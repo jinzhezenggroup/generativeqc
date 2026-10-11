@@ -20,7 +20,9 @@ def _programs(o: typing.Any, v: typing.Any, form: typing.Any = "shared") -> typi
 
 
 def _pack(layouts: typing.Any, arrays: typing.Any) -> typing.Any:
-    return np.concatenate([layout.pack(a) for layout, a in zip(layouts, arrays)])
+    return np.concatenate(
+        [layout.pack(a) for layout, a in zip(layouts, arrays, strict=True)]
+    )
 
 
 def _unpack(layouts: typing.Any, vector: typing.Any) -> typing.Any:
@@ -64,8 +66,8 @@ def test_generated_energy_and_residual_actions_against_determinant_directions(
     jt_lam = _transpose(programs, feeds, lam)
     rhs = _rhs(programs, feeds)
     np.testing.assert_allclose(
-        sum(np.sum(a * b) for a, b in zip(lam, j_u)),
-        sum(np.sum(a * b) for a, b in zip(jt_lam, u)),
+        sum(np.sum(a * b) for a, b in zip(lam, j_u, strict=True)),
+        sum(np.sum(a * b) for a, b in zip(jt_lam, u, strict=True)),
         atol=1e-11,
         rtol=1e-11,
     )
@@ -74,12 +76,12 @@ def test_generated_energy_and_residual_actions_against_determinant_directions(
         plus = oracle.evaluate_full(t1 + h * u[0], t2 + h * u[1])
         minus = oracle.evaluate_full(t1 - h * u[0], t2 - h * u[1])
         np.testing.assert_allclose(
-            -sum(np.sum(a * b) for a, b in zip(rhs, u)),
+            -sum(np.sum(a * b) for a, b in zip(rhs, u, strict=True)),
             (plus[0] - minus[0]) / (2 * h),
             atol=1e-8,
             rtol=1e-8,
         )
-        for actual, upper, lower in zip(j_u, plus[1:], minus[1:]):
+        for actual, upper, lower in zip(j_u, plus[1:], minus[1:], strict=True):
             np.testing.assert_allclose(
                 actual, (upper - lower) / (2 * h), atol=2e-7, rtol=1e-7
             )
@@ -190,7 +192,7 @@ def test_replay_equation_forms_and_provenance() -> None:
         action = _transpose(programs, feeds, arrays[2:])
         if expected is None:
             expected = action
-        for actual, reference in zip(action, expected):
+        for actual, reference in zip(action, expected, strict=True):
             np.testing.assert_allclose(actual, reference, atol=1e-12, rtol=1e-12)
 
 

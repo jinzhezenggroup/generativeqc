@@ -355,7 +355,7 @@ def test_receipt_verifier_handles_effective_tile(
         text=True,
         check=False,
     )
-    if effective is None or type(effective) is int and effective == 144:
+    if effective is None or (type(effective) is int and effective == 144):
         assert result.returncode == 0, result.stdout + result.stderr
         summary = json.loads((tmp_path / "summary.json").read_text())
         assert summary[0]["tile"] == 256

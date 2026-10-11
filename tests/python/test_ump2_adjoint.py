@@ -16,7 +16,7 @@ CHANNELS = ("alpha_alpha", "beta_beta", "alpha_beta")
 
 def problem(occupied: tuple[int, int] = (2, 1), nmo: int = 5) -> tuple:
     rng = np.random.default_rng(1823)
-    counts = dict(zip(SPINS, occupied))
+    counts = dict(zip(SPINS, occupied, strict=True))
     eps = {
         s: np.linspace(-1.8, -0.7, no).tolist()
         + np.linspace(0.2, 1.3, nmo - no).tolist()
@@ -171,6 +171,7 @@ def test_rectangular_disjoint_feed_partials(channel: str) -> None:
                 result.virtual_a,
                 result.virtual_b,
             ),
+            strict=True,
         )
     )
 
@@ -209,8 +210,8 @@ def test_alpha_beta_permutation() -> None:
     }
     other = canonical(
         flipped,
-        dict(zip(SPINS, (eps["beta"], eps["alpha"]))),
-        dict(zip(SPINS, (counts["beta"], counts["alpha"]))),
+        dict(zip(SPINS, (eps["beta"], eps["alpha"]), strict=True)),
+        dict(zip(SPINS, (counts["beta"], counts["alpha"]), strict=True)),
     )
     np.testing.assert_allclose(
         result.integrals_iajb["alpha_alpha"], other.integrals_iajb["beta_beta"]
@@ -476,9 +477,9 @@ def test_actual_uhf_fixed_orbital_perturbations(case: str) -> None:
     assert mf.converged
     if seed is not None:
         assert np.linalg.norm(mf.make_rdm1()[0] - mf.make_rdm1()[1]) > 0.1
-    counts = dict(zip(SPINS, map(int, mol.nelec)))
+    counts = dict(zip(SPINS, map(int, mol.nelec), strict=True))
     eps = {s: np.asarray(mf.mo_energy[k]) for k, s in enumerate(SPINS)}
-    coeff = dict(zip(SPINS, mf.mo_coeff))
+    coeff = dict(zip(SPINS, mf.mo_coeff, strict=True))
     eri = mol.intor("int2e", aosym="s1")
     blocks = {}
     for c in CHANNELS:

@@ -94,14 +94,15 @@ def _literal_all(source: Path) -> tuple[str, ...] | None:
                 isinstance(target, ast.Name) and target.id == "__all__"
                 for target in node.targets
             )
-            or isinstance(node, ast.AnnAssign)
+        ) or (
+            isinstance(node, ast.AnnAssign)
             and isinstance(node.target, ast.Name)
             and node.target.id == "__all__"
         )
         annotation_uses_all = isinstance(node, ast.AnnAssign) and _uses_all(
             node.annotation
         )
-        if annotation_uses_all or not declares_all and _uses_all(node):
+        if annotation_uses_all or (not declares_all and _uses_all(node)):
             raise ValueError(
                 f"{source}: dynamic use/mutation of __all__ is unsupported; "
                 "public __all__ must be a literal list or tuple of names"
@@ -112,11 +113,10 @@ def _literal_all(source: Path) -> tuple[str, ...] | None:
                 isinstance(target, ast.Name) and target.id == "__all__"
                 for target in node.targets
             )
-            or (
-                isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and node.target.id == "__all__"
-            )
+        ) or (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "__all__"
         ):
             # A bare annotation updates __annotations__, not the runtime value.
             if isinstance(node, ast.AnnAssign) and node.value is None:

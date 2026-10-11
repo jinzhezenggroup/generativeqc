@@ -95,7 +95,9 @@ def build_df_derivative_kernel(
         "inverse_two_q": 0.5 / q,
         "rho": rho,
     }
-    replacements.update({f"difference_{axis}": d for axis, d in zip(AXES, difference)})
+    replacements.update(
+        {f"difference_{axis}": d for axis, d in zip(AXES, difference, strict=True)}
+    )
     if count == 3:
         replacements.update(
             {
@@ -146,7 +148,9 @@ def build_df_derivative_kernel(
             -exponent[0]
             * exponent[1]
             / p
-            * sum((a - b) * (a - b) for a, b in zip(centers[0], centers[1]))
+            * sum(
+                (a - b) * (a - b) for a, b in zip(centers[0], centers[1], strict=True)
+            )
         )
         value *= g.exponential(decay_argument)
     derivative = integral.derivative
@@ -190,7 +194,7 @@ def evaluate_df_derivative(
         {
             f"center_{i}_{axis}": v
             for i, c in enumerate(centers)
-            for axis, v in zip(AXES, c)
+            for axis, v in zip(AXES, c, strict=True)
         }
     )
     argument = kernel.graph.evaluate(kernel.boys_argument, variables)

@@ -53,7 +53,10 @@ class DenseSource:
         starts, sizes = request
         return np.ascontiguousarray(
             self.ao[
-                tuple(slice(begin, begin + size) for begin, size in zip(starts, sizes))
+                tuple(
+                    slice(begin, begin + size)
+                    for begin, size in zip(starts, sizes, strict=True)
+                )
             ]
         )
 
@@ -221,14 +224,14 @@ def test_provider_cache_separates_spin_owners_at_identical_mo_indices() -> None:
         for block in blocks:
             columns = [
                 getattr(reference, f"coefficients_{spin}")[:, indices[0]]
-                for spin, indices in zip(block.spins, block.slots)
+                for spin, indices in zip(block.spins, block.slots, strict=True)
             ]
             expected = np.einsum("uvwx,u,v,w,x->", eri, *columns)
             values.append(provider.get(block).to_host())
             np.testing.assert_allclose(values[-1].item(), expected, atol=2e-12)
         assert len({value.item() for value in values}) == len(blocks)
         reads = source.reads
-        for block, value in zip(blocks, values):
+        for block, value in zip(blocks, values, strict=True):
             assert provider.get(block).values is value
         assert source.reads == reads
         assert provider.statistics["transformations"] == len(blocks)

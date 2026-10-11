@@ -341,8 +341,12 @@ def libcint_primitive_gradient(
     from pyscf import gto
 
     names = ("H", "He", "Li", "Be")[: len(angular)]
+    # Nuclear attraction has an additional charge center, not a basis shell.
     mol = gto.M(
-        atom=[(f"ghost-{name}", position) for name, position in zip(names, centers)],
+        atom=[
+            (f"ghost-{name}", position)
+            for name, position in zip(names, centers[: len(names)], strict=True)
+        ],
         basis={
             name: [[angular_momentum, [e, 1]]]
             for name, angular_momentum, e in zip(names, angular, exponents, strict=True)
