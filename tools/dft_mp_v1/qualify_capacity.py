@@ -369,8 +369,9 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # CSR and exact-bitmask device AO maps preserve native geometry allowances.
 # Exact maps reserve only their finite numeric owner, including both offset
 # mirrors and compact AO scratch; bind the helper and endpoint independently.
+# Entering the original prepared lease preserves all admission and work bounds.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "0b59f42d41f6a06cf14df6ff9d3fdfe3a03a37ca69e85bf4d4087c9a8b6b5b23"
+    "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -412,8 +413,10 @@ NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
 )
+# Audited lifecycle-only change: capacity defaults and forwarding remain intact.
+# Closed/running refusal and BaseException revocation protect the original lease.
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
+    "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
@@ -516,8 +519,9 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 )
 # The JIT side defers integral source reuse. Prepared admission charges both
 # native CSR and exact-bitmask caches; packaged selection remains unchanged.
+# Closed/running checks precede admission without changing AOT selection.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
+    "3ce267b3df21df7e551dac4c64ff679d9516b2aa3f63eba140db612fcbb636a2"
 )
 # The restricted-point request joins schedule identity without changing AO reserves.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (

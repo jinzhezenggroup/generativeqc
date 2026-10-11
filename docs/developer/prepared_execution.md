@@ -36,7 +36,7 @@ Per-item output-buffer rejection remains a separate existing boundary: a complet
 fleet can return an invalid-argument item while retaining that item's newly solved
 state and diagnostics. This gate does not yet revoke that item independently;
 callers must check its result status before consuming it, as required by the
-[existing diagnostic contract](../reference/python_execution_contracts.md#python-results-values).
+{ref}`existing diagnostic contract <python-results-values>`.
 Completing per-item publication/borrow lifetimes remains separate work.
 
 A nonconverged return remains an explicitly failed attempt with its completed
