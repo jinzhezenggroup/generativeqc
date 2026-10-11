@@ -1,4 +1,4 @@
-"""Emit portable native PBE/PBE0 weights from the shared stationary TensorIR AD."""
+"""Emit portable native GGA/Hybrid integral weights from stationary TensorIR AD."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from generativeqc_compiler.method.stationary_gradient import (
 def source() -> str:
     """Specialize existing pointwise AD; emit no independent density equations."""
     lines = ["#pragma once", "#include <cstddef>", "#include <cstdint>"]
-    for method in ("PBE", "PBE0"):
+    for method in ("PBE", "PBE0", "B3LYP"):
         plan = StationaryGradientPlan(
             resolve_method(method, spin="unpolarized"),
             StationaryMeanField(SCF_POINT_MODEL),
