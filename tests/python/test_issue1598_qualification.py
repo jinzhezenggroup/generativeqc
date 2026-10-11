@@ -954,3 +954,90 @@ def test_ks_pool_requires_controller_and_harness_identity(
     else:
         rows, failures = reducer._ks_rows(tmp_path)
         assert not failures and len(rows) == 4
+
+
+@pytest.mark.parametrize("counter_state", ["valid", "unknown", "zero_denominator"])
+@pytest.mark.parametrize("pair_state", ["matched", "partial", "failed"])
+def test_reducer_cli_renders_explicit_work_without_losing_unknowns(
+    tmp_path: Path, counter_state: str, pair_state: str
+) -> None:
+    for mode in ("baseline", "incremental"):
+        for round in (1, 2):
+            record = _record(round)
+            if counter_state != "unknown":
+                for items in [
+                    record["generativeqc"]["cold_convergence"],
+                    *[s["convergence"] for s in record["generativeqc"]["warm_samples"]],
+                ]:
+                    items[0]["iterations"] = 2
+                    items[0]["incremental_direct_jk"].update(
+                        quartet_work_counters_valid=True,
+                        delta_builds=1,
+                        full_candidate_shell_quartets=100,
+                        full_admitted_shell_quartets=100
+                        if counter_state == "valid"
+                        else 0,
+                        full_rejected_shell_quartets=0
+                        if counter_state == "valid"
+                        else 100,
+                        delta_candidate_shell_quartets=100,
+                        delta_admitted_shell_quartets=50,
+                        delta_rejected_shell_quartets=50,
+                        full_admitted_quartet_tiles=20
+                        if counter_state == "valid"
+                        else 0,
+                        delta_admitted_quartet_tiles=10,
+                    )
+            failed = pair_state == "failed" or (
+                pair_state == "partial" and mode == "incremental" and round == 2
+            )
+            _point(tmp_path, mode, round, None if failed else record)
+    output = tmp_path / "summary.json"
+    # Exercise the real CLI entry flow and file-based reduction on a bounded
+    # matrix, without replacing the gates or row/console generation helpers.
+    script = (
+        "from tools import reduce_issue1598_incremental_qualification as r; "
+        "r.POPULATIONS=('rhf',); r.SIZES=((12,96),); r.KS_SAMPLES=(); r.main()"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            "--input",
+            str(tmp_path),
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "admitted_tile  admitted_shell  candidate_shell" in result.stdout
+    payload = json.loads(output.read_text())
+    per_round = [row for row in payload["hf_rows"] if isinstance(row["round"], int)]
+    assert len(per_round) == {"matched": 2, "partial": 1, "failed": 0}[pair_state]
+    assert payload["any_point_failed"] is (pair_state != "matched")
+    if pair_state == "failed":
+        assert not payload["all_warm_numerical_gates_passed"]
+        assert len(payload["hf_failures"]) == 1
+        assert len(payload["hf_failures"][0]["failed_points"]) == 4
+        return
+    work = per_round[0]["incremental_warm_work"]
+    if counter_state == "valid":
+        assert "50.000%" in result.stdout and "0.000%" in result.stdout
+        assert work["admitted_shell_quartet_reduction_fraction"] == 0.5
+        assert work["candidate_shell_quartet_reduction_fraction"] == 0.0
+        assert "unknown" not in result.stdout
+    else:
+        assert "unknown" in result.stdout
+        assert work["admitted_shell_quartet_reduction_fraction"] is None
+        assert work["admitted_quartet_tile_reduction_fraction"] is None
+        if counter_state == "unknown":
+            assert work["candidate_shell_quartet_reduction_fraction"] is None
+            assert "0.000%" not in result.stdout
+        else:
+            assert work["candidate_shell_quartet_reduction_fraction"] == 0.0

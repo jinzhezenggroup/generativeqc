@@ -687,6 +687,11 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return rows, failures
 
 
+def _format_reduction(value: float | None) -> str:
+    """Keep missing/invalid quartet counts visibly unknown in the CLI report."""
+    return "unknown" if value is None else f"{value:.3%}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
@@ -758,7 +763,7 @@ def main() -> None:
 
     print(
         "pop    AOs  round  warm_base_ms  warm_inc_ms  speedup  cold_speedup  "
-        "tile_reduce  shell_reduce  branches  numerical"
+        "admitted_tile  admitted_shell  candidate_shell  branches  numerical"
     )
     for row in hf_rows:
         if row.get("round") == "all-matched":
@@ -769,14 +774,23 @@ def main() -> None:
                 f"{row['warm_speedup']:>7.3f}  {row['cold_speedup']:>12.3f}"
             )
             continue
+        work = row["incremental_warm_work"]
+        admitted_tiles = _format_reduction(
+            work["admitted_quartet_tile_reduction_fraction"]
+        )
+        admitted_shells = _format_reduction(
+            work["admitted_shell_quartet_reduction_fraction"]
+        )
+        candidate_shells = _format_reduction(
+            work["candidate_shell_quartet_reduction_fraction"]
+        )
         print(
             f"{row['population']:<5}  {row['ao_count']:>4}  {row['round']:>5}  "
             f"{row['baseline_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['incremental_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['warm_speedup']:>7.3f}  "
             f"{row['cold_speedup']:>12.3f}  "
-            f"{row['incremental_warm_work']['quartet_tile_reduction_fraction']:>11.3%}  "
-            f"{row['incremental_warm_work']['shell_quartet_reduction_fraction']:>12.3%}  "
+            f"{admitted_tiles:>13}  {admitted_shells:>14}  {candidate_shells:>15}  "
             f"{row['iteration_branches_match']!s:>8}  "
             f"{row['numerical_gate_passed']!s:>9}"
         )
