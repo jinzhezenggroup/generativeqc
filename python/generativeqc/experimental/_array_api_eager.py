@@ -625,6 +625,9 @@ def call(name: str, *args: Any, **kwargs: Any) -> Any:
         and callable(getattr(args[0], "__array__", None))
     ):
         arguments = (_numpy.asarray(args[0], copy=kwargs.get("copy")),)
+        # An array protocol can expose object storage only after conversion.
+        # Inspect its leaves before a requested dtype can invoke scalar hooks.
+        check_host_values(arguments[0])
     if name == "can_cast":
         source = np.dtype(args[0].dtype if isinstance(args[0], np.ndarray) else args[0])
         target = np.dtype(args[1])

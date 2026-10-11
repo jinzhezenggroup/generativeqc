@@ -163,6 +163,70 @@ def test_host_ndarray_subclasses_cannot_redirect_eager_execution() -> None:
     np.testing.assert_array_equal(xp.add(array, 1), [2.0, 3.0])
 
 
+@pytest.mark.parametrize("dtype", (xp.float64, xp.int64, xp.bool))
+@pytest.mark.parametrize("protocol", ("dlpack", "cuda"))
+@pytest.mark.parametrize("copy", (None, True, False))
+def test_host_array_protocol_result_rejects_hidden_foreign_leaves(
+    dtype: object, protocol: str, copy: bool | None
+) -> None:
+    class Foreign:
+        def __float__(self) -> float:
+            raise AssertionError("implicit foreign scalar conversion must not execute")
+
+        def __int__(self) -> int:
+            raise AssertionError("implicit foreign scalar conversion must not execute")
+
+        def __bool__(self) -> bool:
+            raise AssertionError("implicit foreign scalar conversion must not execute")
+
+    if protocol == "dlpack":
+        Foreign.__dlpack_device__ = lambda self: (2, 0)
+    else:
+        Foreign.__cuda_array_interface__ = {}
+
+    calls: list[bool | None] = []
+
+    class HostArrayLike:
+        def __array__(
+            self, dtype: object = None, copy: bool | None = None
+        ) -> np.ndarray:
+            calls.append(copy)
+            array = np.empty((1,), dtype=object)
+            array[0] = Foreign()
+            return array
+
+    with pytest.raises(TypeError, match="explicit handoff"):
+        xp.asarray(HostArrayLike(), dtype=dtype, copy=copy)
+    assert calls == [copy]
+
+
+@pytest.mark.parametrize("source_dtype", (object, np.float64))
+@pytest.mark.parametrize("copy", (None, True, False))
+def test_host_array_protocol_result_preserves_single_call_and_copy_contract(
+    source_dtype: object, copy: bool | None
+) -> None:
+    storage = np.asarray([1.0, 2.0], dtype=source_dtype)
+    calls: list[bool | None] = []
+
+    class HostArrayLike:
+        def __array__(
+            self, dtype: object = None, copy: bool | None = None
+        ) -> np.ndarray:
+            calls.append(copy)
+            return storage.copy() if copy else storage
+
+    if source_dtype is object and copy is False:
+        with pytest.raises(ValueError):
+            xp.asarray(HostArrayLike(), dtype=xp.float64, copy=copy)
+    else:
+        result = xp.asarray(HostArrayLike(), dtype=xp.float64, copy=copy)
+        np.testing.assert_array_equal(result, [1.0, 2.0])
+        assert np.shares_memory(result, storage) == (
+            source_dtype is np.float64 and copy is not True
+        )
+    assert calls == [copy]
+
+
 @pytest.mark.parametrize("indices", ([True], [0.5]))
 def test_gathers_require_integer_indices(indices: list[object]) -> None:
     with pytest.raises(TypeError, match="integer dtype"):
