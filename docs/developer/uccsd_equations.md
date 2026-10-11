@@ -13,6 +13,10 @@ legal mathematical blocks. This internal graph does **not** register a public
 UCCSD method, admit UHF references, supply integral providers or denominators,
 or implement an iterative solver, Lambda, triples, or nuclear forces.
 
+The separate [canonical UCCSD solver](uccsd_solver.md) binds this graph to
+validated UHF references, conventional spin providers and packed CPU/CUDA
+iteration state. Its reference/resource policies do not belong to this builder.
+
 ## Hamiltonian and residual convention
 
 Integral inputs are real antisymmetrized physicists' integrals
@@ -116,3 +120,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
 Choose a currently available permitted node and its compatible partition/GPU
 type; do not schedule a maintenance node. An unallocated host run skips the
 CUDA-only cases and is not evidence of CUDA correctness.
+
+## Shared unrestricted triples tiles
+
+The [unrestricted triples tile graph](uccsd_triples.md) reuses these amplitudes,
+spin-labelled feed conventions and native TensorIR backends for canonical (T)
+channels. Its fixed-amplitude qualification does not imply a complete UCCSD(T)
+energy or nuclear-force owner.
