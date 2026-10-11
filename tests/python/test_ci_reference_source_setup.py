@@ -111,7 +111,15 @@ def test_sync_commands_propagate_failure_before_testing(
 
 @pytest.mark.parametrize(
     "shard",
-    ["core-a", "core-b", "core-c", "compiler-heavy", "posthf", "runtime-heavy", "ecp-forces"],
+    [
+        "core-a",
+        "core-b",
+        "core-c",
+        "compiler-heavy",
+        "posthf",
+        "runtime-heavy",
+        "ecp-forces",
+    ],
 )
 @pytest.mark.parametrize("cache_hit", ["true", "false", ""])
 @pytest.mark.parametrize("event", ["pull_request", "merge_group", "schedule"])
@@ -126,7 +134,8 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
         ),
         (
             "Prepare pinned GFN1 and D3 reference inputs",
-            shard in {"core-a", "core-b", "core-c", "compiler-heavy"} and cache_hit != "true",
+            shard in {"core-a", "core-b", "core-c", "compiler-heavy"}
+            and cache_hit != "true",
         ),
         (
             "Save pinned GFN1 and D3 reference inputs",
