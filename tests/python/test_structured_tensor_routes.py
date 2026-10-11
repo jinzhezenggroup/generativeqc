@@ -36,7 +36,10 @@ def _program(expression: str, sizes: dict[str, int]) -> Program:
         input_tensor(
             f"operand_{index}",
             TensorSpec(
-                tuple(Index(f"axis_{axis}", spaces[label]) for axis, label in enumerate(row)),
+                tuple(
+                    Index(f"axis_{axis}", spaces[label])
+                    for axis, label in enumerate(row)
+                ),
                 role="input",
             ),
         )
@@ -115,7 +118,10 @@ def test_matrix_chain_keeps_both_ordered_binary_operations() -> None:
         return input_tensor(
             name,
             TensorSpec(
-                tuple(Index(f"axis_{axis}", spaces[label]) for axis, label in enumerate(labels)),
+                tuple(
+                    Index(f"axis_{axis}", spaces[label])
+                    for axis, label in enumerate(labels)
+                ),
                 role="input",
             ),
         )
