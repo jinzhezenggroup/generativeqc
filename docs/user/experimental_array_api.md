@@ -261,6 +261,8 @@ Slurm `srun` on an allowed node (`n1`, `n2`, `n4`, `n5`), a compatible partition
 request and the unchanged scheduler-assigned `CUDA_VISIBLE_DEVICES`. Select
 `GENERATIVEQC_ARRAY_API_CUDA_TEST=1` for the real-device molecular test, or
 `--backend cuda` for the benchmark; source/planner checks are not device evidence.
+Pass `--cuda-arch` matching the selected GPU when it differs from the default
+`sm_120`; this selects the tensor compiler target without changing Slurm visibility.
 
 ## Scientific metadata remains explicit
 

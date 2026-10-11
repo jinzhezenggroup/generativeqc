@@ -52,6 +52,7 @@ def main() -> None:
     parser.add_argument("--backend", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--molecule", choices=("h2", "water"), default="water")
     parser.add_argument("--basis", default="sto-3g")
+    parser.add_argument("--cuda-arch", default="sm_120")
     parser.add_argument("--repeats", type=int, default=10)
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
@@ -80,7 +81,9 @@ def main() -> None:
     def energy(positions: Any) -> Any:
         return operator(positions)
 
-    compiled = xp.value_and_grad(energy, backend=arguments.backend)
+    compiled = xp.value_and_grad(
+        energy, backend=arguments.backend, cuda_arch=arguments.cuda_arch
+    )
 
     def baseline() -> Any:
         return native.singlepoint(
@@ -138,6 +141,9 @@ def main() -> None:
             "basis": arguments.basis,
             "basis_metadata": reference.basis_metadata,
             "backend": reference.executed_backend,
+            "tensor_cuda_arch": (
+                arguments.cuda_arch if arguments.backend == "cuda" else None
+            ),
             "controls": dict(operator._controls),
             "precision": reference.precision,
             "initial_guess": "fresh hcore, no caller-provided density",
