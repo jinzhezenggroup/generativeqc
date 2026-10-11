@@ -196,7 +196,7 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 32 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
+     defaults.batch_limit != 32 || defaults.ccsd_batch_limit != 32 || !defaults.reduction ||
      !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap ||
      defaults.lambda_interval != 30) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
@@ -236,7 +236,7 @@ int main() {
   for(int argc = 8; argc <= 12; ++argc) {
     const auto selected = select(argc,partial);
     if(selected.diis_history != (argc > 8 ? 4U : 6U) ||
-       selected.ccsd_batch_limit != (argc > 9 ? 3U : 8U) ||
+       selected.ccsd_batch_limit != (argc > 9 ? 3U : 32U) ||
        selected.frame.orbital_screening_tolerance != (argc > 10 ? 1e-7 : 0.0) ||
        selected.frame.profile_jk || !selected.frame.symmetric_polarization ||
        selected.frame.bilinear_derivative || !selected.derived_denominators) return 14;
@@ -253,14 +253,14 @@ int main() {
       const char* selected[]{"endpoint","input","output","1","1",forces,"1","8","6",batch};
       const auto actual = select(10,selected);
       const auto requested = std::stoull(batch);
-      const auto expected = requested ? requested : (forces[0]=='1' ? 8U : 32U);
+      const auto expected = requested ? requested : 32U;
       if(actual.ccsd_batch_limit != expected || !default_frame(actual.frame) ||
          actual.diis_history != 6) return 17;
     }
   }
   const auto energy_default=run_df_ccsdt_native(context,system,system,descriptor,false);
   const auto force_default=run_df_ccsdt_native(context,system,system,descriptor);
-  if(energy_default.ccsd_batch_limit!=32 || force_default.ccsd_batch_limit!=8) return 46;
+  if(energy_default.ccsd_batch_limit!=32 || force_default.ccsd_batch_limit!=32) return 46;
   for(int index : {7,8,9}) {
     for(const char* token : {"-1","+2","2.0","2e-12","8junk",""}) {
       const char* bad[]{"endpoint","input","output","1","1","1","1","8","6","8"};
