@@ -123,6 +123,15 @@ policy, basis/charge/spin, numerical controls, backend and CUDA binary identity.
 estimator and native preparation; see [KS options](../user/ks_options.md).
 Geometry changes preserve the resource shape; model changes require a new plan.
 
+Incremental Direct-J/K is outside this inventory: its anchor/delta buffers and
+closure history have no qualified scalar v1 layout. The native `resources`
+command validates both `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK` and the legacy
+`GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK` for these four KS methods. Unset, `0`
+and `off` preserve ordinary plans; `1` or `on` in either selector returns
+`unsupported` JSON with exit status 2 before basis expansion or layout queries.
+Other values are usage errors (exit 2 with no JSON), even when the other selector
+is enabled. Tuning suffixes are not consulted, and HF inventory is unaffected.
+
 The host inventory includes 36 bytes per quadrature point, packed AO metadata,
 all prepared owners and warm snapshots, iteration records, and conservative
 value-only Cartesian/Jet/recurrence, eigensolver, DIIS and XC workspace bounds.
