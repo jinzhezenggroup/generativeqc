@@ -701,12 +701,32 @@ def cache_statistics(launcher: CompilerCacheLauncher) -> dict[str, Any]:
 def qualified_ccache_policy(working_directory: Path) -> dict[str, str]:
     return {
         "base_dir": str(working_directory.resolve()),
+        "compiler": "",
         "compiler_check": "mtime",
+        "compiler_type": "auto",
+        "cpp_extension": "",
+        "depend_mode": "false",
         "direct_mode": "true",
         "disable": "false",
+        "extra_files_to_hash": "",
         "hash_dir": "true",
+        "ignore_headers_in_manifest": "",
         "ignore_options": "",
+        "inode_cache": "false",
+        "keep_comments_cpp": "false",
+        "path": "",
+        "pch_external_checksum": "false",
+        "prefix_command": "",
+        "prefix_command_cpp": "",
+        "read_only": "false",
+        "read_only_direct": "false",
+        "recache": "false",
+        "remote_only": "false",
+        "remote_storage": "",
+        "reshare": "false",
+        "run_second_cpp": "true",
         "sloppiness": "",
+        "stats": "true",
     }
 
 

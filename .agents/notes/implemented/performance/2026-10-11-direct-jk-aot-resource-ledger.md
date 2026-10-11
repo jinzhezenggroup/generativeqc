@@ -323,6 +323,11 @@ canonical base directory, `compiler_check=mtime`, enabled direct/hash-directory
 behavior, `disable=false`, and empty ignore/sloppiness settings; unsafe user or
 environment configuration fails instead of changing cache correctness silently.
 The accepted policy is part of the inner execution context and cache key.
+It also fixes the compiler/type, second-preprocessor behavior, prefix wrappers,
+extra-file/header/option hashing, dependency/PCH/inode modes, and
+read/recache/remote behaviors to their ccache 4.14 canonical values. Storage
+compression and size settings, which do not alter object identity, remain
+operational rather than scientific inputs.
 
 Building the CMake generation target can itself regenerate `CMakeCache.txt` and
 Ninja rules. The complete production context is therefore validated both before

@@ -684,6 +684,13 @@ class TestProductionCompile:
             ("ignore_options", "-O*"),
             ("sloppiness", "time_macros"),
             ("hash_dir", "false"),
+            ("run_second_cpp", "false"),
+            ("prefix_command", "/path/wrapper"),
+            ("prefix_command_cpp", "/path/cpp-wrapper"),
+            ("extra_files_to_hash", "/tmp/extra"),
+            ("compiler", "/other/nvcc"),
+            ("depend_mode", "true"),
+            ("remote_storage", "redis://cache"),
         ],
     )
     def test_unsafe_ccache_configuration_fails_closed(
