@@ -52,31 +52,34 @@ void one_atom_capacity() {
   require(
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "one-atom stationary capacity fixture is invalid");
-  for (const bool pbe0 : {false, true}) {
+  using generativeqc::scf::CpuStationaryGga;
+  for (const auto method :
+       {CpuStationaryGga::Pbe, CpuStationaryGga::Pbe0, CpuStationaryGga::B3lyp}) {
+    const bool hybrid = method != CpuStationaryGga::Pbe;
     auto spec = generativeqc::scf::make_hf_fock_spec(generativeqc::scf::FockSpin::Restricted);
     spec.derivative_order = 0;
-    spec.exchange.present = pbe0;
-    spec.exchange.coefficient = -0.125;
+    spec.exchange.present = hybrid;
+    spec.exchange.coefficient = method == CpuStationaryGga::B3lyp ? -0.1 : -0.125;
     const auto strategy =
         generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu);
     const generativeqc::scf::PreparedFockPlan target(system, nullptr, strategy);
     const std::array<double, 1> density{1.8}, weighted{-0.4};
     const auto result = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, density, weighted, pbe0, 1 << 20);
+        target, density, weighted, method, 1 << 20);
     require(result.sources.size() == 12 && result.shell_quartets == 1 &&
                 result.primitive_evaluations == 1,
             "one-atom source fabricated molecular storage or repeated J/K primitive work");
     require(std::all_of(result.sources.begin(), result.sources.end(),
                         [](double value) { return std::abs(value) < 1e-10; }),
             "one-atom source violates translation invariance");
-    require(result.numeric_capacity >= (21 + (pbe0 ? 26 : 13)) * sizeof(double),
+    require(result.numeric_capacity >= (21 + (hybrid ? 26 : 13)) * sizeof(double),
             "one-atom capacity omitted owned matrix/source/channel buffers");
     const auto exact = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, density, weighted, pbe0, result.numeric_capacity);
+        target, density, weighted, method, result.numeric_capacity);
     require(exact.sources == result.sources, "exact capacity changed the stationary source");
     bool rejected = false;
     try {
-      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, density, weighted, pbe0,
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, density, weighted, method,
                                                                 result.numeric_capacity - 1);
     } catch (const std::bad_alloc&) {
       rejected = true;
