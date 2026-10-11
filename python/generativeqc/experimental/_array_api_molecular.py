@@ -51,6 +51,7 @@ class RHF:
     _numbers: tuple[int, ...]
     _basis: str
     _charge: int
+    _multiplicity: int
     _backend: str
     _device: int
     _controls: tuple[tuple[str, Any], ...]
