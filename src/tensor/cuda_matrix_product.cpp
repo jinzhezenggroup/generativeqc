@@ -2,11 +2,56 @@
 
 #include <limits>
 #include <stdexcept>
+#if defined(GENERATIVEQC_TEST_HOOKS)
+#include <iomanip>
+#include <sstream>
+#endif
 
 #include "generated_matrix_product_lowering.hpp"
 #include "tensor/cuda_structured_product.hpp"
 
 namespace generativeqc::tensor {
+
+namespace {
+#if defined(GENERATIVEQC_TEST_HOOKS)
+thread_local int structured_qualification_mask = -1;
+thread_local std::string structured_preparation_diagnostic;
+#endif
+unsigned structured_preparation_mask() noexcept {
+#if defined(GENERATIVEQC_TEST_HOOKS)
+  if (structured_qualification_mask >= 0)
+    return static_cast<unsigned>(structured_qualification_mask);
+#endif
+  return CudaStructuredProductBinding::production_library_qualified ? 127U : 0U;
+}
+bool structured_diagnostic_preparation() noexcept {
+#if defined(GENERATIVEQC_TEST_HOOKS)
+  return structured_qualification_mask >= 0;
+#else
+  return false;
+#endif
+}
+}  // namespace
+
+#if defined(GENERATIVEQC_TEST_HOOKS)
+/** Select diagnostic regions before preparing an owner, never during execution.
+ * -1 restores production policy; zero is a matched all-generated ablation. */
+extern "C" bool tensor_structured_scf_qualification_for_test_v1(int region_mask) {
+  if (region_mask < -1 || region_mask > 127) return false;
+  structured_qualification_mask = region_mask;
+  return true;
+}
+
+/** Diagnostic data belongs to the last preparation on this thread. No handle
+ * or scientific state escapes, and normal builds have no telemetry storage. */
+extern "C" const char* tensor_structured_scf_preparation_diagnostic_for_test_v1() {
+  return structured_preparation_diagnostic.c_str();
+}
+#endif
+
+bool CudaStructuredProductBinding::basis_workspace_required() noexcept {
+  return (structured_preparation_mask() & 120U) != 0;
+}
 
 CudaStructuredProductBinding::CudaStructuredProductBinding(cudaStream_t stream,
                                                            cublasHandle_t handle, int dimension,
@@ -25,7 +70,8 @@ CudaStructuredProductBinding::CudaStructuredProductBinding(cudaStream_t stream,
       direct_dimension_(direct_dimension ? direct_dimension : dimension),
       systems_(systems),
       spins_(spins),
-      primitive_qualification_(primitive_qualification) {
+      qualification_mask_(primitive_qualification ? 127U : structured_preparation_mask()),
+      diagnostic_(!primitive_qualification && structured_diagnostic_preparation()) {
   static_assert(sizeof(CudaStructuredProductBinding) +
                     2 * sizeof(std::array<runtime::NativeLoweringCandidate, 7>) + 8192 <=
                 kPreparationHostBytes);
@@ -43,14 +89,38 @@ CudaStructuredProductBinding::CudaStructuredProductBinding(cudaStream_t stream,
   for (std::size_t slot = 0; slot < sites_.size(); ++slot) {
     const auto portfolio = structured_lowering::portfolio(slot);
     auto offers = candidates(static_cast<StructuredOperation>(slot));
-    const std::size_t incumbent =
-        !handle || (!primitive_qualification && !production_library_qualified) ? 0
-        : slot == 0                                                            ? 2
-                                                                               : 1;
+    const std::size_t incumbent = !handle || !(qualification_mask_ & (1U << slot)) ? 0
+                                  : slot == 0                                      ? 2
+                                                                                   : 1;
     const auto decision = runtime::select_native_lowering(
         portfolio.request, offers, portfolio.target, portfolio.compilation, 1, incumbent);
     sites_[slot] = offers[decision.selected];
   }
+#if defined(GENERATIVEQC_TEST_HOOKS)
+  if (structured_diagnostic_preparation()) {
+    std::ostringstream diagnostic;
+    diagnostic << "{\"dimension\":" << dimension_ << ",\"direct_dimension\":" << direct_dimension_
+               << ",\"systems\":" << systems_ << ",\"spins\":" << spins_ << ",\"regions\":[";
+    for (std::size_t slot = 0; slot < sites_.size(); ++slot) {
+      if (slot) diagnostic << ',';
+      diagnostic << "{\"operation\":" << slot
+                 << ",\"selected\":" << std::quoted(std::string(sites_[slot].provider))
+                 << ",\"offers\":[";
+      const auto offers = candidates(static_cast<StructuredOperation>(slot));
+      for (std::size_t offer = 0; offer < offers.size(); ++offer) {
+        if (offer) diagnostic << ',';
+        diagnostic << "{\"provider\":" << std::quoted(std::string(offers[offer].provider))
+                   << ",\"rejection\":" << std::quoted(std::string(offers[offer].rejection))
+                   << ",\"temporary_bytes\":" << offers[offer].temporary_bytes
+                   << ",\"host_bytes\":" << offers[offer].host_bytes
+                   << ",\"provider_bytes\":" << offers[offer].provider_bytes << '}';
+      }
+      diagnostic << "]}";
+    }
+    diagnostic << "]}";
+    structured_preparation_diagnostic = diagnostic.str();
+  }
+#endif
 }
 
 std::array<runtime::NativeLoweringCandidate, 7> CudaStructuredProductBinding::candidates(
@@ -71,7 +141,7 @@ std::array<runtime::NativeLoweringCandidate, 7> CudaStructuredProductBinding::ca
     if (!offer.rejection.empty()) continue;
     if (!handle_)
       offer.rejection = "borrowed provider context unavailable";
-    else if (!primitive_qualification_ && !production_library_qualified)
+    else if (!(qualification_mask_ & (1U << slot)))
       offer.rejection = "structured scientific endpoint qualification remains open";
   }
   return offers;
@@ -91,6 +161,16 @@ const runtime::NativeLoweringCandidate& CudaStructuredProductBinding::site(
 
 bool CudaStructuredProductBinding::library(StructuredOperation operation) const {
   return site(operation).provider == "cublas";
+}
+
+bool CudaStructuredProductBinding::basis_workspace_enabled() const {
+  for (std::size_t slot = 3; slot < sites_.size(); ++slot)
+    if (library(static_cast<StructuredOperation>(slot))) return true;
+  return false;
+}
+
+bool CudaStructuredProductBinding::diagnostic_dense_basis(StructuredOperation operation) const {
+  return diagnostic_ && operation >= StructuredOperation::DensityRight && library(operation);
 }
 
 static_assert(sizeof(CudaMatrixProductBinding) +

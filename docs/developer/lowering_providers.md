@@ -527,6 +527,60 @@ for validation and integration boundaries.
 
 ## Borrowed structured SCF regions
 
+Complete endpoint diagnostics use preparation-only region ablations in native
+test builds. `tensor_structured_scf_qualification_for_test_v1` accepts a seven-bit
+semantic region mask; changing it cannot mutate an existing binding or captured
+Graph. Production builds do not export this hook. The native HF endpoint probe
+and `benchmarks/structured_scf_endpoint_qualification.py` compare source-matched
+RHF/UHF/RKS/UKS energy, density, physical Fock and analytic forces against pinned
+PySCF/Libxc. KS force references reconverge the basis and explicit moving Becke
+grid at two finite-difference steps. Diagnostic snapshots/downloads are outside
+clean endpoint timing; rejected reference/final states cannot supply profitability
+evidence. Preserve generated defaults until complete, matched endpoint evidence
+admits each region, not merely its isolated primitive.
+
+`benchmarks/structured_scf_endpoint_report.py --output REPORT RECEIPTS...`
+compares at least three independent process pairs with `--repeat` identifiers.
+Scientific inputs, source/library identity, graph mode and GPU environment must
+match. It counts each batch once, includes KS preparation in cold cost, retains
+SCF iteration work, and rejects instrumented or failed endpoints. Provider-control
+environment values are part of matching: `--disable-md-j` is an explicit diagnostic
+Direct value-schedule ablation, not a default change or a comparison with normal
+MD-J execution. Failed HF library attempts cannot authenticate a generated retry;
+observations must also match the successful retained operation binding. Region-specific
+target phases require a 3% median benefit with non-regressing lower quartiles;
+every other phase has a 5% regression guard. This diagnostic report never promotes
+defaults or substitutes prepared candidates for actual traced execution evidence.
+Pass separate instrumented `trace.jsonl` files with `--traces` to authenticate
+actual library operations against each sibling receipt. Without matched execution
+observations the report can describe timing differences but profitability remains
+unknown. Graph construction is not work; captured HF regions additionally require
+successful submissions of the appropriate resident iteration/post-eigen Graph.
+Build both the native probe and the PBE stationary companion manifests before
+KS force qualification: `generativeqc_structured_scf_endpoint_probe`,
+`generativeqc_stationary_pbe_rks_manifest`,
+`generativeqc_stationary_pbe_uks_manifest`,
+`generativeqc_stationary_pbe_rks_spd_manifest` and
+`generativeqc_stationary_pbe_uks_spd_manifest`. Building only `generativeqc` does
+not refresh optional force companions; stale compiler contracts must remain
+rejected rather than rewriting manifest hashes around an old binary.
+Use `through-d-{cartesian,spherical}` and `large-spd-{cartesian,spherical}`
+for the admitted KS analytic-force domain. The original through-f and def2-TZVP
+fixtures remain distinct: unsupported KS f-shell force rows stay rejected and
+cannot provide complete-endpoint profitability, even when their energy/D/F and
+final-state diagnostics pass. They do not authorize a CPU/reference fallback.
+
+KS Direct J/K transform submissions borrow the KS matrix owner's frozen context
+only for the call; the longer-lived integral source stores no borrowed binding.
+The physical Cartesian dimension is explicit, including spherical public bases.
+Dead J/K output planes supply density-stage scratch, and dead transformed-density
+planes supply projection scratch after contraction. Subsequent value/derivative
+calls reconstruct density before reuse. Generated source owners charge exact
+shell-span metadata and report the span-envelope/dense-envelope ratio through
+component tracing. Production sparse spans stay native; diagnostic dense
+ablations alone may bypass this optimization. Canonical/RSH compositions without
+a compatible borrowed context retain their existing bounded native route.
+
 `tensor.structured_scf` defines seven strict-FP64 regions: occupied Gram,
 signed weighted Gram, inverse-root overlap reconstruction, and the four
 public/direct basis stages. Gram regions reuse the canonical rank-k recognizer;
@@ -539,16 +593,19 @@ domain. Missing complete endpoint costs remain unknown.
 
 The conventional RHF/UHF owner consumes shared density, orthogonalizer and
 dense basis-stage bindings. The KS owner consumes shared ordinary and signed
-density bindings. KS shell-span basis transforms retain their existing sparse
-owner. `scf/cuda/structured_matrix.*` owns device scaling, publication and
+density bindings and lends its matrix view to the generated Direct value source
+for public/direct stages. Other admitted value schedules, including MD-J, need
+not execute these stages. Shell-span transforms retain their bounded sparse
+provider. `scf/cuda/structured_matrix.*` owns device scaling, publication and
 failure isolation; vendor submissions remain in the tensor backend. No new
 stream, handle or provider allocation is introduced.
 
 The structured library routes are **not enabled by default**. Production
 bindings retain the generated kernels until complete scientific endpoints
-qualify a crossover. Test-hook bindings permit primitive ablations, not public
-provider pinning. A shell-span invocation always retains the bounded native
-stage rather than packing to dense storage. Basis scratch has zero arena size
+qualify a crossover. Test-hook bindings permit diagnostic ablations, not public
+provider pinning. Production shell-span invocations retain the bounded native
+stage rather than packing to dense storage; diagnostic dense submissions record
+the original span facts and are separately qualified. Basis scratch has zero arena size
 while the production gate is closed. Arena planning consumes workspace-presence
 facts, not tensor/CUDA provider policy.
 

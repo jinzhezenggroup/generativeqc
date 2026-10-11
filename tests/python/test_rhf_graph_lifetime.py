@@ -52,6 +52,7 @@ cudaError_t cudaGraphLaunch(cudaGraphExec_t, cudaStream_t);
 namespace {
 bool capturing = false;
 int graphs = 0, executables = 0;
+int launch_status = cudaSuccess;
 std::vector<std::array<std::uint64_t, 10>> events;
 bool observer_throws = false;
 bool observer_recurses = false;
@@ -90,7 +91,7 @@ cudaError_t cudaGraphInstantiate(cudaGraphExec_t* out, cudaGraph_t, unsigned lon
 }
 cudaError_t cudaGraphUpload(cudaGraphExec_t, cudaStream_t) { return cudaSuccess; }
 cudaError_t cudaGraphLaunch(cudaGraphExec_t p, cudaStream_t) {
-  return p ? cudaSuccess : cudaErrorInvalidResourceHandle;
+  return p ? launch_status : cudaErrorInvalidResourceHandle;
 }
 int main() {
   using namespace generativeqc::runtime;
@@ -109,6 +110,7 @@ int main() {
     events.clear();
     {
       generativeqc::scf::cuda_execution::RhfIterationGraphs owner;
+      if (owner.iteration_launches() || owner.post_eigensolver_launches()) return 29;
       auto capture = [&](const std::function<generativeqc_status()>& body) {
         return post ? owner.capture_post_eigensolver(0, nullptr, body)
                     : owner.capture_iteration(0, nullptr, false, body);
@@ -132,6 +134,8 @@ int main() {
       auto replay = post ? owner.launch_post_eigensolver(nullptr)
                          : owner.launch_iteration(nullptr);
       if (replay != cudaSuccess) return 8;
+      if (owner.iteration_launches() != (post ? 0U : 1U) ||
+          owner.post_eigensolver_launches() != (post ? 1U : 0U)) return 30;
       if (events.size() != 3 || events[1][1] != 2 || events[2][1] != 3 ||
           events[2][8] != cudaSuccess || events[0][2] != events[2][2]) return 16;
       if (owner.has_iteration()==post) return 27;
@@ -157,6 +161,14 @@ int main() {
   if (graphs || executables) return 23;
   if (unbind_residency_observer(observer, nullptr, &errors) != 0 || errors != 12) return 24;
   if (unbind_residency_observer(observer, nullptr, &errors) != 1) return 25;
+  {
+    generativeqc::scf::cuda_execution::RhfIterationGraphs owner;
+    if (!owner.capture_iteration(0, nullptr, false, [] { return GENERATIVEQC_STATUS_SUCCESS; }).ok()) return 31;
+    launch_status = cudaErrorInvalidResourceHandle;
+    if (owner.launch_iteration(nullptr) == cudaSuccess || owner.iteration_launches()) return 32;
+    launch_status = cudaSuccess;
+    if (owner.launch_iteration(nullptr) != cudaSuccess || owner.iteration_launches() != 1) return 33;
+  }
   residency_graph_generation = std::numeric_limits<std::uint64_t>::max();
   if (next_residency_graph_generation() != 0 || next_residency_graph_generation() != 0) return 26;
   std::cout << "graph capture lifecycle passed\n";

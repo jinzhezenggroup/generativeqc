@@ -110,3 +110,10 @@ records original/stored sizes and hashes plus the original Git blob. Decompressi
 all timings, forces, settings and ordering; historical summary hashes continue
 to identify those restored bytes. The live response-timeline reader accepts the
 compressed reference. No benchmark was rerun or acceptance gate changed.
+
+The 19-AO and 384-AO batch-four energy records are likewise retained byte-for-byte
+as `measurements/19ao-b4-energy-blas.json.gz` and
+`measurements/384ao-b4-energy-blas.json.gz`. Their adjacent `.storage.json` files
+pin original revisions, both storage identities and original Git blobs. Use
+`gzip -dc` to restore the exact JSON, including every sample, setting and gate.
+Existing historical summary hashes still identify the restored bytes.

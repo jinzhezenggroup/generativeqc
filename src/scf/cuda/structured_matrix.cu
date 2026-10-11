@@ -1,6 +1,7 @@
 #include <cmath>
 #include <limits>
 
+#include "runtime/cuda_component_trace.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/runtime_support.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
@@ -101,6 +102,13 @@ generativeqc_status gram(MatrixLibraryResources resources, int systems, int spin
   const auto operation = failed     ? Operation::InverseRoot
                          : energies ? Operation::SignedGram
                                     : Operation::Gram;
+  runtime::cuda_trace::TraceOperation trace(
+      "structured_gram", resources.stream_,
+      {static_cast<std::size_t>(systems), static_cast<std::size_t>(dimension), 0, false, false});
+  runtime::cuda_trace::trace_counter("operation", static_cast<std::size_t>(operation));
+  runtime::cuda_trace::trace_counter("submitted_states", static_cast<std::size_t>(systems) * spins);
+  runtime::cuda_trace::trace_counter("provider_cublas",
+                                     resources.structured_binding_->library(operation));
   if (!resources.structured_binding_->library(operation)) {
     const auto grid = static_cast<unsigned>((elements + 127) / 128);
     if (failed)
@@ -215,7 +223,19 @@ generativeqc_status launch_structured_basis(MatrixLibraryResources resources, Op
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   if (operation < Operation::DensityRight || operation > Operation::FockRight)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  if (shell_spans || !resources.structured_binding_->library(operation)) {
+  runtime::cuda_trace::TraceOperation trace(
+      "structured_basis", resources.stream_,
+      {static_cast<std::size_t>(systems), static_cast<std::size_t>(dimension),
+       static_cast<std::size_t>(direct_dimension), false, false});
+  runtime::cuda_trace::trace_counter("operation", static_cast<std::size_t>(operation));
+  runtime::cuda_trace::trace_counter("submitted_states", states);
+  runtime::cuda_trace::trace_counter("span_aware", shell_spans != nullptr);
+  runtime::cuda_trace::trace_counter(
+      "provider_cublas",
+      resources.structured_binding_->library(operation) &&
+          (!shell_spans || resources.structured_binding_->diagnostic_dense_basis(operation)));
+  if ((shell_spans && !resources.structured_binding_->diagnostic_dense_basis(operation)) ||
+      !resources.structured_binding_->library(operation)) {
     const auto grid = static_cast<unsigned>((count * states + 127) / 128);
     if (operation == Operation::DensityRight)
       launch_transform_density_to_direct_right_kernel(grid, 128, 0, resources.stream_, systems,

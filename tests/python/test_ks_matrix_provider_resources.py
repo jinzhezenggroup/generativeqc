@@ -35,6 +35,40 @@ PREFIX = r"""
 #include "runtime/allocation_measurement.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
+extern "C" bool tensor_structured_scf_qualification_for_test_v1(int);
+extern "C" void probe_structured_endpoint_ablation() {
+  using generativeqc::tensor::CudaStructuredProductBinding;
+  using generativeqc::tensor::StructuredOperation;
+  const auto stream=reinterpret_cast<void*>(1);
+  const auto handle=reinterpret_cast<void*>(2);
+  assert(tensor_structured_scf_qualification_for_test_v1(127));
+  assert(CudaStructuredProductBinding::basis_workspace_required());
+  CudaStructuredProductBinding library(stream,handle,17,21,3,2);
+  assert(library.basis_workspace_enabled());
+  assert(tensor_structured_scf_qualification_for_test_v1(0));
+  assert(!CudaStructuredProductBinding::basis_workspace_required());
+  CudaStructuredProductBinding generated(stream,handle,17,21,3,2);
+  for (std::size_t slot=0; slot<7; ++slot) {
+    const auto operation=static_cast<StructuredOperation>(slot);
+    assert(library.library(operation));
+    assert(!generated.library(operation));
+    assert(library.diagnostic_dense_basis(operation)==(slot>=3));
+  }
+  assert(!generated.basis_workspace_enabled());
+  assert(library.compatible(stream,handle,17,3,2));
+  assert(!library.compatible(stream,handle,17,3,3));
+  assert(tensor_structured_scf_qualification_for_test_v1(5));
+  CudaStructuredProductBinding partial(stream,handle,17,21,3,2);
+  assert(partial.library(StructuredOperation::Gram));
+  assert(partial.library(StructuredOperation::InverseRoot));
+  assert(!partial.library(StructuredOperation::SignedGram));
+  assert(!partial.basis_workspace_enabled());
+  assert(!tensor_structured_scf_qualification_for_test_v1(128));
+  assert(!tensor_structured_scf_qualification_for_test_v1(-2));
+  assert(tensor_structured_scf_qualification_for_test_v1(-1));
+  CudaStructuredProductBinding production(stream,handle,17,21,3,2);
+  assert(!production.library(StructuredOperation::Gram));
+}
 extern "C" std::size_t probe_matrix_binding_host_bytes() {
   return generativeqc::tensor::CudaMatrixProductBinding::kPreparationHostBytes;
 }
@@ -207,6 +241,7 @@ def matrix_probe(
         "-Wall",
         "-Wextra",
         "-Werror",
+        "-DGENERATIVEQC_TEST_HOOKS=1",
         f"-I{fixture}",
         f"-I{folder}",
         f"-I{ROOT / 'src'}",
@@ -245,6 +280,14 @@ def test_owner_keeps_failed_live_cleanup_owned(
     matrix_probe: tuple[Path, Path], mode: str
 ) -> None:
     subprocess.run([str(matrix_probe[0]), mode], check=True, timeout=10)
+
+
+def test_endpoint_ablation_is_frozen_at_preparation(
+    matrix_probe: tuple[Path, Path],
+) -> None:
+    """Changing diagnostic hooks cannot repin an existing owner or Graph."""
+    library = ctypes.CDLL(str(matrix_probe[1]))
+    library.probe_structured_endpoint_ablation()
 
 
 @pytest.fixture(scope="module")

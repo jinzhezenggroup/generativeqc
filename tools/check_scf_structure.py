@@ -230,6 +230,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
     "tensor/ring_gram.hpp",
+    "runtime/cuda_component_trace.hpp",
     "scf/cuda/matrix_library.hpp",
     "scf/cuda/runtime_support.hpp",
 )
@@ -319,6 +320,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_jk_plan.",
     "scf/cuda/direct_coulomb.",
     "scf/cuda/basis_transform_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/df_jk_kernels.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",

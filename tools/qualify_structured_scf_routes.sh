@@ -46,7 +46,7 @@ if [[ $qualification_mode != run-only ]]; then
     -I"$qualification_root/include" -I"$qualification_cuda/include")
   qualification_objects=()
   for qualification_source in src/scf/cuda/matrix_library.cpp src/scf/cuda/runtime_support.cpp \
-    src/tensor/cuda_matrix_product.cpp; do
+    src/tensor/cuda_matrix_product.cpp src/runtime/cuda_component_trace.cpp; do
     qualification_unit=$(basename -- "$qualification_source" .cpp)
     "$qualification_cache" "$qualification_cxx" -std=c++20 -O3 -fPIC -DGENERATIVEQC_TEST_HOOKS=1 \
       -MD -MF "$qualification_build/$qualification_unit.d" "${qualification_includes[@]}" \

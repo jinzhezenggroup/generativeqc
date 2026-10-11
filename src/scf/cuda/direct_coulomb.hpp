@@ -15,6 +15,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+struct MatrixLibraryResources;
+
 struct ShellPairDensityBounds;
 
 /** Freeze source recurrence controls behind the shared preparation boundary.
@@ -52,6 +54,10 @@ struct GeneratedCoulombPlan {
   std::uint32_t* heads{};
   const std::uint32_t* pair_order{};
   const std::uint32_t* pair_class_offsets{};
+  /** Exact shell-local support bounds for both orientations of C. Density is
+   * the executed span envelope, not the number of nonzero coefficients. */
+  const std::int32_t* projection_spans{};
+  std::size_t projection_span_elements{}, projection_dense_elements{};
   GeneratedShellPairStream* topology{};
   /** Optional borrowed profiler array, one entry per direct shell class.
    * Counts admitted streaming J task dispatches, not primitive recurrences or
@@ -74,7 +80,8 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
  * The same stream owns every transform, scatter and projection; no host copies.
  */
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* density,
-                                      const double* beta, double* coulomb);
+                                      const double* beta, double* coulomb,
+                                      const MatrixLibraryResources* matrix_resources = nullptr);
 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
  * Direct CUDA plans prefer complete generated/native value coverage when the
@@ -127,7 +134,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
 /** Enqueue a complete raw J through generated/native classes plus the bounded
  * higher-l shell fallback owned by the exchange plan. */
 cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestricted,
-                                      const double* alpha, const double* beta, double* coulomb);
+                                      const double* alpha, const double* beta, double* coulomb,
+                                      const MatrixLibraryResources* matrix_resources = nullptr);
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
@@ -136,7 +144,8 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestr
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange,
                                        DirectCoulombRange range = DirectCoulombRange::Full,
-                                       double omega = 0.0);
+                                       double omega = 0.0,
+                                       const MatrixLibraryResources* matrix_resources = nullptr);
 
 /** Enqueue primary full-range J/K plus one SR/LR correction after a
  * single public-to-Cartesian spin-density transform and shell-density-bound

@@ -19,7 +19,8 @@
 
 namespace generativeqc::tensor {
 struct PanelProductDiagnostic;
-}
+class CudaStructuredProductBinding;
+}  // namespace generativeqc::tensor
 
 namespace generativeqc::dft {
 
@@ -300,6 +301,9 @@ class CudaKsPlan {
   /** Optional prepared-operation provenance; null means that the owner did
    * not admit a separate preparation budget. No selection happens here. */
   const tensor::PanelProductDiagnostic* density_provider_diagnostic() const noexcept;
+  /** Complete prepared reconstruction/basis offers, including negative/resource
+   * evidence. This view never performs discovery or changes the selected route. */
+  const tensor::CudaStructuredProductBinding* structured_provider_diagnostic() const noexcept;
   CudaKsTransfers transfers() const noexcept;
 
  private:

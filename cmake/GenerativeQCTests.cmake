@@ -113,9 +113,16 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_df_density_seed_tests tests/native/test_df_density_seed.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver SKIP_77)
     set_property(SOURCE "${GENERATIVEQC_GRID_SOURCE}" src/dft/cuda_ks.cpp src/dft/cuda_xc.cpp
+                        src/tensor/cuda_matrix_product.cpp
                         src/dft/dispersion/d4_runtime_cuda.cu
                  APPEND PROPERTY COMPILE_DEFINITIONS GENERATIVEQC_TEST_HOOKS=1)
     add_executable(generativeqc_weighted_eri_probe tests/native/weighted_eri_probe.cpp)
+    add_executable(generativeqc_structured_scf_endpoint_probe
+                   tests/native/structured_scf_endpoint_probe.cpp)
+    target_link_libraries(generativeqc_structured_scf_endpoint_probe PRIVATE
+                          generativeqc CUDA::cudart CUDA::cublas CUDA::cusolver)
+    target_include_directories(generativeqc_structured_scf_endpoint_probe PRIVATE
+                               "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(generativeqc_weighted_eri_probe PRIVATE generativeqc CUDA::cudart)
     target_include_directories(generativeqc_weighted_eri_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_executable(generativeqc_df_value_probe tests/native/df_value_probe.cpp)

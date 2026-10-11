@@ -904,7 +904,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             bounded_fock_class_timing, requested_bounded_direct_streaming,
             requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
             requested_incremental_diis_gram, use_cublas,
-            tensor::CudaStructuredProductBinding::production_library_qualified)) {
+            tensor::CudaStructuredProductBinding::basis_workspace_required())) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1340,11 +1340,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto direct_fock = arena_pointer<double>(resources.arena_, layout.direct_fock);
   auto direct_transform_temporary =
       arena_pointer<double>(resources.arena_, layout.direct_transform_temporary);
-  auto basis_matrix_scratch =
-      resources.blas_ && transformed_direct &&
-              tensor::CudaStructuredProductBinding::production_library_qualified
-          ? arena_pointer<double>(resources.arena_, layout.basis_matrix_scratch)
-          : nullptr;
   auto shell_pair_bounds = arena_pointer<double>(resources.arena_, layout.shell_pair_bounds);
   auto shell_pair_density_bounds =
       arena_pointer<ShellPairDensityBounds>(resources.arena_, layout.shell_pair_density_bounds);
@@ -1996,6 +1991,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       return outputs;
     }
   }
+  // First setup creates the immutable binding after arena allocation. Resolve
+  // its charged publication span only now, not from an empty optional binding.
+  auto basis_matrix_scratch =
+      resources.structured_binding_ && transformed_direct &&
+              resources.structured_binding_->basis_workspace_enabled()
+          ? arena_pointer<double>(resources.arena_, layout.basis_matrix_scratch)
+          : nullptr;
   if (options.export_physical_reference) {
     // Account for the actual eigensolver workspace before considering optional
     // residency. Cache-eligible references keep their matrix-direct arena so
