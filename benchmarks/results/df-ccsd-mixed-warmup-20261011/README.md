@@ -13,7 +13,7 @@ The comparator is frozen master `98263e06ca13aa88cee504f1f105f5cf3ef6d92a`,
 not whatever master contains when this evidence is read. The measured candidate
 is that commit plus `measured-source.patch.gz`; it was dirty at measurement.
 The publishing commit also adds evidence, updates its note link and registers
-the opt-in policy; none changes measured executable sources. `provenance.json` binds the exact
+the opt-in policy; none changes measured executable sources. `provenance.json.gz` binds the exact
 patch, input, binaries, controls, hardware and retained records by SHA-256.
 No later publishing commit or rebuilt binary is claimed to have been measured.
 
@@ -38,7 +38,7 @@ policy to a default or establish performance for other sizes/devices.
 Maximum paired energy error is `6.963318810448982e-13` hartree and maximum
 force-component error is `1.759259404821023e-11` hartree/bohr. Original independent
 FP64 CCSD replay residuals remain at most `1e-10`; Lambda, Z and stationarity
-gates remain below `1e-8`. `independent-accuracy.json` retains H2/water/LiH
+gates remain below `1e-8`. `independent-accuracy.json.gz` retains H2/water/LiH
 same-Hamiltonian oracle energies and two-step directional finite differences.
 
 CCSD evaluations change 38 → 36 (20 FP32 warmup, 16 strict FP64); strict Q4
@@ -57,7 +57,7 @@ explains the corrections; `rejected-v1.json.gz` retains the negative samples.
 
 ## Retained records and reproduction
 
-- `summary.json`: final medians and numerical gates, without duplicated samples.
+- `summary.json.gz`: final medians and numerical gates, without duplicated samples.
 - `samples.json.gz`: original complete analysis, including all ten unrounded
   endpoint records, full process wall measurements and occupancy peaks.
 - `occupancy-samples.json.gz`: all original timestamps and memory-used values
@@ -68,8 +68,14 @@ explains the corrections; `rejected-v1.json.gz` retains the negative samples.
 - `measured-source.patch.gz`: dirty-source reconstruction against frozen master.
 - `measure.sh` and `analyze.py.gz`: exact historical measurement and gate scripts.
   The runner contains machine-local dependency paths, not a portable installer.
-- `independent-accuracy.json` and `provenance.json`: independent numerical
+- `independent-accuracy.json.gz` and `provenance.json.gz`: independent numerical
   records, qualification summaries and authentic source/binary/storage identities.
+
+The three JSON payloads are losslessly gzip-encoded to leave room for subsequent
+qualification within the existing aggregate evidence budget. Decode them with
+`gzip -dc NAME.json.gz > NAME.json`; the exact historical bytes and SHA-256
+identities inside provenance are unchanged. Its internal filenames refer to
+these decoded payloads. No reconstruction patch or numeric observation is retired.
 
 The shared [ethane input](../df-lambda-gemm-20261004/ethane230.input) has SHA-256
 `9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e`.
@@ -80,7 +86,7 @@ runner's `master/` and `candidate/build-cuda/` paths and the shared input before
 running five pairs, keeping Slurm's assigned device visibility:
 
 ```bash
-srun --partition=main --nodelist=n1 --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+srun --partition=main --nodelist=node1 --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --cpus-per-task=4 --time=01:00:00 bash measure.sh /path/to/run-root 5
 gzip -dc analyze.py.gz > /path/to/run-root/analyze.py
 python /path/to/run-root/analyze.py /path/to/run-root --minimum-pairs 5
