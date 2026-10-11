@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -76,6 +77,8 @@ QUALIFIED_UNIT_MODE = "stable-shards"
 QUALIFIED_STANDARD = "c++20"
 QUALIFIED_FAST_COMPILE = False
 QUALIFIED_HOST_COMPILER = "nvcc-default"
+# The production OBJECT library sets POSITION_INDEPENDENT_CODE=ON.
+QUALIFIED_HOST_OPTIONS = ("-Xcompiler=-fPIC",)
 # Match the normal CMake release build: split compilation changes resources.
 QUALIFIED_SPLIT_COMPILE_THREADS = 1
 # CMake's NVIDIA Release rule adds NDEBUG alongside the target definition.
@@ -166,6 +169,15 @@ def validate_production_shard_count(
     }:
         raise ValueError(
             "production qualification requires GENERATIVEQC_CUDA_FAST_COMPILE=OFF"
+        )
+    if configured_value("CMAKE_CUDA_FLAGS").strip():
+        raise ValueError("production qualification requires empty CMAKE_CUDA_FLAGS")
+    if shlex.split(configured_value("CMAKE_CUDA_FLAGS_RELEASE")) != [
+        "-O3",
+        "-DNDEBUG",
+    ]:
+        raise ValueError(
+            "production qualification requires CMAKE_CUDA_FLAGS_RELEASE=-O3 -DNDEBUG"
         )
     for field, allowed in (
         ("GENERATIVEQC_AOT_UNIT_MODE", {QUALIFIED_UNIT_MODE}),
@@ -273,44 +285,187 @@ def validate_effective_compiler_launcher(
         )
 
 
-def validate_generated_cuda_rules(working_directory: Path) -> None:
-    """Reject effective Ninja CUDA commands with a hidden host override."""
-    build_file = working_directory.resolve() / "build.ninja"
-    rules_file = working_directory.resolve() / "CMakeFiles" / "rules.ninja"
-    if not build_file.is_file() or not rules_file.is_file():
-        raise ValueError("qualified production context requires generated Ninja rules")
-    host_override = re.compile(r"(?:^|[ \t])(?:-ccbin|--compiler-bindir)(?:=|[ \t])")
-    if host_override.search(rules_file.read_text(encoding="utf-8")):
-        raise ValueError("generated CUDA compiler rule contains a host override")
-    lines = build_file.read_text(encoding="utf-8").splitlines()
-    shard_source = (
-        f"generativeqc_generated_shell_sm{QUALIFIED_ARCHITECTURE[3:]}_"
-        f"shard_{QUALIFIED_SHARD_INDEX}.cu"
+def validate_generated_cuda_rules(
+    working_directory: Path,
+    nvcc: Path,
+    effective_launcher: str,
+    *,
+    generated_directory: Path,
+) -> None:
+    """Bind the qualified Ninja edge to the recorded launcher and default host.
+
+    Support literal and per-edge CMake launchers, without evaluating arbitrary
+    Ninja/shell variables or borrowing another target's flags or launcher.
+    """
+    rules = (working_directory / "CMakeFiles" / "rules.ninja").read_text()
+    matching = re.findall(
+        r"^rule (CUDA_COMPILER__generativeqc_aot_sm_120_[^\s]+)\n"
+        r"(.*?)(?=^rule |\Z)",
+        rules,
+        re.MULTILINE | re.DOTALL,
     )
-    starts = [
-        index
-        for index, line in enumerate(lines)
-        if line.startswith("build ")
-        and shard_source in line
-        and "CUDA_COMPILER" in line
-    ]
-    if len(starts) != 1:
-        candidates = [line for line in lines if shard_source in line]
+    if len(matching) != 1 or not matching[0][0].endswith("_Release"):
         raise ValueError(
-            "generated Ninja build must contain exactly one qualified shard-6 "
-            f"CUDA object rule; candidates={candidates!r}"
+            "production qualification requires one Release Ninja AOT compiler rule"
         )
-    start = starts[0]
-    stop = next(
-        (
-            index
-            for index in range(start + 1, len(lines))
-            if lines[index].startswith("build ")
-        ),
-        len(lines),
+    commands = re.findall(r"^[ \t]+command = ([^\r\n]+)$", matching[0][1], re.MULTILINE)
+    if len(commands) != 1:
+        raise ValueError(
+            "production AOT compiler rule must contain exactly one command"
+        )
+    # Target compile options live in FLAGS on the shard's build edge, even
+    # when the launcher and CMAKE_CUDA_HOST_COMPILER are literal rule tokens.
+    # Read only this edge; never borrow another target's values or evaluate
+    # arbitrary Ninja/shell variables.
+    build = (working_directory / "build.ninja").read_text()
+    edges = re.findall(
+        r"^build [^\r\n]*generativeqc_generated_shell_sm120_shard_6\.cu\.o: "
+        + re.escape(matching[0][0])
+        + r" ([^\r\n]*)\n((?:[ \t]+[^\r\n]*\n)*)",
+        build,
+        re.MULTILINE,
     )
-    if host_override.search("\n".join(lines[start:stop])):
-        raise ValueError("qualified shard-6 Ninja rule contains a host override")
+    if len(edges) != 1:
+        raise ValueError(
+            "production qualification requires exactly one shard-6 Ninja edge"
+        )
+
+    inputs, edge = edges[0]
+    if "$" in inputs:
+        raise ValueError("production shard-6 source input must be a literal Ninja path")
+    input_tokens = inputs.split()
+    dependency_start = next(
+        (index for index, token in enumerate(input_tokens) if token in {"|", "||"}),
+        len(input_tokens),
+    )
+    sources = input_tokens[:dependency_start]
+    if len(sources) != 1:
+        raise ValueError("production shard-6 edge requires one explicit source input")
+    source = Path(sources[0])
+    if not source.is_absolute():
+        source = working_directory / source
+    expected_source = (
+        generated_directory
+        / QUALIFIED_ARCHITECTURE
+        / f"generativeqc_generated_shell_sm{QUALIFIED_ARCHITECTURE[3:]}_shard_{QUALIFIED_SHARD_INDEX}.cu"
+    )
+    if source.resolve() != expected_source.resolve():
+        raise ValueError(
+            "production shard-6 source input differs from the measured generated source"
+        )
+
+    def edge_tokens(field: str) -> list[str]:
+        values = re.findall(rf"^[ \t]+{field} = ([^\r\n]*)$", edge, re.MULTILINE)
+        if len(values) != 1 or "$" in values[0]:
+            raise ValueError(
+                f"production shard-6 edge must declare exactly one literal {field} value"
+            )
+        return shlex.split(values[0])
+
+    flag_tokens = edge_tokens("FLAGS")
+    if any(
+        token in {"-optf", "--options-file"}
+        or token.startswith(("-optf=", "--options-file="))
+        for token in flag_tokens
+    ):
+        raise ValueError(
+            "production qualification does not support options-file indirection in FLAGS"
+        )
+    command_text = commands[0]
+    if command_text.startswith("${LAUNCHER}"):
+        # Newer CMake versions put launcher variables on each build edge.
+        launchers = re.findall(r"^[ \t]+LAUNCHER = ([^\r\n]+)$", edge, re.MULTILINE)
+        if len(launchers) != 1:
+            raise ValueError(
+                "production shard-6 edge must declare exactly one LAUNCHER"
+            )
+        command_text = command_text.removeprefix("${LAUNCHER}")
+        if command_text.startswith("${CODE_CHECK}"):
+            checks = re.findall(r"^[ \t]+CODE_CHECK = ([^\r\n]*)$", edge, re.MULTILINE)
+            if len(checks) > 1 or any(value.strip() for value in checks):
+                raise ValueError(
+                    "production qualification does not support a CODE_CHECK wrapper"
+                )
+            command_text = command_text.removeprefix("${CODE_CHECK}")
+        command_text = launchers[0] + command_text
+    command = shlex.split(command_text)
+    # CUDAHOSTCXX/toolchain selections may be normal CMake variables rather
+    # than cache entries. Reject their rule flags and target-option edge flags.
+    if any(
+        token in {"-ccbin", "--compiler-bindir"}
+        or token.startswith(("-ccbin=", "--compiler-bindir="))
+        for token in [*command, *flag_tokens]
+    ):
+        raise ValueError(
+            "production qualification does not support a generated CUDA host override"
+        )
+    # This gate supports the stock production Release recipe, not arbitrary
+    # global or target-local compiler options. A manual adapter invocation must
+    # never qualify a different production optimization/architecture recipe.
+    architecture = QUALIFIED_ARCHITECTURE.removeprefix("sm_")
+    expected_flags = [
+        "-O3",
+        "-DNDEBUG",
+        f"-std={QUALIFIED_STANDARD}",
+        f"--generate-code=arch=compute_{architecture},code=[compute_{architecture},sm_{architecture}]",
+        *QUALIFIED_HOST_OPTIONS,
+    ]
+    # These independent options may be reordered; require each exactly once
+    # so duplicates or later overriding options cannot slip through.
+    if sorted(flag_tokens) != sorted(expected_flags):
+        raise ValueError(
+            "production shard-6 FLAGS do not match the qualified Release recipe: "
+            f"{flag_tokens!r} != {expected_flags!r}"
+        )
+    # NDEBUG comes from the Release FLAGS; the remaining definitions and the
+    # include-search order must match the adapter and preprocessor exactly.
+    if edge_tokens("DEFINES") != [
+        f"-D{definition}"
+        for definition in QUALIFIED_DEFINITIONS
+        if definition != "NDEBUG"
+    ]:
+        raise ValueError("production shard-6 DEFINES differ from the qualified recipe")
+    if edge_tokens("INCLUDES") != [
+        f"-I{ROOT / 'src'}",
+        f"-I{generated_directory.resolve()}",
+    ]:
+        raise ValueError("production shard-6 INCLUDES differ from the qualified recipe")
+    expected_launcher = effective_launcher.split(";")
+    compiler_index = len(expected_launcher)
+    if (
+        len(command) <= compiler_index
+        or command[:compiler_index] != expected_launcher
+        or not Path(command[compiler_index]).is_absolute()
+        or Path(command[compiler_index]).resolve() != nvcc.resolve()
+        or any("$" in token for token in command[: compiler_index + 1])
+    ):
+        raise ValueError(
+            "production generated CUDA launcher/compiler does not match the "
+            "recorded effective launcher and measured nvcc"
+        )
+    # Accept only the stock NVIDIA compile rule. Dependency-file bookkeeping
+    # is recognized explicitly; compiler flags or options-file indirection
+    # inserted by a make-rules override are not part of this qualified recipe.
+    if command[compiler_index + 1 :] != [
+        "-forward-unknown-to-host-compiler",
+        "$DEFINES",
+        "$INCLUDES",
+        "$FLAGS",
+        "-MD",
+        "-MT",
+        "$out",
+        "-MF",
+        "$DEP_FILE",
+        "-x",
+        "cu",
+        "-c",
+        "$in",
+        "-o",
+        "$out",
+    ]:
+        raise ValueError(
+            "production CUDA rule differs from the supported compile/dependency recipe"
+        )
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -378,6 +533,7 @@ def _preprocess_command(
         str(nvcc),
         f"-std={QUALIFIED_STANDARD}",
         f"-arch={QUALIFIED_ARCHITECTURE}",
+        *QUALIFIED_HOST_OPTIONS,
         *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
         f"-I{ROOT / 'src'}",
         f"-I{generated}",
@@ -438,6 +594,7 @@ def qualified_flags() -> dict[str, Any]:
         "optimization": "-O3",
         "fast_compile": QUALIFIED_FAST_COMPILE,
         "host_compiler": QUALIFIED_HOST_COMPILER,
+        "host_options": list(QUALIFIED_HOST_OPTIONS),
         "split_compile_threads": QUALIFIED_SPLIT_COMPILE_THREADS,
         "definitions": list(QUALIFIED_DEFINITIONS),
         "ptxas_verbose": True,
@@ -597,6 +754,7 @@ def compile_shard(
                     object_path,
                     includes=(ROOT / "src", generated),
                     options=(
+                        *QUALIFIED_HOST_OPTIONS,
                         *(
                             (f"--split-compile={QUALIFIED_SPLIT_COMPILE_THREADS}",)
                             if QUALIFIED_SPLIT_COMPILE_THREADS != 1
@@ -839,8 +997,10 @@ def run_measurement(
     validate_effective_compiler_launcher(
         working_directory, launcher, effective_launcher
     )
-    validate_generated_cuda_rules(working_directory)
     generated = generated_directory.resolve()
+    validate_generated_cuda_rules(
+        working_directory, nvcc, effective_launcher, generated_directory=generated
+    )
     shards = generate_production_shards(generated)
     shard = shards[QUALIFIED_SHARD_INDEX]
     toolchain = toolchain_versions(nvcc)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -36,6 +37,8 @@ def _production_cache(**overrides: str) -> str:
         "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
         "GENERATIVEQC_CUDA_ARCHITECTURES": "",
         "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "CMAKE_CUDA_FLAGS": "",
+        "CMAKE_CUDA_FLAGS_RELEASE": "-O3 -DNDEBUG",
         "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED": "ON",
         "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER": "fixture-launcher",
         "GENERATIVEQC_RESOLVED_COMPILER_CACHE": str(FAKE_CCACHE),
@@ -45,6 +48,50 @@ def _production_cache(**overrides: str) -> str:
     }
     fields.update(overrides)
     return "".join(f"{field}:STRING={value}\n" for field, value in fields.items())
+
+
+def _generated_ninja_fixture(
+    directory: Path,
+    *,
+    per_edge: bool = False,
+    cache_name: str = "ccache",
+    actual_launcher: str | None = None,
+    relative_source: bool = False,
+) -> str:
+    """Retain CMake's real OBJECT-library compiler/phony/link edge shapes."""
+    effective = (
+        f"/usr/bin/cmake;-E;env;CCACHE_BASEDIR={directory.resolve()};{FAKE_CCACHE}"
+        if cache_name == "ccache"
+        else "/verified/sccache"
+    )
+    prefix = actual_launcher or shlex.join(effective.split(";"))
+    rule = "CUDA_COMPILER__generativeqc_aot_sm_120_unscanned_Release"
+    obj = "CMakeFiles/generativeqc_aot_sm_120.dir/generativeqc_generated_shell_sm120_shard_6.cu.o"
+    rules = directory / "CMakeFiles/rules.ninja"
+    rules.parent.mkdir(parents=True, exist_ok=True)
+    command_prefix = "${LAUNCHER}${CODE_CHECK}" if per_edge else prefix + " "
+    rules.write_text(
+        f"rule {rule}\n"
+        f"  command = {command_prefix}{FAKE_NVCC} -forward-unknown-to-host-compiler $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -x cu -c $in -o $out\n"
+    )
+    includes = shlex.join(
+        [f"-I{validator.ROOT / 'src'}", f"-I{directory / 'generated'}"]
+    )
+    source = (
+        directory / "generated/sm_120/generativeqc_generated_shell_sm120_shard_6.cu"
+    )
+    if relative_source:
+        source = source.relative_to(directory)
+    (directory / "build.ninja").write_text(
+        f"build {obj}: {rule} {source} || cmake_object_order_depends_target_generativeqc_aot_sm_120\n"
+        "  DEFINES = -DGENERATIVEQC_HAS_CUDA=1\n"
+        f"  INCLUDES = {includes}\n"
+        '  FLAGS = -O3 -DNDEBUG -std=c++20 "--generate-code=arch=compute_120,code=[compute_120,sm_120]" -Xcompiler=-fPIC\n'
+        + (f"  LAUNCHER = {prefix} \n" if per_edge else "")
+        + f"build generativeqc_aot_sm_120: phony {obj}\n"
+        + f"build libgenerativeqc.so: CUDA_SHARED_LIBRARY_LINKER {obj}\n"
+    )
+    return effective
 
 
 def _identity(**overrides: object) -> dict[str, object]:
@@ -154,10 +201,14 @@ class TestLedgerValidation:
     def test_valid_ledger_passes(self) -> None:
         validator.validate_ledger(_ledger())
 
-    def test_committed_ledger_uses_the_current_strict_schema(self) -> None:
+    def test_record_mode_keeps_the_historical_non_pic_ledger_as_a_negative(
+        self,
+    ) -> None:
         payload = json.loads(validator.LEDGER.read_text(encoding="utf-8"))
-        validator.validate_ledger(payload)
         assert payload["flags"]["host_compiler"] == "nvcc-default"
+        assert "host_options" not in payload["flags"]
+        with pytest.raises(validator.LedgerError, match="flags"):
+            validator.validate_ledger(payload)
         assert len(payload["kernels"]) == 86
 
     @pytest.mark.parametrize(
@@ -215,6 +266,9 @@ class TestLedgerValidation:
             ("fast_compile", True),
             ("fast_compile", 0),
             ("host_compiler", "/usr/bin/clang++"),
+            ("host_options", []),
+            ("host_options", "-Xcompiler=-fPIC"),
+            ("host_options", ["-Xcompiler=-fno-PIC"]),
             ("split_compile_threads", 8),
             ("split_compile_threads", True),
             ("split_compile_threads", 1.0),
@@ -451,6 +505,10 @@ class TestProductionCompile:
             assert "-arch=sm_120" in command and "-Xptxas=-v" in command
             assert "-DGENERATIVEQC_HAS_CUDA=1" in command
             assert "-DNDEBUG" in command
+            assert command.count("-Xcompiler=-fPIC") == 1
+            assert arguments["identity"]["flags"]["host_options"] == [
+                "-Xcompiler=-fPIC"
+            ]
             assert command[command.index("-c") + 1] == "shard.cu"
             assert Path.cwd() == tmp_path.resolve()
             assert os.environ["CCACHE_BASEDIR"] == str(tmp_path.resolve())
@@ -536,6 +594,7 @@ class TestProductionCompile:
         ) -> subprocess.CompletedProcess[bytes]:
             assert command[-1] == str(Path("generated/shard.cu"))
             assert kwargs["cwd"] == tmp_path
+            assert command.count("-Xcompiler=-fPIC") == 1
             return subprocess.CompletedProcess(command, 0, b"preprocessed", b"")
 
         monkeypatch.setattr(validator.subprocess, "run", preprocess)
@@ -758,6 +817,8 @@ class TestProductionContextBinding:
         "field,value",
         [
             ("GENERATIVEQC_CUDA_FAST_COMPILE", "ON"),
+            ("CMAKE_CUDA_FLAGS", "--use_fast_math"),
+            ("CMAKE_CUDA_FLAGS_RELEASE", "-O0 -DNDEBUG"),
             ("CMAKE_CUDA_COMPILER", str(Path("/other/nvcc").resolve())),
             ("CMAKE_CUDA_HOST_COMPILER", str(Path("/usr/bin/clang++").resolve())),
             (
@@ -810,39 +871,278 @@ class TestProductionContextBinding:
             )
 
     @pytest.mark.parametrize("location", ["rules", "shard"])
+    @pytest.mark.parametrize("per_edge", [False, True])
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            "-ccbin=/usr/bin/clang++",
+            "--compiler-bindir /usr/bin/clang++",
+            '"-ccbin=/opt/host compiler/g++"',
+            '"--compiler-bindir" /usr/bin/clang++',
+        ],
+    )
     def test_generated_host_override_fails_closed(
-        self, tmp_path: Path, location: str
+        self, tmp_path: Path, location: str, per_edge: bool, flag: str
     ) -> None:
-        rules = tmp_path / "CMakeFiles/rules.ninja"
-        rules.parent.mkdir()
-        rules.write_text(
-            "rule CUDA_COMPILER\n  command = nvcc "
-            + ("-ccbin=/usr/bin/clang++ " if location == "rules" else "")
-            + "$FLAGS -c $in -o $out\n"
+        effective = _generated_ninja_fixture(tmp_path, per_edge=per_edge)
+        path = tmp_path / (
+            "CMakeFiles/rules.ninja" if location == "rules" else "build.ninja"
         )
-        shard = (
-            "generativeqc_generated_shell_sm120_shard_6.cu.o: "
-            "CUDA_COMPILER generated/production_shell_kernels/sm_120/"
-            "generativeqc_generated_shell_sm120_shard_6.cu\n"
-        )
-        flags = "  FLAGS = -O3"
-        if location == "shard":
-            flags += " --compiler-bindir /usr/bin/clang++"
-        (tmp_path / "build.ninja").write_text(f"build {shard}{flags}\n")
+        needle = "$DEFINES" if location == "rules" else "FLAGS ="
+        path.write_text(path.read_text().replace(needle, f"{needle} {flag}"))
         with pytest.raises(ValueError, match="host override"):
-            validator.validate_generated_cuda_rules(tmp_path)
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
 
-    def test_generated_default_host_rule_passes(self, tmp_path: Path) -> None:
-        rules = tmp_path / "CMakeFiles/rules.ninja"
-        rules.parent.mkdir()
-        rules.write_text("rule CUDA_COMPILER\n  command = nvcc $FLAGS -c $in -o $out\n")
-        (tmp_path / "build.ninja").write_text(
-            "build object/generativeqc_generated_shell_sm120_shard_6.cu.o: "
-            "CUDA_COMPILER generated/production_shell_kernels/sm_120/"
-            "generativeqc_generated_shell_sm120_shard_6.cu\n"
-            "  FLAGS = -O3\n"
+    @pytest.mark.parametrize("per_edge", [False, True])
+    @pytest.mark.parametrize("cache_name", ["ccache", "sccache"])
+    @pytest.mark.parametrize("relative_source", [False, True])
+    def test_generated_default_host_object_and_phony_rules_pass(
+        self, tmp_path: Path, per_edge: bool, cache_name: str, relative_source: bool
+    ) -> None:
+        effective = _generated_ninja_fixture(
+            tmp_path,
+            per_edge=per_edge,
+            cache_name=cache_name,
+            relative_source=relative_source,
         )
-        validator.validate_generated_cuda_rules(tmp_path)
+        validator.validate_generated_cuda_rules(
+            tmp_path, FAKE_NVCC, effective, generated_directory=tmp_path / "generated"
+        )
+
+    def test_generated_stock_options_can_be_reordered_but_not_duplicated(
+        self, tmp_path: Path
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(
+            build.read_text()
+            .replace("-std=c++20 ", "")
+            .replace("-Xcompiler=-fPIC", "-Xcompiler=-fPIC -std=c++20")
+        )
+        validator.validate_generated_cuda_rules(
+            tmp_path, FAKE_NVCC, effective, generated_directory=tmp_path / "generated"
+        )
+        build.write_text(build.read_text().replace("FLAGS =", "FLAGS = -O3"))
+        with pytest.raises(ValueError, match="qualified Release recipe"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize("mutation", ["wrong", "extra", "missing", "escaped"])
+    def test_generated_edge_binds_its_single_explicit_source(
+        self, tmp_path: Path, mutation: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path, relative_source=True)
+        build = tmp_path / "build.ninja"
+        source = "generated/sm_120/generativeqc_generated_shell_sm120_shard_6.cu"
+        replacement = {
+            "wrong": "other/" + source,
+            "extra": source + " extra.cu",
+            "missing": "",
+            "escaped": source.replace("generated/", "generated$ dir/"),
+        }[mutation]
+        build.write_text(build.read_text().replace(source + " ||", replacement + " ||"))
+        with pytest.raises(ValueError, match="source input"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    def test_generated_edge_dependencies_are_not_extra_source_inputs(
+        self, tmp_path: Path
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(build.read_text().replace(" ||", " | generated/header.hpp ||"))
+        validator.validate_generated_cuda_rules(
+            tmp_path, FAKE_NVCC, effective, generated_directory=tmp_path / "generated"
+        )
+
+    @pytest.mark.parametrize("per_edge", [False, True])
+    @pytest.mark.parametrize(
+        "option", ["--use_fast_math", "-O0", "--options-file=/tmp/extra-options"]
+    )
+    def test_generated_command_cannot_add_options_outside_flags(
+        self, tmp_path: Path, per_edge: bool, option: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path, per_edge=per_edge)
+        rules = tmp_path / "CMakeFiles/rules.ninja"
+        rules.write_text(
+            rules.read_text().replace(str(FAKE_NVCC), f"{FAKE_NVCC} {option}")
+        )
+        with pytest.raises(ValueError, match="compile/dependency recipe"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize("field", ["DEFINES", "INCLUDES"])
+    @pytest.mark.parametrize("mutation", ["extra", "missing", "duplicate", "variable"])
+    def test_generated_preprocessor_inputs_must_match_the_adapter(
+        self, tmp_path: Path, field: str, mutation: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        text = build.read_text()
+        line = next(
+            line for line in text.splitlines(True) if line.startswith(f"  {field} =")
+        )
+        option = "-DCHANGED_MATH=1" if field == "DEFINES" else "-I/other/headers"
+        replacement = {
+            "extra": line.rstrip() + f" {option}\n",
+            "missing": "",
+            "duplicate": line * 2,
+            "variable": f"  {field} = $OVERRIDE\n",
+        }[mutation]
+        build.write_text(text.replace(line, replacement))
+        with pytest.raises(ValueError, match=field):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    def test_generated_include_search_order_is_bound(self, tmp_path: Path) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        text = build.read_text()
+        line = next(
+            line for line in text.splitlines(True) if line.startswith("  INCLUDES =")
+        )
+        tokens = shlex.split(line.split("=", 1)[1])
+        build.write_text(
+            text.replace(line, "  INCLUDES = " + shlex.join(tokens[::-1]) + "\n")
+        )
+        with pytest.raises(ValueError, match="INCLUDES"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize("per_edge", [False, True])
+    def test_generated_launcher_must_match_managed_snapshot(
+        self, tmp_path: Path, per_edge: bool
+    ) -> None:
+        # A CMAKE_USER_MAKE_RULES_OVERRIDE_CUDA include can run after the
+        # managed snapshot and change the target's eventual launcher.
+        effective = _generated_ninja_fixture(
+            tmp_path, per_edge=per_edge, actual_launcher="/different/sccache"
+        )
+        with pytest.raises(ValueError, match="generated CUDA launcher/compiler"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize("option", ["--use_fast_math", "-O0", "--maxrregcount=32"])
+    def test_generated_flags_reject_global_and_target_local_recipe_drift(
+        self, tmp_path: Path, option: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(build.read_text().replace("FLAGS =", f"FLAGS = {option}"))
+        with pytest.raises(ValueError, match="qualified Release recipe"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize(
+        "flags",
+        [
+            "-optf=/tmp/host-options",
+            "--options-file /tmp/host-options",
+            '"--options-file=/tmp/host options"',
+        ],
+    )
+    def test_generated_flags_cannot_hide_host_options_in_a_file(
+        self, tmp_path: Path, flags: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(build.read_text().replace("FLAGS =", f"FLAGS = {flags}"))
+        with pytest.raises(ValueError, match="options-file indirection"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize(
+        "mutation", ["missing", "duplicate", "variable", "continuation"]
+    )
+    def test_generated_flags_must_be_unambiguous_literals(
+        self, tmp_path: Path, mutation: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        text = build.read_text()
+        flags = next(
+            line for line in text.splitlines(True) if line.startswith("  FLAGS =")
+        )
+        replacement = {
+            "missing": "",
+            "duplicate": flags * 2,
+            "variable": "  FLAGS = $HOST_FLAGS\n",
+            "continuation": "  FLAGS = -O3 $\n    -ccbin=/usr/bin/clang++\n",
+        }[mutation]
+        build.write_text(text.replace(flags, replacement))
+        with pytest.raises(ValueError, match="literal FLAGS"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    @pytest.mark.parametrize(
+        "mutation",
+        ["wrong_rule", "duplicate_object", "missing_separator", "code_check"],
+    )
+    def test_generated_edge_and_launcher_must_be_unambiguous(
+        self, tmp_path: Path, mutation: str
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path, per_edge=True)
+        build = tmp_path / "build.ninja"
+        text = build.read_text()
+        if mutation == "wrong_rule":
+            text = text.replace(": CUDA_COMPILER__", ": OTHER_COMPILER__")
+        elif mutation == "duplicate_object":
+            text += text.split("build generativeqc_aot_sm_120:")[0]
+        elif mutation == "missing_separator":
+            text = text.replace(str(FAKE_CCACHE) + " \n", str(FAKE_CCACHE) + "\n")
+        else:
+            text = text.replace(
+                "  LAUNCHER =", "  CODE_CHECK = /other/wrapper\n  LAUNCHER ="
+            )
+        build.write_text(text)
+        with pytest.raises(ValueError, match="production"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
 
     @pytest.mark.parametrize("cache_type", ["STRING", "UNINITIALIZED"])
     def test_accepts_configured_qualified_shard_count(
@@ -935,6 +1235,7 @@ class TestProductionContextBinding:
             "GENERATIVEQC_AOT_PROFILE",
             "GENERATIVEQC_AOT_SHELL_MANIFEST",
             "GENERATIVEQC_CUDA_FAST_COMPILE",
+            "CMAKE_CUDA_FLAGS_RELEASE",
             "CMAKE_CUDA_COMPILER",
             "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED",
             "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER",
@@ -960,10 +1261,12 @@ class TestProductionContextBinding:
             validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize("mode", ["missing", "duplicate"])
+    @pytest.mark.parametrize(
+        "field", ["GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER", "CMAKE_CUDA_FLAGS"]
+    )
     def test_resolved_default_host_field_must_be_declared_once(
-        self, tmp_path: Path, mode: str
+        self, tmp_path: Path, mode: str, field: str
     ) -> None:
-        field = "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER"
         contents = _production_cache()
         line = next(
             line for line in contents.splitlines(True) if line.startswith(field + ":")
