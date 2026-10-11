@@ -701,14 +701,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotEqual(self.resources("--basis", str(path)).returncode, 0)
 
     def test_scalar_ecp_analytic_energy_forces_and_metadata_validation(self) -> None:
-        sys.path.insert(0, str(SOURCE / "python"))
-        from generativeqc.basis import (
-            BasisProvenance,
-            BasisSet,
-            BasisShell,
-            ElementBasis,
-        )
-
+        # Keep this native-only contract runnable without Python packages.
         potential = [
             {
                 "ecp_type": "scalar_ecp",
@@ -718,19 +711,40 @@ class RuntimeTests(unittest.TestCase):
                 "coefficients": [["0"]],
             }
         ]
-        element = ElementBasis(
-            atomic_number=2,
-            shells=(BasisShell(0, ("1",), (("1",),)),),
-            ecp_core_electrons=1,
-            ecp_data=canonical(potential),
-        )
-        record = BasisSet(
-            name="analytic-He-ECP",
-            elements=(element,),
-            provenance=BasisProvenance("synthetic", "1", "CC0", "c" * 64),
-        )
+        record = {
+            "schema": "generativeqc.basis",
+            "schema_version": 1,
+            "name": "analytic-He-ECP",
+            "representation": "cartesian",
+            "exponent_units": "bohr^-2",
+            "normalization": "normalized-primitives; native-normalized-contractions",
+            "ordering": "CCA-cartesian; libcint-real-spherical",
+            "provenance": {
+                "source": "synthetic",
+                "version": "1",
+                "license": "CC0",
+                "checksum": "c" * 64,
+            },
+            "elements": [
+                {
+                    "atomic_number": 2,
+                    "nuclear_charge": 2,
+                    "ecp_core_electrons": 1,
+                    "ecp_data": canonical(potential),
+                    "shells": [
+                        {
+                            "angular_momentum": 0,
+                            "source_group": 0,
+                            "exponents": ["1E0"],
+                            "coefficients": [["1E0"]],
+                        }
+                    ],
+                }
+            ],
+        }
+        record["checksum"] = digest(record)
         path = self.root / "ecp.json"
-        path.write_text(canonical(record.to_payload()))
+        path.write_text(canonical(record))
         molecule = self.root / "he.xyz"
         molecule.write_text("1\nanalytic ECP\nHe 0 0 0\n")
         flags = (
@@ -753,7 +767,7 @@ class RuntimeTests(unittest.TestCase):
         planned = self.cli("resources", *flags)
         self.assertEqual(planned.returncode, 0, planned.stderr)
         self.assertGreater(json.loads(planned.stdout)["ecp_workspace"], 0)
-        corrupted = record.to_payload()
+        corrupted = copy.deepcopy(record)
         corrupted["elements"][0]["ecp_data"] = (
             '[{"ecp_type":"scalar_ecp","ecp_type":"scalar_ecp"}]'
         )
