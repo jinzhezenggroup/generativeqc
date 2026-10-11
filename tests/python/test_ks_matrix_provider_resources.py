@@ -35,6 +35,12 @@ PREFIX = r"""
 #include "runtime/allocation_measurement.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
+extern "C" std::size_t probe_matrix_binding_host_bytes() {
+  return generativeqc::tensor::CudaMatrixProductBinding::kPreparationHostBytes;
+}
+extern "C" std::size_t probe_structured_binding_host_bytes() {
+  return generativeqc::tensor::CudaStructuredProductBinding::kPreparationHostBytes;
+}
 constexpr int CUBLAS_STATUS_INTERNAL_ERROR=7;
 int device=1, memcalls=0, destroys=0, creates=0, live=0, syncs=0;
 int destroy_failures=0, create_status=0, setup_status=0, capture=0;
@@ -247,6 +253,8 @@ def native_inventory(matrix_probe: tuple[Path, Path]) -> Any:
     query = library.generativeqc_resource_ks_matrix_provider_cuda_v1
     query.argtypes = [ctypes.c_size_t, ctypes.POINTER(ctypes.c_uint64)]
     query.restype = ctypes.c_int
+    library.probe_matrix_binding_host_bytes.restype = ctypes.c_size_t
+    library.probe_structured_binding_host_bytes.restype = ctypes.c_size_t
     return library
 
 
@@ -304,6 +312,28 @@ def test_python_budget_reserves_each_live_owner(
         systems, basis="def2-svp", backend="cuda", library=_library(native_inventory)
     )
     plan = plan_resources([request], ResourceBudget()).require_feasible()
+    matrix_binding_host = next(
+        e for e in plan.estimates if e.name == "all KS host matrix_binding_host"
+    )
+    assert matrix_binding_host.bytes == (
+        len(systems) * native_inventory.probe_matrix_binding_host_bytes()
+    )
+    assert matrix_binding_host.kind == "persistent"
+    structured_binding_host = next(
+        e for e in plan.estimates if e.name == "all KS host structured_binding_host"
+    )
+    assert structured_binding_host.bytes == (
+        len(systems) * native_inventory.probe_structured_binding_host_bytes()
+    )
+    assert structured_binding_host.kind == "persistent"
+    host_exact = ResourceBudget(host_bytes=plan.peak_bytes["host"])
+    plan_resources([request], host_exact).require_feasible()
+    assert (
+        plan_resources(
+            [request], ResourceBudget(host_bytes=host_exact.host_bytes - 1)
+        ).status
+        == "infeasible"
+    )
     allowance = next(
         e
         for e in plan.estimates
