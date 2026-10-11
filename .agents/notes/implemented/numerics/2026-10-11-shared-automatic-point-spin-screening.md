@@ -196,6 +196,25 @@ toolchain/header/library cache closure, cold compile cost, or public admission.
 The existing cached object probes and their diagnostic recipe hashes are not
 new persistent-cache keys. Raw reports are retained under `.cache/1118-ci/`.
 
+After #2242 merged and upstream advanced to
+`a9b991f723ae0482c4496d20c9e2dc0649b6ffe5`, the stage was rebased and frozen at
+`82c34b929b620430ae3bca4257c69a0aa298210a`. The rebased compiler/oracle/resource
+suite passes 569 tests, the point probes pass 33 tests per backend, and the
+complete CPU force/evidence suite again passes all 43 tests in one uninterrupted
+run. All 66 force rows and 22 CPU/CUDA point-source receipts revalidate against
+the rebased compiler closure. Numerical maxima are unchanged. The new real-GPU
+point run is Slurm job 1477; TPSS still records 120 stack bytes and 184 bytes each
+of stores/loads, within the probe's explicit limits, not a production promotion.
+
+The exact CMake-emitted native grid/XC source also compiles with NVCC 12.9 release
+resource flags after the demangler fix. All five active PBE scopes are present:
+AO jets, density product, density features, XC points and vxc contraction. The
+9,327,264-byte object yields compiled-region binding identity
+`fa4aa04b07e87d1ae084c20c85179e59be258d1e6ace784987e0fe5d442358e0`.
+This is compile-only native resource evidence, not automatic molecular CUDA
+execution. Raw rebased reports and `rebased-qualified-summary.json` remain in
+`.cache/1118-ci/`; no source mutation occurs during these qualification runs.
+
 ## References
 
 - Issues #1118, #1119, #1121, #1122, #1123, and #1124.
