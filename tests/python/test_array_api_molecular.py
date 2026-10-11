@@ -21,9 +21,7 @@ def test_molecular_public_api_has_one_entry_not_a_rhf_alias() -> None:
     """Only the unified method-neutral source is public."""
     assert xp.MolecularModel.__name__ == "MolecularModel"
     assert not hasattr(xp, "RHF")
-    assert xp.capabilities()["molecular_operators"] == (
-        "MolecularModel",
-    )
+    assert xp.capabilities()["molecular_operators"] == ("MolecularModel",)
 
 
 def _require_scheduled_cuda() -> None:
