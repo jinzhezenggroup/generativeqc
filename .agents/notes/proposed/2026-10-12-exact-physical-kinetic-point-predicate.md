@@ -3,6 +3,11 @@
 Status: proposed (scoped point qualification complete; no SCF/force promotion)
 Date: 2026-10-12
 
+The original unchanged-value guard below is superseded by
+[the rounded-moment projection correction](2026-10-12-rounded-physical-moment-projection.md).
+The e41a762 point-only qualification did not catch its molecular RKS regression;
+it must not be treated as endpoint qualification or used to justify that guard.
+
 ## Problem
 
 The physical-coordinate correction in #2279 removes a fractional-density

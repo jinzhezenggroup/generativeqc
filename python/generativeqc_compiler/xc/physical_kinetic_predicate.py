@@ -154,20 +154,37 @@ def emit_exact_kinetic_comparison() -> str:
 def emit_physical_kinetic_side() -> tuple[str, ...]:
     """Keep transformed work inputs on their original canonical comparison.
 
-    Exact raw-feature classification is used only if no floor, FHC clamp or
-    cross-spin clamp changed the work inputs. This intentionally does not grant
-    a new boundary convention to empty/floored-spin work coordinates.
+    Exact raw-feature classification requires both unchanged work coordinates
+    and exact per-spin kinetic feasibility. Independently rounded AO moments
+    can violate the latter even when a rounded FHC clamp changes no bits; these
+    latent projections retain the incumbent work-domain branch. Feasible spin
+    moments imply total feasibility by Cauchy-Schwarz, including exact ties.
+    Empty/floored-spin coordinates retain their original convention as well.
     """
     return (
         "  const double physical_kinetic_side = [&]() {",
+        "    const double work_side =",
+        "        work_sigma_aa + 2.0 * work_sigma_ab + work_sigma_bb <=",
+        "        8.0 * ((work_rho_a + work_rho_b) * (work_tau_a + work_tau_b))",
+        "        ? 0.0 : 1.0;",
         "    if (work_rho_a != rho_a || work_rho_b != rho_b ||",
         "        work_tau_a != tau_a || work_tau_b != tau_b ||",
         "        work_sigma_aa != sigma_aa || work_sigma_ab != sigma_ab ||",
         "        work_sigma_bb != sigma_bb)",
-        "      return work_sigma_aa + 2.0 * work_sigma_ab + work_sigma_bb <=",
-        "          8.0 * ((work_rho_a + work_rho_b) * (work_tau_a + work_tau_b))",
-        "          ? 0.0 : 1.0;",
-        f"    const bool inside = {emit_exact_kinetic_comparison()};",
-        "    return inside ? 0.0 : 1.0;",
+        "      return work_side;",
+        "    const auto exact_comparison = [&](const double rho[2],",
+        "        const double (&gradient)[2][3], const double tau[2]) {",
+        f"      return {emit_exact_kinetic_comparison()};",
+        "    };",
+        "    for (unsigned spin = 0; spin < 2; ++spin) {",
+        "      const double spin_rho[2]{rho[spin], 0.0};",
+        "      const double spin_tau[2]{tau[spin], 0.0};",
+        "      const double spin_gradient[2][3]{",
+        "          {gradient[spin][0], gradient[spin][1], gradient[spin][2]},",
+        "          {0.0, 0.0, 0.0}};",
+        "      if (!exact_comparison(spin_rho, spin_gradient, spin_tau))",
+        "        return work_side;",
+        "    }",
+        "    return 0.0;",
         "  }();",
     )

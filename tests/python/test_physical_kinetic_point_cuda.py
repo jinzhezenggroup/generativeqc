@@ -9,6 +9,9 @@ import pytest
 from test_libxc_physical_kinetic_predicate import (
     test_decimal_rank_one_fock_is_independent_inward_energy_derivative as assert_inward,
 )
+from test_libxc_physical_kinetic_predicate import (
+    test_rounded_ao_moments_preserve_inward_psd_energy_derivative as assert_rounded_inward,
+)
 
 pytest_plugins = ("test_libxc_automatic_point_native",)
 
@@ -27,3 +30,14 @@ def test_cpu_cuda_decimal_tie_uses_independent_inward_energy(
     if point.name != "MGGA_C_TPSS":
         pytest.skip("this independent boundary reproducer is TPSS correlation")
     assert_inward(library, scale)
+
+
+@pytest.mark.parametrize("fixed_electrons", (False, True))
+def test_cpu_cuda_rounded_moments_use_independent_inward_energy(
+    native_point: tuple[Any, Any, Any], fixed_electrons: bool
+) -> None:
+    """Actual backend emission must retain the legal captured RKS derivatives."""
+    point, library, _ = native_point
+    if point.name != "MGGA_C_TPSS":
+        pytest.skip("this independent boundary reproducer is TPSS correlation")
+    assert_rounded_inward(library, fixed_electrons)

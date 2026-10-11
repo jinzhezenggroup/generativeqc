@@ -235,3 +235,85 @@ def test_decimal_rank_one_fock_is_independent_inward_energy_derivative(
             slopes.append((evaluator(displaced) - baseline) / step)
         extrapolated = (10 * slopes[-1] - slopes[-2]) / 9
         assert abs(extrapolated - expected) < 2e-7
+
+
+@pytest.mark.parametrize("fixed_electrons", (False, True))
+def test_rounded_ao_moments_preserve_inward_psd_energy_derivative(
+    native_point: Any, fixed_electrons: bool
+) -> None:
+    """Moment rounding is not evidence that an AO-realizable state is exterior.
+
+    Retained RKS points have a positive exact raw kinetic gap although their
+    rounded FHC projection changes no scalar value. Both virtual occupation
+    and fixed-electron occupied-to-virtual transfer are legal inward PSD paths.
+    Independent Libxc energies, not raw vxc or saved native coefficients,
+    qualify each point as well as the weighted contraction.
+    """
+    import pyscf
+    from pyscf.dft import libxc
+
+    assert pyscf.__version__ == "2.14.0"
+    assert libxc.__version__ == "7.0.0"
+    fixture = json.loads(
+        (
+            ROOT / "tests/data/xc/physical-kinetic-predicate/rks-moment-rounding.json"
+        ).read_text()
+    )
+    fields = np.array([point["features"] for point in fixture["points"]])
+    jets = np.array([point["ao"] for point in fixture["points"]])
+    weights = np.array([point["weight"] for point in fixture["points"]])
+
+    def pack(values: np.ndarray) -> np.ndarray:
+        return np.column_stack(
+            (
+                values[:, 0] / 2,
+                values[:, 0] / 2,
+                values[:, 1:4] / 2,
+                values[:, 1:4] / 2,
+                values[:, 4] / 2,
+                values[:, 4] / 2,
+            )
+        )
+
+    def orbital_fields(orbital: list[float]) -> np.ndarray:
+        jet = jets @ np.array(orbital)
+        return np.column_stack(
+            (
+                jet[:, 0] ** 2,
+                2 * jet[:, :1] * jet[:, 1:4],
+                0.5 * np.sum(jet[:, 1:4] ** 2, axis=1),
+            )
+        )
+
+    def independent_energy(values: np.ndarray) -> np.ndarray:
+        physical = np.zeros((2, 6, len(values)))
+        physical[:, :4, :] = values[:, :4].T / 2
+        physical[:, 5, :] = values[:, 4] / 2
+        return libxc.eval_xc("MGGA_C_TPSS", physical, spin=1, deriv=0)[0] * values[:, 0]
+
+    for values in fields:
+        exact = [Fraction(float(value)) for value in values]
+        assert sum(value**2 for value in exact[1:4]) > 8 * exact[0] * exact[4]
+    increment = orbital_fields(fixture["virtual"])
+    if fixed_electrons:
+        increment -= orbital_fields(fixture["occupied"])
+    actual = _evaluate(native_point, pack(fields))
+    assert np.all(actual[:, 11] == 1)
+    response = (
+        (actual[:, 1] + actual[:, 2]) * increment[:, 0] / 2
+        + np.sum((actual[:, 3:6] + actual[:, 6:9]) * increment[:, 1:4] / 2, axis=1)
+        + (actual[:, 9] + actual[:, 10]) * increment[:, 4]
+    )
+    reference = independent_energy(fields)
+    np.testing.assert_allclose(actual[:, 0], reference, atol=2e-11, rtol=0)
+    for evaluator, baseline in (
+        (lambda values: _evaluate(native_point, pack(values))[:, 0], actual[:, 0]),
+        (independent_energy, reference),
+    ):
+        slopes = [
+            (evaluator(fields + step * increment) - baseline) / step
+            for step in (1e-5, 1e-6, 1e-7)
+        ]
+        extrapolated = (10 * slopes[-1] - slopes[-2]) / 9
+        np.testing.assert_allclose(extrapolated, response, atol=2e-7, rtol=0)
+        assert abs(weights @ (extrapolated - response)) < 2e-7
