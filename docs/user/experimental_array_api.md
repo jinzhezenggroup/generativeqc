@@ -171,6 +171,65 @@ of that Python float. During capture, negative-zero float literals are rejected 
 rational constants cannot preserve their sign. Explicitly scientific arrays
 retain the stricter exact-scalar spelling rules.
 
+## Generic native molecular method sources
+
+Use `xp.MolecularModel` to connect any **existing, supported** native
+`Calculator` method selector (such as `rhf`, `uhf`, or a qualified
+`pbe-rks`/`pbe0-rks` route) without writing a separate frontend or
+first-order TensorIR rule for each functional:
+
+```python
+pbe = xp.MolecularModel(("O", "H", "H"), method="pbe-rks",
+                        basis="sto-3g", backend="cpu")
+energy_grad = xp.value_and_grad(lambda coordinates: pbe(coordinates))
+value, gradient = energy_grad(coordinates)
+energy_grad.close()
+```
+
+`method` passes through the established native method/MethodIR resolution,
+using the native method's own analytic energy and force operators.
+`multiplicity`, `density_fitting` and `auxiliary_basis` are part of the
+immutable source identity; unknown or unsupported scientific combinations fail
+through the native capability/resource gate, without CPU or finite-difference
+fallback. This is an *interface generalization*, **not** evidence that all DFT
+functionals, ECPs, unrestricted or CC methods already provide qualified analytic
+nuclear gradients. Energy-only calls are allowed for energy-capable methods;
+`grad`/`value_and_grad` require the method's genuine analytic forces.
+The initial public method-neutral source remains host-staged FP64 and first
+order; higher-order implicit/response gradients are not inferred.
+
+`xp.RHF` remains a backwards-compatible closed-shell all-electron convenience
+source, including its original preflight. Both objects use the same molecular
+capture, native execution, first-order snapshot and TensorIR chain-rule code.
+
+### Diagnose small-endpoint overhead
+
+The opt-in environment switch
+`GENERATIVEQC_ARRAY_API_PROFILE=1` must be set **before constructing the
+compiled function**. `compiled.compilation_info()` then exposes
+`molecular_profile_ns` and `molecular_profile_counts`. The stages are
+`source_input_scan`, `source_geometry`, `source_calculator_lookup`,
+`source_native_singlepoint`, `source_result_publication`,
+`source_diagnostics`, `tensor_snapshot_binding`,
+`tensor_build_cold`, `molecular_dispatch`, and `tensor_execute`.
+`molecular_dispatch` includes its nested source stages, so do **not** sum all
+stage totals as if they were disjoint. Timings use CPU wall clocks around
+synchronous calls and are **not** CUDA-event/kernel measurements.
+
+For alternating complete energy-and-gradient endpoints with a separately
+subtracted cold profile:
+
+```bash
+python benchmarks/array_api_rhf_endpoint.py --backend cuda --molecule h2 \
+  --profile-molecular --repeats 10 --output /tmp/rhf-profile.json
+```
+
+This command still requires the documented bounded Slurm GPU allocation.
+`warm_phase_profile` reports the mean time per profiled warm call; profile
+sampling changes the measured timing and disables the ordinary 5% parity verdict.
+Run again without `--profile-molecular` for fair endpoint comparisons. Neither
+mode by itself certifies GPU peak memory or exact-J/K operator-work parity.
+
 ## Compose complete RHF molecular energies
 
 `RHF` is a GenerativeQC extension, not a standard Array API function. It binds
