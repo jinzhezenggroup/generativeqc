@@ -158,6 +158,11 @@ def _hf_rows(
                         )
                     if int(record["workload"]["batch_size"]) != 1:
                         raise ValueError("qualification requires batch size one")
+                    if not record["gate"].get("passed"):
+                        raise ValueError(
+                            f"{population} {name} {atoms}-atom record failed its "
+                            "independent reference gates"
+                        )
                     sha = str(record["native_build"]["library_sha256"])
                     if library_sha is None:
                         library_sha = sha
