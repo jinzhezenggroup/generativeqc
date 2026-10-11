@@ -686,8 +686,8 @@ DFCCSDTResult run_df_ccsdt_native(
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
   // Resolve endpoint policy before passing a positive limit to the solver.
-  // Energy qualification does not promote the force/response default tile.
-  ccsd_batch_limit = ccsd_batch_limit ? ccsd_batch_limit : (forces ? 8 : 32);
+  // Explicit caps retain bounded ablations; admission still owns actual tiles.
+  ccsd_batch_limit = ccsd_batch_limit ? ccsd_batch_limit : 32;
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();

@@ -25,6 +25,19 @@ def evidence() -> dict:
     return load_publication_record(BUNDLE)
 
 
+def test_historical_validation_storage_preserves_exact_decoded_bytes() -> None:
+    """Storage compaction must retain the complete frozen numerical receipt."""
+    publication = json.loads((BUNDLE / "publication.json").read_text())
+    entry = next(row for row in publication["files"] if row["role"] == "evidence")
+    decoded = lzma.decompress((BUNDLE / entry["path"]).read_bytes())
+    assert len(decoded) == entry["decoded_bytes"] == 2_387_350
+    assert (
+        hashlib.sha256(decoded).hexdigest()
+        == entry["decoded_sha256"]
+        == ("5325c0255c5f95d70ab1d04fe5b0b448aeaaa6a1caff85c73d5bc93fd3d0b70f")
+    )
+
+
 def test_original_publication_keeps_its_exact_source_and_numerical_scope() -> None:
     """A later policy edit must not relabel source-frozen historical evidence."""
     publication = json.loads((BUNDLE / "publication.json").read_text())

@@ -55,10 +55,13 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     const bool scalar_fused = scalar_selected && std::string(scalar_selected) == "1";
     const auto* resident_selected = std::getenv("GENERATIVEQC_TEST_LAMBDA_RESIDENT_KRYLOV");
     const bool resident_krylov = resident_selected && std::string(resident_selected) == "1";
+    // Zero exercises the production automatic cap; ordinary ablations retain Q8.
+    const auto* cap_selected = std::getenv("GENERATIVEQC_TEST_CCSD_Q_CAP");
+    const auto ccsd_cap = cap_selected ? std::stoull(cap_selected) : std::size_t{8};
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
-        8, options, true, packed, parallel_gap, include_gap, scalar_fused, {}, 30, true, true, true,
-        nullptr, false, false, false, resident_krylov);
+        ccsd_cap, options, true, packed, parallel_gap, include_gap, scalar_fused, {}, 30, true,
+        true, true, nullptr, false, false, false, resident_krylov);
     if (forces && resident_krylov && !result.lambda.resident_krylov)
       throw std::runtime_error("complete-force qualification did not exercise resident Lambda");
     if (forces && triples && scalar_fused && !include_gap && !result.triples_scalar_fusion.selected)

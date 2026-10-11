@@ -94,8 +94,8 @@ struct DFCCSDTResult {
  * Lambda defaults request batch 32 and original-graph matrix fresh replay.
  * Complete host/device budgets and currently free VRAM admit actual storage;
  * smaller batches and the original scalar replay remain bounded fallbacks.
- * ccsd_batch_limit=0 selects the endpoint default: 32 for energy-only calls,
- * eight for forces. Positive limits remain explicit overrides. The solver
+ * ccsd_batch_limit=0 selects the endpoint default: 32 for energy and forces.
+ * Positive limits remain explicit overrides. The solver
  * admits the actual tile under its existing full budget and dimension checks;
  * this does not change standalone CCSD or any response precision policy.
  * lambda_resident_krylov is a default-off storage binding of the same physical
