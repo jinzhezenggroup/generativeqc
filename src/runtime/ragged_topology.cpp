@@ -385,12 +385,10 @@ Diagnostic validate_topology_host(const TopologyView& topology) noexcept {
         }
       } else {
         AtomPairLayout previous{-1, -1};
+        const auto* atom_pairs = static_cast<const AtomPairLayout*>(topology.atom_pairs);
         for (std::int64_t pair = pair_begin; pair < pair_end; ++pair) {
           AtomPairLayout current{};
-          std::memcpy(&current,
-                      static_cast<const std::byte*>(topology.atom_pairs) +
-                          static_cast<std::size_t>(pair) * sizeof(current),
-                      sizeof(current));
+          std::memcpy(&current, &atom_pairs[pair], sizeof(current));
           const bool in_system = current.first >= atom_begin && current.first < current.second &&
                                  current.second < atom_end;
           const bool sorted = pair == pair_begin || previous.first < current.first ||
