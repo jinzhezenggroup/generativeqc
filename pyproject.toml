@@ -40,8 +40,10 @@ autotune = ["pyscf>=2.8"]
 # because NVCC registration constructors need cudart while libgenerativeqc.so loads.
 cuda12 = []
 
+# The public `generativeqc` program is installed as a native wheel/SDK binary.
+# Only explicit compiler/autotune tooling uses a Python console entry point.
 [project.scripts]
-generativeqc = "generativeqc.__main__:main"
+generativeqc-tune = "generativeqc.tune_cli:main"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
