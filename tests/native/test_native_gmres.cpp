@@ -492,6 +492,97 @@ void response_callback_preconditioner_contract() {
           "conflicting response preconditioners reached the physical action");
 }
 
+void response_preconditioner_borrow_contract() {
+  using generativeqc::response::LinearOperator;
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponseSolveRequest;
+  struct StatefulInverse {
+    bool* fail_copy;
+    mutable std::size_t actions{};
+    explicit StatefulInverse(bool& fail) : fail_copy(&fail) {}
+    StatefulInverse(const StatefulInverse& other)
+        : fail_copy(other.fail_copy), actions(other.actions) {
+      if (*fail_copy) throw std::runtime_error("preconditioner was copied during solve");
+    }
+    void operator()(std::span<const double> input, std::span<double> output) const {
+      ++actions;
+      std::copy(input.begin(), input.end(), output.begin());
+    }
+  };
+
+  DenseOperator matrix{2, {4.0, 1.0, 2.0, 3.0}};
+  LinearResponseProblem problem(2, [&](auto input, auto output) { matrix(input, output); });
+  LinearResponseProblem unrelated(2, problem.apply());
+  const std::array<double, 2> rhs{1.0, 2.0};
+  bool fail_copy = false;
+  const LinearOperator inverse = StatefulInverse(fail_copy);
+  const ResponseSolveRequest request{rhs, {}, {}, inverse};
+  const std::array<ResponseSolveRequest, 1> requests{request};
+  // Descriptors own their callbacks, but executing one must borrow that owned
+  // state. Its copy may allocate method payload or throw before admission.
+  fail_copy = true;
+  const auto plan = generativeqc::response::prepare_response(problem, {});
+  const auto direct = generativeqc::response::solve_response(plan, problem, rhs, {}, {}, inverse);
+  const auto owned = generativeqc::response::solve_response(plan, problem, request);
+  require(direct.converged() && owned.converged() && direct.solution == owned.solution &&
+              inverse.target<StatefulInverse>()->actions == direct.preconditioner_actions &&
+              request.right_preconditioner.target<StatefulInverse>()->actions ==
+                  owned.preconditioner_actions,
+          "response solve did not invoke its caller-owned preconditioner state");
+
+  const auto batch_plan = generativeqc::response::prepare_response_batch(
+      problem, {}, requests.size(), std::numeric_limits<std::size_t>::max());
+  const auto batch = generativeqc::response::solve_response_batch(batch_plan, problem, requests);
+  require(batch.complete() && batch.responses[0].converged() &&
+              requests[0].right_preconditioner.target<StatefulInverse>()->actions ==
+                  batch.responses[0].preconditioner_actions,
+          "response batch copied a request's preconditioner state");
+
+  const auto actions_before = matrix.actions;
+  const auto inverse_actions = inverse.target<StatefulInverse>()->actions;
+  const auto request_actions = request.right_preconditioner.target<StatefulInverse>()->actions;
+  const auto batch_actions = requests[0].right_preconditioner.target<StatefulInverse>()->actions;
+  const auto require_wrong_binding = [](auto&& solve) {
+    bool rejected = false;
+    try {
+      solve();
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "unrelated problem reached a preconditioner before binding validation");
+  };
+  require_wrong_binding(
+      [&] { (void)generativeqc::response::solve_response(plan, unrelated, rhs, {}, {}, inverse); });
+  require_wrong_binding(
+      [&] { (void)generativeqc::response::solve_response(plan, unrelated, request); });
+
+  auto limited_options = plan.options;
+  limited_options.max_workspace_bytes = 1;
+  const auto limited_plan = generativeqc::response::prepare_response(problem, limited_options);
+  const auto limited_direct =
+      generativeqc::response::solve_response(limited_plan, problem, rhs, {}, {}, inverse);
+  const auto limited_owned = generativeqc::response::solve_response(limited_plan, problem, request);
+  for (const auto* result : {&limited_direct, &limited_owned})
+    require(result->status == GmresStatus::workspace_limit && result->solution.empty() &&
+                result->measured_workspace_peak_bytes == 0,
+            "response refusal copied a preconditioner before numeric admission");
+
+  const auto limited_batch_plan =
+      generativeqc::response::prepare_response_batch(problem, {}, requests.size(), 0);
+  const auto refused =
+      generativeqc::response::solve_response_batch(limited_batch_plan, problem, requests);
+  require(!refused.complete() && refused.responses.empty(),
+          "over-budget response batch executed a preconditioner");
+  require_wrong_binding([&] {
+    (void)generativeqc::response::solve_response_batch(limited_batch_plan, unrelated, requests);
+  });
+  require(matrix.actions == actions_before &&
+              inverse.target<StatefulInverse>()->actions == inverse_actions &&
+              request.right_preconditioner.target<StatefulInverse>()->actions == request_actions &&
+              requests[0].right_preconditioner.target<StatefulInverse>()->actions == batch_actions,
+          "response binding or budget refusal invoked a method callback");
+}
+
 void response_problem_assignment_contract() {
   using generativeqc::response::LinearResponseProblem;
   using generativeqc::response::LinearResponseSymmetry;
@@ -960,6 +1051,7 @@ int main() {
     response_plan_binding_contract();
     response_action_shape_contract();
     response_callback_preconditioner_contract();
+    response_preconditioner_borrow_contract();
     response_problem_assignment_contract();
     response_batch_binding_contract();
     zero_rhs_is_transactional();

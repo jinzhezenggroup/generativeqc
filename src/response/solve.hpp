@@ -101,22 +101,23 @@ inline ResponsePlan prepare_response(const LinearResponseProblem& problem,
 
 /** Reject a different problem before allocating or invoking its operator. */
 inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
-                                  ResponseSolveRequest request) {
-  if (plan.dimension != problem.dimension())
-    throw std::invalid_argument("response plan and problem dimensions do not match");
-  if (!plan.is_bound_to(problem))
-    throw std::invalid_argument("response plan belongs to a different problem binding");
-  return solve_gmres(plan, problem.apply(), request.rhs, request.initial_guess,
-                     request.diagonal_preconditioner, request.right_preconditioner);
-}
-
-inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
                                   std::span<const double> rhs,
                                   std::span<const double> initial_guess = {},
                                   std::span<const double> diagonal_preconditioner = {},
                                   const LinearOperator& right_preconditioner = {}) {
-  return solve_response(plan, problem,
-                        {rhs, initial_guess, diagonal_preconditioner, right_preconditioner});
+  if (plan.dimension != problem.dimension())
+    throw std::invalid_argument("response plan and problem dimensions do not match");
+  if (!plan.is_bound_to(problem))
+    throw std::invalid_argument("response plan belongs to a different problem binding");
+  return solve_gmres(plan, problem.apply(), rhs, initial_guess, diagonal_preconditioner,
+                     right_preconditioner);
+}
+
+/** Borrow the descriptor's callback without copying method state before admission. */
+inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
+                                  const ResponseSolveRequest& request) {
+  return solve_response(plan, problem, request.rhs, request.initial_guess,
+                        request.diagonal_preconditioner, request.right_preconditioner);
 }
 
 inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& problem,
