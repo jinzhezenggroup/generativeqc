@@ -132,10 +132,16 @@ def test_native_xc_dispatch_consumes_generated_capabilities() -> None:
     source = emit_native_xc_point_dispatch()
     for item in SEMILOCAL_FAMILIES:
         code = f"semilocal_family_code(SemilocalFamily::{item['symbol']})"
-        assert f"return &launch_points<{code}, false>;" in source
-        assert (f"return &launch_points<{code}, true>;" in source) == (
+        assert f"&launch_points<{code}, false>;" in source
+        assert (f"&launch_points<{code}, true>;" in source) == (
             item["cuda_fast_paths"]["response"] == "qualified"
         )
+        for response in (False, True):
+            consumer = str(response).lower()
+            assert (f"&launch_points<{code}, {consumer}, true>" in source) == (
+                item["symbol"] == "Pbe"
+                and (not response or item["cuda_fast_paths"]["response"] == "qualified")
+            )
 
 
 def test_grid_jit_tracks_and_ships_capability_headers() -> None:
