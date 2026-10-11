@@ -453,7 +453,7 @@ def _discover_cc_options(root: Path) -> dict[str, str]:
 
 
 def _discover_cc_execution(root: Path) -> dict[str, str]:
-    """Audit the energy-only source alias default without inventing a user flag."""
+    """Audit bounded energy execution defaults without inventing user flags."""
     relative = Path("src/cc/df_triples_cuda.cu")
     source = _read(root / relative)
     energy_start = source.find("DFCudaResult evaluate_df_cuda(")
@@ -485,9 +485,29 @@ def _discover_cc_execution(root: Path) -> dict[str, str]:
         or "visit_occupied_tiles" in source[response_start:]
     ):
         raise ValueError("DF triples bounded panel traversal admission drifted")
+    independent_pair = (
+        "constautounpaired_layout=p;",
+        "if(p.panel_capacity==3&&execution_plan.pair_pointer_bytes())",
+        "if(paired.total<=max_bytes)p=paired;",
+        "std::array<std::size_t,6>seed_permutations{};",
+        "if(seed_count==2&&p.paired_pointer_bytes)",
+        "moments+seed_permutations[0]*p.v3,moments+seed_permutations[1]*p.v3,context.arena+p.paired_pointers)",
+    )
+    generator = re.sub(
+        r"\s+", "", _read(root / "tools/generate_df_occupied_triples.py")
+    )
+    if (
+        any(body.count(fragment) != 1 for fragment in independent_pair)
+        or "build_w_pair" in source[response_start:]
+        or "precision.arithmetic.is_strict_fp64()&&algorithm()==tensor::ContractionAlgorithm::PedanticBlas"
+        not in generator
+        or "second_output!=first_output+v3" not in generator
+    ):
+        raise ValueError("DF triples independent-pair admission drifted")
     return {
         "cc-execution:df-triples-distinct-moments": relative.as_posix(),
         "cc-execution:df-triples-panel-traversal": relative.as_posix(),
+        "cc-execution:df-triples-independent-pair": relative.as_posix(),
     }
 
 

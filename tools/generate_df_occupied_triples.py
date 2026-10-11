@@ -78,6 +78,9 @@ def _gemm(
     output_leading_dimension: str | None = None,
     adapter: TensorLoweringAdapter | None = None,
     descriptors: list[str] | None = None,
+    paired_bindings: Mapping[str, tuple[str, str | None]] | None = None,
+    paired_output_pointer: str | None = None,
+    paired_slot: int | None = None,
 ) -> str:
     """Derive a column-major call from a TensorIR product and strided views.
 
@@ -86,6 +89,8 @@ def _gemm(
     and output layout come exclusively from the shared GEMM contract. A None
     leading dimension denotes a contiguous tensor; derive its matrix cut from
     this contraction, since one cube can be [ab,c] in W1 and [a,bc] in W2.
+    A paired call reuses an existing identical typed descriptor with two views;
+    it cannot introduce a new equation, precision or physical leading dimension.
     """
     g = gemm_contract(node)
     if (
@@ -107,6 +112,7 @@ def _gemm(
     # scalar multiplier into BLAS alpha, preserving all other input topology.
     scale = Fraction(1)
     operands = []
+    paired_operands = []
     for raw_operand in node.inputs:
         operand = raw_operand
         while operand.op == "add" and len(operand.inputs) == 1:
@@ -121,11 +127,14 @@ def _gemm(
                 "occupied triples product needs a packed input or scaled seed"
             )
         operands.append(bindings[operand.attrs["name"]])
+        if paired_bindings is not None:
+            paired_operands.append(paired_bindings[operand.attrs["name"]])
     aa, bb = operands
     if scale != 1:
         alpha = f"({alpha})*({scale.numerator}.0/{scale.denominator}.0)"
     if c != m + n:
         a, b, m, n, aa, bb = b, a, n, m, bb, aa
+        paired_operands.reverse()
     if c != m + n:
         raise ValueError("occupied triples output needs an unqualified packing")
     dims = {
@@ -157,24 +166,57 @@ def _gemm(
         dimension = lambda index: {"occupied": "o", "virtual": "v", "auxiliary": "q"}[
             index.space.kind
         ]
-        descriptors.append(
-            contraction_initializer(
-                adapter,
-                node,
-                dimension,
-                transpose=(trans(a, m, k), trans(b, k, n)),
-                extents=("1", extent(m), extent(n), extent(k)),
-                coefficient=alpha,
-                row_axes=(
-                    len(m) if a == m + k else len(k),
-                    len(k) if b == k + n else len(n),
-                    len(m),
-                ),
-                leading_dimensions=(lda, ldb, output_leading_dimension or extent(n)),
-                beta=beta,
-            )
+        descriptor = contraction_initializer(
+            adapter,
+            node,
+            dimension,
+            transpose=(trans(a, m, k), trans(b, k, n)),
+            extents=("1", extent(m), extent(n), extent(k)),
+            coefficient=alpha,
+            row_axes=(
+                len(m) if a == m + k else len(k),
+                len(k) if b == k + n else len(n),
+                len(m),
+            ),
+            leading_dimensions=(lda, ldb, output_leading_dimension or extent(n)),
+            beta=beta,
         )
+        if paired_bindings is not None:
+            if (
+                paired_output_pointer is None
+                or paired_slot is None
+                or not 0 <= paired_slot < len(descriptors)
+            ):
+                raise ValueError(
+                    "paired triples need an existing descriptor and second output"
+                )
+            if descriptors[paired_slot] != descriptor:
+                raise ValueError(
+                    "paired triples differ from the prepared scientific descriptor"
+                )
+            other_left, other_right = paired_operands
+            if (other_left[1] or extent(k if a == m + k else m)) != lda or (
+                other_right[1] or extent(n if b == k + n else k)
+            ) != ldb:
+                raise ValueError(
+                    "paired triples views require different physical strides"
+                )
+            return (
+                f"table.execute_independent_pair({paired_slot},o,v,q,context.stream,"
+                f"{aa[0]},{other_left[0]},{bb[0]},{other_right[0]},"
+                f"{output_pointer},{paired_output_pointer},context.error,"
+                "pointer_storage,plan_.pair_pointer_bytes());"
+            )
+        if paired_output_pointer is not None or paired_slot is not None:
+            raise ValueError("paired triples metadata requires paired input views")
+        descriptors.append(descriptor)
         return f"table.execute({slot},o,v,q,context.stream,{aa[0]},{bb[0]},{output_pointer},context.error);"
+    if (
+        paired_bindings is not None
+        or paired_output_pointer is not None
+        or paired_slot is not None
+    ):
+        raise ValueError("paired triples require typed prepared execution")
     # Transpose the entire row-major product, reversing the two operands.
     return (
         f"gemm('{trans(b, k, n)}','{trans(a, m, k)}',"
@@ -790,11 +832,53 @@ def native_execution_header() -> str:
         mixed_calls.append(
             f"generativeqc_tensor::accumulate_fp32_into_fp64(context,scratch,output,v3,{coefficient(weights[slot])},{slot}.0,22);"
         )
+    paired_calls = []
+    for slot, (first_views, second_views) in enumerate(
+        (
+            (
+                {
+                    "panel": ("panel", "v"),
+                    "t2_kj": ("in.t2+(occupied_third*o+occupied_second)*v*v", "v"),
+                },
+                {
+                    "panel": ("panel", "v"),
+                    "t2_kj": ("in.t2+(occupied_second*o+occupied_third)*v*v", "v"),
+                },
+            ),
+            (
+                {
+                    "ovoo_ij": (
+                        "in.ovoo+(occupied_first*v*o+occupied_second)*o",
+                        "o*o",
+                    ),
+                    "t2_mk": ("in.t2+occupied_third*v*v", "o*v*v"),
+                },
+                {
+                    "ovoo_ij": ("in.ovoo+(occupied_first*v*o+occupied_third)*o", "o*o"),
+                    "t2_mk": ("in.t2+occupied_second*v*v", "o*v*v"),
+                },
+            ),
+        )
+    ):
+        paired_calls.append(
+            _gemm(
+                w.inputs[slot],
+                first_views,
+                coefficient(weights[slot]),
+                f"{slot}.0",
+                output_pointer="first_output",
+                adapter=strict_adapter,
+                descriptors=strict_descriptors,
+                paired_bindings=second_views,
+                paired_output_pointer="second_output",
+                paired_slot=slot,
+            )
+        )
     code_identity = canonical_hash(
         {
             "descriptors": [panel_descriptors, strict_descriptors, mixed_descriptors],
-            "calls": [panel_call, strict_calls, mixed_calls],
-            "schema": "prepared-w-v2",
+            "calls": [panel_call, strict_calls, mixed_calls, paired_calls],
+            "schema": "prepared-w-v3-independent-pairs",
         }
     )
     return (
@@ -809,6 +893,11 @@ struct WPlan {
   bool retained_incumbent{};
   std::string_view schedule_identity;
   tensor::ContractionProviderReservation optional_reservation;
+  std::size_t pair_pointer_bytes() const {
+    return precision.arithmetic.is_strict_fp64() &&
+        algorithm()==tensor::ContractionAlgorithm::PedanticBlas
+        ? tensor::PreparedContractions::independent_pair_storage_bytes() : 0;
+  }
   tensor::ContractionAlgorithm algorithm() const {
     const auto provider=w_lowering_candidates[selected].provider;
     if(provider=="cublas") return tensor::ContractionAlgorithm::PedanticBlas;
@@ -976,6 +1065,22 @@ class WExecution {
   void build_w(generativeqc_tensor::Context& context,const Inputs& in,
                std::size_t i,std::size_t j,std::size_t k,const double* panel,double* output,std::size_t slot) {
     (this->*launch_)(context,in,i,j,k,panel,output,slot);
+  }
+  /** Group independent seeds without changing either original W request.
+   * Refusal happens before work; dispatch/arithmetic errors cannot replay a
+   * partially evaluated seed. Both prepared cuts must support the same region. */
+  bool build_w_pair(generativeqc_tensor::Context& context,const Inputs& in,
+      std::size_t occupied_first,std::size_t occupied_second,std::size_t occupied_third,
+      const double* panel,double* first_output,double* second_output,void* pointer_storage) {
+    if(!plan_.pair_pointer_bytes() || !pointer_storage || occupied_second==occupied_third ||
+       second_output!=first_output+v3) return false;
+    auto& table=w_table_;
+    if(!table.independent_pair_supported(0,o,v,q,context.stream) ||
+       !table.independent_pair_supported(1,o,v,q,context.stream)) return false;
+""",
+                *paired_calls,
+                r"""
+    return true;
   }
  private:
   void strict_w(generativeqc_tensor::Context& context,const Inputs& in,

@@ -105,6 +105,18 @@ def test_native_projection_validates_cc_and_rhf_recipes(tmp_path: Path) -> None:
 
 def test_native_typed_cuda_execution(tmp_path: Path) -> None:
     """Real-device dtype, transpose, batch, failure and capture-boundary gates."""
+    _run_native_cuda_execution(tmp_path, "test_native_contraction_cuda.cu")
+
+
+def test_native_independent_pair_cuda_execution(tmp_path: Path) -> None:
+    """Qualify only the new pair API, without replaying the ordinary GPU matrix."""
+    if os.environ.get("GENERATIVEQC_DF_CC_CUDA_TEST") == "1":
+        assert os.environ.get("SLURM_JOB_ID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+    _run_native_cuda_execution(tmp_path, "test_native_contraction_pair_cuda.cu")
+
+
+def _run_native_cuda_execution(tmp_path: Path, source_name: str) -> None:
+    """Compile cached objects separately from linking in the caller's allocation."""
     if os.environ.get("GENERATIVEQC_DF_CC_CUDA_TEST") != "1":
         pytest.skip("requires explicit finite Slurm real-device qualification")
     cache, compiler = shutil.which("ccache"), shutil.which("nvcc")
@@ -123,7 +135,7 @@ def test_native_typed_cuda_execution(tmp_path: Path) -> None:
             "-arch=sm_120",
             "-I" + str(root / "src"),
             "-c",
-            str(root / "tests/native/test_native_contraction_cuda.cu"),
+            str(root / "tests/native" / source_name),
             "-o",
             str(obj),
         ],
