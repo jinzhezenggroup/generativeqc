@@ -3,6 +3,9 @@
   "coverage": "stable AOT shard 6 (sm_120): ordinary RHF J/K streaming consumers dsss/ddss/ddps and every co-located kernel",
   "flags": {
     "architecture": "sm_120",
+    "code_generation": [
+      "--generate-code=arch=compute_120,code=[compute_120,sm_120]"
+    ],
     "definitions": [
       "NDEBUG",
       "GENERATIVEQC_HAS_CUDA=1"

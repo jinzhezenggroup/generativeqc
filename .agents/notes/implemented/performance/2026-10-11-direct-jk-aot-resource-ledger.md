@@ -318,6 +318,15 @@ The committed non-PIC ledger is retained as an explicit stale negative during
 record mode. A canonical CI record must measure the corrected PIC recipe before
 any ledger update or restoration of gate mode.
 
+Canonical record run 38155416533 at `81d1c45b0` passed the real generated-rule
+checks and compiled the PIC recipe through `/usr/local/bin/ccache` 4.14 on a
+cache miss, with passing before/after statistics and paired object/log/cuobjdump
+receipts. The candidate retained the complete 86-kernel inventory and every
+resource row, plus all prior source/preprocessed/header/manifest/toolchain
+identities. Its sole ledger change is the typed
+`host_options=["-Xcompiler=-fPIC"]` field. That candidate is installed and gate
+mode is restored for final exact-head qualification.
+
 The generator is likewise no longer reconstructed by the validator. The gate
 builds the qualified shard output through the configured CMake custom-command
 edge, so changes to the codegen runner, Python executable, generator path, or
@@ -330,11 +339,11 @@ an exact-argv identity alignment rather than a claim that the earlier shorthand
 was proven to omit PTX or change resources. The PIC ledger remains a stale
 negative until this final recipe is recorded canonically.
 
-Canonical record run 38155416533 at `81d1c45b0` passed the real generated-rule
-checks and compiled the PIC recipe through `/usr/local/bin/ccache` 4.14 on a
-cache miss, with passing before/after statistics and paired object/log/cuobjdump
-receipts. The candidate retained the complete 86-kernel inventory and every
-resource row, plus all prior source/preprocessed/header/manifest/toolchain
-identities. Its sole ledger change is the typed
-`host_options=["-Xcompiler=-fPIC"]` field. That candidate is installed and gate
-mode is restored for final exact-head qualification.
+Canonical record run 38157568655 at `afc9c1f53` executed the CMake generation
+edge and compiled the explicit production code-generation tuple through
+`/usr/local/bin/ccache` 4.14 on a cache miss. The candidate retained all prior
+source/preprocessed/header/manifest/toolchain identities, the complete 86-kernel
+inventory, and every resource row. Its sole ledger change is the typed
+`code_generation=["--generate-code=arch=compute_120,code=[compute_120,sm_120]"]`
+field. That candidate is installed and gate mode is restored for final
+exact-head qualification.
