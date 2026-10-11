@@ -70,6 +70,9 @@ def test_aggregate_only_admits_intentional_scheduled_artifact_skip(
     )
     allowed_skips = _evaluate(ast.parse(expression, mode="eval").body)
     assert isinstance(allowed_skips, str)
+    assert {name.strip() for name in allowed_skips.split(",") if name.strip()} == (
+        {"native-cli-artifact"} if event == "schedule" else set()
+    )
     accepted = result == "success" or (
         result == "skipped" and "native-cli-artifact" in allowed_skips.split(",")
     )
