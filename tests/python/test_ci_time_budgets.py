@@ -102,19 +102,12 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
         in section
     )
-    assert "env: &python_ci_env" in section
-    assert "steps: &python_ci_steps" in section
-    nightly = section.split("\n  python-nightly:\n", 1)[1].split(
-        "\n  cpu-benchmark:\n", 1
-    )[0]
-    assert "shard: [nightly-hessian, nightly-wb97mv]" in nightly
-    assert "github.event_name == 'schedule'" in nightly
-    assert "github.event_name == 'workflow_dispatch'" in nightly
-    assert "env: *python_ci_env" in nightly
-    assert "steps: *python_ci_steps" in nightly
-    gate = path.read_text(encoding="utf-8").split("\n  pass:\n", 1)[1]
-    assert "python, python-nightly]" in gate
-    assert "allowed-skips: python-nightly" in gate
+    # No extra job/matrix or YAML aliases: GitHub parses the original shape.
+    assert "python-nightly:" not in section
+    assert "env: &python_ci_env" not in section
+    assert "steps: &python_ci_steps" not in section
+    assert 'test_targets+=(tests/python/test_wb97mv_complete.py)' in section
+    assert 'test_targets+=("${nightly_hessian_paths[@]}")' in section
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
     assert "rebalance_paths=(" in section
