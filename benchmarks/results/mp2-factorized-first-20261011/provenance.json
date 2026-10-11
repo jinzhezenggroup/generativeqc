@@ -11,7 +11,7 @@
     "src/posthf/mp2_derivative_common.cpp": "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657",
     "src/posthf/mp2_derivative_common.hpp": "877332e87e8889570b2056be8bb23de18a8f47a9d611e843d0d92191a15b50a9",
     "tests/native/mp2_derivative_pullback_probe.cpp": "a66370233c5c437d6bf84fd62e69293659489722f5d28fdb48c91b04efbf612a",
-    "tests/python/test_mp2_derivative_pullback_probe.py": "a2c4c8926c99e665ab5004c16dc3047508cf2149c3b383940d2ee6ea54bad1d7"
+    "tests/python/test_mp2_derivative_pullback_probe.py": "ae988985cdd2628521ce314e69f473be24e08fb89899e334524f83bb4a2f17ad"
   },
   "post_qualification_delta": "Only Python test type annotations, canonical LF disposition metadata, evidence and tracker formatting changed after qualification. Common C++/header/native probe remain byte-identical. Published artifact hashes distinguish formatting from executed source hashes. After upstream integration, source-bound instrumentation is opt-in (GENERATIVEQC_MP2_WORK_PROBE=1); default CI retains unmodified C++ independent-oracle, fallback and molecular tests.",
   "source_inventory": "cmake/GenerativeQCSourceIdentity.json",
