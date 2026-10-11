@@ -485,6 +485,7 @@ class StationaryGradientPlan:
                 coefficient=self.exchange.fock_coefficient(self.method.spin) / 2,
             )
         elif range_primitive is not None:
+            assert range_coefficient is not None
             # For an ordered exchange quartet (i,k|j,l), callers bind the two
             # density inputs to (i,j) and (k,l). RKS total density carries
             # occupation two; UKS keeps alpha/beta separate and has no cross-spin
