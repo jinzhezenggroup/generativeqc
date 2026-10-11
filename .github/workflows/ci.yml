@@ -1263,6 +1263,10 @@ jobs:
             tests/python/test_cc_shared_iteration_driver.py
             tests/python/test_rccsd_codegen_no_numpy.py
           )
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Preserve every other core file's parity while moving WB97M-V.
+            rebalance_paths+=(tests/python/test_wb97mv_complete.py)
+          fi
           case "${{ matrix.shard }}" in
             core-a|core-b)
               # Split the broad remainder by file, not by collected test node:
@@ -1397,6 +1401,9 @@ jobs:
                 tests/python/test_cc_shared_iteration_driver.py
                 tests/python/test_rccsd_codegen_no_numpy.py
               )
+              if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                test_targets+=(tests/python/test_wb97mv_complete.py)
+              fi
               ;;
             *)
               echo "::error::unknown Python shard: ${{ matrix.shard }}"
