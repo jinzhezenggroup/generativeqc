@@ -362,7 +362,7 @@ class TestGenerationDeterminism:
             shards_a = validator.generate_production_shards(first)
             shards_b = validator.generate_production_shards(second)
             assert len(shards_a) == validator.QUALIFIED_SHARDS
-            for shard_a, shard_b in zip(shards_a, shards_b):
+            for shard_a, shard_b in zip(shards_a, shards_b, strict=True):
                 assert shard_a.read_bytes() == shard_b.read_bytes()
             qualified = shards_a[validator.QUALIFIED_SHARD_INDEX]
             text = qualified.read_text()
