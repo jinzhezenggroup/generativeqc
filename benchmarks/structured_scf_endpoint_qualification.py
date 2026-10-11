@@ -441,6 +441,7 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
                     strict=False,
                 )
                 seconds = time.perf_counter() - begin
+                transport = prepared.ks_transport_diagnostics
                 for index, item in enumerate(result.items):
                     row = {
                         "phase": phase,
@@ -453,8 +454,8 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
                         "forces": None if item.forces is None else item.forces.tolist(),
                         "iterations": item.iterations,
                         "transport_diagnostic": None
-                        if item.ks_transport_diagnostic is None
-                        else item.ks_transport_diagnostic.to_payload(),
+                        if transport[index] is None
+                        else transport[index].to_payload(),
                         "complete_seconds": seconds,
                         "preparation_seconds": preparation if phase == 0 else 0.0,
                         "cold_total_seconds": preparation + seconds
