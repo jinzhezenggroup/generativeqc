@@ -1,4 +1,4 @@
-"""The response owner must import with its documented runtime dependencies."""
+"""CC owners must import with their documented runtime dependencies."""
 
 import subprocess
 import sys
@@ -14,9 +14,14 @@ from pathlib import Path
 root = Path(sys.argv[1])
 sys.path[:0] = [str(root / "python"), str(root)]
 sys.modules["typing_extensions"] = None
-from tools.generativeqc_cc import PreparedCUDALambda, CudaTriplesResponseTiles
+from tools.generativeqc_cc import (
+    PreparedCUDALambda,
+    CudaTriplesResponseTiles,
+    PreparedUCCSD,
+)
 assert PreparedCUDALambda.__module__ == "tools.generativeqc_cc.lambda_cuda"
 assert CudaTriplesResponseTiles.__module__ == "tools.generativeqc_cc.triples_response_cuda"
+assert PreparedUCCSD.__module__ == "tools.generativeqc_cc.uccsd_solver"
 """
     result = subprocess.run(
         [sys.executable, "-I", "-c", code, str(ROOT)],
