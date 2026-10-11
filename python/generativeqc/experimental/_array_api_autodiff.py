@@ -78,6 +78,7 @@ def _combine(primal: Program, derivative: Program) -> Program:
         {**primal.outputs, **derivative.outputs},
         tuple(dict.fromkeys((*primal.nodes, *derivative.nodes))),
         provenance={
+            **dict(primal.provenance),
             **dict(derivative.provenance),
             "public_array_transform": "primal-and-derivative",
         },
@@ -125,7 +126,14 @@ class _GradientFunction:
             program = (
                 _combine(primal, reverse.program)
                 if self.with_value
-                else reverse.program
+                else Program(
+                    reverse.program.outputs,
+                    reverse.program.nodes,
+                    provenance={
+                        **dict(primal.provenance),
+                        **dict(reverse.program.provenance),
+                    },
+                )
             )
             mapping = {
                 original: generated

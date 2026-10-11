@@ -7,6 +7,100 @@ correlation-only-DF variant. Prepared batches remain unsupported.
 
 ## First supported method definition
 
+### Internal mixed-precision preconvergence
+
+The CUDA DF-CCSD solver has an opt-in `SolverOptions.df_mixed_precision`
+schedule. It evaluates the existing auxiliary primal graph with FP32 storage,
+pedantic FP32 GEMMs and round-to-nearest scalar arithmetic during warmup.
+Immutable factor conversions are owner-local; amplitudes and tau are converted
+for each evaluation. Every auxiliary contribution is widened before the
+original ordered FP64 Q accumulation. Energy, retained-core contractions,
+Jacobi denominators, amplitudes and DIIS remain FP64.
+
+At `df_mixed_precision_switch_residual` (default `1e-7`), or after at most
+`df_mixed_precision_max_evaluations` (default 24) warmup graph calls, the controller clears
+mixed DIIS history and permanently switches to the original FP64 auxiliary graph.
+When the original supplied guess admitted restricted-pair coordinates and the
+strict pair workspace is available, the internal warm-start doubles are projected
+with the compiler-owned pair map to remove redundant-coordinate FP32 noise.
+An asymmetric supplied guess is never repaired. A packed history refused during
+warmup may borrow the larger full-history lease again at its original packed
+stride, with empty rows and the unchanged strict symmetry gate. FP64 reevaluation
+then observes this warm-start state. Strict polishing uses half
+the warmup Q batch, down to one Q. The shared arena includes its Q-independent
+FP64 slots and optional qualified occupied-pair workspace; it never allocates a
+second batched arena. Pair projection keeps the original physical error bound
+and may refuse states that do not meet that bound.
+Neither mixed residuals nor rounded cuts can certify convergence: the original
+energy/residual tolerances and independent expanded FP64 replay still apply.
+The strict Lambda solve, parameter/factor VJPs, (T), orbital response and nuclear
+derivatives remain FP64 consumers. Resource refusal retains strict execution; numerical
+failure is reported, not hidden by a retry. This is an internal candidate, not
+a new public method precision policy or a default performance claim.
+
+The developer `df_ccsdt_force_endpoint` benchmark accepts a
+`CCSD_MIXED_PRECISION_0_OR_1` argument at position 30, after the existing
+`LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1` (28) and `LIFECYCLE_0_OR_1` (29) controls.
+The separate `LAMBDA_MIXED_PRECISION_0_OR_1` flag is position 31. Positions count
+from `argv[0]`; all four controls default to off. Historical benchmark runners
+are tied to their recorded source and retain their original argument layout.
+Its diagnostics distinguish FP32 GEMMs, casts, warmup evaluations and the
+precision switch from FP64 work. Use complete cold E+F timing and independent
+energy/force gates rather than treating a GEMM throughput gain as endpoint
+qualification.
+
+The Lambda owner shares matrix scratch across solver/parameter stages, fresh
+primal replay and the independent audit. Their generated equations and pinned
+inputs/cuts/seeds remain separate; only sequential temporary storage aliases.
+`df_shared_scratch_bytes` reports that lease's capacity and
+`df_scratch_avoided_bytes` the eliminated second reservation, not measured peak
+VRAM. Optional audit or allocation refusal still restores the smaller operator
+or scalar layout. This matrix/audit sharing is independent of the separate
+default-off `serial_scratch_reuse` option, which additionally shares expanded
+and scalar scratch through an aligned prefix. In either layout, the mixed
+input tail is admitted against the conservative matrix/audit capacity and every
+live warmup high-water mark, never merely the total device allocation.
+
+### Internal Lambda mixed-precision preconvergence
+
+`LambdaOptions::df_mixed_precision` is a separate, default-off CUDA experiment.
+Only the compiler-owned staged auxiliary transpose uses uniform FP32 storage
+and pedantic FP32 contractions during a bounded GMRES warm start. Its core
+adjoint, primal state, RHS, packed host Krylov algebra, diagonal preconditioner
+and ordered accumulation stay FP64. Each Q output widens separately before
+the original FP64 accumulation; no FP32 Q subtotal replaces that order.
+
+Warmup uses absolute tolerance `1e-6`, zero relative tolerance and at most 16
+iterations, independently configurable through the Lambda options. A finite
+exhausted, stagnant or broken-down proposal may seed a **new original FP64
+GMRES solve**, never certify convergence. This new solve starts with empty
+Krylov history and a fresh FP64 physical action. The original strict tolerances,
+independently expanded transpose audit and all parameter/factor/force VJPs
+remain unchanged. Nonfinite failures propagate without publication or a quiet
+strict retry.
+
+The opt-in halves the requested strict auxiliary Q batch, down to one Q; default
+FP64 callers retain the original schedule. Immutable FP32 factors/amplitudes
+and dynamic cut seeds borrow a tail of the existing shared strict scratch
+lease, outside every warmup core/auxiliary/tau scratch high-water mark. There
+is no new owned device allocation. Begin the single-use epoch only after fresh FP64
+primal/RHS work; permanently finish it before any strict replay/audit/VJP can
+overwrite that tail. Refused storage or provider descriptors retain bounded
+FP64 actions. Host descriptor and warm-proposal capacities are budgeted.
+
+The benchmark's trailing `LAMBDA_MIXED_PRECISION_0_OR_1` argument follows the
+CCSD precision flag. Diagnostics separate mixed/strict iterations and actions,
+FP32 GEMM calls/summands, converted elements, the permanent switch and borrowed
+storage/input offset. Borrowed bytes are not extra allocations or measured
+peak VRAM. Qualify complete cold E+F time, total operator work, independent
+energies/forces and sampled occupancy separately; small-fixture correctness
+does not imply a general production precision policy.
+
+See the [Lambda warm-start decision](../../.agents/notes/implemented/performance/2026-10-11-df-lambda-mixed-warmup.md)
+for rationale and source-matched evidence.
+
+### Scientific definition
+
 The first validated DF-CCSD(T) variant deliberately separates the reference
 approximation from the correlation-integral approximation:
 

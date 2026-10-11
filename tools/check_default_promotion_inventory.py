@@ -468,21 +468,27 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
 
 
 def _discover_cc_options(root: Path) -> dict[str, str]:
-    relative = Path("src/cc/solver.hpp")
-    source = _read(root / relative)
-    match = re.search(
-        r"struct\s+SolverOptions\s*\{(?P<body>.*?)\n\};",
-        source,
-        flags=re.DOTALL,
-    )
-    if match is None:
-        raise ValueError("missing audited cc::SolverOptions")
-    body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
-    names = re.findall(
-        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
-        body,
-    )
-    return {f"cc-option:{name}": relative.as_posix() for name in names}
+    """Discover default-off primal and Lambda controls in distinct namespaces."""
+    result = {}
+    for relative, structure, prefix in (
+        (Path("src/cc/solver.hpp"), "SolverOptions", "cc-option:"),
+        (Path("src/cc/lambda_response.hpp"), "LambdaOptions", "cc-option:lambda."),
+    ):
+        source = _read(root / relative)
+        match = re.search(
+            rf"struct\s+{structure}\s*\{{(?P<body>.*?)\n\}};",
+            source,
+            flags=re.DOTALL,
+        )
+        if match is None:
+            raise ValueError(f"missing audited cc::{structure}")
+        body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
+        names = re.findall(
+            r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+            body,
+        )
+        result.update({f"{prefix}{name}": relative.as_posix() for name in names})
+    return result
 
 
 def _discover_cc_execution(root: Path) -> dict[str, str]:

@@ -43,6 +43,8 @@ option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
 option(GENERATIVEQC_BUILD_TESTS "Build native tests" ON)
 option(GENERATIVEQC_BUILD_CLI "Build the Python-free native command-line executable" ON)
+option(GENERATIVEQC_MONOLITHIC_CLI
+       "Link the native CLI to the static GenerativeQC core (external providers remain dynamic)" OFF)
 option(GENERATIVEQC_PYTHON_WHEEL
        "Install one unversioned shared library for a Python wheel" OFF)
 option(GENERATIVEQC_BUNDLE_XTB_OPENBLAS
@@ -255,7 +257,19 @@ if(GENERATIVEQC_ENABLE_CUDA)
 endif()
 
 # Scoped GenerativeQC-owned GFN2 CPU runtime is registered below.
-add_library(generativeqc SHARED)
+# The default SDK/wheel keeps its ABI-compatible shared core. Distribution-only
+# builds can instead link the same C++/CUDA core into the native CLI, avoiding a
+# second GenerativeQC runtime DSO. CUDA toolkit, driver and system providers
+# are intentionally not presented as a fully static Linux executable.
+if(GENERATIVEQC_MONOLITHIC_CLI)
+  if(NOT GENERATIVEQC_BUILD_CLI OR GENERATIVEQC_PYTHON_WHEEL)
+    message(FATAL_ERROR
+      "GENERATIVEQC_MONOLITHIC_CLI requires the native CLI and is not a wheel build")
+  endif()
+  add_library(generativeqc STATIC)
+else()
+  add_library(generativeqc SHARED)
+endif()
 target_link_libraries(generativeqc PRIVATE Threads::Threads)
 generativeqc_configure_cutensor(generativeqc)
 generativeqc_configure_cutlass(generativeqc)
@@ -440,6 +454,8 @@ if(GENERATIVEQC_BUILD_CLI)
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_VERSION="${PROJECT_VERSION}")
+  target_compile_definitions(generativeqc_cli PRIVATE
+    GENERATIVEQC_MONOLITHIC_CLI=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>)
   target_compile_options(generativeqc_cli PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
   set_target_properties(generativeqc_cli PROPERTIES OUTPUT_NAME generativeqc)

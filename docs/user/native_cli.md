@@ -40,6 +40,82 @@ The installed executable uses a relocatable RPATH to find the adjacent
 `libgenerativeqc`, so an ordinary prefix install does not require Python or a
 package-specific `LD_LIBRARY_PATH`.
 
+## Precompiled CUDA CLI distributions
+
+The [CI workflow](https://github.com/jinzhezenggroup/generativeqc/actions/workflows/ci.yml)
+builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
+`master` push, using the `cuda-release-cli-sm120` CMake preset:
+
+- Full `Release` code generation (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`),
+  CLI-reachable AOT shell kernels and native CPU derivative shards, precompiled
+  C++ headers, ccache, and the pinned CUDA 12.9 toolchain.
+- `GENERATIVEQC_MONOLITHIC_CLI=ON`: links the GenerativeQC **core** statically
+  into `bin/generativeqc`, removing its `libgenerativeqc.so` dependency.
+  The normal shared-library C++ SDK and Python wheel are unchanged.
+- A smoke test checks CLI version, methods, basis catalog and ELF dependencies
+  before uploading an archive and `SHA256SUMS` to **GitHub Actions Artifacts**.
+  Download the artifact from the successful CI run for the desired commit.
+- When a `vX.Y.Z` tag is pushed **and exactly matches the CMake project version**
+  on a commit already on `master`, the same production build uploads a
+  previously unpublished version to [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
+  Ordinary `master` pushes do **not** create releases or tags. Existing
+  releases and their assets are never automatically overwritten.
+  Manual CI dispatches build Actions artifacts only, even when run on a tag.
+  Publication rechecks that the current remote tag still identifies the built
+  commit; a moved tag fails instead of receiving mismatched artifacts.
+
+After extracting the archive:
+
+```bash
+tar -xzf generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120.tar.gz
+./generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120/bin/generativeqc --version
+```
+
+The filename is an illustration; master branch artifacts additionally include
+a Git SHA suffix. A binary includes the compiled native core, but this is **not**
+a fully statically linked Linux executable: CUDA runtime/math libraries and the
+NVIDIA driver, plus normal host providers (such as OpenBLAS, OpenSSL and
+libarchive), still need to be installed. On a host with a nonstandard CUDA
+library location, configure the dynamic loader's library path. The archive
+contains **one GenerativeQC executable** (`bin/generativeqc`), with no
+GenerativeQC shared libraries or separate stationary AOT plug-ins. Existing
+native AOT shell and CPU derivative code is compiled into the C++ core. The
+independent `stationary_*` CUDA derivative `.so` modules serve the Python
+force-consumer route, which the native CLI does not invoke, so bundling those
+modules would not add native CLI force capabilities. Their Python package and
+shared-SDK distribution semantics are unchanged.
+
+The monolithic distribution cannot replace its linked core with a local binary
+profile through loader interposition. Automatic discovery of a cached binary
+profile retains the official core and reports the rejection in `profile diagnose`.
+An explicitly requested binary profile (`GENERATIVEQC_PROFILE=/path/to/bundle`)
+is refused with guidance to use the shared-core CLI or set
+`GENERATIVEQC_PROFILE=off`. Installing such a profile is also refused without
+changing the active cache. Shared-core SDK and wheel commands keep their
+existing profile activation behavior. DFT schedule-only diagnostics are unchanged.
+
+The current distributable specifically targets **sm_120 (Blackwell)**. It does
+not support every CUDA architecture (for example, Ada sm_89) without a separate
+build. The packaging is **no-Python-at-runtime**, not no-Python-at-build-time:
+code generators still use Python on CI.
+
+To reproduce this build from source (with CUDA 12.9 and ccache installed):
+
+```bash
+cmake --preset cuda-release-cli-sm120
+cmake --build --preset cuda-release-cli-sm120 --parallel 3
+cmake --install build/cuda-release-cli-sm120 --prefix "$PWD/build/native-cli-prefix"
+python3 tools/package_native_cli.py \
+  --prefix "$PWD/build/native-cli-prefix" --output-dir dist \
+  --version 0.1.0 --commit "$(git rev-parse HEAD)" \
+  --source-date-epoch "$(git log -1 --format=%ct)"
+```
+
+The explicit project version should match the one in `CMakeLists.txt`.
+Optional external providers and experimental optimizations are **not**
+implicitly enabled merely because this is a distribution build; existing
+production numerical fallbacks are retained.
+
 ## Discover native methods
 
 ```bash
@@ -331,7 +407,8 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:02:00 generativeqc profile install profile.zip
 ```
 
-On Linux, CUDA `run` honors `GENERATIVEQC_PROFILE=off`, an explicit bundle
+For shared-core SDK and wheel commands on Linux, CUDA `run` honors
+`GENERATIVEQC_PROFILE=off`, an explicit bundle
 directory, or the compatible active index. Complete kernel libraries are
 selected through native re-execution/loader interposition, with no Python or
 compilation. Device visibility is preserved and the binary is revalidated on

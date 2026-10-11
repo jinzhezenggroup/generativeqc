@@ -20,6 +20,7 @@
       "python/generativeqc_compiler/tensor/cuda_execute.py",
       "python/generativeqc_compiler/tensor/cuda_plan.py",
       "src/cc/solver.hpp",
+      "src/cc/lambda_response.hpp",
       "src/cc/df_triples_cuda.cu",
       "src/dft/cuda_ks.cpp",
       "src/dft/cuda_spd_force_policy.hpp",
@@ -119,7 +120,7 @@
     },
     {
       "id": "scf.incremental-direct-jk",
-      "classification": "needs-qualification",
+      "classification": "negative-evidence",
       "controls": [
         "scf-option:incremental_direct_jk"
       ],
@@ -129,9 +130,13 @@
       "sources": [
         "src/scf/types.hpp"
       ],
-      "rationale": "The exact incremental Direct-J/K implementation is merged via #990/#1579, but automatic selection remains unqualified: bounded-streaming provider-owned accounting, matched complete endpoints, RHF/UHF workload coverage, geometry-change behavior, and composition with precision policy still require a promotion decision under #1598.",
-      "revisit_condition": "Reclassify only after #1598 retains complete cold, warm, and changed-geometry endpoint evidence with numerical parity and a workload/resource guard, or records durable negative evidence and keeps the route opt-in.",
+      "rationale": "The exact incremental Direct-J/K implementation (#990/#1579) remains opt-in. The reduced #1598 historical capsule retains one matched 384-AO RHF baseline/incremental round: incremental prepared-plan cold execution (setup excluded, cold arrays absent) is about 41% slower and warm E/F is 103% slower; all three retained warm independent-reference and matched-arm numerical pairs pass. Seven additional final outcomes record unsuccessful retried 192/768-AO points, but missing per-attempt diagnostics do not establish their failure cause or baseline success. Other successful campaign records are not retained here; the earlier reported 96-AO cold gain rules out a blanket claim that every endpoint loses. UHF/moved populations were incomplete and KS acceptance was not established. Invalid retained quartet work counters cannot certify a bounded-resource guard. This is scoped historical negative evidence, not a complete default-promotion qualification. The route remains available to the narrower KS/PBE0 owner #2053.",
+      "revisit_condition": "Reopen promotion only after provider-owned bounded-streaming admitted/rejected work accounting exists and a candidate guard domain shows matched complete-endpoint wins across cold, warm and moved-geometry RHF/UHF populations with unchanged numerical gates, repeated interleaved timing, exact source/library/device identity, and compile/artifact reuse cost charged to admission; or if a materially different late-SCF work distribution reopens the economics.",
       "evidence": [
+        "benchmarks/results/issue1598-incremental-direct-jk-20261011/README.md",
+        ".agents/notes/implemented/performance/2026-10-11-incremental-direct-jk-negative-closeout.md",
+        "benchmarks/run_issue1598_incremental_qualification.sh",
+        "tools/reduce_issue1598_incremental_qualification.py",
         "issue:#990",
         "pr:#1579",
         "issue:#1598"
@@ -892,6 +897,72 @@
         "benchmarks/results/df-cc-force-input-residual-20261011/publication.json",
         "tests/python/test_df_cc_force_input_residual_evidence.py",
         "tests/python/test_df_cc_native_solver.py"
+      ]
+    },
+    {
+      "id": "cc.df-mixed-precision-warmup",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "cc-option:df_mixed_precision"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/cc/solver.hpp",
+        "src/cc/cuda_solver.cu",
+        "python/generativeqc_compiler/cc/df_mixed_precision.py",
+        "tools/generate_df_ccsd_hoisted.py",
+        "tools/generate_rccsd_native.py"
+      ],
+      "rationale": "Experimental opt-in uniform FP32 auxiliary warmup retains FP64 amplitudes, core, energy, ordered Q accumulation and DIIS arithmetic. A residual threshold or finite evaluation cap permanently restores the original FP64 graph, discards approximate history and preserves independent expanded physical replay. Only an internally generated warm-start state with originally admitted restricted-pair symmetry may recover the existing compiler-owned pair representation; externally asymmetric guesses are never repaired. Scoped complete cold ethane E+F pairs and independent small-molecule force gates qualify this experiment, not a universal default precision policy. The strict Lambda solve and all final response arithmetic remain FP64; exact sequential Lambda scratch reuse and the separately controlled Lambda warm start are independent of this precision option.",
+      "revisit_condition": "Promote or broaden the consumer only after representative complete cold E+F comparisons on additional sizes and devices, original independent FP64 residual and force gates, full retained-memory/work accounting, and bounded resource-refusal and nonfinite-publication tests. Do not introduce molecule-specific routing or infer unmeasured size thresholds from the ethane cohort.",
+      "evidence": [
+        "docs/developer/df_ccsdt.md",
+        ".agents/notes/implemented/performance/2026-10-11-df-ccsd-mixed-warmup-shared-lambda-scratch.md",
+        "benchmarks/results/df-ccsd-mixed-warmup-20261011/README.md",
+        "tests/python/test_df_cc_mixed_precision.py",
+        "tests/python/test_df_triples_mixed_endpoint.py"
+      ]
+    },
+    {
+      "id": "cc.lambda-serial-scratch-reuse",
+      "classification": "needs-qualification",
+      "controls": ["cc-option:lambda.serial_scratch_reuse"],
+      "owner_issues": [1598],
+      "sources": [
+        "src/cc/lambda_response.hpp",
+        "src/cc/lambda_response_cuda.cu",
+        "src/cc/df_lambda_cuda.cu",
+        "docs/developer/iteration_reuse.md"
+      ],
+      "rationale": "The existing default-off owner option shares sequential expanded, staged, matrix and audit scratch on one stream while pinned inputs, cuts, seeds, outputs and invariant frontiers remain disjoint. It is independent of both mixed-precision controls and the narrower default matrix/audit lease sharing. Registration follows the expanded Lambda option audit and does not promote this broader storage candidate or transfer historical performance qualification to integrated sources.",
+      "revisit_condition": "Promote only with source-matched complete-endpoint A/B gates, full capacity and peak accounting, real-device lifetime/refusal validation and unchanged scientific work and publication gates; preserve an explicit bounded layout fallback.",
+      "evidence": [
+        "pr:#2269",
+        ".agents/notes/implemented/performance/2026-10-11-memory-aware-native-arena-candidates.md",
+        "tests/python/test_df_lambda_serial_scratch.py",
+        "tests/python/test_df_lambda_mixed_scratch_composition.py"
+      ]
+    },
+    {
+      "id": "cc.lambda-df-mixed-precision-warmup",
+      "classification": "guarded-promotion-candidate",
+      "controls": ["cc-option:lambda.df_mixed_precision"],
+      "owner_issues": [1598],
+      "sources": [
+        "src/cc/lambda_response.hpp",
+        "src/cc/lambda_response_cuda.cu",
+        "src/cc/df_lambda_cuda.cu",
+        "python/generativeqc_compiler/cc/df_mixed_precision.py",
+        "tools/generate_df_lambda.py"
+      ],
+      "rationale": "Default-off auxiliary-only FP32 Lambda preconvergence borrows idle shared strict scratch with a half-size strict Q tile. FP64 primal/core/RHS/Krylov algebra and individual-Q widening remain intact. Only a finite proposal crosses a permanent precision boundary into a new original FP64 GMRES solve with a fresh physical residual and empty history. Independent expanded FP64 audit and every parameter/factor/force VJP are unchanged; optional resource refusal retains bounded FP64 actions and nonfinite failures do not publish or silently retry.",
+      "revisit_condition": "Do not promote by default without representative source-matched complete cold E+F cohorts on additional sizes/devices, original independent energy/force and residual gates, total mixed-plus-strict work counts and resource/lifetime/sanitizer coverage. Borrowed scratch capacity is not an allocator peak; extra warmup iterations must be charged to endpoint time.",
+      "evidence": [
+        "docs/developer/df_ccsdt.md",
+        ".agents/notes/implemented/performance/2026-10-11-df-lambda-mixed-warmup.md",
+        "benchmarks/results/df-lambda-mixed-warmup-20261011/publication.json",
+        "tests/python/test_df_lambda_mixed_precision.py",
+        "tests/python/test_df_triples_mixed_endpoint.py"
       ]
     },
     {

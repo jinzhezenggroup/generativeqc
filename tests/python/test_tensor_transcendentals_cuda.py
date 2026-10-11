@@ -53,17 +53,21 @@ def cache(tmp_path_factory: typing.Any) -> typing.Any:
     )
 
 
-def _input() -> typing.Any:
+def _input(dtype: str) -> typing.Any:
     i = Index("i", IndexSpace("axis", "batch", 6))
-    return input_tensor("x", TensorSpec((i,), role="parameter", differentiable=True))
+    return input_tensor(
+        "x", TensorSpec((i,), dtype=dtype, role="parameter", differentiable=True)
+    )
 
 
 @pytest.mark.parametrize("schedule_id", [0, 1, 2])
+@pytest.mark.parametrize("dtype", ("float32", "float64"))
 def test_cuda_primal_jvp_vjp_ordinary_and_resident(
     compiler: typing.Any,
     cache: typing.Any,
     schedule_id: typing.Any,
     monkeypatch: typing.Any,
+    dtype: str,
 ) -> None:
     from generativeqc_compiler.tensor import interpreter
     from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
@@ -78,17 +82,24 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
         TensorSchedule(views=True, fuse=True),
         TensorSchedule(views=True, fuse=True, recompute=True),
     ]
-    x = _input()
+    x = _input(dtype)
     y = add(exp(x), log(x), sqrt(x), power(x, "3/2"))
     primal = Program({"out": y, "square": multiply(y, y)})
-    values = np.array([0.125, 0.25, 0.5, 1.0, 2.0, 4.0])
+    values = np.array([0.125, 0.25, 0.5, 1.0, 2.0, 4.0], dtype=dtype)
     feeds = {"x": values}
     jobs = [
         (primal, feeds),
-        (linearize(primal, ["x"]).program, {**feeds, "d_x": np.full(6, 0.75)}),
+        (
+            linearize(primal, ["x"]).program,
+            {**feeds, "d_x": np.full(6, 0.75, dtype=dtype)},
+        ),
         (
             transpose_program(primal, ["out", "square"]).program,
-            {**feeds, "bar_out": np.ones(6), "bar_square": np.full(6, 0.25)},
+            {
+                **feeds,
+                "bar_out": np.ones(6, dtype=dtype),
+                "bar_square": np.full(6, 0.25, dtype=dtype),
+            },
         ),
     ]
     expected = [execute(program, args).outputs for program, args in jobs]
@@ -97,6 +108,7 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
         raise AssertionError("CUDA delegated arithmetic to the CPU interpreter")
 
     monkeypatch.setattr(interpreter, "_evaluate", forbidden)
+    tolerance = 5e-6 if dtype == "float32" else 5e-13
     for (program, args), reference in zip(jobs, expected, strict=True):
         plan = plan_cuda(program, compiler.target, schedule=schedules[schedule_id])
         with PreparedCuda(plan, compile_cuda(plan, compiler, cache)) as prepared:
@@ -104,8 +116,9 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
                 result = prepared.execute(args).outputs
                 for name, expected_value in reference.items():
                     np.testing.assert_allclose(
-                        result[name], expected_value, rtol=5e-13, atol=1e-13
+                        result[name], expected_value, rtol=tolerance, atol=tolerance
                     )
+                    assert result[name].dtype == np.dtype(dtype)
         with PreparedResident(
             plan, compile_resident(plan, compiler, cache)
         ) as resident:
@@ -117,8 +130,8 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
                     np.testing.assert_allclose(
                         resident.download(leases[name]),
                         expected_value,
-                        rtol=5e-13,
-                        atol=1e-13,
+                        rtol=tolerance,
+                        atol=tolerance,
                     )
 
 
@@ -134,8 +147,9 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
         "power-overflow",
     ],
 )
+@pytest.mark.parametrize("dtype", ("float32", "float64"))
 def test_cuda_error_propagation_recovery_and_no_stale_resident_outputs(
-    compiler: typing.Any, cache: typing.Any, kind: typing.Any
+    compiler: typing.Any, cache: typing.Any, kind: typing.Any, dtype: str
 ) -> None:
     from generativeqc_compiler.tensor.cuda_execute import PreparedCuda
     from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
@@ -144,7 +158,7 @@ def test_cuda_error_propagation_recovery_and_no_stale_resident_outputs(
         compile_resident,
     )
 
-    x = _input()
+    x = _input(dtype)
     if kind.startswith("power"):
         exponent = {"power-zero": 0, "power-one": 1, "power-overflow": 2}[kind]
         node = power(x, Fraction(exponent))
@@ -161,12 +175,12 @@ def test_cuda_error_propagation_recovery_and_no_stale_resident_outputs(
         program, compiler.target, schedule=TensorSchedule(views=True, fuse=True)
     )
     artifact = compile_resident(plan, compiler, cache)
-    good = {"x": np.ones(6), "d_x": np.zeros(6)}
-    bad = {**good, "x": np.ones(6)}
+    good = {"x": np.ones(6, dtype=dtype), "d_x": np.zeros(6, dtype=dtype)}
+    bad = {**good, "x": np.ones(6, dtype=dtype)}
     bad["x"][3] = {
         "sqrt-zero-ad": 0.0,
         "exp-overflow": 1000.0,
-        "power-overflow": 1e200,
+        "power-overflow": 1e20 if dtype == "float32" else 1e200,
         "power-zero": 0.0,
     }.get(kind, -1.0)
     message = (

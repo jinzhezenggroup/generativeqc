@@ -1,0 +1,60 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent molecular energies/force finite differences, strict FP64 certificates and memcheck pass on the frozen measured source. One completed cold triplet supplies exploratory timing only. Later master integration and the unused-option admission guard are not revalidated, at user request; no default/performance promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 5259,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "ff94cc90ff0521a71d1445e259c879dee94dd6c8b59297bc80bf293de7e5225c"
+    },
+    {
+      "bytes": 4331,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "50c5f0e0a97eb8707cf5760cab3d91343876852cee0c2fe489f1fc193f25c568"
+    },
+    {
+      "bytes": 5154,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "f6645a55e9ff8c114156900fbe76994b9f27d1cde9d43059607748d994468ed9"
+    },
+    {
+      "bytes": 1819,
+      "path": "occupancy.json.gz",
+      "role": "samples",
+      "sha256": "e02b8c88daa11cac55e846905a90925bb8f91434d512555cfac5e423b6df75f5"
+    },
+    {
+      "bytes": 1968,
+      "path": "measure.sh.gz",
+      "role": "reproduction",
+      "sha256": "6c121c7bd037c2812ff2a57709ebfd79c6391bc066cdbfc33cd01d1db795068c"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=01:30:00",
+      "bash",
+      "measure.sh",
+      "/path/to/run-root"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "04cdb116bcd377788ace975e65fd08f02becf4c0"
+  }
+}

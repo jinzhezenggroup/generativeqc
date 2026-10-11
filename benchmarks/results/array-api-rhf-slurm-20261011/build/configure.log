@@ -1,0 +1,5 @@
+-- GenerativeQC compiler cache: /home/jzzeng/codes/wb97m-20261002/ccache/usr/bin/ccache
+-- GenerativeQC CPU linear algebra: scalar fallback
+-- Configuring done (0.7s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/jzzeng/codes/qc-array-api-rhf-d15383b49-20261011/build/cuda-release-sm120

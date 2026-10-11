@@ -149,6 +149,16 @@ COLUMNS = (
     "pair_geometry_elements",
     "pair_capacity_bytes",
     "pair_binding_host_bytes",
+    "mixed_precision",
+    "mixed_precision_refused",
+    "mixed_evaluations",
+    "fp32_gemm_calls",
+    "fp32_gemm_summands",
+    "precision_cast_elements",
+    "precision_switches",
+    "strict_batch_size",
+    "mixed_pair_projection_calls",
+    "mixed_pair_projection_bytes",
 )
 
 
@@ -308,6 +318,8 @@ def _stream(
     replay_matrix: bool = True,
     occupied_pairs: bool = True,
     max_iterations: int = 100,
+    mixed_precision: bool = False,
+    mixed_two_evaluation_limit: bool = False,
 ) -> bytes:
     o, v = arrays["t1"].shape
     q = len(arrays["bov"]) if df else 0
@@ -326,7 +338,9 @@ def _stream(
             | (32 if packed_diis else 0)
             | (0 if replay_matrix else 64)
             | (0 if occupied_pairs else 128)
-            | (batch_limit << 8),
+            | (batch_limit << 8)
+            | ((1 << 63) if mixed_precision else 0)
+            | ((1 << 62) if mixed_two_evaluation_limit else 0),
         ],
         dtype=np.uint64,
     )

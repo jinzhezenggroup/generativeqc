@@ -1,6 +1,8 @@
 """Resident reuse must obey each call's admission caps before any device work."""
 
 import inspect
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -24,14 +26,80 @@ def test_shared_tensor_artifact_is_bound_once_without_hiding_collisions() -> Non
         runtime._unique_prepared_artifacts((first, conflicting))
 
 
-def test_prepared_artifact_deduplication_is_inside_cleanup_scope() -> None:
-    source = inspect.getsource(runtime.PreparedStationaryCudaExecution.ensure)
-    artifacts_at = source.index("artifacts = _unique_prepared_artifacts(")
-    try_at = source.rfind("try:", 0, artifacts_at)
-    install_at = source.index("self._lease.install(", artifacts_at)
-    except_at = source.index("except Exception:", install_at)
-    close_at = source.index("stack.close()", except_at)
-    assert 0 <= try_at < artifacts_at < install_at < except_at < close_at
+@pytest.mark.parametrize("failure", ("artifact-collision", "lease-install"))
+def test_prepared_artifact_resources_close_when_publication_fails(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """A failed publish closes both acquired owners in reverse order, without a GPU."""
+    owner = runtime.PreparedStationaryCudaExecution()
+    monkeypatch.setattr(owner, "_request", lambda **_kwargs: object())
+    monkeypatch.setattr(runtime, "_layout", lambda _basis: (None, None, (), None))
+    monkeypatch.setattr(runtime, "_component_mode", lambda _expansions: False)
+    monkeypatch.setattr(runtime, "stationary_runtime_sources", lambda _plan: ())
+    stationary = SimpleNamespace(metadata={"key": "a" * 64, "binary_sha256": "b" * 64})
+    grid = SimpleNamespace(
+        metadata={
+            "key": "a" * 64 if failure == "artifact-collision" else "c" * 64,
+            "binary_sha256": "d" * 64,
+        }
+    )
+    monkeypatch.setattr(
+        runtime, "compile_stationary_cuda", lambda *_a, **_kw: stationary
+    )
+    monkeypatch.setattr(runtime, "compile_grid", lambda *_a, **_kw: grid)
+
+    events: list[str] = []
+
+    @contextmanager
+    def resource(name: str) -> Iterator[SimpleNamespace]:
+        events.append(f"enter:{name}")
+        try:
+            yield SimpleNamespace()
+        finally:
+            events.append(f"exit:{name}")
+
+    monkeypatch.setattr(runtime, "CudaGrid", lambda *_a, **_kw: resource("grid"))
+    monkeypatch.setattr(runtime, "_CudaSources", lambda *_a, **_kw: resource("sources"))
+
+    if failure == "lease-install":
+
+        def reject_install(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("injected lease installation failure")
+
+        monkeypatch.setattr(owner._lease, "install", reject_install)
+
+    error = ValueError if failure == "artifact-collision" else RuntimeError
+    message = (
+        "conflicting binaries" if failure == "artifact-collision" else "injected lease"
+    )
+    with pytest.raises(error, match=message):
+        owner.ensure(
+            state=SimpleNamespace(),
+            basis=SimpleNamespace(identity="geometry", natom=1, nao=1),
+            contract=SimpleNamespace(),
+            plan=SimpleNamespace(spin_blocks=1),
+            tensor_plans={},
+            compiler=SimpleNamespace(target=SimpleNamespace()),
+            cache="unused",
+            requests=(),
+            functional=0,
+            ecp=False,
+            device=0,
+            spec=SimpleNamespace(partition_iterations=1),
+            grid_plan=SimpleNamespace(peak_bytes=1, allocation_bytes=1),
+            source_bytes=1,
+            tile_points=8,
+            primitive_tile=16,
+            integral_terms=2,
+            page_work_budget=64,
+            max_device_bytes=100,
+            max_host_bytes=100,
+            host_bound=1,
+        )
+
+    assert events == ["enter:grid", "enter:sources", "exit:sources", "exit:grid"]
+    assert owner._stack is None
+    assert owner._lease.contract is None
 
 
 @pytest.mark.parametrize(

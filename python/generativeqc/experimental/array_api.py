@@ -44,6 +44,7 @@ from generativeqc_compiler.tensor import (
 from . import _array_api_eager as _eager
 from . import _array_api_symbolic as _symbolic_backend
 from ._array_api_eager import Array
+from ._array_api_molecular import RHF
 
 API_VERSION = 1
 __array_api_version__ = "2025.12"
@@ -1114,14 +1115,33 @@ class CompiledFunction:
         key = tuple(key_rows)
         program = self._programs.get(key)
         if program is None:
-            program = trace(
-                self._function,
-                specs,
-                provenance={
-                    "public_array_api_version": API_VERSION,
-                    "generic_array_semantics": 1,
-                },
-            )
+            from ._array_api_molecular import _MolecularCapture
+
+            with _MolecularCapture(
+                self._backend, self._options["device"], set(specs)
+            ) as capture:
+                program = trace(
+                    self._function,
+                    specs,
+                    provenance={
+                        "public_array_api_version": API_VERSION,
+                        "generic_array_semantics": 1,
+                    },
+                )
+            if capture.sources:
+                program = Program(
+                    program.outputs,
+                    program.nodes,
+                    provenance={
+                        **dict(program.provenance),
+                        "molecular_sources": tuple(
+                            source.payload() for source in capture.sources
+                        ),
+                        "molecular_ad": "native-analytic-first-order-jet",
+                    },
+                )
+                with self._execution.lock:
+                    self._execution.molecular.register(capture.sources)
             self._programs[key] = program
         return program, feeds
 
@@ -1156,6 +1176,10 @@ class CompiledFunction:
             "specializations": len(self._programs),
             "native_executables": len(self._execution.executables),
             "program_hashes": tuple(self._execution.executables),
+            "molecular_calls": tuple(
+                dict(record)
+                for record in self._execution.molecular.diagnostics.values()
+            ),
         }
 
     def close(self) -> None:
@@ -1341,6 +1365,9 @@ def capabilities() -> dict[str, object]:
             "compiled_call": "shape-dtype-specialized-native-tensorir",
             "compiled_backends": ("cpu", "cuda", "reference"),
             "native_cpu_dtypes": ("float64",),
+            "molecular_operators": ("RHF",),
+            "molecular_derivatives": "native-analytic-nuclear-first-order",
+            "molecular_backend_fallback": False,
             "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
             "compiled_differentiability": "explicit-parameter-names",
             "namespace_dispatch": "array-api-cpu-eager-or-symbolic-tensorir",
@@ -1361,6 +1388,7 @@ __all__ = [
     "API_VERSION",
     "DLPACK_INTEROP_VERSION",
     "FRONTEND_VERSION",
+    "RHF",
     "SUPPORTED_FUNCTIONS",
     "Array",
     "CompiledFunction",

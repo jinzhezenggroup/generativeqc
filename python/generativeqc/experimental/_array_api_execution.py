@@ -52,6 +52,9 @@ class _Executor:
         self.executables: dict[str, Any] = {}
         self.lock = RLock()
         self.closed = False
+        from ._array_api_molecular import _MolecularRuntime
+
+        self.molecular = _MolecularRuntime()
 
     def _build(self, program: Any) -> Any:
         cache = self.options["cache"]
@@ -107,6 +110,7 @@ class _Executor:
         with self.lock:
             if self.closed:
                 raise RuntimeError("compiled function is closed")
+            program = self.molecular.bind_snapshots(program)
             if self.backend == "reference":
                 from generativeqc_compiler.tensor.interpreter import execute
 
@@ -117,11 +121,13 @@ class _Executor:
             if executable is None:
                 executable = self._build(program)
                 self.executables[program.logical_hash] = executable
+            self.molecular.materialize(self, program, feeds)
             result = executable.execute(feeds)
             return result if self.backend == "cpu" else result.outputs
 
     def close(self) -> None:
         with self.lock:
+            self.molecular.close()
             for executable in self.executables.values():
                 if self.backend == "cuda":
                     executable.close()
