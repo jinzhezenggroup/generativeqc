@@ -55,6 +55,7 @@ run_point() {
       --energy-tolerance 1e-10 --density-tolerance 1e-9 \
       --reference-gradient-tolerance 1e-8 --screening-tolerance 1e-12 \
       --maximum-energy-error 1e-8 --maximum-force-error 1e-7 \
+      --allow-portable-build \
       --output "$prefix.json" --progress-output "$prefix.progress.jsonl" \
       > "$prefix.log" 2>&1; then
     printf '{"exit_code":0}\n' > "$prefix.outcome"
