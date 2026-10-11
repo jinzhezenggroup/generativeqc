@@ -62,12 +62,12 @@ __device__ inline Scalar primitive_eri(double alpha, const Vec3<Scalar>& first, 
  * it neither changes the Coulomb auxiliary nor stores primitive/AO quartets.
  */
 template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
-          typename SecondCoefficients>
+          typename SecondCoefficients, typename CoulombStates>
 __device__ inline Scalar convolved_hermite_contraction(
     const Angular& angular_first, const Angular& angular_second,
     const Angular& angular_third, const Angular& angular_fourth,
     const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
-    const CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
+    const CoulombStates& auxiliary) {
   static_assert(!std::is_same_v<Scalar, MixedPrecisionFloat>,
                 "Hermite reassociation requires its own mixed-precision qualification");
   unsigned degree[3];
@@ -155,6 +155,56 @@ __device__ inline Scalar consume_cartesian_coulomb(
       angular_second, angular_third, angular_fourth, first_coefficients, second_coefficients, auxiliary);
 }
 
+/** Read a first geometry jet from scalar spatial states, not four AD simplexes.
+ * The shared Coulomb recurrence already defines dR(n,t,u,v)/d(P-Q)_axis as
+ * the corresponding raised Cartesian state. All nine geometry seeds are kept:
+ * this view also supports non-diagonal forward directions, not only atom seeds.
+ * Exponents and range boundaries are fixed, as in the retained Dual3 contract.
+ */
+template <unsigned MaximumAngular>
+struct CartesianCoulombSpatialResponse {
+  const CoulombAuxiliary<double, MaximumAngular + 1U>& states;
+  Vec3<Dual3> difference;
+
+  __device__ inline Dual3 at(unsigned order, unsigned axis_x, unsigned axis_y,
+                            unsigned axis_z) const {
+    const double raised_x = states.at(order, axis_x + 1U, axis_y, axis_z);
+    const double raised_y = states.at(order, axis_x, axis_y + 1U, axis_z);
+    const double raised_z = states.at(order, axis_x, axis_y, axis_z + 1U);
+    return {states.at(order, axis_x, axis_y, axis_z),
+            difference.x.derivative_x * raised_x + difference.y.derivative_x * raised_y +
+                difference.z.derivative_x * raised_z,
+            difference.x.derivative_y * raised_x + difference.y.derivative_y * raised_y +
+                difference.z.derivative_y * raised_z,
+            difference.x.derivative_z * raised_x + difference.y.derivative_z * raised_y +
+                difference.z.derivative_z * raised_z};
+  }
+};
+
+/** Keep the incumbent contraction and optional reassociation independent of
+ * whether preparation stores scalar states or complete forward jets. */
+template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
+          typename SecondCoefficients, typename CoulombStates>
+__device__ inline Scalar contract_prepared_cartesian_coulomb(
+    EvaluationReal<Scalar> p, EvaluationReal<Scalar> q, const Angular& angular_first,
+    const Angular& angular_second, const Angular& angular_third, const Angular& angular_fourth,
+    const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
+    const CoulombStates& auxiliary, bool hermite_convolution) {
+  if constexpr (MaximumAngular >= 5 && !std::is_same_v<Scalar, MixedPrecisionFloat>) {
+    if (hermite_convolution) {
+      const Scalar value = convolved_hermite_contraction<MaximumAngular, Scalar>(
+          angular_first, angular_second, angular_third, angular_fourth,
+          first_coefficients, second_coefficients, auxiliary);
+      const EvaluationReal<Scalar> prefactor =
+          EvaluationReal<Scalar>{2.0 * pow(kPi, 2.5)} / (p * q * qsqrt(p + q));
+      return prefactor * value;
+    }
+  }
+  return consume_cartesian_coulomb_states<MaximumAngular, Scalar>(
+      p, q, angular_first, angular_second, angular_third, angular_fourth,
+      first_coefficients, second_coefficients, auxiliary);
+}
+
 template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
           typename SecondCoefficients>
 __device__ inline __noinline__ Scalar eri_cartesian_value(
@@ -165,41 +215,47 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
     double omega = 0.0, bool reachable_coulomb = false, bool hermite_convolution = false) {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
-  CoulombAuxiliary<Scalar, MaximumAngular> auxiliary;
   // The compiler consumer knows the exact AO-component roots. The shared
   // recurrence keeps their dependency closure, including Dual geometry jets;
   // this selection does not change the primitive/AO screening domain.
-  const CoulombComponentDomain domain{
+  CoulombComponentDomain domain{
       angular_first.x + angular_second.x + angular_third.x + angular_fourth.x,
       angular_first.y + angular_second.y + angular_third.y + angular_fourth.y,
       angular_first.z + angular_second.z + angular_third.z + angular_fourth.z,
       reachable_coulomb};
-  if constexpr (!std::is_same_v<Scalar, MixedPrecisionFloat>) {
+  if constexpr (MaximumAngular >= 7U && std::is_same_v<Scalar, Dual3>) {
+    // Only the generic high-order derivative storage changes. Low orders,
+    // single-direction AD and mixed precision keep their qualified owners.
+    CoulombAuxiliary<double, MaximumAngular + 1U> auxiliary;
+    const Vec3<double> scalar_product{product_p.x.value, product_p.y.value, product_p.z.value};
+    const Vec3<double> scalar_center{product_q.x.value, product_q.y.value, product_q.z.value};
+    domain.first_response = true;
     if (range == generativeqc::integrals::CoulombRange::Full)
-      fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
-    else if (!fill_range_coulomb<MaximumAngular>(rho, product_p, product_q, range, omega,
-                                                 auxiliary, domain))
+      fill_coulomb<MaximumAngular + 1U>(rho, scalar_product, scalar_center, auxiliary, domain);
+    else if (!fill_range_coulomb<MaximumAngular + 1U>(
+                 rho, scalar_product, scalar_center, range, omega, auxiliary, domain))
       return scalar<Scalar>(NAN);
+    const CartesianCoulombSpatialResponse<MaximumAngular> response{
+        auxiliary, {product_p.x - product_q.x, product_p.y - product_q.y, product_p.z - product_q.z}};
+    return contract_prepared_cartesian_coulomb<MaximumAngular, Scalar>(
+        p, q, angular_first, angular_second, angular_third, angular_fourth,
+        first_coefficients, second_coefficients, response, hermite_convolution);
   } else {
-    if (range != generativeqc::integrals::CoulombRange::Full) return scalar<Scalar>(NAN);
-    fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
-  }
-
-  // Limit the experimental consumer to the profiled generic high orders.
-  // Existing low-order specializations and all mixed arithmetic remain intact.
-  if constexpr (MaximumAngular >= 5 && !std::is_same_v<Scalar, MixedPrecisionFloat>) {
-    if (hermite_convolution) {
-      const Scalar value = convolved_hermite_contraction<MaximumAngular>(
-          angular_first, angular_second, angular_third, angular_fourth,
-          first_coefficients, second_coefficients, auxiliary);
-      const EvaluationReal<Scalar> prefactor =
-          EvaluationReal<Scalar>{2.0 * pow(kPi, 2.5)} / (p * q * qsqrt(p + q));
-      return prefactor * value;
+    CoulombAuxiliary<Scalar, MaximumAngular> auxiliary;
+    if constexpr (!std::is_same_v<Scalar, MixedPrecisionFloat>) {
+      if (range == generativeqc::integrals::CoulombRange::Full)
+        fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
+      else if (!fill_range_coulomb<MaximumAngular>(rho, product_p, product_q, range, omega,
+                                                   auxiliary, domain))
+        return scalar<Scalar>(NAN);
+    } else {
+      if (range != generativeqc::integrals::CoulombRange::Full) return scalar<Scalar>(NAN);
+      fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
     }
+    return contract_prepared_cartesian_coulomb<MaximumAngular, Scalar>(
+        p, q, angular_first, angular_second, angular_third, angular_fourth,
+        first_coefficients, second_coefficients, auxiliary, hermite_convolution);
   }
-  return consume_cartesian_coulomb<MaximumAngular>(
-      p, q, angular_first, angular_second, angular_third, angular_fourth,
-      first_coefficients, second_coefficients, auxiliary);
 }
 
 template <unsigned MaximumAngular, typename Scalar>
