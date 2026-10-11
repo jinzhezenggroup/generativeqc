@@ -9,6 +9,9 @@
     ],
     "fast_compile": false,
     "host_compiler": "nvcc-default",
+    "host_options": [
+      "-Xcompiler=-fPIC"
+    ],
     "optimization": "-O3",
     "ptxas_verbose": true,
     "split_compile_threads": 1,

@@ -205,14 +205,11 @@ class TestLedgerValidation:
     def test_valid_ledger_passes(self) -> None:
         validator.validate_ledger(_ledger())
 
-    def test_record_mode_keeps_the_historical_non_pic_ledger_as_a_negative(
-        self,
-    ) -> None:
+    def test_committed_ledger_uses_the_current_pic_schema(self) -> None:
         payload = json.loads(validator.LEDGER.read_text(encoding="utf-8"))
+        validator.validate_ledger(payload)
         assert payload["flags"]["host_compiler"] == "nvcc-default"
-        assert "host_options" not in payload["flags"]
-        with pytest.raises(validator.LedgerError, match="flags"):
-            validator.validate_ledger(payload)
+        assert payload["flags"]["host_options"] == ["-Xcompiler=-fPIC"]
         assert len(payload["kernels"]) == 86
 
     @pytest.mark.parametrize(
@@ -1437,7 +1434,7 @@ class TestProductionContextBinding:
             "- name: Qualify direct J/K AOT static resources (shard 6)", 1
         )[1].split("- name:", 1)[0]
         assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
-        assert "--record-output build/direct-jk-aot/ledger.candidate.json" in step
+        assert "--record-output" not in step
 
     def test_cmake_records_the_resolved_compiler_cache(self) -> None:
         cmake = (validator.ROOT / "CMakeLists.txt").read_text()

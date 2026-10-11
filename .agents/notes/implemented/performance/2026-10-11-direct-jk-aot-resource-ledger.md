@@ -317,3 +317,12 @@ records it as `host_options`.
 The committed non-PIC ledger is retained as an explicit stale negative during
 record mode. A canonical CI record must measure the corrected PIC recipe before
 any ledger update or restoration of gate mode.
+
+Canonical record run 38155416533 at `81d1c45b0` passed the real generated-rule
+checks and compiled the PIC recipe through `/usr/local/bin/ccache` 4.14 on a
+cache miss, with passing before/after statistics and paired object/log/cuobjdump
+receipts. The candidate retained the complete 86-kernel inventory and every
+resource row, plus all prior source/preprocessed/header/manifest/toolchain
+identities. Its sole ledger change is the typed
+`host_options=["-Xcompiler=-fPIC"]` field. That candidate is installed and gate
+mode is restored for final exact-head qualification.
