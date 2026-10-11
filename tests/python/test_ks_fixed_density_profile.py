@@ -147,7 +147,7 @@ struct RangeEvent {
 namespace scf {
 struct Term { bool present{true}; double coefficient{1.0}; };
 struct Spec { Term coulomb, exchange{true, -0.125}; };
-struct Strategy { Spec spec; };
+struct Strategy { Spec spec; double screening_tolerance{1e-12}; };
 struct Direct {};
 struct Fitted {};
 struct Provider {
@@ -215,6 +215,28 @@ int enqueue_prepared_cuda_fock(Provider& provider, const double* density, const 
   return mode == 25 ? GENERATIVEQC_STATUS_CUDA_ERROR : status;
 }
 }
+// The prepared source follows the same raw J/K routing contract, but its
+// completed-action audit owns the resident-value error/census boundary.
+struct PhaseSource {
+  unsigned calls{}, audits{}, observations{};
+  bool active() const { return mode != 32; }
+  int enqueue(scf::Spec spec, const double* density, double* j, double* k,
+              int* error, double threshold, std::string& detail,
+              const double* beta, double* kb) {
+    assert(active() && threshold == 1e-12);
+    ++calls;
+    const auto status = scf::enqueue_cuda_direct_jk_device(
+        nullptr, spec, density, beta, 4, j, k, kb, error, detail);
+    return mode == 33 ? GENERATIVEQC_STATUS_CUDA_ERROR : status;
+  }
+  int audit() {
+    assert(!timing && pending.empty());
+    ++audits;
+    if (mode == 34) throw std::bad_alloc();
+    return mode == 31 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE : 0;
+  }
+  void observe_completed(std::size_t actions) { observations += actions; }
+};
 struct CudaKsFinalStateToken {
   int version{1}, identity{5};
   bool operator==(const CudaKsFinalStateToken&) const = default;
@@ -254,6 +276,7 @@ struct Impl {
   scf::Spec correction;
   scf::Spec* range_correction{&correction};
   scf::Provider provider;
+  std::unique_ptr<PhaseSource> phase_source;
   scf::Provider separate_range_provider;
   scf::Provider* range_provider{};
   struct { int stream{11}; } range_fock_binding;
@@ -280,19 +303,24 @@ int main(int argc, char** argv) {
   if (mode == 3) p.nonlocal_correlation = &p;
   if (mode == 4) p.has_range_correction = false;
   if (mode == 17) p.xc.reset();
-  if (mode >= 21) {
+  if (mode >= 21 && mode <= 28) {
     p.separate_range_provider.is_range = true;
     p.range_provider = &p.separate_range_provider;
   }
+  if (mode >= 29) {
+    p.phase_source = std::make_unique<PhaseSource>();
+    p.has_range_correction = false;
+    if (mode == 30) p.provider.model.spec.exchange.present = false;
+  }
   change_token = [&] { ++p.identity; };
   CudaKsFinalStateToken expected = p.token();
-  if (mode == 5) ++expected.identity;
+  if (mode == 5 || mode == 35) ++expected.identity;
   CudaKsFixedDensityProfile profile{{99,99,99,99}, 15};
   std::string detail;
   auto run = [&] { return owner.profile_fixed_density_components(expected, profile, detail); };
   const auto status = run();
-  const bool preflight_failure = mode == 5 || mode == 6 || mode == 7 || mode == 20;
-  const bool success = mode < 5 || mode == 17 || mode == 21;
+  const bool preflight_failure = mode == 5 || mode == 6 || mode == 7 || mode == 20 || mode == 35;
+  const bool success = mode < 5 || mode == 17 || mode == 21 || mode == 29 || mode == 30 || mode == 32;
   assert((status == GENERATIVEQC_STATUS_SUCCESS) == success);
   if (mode == 23 || mode == 25 || mode == 27)
     assert(status == GENERATIVEQC_STATUS_CUDA_ERROR);
@@ -301,10 +329,11 @@ int main(int argc, char** argv) {
   for (int i = 0; i != 8; ++i) assert(p.density[i] == i + 1);
   assert(pending.empty() && range_pending.empty());
   if (success) {
-    const unsigned mask = mode == 2 ? 9 : mode == 3 || mode == 17 ? 7 : mode == 4 ? 11 : 15;
+    const unsigned mask = mode == 2 || mode == 30 ? 9 : mode == 3 || mode == 17 ? 7 :
+                          mode == 4 || mode >= 29 ? 11 : 15;
     assert(profile.present_mask == mask && p.token() == expected && drains == 0);
     for (unsigned i = 0; i != 4; ++i) assert(profile.milliseconds[i] == ((mask & (1U << i)) ? 2 : 0));
-    assert(stages == (mode == 2 ? std::vector<char>{'J','X'} : mode == 4 ?
+    assert(stages == (mode == 2 || mode == 30 ? std::vector<char>{'J','X'} : mode == 4 || mode >= 29 ?
       std::vector<char>{'J','K','X'} : mode == 3 || mode == 17 ? std::vector<char>{'J','K','R'} :
       std::vector<char>{'J','K','R','X'}));
     const auto count = stages.size();
@@ -334,10 +363,19 @@ int main(int argc, char** argv) {
   // Submission failures must drain the correction stream before lease
   // revocation. Pre-submission failures and successful event joins need none.
   assert((range_drains > 0) == (mode >= 24 && mode <= 27));
-  if (mode < 21) assert(bridge.empty());
-  if (mode >= 22) {
+  if (mode < 21 || mode >= 29) assert(bridge.empty());
+  if (mode >= 22 && mode <= 28) {
     const std::array<std::string, 7> expected_bridge{"", "I", "IiR", "IiR", "IiR", "IiRO", "IiROo"};
     assert(std::string(bridge.begin(), bridge.end()) == expected_bridge[mode - 22]);
+  }
+  if (p.phase_source) {
+    if (mode == 32 || mode == 35)
+      assert(p.phase_source->calls == 0 && p.phase_source->audits == 0);
+    else if (success)
+      assert(p.phase_source->calls == (mode == 30 ? 2U : 4U) &&
+             p.phase_source->audits == p.phase_source->calls);
+    else
+      assert(p.phase_source->calls == 1 && p.phase_source->audits == (mode == 33 ? 0U : 1U));
   }
 }
 """
@@ -377,6 +415,13 @@ int main(int argc, char** argv) {
         pytest.param(26, id="range-output-record-failure"),
         pytest.param(27, id="range-output-wait-failure"),
         pytest.param(28, id="range-device-error"),
+        pytest.param(29, id="resident-source-jk"),
+        pytest.param(30, id="resident-source-j-only"),
+        pytest.param(31, id="resident-source-audit-failure"),
+        pytest.param(32, id="inactive-source-fallback"),
+        pytest.param(33, id="resident-source-submit-failure"),
+        pytest.param(34, id="resident-source-audit-allocation"),
+        pytest.param(35, id="resident-source-stale-token"),
     ],
 )
 @pytest.mark.parametrize("spins", [1, 2])
