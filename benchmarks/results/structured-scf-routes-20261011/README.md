@@ -2,7 +2,7 @@
 
 This compact [receipt](qualification.json) qualifies primitive arithmetic,
 resource facts, masks and replay for scientific source commit
-`12c96bfde81f79b4fd6aa0185826a9cfb5a37ba6`. It is **not** complete scientific
+`8f09a10bb8a6228394f6d8cde4168d963fbac646`. It is **not** complete scientific
 endpoint or default-route qualification, and closes none of #1877/#1878/#1883.
 Subsequent receipt-only changes do not change the qualified scientific source.
 
