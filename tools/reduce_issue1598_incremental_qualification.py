@@ -138,7 +138,8 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _outcome(root: Path, path: Path) -> dict[str, Any]:
-    return json.loads((path.parent / (path.name + ".outcome")).read_text())
+    stem = path.name[: -len(".json")]
+    return json.loads((path.parent / f"{stem}.outcome").read_text())
 
 
 def _hf_rows(
@@ -150,13 +151,15 @@ def _hf_rows(
     for population in POPULATIONS:
         size_pairs = MOVED_SIZES if population == "moved" else SIZES
         for atoms, expected_aos in size_pairs:
-            loaded: dict[str, list[dict[str, Any]]] = {}
+            loaded: dict[str, dict[int, dict[str, Any]]] = {
+                "baseline": {},
+                "incremental": {},
+            }
             failed_points: list[str] = []
             for name, mode in (
                 ("baseline", "baseline"),
                 ("incremental", "incremental"),
             ):
-                records = []
                 for round in (1, 2):
                     path = root / population / f"direct-{atoms}-{mode}-{round}.json"
                     outcome = _outcome(root, path)
@@ -167,42 +170,7 @@ def _hf_rows(
                             f"attempt {outcome.get('attempt')})"
                         )
                         continue
-                    records.append(_load(path))
-                loaded[name] = records
-            if failed_points:
-                failures.append(
-                    {
-                        "population": population,
-                        "atoms": atoms,
-                        "ao_count": expected_aos,
-                        "failed_points": failed_points,
-                    }
-                )
-            baseline_records = loaded["baseline"]
-            incremental_records = loaded["incremental"]
-            if not baseline_records or not incremental_records:
-                continue
-            baseline_cold = [
-                _positive_seconds(r["generativeqc"]["cold_seconds"])
-                for r in baseline_records
-            ]
-            incremental_cold = [
-                _positive_seconds(r["generativeqc"]["cold_seconds"])
-                for r in incremental_records
-            ]
-            baseline_warm = [
-                _positive_seconds(r["generativeqc"]["warm_median_seconds"])
-                for r in baseline_records
-            ]
-            incremental_warm = [
-                _positive_seconds(r["generativeqc"]["warm_median_seconds"])
-                for r in incremental_records
-            ]
-            for name, records in (
-                ("baseline", baseline_records),
-                ("incremental", incremental_records),
-            ):
-                for record in records:
+                    record = _load(path)
                     aos = int(record["workload"]["ao_count"])
                     if aos != expected_aos:
                         raise ValueError(
@@ -220,50 +188,101 @@ def _hf_rows(
                         library_sha = sha
                     elif sha != library_sha:
                         raise ValueError("matrix did not use one native library")
-            warm_speedup = _median(baseline_warm) / _median(incremental_warm)
-            cold_speedup = _median(baseline_cold) / _median(incremental_cold)
-            energy_difference = max(
-                _maximum_abs_difference(
-                    base["generativeqc"]["energies_hartree"],
-                    inc["generativeqc"]["energies_hartree"],
+                    loaded[name][round] = record
+            if failed_points:
+                failures.append(
+                    {
+                        "population": population,
+                        "atoms": atoms,
+                        "ao_count": expected_aos,
+                        "failed_points": failed_points,
+                    }
                 )
-                for base, inc in zip(baseline_records, incremental_records, strict=True)
-            )
-            force_difference = max(
-                _maximum_abs_difference(
-                    base["generativeqc"]["forces_hartree_per_bohr"],
-                    inc["generativeqc"]["forces_hartree_per_bohr"],
+            matched_cold: dict[str, list[float]] = {"baseline": [], "incremental": []}
+            matched_warm: dict[str, list[float]] = {"baseline": [], "incremental": []}
+            for round in (1, 2):
+                baseline_record = loaded["baseline"].get(round)
+                incremental_record = loaded["incremental"].get(round)
+                if baseline_record is None or incremental_record is None:
+                    continue
+                baseline_cold = _positive_seconds(
+                    baseline_record["generativeqc"]["cold_seconds"]
                 )
-                for base, inc in zip(baseline_records, incremental_records, strict=True)
-            )
-            baseline_branches = _branches(baseline_records[0])
-            incremental_branches = _branches(incremental_records[0])
-            work = _incremental_work(incremental_records[0])
-            rows.append(
-                {
-                    "population": population,
-                    "atoms": atoms,
-                    "ao_count": expected_aos,
-                    "baseline_cold_median_seconds": _median(baseline_cold),
-                    "incremental_cold_median_seconds": _median(incremental_cold),
-                    "cold_speedup": cold_speedup,
-                    "baseline_warm_median_seconds": _median(baseline_warm),
-                    "incremental_warm_median_seconds": _median(incremental_warm),
-                    "warm_speedup": warm_speedup,
-                    "baseline_iteration_branches": baseline_branches,
-                    "incremental_iteration_branches": incremental_branches,
-                    "iteration_branches_match": (
-                        baseline_branches == incremental_branches
-                    ),
-                    "maximum_energy_difference_hartree": energy_difference,
-                    "maximum_force_difference_hartree_per_bohr": force_difference,
-                    "numerical_gate_passed": (
-                        energy_difference <= args.maximum_energy_difference
-                        and force_difference <= args.maximum_force_difference
-                    ),
-                    "incremental_work": work,
-                }
-            )
+                incremental_cold = _positive_seconds(
+                    incremental_record["generativeqc"]["cold_seconds"]
+                )
+                baseline_warm = _positive_seconds(
+                    baseline_record["generativeqc"]["warm_median_seconds"]
+                )
+                incremental_warm = _positive_seconds(
+                    incremental_record["generativeqc"]["warm_median_seconds"]
+                )
+                matched_cold["baseline"].append(baseline_cold)
+                matched_cold["incremental"].append(incremental_cold)
+                matched_warm["baseline"].append(baseline_warm)
+                matched_warm["incremental"].append(incremental_warm)
+                energy_difference = _maximum_abs_difference(
+                    baseline_record["generativeqc"]["energies_hartree"],
+                    incremental_record["generativeqc"]["energies_hartree"],
+                )
+                force_difference = _maximum_abs_difference(
+                    baseline_record["generativeqc"]["forces_hartree_per_bohr"],
+                    incremental_record["generativeqc"]["forces_hartree_per_bohr"],
+                )
+                baseline_branches = _branches(baseline_record)
+                incremental_branches = _branches(incremental_record)
+                work = _incremental_work(incremental_record)
+                rows.append(
+                    {
+                        "population": population,
+                        "atoms": atoms,
+                        "ao_count": expected_aos,
+                        "round": round,
+                        "baseline_cold_seconds": baseline_cold,
+                        "incremental_cold_seconds": incremental_cold,
+                        "cold_speedup": baseline_cold / incremental_cold,
+                        "baseline_warm_median_seconds": baseline_warm,
+                        "incremental_warm_median_seconds": incremental_warm,
+                        "warm_speedup": baseline_warm / incremental_warm,
+                        "baseline_iteration_branches": baseline_branches,
+                        "incremental_iteration_branches": incremental_branches,
+                        "iteration_branches_match": (
+                            baseline_branches == incremental_branches
+                        ),
+                        "maximum_energy_difference_hartree": energy_difference,
+                        "maximum_force_difference_hartree_per_bohr": force_difference,
+                        "numerical_gate_passed": (
+                            energy_difference <= args.maximum_energy_difference
+                            and force_difference <= args.maximum_force_difference
+                        ),
+                        "incremental_work": work,
+                    }
+                )
+            if matched_warm["baseline"] and matched_warm["incremental"]:
+                rows.append(
+                    {
+                        "population": population,
+                        "atoms": atoms,
+                        "ao_count": expected_aos,
+                        "round": "all-matched",
+                        "baseline_cold_median_seconds": _median(
+                            matched_cold["baseline"]
+                        ),
+                        "incremental_cold_median_seconds": _median(
+                            matched_cold["incremental"]
+                        ),
+                        "cold_speedup": _median(matched_cold["baseline"])
+                        / _median(matched_cold["incremental"]),
+                        "baseline_warm_median_seconds": _median(
+                            matched_warm["baseline"]
+                        ),
+                        "incremental_warm_median_seconds": _median(
+                            matched_warm["incremental"]
+                        ),
+                        "warm_speedup": _median(matched_warm["baseline"])
+                        / _median(matched_warm["incremental"]),
+                    }
+                )
     return rows, library_sha, failures
 
 
@@ -332,6 +351,10 @@ def main() -> None:
     ledger_path = args.input / "ledger" / "nvidia-smi.tsv"
     ledger_lines = sum(1 for _ in ledger_path.open()) if ledger_path.exists() else 0
 
+    per_round_rows = [row for row in hf_rows if isinstance(row.get("round"), int)]
+    matched_rows = [
+        row for row in hf_rows if row.get("round") == "all-matched"
+    ]
     payload = {
         "schema_version": 1,
         "issue": 1598,
@@ -351,27 +374,38 @@ def main() -> None:
         "ks_failures": ks_failures,
         "ledger_receipt_lines": ledger_lines,
         "any_point_failed": bool(hf_failures or ks_failures),
-        "all_numerical_gates_passed": all(
-            row["numerical_gate_passed"] for row in hf_rows
-        ),
+        "all_numerical_gates_passed": bool(per_round_rows)
+        and all(row["numerical_gate_passed"] for row in per_round_rows),
         "all_iteration_branches_match": all(
-            row["iteration_branches_match"] for row in hf_rows
+            row["iteration_branches_match"] for row in per_round_rows
         ),
-        "any_warm_endpoint_win": any(row["warm_speedup"] > 1.0 for row in hf_rows),
-        "any_cold_endpoint_win": any(row["cold_speedup"] > 1.0 for row in hf_rows),
-        "best_warm_speedup": max(row["warm_speedup"] for row in hf_rows),
-        "best_cold_speedup": max(row["cold_speedup"] for row in hf_rows),
+        "any_warm_endpoint_win": any(row["warm_speedup"] > 1.0 for row in matched_rows),
+        "any_cold_endpoint_win": any(row["cold_speedup"] > 1.0 for row in matched_rows),
+        "best_warm_speedup": (
+            max(row["warm_speedup"] for row in matched_rows) if matched_rows else None
+        ),
+        "best_cold_speedup": (
+            max(row["cold_speedup"] for row in matched_rows) if matched_rows else None
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
 
     print(
-        "pop    AOs  warm_base_ms  warm_inc_ms  speedup  cold_speedup  "
+        "pop    AOs  round  warm_base_ms  warm_inc_ms  speedup  cold_speedup  "
         "tile_reduce  shell_reduce  branches  numerical"
     )
     for row in hf_rows:
+        if row.get("round") == "all-matched":
+            print(
+                f"{row['population']:<5}  {row['ao_count']:>4}  {row['round']!s:>10}  "
+                f"{row['baseline_warm_median_seconds'] * 1e3:>11.3f}  "
+                f"{row['incremental_warm_median_seconds'] * 1e3:>11.3f}  "
+                f"{row['warm_speedup']:>7.3f}  {row['cold_speedup']:>12.3f}"
+            )
+            continue
         print(
-            f"{row['population']:<5}  {row['ao_count']:>4}  "
+            f"{row['population']:<5}  {row['ao_count']:>4}  {row['round']:>5}  "
             f"{row['baseline_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['incremental_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['warm_speedup']:>7.3f}  "

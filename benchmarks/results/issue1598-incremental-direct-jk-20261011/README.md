@@ -41,6 +41,15 @@ All comparable numerical gates pass (|ΔE| ≤ 1e-8 Eh, |ΔF| ≤ 1e-7 Eh/Bohr).
 The KS control could not be re-accepted on the new master because the retained
 oracle predates #2246; see the decision note.
 
+## Retained scope
+
+The compact publication retains the failure outcomes (the measured negative
+dispositions) plus the matched 384-AO round-1 pair on the new master;
+successful points whose records were compacted away have their outcomes
+removed too, so the retained set is self-consistent. The other sizes are cited
+from the decision note. `verify.py` binds every retained file to
+`publication.json` and reports the dispositions it cannot re-check.
+
 ## Reproduction
 
 The campaign runner and reducer are retained in-tree

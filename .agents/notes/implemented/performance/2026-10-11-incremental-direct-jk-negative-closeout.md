@@ -74,20 +74,28 @@ for any future revisit.
 All paired numerical gates that could be compared pass (maximum |ΔE| ≤ 1e-8 Eh,
 |ΔF| ≤ 1e-7 Eh/Bohr, plus the comparator's independent reference gates). The
 incremental diagnostics confirm the mechanism activates and removes real
-fixed-topology quartet work where counters are valid, while complete endpoint
-wall time is never reduced: the measured populations show neutral-to-strongly
-negative cold and warm economics plus reproducible convergence failures at 192
-and 768 AOs. The retained records include the nvidia-smi resource ledger,
-device/library/source identities, per-run progress journals, retry outcomes and
-the reducer summaries.
+fixed-topology quartet work where counters are valid. No complete-endpoint win
+exists at any population of 192 AOs or larger on either revision: the 384-AO
+warm endpoints are 1.94x/2.03x slower and the cold endpoints 1.42x/1.41x
+slower; 192-AO and 768-AO incremental cold runs reproducibly fail to converge
+while their baselines converge. Only the 96-AO no-opportunity points slightly
+favor the incremental route on cold samples (2.29/2.22 s versus 2.36/2.36 s),
+which does not generalize. The in-repo receipts retain the failure outcomes
+from both campaigns, the matched 384-AO round-1 pair on the new master, and
+the nvidia-smi resource ledger, device/library/source identities, per-run
+progress journals, retry outcomes and the reducer summaries; the compact
+publication deliberately omits the remaining successful records, which are
+cited from this note.
 
 ## Why no promotion
 
-Task-count reduction did not translate into complete-endpoint wins in any
-measured population, consistent with the independently re-verified PBE0-domain
-pattern (warm parity after audit reuse; moved-geometry regression), and the
-route reproduces convergence failures at 192 and 768 AOs on two successive
-master revisions. The remaining provider-owned bounded-streaming work
+Task-count reduction did not translate into complete-endpoint wins at any
+population of 192 AOs or larger on either measured revision, consistent with
+the PBE0-domain pattern (warm parity after audit reuse; moved-geometry
+regression), and the route reproduces convergence failures at 192 and 768 AOs
+on two successive master revisions. The 96-AO cold no-opportunity samples
+slightly favor the incremental route and are reported as such rather than
+generalized. The remaining provider-owned bounded-streaming work
 accounting (`quartet_work_counters_valid` excludes bounded-streaming runs) also
 means no fail-closed workload guard can currently be certified across the
 bounded resource domain the promotion contract requires. Keeping the route

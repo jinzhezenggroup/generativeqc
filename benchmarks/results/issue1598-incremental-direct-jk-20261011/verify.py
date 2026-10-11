@@ -1,16 +1,18 @@
 """Recheck the retained #1598 negative-closeout gates without CUDA.
 
-Decompresses the retained records, verifies library identity per campaign,
-recomputes the paired numerical gates for the retained round-1 pairs and the
-failure dispositions from the retained outcomes. Compact publication retains
-round-1 records plus every outcome; removed round-2 records are cited from the
-README/note tables and are not re-derivable here.
+Binds every retained file to the publication manifest (path, bytes, sha256),
+validates library identity per campaign, recomputes the paired numerical gates
+for every retained comparable round and the failure dispositions from the
+retained outcomes, and reports which points are not retained so the compact
+publication cannot be misread as a complete matrix.
 """
 
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
+import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -21,6 +23,7 @@ EXPECTED_LIBRARIES = {
 }
 MAX_ENERGY_DIFFERENCE = 1.0e-8
 MAX_FORCE_DIFFERENCE = 1.0e-7
+SIZES = {"old": (12, 24, 48, 96), "new": (24, 48, 96)}
 
 
 def require(condition: bool, message: str) -> None:
@@ -30,6 +33,28 @@ def require(condition: bool, message: str) -> None:
 
 def load_gz(path: Path) -> dict:
     return json.loads(gzip.decompress(path.read_bytes()))
+
+
+def validate_publication() -> dict[str, tuple[int, str]]:
+    """Every member must exist with the exact bytes and digest recorded."""
+
+    manifest_path = ROOT / "publication.json"
+    require(manifest_path.exists(), "publication.json is missing")
+    manifest = json.loads(manifest_path.read_text())
+    require(
+        manifest.get("schema") == "generativeqc.benchmark-publication.v1",
+        "unsupported publication schema",
+    )
+    members: dict[str, tuple[int, str]] = {}
+    for entry in manifest["files"]:
+        path = ROOT / entry["path"]
+        require(path.is_file(), f"publication member missing: {entry['path']}")
+        data = path.read_bytes().replace(b"\r\n", b"\n")
+        require(len(data) == entry["bytes"], f"member size changed: {entry['path']}")
+        digest = hashlib.sha256(data).hexdigest()
+        require(digest == entry["sha256"], f"member digest changed: {entry['path']}")
+        members[entry["path"]] = (entry["bytes"], digest)
+    return members
 
 
 def maximum_abs_difference(first: object, second: object) -> float:
@@ -46,67 +71,87 @@ def maximum_abs_difference(first: object, second: object) -> float:
         type(first) in (int, float) and type(second) in (int, float),
         "benchmark results require numeric values",
     )
-    return abs(float(first) - float(second))
+    a, b = float(first), float(second)
+    require(math.isfinite(a) and math.isfinite(b), "non-finite benchmark result")
+    return abs(a - b)
 
 
-def check_campaign(name: str, sizes: tuple[int, ...]) -> dict:
-    root = ROOT / name / "rhf"
-    summary = {"records": [], "failures": []}
-    for atoms in sizes:
+def check_campaign(
+    name: str, members: dict[str, tuple[int, str]]
+) -> dict[str, object]:
+    retained: list[str] = []
+    failures: list[str] = []
+    not_retained: list[str] = []
+    for atoms in SIZES[name]:
         for mode in ("baseline", "incremental"):
             for round in (1, 2):
                 stem = f"direct-{atoms}-{mode}-{round}"
-                record_path = root / f"{stem}.json.gz"
-                outcome_path = root / f"{stem}.outcome.gz"
-                if not outcome_path.exists() and not record_path.exists():
-                    # Compact publication omits non-decisive points entirely;
-                    # their dispositions are cited from the README/note tables.
+                record_rel = f"{name}/rhf/{stem}.json.gz"
+                outcome_rel = f"{name}/rhf/{stem}.outcome.gz"
+                has_record = record_rel in members
+                has_outcome = outcome_rel in members
+                if not has_record and not has_outcome:
+                    not_retained.append(f"{name}/{stem}")
                     continue
-                require(outcome_path.exists(), f"missing outcome for {name}/{stem}")
-                outcome = load_gz(outcome_path)
+                require(has_outcome, f"retained record lacks outcome: {stem}")
+                outcome = load_gz(ROOT / outcome_rel)
                 if outcome.get("exit_code") != 0:
-                    summary["failures"].append(f"{name}/{stem}")
+                    failures.append(f"{name}/{stem}")
                     continue
-                if record_path.exists():
-                    record = load_gz(record_path)
-                    require(
-                        record.get("benchmark") == "compare_gpu4pyscf_batch",
-                        f"{name}/{stem} is not a comparator record",
-                    )
-                    require(
-                        record["native_build"]["library_sha256"]
-                        == EXPECTED_LIBRARIES[name],
-                        f"{name}/{stem} library identity mismatch",
-                    )
-                    require(record["gate"]["passed"], f"{name}/{stem} failed gates")
-                    summary["records"].append(stem)
-        base_path = root / f"direct-{atoms}-baseline-1.json.gz"
-        inc_path = root / f"direct-{atoms}-incremental-1.json.gz"
-        if base_path.exists() and inc_path.exists():
-            base = load_gz(base_path)
-            inc = load_gz(inc_path)
-            require(
-                maximum_abs_difference(
-                    base["generativeqc"]["energies_hartree"],
-                    inc["generativeqc"]["energies_hartree"],
+                require(has_record, f"successful point lacks record: {stem}")
+                record = load_gz(ROOT / record_rel)
+                require(
+                    record.get("benchmark") == "compare_gpu4pyscf_batch",
+                    f"{stem} is not a comparator record",
                 )
-                <= MAX_ENERGY_DIFFERENCE,
-                f"{name}/{atoms}-atom energy gate failed",
-            )
-            require(
-                maximum_abs_difference(
-                    base["generativeqc"]["forces_hartree_per_bohr"],
-                    inc["generativeqc"]["forces_hartree_per_bohr"],
+                require(
+                    record["native_build"]["library_sha256"]
+                    == EXPECTED_LIBRARIES[name],
+                    f"{stem} library identity mismatch",
                 )
-                <= MAX_FORCE_DIFFERENCE,
-                f"{name}/{atoms}-atom force gate failed",
-            )
-    return summary
+                require(record["gate"]["passed"], f"{stem} failed its gates")
+                require(
+                    math.isfinite(
+                        float(record["generativeqc"]["cold_seconds"])
+                    )
+                    and float(record["generativeqc"]["cold_seconds"]) > 0,
+                    f"{stem} non-finite cold timing",
+                )
+                retained.append(stem)
+        # Paired gates for every retained comparable round pair.
+        for round in (1, 2):
+            base_rel = f"{name}/rhf/direct-{atoms}-baseline-{round}.json.gz"
+            inc_rel = f"{name}/rhf/direct-{atoms}-incremental-{round}.json.gz"
+            if base_rel in members and inc_rel in members:
+                base = load_gz(ROOT / base_rel)
+                inc = load_gz(ROOT / inc_rel)
+                require(
+                    maximum_abs_difference(
+                        base["generativeqc"]["energies_hartree"],
+                        inc["generativeqc"]["energies_hartree"],
+                    )
+                    <= MAX_ENERGY_DIFFERENCE,
+                    f"{name}/{atoms}-atom round {round} energy gate failed",
+                )
+                require(
+                    maximum_abs_difference(
+                        base["generativeqc"]["forces_hartree_per_bohr"],
+                        inc["generativeqc"]["forces_hartree_per_bohr"],
+                    )
+                    <= MAX_FORCE_DIFFERENCE,
+                    f"{name}/{atoms}-atom round {round} force gate failed",
+                )
+    return {
+        "retained": retained,
+        "failures": failures,
+        "not_retained": not_retained,
+    }
 
 
 def main() -> None:
-    old = check_campaign("old", (12, 24, 48, 96))
-    new = check_campaign("new", (24, 48, 96))
+    members = validate_publication()
+    old = check_campaign("old", members)
+    new = check_campaign("new", members)
     # The negative-closeout statements must match the retained dispositions:
     # the 192-AO (24-atom) incremental points fail in both campaigns.
     require(
@@ -119,10 +164,11 @@ def main() -> None:
     )
     print(
         "verified: "
-        f"old={len(old['records'])} retained records, {len(old['failures'])} failed "
-        f"points; new={len(new['records'])} retained records, "
-        f"{len(new['failures'])} failed points; all retained paired numerical "
-        "gates pass"
+        f"old={len(old['retained'])} retained records, {len(old['failures'])} failed "
+        f"points, {len(old['not_retained'])} not retained; "
+        f"new={len(new['retained'])} retained records, {len(new['failures'])} failed "
+        f"points, {len(new['not_retained'])} not retained; "
+        "publication manifest and all retained paired numerical gates pass"
     )
 
 
