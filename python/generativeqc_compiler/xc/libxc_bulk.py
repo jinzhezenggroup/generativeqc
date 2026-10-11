@@ -43,7 +43,7 @@ def canonicalize_spin_density_coordinates(
     rho_a: Expr,
     rho_b: Expr,
 ) -> tuple[Expr, ...]:
-    """Express exact inverse-rs/zeta densities in physical input coordinates.
+    """Express boundary predicates in exact physical input coordinates.
 
     Apply this before differentiation and when reconstructing source subgraphs
     for matching. Both consumers must see the same inclusive spin-screen nodes;
@@ -59,13 +59,89 @@ def canonicalize_spin_density_coordinates(
     rs_factor = graph.approximate_constant((3.0 / (4.0 * math.pi)) ** (1.0 / 3.0))
     rs = rs_factor * density.pow(-1.0 / 3.0)
     reconstructed_density = (rs_factor / rs).pow(3.0)
-    return graph.replace_subexpressions(
+    roots = graph.replace_subexpressions(
         roots,
         {
             (1 + zeta) * reconstructed_density / 2: rho_a,
             (1 - zeta) * reconstructed_density / 2: rho_b,
         },
     )
+    return _canonicalize_kinetic_ratio_predicates(graph, roots, rho_a, rho_b)
+
+
+def _canonicalize_kinetic_ratio_predicates(
+    graph: Graph,
+    roots: tuple[Expr, ...],
+    rho_a: Expr,
+    rho_b: Expr,
+) -> tuple[Expr, ...]:
+    """Compare tau_W/tau to one without cancelling fractional density powers.
+
+    The imported ``xt**2 / (8*t_total(z, ts_a, ts_b))`` is exactly
+    ``sigma_total / (8*rho_total*tau_total)`` on positive work coordinates.
+    Its normalized round trip can exceed one by an ulp at a physical rank-one
+    density, selecting a constant branch with the wrong inward PSD derivative.
+    Rewrite only the predicate before differentiation. Retain the original
+    branch values and derivatives, including their raw Libxc work-boundary
+    coefficients at empty/floored spin coordinates.
+    """
+    names = {node.payload for node in graph.nodes if node.operation == "variable"}
+    if {"sigma_aa", "sigma_ab", "sigma_bb", "tau_a", "tau_b"} <= names:
+        sigma_aa, sigma_ab, sigma_bb, tau_a, tau_b = (
+            graph.variable(name)
+            for name in ("sigma_aa", "sigma_ab", "sigma_bb", "tau_a", "tau_b")
+        )
+    elif {"sigma", "tau"} <= names:
+        sigma_aa = sigma_ab = sigma_bb = graph.variable("sigma") / 4
+        tau_a = tau_b = graph.variable("tau") / 2
+    else:
+        return roots
+    density = rho_a + rho_b
+    zeta = (
+        graph.constant(0)
+        if rho_a.identifier == rho_b.identifier
+        else (rho_a - rho_b) / density
+    )
+    sigma = sigma_aa + 2 * sigma_ab + sigma_bb
+    total_t = tau_a * rho_a.pow(-5 / 3) * ((1 + zeta) / 2).pow(5 / 3)
+    total_t += tau_b * rho_b.pow(-5 / 3) * ((1 - zeta) / 2).pow(5 / 3)
+    normalized_ratio = graph.multiply_many((sigma, density.pow(-4 / 3).pow(2))) / (
+        8 * total_t
+    )
+    replacements = {}
+    reachable = set(graph.topological_order(roots))
+    for index in sorted(reachable):
+        node = graph.nodes[index]
+        if (
+            node.operation == "select_le"
+            and node.arguments[0] == normalized_ratio.identifier
+            and graph.is_constant(Expr(graph, node.arguments[1]), 1)
+        ):
+            # Multiply density and tau first: 8*density can overflow even
+            # when their product is representable. Outside the normal-product
+            # range retain the existing comparison rather than introducing
+            # an underflow-induced boundary change. Production work floors
+            # keep this product many orders above the binary64 normal minimum.
+            product = density * (tau_a + tau_b)
+            physical = graph.select_le(
+                sigma,
+                8 * product,
+                Expr(graph, node.arguments[2]),
+                Expr(graph, node.arguments[3]),
+            )
+            guarded = graph.select_le(
+                product,
+                float.fromhex("0x1.0p-1022"),
+                Expr(graph, index),
+                physical,
+            )
+            replacements[Expr(graph, index)] = guarded
+            # The original comparison remains inside its underflow fallback.
+            # Retain an already-normalized wrapper verbatim on repeated calls,
+            # while still normalizing other uses of the same original node.
+            if guarded.identifier in reachable:
+                replacements[guarded] = guarded
+    return graph.replace_subexpressions(roots, replacements)
 
 
 def read_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
