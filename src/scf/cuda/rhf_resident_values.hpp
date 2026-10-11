@@ -54,7 +54,7 @@ class RhfResidentValues {
   int* error_{};
   std::uint64_t* census_{};
   std::size_t matrix_elements_{}, correction_elements_{};
-  std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{};
+  std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{}, source_value_count_{};
   bool prepared_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};

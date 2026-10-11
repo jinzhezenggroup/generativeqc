@@ -1,11 +1,43 @@
 #pragma once
 
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <string_view>
 
 namespace generativeqc::scf::cuda_execution {
 
 inline constexpr std::size_t kReferenceEriCacheLimit = 256ULL << 20;
+
+/** Experimental measured-plan admission. The immutable mask is captured once
+ * per owner, never consulted by kernels or graphs. Unset preserves complete
+ * residency and its existing automatic eligibility/defaults. */
+struct ReferenceResidentBucketPolicy {
+  std::uint32_t mask{(1U << 28) - 1};
+  std::size_t ceiling{8ULL << 30};
+  bool valid{true};
+};
+
+inline ReferenceResidentBucketPolicy reference_resident_bucket_policy() noexcept {
+  ReferenceResidentBucketPolicy policy;
+  const auto parse = [](const char* text, auto& output) {
+    if (!text) return true;
+    std::string_view value(text);
+    int base = 10;
+    if (value.starts_with("0x")) {
+      value.remove_prefix(2);
+      base = 16;
+    }
+    if (value.empty()) return false;
+    const auto result = std::from_chars(value.data(), value.data() + value.size(), output, base);
+    return result.ec == std::errc{} && result.ptr == value.data() + value.size();
+  };
+  policy.valid = parse(std::getenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK"), policy.mask) &&
+                 policy.mask < (1U << 28) &&
+                 parse(std::getenv("GENERATIVEQC_RHF_RESIDENT_MAX_BYTES"), policy.ceiling);
+  return policy;
+}
 
 enum class ReferenceResidentValuesSelection { automatic, disabled, forced, invalid };
 

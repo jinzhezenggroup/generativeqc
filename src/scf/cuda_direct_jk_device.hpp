@@ -45,6 +45,19 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Select whole immutable angular buckets, numbered first*(first+1)/2+second.
+ * The mask is shared across batch items. Unselected buckets retain the native
+ * canonical evaluator, not a second whole-source action. Selection affects
+ * storage/scheduling only; the full-range unscreened FP64 equation is unchanged.
+ * A zero mask retains Direct without allocation. Published leases cannot be
+ * replaced in place, since captured consumers may borrow their pointers. */
+std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan* plan,
+                                                         std::uint32_t bucket_mask);
+generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJkPlan* plan,
+                                                                    std::size_t maximum_bytes,
+                                                                    std::uint32_t bucket_mask,
+                                                                    std::string& detail);
+
 /** Enqueue one exact, unscreened full-range AO ERI tile into caller-owned
  * device storage on caller_stream. The tile is row-major [i,j,k,l] with the
  * last axis fastest and uses the prepared Direct plan's public AO basis.

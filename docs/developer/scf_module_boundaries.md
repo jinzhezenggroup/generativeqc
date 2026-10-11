@@ -100,8 +100,40 @@ matrices and diagnostics. Optional values have an 8-GiB ceiling and must also
 fit available device memory with a 256-MiB runtime reserve. Resource/capability
 refusals retain the already admitted exact evaluator; driver/numerical failures
 propagate instead of masquerading as pressure. Preparation finite-audits values
-before publication. A completed action must report zero recurrence evaluations
-and a canonical census matching the source inventory before reference export.
+before publication. A completed action must report a canonical census matching
+the entire source inventory before reference export. Complete residency reports
+zero recurrence evaluations; partial residency reports exactly the uncached
+inventory, never a second whole-source Direct pass.
+
+Two experimental controls can apply an externally measured partial plan without
+changing the automatic eligibility or default full-cache behavior:
+
+- `GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK` selects among the 28 canonical AO-pair
+  angular-sum buckets. For `0 <= second <= first < 7`, the bit index is
+  `first * (first + 1) / 2 + second`. Unset means all 28 bits; zero retains Direct.
+- `GENERATIVEQC_RHF_RESIDENT_MAX_BYTES` caps the optional FP64 value storage
+  after complete mandatory admission. Unset retains the 8-GiB ceiling; zero
+  disables optional storage. It cannot enlarge the complete reference budget.
+
+Both accept unsigned decimal or lowercase `0x` hexadecimal, with no whitespace,
+sign or trailing characters. Out-of-range masks and malformed values are rejected
+by an eligible owner. The policy is frozen once per phase owner. The common
+provider packs only selected values and dispatches every remaining bucket through
+the same compensated canonical Direct consumer. A published selection cannot
+change, and moved geometry rebuilds values rather than borrowing stale integrals.
+Packed layout metadata is included in complete numeric admission. Allocation or
+capacity refusal preserves whole-source exact Direct fallback.
+
+These are experimental unscreened full-range RHF controls, not a screened PBE0,
+UKS or range-separated source contract. The native RHF frame-response owner uses
+the same partial policy; its independently recomputed scalar audits remain
+uncached. The profiler and bounded additive selector in
+`benchmarks/selective_eri_cache.py` supply candidate masks, not universal
+profitability predictions. Complete E+F comparison uses
+`benchmarks/selective_eri_rhf_endpoint.py` and the independent oracle/paired
+acceptance gates in `benchmarks/selective_eri_rhf_acceptance.py`. Reference export
+itself does not return forces; this endpoint composes the existing native
+`rhf_frame_response_cuda` electronic gradient with nuclear repulsion.
 
 The lease borrows the RHF stream and owns separate iteration graphs. Every
 admitted call recaptures those graphs, including changed/restored geometry when

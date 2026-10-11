@@ -12,6 +12,7 @@
 #include "posthf/capacity.hpp"
 #include "response/low_rank_preconditioner.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "tensor/cuda_runtime.cuh"
@@ -106,9 +107,12 @@ class Owner {
             "RHF exact provider exceeded admitted setup inventory");
     stats.direct_device_bytes = direct_stats.device_bytes;
     if (resident_budget) {
+      const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
+      require(bucket_policy.valid, "invalid resident bucket mask or byte ceiling");
       const auto cache_started = Clock::now();
-      const auto cache_status =
-          scf::prepare_cuda_direct_jk_resident_values(direct.get(), resident_budget, detail);
+      const auto cache_status = scf::prepare_cuda_direct_jk_selected_resident_values(
+          direct.get(), std::min(resident_budget, bucket_policy.ceiling), bucket_policy.mask,
+          detail);
       stats.resident_jk_setup_seconds = seconds(cache_started);
       if (cache_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
           cache_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
@@ -666,7 +670,19 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       recycling = nullptr;
     }
   }
-  const auto resident_budget = options.resident_jk_allowance(n, options.maximum_bytes - total);
+  const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
+  require(bucket_policy.valid, "invalid resident bucket mask or byte ceiling");
+  auto resident_budget = std::min(options.resident_jk_allowance(n, options.maximum_bytes - total),
+                                  bucket_policy.ceiling);
+  const auto layout_bytes =
+      resident_budget && bucket_policy.mask && bucket_policy.mask != (1U << 28) - 1
+          ? 28 * sizeof(std::size_t)
+          : 0;
+  if (!bucket_policy.mask || layout_bytes > options.maximum_bytes - total) resident_budget = 0;
+  if (resident_budget) {
+    total = checked_add(total, layout_bytes);
+    resident_budget = std::min(resident_budget, options.maximum_bytes - total);
+  }
   result.numeric_capacity_bytes = checked_add(total, resident_budget);
   attempted_capacity = result.numeric_capacity_bytes;
   result.operator_hash = maps::orbital_action_hash;

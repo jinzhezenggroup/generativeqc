@@ -91,6 +91,7 @@ PREFIX = r"""
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "scf/cuda/reference_eri_policy.hpp"
 using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorLaunchFailure };
 enum generativeqc_status {
@@ -191,6 +192,7 @@ struct CudaDirectJkPlan {
   int device_id{};
   double* resident_values{};
   size_t resident_value_count{}, device_bytes{16};
+  std::uint32_t resident_bucket_mask{(1U << 28) - 1};
   Diagnostic diagnostic;
   cudaStream_t stream{reinterpret_cast<void*>(1)};
   int numerical_value{};
@@ -233,6 +235,7 @@ void status(generativeqc_status c, const std::string& d) {
   if (c == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (c != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(d);
 }
+void require(bool condition, const char* detail) { direct_jk_require(condition, detail); }
 void cuda_resource_check(cudaError_t e) {
   if (e == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (e != cudaSuccess) throw std::runtime_error("CUDA execution fault");
@@ -250,6 +253,11 @@ size_t checked_mul(size_t a, size_t b) {
 size_t bytes(size_t n) { return checked_mul(n, sizeof(double)); }
 namespace scf {
 using ::prepare_cuda_direct_jk_resident_values;
+namespace cuda_execution = generativeqc::scf::cuda_execution;
+generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t, std::string& detail) {
+  return ::prepare_cuda_direct_jk_resident_values(plan, budget, detail);
+}
 Diagnostic cuda_direct_jk_plan_diagnostic(CudaDirectJkPlan* p) { return p->diagnostic; }
 using ::cuda_direct_jk_linear_available;
 using ::cuda_direct_jk_compensation_elements;

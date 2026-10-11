@@ -123,6 +123,11 @@ struct CudaDirectJkPlan {
    * lease never changes range, screening or derivative fallback semantics. */
   double* resident_values{};
   std::size_t resident_value_count{};
+  /** Empty preserves the established complete-source traversal. Partial leases
+   * store packed offsets, with SIZE_MAX marking exactly the uncached buckets.
+   * These host-only descriptors are immutable before graph capture. */
+  std::vector<std::array<std::size_t, 28>> resident_bucket_offsets;
+  std::uint32_t resident_bucket_mask{(1U << 28) - 1};
   ~CudaDirectJkPlan();
 };
 

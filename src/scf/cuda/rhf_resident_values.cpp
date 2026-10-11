@@ -88,6 +88,15 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
     return finish(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   }
   selection_ = selection == ReferenceResidentValuesSelection::forced ? "forced" : "auto";
+  const auto bucket_policy = reference_resident_bucket_policy();
+  if (!bucket_policy.valid) {
+    reason_ = "invalid resident bucket mask or byte ceiling";
+    return finish(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  }
+  if (!bucket_policy.mask || !bucket_policy.ceiling) {
+    reason_ = "no resident bucket selected";
+    return finish(GENERATIVEQC_STATUS_SUCCESS);
+  }
   if (systems.size() != 1) return finish(GENERATIVEQC_STATUS_SUCCESS);
   const auto& system = systems.front();
   const auto nbf = molecule::ao_count(system);
@@ -112,11 +121,16 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
       checked_add(checked_mul(2, matrix_elements_), correction_elements_), sizeof(double));
   // Match the common response owner's conservative host-preparation inventory;
   // explicit scratch includes the diagnostic integer and last-action census.
+  const auto layout_bytes = bucket_policy.mask == (1U << 28) - 1
+                                ? 0
+                                : checked_mul(systems.size(), 28 * sizeof(std::size_t));
   const auto overhead = checked_add(
-      checked_add(checked_mul(5, direct_bound), checked_mul(6, source_capacity(system))),
-      checked_add(scratch_bytes, sizeof(int) + 2 * sizeof(std::uint64_t)));
+      layout_bytes,
+      checked_add(
+          checked_add(checked_mul(5, direct_bound), checked_mul(6, source_capacity(system))),
+          checked_add(scratch_bytes, sizeof(int) + 2 * sizeof(std::uint64_t))));
   auto allowance = reference_resident_value_allowance(nbf, maximum_iterations, required, overhead,
-                                                      budget, 8ULL << 30);
+                                                      budget, bucket_policy.ceiling);
   if (!allowance) {
     reason_ = "reuse or numeric capacity refusal";
     return finish(GENERATIVEQC_STATUS_SUCCESS);
@@ -148,7 +162,9 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
     reason_ = "Direct provider exceeded admitted inventory";
     return finish(GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
-  const auto required_values = cuda_direct_jk_resident_value_bytes(direct_.get());
+  source_value_count_ = cuda_direct_jk_resident_value_bytes(direct_.get()) / sizeof(double);
+  const auto required_values =
+      cuda_direct_jk_selected_resident_value_bytes(direct_.get(), bucket_policy.mask);
   if (!required_values || required_values > allowance ||
       cuda_direct_jk_compensation_elements(direct_.get()) != correction_elements_) {
     reason_ = "canonical domain or value capacity refusal";
@@ -175,7 +191,8 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
   }
   runtime::df_progress::Scope::number("source_values_requested", required_values / sizeof(double));
   runtime::df_progress::Scope::number("admitted_optional_capacity_bytes", capacity_bytes_);
-  status = prepare_cuda_direct_jk_resident_values(direct_.get(), allowance, reason_);
+  status = prepare_cuda_direct_jk_selected_resident_values(direct_.get(), allowance,
+                                                           bucket_policy.mask, reason_);
   if (optional_refusal(status)) {
     return refuse_optional();
   }
@@ -184,7 +201,9 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
   value_bytes_ = diagnostic.resident_value_bytes;
   value_count_ = diagnostic.resident_value_count;
   capacity_bytes_ = checked_add(overhead, value_bytes_);
-  reason_ = "admitted phase-local canonical FP64 values";
+  reason_ = value_count_ == source_value_count_
+                ? "admitted phase-local canonical FP64 values"
+                : "admitted partial canonical FP64 values plus exact Direct buckets";
   return finish(GENERATIVEQC_STATUS_SUCCESS, true);
 }
 
@@ -216,7 +235,8 @@ generativeqc_status RhfResidentValues::audit() {
   const auto drain = cudaStreamSynchronize(stream_);
   if (error != cudaSuccess) return cuda_status(error);
   if (drain != cudaSuccess) return cuda_status(drain);
-  if (failure || census[0] != value_count_ || census[1] != 0)
+  if (failure || census[0] != source_value_count_ ||
+      census[1] != source_value_count_ - value_count_)
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
@@ -226,6 +246,9 @@ void RhfResidentValues::observe_completed(std::size_t physical_focks) const noex
   runtime::df_progress::Scope::label("resident_value_admission", reason_.c_str());
   runtime::df_progress::Scope::number("phase_resident_value_bytes", value_bytes_);
   runtime::df_progress::Scope::number("phase_resident_values_built", value_count_);
+  runtime::df_progress::Scope::number("phase_canonical_source_values", source_value_count_);
+  runtime::df_progress::Scope::number("phase_direct_values_per_action",
+                                      active() ? source_value_count_ - value_count_ : 0);
   runtime::df_progress::Scope::number("phase_resident_fock_actions", active() ? physical_focks : 0);
   runtime::df_progress::Scope::number("phase_additional_numeric_capacity_bytes", capacity_bytes_);
 }

@@ -1,0 +1,87 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent complete E+F, exact work, bounded fallback and actual partial-provider lifetime gates pass; local endpoint gains are retained without shared formal/global/default promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 3728,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "9c7c798f7bc038fdff55eef148c4522d601ae975010f454d1c01e932e2415506"
+    },
+    {
+      "bytes": 2824,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "20100ffcc2d65ea36a8f98acbb814f1b40084d3f399a1e501cc1dbeae068a24b"
+    },
+    {
+      "bytes": 5628,
+      "path": "basis.input",
+      "role": "input",
+      "sha256": "67345c908e453777df5d5c3add34bfbfa907d3829a05ec9062fd96ab6a2cbc51"
+    },
+    {
+      "bytes": 2031,
+      "path": "selection.json",
+      "role": "summary",
+      "sha256": "55b9b0c3ca307c17b74981932d8335f5b790d49870066475db0f5e8d64cd3f9d"
+    },
+    {
+      "bytes": 13913,
+      "path": "comparison.json",
+      "role": "summary",
+      "sha256": "c536e952e6a5a247ba39cd41674ebbb0d780ad617a09f57e9509c3244b9ad22e"
+    },
+    {
+      "bytes": 23319,
+      "path": "source-observers.json",
+      "role": "summary",
+      "sha256": "03bf9797837eff0af623ff3a2ef29feebbf6f8898ee0fdf1b1542cf0f517d1f4"
+    },
+    {
+      "bytes": 7948,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "81a195d032dc4999100acc3839f8a3af74e224d23678e439a1f5d3e54851924c"
+    },
+    {
+      "bytes": 1082,
+      "path": "oracle.json.gz",
+      "role": "samples",
+      "sha256": "a8d1a55197002af004319f106b6950fb8c6ef119c79829366b4f083766349880"
+    },
+    {
+      "bytes": 525,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "36705790a3ee3ed6e7cf26afb5d26a559500cf501db2e3b39b5ea4d7382cdd11"
+    },
+    {
+      "bytes": 30702,
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "bacb8c2bc1cc8802944b28451a54bdd900330d85a07b9ef5f1d1425ba75ce07c"
+    },
+    {
+      "bytes": 4282,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "531120e67dbbcdd153eeaa2c546dfe8418cc313c03c151ea346a9db8750d5c43"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "637466c624c4c4c4dd4eb7c511a2c88675744325"
+  }
+}
