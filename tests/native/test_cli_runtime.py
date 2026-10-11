@@ -324,6 +324,62 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(unsupported.returncode, 2)
         self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
 
+    def test_cpu_ks_cli_uses_shared_native_host_inventory(self) -> None:
+        """The Python-free command exposes each authoritative host owner."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_ks_cpu_host_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in KS_INVENTORY_METHODS:
+            with self.subTest(method=method):
+                run = self.resources("--method", method)
+                self.assertEqual(run.returncode, 0, run.stderr)
+                plan = json.loads(run.stdout)
+                radial, polar, azimuth = plan["controls"]["grid"]
+                shape = (ctypes.c_uint64 * 17)(
+                    2,
+                    2,
+                    2,
+                    2,
+                    6,
+                    2 if method.endswith("uks") else 1,
+                    0,
+                    0,
+                    2 * radial * polar * azimuth,
+                    radial,
+                    polar,
+                    256,
+                    8,
+                    100,
+                    int(method.startswith("pbe")),
+                    0,
+                    0,
+                )
+                values = (ctypes.c_uint64 * 16)()
+                self.assertEqual(query(shape, 17, values, 16), 0)
+                self.assertEqual(plan["item_inventory"]["retained"], values[13])
+                self.assertEqual(plan["item_inventory"]["setup_workspace"], values[14])
+                self.assertEqual(plan["item_inventory"]["scf_workspace"], values[15])
+                self.assertEqual(plan["item_inventory"]["ao_grid_cache"], values[12])
+                peak = plan["peak_bytes"]["host"]
+                self.assertEqual(
+                    self.resources(
+                        "--method", method, "--host-bytes", str(peak)
+                    ).returncode,
+                    0,
+                )
+                self.assertEqual(
+                    self.resources(
+                        "--method", method, "--host-bytes", str(peak - 1)
+                    ).returncode,
+                    2,
+                )
+
     def assert_incremental_inventory_unsupported(
         self, result: subprocess.CompletedProcess[str]
     ) -> None:
