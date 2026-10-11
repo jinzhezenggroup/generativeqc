@@ -3,6 +3,7 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <string>
 
 #include "dft/cuda_ks_final_state.hpp"
@@ -47,6 +48,13 @@ generativeqc_status dft_prepared_integral_gradient_cached(
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
     std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
 
+/** Dry capacity for lazy CUDA integral derivative owners under a live token.
+ * Zero means the derivative owner was already charged to SCF. This excludes
+ * DF response storage and does not allocate or grant force capability. */
+generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::size_t& bytes, std::string& detail);
+
 /** Five explicit CUDA stationary sources: hcore, overlap/Pulay, J, SR-K,
  * LR-K. The live token binds D/W, geometry, radial parameters and spin.
  * XC, nonlocal correlation and nuclear repulsion are separate consumers. */
@@ -75,6 +83,16 @@ generativeqc_status dft_density_fitted_integral_gradient_cached(
     const std::vector<scf::reference::Matrix>& density,
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
     std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
+
+/** Mixed fitted-primary/exact-LR sources through the shared native composer.
+ * CPU binds a compiler-generated compact weighted LR correction; CUDA owns
+ * its resident derivative execution. Output is [H, Pulay, J_DF, K_SR, K_LR]. */
+generativeqc_status dft_mixed_density_fitted_integral_gradient_cached(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density,
+    std::span<const double> lr_correction, std::vector<double>& output, std::size_t maximum_bytes,
+    std::array<std::uint64_t, 9>& work, std::string& detail);
 
 /** Token-checked full-range J'/K' through the prepared Direct shell owner.
  * Output is source-major [J,K], each block containing 3*Natom values. */

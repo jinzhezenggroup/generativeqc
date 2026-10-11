@@ -9,6 +9,19 @@ STO-3G, def2-SVP, and def2-TZVP. Its BSD-3-Clause license is retained in
 `LICENSES/bse-data-BSD-3-Clause.txt` and installed with the native CLI under
 `share/generativeqc/licenses/` (or the configured CMake data directory).
 
+## Native CLI metadata and archive dependencies
+
+The native executable uses JSON for Modern C++ (nlohmann-json) headers under
+the MIT license, retained in `LICENSES/nlohmann-json-MIT.txt` and installed
+with native CLI notices. Python wheel builds declare a pinned header-only
+build dependency; installed runtime commands do not import that package.
+
+OpenSSL Crypto supplies SHA-256 and libarchive supplies checked ZIP I/O.
+Native SDK builds link the platform's development/runtime packages. Wheel
+repair may retain these shared libraries and their transitive dependencies;
+redistributors must retain the license notices of the exact packages bundled,
+including the version-specific OpenSSL license and libarchive notices.
+
 ## Implib.so
 
 GenerativeQC vendors the Implib.so generator/templates under `cmake/3rdparty/implib/`

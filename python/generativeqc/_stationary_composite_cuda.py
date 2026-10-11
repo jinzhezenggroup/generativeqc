@@ -38,6 +38,7 @@ from generativeqc_compiler.method.stationary_composite_resources import (
     plan_composite_stationary_cuda_resources,
 )
 from generativeqc_compiler.method.stationary_cuda import (
+    COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
     compile_stationary_cuda,
     stationary_external_provider_sources,
     stationary_runtime_sources,
@@ -76,13 +77,7 @@ from ._stationary_cuda import (
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
-_COMPOSITE_EXTERNAL_SOURCES = (
-    "exchange_short_range",
-    "exchange_long_range",
-    "nonlocal_ao",
-    "nonlocal_grid",
-    "nonlocal_weight",
-)
+_COMPOSITE_EXTERNAL_SOURCES = COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES
 
 
 def _plan_for_state(state: typing.Any) -> StationaryGradientPlan:
@@ -303,6 +298,11 @@ class PreparedCompositeStationaryCudaGradient:
             raise ValueError(
                 "resident nonlocal force exceeds nonlocal_memory_budget_bytes"
             )
+        native_derivative_bytes = (
+            source.cuda_integral_gradient_additional_device_bytes()
+            if bool(getattr(source, "density_fitted", False))
+            else 0
+        )
         layout = plan_composite_stationary_cuda_resources(
             basis,
             becke_primitive=bool(_resolve_becke_primitive_policy()),
@@ -322,6 +322,7 @@ class PreparedCompositeStationaryCudaGradient:
             max_device_bytes=max_device_bytes,
             max_host_bytes=max_host_bytes,
             tile_points=tile_points,
+            native_derivative_bytes=native_derivative_bytes,
         )
         gp = layout.grid
         tile_points = gp.tile_points
@@ -625,6 +626,7 @@ class PreparedCompositeStationaryCudaGradient:
             "active_ao_cutoff": active_ao_cutoff,
             "active_ao_producer": active_ao_producer,
             "active_ao_max_active_fraction": active_ao_max_active_fraction,
+            "native_integral_additional_device_reserve_bytes": native_derivative_bytes,
             "native_integral_resources": dict(
                 _integral_source_resources(
                     native_usage,

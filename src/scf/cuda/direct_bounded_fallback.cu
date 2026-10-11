@@ -667,7 +667,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
-    detail::BoundedDirectBlockDomain block_domain, const GeneratedShellPairStream* force_topology) {
+    detail::BoundedDirectBlockDomain block_domain, const GeneratedShellPairStream* force_topology,
+    DirectSpdForceSchedule spd_schedule) {
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   auto split = [&]<bool Unrestricted>() {
@@ -687,11 +688,22 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
               density, active, output, global_cursor, profile, coulomb_coefficient,
               exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
     };
-    if (cooperative_available)
-      generic.template operator()<-3>();
-    else
-      generic.template operator()<-2>();
-    auto error = cudaPeekAtLastError();
+    cudaError_t error;
+    if (cooperative_available && block_domain.prefix &&
+        spd_schedule == DirectSpdForceSchedule::SpatialReuse) {
+      error = launch_direct_force_spatial_spd_low(
+          Unrestricted, grid, shared_bytes, stream, batch, screening_tolerance, shell_pair_bounds,
+          shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
+          system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
+          schwarz_bounds, density, active, output, global_cursor, profile, coulomb_coefficient,
+          exchange_coefficient, separate_sources, block_domain);
+    } else {
+      if (cooperative_available)
+        generic.template operator()<-3>();
+      else
+        generic.template operator()<-2>();
+      error = cudaPeekAtLastError();
+    }
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);
     if (error != cudaSuccess) return error;

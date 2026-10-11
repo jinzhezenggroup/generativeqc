@@ -486,26 +486,22 @@ def symmetric_rank_k_request(
     )
 
 
-def emit_symmetric_rank_k_portfolio(
-    program: Program,
-    output: str,
-    source: str,
-    *,
-    name: str,
-    order: MatrixOrder = "row-major",
-    update: UpdateMode = "update",
-) -> str:
-    """Emit generated and signed-GEMM candidates for one rank-k request.
+def symmetric_rank_k_candidates(
+    request: LoweringRequest, source: str, target: TargetCapabilities
+) -> tuple[LoweringCandidate, ...]:
+    """Offer the existing qualified rank-k implementations under one request.
 
-    Native preparation resolves exact resource bytes and endpoint eligibility.
-    Unknown timing cannot promote the optional library provider by itself.
+    This is an AOT candidate portfolio, not a runtime switch.  Both the
+    generated and cuBLAS recipes retain the same original composition
+    identity and require source-matched resource/numerical endpoint admission.
     """
-    request = symmetric_rank_k_request(program, output, order=order, update=update)
-    if request.scientific_identity is None:
-        raise ValueError("rank-k requires an original scientific identity")
-    target = TargetCapabilities(
-        TargetInfo("cuda", "current-aot-module", 32, 1024, None)
-    )
+    if (
+        request.backend != "cuda"
+        or dict(request.semantics).get("symmetric_rank_k") is not True
+        or target.target.backend != "cuda"
+        or not request.precisions
+    ):
+        raise ValueError("rank-k candidates require a recognized CUDA request")
     precision = request.precisions[0]
     candidates = tuple(
         LoweringCandidate(
@@ -544,6 +540,30 @@ def emit_symmetric_rank_k_portfolio(
             ),
         )
     )
+    return candidates
+
+
+def emit_symmetric_rank_k_portfolio(
+    program: Program,
+    output: str,
+    source: str,
+    *,
+    name: str,
+    order: MatrixOrder = "row-major",
+    update: UpdateMode = "update",
+) -> str:
+    """Emit generated and signed-GEMM candidates for one rank-k request.
+
+    Native preparation resolves exact resource bytes and endpoint eligibility.
+    Unknown timing cannot promote the optional library provider by itself.
+    """
+    request = symmetric_rank_k_request(program, output, order=order, update=update)
+    if request.scientific_identity is None:
+        raise ValueError("rank-k requires an original scientific identity")
+    target = TargetCapabilities(
+        TargetInfo("cuda", "current-aot-module", 32, 1024, None)
+    )
+    candidates = symmetric_rank_k_candidates(request, source, target)
     return native_lowering_portfolio(
         request,
         candidates,

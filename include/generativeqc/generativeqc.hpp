@@ -233,6 +233,22 @@ class System {
       : atom_count_(descriptor.atom_count) {
     check(generativeqc_system_create(context.get(), &descriptor, &handle_));
   }
+  /** @native-contract generativeqc::System::System-ecp
+   * @behavior Create an owned scalar-ECP system through the native ECP constructor.
+   * @inputs Core counts must match atom_count; scalar term admission follows the C API.
+   * @lifetime Copies all basis/core/term arrays; the Context must outlive this owner.
+   * @errors Throws Error on invalid dimensions or native preparation/admission failure.
+   * @execution Synchronous; serialize operations involving this owner and its Context.
+   * @units Coordinates and Gaussian residual terms use atomic units.
+   */
+  System(Context& context, const generativeqc_system_descriptor& descriptor,
+         std::span<const std::int32_t> core_electrons, std::span<const generativeqc_ecp_term> terms)
+      : atom_count_(descriptor.atom_count) {
+    if (core_electrons.size() != descriptor.atom_count)
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "ECP core count must match atom count");
+    check(generativeqc_system_create_ecp(context.get(), &descriptor, core_electrons.data(),
+                                         terms.data(), terms.size(), &handle_));
+  }
   /** @native-contract generativeqc::System::~System
    * @behavior Destroy the owned native system and release resources.
    * @lifetime Owns a copied native system. Successful prepared consumers have their own system
