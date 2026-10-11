@@ -4,6 +4,7 @@
   "flags": {
     "architecture": "sm_120",
     "definitions": [
+      "NDEBUG",
       "GENERATIVEQC_HAS_CUDA=1"
     ],
     "optimization": "-O3",
@@ -536,7 +537,7 @@
     }
   },
   "manifest_sha256": "4327a87909b22a3af1518948cf9417d3b347289e86c0de8bebfa20dc7a189a64",
-  "preprocessed_sha256": "b3f17dbe47e1ba1e36cfca466e0533d0fe86bdf59f750c0a36e2f9fa0d869cda",
+  "preprocessed_sha256": "37433b5c1cc9c9067c5cce82119a2d1c84e8ffe4bb573d679687499d1fc84373",
   "schema": "generativeqc.direct-jk-aot-resource-ledger",
   "schema_version": 1,
   "shard_source_sha256": "a9fdacb018e1e1547ab71841e505260000f40cef5269a41ee48e42a9f4111370",

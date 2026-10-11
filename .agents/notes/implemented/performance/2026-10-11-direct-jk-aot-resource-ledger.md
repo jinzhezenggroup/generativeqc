@@ -210,9 +210,10 @@ the existing f-shell/libxc resource-gate precedent.
 The validator now includes CMake's NVIDIA Release `NDEBUG` definition in
 preprocessing, compilation, and the recorded flag identity. The previously
 measured split-1 ledger above did not include this macro; it remains historical
-evidence and must not be relabeled. It intentionally fails the repaired flag
-schema until an explicit production-context requalification supplies a new ledger.
-No new CUDA measurement is supplied by this source-only repair.
+evidence and is not relabeled. It failed the repaired flag schema as intended,
+and an explicit production-context requalification then supplied the committed
+ledger that includes `NDEBUG`; all 86 kernel resource rows were unchanged by
+the macro, while the preprocessed identity changed as expected.
 
 The configured production `CMakeCache.txt` must declare the qualified eight-way
 shard partition, including preset and command-line overrides; missing, ambiguous,
