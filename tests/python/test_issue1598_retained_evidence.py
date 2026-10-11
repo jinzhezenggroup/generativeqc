@@ -13,6 +13,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from tools import verify_issue1598_history as history
+from tools.verify_issue1598_history import restore
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -20,6 +23,13 @@ ROOT = Path(__file__).resolve().parents[2]
 CAPSULE = ROOT / "benchmarks/results/issue1598-incremental-direct-jk-20261011"
 POINT = "new/rhf/direct-48-incremental-1.json.gz"
 FAILED_POINT = "old/rhf/direct-24-incremental-1.outcome.gz"
+
+
+@pytest.fixture(scope="module")
+def historical_capsule(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    destination = tmp_path_factory.mktemp("issue1598-original")
+    restore(destination, fetch=True)
+    return destination
 
 
 def refresh_manifest(root: Path) -> None:
@@ -137,9 +147,9 @@ def verify(root: Path, *, optimized: bool) -> subprocess.CompletedProcess[str]:
     ],
 )
 def test_historical_capsule_gates(
-    tmp_path: Path, optimized: bool, mutation: str, error: str
+    tmp_path: Path, historical_capsule: Path, optimized: bool, mutation: str, error: str
 ) -> None:
-    shutil.copytree(CAPSULE, tmp_path, dirs_exist_ok=True)
+    shutil.copytree(historical_capsule, tmp_path, dirs_exist_ok=True)
     if mutation == "missing_manifest":
         (tmp_path / "capsule.json").unlink()
     elif mutation in {"missing_success", "missing_outcome"}:
@@ -312,9 +322,14 @@ def test_historical_capsule_gates(
 @pytest.mark.parametrize("sample_index", [0, 1, 2])
 @pytest.mark.parametrize("field", ["energies_hartree", "forces_hartree_per_bohr"])
 def test_every_warm_independent_reference_pair(
-    tmp_path: Path, optimized: bool, engine: str, sample_index: int, field: str
+    tmp_path: Path,
+    historical_capsule: Path,
+    optimized: bool,
+    engine: str,
+    sample_index: int,
+    field: str,
 ) -> None:
-    shutil.copytree(CAPSULE, tmp_path, dirs_exist_ok=True)
+    shutil.copytree(historical_capsule, tmp_path, dirs_exist_ok=True)
 
     def mutate(record: dict) -> None:
         result = record[engine]
@@ -330,3 +345,42 @@ def test_every_warm_independent_reference_pair(
     result = verify(tmp_path, optimized=optimized)
     assert result.returncode != 0, result.stdout
     assert f"{field} gate failed" in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize("damage", ["tree", "manifest", "member"])
+def test_history_recovery_rejects_tampered_objects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str
+) -> None:
+    original = history.git
+
+    def altered(*args: str) -> bytes:
+        raw = original(*args)
+        if (
+            (damage == "tree" and args[0] == "rev-parse")
+            or (
+                damage == "manifest"
+                and args[0] == "show"
+                and args[1].endswith("/capsule.json")
+            )
+            or (damage == "member" and args[0] == "show" and args[1].endswith(POINT))
+        ):
+            return b"tampered"
+        return raw
+
+    monkeypatch.setattr(history, "git", altered)
+    with pytest.raises(ValueError, match="identity|checksum"):
+        restore(tmp_path)
+
+
+def test_current_history_entrypoint() -> None:
+    result = subprocess.run(
+        [sys.executable, str(CAPSULE / "verify.py")],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["historical_commit"] == history.COMMIT
+    assert payload["cold_timing_scope"].startswith("prepared-plan-execute-only")

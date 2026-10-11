@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import gzip
+import hashlib
 import json
 import subprocess
 import sys
@@ -16,6 +18,25 @@ from tools import reduce_issue1598_incremental_qualification as reducer
 
 ROOT = Path(__file__).resolve().parents[2]
 CAPSULE = ROOT / "benchmarks/results/issue1598-incremental-direct-jk-20261011"
+
+
+def _ks_identity(atoms: int) -> dict:
+    raw = (
+        ROOT
+        / (
+            "benchmarks/results/pbe0-composed-baseline-20261005/"
+            f"reference-{atoms}.json.gz"
+        )
+    ).read_bytes()
+    return {
+        "protocol": json.loads(gzip.decompress(raw))["protocol"],
+        "reference_sha256": hashlib.sha256(raw).hexdigest(),
+        "native_build": {
+            "library_sha256": "a" * 64,
+            "probe": {"source_identity": "b" * 64, "device": {"name": "gpu"}},
+        },
+        "allocation": {"hostname": "host"},
+    }
 
 
 def _record(round: int) -> dict:
@@ -56,6 +77,8 @@ def _record(round: int) -> dict:
                             "incremental_direct_jk": {
                                 "active": True,
                                 "anchor_full_builds": 1,
+                                "bypass_full_builds": 0,
+                                "post_scf_full_builds": 2,
                                 "delta_builds": 0,
                                 "full_admitted_shell_quartets": 0,
                                 "delta_admitted_shell_quartets": 0,
@@ -235,7 +258,7 @@ def test_failed_runner_keeps_real_exit_code(
     end = source.index("\n}\n", start) + 3
     (tmp_path / "ks").mkdir()
     script = f"""set -eu
-output={str(tmp_path)!r}
+output={tmp_path.as_posix()!r}
 point_timeout=1
 rebuild_interval=8
 python=unused
@@ -322,6 +345,7 @@ def test_ks_reducer_consumes_check_endpoint_gate(
             {
                 "schema": "issue1598.ks-cold-control.v1",
                 "status": "measured",
+                **_ks_identity(48),
                 "complete_seconds": 1.0,
                 "iterations": 2,
                 "fock_builds": 2,
@@ -476,3 +500,80 @@ def test_failed_cold_endpoint_is_not_a_timing_sample(matrix: Path, engine: str) 
     _point(matrix, "incremental", 1, record)
     with pytest.raises(ValueError, match="cold endpoint did not converge"):
         _rows(matrix)
+
+
+@pytest.mark.parametrize(
+    "option,value",
+    [
+        ("--maximum-energy-difference", "1"),
+        ("--maximum-force-difference", "1"),
+    ],
+)
+def test_paired_cli_tolerances_cannot_be_weakened(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, option: str, value: str
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "reduce",
+            "--input",
+            str(tmp_path),
+            "--output",
+            str(tmp_path / "summary.json"),
+            option,
+            value,
+        ],
+    )
+    with pytest.raises(ValueError, match="paired numerical tolerance was weakened"):
+        reducer.main()
+
+
+def test_finalization_and_bypass_work_are_counted() -> None:
+    record = _record(1)
+    for sample in record["generativeqc"]["warm_samples"]:
+        sample["convergence"][0]["incremental_direct_jk"]["bypass_full_builds"] = 1
+    work = reducer._incremental_work(record)
+    assert work["anchor_full_builds"] == 3
+    assert work["post_scf_full_builds"] == 6
+    assert work["bypass_full_builds"] == 3
+    assert work["full_builds"] == 12
+
+
+@pytest.mark.parametrize(
+    "mutation", ["protocol", "reference", "library", "source", "device", "allocation"]
+)
+def test_ks_samples_require_matched_identities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    monkeypatch.setattr(reducer, "KS_SAMPLES", (("off", 48, 1), ("on", 48, 1)))
+    root = tmp_path / "ks"
+    root.mkdir()
+    for mode in ("off", "on"):
+        record = {
+            "schema": "issue1598.ks-cold-control.v1",
+            "status": "measured",
+            **_ks_identity(48),
+            "complete_seconds": 1.0,
+            "iterations": 2,
+            "fock_builds": 2,
+            "incremental_direct_jk": {"active": mode == "on"},
+            "acceptance": {"gate": True},
+        }
+        if mode == "on":
+            if mutation == "protocol":
+                record["protocol"]["atoms"] = 96
+            elif mutation == "reference":
+                record["reference_sha256"] = "c" * 64
+            elif mutation == "library":
+                record["native_build"]["library_sha256"] = "c" * 64
+            elif mutation == "source":
+                record["native_build"]["probe"]["source_identity"] = "c" * 64
+            elif mutation == "device":
+                record["native_build"]["probe"]["device"]["name"] = "other"
+            else:
+                record["allocation"]["hostname"] = "other"
+        (root / f"pbe0-48-{mode}-1.json").write_text(json.dumps(record))
+        (root / f"pbe0-48-{mode}-1.outcome").write_text('{"exit_code":0,"attempt":1}')
+    with pytest.raises(ValueError, match="identity|build/device"):
+        reducer._ks_rows(tmp_path)

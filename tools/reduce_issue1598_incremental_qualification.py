@@ -13,6 +13,8 @@ warm acceptance. Work accounting is separated by phase.
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import math
 import statistics
@@ -104,7 +106,15 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
     typed = [value for value in diagnostics if isinstance(value, dict)]
     if any(value.get("active") is not True for value in typed):
         raise ValueError("incremental benchmark did not activate Direct-J/K updates")
-    full_builds = sum(_count(value["anchor_full_builds"]) for value in typed)
+    anchor_builds = sum(_count(value["anchor_full_builds"]) for value in typed)
+    bypass_builds = sum(_count(value["bypass_full_builds"]) for value in typed)
+    post_scf_builds = sum(_count(value["post_scf_full_builds"]) for value in typed)
+    full_builds = anchor_builds + bypass_builds + post_scf_builds
+    build_categories = {
+        "anchor_full_builds": anchor_builds,
+        "bypass_full_builds": bypass_builds,
+        "post_scf_full_builds": post_scf_builds,
+    }
     delta_builds = sum(_count(value["delta_builds"]) for value in typed)
     full_shells = sum(_count(value["full_admitted_shell_quartets"]) for value in typed)
     delta_shells = sum(
@@ -118,6 +128,7 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
         return {
             "phase": "cold",
             "sample_count": len(typed),
+            **build_categories,
             "full_builds": full_builds,
             "delta_builds": delta_builds,
             "no_incremental_opportunity": delta_builds == 0,
@@ -133,6 +144,7 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
             raise ValueError("incremental benchmark lacks measurable full work")
         return {
             "sample_count": len(typed),
+            **build_categories,
             "full_builds": full_builds,
             "delta_builds": 0,
             "full_admitted_shell_quartets_per_build": (
@@ -157,6 +169,7 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
     delta_tiles_per_build = delta_tiles / delta_builds
     return {
         "sample_count": len(typed),
+        **build_categories,
         "full_builds": full_builds,
         "delta_builds": delta_builds,
         "full_admitted_shell_quartets_per_build": full_shells_per_build,
@@ -456,6 +469,7 @@ def _hf_rows(
                         "round": round,
                         "baseline_cold_seconds": baseline_cold,
                         "incremental_cold_seconds": incremental_cold,
+                        "cold_timing_scope": "prepared-plan-execute-only; setup excluded",
                         "cold_speedup": baseline_cold / incremental_cold,
                         "baseline_warm_median_seconds": baseline_warm,
                         "incremental_warm_median_seconds": incremental_warm,
@@ -469,7 +483,7 @@ def _hf_rows(
                         "maximum_force_difference_hartree_per_bohr": force_difference,
                         "warm_numerical_gate_passed": warm_numerical_gate_passed,
                         "cold_numerical_gate_passed": cold_numerical_gate_passed,
-                        "cold_speedup_qualified": cold_numerical_gate_passed,
+                        "cold_speedup_qualified": False,
                         "numerical_gate_passed": warm_numerical_gate_passed
                         and cold_numerical_gate_passed,
                         "cold_numerical_scope": "retained cold arrays"
@@ -488,7 +502,7 @@ def _hf_rows(
                         "round": "all-matched",
                         "cold_numerical_gate_passed": all(cold_gates),
                         "warm_numerical_gate_passed": all(warm_gates),
-                        "cold_speedup_qualified": all(cold_gates),
+                        "cold_speedup_qualified": False,
                         "numerical_gate_passed": all(cold_gates) and all(warm_gates),
                         "baseline_cold_median_seconds": _median(
                             matched_cold["baseline"]
@@ -496,6 +510,7 @@ def _hf_rows(
                         "incremental_cold_median_seconds": _median(
                             matched_cold["incremental"]
                         ),
+                        "cold_timing_scope": "prepared-plan-execute-only; setup excluded",
                         "cold_speedup": _median(matched_cold["baseline"])
                         / _median(matched_cold["incremental"]),
                         "baseline_warm_median_seconds": _median(
@@ -515,6 +530,7 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     samples: dict[tuple[str, int], list[float]] = {}
+    identity = None
     for mode, atoms, round in KS_SAMPLES:
         path = root / "ks" / f"pbe0-{atoms}-{mode}-{round}.json"
         outcome = _outcome(root, path)
@@ -539,6 +555,39 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             mode == "on"
         ):
             raise ValueError("KS control route does not match requested mode")
+        reference_path = Path(__file__).resolve().parents[1] / (
+            "benchmarks/results/pbe0-composed-baseline-20261005/"
+            f"reference-{atoms}.json.gz"
+        )
+        reference_raw = reference_path.read_bytes()
+        reference = json.loads(gzip.decompress(reference_raw))
+        if (
+            reference.get("status") != "measured"
+            or record.get("protocol") != reference["protocol"]
+            or reference["protocol"].get("atoms") != atoms
+            or record.get("reference_sha256")
+            != hashlib.sha256(reference_raw).hexdigest()
+        ):
+            raise ValueError("KS control protocol/reference identity mismatch")
+        native = record["native_build"]
+        library = native["library_sha256"]
+        source = native["probe"]["source_identity"]
+        device = native["probe"]["device"]
+        if (
+            any(
+                not isinstance(value, str)
+                or len(value) != 64
+                or any(c not in "0123456789abcdef" for c in value)
+                for value in (library, source)
+            )
+            or not isinstance(device, dict)
+            or not device
+        ):
+            raise ValueError("KS control build/device identity missing")
+        current = (library, source, device, record["allocation"])
+        if identity is not None and current != identity:
+            raise ValueError("KS matrix did not use one build/device allocation")
+        identity = current
         seconds = _positive_seconds(record["complete_seconds"])
         samples.setdefault((mode, atoms), []).append(seconds)
         if record["acceptance"].get("gate") is not True:
@@ -575,8 +624,13 @@ def main() -> None:
     parser.add_argument("--maximum-energy-difference", type=float, default=1.0e-8)
     parser.add_argument("--maximum-force-difference", type=float, default=1.0e-7)
     args = parser.parse_args()
-    for threshold in (args.maximum_energy_difference, args.maximum_force_difference):
-        _positive_seconds(threshold)
+    for threshold, ceiling in zip(
+        (args.maximum_energy_difference, args.maximum_force_difference),
+        (1e-8, 1e-7),
+        strict=True,
+    ):
+        if _positive_seconds(threshold) > ceiling:
+            raise ValueError("paired numerical tolerance was weakened")
 
     hf_rows, library_sha, hf_failures = _hf_rows(args, args.input)
     ks_rows, ks_failures = _ks_rows(args.input)
