@@ -380,7 +380,7 @@ CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               std::size_t requested_tiles,
                                               std::size_t device_budget, bool compact);
 CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional,
-                                                       CudaXcPointLauncher point_launcher);
+                                                      CudaXcPointLauncher point_launcher);
 /** Emitted capability selector for the same finite point-program registry. */
 CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);
 /** Allocation-free launch adapter compiled with the existing generated AO
