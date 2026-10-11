@@ -274,6 +274,8 @@ jobs:
   cuda-compile:
     name: CUDA 12.9 compile (sm_120)
     needs: merge_queue_liveness
+    outputs:
+      publish_cache_snapshot: ${{ steps.trusted_cuda_ccache.outputs.publish }}
     if: needs.merge_queue_liveness.outputs.active != 'false'
     runs-on: ubuntu-24.04
     permissions:
@@ -346,7 +348,7 @@ jobs:
           created_at=""
           source_sha=""
           publish=false
-          artifact_name='cuda-ccache-master-12.9-sm120-v2'
+          artifact_name='cuda-ccache-master-12.9-sm120-v3'
 
           # Trust only artifacts produced by successful pushes of this CI workflow
           # on master. A repository-wide artifact-name lookup is insufficient
@@ -427,21 +429,22 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: cuda-ccache-master-12.9-sm120-v2
+          name: cuda-ccache-master-12.9-sm120-v3
           path: ~/.cache/ccache
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
-      - name: Restore CUDA ccache
+      - name: Restore shared Linux CUDA ccache
         id: cuda_ccache
         if: github.event_name != 'merge_group' || steps.trusted_cuda_ccache_download.outcome != 'success'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-cuda-v2-12.9-sm120-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'CMakePresets.json', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cuda-v4-12.9-sm120-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'tests/native/**', 'manifests/**', 'data/**', 'upstream/**') }}
           restore-keys: |
+            ccache-linux-cuda-v4-12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
-            ccache-cuda-12.9-sm120-
+            ccache-native-cli-v1-cuda12.9-sm120-
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Install native CLI dependencies
@@ -481,12 +484,6 @@ jobs:
             --basetemp build/ao-radial-compile
       # Merge-group refs are ephemeral, so saving actions/cache there cannot
       # accelerate the next queue group. Stable PR/master refs still benefit.
-      - name: Save CUDA ccache immediately after build
-        if: github.event_name != 'merge_group' && steps.cuda_ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ccache
-          key: ${{ steps.cuda_ccache.outputs.cache-primary-key }}
       - name: Check Fock and proposal preflight without a GPU
         env:
           CUDA_VISIBLE_DEVICES: ""
@@ -496,17 +493,6 @@ jobs:
             -R '^generativeqc_(fock_build|scf_proposal)_tests$' --output-on-failure
       - name: Show CUDA ccache statistics
         run: ccache --show-stats
-      - name: Publish trusted master CUDA ccache snapshot
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.trusted_cuda_ccache.outputs.publish == 'true'
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: cuda-ccache-master-12.9-sm120-v2
-          path: ~/.cache/ccache
-          if-no-files-found: error
-          include-hidden-files: true
-          compression-level: 0
-          retention-days: 1
       - name: Preserve opted-in AO radial resource reports
         if: ${{ always() && github.event_name != 'push' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -521,8 +507,8 @@ jobs:
 
   master-cache-cleanup:
     name: Trim trusted CUDA cache snapshots
-    needs: cuda-compile
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.cuda-compile.result == 'success'
+    needs: native-cli-artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.native-cli-artifact.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
@@ -537,7 +523,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          artifact_name='cuda-ccache-master-12.9-sm120-v2'
+          artifact_name='cuda-ccache-master-12.9-sm120-v3'
           workflow_payload="$(gh api --method GET \
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml")"
           workflow_id="$(jq -er '.id | select(type == "number")' <<<"$workflow_payload")"
@@ -1317,13 +1303,14 @@ jobs:
           ccache --version
       - name: Test deterministic native CLI packager
         run: python3 -m unittest discover -s tests/python -p test_native_cli_package.py
-      - name: Restore production CUDA ccache
+      - name: Restore shared Linux CUDA ccache
         id: cli_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-native-cli-v1-cuda12.9-sm120-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'manifests/**', 'data/**', 'upstream/**') }}
+          key: ccache-linux-cuda-v4-12.9-sm120-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'tests/native/**', 'manifests/**', 'data/**', 'upstream/**') }}
           restore-keys: |
+            ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
       - name: Build fully optimized precompiled C++ CUDA CLI
