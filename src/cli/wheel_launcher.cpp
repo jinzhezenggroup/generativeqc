@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
