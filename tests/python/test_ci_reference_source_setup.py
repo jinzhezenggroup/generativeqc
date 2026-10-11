@@ -20,8 +20,7 @@ def _preparation() -> tuple[str, str]:
     step = workflow.split(name, 1)[1].split("      - name:", 1)[0]
     assert (
         "if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || "
-        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && "
-        in step
+        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && " in step
     )
     assert "steps.gfn1_reference_sources.outputs.cache-hit != 'true'" in step
     commands = step.split("        run: |\n", 1)[1]
@@ -48,8 +47,7 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
     )[1].split("      - name:", 1)[0]
     assert (
         "if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || "
-        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy'"
-        in cache
+        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy'" in cache
     )
     assert "upstream/manifest.json" in cache and "tools/source_registry.py" in cache
     assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in cache
