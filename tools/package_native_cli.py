@@ -40,28 +40,22 @@ def _copy_runtime_tree(prefix: Path, staging: Path) -> list[str]:
         raise ValueError("Distribution CLI still requires the GenerativeQC shared core")
     shutil.copy2(executable, staging / "bin" / "generativeqc")
 
-    # Supplemental stationary AOT kernels are loadable plug-ins. Keep their
-    # SONAME symlinks and manifests, but never ship unused SDK static archives.
+    # The CLI has no Python stationary-force loader. A standalone .so in the
+    # native distribution is either an unintended Python-only AOT build or a
+    # missing static-link integration: fail closed rather than ship an archive
+    # that merely *looks* like a single-file CLI. Static .a files are SDK
+    # build inputs, not runtime dependencies.
     for lib_root in ("lib", "lib64"):
         source_dir = prefix / lib_root
         if not source_dir.is_dir():
             continue
-        for source in sorted(source_dir.rglob("*")):
+        for source in source_dir.rglob("*"):
             if source.is_dir():
                 continue
-            if ".so" not in source.name and source.suffix != ".json":
-                continue
-            if source.name.startswith("libgenerativeqc.so"):
+            if ".so" in source.name:
                 raise ValueError(
-                    "Static-core distribution must not ship libgenerativeqc.so"
+                    f"Native CLI distribution has an unexpected shared object: {source}"
                 )
-            rel = source.relative_to(prefix)
-            target = staging / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if source.is_symlink():
-                target.symlink_to(source.readlink())
-            else:
-                shutil.copy2(source, target)
 
     licenses = prefix / "share" / "generativeqc" / "licenses"
     if licenses.is_dir():
@@ -134,6 +128,7 @@ def package_native_cli(
         "cuda_architecture": "sm_120",
         "core_linkage": "static",
         "generativeqc_shared_core_required": False,
+        "separately_packaged_aot_plugins": False,
         "elf_needed": dependencies,
         "source_date_epoch": source_date_epoch,
     }
@@ -155,8 +150,9 @@ def package_native_cli(
         "If your CUDA installation is non-standard, configure the loader's\n"
         "library search path before launching. sm_120 targets Blackwell GPUs;\n"
         "this artifact is NOT a universal CUDA fat binary.\n"
-        "Any shipped lib/ objects contain separately compiled stationary AOT\n"
-        "plug-ins/manifests; keep these next to the executable.\n"
+        "All native-CLI-reachable AOT kernels are already compiled into the\n"
+        "static core. Python-only stationary CUDA force plug-ins are not\n"
+        "included; they are not callable by this native CLI.\n"
         "License and third-party notices are included in this archive.\n",
         encoding="utf-8",
     )
