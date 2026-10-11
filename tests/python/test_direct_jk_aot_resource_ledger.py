@@ -105,8 +105,8 @@ def _generated_ninja_fixture(
     )
     includes = shlex.join(
         [
-            f"-I{(validator.ROOT / 'src').resolve().as_posix()}",
-            f"-I{(directory / 'generated').resolve().as_posix()}",
+            f"-I{validator.ROOT / 'src'}",
+            f"-I{(directory / 'generated').resolve()}",
         ]
     )
     source = (
@@ -937,7 +937,7 @@ class TestProductionContextBinding:
     def test_effective_ccache_wrapper_matches_cmake_context(
         self, tmp_path: Path
     ) -> None:
-        launcher = CompilerCacheLauncher(FAKE_CCACHE, "ccache", "ccache 4.14")
+        launcher = CompilerCacheLauncher(FAKE_CCACHE, "ccache", "ccache version 4.14")
         effective = ";".join(
             (
                 str(Path("/usr/bin/cmake")),
@@ -961,6 +961,12 @@ class TestProductionContextBinding:
                     Path("/verified/sccache"), "sccache", "sccache 0.16.0"
                 ),
                 "/verified/sccache",
+            )
+        with pytest.raises(ValueError, match="ccache version 4.14"):
+            validator.validate_effective_compiler_launcher(
+                tmp_path,
+                CompilerCacheLauncher(FAKE_CCACHE, "ccache", "ccache version 4.15"),
+                effective,
             )
 
     @pytest.mark.parametrize("location", ["rules", "shard"])
@@ -1119,6 +1125,23 @@ class TestProductionContextBinding:
         build.write_text(
             text.replace(line, "  INCLUDES = " + shlex.join(tokens[::-1]) + "\n")
         )
+        with pytest.raises(ValueError, match="INCLUDES"):
+            validator.validate_generated_cuda_rules(
+                tmp_path,
+                FAKE_NVCC,
+                effective,
+                generated_directory=tmp_path / "generated",
+            )
+
+    def test_generated_include_alias_is_not_spelling_equivalent(
+        self, tmp_path: Path
+    ) -> None:
+        effective = _generated_ninja_fixture(tmp_path)
+        build = tmp_path / "build.ninja"
+        text = build.read_text()
+        canonical = f"-I{validator.ROOT / 'src'}"
+        aliased = f"-I{validator.ROOT / 'src/../src'}"
+        build.write_text(text.replace(canonical, aliased))
         with pytest.raises(ValueError, match="INCLUDES"):
             validator.validate_generated_cuda_rules(
                 tmp_path,

@@ -304,6 +304,13 @@ different line-marker-sensitive context. The gate rejects sccache rather than
 silently treating the two source spellings as equivalent; the repository's
 general compiler-cache preference remains unchanged for other consumers.
 
+The generated shard edge's include tokens are compared by exact ordered
+spelling, not resolved filesystem equivalence. Source-tree aliases or symlinked
+spellings can survive ccache normalization and change preprocessor line markers.
+The verified launcher must also report exactly `ccache version 4.14`; a different
+ccache release is a distinct path-normalization implementation and cannot replay
+the canonical cubin under this bounded gate.
+
 The gate also rejects non-empty `NVCC_PREPEND_FLAGS` and
 `NVCC_APPEND_FLAGS` before any generation, cache lookup, or compilation. NVCC
 applies those environment options outside explicit argv and append flags can
