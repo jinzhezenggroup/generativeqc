@@ -48,7 +48,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
         "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
-        "reference_experiment,lambda_serial_scratch_reuse,ccsd_mixed_precision,lambda_mixed_precision}; }\n"
+        "reference_experiment,lambda_serial_scratch_reuse,ccsd_mixed_precision,lambda_mixed_precision,lambda_resident_krylov}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -87,11 +87,18 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     )
     assert len(reference_calls) == 1
     reference_call = reference_calls[0] + "\n"
+    complete_probe = (ROOT / "tests/native/df_complete_force_probe.cpp").read_text()
+    probe_selection = complete_probe[
+        complete_probe.index(
+            "    const auto* resident_selected ="
+        ) : complete_probe.index("    if (forces && resident_krylov")
+    ]
     source = tmp_path / "defaults.cpp"
     source.write_text(
         r"""
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include "cc/lambda_response.hpp"
@@ -119,6 +126,7 @@ struct DFCCSDTResult {
   DFCCSDTReferenceExperiment* reference_experiment;
   bool serial_scratch_reuse;
   bool ccsd_mixed, lambda_mixed;
+  bool resident_krylov;
 };
 """
         + declaration
@@ -153,12 +161,46 @@ void check_reference_benchmark() {
      result.batch_limit != 8 || result.ccsd_batch_limit != 8)
     throw std::runtime_error("reference benchmark selectors or experiment pointer changed");
 }
+generativeqc::methods::detail::DFCCSDTResult select_probe(bool forces) {
+  namespace methods=generativeqc::methods;
+  generativeqc::runtime::ExecutionContext execution;
+  generativeqc_method_descriptor descriptor{};
+  generativeqc::hf::RHFFrameResponseOptions options;
+  struct Raw {
+    generativeqc::core::System system;
+    const auto& orbital() const{return system;}
+    const auto& auxiliary() const{return system;}
+  } raw;
+  const bool triples=true,packed=false,parallel_gap=true,include_gap=false,scalar_fused=false;
+"""
+        + probe_selection
+        + r"""
+  return result;
+}
+void check_complete_probe() {
+  for(const char* cap : {static_cast<const char*>(nullptr),"0","1","3","8","16","32"})
+  for(bool resident : {false,true}) for(bool forces : {false,true}) {
+    if(cap)setenv("GENERATIVEQC_TEST_CCSD_Q_CAP",cap,1);
+    else unsetenv("GENERATIVEQC_TEST_CCSD_Q_CAP");
+    if(resident)setenv("GENERATIVEQC_TEST_LAMBDA_RESIDENT_KRYLOV","1",1);
+    else unsetenv("GENERATIVEQC_TEST_LAMBDA_RESIDENT_KRYLOV");
+    const auto result=select_probe(forces);
+    const auto requested=cap?std::stoull(cap):8U;
+    if(result.ccsd_batch_limit!=(requested?requested:32U) ||
+       result.resident_krylov!=resident || result.forces!=forces ||
+       result.serial_scratch_reuse || result.ccsd_mixed || result.lambda_mixed)
+      throw std::runtime_error("complete probe cap and residency selectors aliased");
+  }
+  unsetenv("GENERATIVEQC_TEST_CCSD_Q_CAP");
+  unsetenv("GENERATIVEQC_TEST_LAMBDA_RESIDENT_KRYLOV");
+}
 bool default_frame(const generativeqc::hf::RHFFrameResponseOptions& frame) {
   return frame.orbital_screening_tolerance == 0.0 && !frame.profile_jk &&
          !frame.bilinear_derivative && frame.symmetric_polarization;
 }
 int main() {
   check_reference_benchmark();
+  check_complete_probe();
   generativeqc::cc::LambdaOptions options;
   if(!options.df_matrix_gemm || !options.df_auxiliary_reduction ||
      options.gmres.true_residual_every != 1 || options.df_mixed_precision ||
@@ -182,7 +224,7 @@ int main() {
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame) ||
      ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30 ||
      ordinary.batch_limit != 32 || explicit_matrix.batch_limit != 8 ||
-     !ordinary.replay_matrix) return 7;
+     !ordinary.replay_matrix || ordinary.resident_krylov || explicit_matrix.resident_krylov) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
   explicit_frame.profile_jk = true;
@@ -199,6 +241,10 @@ int main() {
       context,system,system,descriptor,true,true,true,true,true,8,8,{},
       true,false,true,false,false,{},1);
   if(strict_lambda.lambda_interval != 1) return 44;
+  const auto resident_lambda=run_df_ccsdt_native(
+      context,system,system,descriptor,true,true,true,true,true,8,8,{},
+      true,false,true,false,false,{},30,true,true,true,nullptr,false,false,false,true);
+  if(!resident_lambda.resident_krylov || resident_lambda.serial_scratch_reuse) return 51;
   const char* missing[]{"endpoint","input","output","1"};
   const char* matrix[]{"endpoint","input","output","1","1","1","1"};
   const char* scalar[]{"endpoint","input","output","1","1","1","0"};
@@ -207,7 +253,7 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 32 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
+     defaults.batch_limit != 32 || defaults.ccsd_batch_limit != 32 || !defaults.reduction ||
      !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap ||
      defaults.lambda_interval != 30 || defaults.ccsd_mixed || defaults.lambda_mixed) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
@@ -247,7 +293,7 @@ int main() {
   for(int argc = 8; argc <= 12; ++argc) {
     const auto selected = select(argc,partial);
     if(selected.diis_history != (argc > 8 ? 4U : 6U) ||
-       selected.ccsd_batch_limit != (argc > 9 ? 3U : 8U) ||
+       selected.ccsd_batch_limit != (argc > 9 ? 3U : 32U) ||
        selected.frame.orbital_screening_tolerance != (argc > 10 ? 1e-7 : 0.0) ||
        selected.frame.profile_jk || !selected.frame.symmetric_polarization ||
        selected.frame.bilinear_derivative || !selected.derived_denominators) return 14;
@@ -264,14 +310,14 @@ int main() {
       const char* selected[]{"endpoint","input","output","1","1",forces,"1","8","6",batch};
       const auto actual = select(10,selected);
       const auto requested = std::stoull(batch);
-      const auto expected = requested ? requested : (forces[0]=='1' ? 8U : 32U);
+      const auto expected = requested ? requested : 32U;
       if(actual.ccsd_batch_limit != expected || !default_frame(actual.frame) ||
          actual.diis_history != 6) return 17;
     }
   }
   const auto energy_default=run_df_ccsdt_native(context,system,system,descriptor,false);
   const auto force_default=run_df_ccsdt_native(context,system,system,descriptor);
-  if(energy_default.ccsd_batch_limit!=32 || force_default.ccsd_batch_limit!=8) return 46;
+  if(energy_default.ccsd_batch_limit!=32 || force_default.ccsd_batch_limit!=32) return 46;
   for(int index : {7,8,9}) {
     for(const char* token : {"-1","+2","2.0","2e-12","8junk",""}) {
       const char* bad[]{"endpoint","input","output","1","1","1","1","8","6","8"};

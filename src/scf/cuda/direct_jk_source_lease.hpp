@@ -30,13 +30,16 @@ class DirectJkSourceLease {
    * auto_policy defaults to the unchanged RHF generic/f-shell domain. The KS
    * screened policy is opt-in and does not turn the iteration limit into an
    * expected reuse count.
+   * bucket_mask defaults to complete residency. Partial masks share the full
+   * source's immutable Schwarz layout; uncached buckets remain exact Direct.
    */
   generativeqc_status prepare(
       int device, const std::vector<core::System>& systems, unsigned maximum_iterations,
       std::size_t direct_nbf, std::size_t required, std::size_t budget, const char* selection_value,
       const char* trace_name, bool cold_phase = false, bool generic_fock = false,
       double screening = 0.0, std::size_t value_ceiling = 8ULL << 30, bool own_outputs = true,
-      DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f);
+      DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
+      std::uint32_t bucket_mask = (1U << 28) - 1);
   bool active() const noexcept { return direct_ != nullptr; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
   std::size_t value_bytes() const noexcept { return value_bytes_; }
@@ -50,7 +53,10 @@ class DirectJkSourceLease {
   generativeqc_status enqueue(FockBuildSpec spec, const double* density, double* coulomb,
                               double* exchange, int* numerical_error, double screening,
                               std::string& detail);
-  /** Fence the last action's finite/census audit before publishing a result. */
+  /** Fence finite/census validation before publishing the last action.
+   * At the frozen Schwarz threshold every uncached value must be evaluated.
+   * A stricter replay predicate may skip recurrences but not source visits.
+   */
   generativeqc_status audit();
   /** Completed physical work, not host graph-capture calls. */
   void observe_completed(std::size_t physical_focks) const noexcept;
@@ -83,8 +89,9 @@ class DirectJkSourceLease {
   int* last_error_{};
   std::uint64_t* census_{};
   std::size_t matrix_elements_{}, output_elements_{}, correction_elements_{};
-  std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{};
+  std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{}, source_value_count_{};
   std::size_t completed_values_{};
+  double source_screening_{}, last_screening_{};
   bool prepared_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};

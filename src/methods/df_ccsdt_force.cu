@@ -112,7 +112,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
     bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
-    bool lambda_mixed_precision = false) {
+    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
@@ -240,6 +240,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   phase = Clock::now();
   if (trace.enabled()) Trace::label("phase", "corrected_lambda");
   cc::LambdaOptions lambda_options;
+  lambda_options.cuda_resident_krylov = lambda_resident_krylov;
   lambda_options.serial_scratch_reuse = lambda_serial_scratch_reuse;
   lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
   lambda_options.df_matrix_gemm = lambda_matrix_gemm;
@@ -680,12 +681,13 @@ DFCCSDTResult run_df_ccsdt_native(
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
     std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
     bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
-    bool lambda_serial_scratch_reuse, bool ccsd_mixed_precision, bool lambda_mixed_precision) {
+    bool lambda_serial_scratch_reuse, bool ccsd_mixed_precision, bool lambda_mixed_precision,
+    bool lambda_resident_krylov) {
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
   // Resolve endpoint policy before passing a positive limit to the solver.
-  // Energy qualification does not promote the force/response default tile.
-  ccsd_batch_limit = ccsd_batch_limit ? ccsd_batch_limit : (forces ? 8 : 32);
+  // Explicit caps retain bounded ablations; admission still owns actual tiles.
+  ccsd_batch_limit = ccsd_batch_limit ? ccsd_batch_limit : 32;
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
@@ -719,7 +721,8 @@ DFCCSDTResult run_df_ccsdt_native(
         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
-        diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision);
+        diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision,
+        lambda_resident_krylov);
   };
   try {
     return finish(attempt());

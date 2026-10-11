@@ -680,7 +680,8 @@ class RccsdPrepared final : public PreparedCalculation {
   RccsdPrepared(Capabilities capabilities, runtime::ExecutionContext execution, core::System system,
                 scf::ScfOptions reference_options, cc::SolverOptions solver_options,
                 std::size_t reference_capacity)
-      : capabilities_(capabilities),
+      : PreparedCalculation(execution.backend(), execution.device_id()),
+        capabilities_(capabilities),
         execution_(std::move(execution)),
         system_(std::move(system)),
         reference_options_(reference_options),
@@ -708,7 +709,7 @@ class RccsdPrepared final : public PreparedCalculation {
     last_performance_.reset();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
@@ -894,7 +895,8 @@ class RccsdPreparedBatch final : public PreparedBatch {
   RccsdPreparedBatch(Capabilities capabilities, core::ContextState& context,
                      std::vector<core::System> systems,
                      const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : capabilities_(capabilities),
+      : PreparedBatch(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         execution_(context),
         context_(&context),
         systems_(std::move(systems)),
@@ -915,9 +917,8 @@ class RccsdPreparedBatch final : public PreparedBatch {
   void invalidate_result() override {
     for (auto& owner : owners_) owner->invalidate_result();
   }
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("RCCSD batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
@@ -1070,12 +1071,12 @@ RccsdNativeState run_rccsd_native_state(
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;
   solver_options.df_mixed_precision = df_mixed_precision;
-  // A changed nonlinear trajectory is qualified for CUDA DF energies only;
-  // force/Lambda owners and conventional/CPU callers retain trial-state DIIS.
-  solver_options.diis_input_residual =
-      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
-  solver_options.df_replay_auxiliary_batch =
-      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
+  // Retaining DF response inputs changes source lifetime, not the CC equations.
+  // Every observed state and the independent final physical replay stay fresh.
+  solver_options.diis_input_residual = execution.cuda_requested() && correlation_auxiliary;
+  // The fresh expanded replay consumes final amplitudes, not retained adjoint
+  // intermediates. Optional batching preserves ordered Q checks and admission.
+  solver_options.df_replay_auxiliary_batch = execution.cuda_requested() && correlation_auxiliary;
   auto reference = reference_options(descriptor, phase_budget);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;

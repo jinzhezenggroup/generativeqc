@@ -31,9 +31,10 @@ def _evaluate(node: ast.AST) -> str | bool:
     if (
         isinstance(node, ast.Compare)
         and len(node.ops) == 1
-        and isinstance(node.ops[0], ast.Eq)
+        and isinstance(node.ops[0], (ast.Eq, ast.NotEq))
     ):
-        return _evaluate(node.left) == _evaluate(node.comparators[0])
+        equal = _evaluate(node.left) == _evaluate(node.comparators[0])
+        return equal if isinstance(node.ops[0], ast.Eq) else not equal
     if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
         result = _evaluate(node.values[0])
         for value in node.values[1:]:
@@ -43,6 +44,31 @@ def _evaluate(node: ast.AST) -> str | bool:
                 result = _evaluate(value)
         return result
     raise AssertionError(f"Unsupported workflow expression: {ast.dump(node)}")
+
+
+@pytest.mark.parametrize("tier", ["skip", "fast", "release"])
+@pytest.mark.parametrize(
+    "step_name",
+    [
+        "Restore shared Linux CUDA ccache",
+        "Seed fast CUDA CI objects in the shared cache",
+        "Build monolithic C++ CUDA CLI (release or fast PR)",
+        "Verify full automatic CUDA XC catalog is compiled for distribution",
+        "Smoke-test release-mode native command",
+    ],
+)
+def test_native_cli_tier_admits_all_selected_build_stages(
+    tier: str, step_name: str
+) -> None:
+    step = (
+        _job("native-cli-artifact")
+        .split(f"      - name: {step_name}\n", 1)[1]
+        .split("\n      - ", 1)[0]
+    )
+    condition = re.search(r"^        if: (.+)$", step, re.MULTILINE)
+    assert condition is not None
+    expression = condition.group(1).replace("steps.cli_scope.outputs.tier", repr(tier))
+    assert _evaluate(ast.parse(expression, mode="eval").body) == (tier != "skip")
 
 
 @pytest.mark.parametrize(

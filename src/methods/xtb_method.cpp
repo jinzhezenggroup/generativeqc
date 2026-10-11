@@ -55,7 +55,8 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
   Gfn2PreparedCalculation(const Capabilities& capabilities, const core::System& system,
                           const generativeqc_method_descriptor& descriptor,
                           core::ContextState& context)
-      : capabilities_(capabilities),
+      : PreparedCalculation(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         atoms_(system.atoms),
         charge_(system.charge),
         multiplicity_(system.multiplicity),
@@ -87,7 +88,7 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
   [[nodiscard]] std::size_t atom_count() const noexcept override { return atoms_.size(); }
   [[nodiscard]] const Capabilities& capabilities() const noexcept override { return capabilities_; }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     std::vector<std::int32_t> atomic_numbers;
     std::vector<double> positions;
     atomic_numbers.reserve(atoms_.size());

@@ -9,6 +9,7 @@
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
+#include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
@@ -447,7 +448,7 @@ generativeqc_status generativeqc_batch_clear_warm_starts(generativeqc_batch* bat
   if (batch == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   try {
-    batch->plan->clear_warm_starts();
+    batch->plan->reset_execution();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
@@ -552,6 +553,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   // Invalidation mutates shared diagnostics even when validation rejects the
   // replay, so it belongs to the same serialized operation as execution.
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  generativeqc::api::PreparedPublication publication(*batch->plan);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
   std::fill(batch->initial_guesses.begin(), batch->initial_guesses.end(), std::nullopt);
   std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
@@ -632,17 +634,18 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
               sizeof(generativeqc_scf_diagnostic), GENERATIVEQC_ABI_VERSION,
               item.calculation.convergence.residual_rms, *item.calculation.physical_residual_rms};
       }
-      // The CUDA KS legacy executor counts actual physical builds. Publish
-      // them only with its complete operator census: chunk/replay and other
-      // uninstrumented owners may omit speculative work. A warm-to-cold retry
-      // can also discard builds, so its successful attempt is not a total.
+      // A retry-aware owner publishes only its complete execution-local total.
+      // Missing work must not fall through to a successful attempt's count.
+      // Legacy owners still require the final census and no discarded attempt.
       const auto& work = item.calculation.precision_work;
       const bool counted_cuda_ks = item.calculation.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
                                    batch->ks_diagnostics[i].has_value() && work.complete &&
                                    work.operator_inventory_complete;
-      if (!item.warm_start_fallback &&
-          (item.calculation.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-           counted_cuda_ks)) {
+      if (item.target_fock_work) {
+        batch->last_fock_builds[i] = item.target_fock_work->total().value_or(0);
+      } else if (!item.warm_start_fallback &&
+                 (item.calculation.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+                  counted_cuda_ks)) {
         batch->last_fock_builds[i] = item.calculation.fock_builds;
       }
       const std::uint32_t required_forces = batch->atom_counts[i] * 3;
@@ -674,6 +677,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
         std::copy(item.calculation.forces.begin(), item.calculation.forces.end(), output.forces);
       }
     }
+    publication.commit();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);

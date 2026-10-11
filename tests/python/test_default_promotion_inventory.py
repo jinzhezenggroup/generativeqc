@@ -44,6 +44,19 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+def test_partial_source_default_requires_new_qualification(tmp_path: Path) -> None:
+    """A measured explicit mask cannot silently become the production default."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_jk_source_policy.hpp"
+    original = source.read_text()
+    source.write_text(original.replace("mask{(1U << 28) - 1}", "mask{32752}"))
+    assert any(
+        "experimental partial source default or admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 @pytest.mark.parametrize(
     "relative,before,after",
     [
@@ -285,8 +298,28 @@ def test_native_xc_batch_defaults_are_audited(
         ),
         (
             "src/dft/cuda_ks_final_validation_policy.hpp",
-            "fock_exchange_coefficient == -0.125",
-            "fock_exchange_coefficient == -0.25",
+            "std::isfinite(coefficient)",
+            "true",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "coefficient < 0.0",
+            "coefficient <= 0.0",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "coefficient >= -0.5",
+            "coefficient >= -1.0",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "final_validation_partial && matrix_products.library_enabled()",
+            "matrix_products.library_enabled()",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "final_validation_partial && matrix_products.library_enabled()",
+            "final_validation_partial",
         ),
         (
             "src/dft/cuda_ks.cpp",
@@ -298,7 +331,7 @@ def test_native_xc_batch_defaults_are_audited(
 def test_native_ks_final_validation_default_is_audited(
     tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
-    """Default promotion must not silently expand the measured scope or leases."""
+    """Audit exact-hybrid bounds and required matrix resources and live leases."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / relative
@@ -405,6 +438,39 @@ def test_panel_traversal_refuses_domain_or_reduction_order_drift(
     source.write_text(original.replace(before, after))
     assert any(
         "bounded panel traversal admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("d.w_contraction_storage_bits == 64", "true"),
+        ("d.w_contraction_compute_bits == 64", "true"),
+        ("d.w_contraction_accumulation_bits == 64", "true"),
+        ("const auto source = sources.index[perm];", "const auto source = perm;"),
+        (
+            "moments + perm * p.v3, moments + source * p.v3",
+            "bar_w + perm * p.v3, moments + source * p.v3",
+        ),
+        (
+            "bar_w + perm * p.v3, bar_panel, out, reverse_gemm",
+            "bar_w, bar_panel, out, reverse_gemm",
+        ),
+    ],
+)
+def test_force_distinct_default_refuses_precision_copy_or_cotangent_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Forward reuse must never broaden precision or collapse reverse slots."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "forward-only force admission drifted" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 

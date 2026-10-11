@@ -405,7 +405,8 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     double* grad, StationaryPointValue& xc, double& becke_seed, int* error) {
   const size_t np = view.npoint;
   double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
-  if (stationary_functional != 0)
+  // Consume the emitted ingredient layout, never a functional's numeric code.
+  if (stationary_coefficients > 1)
     for (size_t s = 0; s < 2; ++s)
       for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
   if (stationary_coefficients == 5)
@@ -413,7 +414,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
   if constexpr (restricted_point) {
-    static_assert(!restricted_point || stationary_pbe0_restricted_point_capable);
+    static_assert(!restricted_point || stationary_restricted_point_capable);
     if (external) {
       atomicExch(error, 1);
       return false;
