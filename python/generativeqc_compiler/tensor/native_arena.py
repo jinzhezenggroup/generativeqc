@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SymbolicArenaPlan:
-    """Exclusive retained slots plus last-reader-colored dynamic FP64 storage.
+    """Exclusive retained slots plus uniformly typed last-reader-colored storage.
 
     Slot capacities are products of runtime extent symbols, not representative
     numeric shapes. Outputs stay live through return because native callers
@@ -35,6 +35,7 @@ class SymbolicArenaPlan:
 
     slots: tuple[tuple[str, ...], ...]
     node_slots: Mapping[int, int]
+    storage_dtype: str = "float64"
 
     @property
     def identity(self) -> str:
@@ -44,6 +45,11 @@ class SymbolicArenaPlan:
                 "schema": "generativeqc.tensor.symbolic-arena.v1",
                 "slots": self.slots,
                 "assignments": tuple(self.node_slots.items()),
+                **(
+                    {"storage_dtype": self.storage_dtype}
+                    if self.storage_dtype != "float64"
+                    else {}
+                ),
             }
         )
 
@@ -162,13 +168,14 @@ def plan_symbolic_arena(
     dimension_symbol: Callable[[Index], str],
     execution_nodes: Sequence[Node] | None = None,
     retained_nodes: Sequence[Node] = (),
+    storage_dtype: str = "float64",
 ) -> SymbolicArenaPlan:
     """Plan the established materialized native schedule without backend policy.
 
     The caller deterministically binds each index to a runtime extent symbol and may
     supply an already-selected dependency order. Every live node must occur once;
     no operation is reordered, removed, fused, or rematerialized here. Lowering
-    must write each noninput node into distinct dense FP64 storage: views or
+    must write each noninput node into distinct dense uniform floating storage: views or
     opaque physical aliases require the separate common storage analysis.
 
     ``retained_nodes`` declares exclusive storage, not a proof of invariance.
@@ -178,6 +185,8 @@ def plan_symbolic_arena(
     """
     if not isinstance(program, Program):
         raise TypeError("symbolic arena planning requires a TensorIR Program")
+    if storage_dtype not in ("float32", "float64"):
+        raise ValueError("native tensor arena requires a floating storage dtype")
     if not callable(dimension_symbol):
         raise TypeError("arena dimension symbols require an index binding")
     for label, values in (
@@ -207,8 +216,11 @@ def plan_symbolic_arena(
             last_use[numbers[source]] = number
         if node.op == "input":
             continue
-        if node.spec.dtype != "float64":
-            raise ValueError("native tensor arena requires FP64 intermediates")
+        if node.spec.dtype != storage_dtype:
+            label = "FP64" if storage_dtype == "float64" else "FP32"
+            raise ValueError(
+                f"native tensor arena requires uniform {label} intermediates"
+            )
         symbols = []
         for index in node.spec.indices:
             symbol = dimensions.get(index)
@@ -251,4 +263,4 @@ def plan_symbolic_arena(
         node_slots[number] = slot
         releases[last_use[number] + 1].append(slot)
 
-    return SymbolicArenaPlan(tuple(slots), MappingProxyType(node_slots))
+    return SymbolicArenaPlan(tuple(slots), MappingProxyType(node_slots), storage_dtype)

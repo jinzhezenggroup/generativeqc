@@ -1,0 +1,199 @@
+{
+  "measured_source": {
+    "revision": "98263e06ca13aa88cee504f1f105f5cf3ef6d92a",
+    "dirty": true,
+    "reconstruction": "measured-source.patch.gz",
+    "publishing_changes": "Evidence retention, note link and opt-in policy registration only; measured executable sources unchanged."
+  },
+  "qualification": {
+    "date": "2026-10-11",
+    "slurm_job": 7502,
+    "host": "node1",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "cpus": 4,
+    "finite_time": "01:00:00",
+    "gpu_uuid": "GPU-57db1e6a-5ff9-570d-67b0-6965fb3a77e6",
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "driver": "580.95.05",
+    "power_limit_watts": 600,
+    "nvml_interval_ms": 200,
+    "order": [
+      "master,mixed",
+      "mixed,master",
+      "master,mixed",
+      "mixed,master",
+      "master,mixed"
+    ],
+    "cold_boundary": "fresh independent process; compiled executable reused; no supplied electronic state"
+  },
+  "toolchain": {
+    "cuda": "12.9.86",
+    "gcc": "11.4.0",
+    "ccache": "4.5.1",
+    "cmake_build_type": "Release",
+    "cuda_architecture": "120"
+  },
+  "controls_after_input_and_output": [
+    "1",
+    "1",
+    "1",
+    "1",
+    "32",
+    "8",
+    "8",
+    "0",
+    "0",
+    "2",
+    "1",
+    "30",
+    "0",
+    "0",
+    "1",
+    "auto",
+    "1",
+    "0",
+    "auto",
+    "0",
+    "0",
+    "30",
+    "1",
+    "1",
+    "1"
+  ],
+  "mixed_appended_control": "1",
+  "original_binary_and_input_hashes": {
+    "/data/jzzeng/qc-cc-mixed-20261011/master/libgenerativeqc.so": "47f61e3a707297e0639ad70ad00b8f67c33a543eede338993f14e81df02c751e",
+    "/data/jzzeng/qc-cc-mixed-20261011/master/endpoint": "8fa04c619a9eec1b5b044958f455c7a1411942551383a9e7523997bd9e041212",
+    "/data/jzzeng/qc-cc-mixed-20261011/candidate/build-cuda/libgenerativeqc.so": "9e05def80dbc2f80aac36168941b1cd0b6f6a4f00dac6f1bb0d74398adc43140",
+    "/data/jzzeng/qc-cc-mixed-20261011/candidate/build-cuda/endpoint": "5a95d647f4f2c094cefedc428f0900f85454a5e76dfc36c790f95e26d9a3b558",
+    "/data/jzzeng/qc-cc-mixed-20261011/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+  },
+  "validation": {
+    "gpu_suite": {
+      "passed": 51,
+      "skipped": 9,
+      "deselected": 3,
+      "note": "Expected CPU-parameter skips; unrelated (T)-mixed tests deselected. Not 51 distinct GPU tests."
+    },
+    "targeted_cpu": {
+      "passed": 62,
+      "skipped": 76
+    },
+    "precision_lifetime_contracts": {
+      "passed": 55
+    },
+    "water_memcheck": {
+      "slurm_job": 7506,
+      "host": "node1",
+      "errors": 0,
+      "leaked_bytes": 0
+    },
+    "local_receipt_hashes": {
+      "runs-7502/tests.log": {
+        "sha256": "5a14e64b6a273f80e4d696183b3c75eecfaec8f7c1102612a9948d5ee72f8d46",
+        "bytes": 639
+      },
+      "final-cpu-validation.log": {
+        "sha256": "c3299218f2ffa3a9f928909281c7f3f7016cf56f4564a217cb3899b261789e2d",
+        "bytes": 202
+      },
+      "final-contract-tests.log": {
+        "sha256": "2031446784d8e8eeaac946c834a004e9fd2ff1a2015f614308c3e08eebc26cf0",
+        "bytes": 100
+      },
+      "memcheck/memcheck.log": {
+        "sha256": "a1dc5cb4d4161412fb091fa6e6b400cd0b0a8e1bc3524e006e80185d2391acdd",
+        "bytes": 212
+      }
+    }
+  },
+  "files": {
+    "analyze.py.gz": {
+      "sha256": "837d8470655810b429860ae5371bb4f09ae396fa19f6b0e11f1f833e6ba92187",
+      "bytes": 1817,
+      "uncompressed_sha256": "29bb2c0e79ed98838072f2fc629887bdd7c62fb5a099f1f2a8c467c264b9f43d",
+      "uncompressed_bytes": 5465
+    },
+    "independent-accuracy.json": {
+      "sha256": "80645386ebcfbeb01ea6bf36692de8bc1d604a21ed83b2144213748f7dae8a2a",
+      "bytes": 1417
+    },
+    "measure.sh": {
+      "sha256": "90050147c7498a7c134dd34df487d25e7cee90880d6442f98f3d7b25ec4e988f",
+      "bytes": 3588
+    },
+    "measured-source.patch.gz": {
+      "sha256": "44735dd30bbc68b306d1ddfa18140e0a06d2ed3e79d3488874899bc8aed7b94f",
+      "bytes": 25027,
+      "uncompressed_sha256": "b6905eaa266ec5bb70d56c6fec5f578b200cb1dac2a1a0bec61f28120a5042e7",
+      "uncompressed_bytes": 91759
+    },
+    "occupancy-samples.json.gz": {
+      "sha256": "8f697ab3b27bfb6d9a7125fc11586851cd9f20cdf5169d5d4bada8bada5ac88f",
+      "bytes": 4904,
+      "uncompressed_sha256": "26055a0a740b42be56773c9cc1219973a3e9a4c0a025b5b903253e4195d65400",
+      "uncompressed_bytes": 150051
+    },
+    "rejected-v1.json.gz": {
+      "sha256": "56738d53cff796c8bf7047dc71412ad007adb255ace2089075190e3ac2edb883",
+      "bytes": 4543,
+      "uncompressed_sha256": "ea2aa7423744736ebf31492eb71866a2fc636e1e50bb1d16acddea50fab70117",
+      "uncompressed_bytes": 24236
+    },
+    "samples.json.gz": {
+      "sha256": "9befd7c6e74cf1c0ab47bca6d3c7f49d2a021f46b3a87b45a881c25ab219d36a",
+      "bytes": 8318,
+      "uncompressed_sha256": "3bdfb889208ec9de83682b8f8eba57e43de8bc9d514ccd8f32b96f7eeef79e73",
+      "uncompressed_bytes": 109627
+    },
+    "summary.json": {
+      "sha256": "622f1ad39ed83bc842f58590af76f622c0564c9dbe7da3376f8785c82dc58416",
+      "bytes": 3241
+    }
+  },
+  "original_nvml_csv_hashes": {
+    "master-1.gpu.csv": {
+      "sha256": "aa28fc4f5d62350703b17aa48bfc7338a9a8b916b8d728ca296d11800d1ddae8",
+      "bytes": 117148
+    },
+    "master-2.gpu.csv": {
+      "sha256": "a727a7e869b69d2e29c8a594381e5594a446bfb3c3262f7866e6091deff05d35",
+      "bytes": 117005
+    },
+    "master-3.gpu.csv": {
+      "sha256": "e950f1ceac217afa20186c3b34443b1ae38823bd69e1ba349f1c3e7743dd1672",
+      "bytes": 117538
+    },
+    "master-4.gpu.csv": {
+      "sha256": "02adad7c23d4723624c799617a65eefda7d3314a381fe3b868378b15ec9abb0b",
+      "bytes": 116974
+    },
+    "master-5.gpu.csv": {
+      "sha256": "bae9438f4e2df325a37f502945e5b30f87f229f6cd63564232b0250f7fc70a91",
+      "bytes": 117675
+    },
+    "mixed-1.gpu.csv": {
+      "sha256": "5163396511cb25c3472c2ec59f1bd435df3a08cf293f9b2355711d1566fa8b44",
+      "bytes": 112819
+    },
+    "mixed-2.gpu.csv": {
+      "sha256": "81d84dd49d657b79920d15c2c1ed1ce0fc34a2451b39c7022eb86ca4052a5d01",
+      "bytes": 112433
+    },
+    "mixed-3.gpu.csv": {
+      "sha256": "c9c39489019609fd057d83f57138b6aadb2b06f2f122598d1ae0484d8f1c8bfd",
+      "bytes": 112197
+    },
+    "mixed-4.gpu.csv": {
+      "sha256": "6d45d053b36eb10ae57d4dbbb39b470727df79f1b30e15b2ba46a4f237017858",
+      "bytes": 112791
+    },
+    "mixed-5.gpu.csv": {
+      "sha256": "57bf16ca349fb284e36304c93a775bb407e015cc4246291c418f6d1f6d52ac55",
+      "bytes": 112706
+    }
+  },
+  "occupancy_projection": "Retain every original timestamp and integer MiB memory-used value; omit unused utilization, power, temperature and clock columns.",
+  "occupancy_encoding": "Each run stores its exact first timestamp, adjacent integer millisecond deltas, and every integer MiB memory-used value; reconstruct timestamps by cumulatively adding deltas. Source timestamps have exactly three fractional digits. Every original timestamp/value pair was round-trip checked."
+}

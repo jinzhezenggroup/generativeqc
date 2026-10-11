@@ -292,6 +292,8 @@ class CudaLambdaActions {
     target.core_reuse_plan_hash = d.core_reuse_plan_hash;
     target.df_audit_matrix_gemm = d.df_audit_matrix_gemm;
     target.df_audit_arena_bytes = d.df_audit_arena_bytes;
+    target.df_shared_scratch_bytes = d.df_shared_scratch_bytes;
+    target.df_scratch_avoided_bytes = d.df_scratch_avoided_bytes;
     target.df_primal_matrix_gemm = d.df_primal_matrix_gemm;
     target.audit_schedule_hash = d.audit_schedule_hash;
 

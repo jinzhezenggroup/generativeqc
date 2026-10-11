@@ -862,6 +862,30 @@
       ]
     },
     {
+      "id": "cc.df-mixed-precision-warmup",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "cc-option:df_mixed_precision"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/cc/solver.hpp",
+        "src/cc/cuda_solver.cu",
+        "python/generativeqc_compiler/cc/df_mixed_precision.py",
+        "tools/generate_df_ccsd_hoisted.py",
+        "tools/generate_rccsd_native.py"
+      ],
+      "rationale": "Experimental opt-in uniform FP32 auxiliary warmup retains FP64 amplitudes, core, energy, ordered Q accumulation and DIIS arithmetic. A residual threshold or finite evaluation cap permanently restores the original FP64 graph, discards approximate history and preserves independent expanded physical replay. Only an internally generated warm-start state with originally admitted restricted-pair symmetry may recover the existing compiler-owned pair representation; externally asymmetric guesses are never repaired. Scoped complete cold ethane E+F pairs and independent small-molecule force gates qualify this experiment, not a universal default precision policy. Lambda and all final response arithmetic remain FP64; exact sequential Lambda scratch reuse is independent of this precision option.",
+      "revisit_condition": "Promote or broaden the consumer only after representative complete cold E+F comparisons on additional sizes and devices, original independent FP64 residual and force gates, full retained-memory/work accounting, and bounded resource-refusal and nonfinite-publication tests. Do not introduce molecule-specific routing or infer unmeasured size thresholds from the ethane cohort.",
+      "evidence": [
+        "docs/developer/df_ccsdt.md",
+        ".agents/notes/implemented/performance/2026-10-11-df-ccsd-mixed-warmup-shared-lambda-scratch.md",
+        "benchmarks/results/df-ccsd-mixed-warmup-20261011/README.md",
+        "tests/python/test_df_cc_mixed_precision.py",
+        "tests/python/test_df_triples_mixed_endpoint.py"
+      ]
+    },
+    {
       "id": "cc.df-batched-physical-replay",
       "classification": "already-default",
       "controls": [

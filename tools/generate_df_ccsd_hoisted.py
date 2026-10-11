@@ -17,6 +17,7 @@ from generativeqc_compiler.cc.df_hoist import (
     build_df_auxiliary_reduction_programs,
 )
 from generativeqc_compiler.cc.df_lambda_matrix import matrix_program
+from generativeqc_compiler.cc.df_mixed_precision import auxiliary_warmup_program
 from generativeqc_compiler.tensor import Program
 
 from tools.generate_df_ccsd_core import INPUTS as CORE_INPUTS
@@ -71,6 +72,30 @@ def packed_programs() -> dict[str, Program]:
 def batched_auxiliary_program() -> Program:
     """Reuse Lambda's Q lifting; the nonunit symbolic extent becomes runtime q."""
     return matrix_program(programs()["auxiliary"], batch_size=3)
+
+
+@cache
+def mixed_auxiliary_program() -> Program:
+    """Use the unchanged batched primal only for bounded FP32 preconvergence."""
+    return auxiliary_warmup_program(batched_auxiliary_program())
+
+
+def mixed_auxiliary_accumulation() -> tuple[str, str]:
+    """Widen each FP32 Q contribution before the original ordered FP64 sum."""
+    return ordered_batch_accumulation(
+        mixed_auxiliary_program(),
+        "mixed_auxiliary",
+        "MixedAuxiliaryCudaState",
+        "MixedAuxiliaryOutputs",
+        "s.q",
+        dict(
+            zip(
+                OUTPUTS["auxiliary"][1],
+                ("lvv", "wvoov", "wvovo", "xv", "ladder", "singles"),
+                strict=True,
+            )
+        ),
+    )
 
 
 def auxiliary_accumulation() -> tuple[str, str]:
@@ -208,6 +233,9 @@ def cuda_header() -> str:
         [
             "// Generated DF auxiliary-reduction CUDA declarations; do not edit.",
             "#pragma once",
+            "#if defined(__CUDA_FTZ) && __CUDA_FTZ",
+            '#error "DF-CCSD FP32 warmup requires gradual underflow (--ftz=false)"',
+            "#endif",
             '#include "tensor/cuda_contraction.cuh"',
             '#include "generated_df_ccsd_hoisted_cpu.hpp"',
             '#include "generated_df_ccsd_core_cuda.cuh"',
@@ -218,6 +246,23 @@ def cuda_header() -> str:
             "  std::size_t q{1};",
             "  generativeqc::tensor::PreparedContractions prepare_contractions, auxiliary_contractions, auxiliary_batched_contractions, iteration_contractions;",
             "};",
+            "struct MixedAuxiliaryOutputs { const float *lvv, *wvoov, *wvovo, *xv, *ladder, *singles; };",
+            "struct MixedAuxiliaryCudaState {",
+            "  std::size_t o{},v{},q{}; cudaStream_t stream{}; int* error{};",
+            "  const float *bov{}, *bvv{}, *t1{}, *t2{}, *df_tau{};",
+            "  float* auxiliary_arena{}; generativeqc::tensor::PreparedContractions contractions;",
+            "};",
+            _required_function(
+                mixed_auxiliary_program(),
+                "mixed_auxiliary_arena_elements",
+                batch_dim=True,
+            ),
+            f'inline constexpr const char* mixed_auxiliary_equation_hash="{mixed_auxiliary_program().logical_hash}";',
+            "inline std::size_t mixed_contraction_host_bytes(std::size_t variants){ return "
+            + f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(node) is not None or _packed_batched_matrix_gemm(node) is not None for node in mixed_auxiliary_program().live_nodes)},variants); }}",
+            "void prepare_mixed_contractions(MixedAuxiliaryCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands);",
+            "MixedAuxiliaryOutputs run_mixed_auxiliary_cuda(MixedAuxiliaryCudaState&);",
+            mixed_auxiliary_accumulation()[0] + ";",
             "inline constexpr std::size_t contraction_host_bytes(std::size_t variants) { return "
             + "+".join(
                 f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(n) is not None for n in p.live_nodes)})"
@@ -286,6 +331,24 @@ def cuda_source() -> str:
                 f"{kind} run_{name}_cuda(CudaState& s) {{ return s.{name}_contractions ? run_{name}_packed(s) : run_{name}_scalar(s); }}"
             )
     lines += [
+        _cuda_program(
+            mixed_auxiliary_program(),
+            "mixed_auxiliary",
+            "MixedAuxiliaryOutputs",
+            input_overrides={key: f"s.{key}" for key in INPUTS},
+            arena_field="auxiliary_arena",
+            state_type="MixedAuxiliaryCudaState",
+            output_fields=OUTPUTS["auxiliary"][1],
+            reset_error=False,
+            prepared_contractions="s.contractions",
+            batch_dim=True,
+        ),
+        "MixedAuxiliaryOutputs run_mixed_auxiliary_cuda(MixedAuxiliaryCudaState& s){ return run_mixed_auxiliary(s); }",
+        "void prepare_mixed_contractions(MixedAuxiliaryCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",
+        "  bind_mixed_auxiliary(s,context,batch,calls,summands);",
+        "  if(tail && tail!=batch) bind_mixed_auxiliary(s,context,tail,calls,summands);",
+        "}",
+        mixed_auxiliary_accumulation()[1],
         "void prepare_contractions(CudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",
         *(f"  bind_{name}_packed(s,context,1,calls,summands);" for name in programs()),
         "  if(batch>1) bind_auxiliary_batched(s,context,batch,calls,summands);",

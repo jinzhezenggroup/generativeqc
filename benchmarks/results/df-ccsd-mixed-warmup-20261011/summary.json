@@ -1,0 +1,135 @@
+{
+  "source_master": "98263e06ca13aa88cee504f1f105f5cf3ef6d92a",
+  "pair_count": 5,
+  "cold_boundary": "fresh independent process; compiled executable reused; no supplied electronic state",
+  "median_native_seconds": {
+    "master": 305.987797367,
+    "mixed": 293.743218727
+  },
+  "median_process_wall_seconds": {
+    "master": 306.4,
+    "mixed": 294.14
+  },
+  "endpoint_time_reduction_percent": 4.001655865156584,
+  "median_sampled_device_occupancy_peak_mib": {
+    "master": 31529.0,
+    "mixed": 27547.0
+  },
+  "sampled_peak_reduction_percent": 12.629642551301979,
+  "max_energy_error": 6.963318810448982e-13,
+  "max_force_error": 1.759259404821023e-11,
+  "median_phase_seconds": {
+    "native_seconds": {
+      "master": 305.987797367,
+      "mixed": 293.743218727
+    },
+    "resident_jk_retry_seconds": {
+      "master": 0,
+      "mixed": 0
+    },
+    "reference_seconds": {
+      "master": 16.707130378,
+      "mixed": 16.673501013
+    },
+    "source_seconds": {
+      "master": 3.674856008,
+      "mixed": 3.669988124
+    },
+    "ccsd_seconds": {
+      "master": 63.829336933,
+      "mixed": 51.812468808
+    },
+    "ccsd_diis_seconds": {
+      "master": 0.05136035639843706,
+      "mixed": 0.05254959983593699
+    },
+    "ccsd_iteration_seconds": {
+      "master": 53.735702274140614,
+      "mixed": 41.715395096292966
+    },
+    "ccsd_replay_seconds": {
+      "master": 9.876413142,
+      "mixed": 9.89244949
+    },
+    "ccsd_update_seconds": {
+      "master": 0.00160542,
+      "mixed": 0.001476971
+    },
+    "triples_seconds": {
+      "master": 41.645268723,
+      "mixed": 41.64426501
+    },
+    "lambda_seconds": {
+      "master": 78.945867989,
+      "mixed": 79.036452954
+    },
+    "source_response_seconds": {
+      "master": 3.997646451,
+      "mixed": 3.999935425
+    },
+    "orbital_seconds": {
+      "master": 96.83323015,
+      "mixed": 96.953449465
+    },
+    "resident_jk_setup_seconds": {
+      "master": 14.873619797,
+      "mixed": 14.894023505
+    },
+    "resident_jk_seconds": {
+      "master": 0,
+      "mixed": 0
+    },
+    "resident_jk_device_seconds": {
+      "master": 0,
+      "mixed": 0
+    },
+    "z_preconditioner_setup_seconds": {
+      "master": 2.5e-07,
+      "mixed": 2.6e-07
+    },
+    "previous_endpoint_seconds": {
+      "master": 0,
+      "mixed": 0
+    },
+    "orbital_setup_seconds": {
+      "master": 15.051351975,
+      "mixed": 15.070216916
+    },
+    "orbital_reference_audit_seconds": {
+      "master": 0.263563189,
+      "mixed": 0.264543682
+    },
+    "orbital_weights_seconds": {
+      "master": 0.518334627,
+      "mixed": 0.518135638
+    },
+    "orbital_solve_seconds": {
+      "master": 3.396360755,
+      "mixed": 3.398523213
+    },
+    "orbital_independent_audit_seconds": {
+      "master": 15.470923608,
+      "mixed": 15.47694066
+    },
+    "orbital_one_electron_seconds": {
+      "master": 0.125163361,
+      "mixed": 0.125731317
+    },
+    "orbital_two_electron_seconds": {
+      "master": 62.004433702,
+      "mixed": 62.051937257
+    },
+    "orbital_jk_seconds": {
+      "master": 0,
+      "mixed": 0
+    },
+    "orbital_jk_device_seconds": {
+      "master": 0,
+      "mixed": 0
+    },
+    "orbital_screened_jk_seconds": {
+      "master": 0,
+      "mixed": 0
+    }
+  }
+}

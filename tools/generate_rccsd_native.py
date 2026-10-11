@@ -8,6 +8,7 @@ only specialization removed here is the concrete occupied/virtual extent.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import typing
 from collections import Counter
@@ -538,6 +539,11 @@ def _arena_plan(
         dimension_symbol=_dim,
         execution_nodes=_execution_nodes(program),
         retained_nodes=retained_nodes,
+        **(
+            {"storage_dtype": "float32"}
+            if all(node.spec.dtype == "float32" for node in program.live_nodes)
+            else {}
+        ),
     )
 
 
@@ -1582,8 +1588,17 @@ def _cuda_kernel(
             f"{_fraction(c)}*a{i}[flat]"
             for i, c in enumerate(node.attrs["coefficients"])
         ]
+        expression = " + ".join(terms)
+        if node.spec.dtype == "float32":
+            terms = [
+                f"__fmul_rn({_float32_native_source(_fraction(coefficient))},a{index}[flat])"
+                for index, coefficient in enumerate(node.attrs["coefficients"])
+            ]
+            expression = terms[0]
+            for term in terms[1:]:
+                expression = f"__fadd_rn({expression},{term})"
         lines += [
-            f"    const double value={' + '.join(terms)};",
+            f"    const double value={expression};",
             f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     elif node.op == "divide":
@@ -1799,7 +1814,23 @@ def _cuda_kernel(
     else:
         raise ValueError(f"unsupported native RCCSD CUDA op {node.op}")
     lines += ["  }", "}"]
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if node.spec.dtype == "float32":
+        source = _float32_native_source(source)
+    return source
+
+
+def _float32_native_source(source: str) -> str:
+    """Spell the uniform FP32 native schedule with round-to-nearest arithmetic.
+
+    The caller supplies a typed FP32 TensorIR graph; this only selects C++
+    scalar spellings, literals and CUDA intrinsics, never rewrites equations.
+    Mixed-dtype programs are refused by the native emitter instead of relying
+    on implicit pointer casts. FP64 schedules do not pass through this helper.
+    """
+    source = re.sub(r"\bdouble\b", "float", source)
+    source = re.sub(r"\b__d(mul|add|sub|div)_rn\b", r"__f\1_rn", source)
+    return re.sub(r"(?<![\w.])(\d+\.0)(?![\w.])", r"\1f", source)
 
 
 def _packed_matrix_gemm(node: typing.Any) -> tuple[str, str, str, str, str] | None:
@@ -1913,6 +1944,10 @@ def _cuda_program(
     reuse_storage_nodes: tuple[typing.Any, ...] | None = None,
     retained_arena_field: str | None = None,
 ) -> str:
+    dtypes = {node.spec.dtype for node in program.live_nodes} - {"int64"}
+    if len(dtypes) != 1 or not dtypes <= {"float32", "float64"}:
+        raise ValueError("native CUDA schedules require uniform floating storage")
+    scalar_type = "float" if dtypes == {"float32"} else "double"
     names = _prepare_program(program)
     if (reuse_plan is None) != (reuse_phase is None):
         raise ValueError("reuse emission requires both a plan and phase")
@@ -2002,7 +2037,7 @@ def _cuda_program(
         *(["  const auto q=s.q;"] if batch_dim else []),
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
-        "  auto allocate=[&](std::size_t count)->double*{double* p=arena+cursor;cursor=checked_add(cursor,count);return p;};",
+        f"  auto allocate=[&](std::size_t count)->{scalar_type}*{{{scalar_type}* p=arena+cursor;cursor=checked_add(cursor,count);return p;}};",
         *(
             [
                 f"  auto* retained_arena=s.{retained_arena_field};",
@@ -2013,7 +2048,7 @@ def _cuda_program(
             else []
         ),
         *[
-            f"  double* slot{slot}="
+            f"  {scalar_type}* slot{slot}="
             + (
                 "retain"
                 if retained_arena_field is not None and slot < len(retained)
@@ -2040,10 +2075,12 @@ def _cuda_program(
                 if input_name in input_overrides
                 else _input_access(input_name, cuda=True)
             )
-            ctype = "std::int64_t" if node.spec.dtype == "int64" else "double"
+            ctype = "std::int64_t" if node.spec.dtype == "int64" else scalar_type
             lines.append(f"  const {ctype}* {names[number]}={access};")
             continue
-        lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
+        lines.append(
+            f"  {scalar_type}* {names[number]}=slot{arena_plan.node_slots[number]};"
+        )
         if reuse_phase is not None and (
             (id(node) in invariant_ids) != (reuse_phase == "prepare")
         ):

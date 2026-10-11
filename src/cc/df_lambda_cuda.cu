@@ -257,6 +257,7 @@ struct DFLambdaActions::Impl {
       metrics.df_core_reuse_bytes = 0;
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
+      metrics.df_shared_scratch_bytes = metrics.df_scratch_avoided_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
@@ -305,6 +306,7 @@ struct DFLambdaActions::Impl {
     auto drop_audit = [&] {
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
+      metrics.df_shared_scratch_bytes = metrics.df_scratch_avoided_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
       cursor = operator_cursor;
       binding_host_bytes = operator_binding_host_bytes;
@@ -318,20 +320,28 @@ struct DFLambdaActions::Impl {
         const auto descriptors =
             generated_response::audit_contraction_host_bytes(q % batch ? 2 : 1);
         const bool replay_fit = options.df_primal_matrix_gemm && primal_virtual.fit(o, v, batch);
-        // Fresh replay and the later independent audit have disjoint lifetimes.
+        // Solver, parameter, fresh-replay and independent-audit outputs are
+        // consumed before the next stage on this owner's stream. Share their
+        // scratch lease, not their values or equations. The matrix lease is
+        // the final allocation at operator_cursor, so enlarging it cannot
+        // overwrite pinned inputs, reduced cuts, seeds or detached outputs.
         // Replay storage refusal must not refuse the existing matrix audit.
         for (const bool replay : {replay_fit, false}) {
           auto candidate = cursor;
           const auto arena_bytes =
               replay ? std::max(audit_bytes, bytes(primal_virtual.matrix_arena(o, v, batch)))
                      : audit_bytes;
-          const auto offset = reserve(candidate, arena_bytes);
+          const auto offset = staged_arena;
+          candidate = std::max(candidate, checked_add(offset, arena_bytes));
           if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
                           checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
                   options.max_bytes &&
               device_fits(candidate, metrics.df_provider_allowance_bytes)) {
             metrics.df_audit_matrix_gemm = true;
             metrics.df_audit_arena_bytes = arena_bytes;
+            metrics.df_shared_scratch_bytes = std::max(bytes(matrix_scratch_elements), arena_bytes);
+            metrics.df_scratch_avoided_bytes =
+                std::min(bytes(matrix_scratch_elements), arena_bytes);
             metrics.df_primal_matrix_gemm = replay;
             cursor = candidate;
             audit_offset = offset;

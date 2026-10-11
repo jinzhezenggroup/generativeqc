@@ -98,6 +98,8 @@ struct LambdaDiagnostic {
   const char* core_reuse_plan_hash{};
   bool df_audit_matrix_gemm{};
   std::size_t df_audit_arena_bytes{};
+  /** Shared allocation capacity and avoided separate scratch; not allocator peaks. */
+  std::size_t df_shared_scratch_bytes{}, df_scratch_avoided_bytes{};
   bool df_primal_matrix_gemm{};
   const char* audit_schedule_hash{};
   const char* shared_program_hash{};
