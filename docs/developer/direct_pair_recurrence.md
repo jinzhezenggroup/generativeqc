@@ -70,6 +70,31 @@ advances by the actual force CTA width, so narrowing a CTA does not omit the
 second half of a queue page. The existing component screening, density gates,
 radial recurrence, spin coefficients, and force scatter remain authoritative.
 
+## Bounded independent-center force responses
+
+Ordinary full-range and long-range Cartesian force components of total angular
+order seven through eleven reuse one scalar Coulomb simplex per primitive
+quartet across all independent atoms. The compiler emits this consumer in
+`direct_pair_materialized_gradient_cuda.py`; native queue traversal, screening,
+density weights and output scatter remain unchanged. It is a production default
+and requires neither a new selector nor resident primitive-pair storage.
+
+The scalar simplex extends to L+1: a Coulomb spatial response is its next
+Cartesian state. One first-center `Dual` response per Hermite axis supplies the
+opposite second-center response because pair coefficients depend only on A-B.
+Repeated atoms therefore scale the same pair response rather than rebuilding
+its geometry. The product-center response still includes both exponent-weighted
+centers. All N-1 independent atoms consume the existing Cartesian contraction
+body; translation recovers the final atom. Individual primitive and normalized
+AO coefficients are never reconstructed by dividing Gaussian factors.
+
+The private workspace is bounded by the instantiated angular order and existing
+through-f Hermite limits; no global derivative tensor or retained lease is
+introduced. The L+1 simplex must fit the existing Coulomb order bound, so order
+twelve retains forward AD. Orders zero through six retain their specialized
+owners. Short-range production requests and separately selected reachable or
+convolved derivative algebra also retain their existing consumers.
+
 ## Legacy HF and dddd qualification
 
 The internal HF/dddd qualification switch
