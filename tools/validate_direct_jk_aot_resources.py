@@ -72,7 +72,8 @@ QUALIFIED_UNIT_MODE = "stable-shards"
 QUALIFIED_STANDARD = "c++20"
 # Match the normal CMake release build: split compilation changes resources.
 QUALIFIED_SPLIT_COMPILE_THREADS = 1
-QUALIFIED_DEFINITIONS = ("GENERATIVEQC_HAS_CUDA=1",)
+# CMake's NVIDIA Release rule adds NDEBUG alongside the target definition.
+QUALIFIED_DEFINITIONS = ("NDEBUG", "GENERATIVEQC_HAS_CUDA=1")
 # Source-tree headers every production shard prelude includes; the AOT header
 # contract whose perturbation triggered issue #2101.
 PRELUDE_HEADERS = (
@@ -80,6 +81,13 @@ PRELUDE_HEADERS = (
     "runtime/compensated_atomic.cuh",
 )
 RESOURCE_FIELDS = ("REG", "STACK", "SHARED", "LOCAL")
+# These implementations construct the actual compile invocation. Their hashes
+# invalidate execution-cache entries independently of the scientific ledger:
+# changing an adapter option must not replay a cubin built with the old command.
+COMPILE_IMPLEMENTATIONS = (
+    "tools/validate_direct_jk_aot_resources.py",
+    "python/generativeqc_compiler/common/cuda_adapter.py",
+)
 
 
 class LedgerError(ValueError):
@@ -104,6 +112,21 @@ def toolchain_versions(nvcc: Path) -> dict[str, str]:
 def generator_abi() -> int:
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
     return int(payload["architectures"][QUALIFIED_ARCHITECTURE]["generator_abi"])
+
+
+def validate_production_shard_count(cmake_cache: Path) -> None:
+    """Require the configured production build to use the qualified partition."""
+    counts = re.findall(
+        r"^GENERATIVEQC_AOT_SHARDS:[^=\r\n]+=([^\r\n]*)$",
+        cmake_cache.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if counts != [str(QUALIFIED_SHARDS)]:
+        raise ValueError(
+            "production CMake cache must contain exactly one "
+            f"GENERATIVEQC_AOT_SHARDS={QUALIFIED_SHARDS}; found {counts!r}; "
+            "requalify the production shard partition deliberately"
+        )
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -274,7 +297,12 @@ def compile_shard(
 ) -> tuple[Path, Path, dict[str, Any]]:
     """Compile one shard through the verified cache launcher with a bounded
     identity-keyed object cache; successful hits require matching metadata."""
-    key = canonical_hash(identity)
+    implementation_sha256 = {
+        path: file_hash(ROOT / path) for path in COMPILE_IMPLEMENTATIONS
+    }
+    key = canonical_hash(
+        {"identity": identity, "compile_implementation_sha256": implementation_sha256}
+    )
     directory = cache / key
     directory.mkdir(parents=True, exist_ok=True)
     object_path = directory / "shard.o"
@@ -286,6 +314,7 @@ def compile_shard(
         if (
             candidate.get("status") == "pass"
             and candidate.get("identity") == identity
+            and candidate.get("compile_implementation_sha256") == implementation_sha256
             and object_path.is_file()
             and log_path.is_file()
             and candidate.get("object_hash") == file_hash(object_path)
@@ -341,6 +370,7 @@ def compile_shard(
             if compiled.timed_out
             else "NVCC compilation failed",
             "identity": identity,
+            "compile_implementation_sha256": implementation_sha256,
             "cache_key": key,
             "cache_hit": False,
             "seconds": compiled.duration_seconds,
@@ -539,6 +569,7 @@ def run_measurement(
     cache: Path,
     output: Path,
     generated_directory: Path,
+    cmake_cache: Path,
     timeout: float,
 ) -> dict[str, Any]:
     """Generate, preprocess, compile, and resource-dump the qualified shard.
@@ -548,6 +579,9 @@ def run_measurement(
     the qualified identity deliberately pins the preprocessed line markers of
     that exact path.
     """
+    # Read CMake's configured value, including -D/preset overrides, before
+    # generation or compilation. A constant alone cannot guard production drift.
+    validate_production_shard_count(cmake_cache)
     generated = generated_directory.resolve()
     shards = generate_production_shards(generated)
     shard = shards[QUALIFIED_SHARD_INDEX]
@@ -591,6 +625,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument(
+        "--cmake-cache",
+        type=Path,
+        default=ROOT / "build" / "cuda-release-sm120" / "CMakeCache.txt",
+        help="configured production CMakeCache.txt whose shard count must match",
+    )
+    parser.add_argument(
         "--generated-dir",
         type=Path,
         help=(
@@ -630,6 +670,7 @@ def main(argv: list[str] | None = None) -> int:
             cache=cache,
             output=output,
             generated_directory=args.generated_dir or output / "generated",
+            cmake_cache=args.cmake_cache,
             timeout=args.compile_timeout,
         )
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:

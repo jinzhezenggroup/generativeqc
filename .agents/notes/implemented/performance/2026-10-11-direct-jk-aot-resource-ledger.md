@@ -204,3 +204,18 @@ the existing f-shell/libxc resource-gate precedent.
   `tests/python/test_direct_jk_aot_resource_ledger.py`.
 - Gate precedent: `tools/generativeqc_validation/f_shell.py` and
   `.agents/notes/implemented/performance/2026-09-25-libxc-aot-resource-gate.md`.
+
+## Superseding source-contract repair
+
+The validator now includes CMake's NVIDIA Release `NDEBUG` definition in
+preprocessing, compilation, and the recorded flag identity. The previously
+measured split-1 ledger above did not include this macro; it remains historical
+evidence and must not be relabeled. It intentionally fails the repaired flag
+schema until an explicit production-context requalification supplies a new ledger.
+No new CUDA measurement is supplied by this source-only repair.
+
+The configured production `CMakeCache.txt` must declare the qualified eight-way
+shard partition, including preset and command-line overrides; missing, ambiguous,
+or different counts fail before generation or compilation. Separately, hashes of
+the validator and compiler adapter bind object-cache entries to the implementation
+that constructs the command, without rewriting scientific ledger identity.

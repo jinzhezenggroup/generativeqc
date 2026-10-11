@@ -413,6 +413,7 @@ class TestProductionCompile:
             assert "-O3" in command and "-std=c++20" in command
             assert "-arch=sm_120" in command and "-Xptxas=-v" in command
             assert "-DGENERATIVEQC_HAS_CUDA=1" in command
+            assert "-DNDEBUG" in command
             events.append("compile")
             pending_receipt = json.loads(
                 next((tmp_path / "cache").glob("*/compiler-cache.json")).read_text()
@@ -591,3 +592,176 @@ class TestWorkflowCache:
             "build/direct-jk-aot-cache/*/nvcc.log",
         ):
             assert path in step
+
+
+class TestCompileImplementationIdentity:
+    def test_adapter_change_misses_without_relabeling_scientific_identity(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        implementation = tmp_path / "cuda_adapter.py"
+        implementation.write_text("original command implementation\n")
+        monkeypatch.setattr(
+            validator, "COMPILE_IMPLEMENTATIONS", (str(implementation),)
+        )
+        monkeypatch.setattr(
+            validator,
+            "resolve_compiler_cache",
+            lambda timeout: CompilerCacheLauncher(
+                Path("/fake/ccache"), "ccache", "4.14"
+            ),
+        )
+        monkeypatch.setattr(
+            validator, "cache_statistics", lambda launcher: {"status": "pass"}
+        )
+        executions: list[str] = []
+
+        def compile_run(
+            self: Any, source: Path, output: Path, **kwargs: Any
+        ) -> CompileResult:
+            command_version = implementation.read_text()
+            executions.append(command_version)
+            output.write_text(command_version)
+            return CompileResult(0, False, 0.1, command_version, "")
+
+        monkeypatch.setattr(validator.CudaCompilerAdapter, "compile", compile_run)
+        identity = _identity()
+        arguments = {
+            "nvcc": Path("/fake/nvcc"),
+            "shard": tmp_path / "shard.cu",
+            "generated": tmp_path / "generated",
+            "cache": tmp_path / "cache",
+            "identity": identity,
+            "timeout": 23,
+        }
+        first_object, first_directory, first = validator.compile_shard(**arguments)
+        _, _, replay = validator.compile_shard(**arguments)
+        assert first["cache_hit"] is False and replay["cache_hit"] is True
+        assert len(executions) == 1
+
+        implementation.write_text("changed optimizer option\n")
+        second_object, second_directory, second = validator.compile_shard(**arguments)
+        assert second["cache_hit"] is False
+        assert first_directory != second_directory
+        assert first_object.read_text() == "original command implementation\n"
+        assert second_object.read_text() == "changed optimizer option\n"
+        assert first["identity"] == second["identity"] == identity
+        assert (
+            first["compile_implementation_sha256"]
+            != second["compile_implementation_sha256"]
+        )
+        assert len(executions) == 2
+
+        # Even a restored record in the current key must carry this execution
+        # identity; matching scientific inputs and object/log bytes are not enough.
+        metadata_path = second_directory / "compile.json"
+        metadata = json.loads(metadata_path.read_text())
+        del metadata["compile_implementation_sha256"]
+        metadata_path.write_text(json.dumps(metadata))
+        _, _, legacy = validator.compile_shard(**arguments)
+        assert legacy["cache_hit"] is False
+        assert len(executions) == 3
+
+    def test_cache_identity_covers_both_command_builders(self) -> None:
+        assert (
+            "tools/validate_direct_jk_aot_resources.py"
+            in validator.COMPILE_IMPLEMENTATIONS
+        )
+        assert (
+            "python/generativeqc_compiler/common/cuda_adapter.py"
+            in validator.COMPILE_IMPLEMENTATIONS
+        )
+
+
+class TestProductionContextBinding:
+    def test_release_definition_is_in_preprocessing_and_flag_identity(self) -> None:
+        command = validator._preprocess_command(
+            Path("/fake/nvcc"), Path("shard.cu"), Path("generated")
+        )
+        assert "-DNDEBUG" in command
+        assert "NDEBUG" in validator.qualified_flags()["definitions"]
+
+    def test_historical_ledger_without_release_definition_fails_closed(self) -> None:
+        ledger = _ledger()
+        ledger["flags"]["definitions"].remove("NDEBUG")
+        with pytest.raises(validator.LedgerError, match="flags.definitions"):
+            validator.validate_ledger(ledger)
+
+    @pytest.mark.parametrize("cache_type", ["STRING", "UNINITIALIZED"])
+    def test_accepts_configured_qualified_shard_count(
+        self, tmp_path: Path, cache_type: str
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(
+            f"// production configuration\nGENERATIVEQC_AOT_SHARDS:{cache_type}=8\n"
+        )
+        validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize(
+        "contents",
+        [
+            "",
+            "// GENERATIVEQC_AOT_SHARDS:STRING=8\n",
+            "GENERATIVEQC_AOT_SHARDS:STRING=10\n",
+            "GENERATIVEQC_AOT_SHARDS:STRING=0\n",
+            "GENERATIVEQC_AOT_SHARDS:STRING=8;10\n",
+            "GENERATIVEQC_AOT_SHARDS:STRING=8\nGENERATIVEQC_AOT_SHARDS:STRING=8\n",
+        ],
+    )
+    def test_bad_config_fails_before_generation_or_compilation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, contents: str
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(contents)
+
+        def unexpected_generation(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("production mismatch must fail before generation/compilation")
+
+        monkeypatch.setattr(
+            validator, "generate_production_shards", unexpected_generation
+        )
+        with pytest.raises(ValueError, match="GENERATIVEQC_AOT_SHARDS=8"):
+            validator.run_measurement(
+                nvcc=Path("/fake/nvcc"),
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=tmp_path / "generated",
+                cmake_cache=cache,
+                timeout=23,
+            )
+
+    def test_missing_config_is_not_silently_assumed(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError):
+            validator.validate_production_shard_count(tmp_path / "CMakeCache.txt")
+
+    def test_cli_reports_config_override_failure(self, tmp_path: Path) -> None:
+        nvcc = tmp_path / "nvcc"
+        nvcc.touch()
+        configured = tmp_path / "configured.txt"
+        configured.write_text("GENERATIVEQC_AOT_SHARDS:STRING=10\n")
+        output = tmp_path / "report"
+        assert (
+            validator.main(
+                [
+                    "--nvcc",
+                    str(nvcc),
+                    "--cache",
+                    str(tmp_path / "cache"),
+                    "--output",
+                    str(output),
+                    "--cmake-cache",
+                    str(configured),
+                ]
+            )
+            == 1
+        )
+        report = json.loads((output / "report.json").read_text())
+        assert report["status"] == "fail" and report["measurement"] is None
+        assert "GENERATIVEQC_AOT_SHARDS=8" in report["failures"][0]
+
+    def test_workflow_binds_the_configured_production_cache(self) -> None:
+        workflow = (validator.ROOT / ".github/workflows/ci.yml").read_text()
+        step = workflow.split(
+            "- name: Qualify direct J/K AOT static resources (shard 6)", 1
+        )[1].split("- name:", 1)[0]
+        assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
+        assert "--record-output" not in step
