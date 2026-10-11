@@ -98,3 +98,28 @@ collection setup and unrelated frozen-gzip header comparisons remain in the
 receipt. No acceptance gate or retained evidence bytes are weakened. DF Lambda,
 HF/CPKS/MP2 residency, prepared leases/ragged recovery and the historical finite
 13-AO cold-JIT gate remain unfinished; this receipt does not close #932.
+
+## Master follow-up replay
+
+PR #2272 was externally merged while the resident slice was being qualified.
+The [follow-up receipt](qualification-resident-integration.json) freezes
+`b9617de02ab3664fc24532b742c88ac647e4fb0b` on master `f90d79fcc`. Integration
+retains the upstream default-off serial-scratch candidate and the separate
+default-off resident-vector candidate; the earlier source receipt is not
+relabeled as qualification of this later tree.
+
+Rebuilt master bindings pass 131 focused tests, three native CPU CTests, Sphinx
+and hooks. Job 7595 passes native Lambda and complete E+F pairs, but its initial
+existing-regression attempt correctly rejects stale stationary profile
+identities. Supported CMake targets regenerate current manifests; unchanged
+compiled s/p kernels replay by artifact identity. Job 7601 then passes all 91
+existing CUDA tests without skips. Neither contract validation nor force
+requests are disabled to obtain that result.
+
+Finite Slurm job 7596 passes six resident E+F calls under Compute Sanitizer:
+zero errors and zero leaked bytes. Separate Nsight Systems baseline/resident
+processes each trace six full E+F calls. Both have a 12,716,112-byte peak of
+simultaneously-live traced dynamic device allocations and balance to zero.
+Resident transfer, synchronization and kernel counts increase for this tiny
+domain. This is a CUDA allocation-event census, not total physical VRAM,
+module/static storage or host-heap accounting, and does not promote a default.
