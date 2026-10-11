@@ -969,7 +969,7 @@ def test_native_direct_spd_force_matches_independent_pyscf(
     calc = calculator(method, basis=basis_set, max_iterations=200)
     with (
         calc.prepare_batch([atoms]) as batch,
-        NativeAO(atoms, basis=basis_set) as basis,
+        NativeAO(atoms, basis=basis_set, representation=representation) as basis,
     ):
         assert batch._native_dft_force_eligible()
         result = batch.execute(strict=True, properties=("energy", "forces")).items[0]
