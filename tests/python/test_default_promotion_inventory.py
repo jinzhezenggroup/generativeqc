@@ -47,6 +47,52 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 @pytest.mark.parametrize(
     "relative,before,after",
     [
+        (
+            "src/cc/df_triples_cuda.cu",
+            "p.panel_capacity == 3 && execution_plan.pair_pointer_bytes()",
+            "p.panel_capacity >= 2 && execution_plan.pair_pointer_bytes()",
+        ),
+        (
+            "src/cc/df_triples_cuda.cu",
+            "if (paired.total <= max_bytes) p = paired;",
+            "p = paired;",
+        ),
+        (
+            "src/cc/df_triples_cuda.cu",
+            "std::array<std::size_t, 6> seed_permutations{};",
+            "std::array<std::size_t, 2> seed_permutations{};",
+        ),
+        (
+            "tools/generate_df_occupied_triples.py",
+            "return precision.arithmetic.is_strict_fp64() &&",
+            "return true &&",
+        ),
+        (
+            "tools/generate_df_occupied_triples.py",
+            "second_output!=first_output+v3",
+            "second_output==nullptr",
+        ),
+    ],
+)
+def test_independent_pair_default_refuses_domain_or_capacity_drift(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Pair admission cannot widen or silently lose complete fallback groups."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "independent-pair admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
         ("src/scf/cuda/reference_eri_policy.hpp", "!value ||", "false ||"),
         ("src/scf/cuda/reference_eri_policy.hpp", "if (!cold_reference)", "if (false)"),
         (
@@ -179,6 +225,49 @@ def test_native_ks_final_validation_default_is_audited(
     source.write_text(original.replace(before, after))
     assert any(
         "KS final-validation default" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/dft/cuda_spd_force_policy.hpp", "aos >= 384", "aos >= 17"),
+        ("src/dft/cuda_spd_force_policy.hpp", "spins == 1", "spins <= 2"),
+        (
+            "src/scf/cuda/direct_spd_force_schedule.hpp",
+            "if (selector.empty()) return DirectSpdForceSchedule::Automatic;",
+            "if (selector.empty()) return DirectSpdForceSchedule::SpatialReuse;",
+        ),
+        (
+            "src/scf/cuda/direct_spd_force_schedule.hpp",
+            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse",
+            "return true ? DirectSpdForceSchedule::SpatialReuse",
+        ),
+        (
+            "src/methods/dft_method.cpp",
+            "!execution_plan_.d4_correction",
+            "true",
+        ),
+        (
+            "src/methods/dft_method.cpp",
+            "options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "options_.precision_mode == GENERATIVEQC_PRECISION_AUTO",
+        ),
+    ],
+)
+def test_spatial_force_default_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Widening automatic method admission requires a new scoped decision."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Spatial force default" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 

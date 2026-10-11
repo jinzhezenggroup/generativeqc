@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from . import _generated_methods as _method_manifest
-from . import _native, profiles
+from . import _native, _native_cli, profiles
 
 
 def _public_method_rows() -> tuple[dict[str, object], ...]:
@@ -102,6 +102,10 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also list default-allow automatic Libxc semilocal selectors",
     )
+    run = commands.add_parser(
+        "run", help="run the installed Python-free native calculation endpoint"
+    )
+    run.add_argument("native_arguments", nargs=argparse.REMAINDER)
     resources = commands.add_parser(
         "resources",
         help="dry-run HF/KS resource estimates without scientific execution",
@@ -197,6 +201,10 @@ def parser() -> argparse.ArgumentParser:
     )
     export.add_argument("directory", type=Path)
     export.add_argument("destination", type=Path)
+    validate = operations.add_parser(
+        "validate", help="validate a bundle without probing a GPU"
+    )
+    validate.add_argument("directory", type=Path)
     operations.add_parser("show", help="show stored profiles without probing hardware")
     operations.add_parser(
         "clear", help="deactivate profiles; retain binaries used by live processes"
@@ -209,6 +217,12 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     """Leave the working profile intact after errors; diagnostics remain actionable."""
+    try:
+        if (native_status := _native_cli.dispatch(sys.argv[1:])) is not None:
+            return native_status
+    except (OSError, RuntimeError) as error:
+        print(f"generativeqc: {error}", file=sys.stderr)
+        return 1
     arguments = parser()
     args = arguments.parse_args()
     try:
@@ -296,6 +310,14 @@ def main() -> int:
         elif operation == "clear":
             profiles.clear_profiles()
             print("Local profiles deactivated.")
+        elif operation == "validate":
+            profile = profiles.validate_bundle(args.directory)
+            print(
+                json.dumps(
+                    {"valid": True, "identity": profiles.canonical_hash(profile)},
+                    indent=2,
+                )
+            )
         elif operation == "export":
             profiles.export_bundle(args.directory, args.destination)
             print(args.destination)

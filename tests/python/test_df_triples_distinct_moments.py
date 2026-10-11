@@ -20,6 +20,7 @@ from tools.generate_df_occupied_triples import (
     cuda_source,
     fock_cuda_source,
     header,
+    native_execution_header,
     response_cuda_source,
 )
 
@@ -243,8 +244,8 @@ def test_all_equal_tile_still_checks_nonfinite_moments(emitted_probe: Any) -> No
     assert error.value != 0
 
 
-def test_legacy_energy_types_response_and_fock_sources_are_unchanged() -> None:
-    """Hashes pin the pre-alias compiler output, not a second copied formula."""
+def test_legacy_math_sources_and_paired_execution_header_are_pinned() -> None:
+    """Pin unchanged math separately from the reviewed prepared-pair binding."""
     source = cuda_source()
     original = source[
         source.index("__global__ void tile_kernel") : source.index(
@@ -259,9 +260,20 @@ def test_legacy_energy_types_response_and_fock_sources_are_unchanged() -> None:
     start = generated_header.index("/** Alias only equal physical occupied tuples;")
     end = generated_header.index("struct Inputs", start)
     legacy_header = generated_header[:start] + generated_header[end:]
+    binding = native_execution_header()
+    assert legacy_header.count(binding) == 1
+    mathematical_header = legacy_header.replace(binding, "", 1)
+    # This hash is identical to the pre-pairing master header with only its
+    # native execution binding removed; no mathematical source is normalized.
+    assert (
+        hashlib.sha256(mathematical_header.encode()).hexdigest()
+        == "3f6542d55ea65f13db2b993b1c7d9f40572b866f82ec966541094002d059b355"
+    )
+    # Also pin the complete current header, including the intentionally added
+    # prepared-pair binding and its execution identity.
     assert (
         hashlib.sha256(legacy_header.encode()).hexdigest()
-        == "00f7d5f4fd5713857a08df8d23949f2446b2c974ad8a93bf6358a5064319ae42"
+        == "9872d3a585415f6b76b4e8d6aae36bfb3346a7e84c262a54407cbcccf0b3a98d"
     )
     assert (
         hashlib.sha256(response_cuda_source().encode()).hexdigest()

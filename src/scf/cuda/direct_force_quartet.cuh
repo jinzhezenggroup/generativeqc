@@ -25,7 +25,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-template <bool Unrestricted, unsigned AngularOrder, bool SeparateSources = false>
+template <bool Unrestricted, unsigned AngularOrder, bool SeparateSources = false,
+          bool SpatialReuse = false>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scaled(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
@@ -33,6 +34,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
     double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
+  static_assert(!SpatialReuse || AngularOrder == 6U);
   static_assert(AngularOrder >= 2U, "order-0/1 Direct force uses generated exact shell tasks");
   static_assert(AngularOrder != 3U,
                 "order-three Direct force is owned by generated shell-task workers");
@@ -125,6 +127,18 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     const unsigned unique_center_count =
         direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
     double explicit_unique_gradient[4][3]{};
+    bool shared_response = false;
+    if constexpr (AngularOrder >= 7U && AngularOrder < kMaximumCoulombOrder) {
+      if ((batch.direct_coulomb_reachable & 2U) == 0U &&
+          (batch.direct_hermite_convolution & 2U) == 0U) {
+        const auto gradient = contracted_direct_shared_response_gradient<AngularOrder>(
+            batch, system, i, j, k, l, unique_center_atoms, unique_center_count);
+        for (unsigned center = 0; center + 1U < unique_center_count; ++center)
+          for (unsigned axis = 0; axis < 3U; ++axis)
+            explicit_unique_gradient[center][axis] = gradient.center[center][axis];
+        shared_response = true;
+      }
+    }
     if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
       CartesianQuartetGradient explicit_gradient{};
       if constexpr (AngularOrder == 2) {
@@ -140,7 +154,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
       } else {
-        explicit_gradient = contracted_eri_cartesian_source_order6_gradient(
+        explicit_gradient = contracted_eri_cartesian_source_order6_gradient<false, SpatialReuse>(
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
       }
@@ -164,6 +178,10 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
       double derivative_y = 0.0;
       double derivative_z = 0.0;
       if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
+        derivative_x = explicit_unique_gradient[center][0];
+        derivative_y = explicit_unique_gradient[center][1];
+        derivative_z = explicit_unique_gradient[center][2];
+      } else if (shared_response) {
         derivative_x = explicit_unique_gradient[center][0];
         derivative_y = explicit_unique_gradient[center][1];
         derivative_z = explicit_unique_gradient[center][2];
@@ -344,6 +362,20 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
   }
 
   double derivative_sum[3]{};
+  if constexpr (AngularOrder >= 7U && AngularOrder < kMaximumCoulombOrder &&
+                (PackagedShellClass < 0 ||
+                 PackagedRange == generativeqc::integrals::CoulombRange::Long)) {
+    if (range == generativeqc::integrals::CoulombRange::Long &&
+        (batch.direct_coulomb_reachable & 2U) == 0U &&
+        (batch.direct_hermite_convolution & 2U) == 0U) {
+      const auto gradient = contracted_direct_shared_response_gradient<AngularOrder>(
+          batch, system, i, j, k, l, unique_center_atoms, unique_center_count, range, omega);
+      for (unsigned center = 0; center + 1U < unique_center_count; ++center)
+        for (unsigned axis = 0; axis < 3U; ++axis)
+          explicit_unique_gradient[center][axis] = gradient.center[center][axis];
+      shared_long_range = true;
+    }
+  }
   for (unsigned center = 0; center + 1U < unique_center_count; ++center) {
     const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[center]) * 3;
     Dual3 derivative{};

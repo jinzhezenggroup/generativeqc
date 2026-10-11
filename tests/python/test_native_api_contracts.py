@@ -83,7 +83,7 @@ class NativeContractTests(unittest.TestCase):
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
         self.assertEqual(sum(d.kind == "c-function" for d in declarations), 83)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 11)
-        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 43)
+        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 44)
         self.assertEqual(
             (ROOT / REFERENCE).read_text(encoding="utf-8"), render(declarations)
         )
@@ -207,6 +207,10 @@ class NativeContractTests(unittest.TestCase):
         self.assertNotEqual(
             anchors["generativeqc_batch_execute"],
             anchors["generativeqc::Batch::execute"],
+        )
+        self.assertNotEqual(
+            anchors["generativeqc::System::System"],
+            anchors["generativeqc::System::System-ecp"],
         )
 
     def test_signature_change_requires_review(self) -> None:
