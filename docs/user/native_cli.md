@@ -335,7 +335,7 @@ native capability: preparation remains authoritative.
 
 ### Context-qualified native DFT analytic forces
 
-A narrow **CPU, Direct or density-fitted, all-electron RKS PBE/PBE0** force path composes
+A bounded **CPU, Direct or density-fitted, all-electron RKS PBE/PBE0/B3LYP** force path composes
 the same prepared electronic state as the energy route with the native one-
 and two-electron response providers, generated XC point derivatives, the
 moving molecular grid/Becke partition derivative and nuclear repulsion:
@@ -348,14 +348,14 @@ generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
 Use `--density-fitting none` for the exact Direct source instead. Its packaged
 derivative and work-envelope prerequisites are documented in the
 [C++ SDK derivative contract](native_cpp.md#density-fitting-and-derivative-boundary).
-The generated **PBE0-RKS** composition can use either route only when its
+The generated **PBE0-RKS and B3LYP-RKS** compositions can use either route only when their
 prepared full-range exact-exchange **and** Coulomb terms admit the corresponding
-native derivative provider. Its H2/STO-3G native CLI analytic
-force is independently checked against central differences of fully
+native derivative provider. Their H2/STO-3G native CLI analytic
+forces are independently checked against central differences of fully
 reconverged molecular energies at displaced geometries, while the C++ SDK
 test checks the exact prepared force-capability contract and translation
 invariance. These tests are a narrow admission gate, not evidence of general
-PBE0 gradients across bases, spins or backends. The installed C++ SDK queries the
+hybrid gradients across bases, spins or backends. The installed C++ SDK queries the
 actual prepared context through
 `generativeqc_calculation_get_supported_properties_v1`; the generic method
 registry remains energy-only because it cannot promise forces for every
@@ -365,7 +365,7 @@ rather than the global method manifest to test this narrow admission.
 This is not support for native CUDA DFT forces, UKS,
 r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
 requests reject before execution and do not return a partial derivative.
-Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
+Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0/B3LYP
 RKS force consumer only when every member has a qualified prepared
 context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
 native force capabilities and reuses this exact batch consumer when every
