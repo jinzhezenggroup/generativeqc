@@ -701,6 +701,7 @@ def cache_statistics(launcher: CompilerCacheLauncher) -> dict[str, Any]:
 def qualified_ccache_policy(working_directory: Path) -> dict[str, str]:
     return {
         "base_dir": str(working_directory.resolve()),
+        "compiler": "",
         "compiler_check": "mtime",
         "direct_mode": "true",
         "disable": "false",

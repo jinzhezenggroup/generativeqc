@@ -680,6 +680,7 @@ class TestProductionCompile:
         "field,value",
         [
             ("disable", "true"),
+            ("compiler", "/other/nvcc"),
             ("compiler_check", "none"),
             ("ignore_options", "-O*"),
             ("sloppiness", "time_macros"),
