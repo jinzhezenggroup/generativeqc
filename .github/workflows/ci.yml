@@ -69,79 +69,14 @@ jobs:
           echo "active=true" >> "${GITHUB_OUTPUT}"
 
   master-cpu-cache:
-    name: Seed CPU ccache (${{ matrix.compiler }}, ${{ matrix.mode }})
+    name: Seed shared Linux CPU ccache (GCC, coverage, Clang, Python)
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    # GCC plain master cache seeding can reach its final link tasks just past 8m.
-    # Give that matrix entry headroom without raising clang or coverage budgets.
-    timeout-minutes: ${{ matrix.mode == 'coverage' && 10 || matrix.compiler == 'gcc' && 12 || 8 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [gcc, clang]
-        mode: [plain]
-        include:
-          - compiler: gcc
-            mode: coverage
+    # One master producer fills all CPU compiler/flag variants before publishing.
+    # The cache key is a transport snapshot; ccache itself keys compiler and flags.
+    timeout-minutes: 55
     runs-on: ubuntu-24.04
     env:
-      CCACHE_MAXSIZE: 1G
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install ccache 4.14
-        run: |
-          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
-            --output "/tmp/${archive}" \
-            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
-          tar -xJf "/tmp/${archive}" -C /tmp
-          sudo install -m 0755 \
-            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
-            /usr/local/bin/ccache
-      - name: Restore CPU ccache
-        id: master_cpu_ccache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ccache
-          key: ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.mode }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
-          restore-keys: |
-            ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.mode }}-
-      - name: Install native CLI dependencies
-        uses: ./.github/actions/install-native-cli-deps
-      - name: Build CPU cache seed
-        env:
-          CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
-          # Coverage objects cannot reuse the ordinary GCC seed. Match PR flags.
-          COVERAGE_COMPILE_FLAGS: ${{ matrix.mode == 'coverage' && '-fprofile-arcs -ftest-coverage -fprofile-update=atomic' || '' }}
-          COVERAGE_LINK_FLAGS: ${{ matrix.mode == 'coverage' && '--coverage' || '' }}
-        run: |
-          ccache --zero-stats
-          cmake -S . -B build -G Ninja \
-            -DGENERATIVEQC_ENABLE_CUDA=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DGENERATIVEQC_COMPILER_CACHE=ccache \
-            -DCMAKE_CXX_FLAGS="${COVERAGE_COMPILE_FLAGS}" \
-            -DCMAKE_EXE_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}" \
-            -DCMAKE_SHARED_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
-          cmake --build build --parallel
-          ccache --show-stats
-      - name: Save CPU ccache
-        if: steps.master_cpu_ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ccache
-          key: ${{ steps.master_cpu_ccache.outputs.cache-primary-key }}
-
-  master-python-cache:
-    name: Seed Python native ccache
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    timeout-minutes: 10
-    runs-on: ubuntu-24.04
-    env:
-      CCACHE_MAXSIZE: 1G
-      GENERATIVEQC_ENABLE_CUDA: "OFF"
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -153,7 +88,7 @@ jobs:
           version: "0.10.7"
           python-version: "3.11"
           enable-cache: true
-          cache-suffix: "python-cache-seed-v1"
+          cache-suffix: "cpu-compiler-seed-v1"
           prune-cache: true
       - name: Install ccache 4.14
         run: |
@@ -165,15 +100,39 @@ jobs:
           sudo install -m 0755 \
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
-      - name: Restore Python-build ccache
-        id: master_python_ccache
+      - name: Restore shared CPU ccache
+        id: master_cpu_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-python-v2-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
-            ccache-python-v2-
-            ccache-python-
+            ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
+      - name: Compile GCC, instrumented GCC, and Clang
+        run: |
+          set -euo pipefail
+          ccache --zero-stats
+          for mode in gcc-plain gcc-coverage clang-plain; do
+            compiler=g++
+            compile_flags=""
+            link_flags=""
+            if [[ "$mode" == "clang-plain" ]]; then
+              compiler=clang++
+            elif [[ "$mode" == "gcc-coverage" ]]; then
+              compile_flags="-fprofile-arcs -ftest-coverage -fprofile-update=atomic"
+              link_flags="--coverage"
+            fi
+            CXX="$compiler" cmake -S . -B "build-seed-$mode" -G Ninja \
+              -DGENERATIVEQC_ENABLE_CUDA=OFF \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DGENERATIVEQC_COMPILER_CACHE=ccache \
+              -DCMAKE_CXX_FLAGS="$compile_flags" \
+              -DCMAKE_EXE_LINKER_FLAGS="$link_flags" \
+              -DCMAKE_SHARED_LINKER_FLAGS="$link_flags"
+            cmake --build "build-seed-$mode" --parallel
+          done
       - name: Prepare Python native cache seed
         run: |
           uv venv --python 3.11
@@ -192,12 +151,9 @@ jobs:
           PY_INNER
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
-      - name: Install native CLI dependencies
-        uses: ./.github/actions/install-native-cli-deps
       - name: Build Python native cache seed
         run: |
-          ccache --zero-stats
-          cmake -S . -B build -G Ninja \
+          cmake -S . -B build-seed-python -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
             -DGENERATIVEQC_BUILD_TESTS=OFF \
             -DGENERATIVEQC_PYTHON_WHEEL=ON \
@@ -206,14 +162,16 @@ jobs:
             -DPython3_EXECUTABLE="$PWD/.venv/bin/python" \
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
-          cmake --build build --parallel
+          cmake --build build-seed-python --parallel
           ccache --show-stats
-      - name: Save Python-build ccache
-        if: steps.master_python_ccache.outputs.cache-hit != 'true'
+      - name: Save complete CPU compiler cache
+        if: steps.master_cpu_ccache.outputs.cache-hit != 'true'
+        continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ${{ steps.master_python_ccache.outputs.cache-primary-key }}
+          key: ${{ steps.master_cpu_ccache.outputs.cache-primary-key }}
+
   cpu:
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
@@ -229,7 +187,7 @@ jobs:
       # Keep each compiler cache bounded so both matrix jobs can share the
       # repository's Actions cache quota. Compiler identity and flags remain
       # part of ccache's own key, so a miss affects speed rather than validity.
-      CCACHE_MAXSIZE: 1G
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -248,14 +206,14 @@ jobs:
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
           ccache --version
-      - name: Restore ccache
+      - name: Restore shared Linux CPU ccache (CPU CTest)
         id: cpu_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 'coverage' || 'plain' }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
-            ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 'coverage' || 'plain' }}-
+            ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Install native CLI dependencies
@@ -280,12 +238,6 @@ jobs:
           -DCMAKE_SHARED_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
       - name: Build
         run: cmake --build build --parallel
-      - name: Save ccache immediately after build
-        if: github.event_name != 'merge_group' && steps.cpu_ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ccache
-          key: ${{ steps.cpu_ccache.outputs.cache-primary-key }}
       - name: Show ccache statistics
         run: ccache --show-stats
       - name: Test
@@ -835,7 +787,7 @@ jobs:
     # Keep the full test-step ceilings and leave setup/cache-save headroom.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || 40 }}
     env:
-      CCACHE_MAXSIZE: 1G
+      CCACHE_MAXSIZE: 2G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those
       # libraries single-threaded so pytest-xdist owns the job-level parallelism.
       OMP_NUM_THREADS: 1
@@ -870,15 +822,14 @@ jobs:
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
           ccache --version
-      - name: Restore ccache
+      - name: Restore shared Linux CPU ccache (Python native)
         id: python_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-python-v2-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
-            ccache-python-v2-
-            ccache-python-
+            ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Prepare CPU Python test environment
@@ -947,12 +898,6 @@ jobs:
           cmake --build build --parallel
       # The seven Python shards build the same native library. Stable refs may
       # publish it, while ephemeral merge-group refs remain read-only consumers.
-      - name: Save Python-build ccache immediately
-        if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.python_ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ccache
-          key: ${{ steps.python_ccache.outputs.cache-primary-key }}
       - name: Install GenerativeQC editable package
         run: |
           # Dependencies and build requirements are already present. Reuse the
@@ -988,24 +933,11 @@ jobs:
         run: ccache --show-stats
       # Probe caches are useful only for shards that compile native probes.
       # Merge-group refs are ephemeral, so they restore but never publish caches.
-      - name: Restore native Python probes
-        id: python_probe_ccache
-        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ccache-python-probes
-          key: ccache-python-probes-v2-${{ matrix.shard }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
-          restore-keys: |
-            ccache-python-probes-v2-${{ matrix.shard }}-
+
       - name: Reset native probe ccache statistics
-        env:
-          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
       - name: Prepare bounded native diagnostics
         if: matrix.shard == 'core-b'
-        env:
-          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
-          CCACHE_MAXSIZE: 256M
         run: |
           ccache --version
           ccache cc -std=c11 -fPIC -O2 -Wall -Wextra -Werror \
@@ -1019,8 +951,6 @@ jobs:
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
-          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
-          CCACHE_MAXSIZE: 256M
         run: |
           export GENERATIVEQC_CI_SHARD="${{ matrix.shard }}"
           # Selection is sourced into this shell so its arrays flow into pytest.
@@ -1043,18 +973,8 @@ jobs:
             "${extra_args[@]}"
       # ccache only retains successful compiler outputs, even if a later test
       # fails or times out. Partial snapshots must not freeze the complete key.
-      - name: Save native Python probes
-        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != ''
-        timeout-minutes: 2
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/ccache-python-probes
-          key: ${{ steps.python_tests.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key || format('{0}-partial-{1}-{2}', steps.python_probe_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
       - name: Show post-test ccache statistics
         if: always()
-        env:
-          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
-          CCACHE_MAXSIZE: 256M
         run: ccache --show-stats
       - name: Preserve transient benchmark/debug artifacts on failure
         if: failure()
@@ -1093,7 +1013,7 @@ jobs:
     env:
       # Non-PR events have no selector step to initialize the setup guard.
       GENERATIVEQC_CODSPEED_RUN: "1"
-      CCACHE_MAXSIZE: 1G
+      CCACHE_MAXSIZE: 2G
       OMP_NUM_THREADS: 1
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
@@ -1144,16 +1064,14 @@ jobs:
           sudo install -m 0755 \
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
-      - name: Restore CPU benchmark ccache
+      - name: Restore shared Linux CPU ccache (CodSpeed)
         id: benchmark_ccache
-        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-cpu-benchmark-v2-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
-            ccache-cpu-benchmark-v2-
-            ccache-cpu-benchmark-
+            ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Reset CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
@@ -1168,12 +1086,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build-benchmark --target generativeqc --parallel
-      - name: Save CPU benchmark ccache after build
-        if: env.GENERATIVEQC_CODSPEED_RUN != '0' && steps.benchmark_ccache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ccache
-          key: ${{ steps.benchmark_ccache.outputs.cache-primary-key }}
       - name: Show CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --show-stats
