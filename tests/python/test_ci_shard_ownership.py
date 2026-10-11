@@ -1,8 +1,8 @@
 """Exercise the real CI shell selection without building or running workloads."""
 
+import os
 import shutil
 import subprocess
-import textwrap
 from collections import Counter
 from pathlib import Path
 
@@ -16,16 +16,20 @@ def _selection(event: str, shard: str) -> tuple[str, list[str], list[str]]:
     bash = shutil.which("bash")
     if bash is None:
         pytest.skip("CI selection uses Bash")
-    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    step = source.split("- name: Run Python tests with coverage", 1)[1]
-    body = step.split("        run: |\n", 1)[1]
-    body = body.split("          .venv/bin/python -m pytest", 1)[0]
-    script = textwrap.dedent(body)
-    script = script.replace("${{ github.event_name }}", event)
-    script = script.replace("${{ matrix.shard }}", shard)
-    script += '\nprintf "%s\\0" "$dist_mode" "${test_targets[@]}" --extra-- "${extra_args[@]}"\n'
+    selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
+    assert selector.is_file()
+    script = "source .github/scripts/ci_select_python_shard.sh\n"
+    script += 'printf "%s\\0" "$dist_mode" "${test_targets[@]}" --extra-- "${extra_args[@]}"\n'
     result = subprocess.run(
-        [bash, "-eu", "-c", script], check=True, capture_output=True, cwd=ROOT
+        [bash, "-eu", "-c", script],
+        check=True,
+        capture_output=True,
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "GITHUB_EVENT_NAME": event,
+            "GENERATIVEQC_CI_SHARD": shard,
+        },
     )
     values = result.stdout.decode().split("\0")[:-1]
     boundary = values.index("--extra--")
@@ -132,5 +136,6 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert '--junitxml=".artifacts/pytest-${{ matrix.shard }}.xml"' in source
     assert "path: .artifacts/" in source
+    assert "source .github/scripts/ci_select_python_shard.sh" in source
     assert 'pytest "${test_targets[@]}" -v' in source
     assert "-o faulthandler_timeout=900" in source
