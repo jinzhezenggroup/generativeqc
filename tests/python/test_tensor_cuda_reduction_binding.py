@@ -276,6 +276,24 @@ def test_cached_binding_index_cannot_bypass_validation() -> None:
         bound.lowering_by_step[index] = binding
 
 
+def test_binding_pairs_cannot_mutate_plan_after_validation() -> None:
+    plan = _plan()
+    index, cub = qualification_reduction_plan(plan).lowering_bindings[0]
+    _, generated = qualification_reduction_plan(
+        plan, implementation="generated"
+    ).lowering_bindings[0]
+    pair = [index, cub]
+    pairs = [pair]
+    bound = replace(plan, lowering_bindings=pairs)
+    source, identity = emit_cuda(bound), bound.identity
+    pair[1] = generated
+    pairs.clear()
+    assert bound.lowering_bindings == ((index, cub),)
+    assert bound.lowering_by_step[index] == cub
+    assert bound.identity == identity
+    assert emit_cuda(bound) == source
+
+
 def test_qualification_compile_cli_keeps_checkout_pythonpath_contract() -> None:
     root = Path(__file__).resolve().parents[2]
     result = subprocess.run(

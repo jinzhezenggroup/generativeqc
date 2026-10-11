@@ -9,7 +9,7 @@ resource measurements or grounds for performance promotion.
 from __future__ import annotations
 
 import typing
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from itertools import combinations, islice, product
 from math import prod
 
@@ -566,6 +566,8 @@ class ScheduleCandidate:
         }
         if self.plan is not None:
             row.update(plan=self.plan.to_payload(), plan_identity=self.plan.identity)
+            if self.plan.lowering_bindings:
+                row["lowering"] = tensor_lowering_diagnostics(self.plan)
         if self.reason is not None:
             row["reason"] = self.reason
         if self.estimates is not None:
@@ -593,8 +595,16 @@ def plan_schedule_search(
     limits: typing.Any = DEFAULT_SEARCH_LIMITS,
     *,
     precision_programs: typing.Any = None,
+    prepare_lowering: typing.Callable[[TensorPlan], TensorPlan] | None = None,
 ) -> typing.Any:
-    """Plan, deduplicate and statically prune without compiling or allocating."""
+    """Plan, deduplicate and statically prune without compiling or allocating.
+
+    An optional pure preparation callback may install already-admitted lowering
+    recipes after semantic planning. It must not probe, compile, allocate, or
+    change any plan field other than lowering_bindings. Implementations remain
+    absent from scientific schedules, while concrete recipes precede executable
+    deduplication and resource checks.
+    """
     if not isinstance(limits, TensorSearchLimits):
         raise TypeError("limits must be TensorSearchLimits")
     schedules = tuple(islice(schedules, limits.maximum_candidates + 1))
@@ -643,6 +653,16 @@ def plan_schedule_search(
                     library_bytes=baseline.library_bytes,
                     provider_bytes=baseline.provider_bytes,
                 )
+                if prepare_lowering is not None:
+                    prepared = prepare_lowering(plan)
+                    if (
+                        not isinstance(prepared, TensorPlan)
+                        or replace(prepared, lowering_bindings=()) != plan
+                    ):
+                        raise ValueError(
+                            "lowering preparation may only install plan bindings"
+                        )
+                    plan = prepared
             except ValueError as error:
                 candidates.append(
                     ScheduleCandidate(

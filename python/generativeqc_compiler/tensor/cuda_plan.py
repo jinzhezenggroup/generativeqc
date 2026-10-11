@@ -243,7 +243,11 @@ class TensorPlan:
     )
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "lowering_bindings", tuple(self.lowering_bindings))
+        object.__setattr__(
+            self,
+            "lowering_bindings",
+            tuple((index, binding) for index, binding in self.lowering_bindings),
+        )
         if self.lowering_bindings:
             from .cuda_providers import validate_reduction_bindings
 

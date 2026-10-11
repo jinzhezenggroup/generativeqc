@@ -14,8 +14,6 @@ import hashlib
 import json
 import os
 import platform
-import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -45,7 +43,6 @@ from generativeqc_compiler.common.provenance import (
     atomic_json,
     canonical_hash,
     file_hash,
-    toolchain_identity,
 )
 from generativeqc_compiler.common.specialization import (
     CompilationIdentity,
@@ -55,6 +52,7 @@ from generativeqc_compiler.common.specialization import (
     WorkloadSignature,
 )
 
+from .cuda_compiler_identity import compiler_dependency_facts
 from .cuda_dtype import compile_options, scalar_type, symmetry_tolerance
 from .cuda_emit import emit_cuda
 from .cuda_plan import (
@@ -186,41 +184,23 @@ def _tensor_compiler_facts(
     if compiler.target != plan.target:
         raise ValueError("compiler target does not match tensor plan target")
     options = compile_options(plan)
-    host_compiler = os.environ.get("NVCC_CCBIN") or shutil.which("gcc")
-    if not host_compiler:
-        raise ValueError("NVCC host compiler cannot be identified")
-    host_version = subprocess.run(
-        [host_compiler, "--version"],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    cub_header = (
-        compiler.nvcc.resolve().parent.parent / "include/cub/block/block_reduce.cuh"
-    )
     return {
         "source": tensor_source_identity(),
-        "toolchain": toolchain_identity(compiler.nvcc),
-        "cub_header": file_hash(cub_header) if cub_header.is_file() else None,
-        "host_compiler": host_version.stdout + host_version.stderr,
-        "compiler_environment": {
-            name: os.environ.get(name, "")
-            for name in (
-                "NVCC_PREPEND_FLAGS",
-                "NVCC_APPEND_FLAGS",
-                "NVCC_CCBIN",
-                "CPATH",
-                "CPLUS_INCLUDE_PATH",
-                "LIBRARY_PATH",
-            )
-        },
+        **compiler_dependency_facts(compiler, options),
         "host": {
             "system": platform.system(),
             "machine": platform.machine(),
             "libc": platform.libc_ver(),
         },
-        "options": [*options, "c++17", "O3", "shared", "fPIC", "cublas"],
+        "options": [
+            *options,
+            compiler.target.architecture,
+            "c++17",
+            "O3",
+            "shared",
+            "fPIC",
+            "cublas",
+        ],
     }
 
 
@@ -252,6 +232,15 @@ def compile_cuda(
         raise ValueError(
             "prepared reduction compiler context changed; rebind before compilation"
         )
+    if (
+        any(
+            binding.selected.execution is not None
+            and binding.selected.execution.algorithm == "cub-block-reduce"
+            for _, binding in plan.lowering_bindings
+        )
+        and facts["dependencies"]["cub"] is None
+    ):
+        raise ValueError("selected CUB provider has no verified dependency closure")
     options = compile_options(plan)
     source = emit_cuda(plan, embed_static_data=False)
     static_data = tensor_static_data(plan)

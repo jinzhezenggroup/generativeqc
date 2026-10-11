@@ -145,6 +145,46 @@ launcher use is not presented as cache-hit evidence or a compilation speedup.
 
 ## Consequences and revisit conditions
 
+Review found two executable consumers outside the initial focused suite still
+constructing the removed schedule axis: the retained CUB endpoint qualification
+runner and the ordinary real-device integration test. They now use the shared
+binding fixture. The tuner applies a pure, bindings-only preparation hook after
+semantic planning and before deduplication/static screening; concrete prepared
+plan identities enter its evidence key. This preserves the complete existing
+numerical/resource/ABBA qualification path without bringing provider names back
+into schedules or duplicating a benchmark execution loop. CPU regressions cover
+the runnable entry point, unchanged semantic plans, distinct recipe evidence,
+resource pruning and endpoint gates. Real-device reruns remain separate evidence.
+The executable plan also copies each incoming binding pair, not only the outer
+sequence. A caller-owned mutable pair otherwise could alter the stored recipe
+after validation while the cached emitter lookup still referenced the old one.
+
+Review also reproduced a stale dependency identity: replacing the transitive
+`cub/block/specializations/block_reduce_warp_reductions.cuh` left the former
+single-header hash unchanged. The compiler context now uses NVCC's `-M` phase
+with `-MF`/`-MT` to resolve runtime and runtime-plus-CUB include closures before
+compilation. These are preprocessing-only probes, not object compilation or
+device work. Header logical names and bytes are retained together; tool versions
+are cached only under executable-byte and environment identities. Header
+resolution refreshes on every context check so a newly shadowing include cannot
+reuse an old manifest. Missing or unidentifiable runtime dependencies fail
+closed. Optional CUB failures have a stable unavailable identity, allowing
+generated execution while rejecting a selected CUB recipe. The probe has finite
+process-tree timeouts and dependency count/byte bounds. Existing toolchain and
+host-version evidence fields remain compatible. This inventories selected
+compiler executables and preprocessing dependencies, not arbitrary wrapper
+internals or a fully hermetic operating-system/toolkit image.
+
+The 36 CPU dependency regressions cover transitive replacements, include
+shadowing, filename/content swaps, same-banner executable replacement, portable
+toolkit relocation, probe caching, missing CUB, malformed/missing/vanished
+manifests, unsafe phase overrides and finite bounds. Independent regeneration of
+six FP32/FP64 elementwise/scalar/cooperative fixtures also preserves equation and
+precision hashes and emitted source after normalizing only the embedded plan
+identity against the qualified base. No new real-NVCC or GPU result is claimed
+for these review repairs. NVCC phase semantics follow the
+[official compiler driver reference](https://docs.nvidia.com/cuda/archive/12.6.2/cuda-compiler-driver-nvcc/index.html).
+
 This retires the Tensor reduction-selector family under #1886/#1889/#1890.
 It does not close those trackers: method-local CC/SCF selector debt and broader
 provider/method endpoint qualification remain. No speedup or mixed-precision
