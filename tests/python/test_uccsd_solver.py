@@ -294,6 +294,39 @@ def test_solver_and_denominator_admission_precede_all_ao_reads() -> None:
         assert source.reads == 0
 
 
+@pytest.mark.parametrize("occupied_energy", [0.0, 2e-9])
+def test_denominator_extrema_allow_snapshot_ordering_tolerance(
+    occupied_energy: float,
+) -> None:
+    # Snapshot admission permits ordering noise below its validation tolerance.
+    # Check actual extrema, including a non-boundary occupied orbital, before
+    # producing any integrals or a zero/non-Aufbau proposal denominator.
+    snapshot = _reference(
+        alpha_coefficients=np.eye(4),
+        alpha_energies=np.array([occupied_energy, -5e-9, 0.0, 1.0]),
+    )
+    source = DenseSource(_eri(), snapshot)
+    with ConventionalProvider(snapshot, source) as provider:
+        with pytest.raises(ValueError, match="denominator"):
+            PreparedUCCSD(snapshot, provider)
+        assert source.reads == 0
+
+
+def test_denominator_minimum_uses_actual_unsorted_extrema() -> None:
+    snapshot = _reference(
+        alpha_coefficients=np.eye(4),
+        alpha_energies=np.array([-1e-8, -1.5e-8, 1e-8, 5e-9]),
+    )
+    source = DenseSource(_eri(), snapshot)
+    with (
+        ConventionalProvider(snapshot, source) as provider,
+        PreparedUCCSD(snapshot, provider) as prepared,
+    ):
+        assert prepared.minimum_absolute_denominator == np.min(
+            np.abs(prepared.denominators)
+        )
+
+
 def test_provider_sequence_admission_is_spin_aware_and_transactional() -> None:
     snapshot = _reference(beta_occupied=2)
     source = DenseSource(_eri(), snapshot)
@@ -492,3 +525,172 @@ def test_complete_cuda_solver_against_cpu_and_pyscf(
         np.testing.assert_allclose(
             actual.amplitudes[name], cpu.amplitudes[name], atol=2e-8, rtol=0
         )
+
+
+def test_nonfinite_diis_extrapolation_keeps_latest_finite_trial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A finite trial remains the checkpoint if the following DIIS state fails."""
+    snapshot = _reference(beta_occupied=2)
+    source = DenseSource(_eri(), snapshot)
+    executor = NativeCCTensorExecutor(max_bytes=256 << 20)
+    with (
+        ConventionalProvider(snapshot, source) as provider,
+        PreparedUCCSD(
+            snapshot,
+            provider,
+            options=SolverOptions(diis_size=2, max_iterations=6),
+            executor=executor,
+        ) as prepared,
+    ):
+        evaluations = []
+
+        def finite_trial_oracle(program: Any, feeds: Any) -> dict:
+            coordinate = float(feeds["t1a"][0, 0])
+            evaluations.append(coordinate)
+            if 0.49 < coordinate < 0.51:
+                raise FloatingPointError("nonfinite DIIS extrapolation")
+            residuals = prepared.layout.unpack(
+                prepared.denominators * (1 + coordinate**2)
+            )
+            return {
+                "correlation_energy": np.array(coordinate),
+                **{
+                    name.replace("t", "r", 1): value
+                    for name, value in residuals.items()
+                },
+            }
+
+        monkeypatch.setattr(executor, "execute", finite_trial_oracle)
+        result = prepared.solve()
+        np.testing.assert_allclose(evaluations, [0, 1, 1, 3, 0.5])
+        assert result.status == "nonfinite"
+        assert result.correlation_energy == 3
+        assert result.total_energy == snapshot.reference_energy + 3
+        np.testing.assert_array_equal(
+            result.packed_amplitudes, np.full(prepared.layout.packed_size, 3.0)
+        )
+        np.testing.assert_array_equal(
+            prepared.layout.pack(result.amplitudes), result.packed_amplitudes
+        )
+
+
+def test_cached_provider_admission_includes_live_reference_and_source() -> None:
+    """An all-hit sequence still charges the reference and integral producer."""
+    nmo = 12
+    coefficients = np.eye(nmo)
+    energies = np.arange(nmo, dtype=np.float64) - 5.5
+    occupations = np.r_[np.ones(6), np.zeros(6)]
+    snapshot = replace(
+        _reference(),
+        overlap=coefficients,
+        hcore=np.zeros((nmo, nmo)),
+        coefficients_alpha=coefficients,
+        coefficients_beta=coefficients,
+        fock_alpha=np.diag(energies),
+        fock_beta=np.diag(energies),
+        orbital_energies_alpha=energies,
+        orbital_energies_beta=energies,
+        occupations_alpha=occupations,
+        occupations_beta=occupations,
+    )
+    source = DenseSource(np.zeros((nmo,) * 4), snapshot)
+    slots = tuple(range(nmo))
+    blocks = [
+        SpinMOBlock(
+            (
+                slots[first:] + slots[:first],
+                slots[second:] + slots[:second],
+                slots,
+                slots,
+            ),
+            ("alpha",) * 4,
+        )
+        for first, second in ((index % nmo, index // nmo) for index in range(64))
+    ]
+    with ConventionalProvider(
+        snapshot, source, axis_tile=nmo, budget_bytes=64 << 20
+    ) as provider:
+        for block in blocks:
+            provider.get(block)
+        baseline = provider._retained + snapshot.numeric_bytes + source.numeric_bytes
+        assert provider._retained > provider.plan(blocks[0]).peak_bytes
+        before = (source.reads, dict(provider.statistics), tuple(provider._cache))
+        assert provider.admit(blocks) >= baseline
+        assert before == (
+            source.reads,
+            dict(provider.statistics),
+            tuple(provider._cache),
+        )
+        provider.budget_bytes = baseline - 1
+        with pytest.raises(MemoryError, match="budget"):
+            provider.admit(blocks)
+        assert source.reads == before[0]
+
+
+@pytest.mark.parametrize("replay_failure", ["nonfinite", "finite_rejected"])
+def test_failed_final_replay_preserves_latest_finite_owned_checkpoint(
+    monkeypatch: pytest.MonkeyPatch, replay_failure: str
+) -> None:
+    """Replay failure cannot promote success or discard its latest finite energy."""
+    snapshot = _reference(beta_occupied=2)
+    source = DenseSource(_eri(), snapshot)
+    executor = NativeCCTensorExecutor(max_bytes=256 << 20)
+    with (
+        ConventionalProvider(snapshot, source) as provider,
+        PreparedUCCSD(
+            snapshot,
+            provider,
+            options=SolverOptions(diis_size=0, max_iterations=1),
+            executor=executor,
+        ) as prepared,
+    ):
+        evaluations = []
+        borrowed_amplitudes = []
+
+        def replay_oracle(program: Any, feeds: Any) -> dict:
+            evaluations.append(float(feeds["t1a"][0, 0]))
+            borrowed_amplitudes.extend(
+                feeds[block.name] for block in prepared.layout.blocks
+            )
+            final_replay = len(evaluations) == 4
+            energy = (
+                float("nan")
+                if final_replay and replay_failure == "nonfinite"
+                else 7.5
+                if final_replay
+                else 7.0
+            )
+            return {
+                "correlation_energy": np.array(energy),
+                **{
+                    block.name.replace("t", "r", 1): np.full(
+                        block.spec.shape, 1.0 if final_replay else 0.0
+                    )
+                    for block in prepared.layout.blocks
+                },
+            }
+
+        monkeypatch.setattr(executor, "execute", replay_oracle)
+        initial = np.full(prepared.layout.packed_size, 0.2)
+        result = prepared.solve(initial)
+        assert len(evaluations) == 4
+        assert not result.converged
+        assert result.status == (
+            "nonfinite" if replay_failure == "nonfinite" else "iteration_limit"
+        )
+        expected_energy = 7.0 if replay_failure == "nonfinite" else 7.5
+        assert result.correlation_energy == expected_energy
+        assert result.total_energy == snapshot.reference_energy + expected_energy
+        initial.fill(9)
+        for borrowed in borrowed_amplitudes:
+            borrowed.fill(9)
+        np.testing.assert_array_equal(
+            result.packed_amplitudes, np.full(prepared.layout.packed_size, 0.2)
+        )
+        np.testing.assert_array_equal(
+            prepared.layout.pack(result.amplitudes), result.packed_amplitudes
+        )
+        for value in (result.packed_amplitudes, *result.amplitudes.values()):
+            with pytest.raises(ValueError):
+                value.setflags(write=True)
