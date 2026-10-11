@@ -125,7 +125,9 @@ class ConventionalProvider:
             self.source._check_open()
             cache = OrderedDict((key, cost) for key, (_, cost) in self._cache.items())
             retained = self._retained
-            peak = retained
+            peak = retained + self.snapshot.numeric_bytes + self.source.numeric_bytes
+            if peak > self.budget_bytes:
+                raise MemoryError("MO block sequence exceeds provider budget")
             for block in blocks:
                 plan = self.plan(block)
                 if plan.peak_bytes > self.budget_bytes:

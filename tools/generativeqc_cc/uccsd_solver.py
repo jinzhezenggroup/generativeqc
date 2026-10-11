@@ -15,6 +15,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from hashlib import sha256
+from heapq import nlargest, nsmallest
 from types import MappingProxyType
 from typing import Any
 
@@ -134,14 +135,18 @@ def _denominator_minimum(
         try:
             with np.errstate(over="raise", invalid="raise"):
                 if block.same_spin:
-                    largest = np.sum(occupied[0][-2:]) - np.sum(virtual[0][:2])
-                    smallest = np.sum(occupied[0][:2]) - np.sum(virtual[0][-2:])
-                else:
-                    largest = sum(energies[-1] for energies in occupied) - sum(
-                        energies[0] for energies in virtual
+                    largest = np.sum(nlargest(2, occupied[0])) - np.sum(
+                        nsmallest(2, virtual[0])
                     )
-                    smallest = sum(energies[0] for energies in occupied) - sum(
-                        energies[-1] for energies in virtual
+                    smallest = np.sum(nsmallest(2, occupied[0])) - np.sum(
+                        nlargest(2, virtual[0])
+                    )
+                else:
+                    largest = sum(np.max(energies) for energies in occupied) - sum(
+                        np.min(energies) for energies in virtual
+                    )
+                    smallest = sum(np.min(energies) for energies in occupied) - sum(
+                        np.max(energies) for energies in virtual
                     )
                 shifted = smallest - len(occupied) * options.level_shift
         except FloatingPointError as error:
@@ -466,7 +471,7 @@ class PreparedUCCSD:
         last_finite = current.copy()
         diis = _DIIS(self.options.diis_size)
         history = []
-        energy = previous_energy = None
+        energy = previous_energy = last_finite_energy = None
         status, reason = "iteration_limit", "maximum UCCSD iterations reached"
         evaluations = 0
         started = time.perf_counter()
@@ -497,12 +502,14 @@ class PreparedUCCSD:
                     UCCSDIteration(iteration, current_energy, delta, residual, maxima)
                 )
                 last_finite, energy = current.copy(), current_energy
+                last_finite_energy = current_energy
                 if residual <= self.options.residual_tolerance and (
                     not self.layout.packed_size
                     or (delta is not None and delta <= self.options.energy_tolerance)
                 ):
                     recheck = self.evaluate(current)
                     evaluations += 1
+                    last_finite_energy = float(recheck["correlation_energy"])
                     fresh_residual = max(
                         float(np.max(np.abs(value), initial=0))
                         for name, value in recheck.items()
@@ -529,6 +536,10 @@ class PreparedUCCSD:
                     )
                 trial_outputs = self.evaluate(trial)
                 evaluations += 1
+                last_finite, last_finite_energy = (
+                    trial.copy(),
+                    float(trial_outputs["correlation_energy"]),
+                )
                 error = _representatives(self.layout, trial_outputs, residuals=True)
                 current = diis.update(trial, error)
                 previous_energy = energy
@@ -575,8 +586,10 @@ class PreparedUCCSD:
         return UCCSDResult(
             status,
             reason,
-            energy,
-            None if energy is None else self.reference.reference_energy + energy,
+            last_finite_energy,
+            None
+            if last_finite_energy is None
+            else self.reference.reference_energy + last_finite_energy,
             amplitudes,
             packed,
             tuple(history),
