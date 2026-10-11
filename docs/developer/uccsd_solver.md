@@ -9,7 +9,9 @@ real-FP64 UCCSD energy/iteration owner. CPU and ordinary-stream CUDA use the
 same [spin-resolved energy/residual TensorIR](uccsd_equations.md), the same
 packed iteration policy, and the existing conventional integral provider.
 This API does not register a native Calculator method, implement DF, or supply
-unrestricted triples, Lambda or analytic forces.
+unrestricted triples, Lambda or analytic forces. The separate
+[UCCSD(T) energy owner](uccsd_t_owner.md) consumes its qualified state and reuses
+its executor and retained feeds for the complete four-channel correction.
 
 ## Reference and execution admission
 
