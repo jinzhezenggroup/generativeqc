@@ -142,6 +142,8 @@ def test_native_grid_file_target_generates_its_exact_header_closure(
     """Exercise the real production declarations without enabling a CUDA compiler."""
     from generativeqc_compiler.dft.ao_cuda import emit_grid_source
 
+    from tools.generate_libxc_semilocal_cuda_registry import emit_header, emit_registry
+
     subprocess.run(["ccache", "--version"], check=True, capture_output=True, timeout=10)
     for name in ("tools", "python", "src", "include", "manifests", "upstream", "data"):
         (tmp_path / name).symlink_to(ROOT / name, target_is_directory=True)
@@ -151,9 +153,12 @@ def test_native_grid_file_target_generates_its_exact_header_closure(
         "project(CudaGridCodegen LANGUAGES CXX)\n"
         f'include("{ROOT / "cmake/GenerativeQCGenerated.cmake"}")\n'
         f'include("{ROOT / "cmake/GenerativeQCGeneratedSources.cmake"}")\n'
+        f'include("{ROOT / "cmake/GenerativeQCCuda.cmake"}")\n'
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         "set(GENERATIVEQC_ENABLE_CUDA ON)\n"
+        "set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OFF)\n"
         "set(CMAKE_CUDA_ARCHITECTURES 120)\n"
+        "add_library(CUDA::cudart INTERFACE IMPORTED)\n"
         "add_library(generativeqc STATIC dummy.cpp)\n"
         "generativeqc_register_host_generated_sources(generativeqc)\n"
         "generativeqc_register_cuda_generated_sources(generativeqc)\n"
@@ -190,13 +195,26 @@ def test_native_grid_file_target_generates_its_exact_header_closure(
         timeout=120,
     )
     generated = build / "generated"
-    assert {path.name for path in generated.iterdir() if path.suffix != ".d"} == {
+    assert {
+        path.relative_to(generated).as_posix()
+        for path in generated.rglob("*")
+        if path.is_file() and path.suffix != ".d"
+    } == {
         "generated_grid_policy.cu",
         "generated_b3lyp_device.cuh",
         "generated_r2scan_device.cuh",
         "generated_wb97mv_device.cuh",
         "generated_split_hybrid_registry.cuh",
+        "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp",
+        "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.cpp",
     }
+    registry = generated / "libxc_semilocal_cuda"
+    assert (registry / "generated_libxc_semilocal_cuda_registry.hpp").read_text() == (
+        emit_header()
+    )
+    assert (registry / "generated_libxc_semilocal_cuda_registry.cpp").read_text() == (
+        emit_registry(enabled=False)
+    )
     assert (generated / "generated_grid_policy.cu").read_text() == emit_grid_source(
         native_ks=True
     )[0]

@@ -111,7 +111,9 @@ def _oracle(t: int, u: int, v: int, moments: Sequence[float]) -> float:
     for pairs in itertools.product(*(range(power // 2 + 1) for power in powers)):
         order = sum(powers) - sum(pairs)
         term = (-1.4) ** order * moments[order]
-        for power, pair, coordinate in zip(powers, pairs, (0.19, -0.27, 0.11)):
+        for power, pair, coordinate in zip(
+            powers, pairs, (0.19, -0.27, 0.11), strict=True
+        ):
             term *= (
                 math.factorial(power)
                 / (2**pair * math.factorial(pair) * math.factorial(power - 2 * pair))

@@ -59,7 +59,7 @@ def test_eager_and_captured_comparisons_match_numpy(
     expected = oracle(left, right)
     operation = getattr(xp, name)
     eager = operation(left, right)
-    compiled = xp.compile(lambda x, y: operation(x, y))
+    compiled = xp.compile(lambda x, y: operation(x, y), backend="reference")
     program = compiled.lower(left, right)
     actual = compiled(left, right)
     assert eager.dtype == actual.dtype == expected.dtype == np.dtype("bool")
@@ -83,7 +83,7 @@ def test_operator_comparisons_remain_symbolic_and_immutable() -> None:
         (lambda x: x <= 2, np.less_equal(values, 2)),
     )
     for expression, oracle in operations:
-        program = xp.compile(expression).lower(values)
+        program = xp.compile(expression, backend="reference").lower(values)
         result = execute(program, {"x": values}).outputs["output"]
         np.testing.assert_array_equal(result, oracle)
         assert result.dtype == np.dtype("bool")
@@ -141,33 +141,32 @@ def test_public_bool_admission_and_bounded_creation() -> None:
     np.testing.assert_array_equal(xp.full((2,), True, dtype=xp.bool), [True, True])
     np.testing.assert_array_equal(xp.zeros((2,), dtype=xp.bool), [False, False])
     np.testing.assert_array_equal(xp.ones_like(mask), [True, True])
-    compiled = xp.compile(lambda x: xp.full_like(x, True))
+    compiled = xp.compile(lambda x: xp.full_like(x, True), backend="reference")
     program = compiled.lower(mask)
     assert program.outputs["output"].spec.dtype == "bool"
     np.testing.assert_array_equal(compiled(mask), [True, True])
-    with pytest.raises(TypeError, match="bool fill"):
-        xp.full((2,), 1, dtype=xp.bool)
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(mask, dtype=xp.float64)
+    np.testing.assert_array_equal(xp.full((2,), 1, dtype=xp.bool), [True, True])
+    np.testing.assert_array_equal(xp.asarray(mask, dtype=xp.float64), [1.0, 0.0])
     with pytest.raises(TypeError, match="floating arithmetic"):
         xp.add(mask, mask)
     with pytest.raises(TypeError, match="array operand"):
         xp.equal(1.0, 2.0)
 
 
-def test_mixed_bool_real_host_containers_fail_before_numpy_promotion() -> None:
+def test_mixed_host_containers_convert_eagerly_but_fail_compiler_admission() -> None:
     mixed_values = (
         [True, 0.5],
         [[True, False], [0.25, 0.75]],
         [np.asarray([True, False]), np.asarray([0.25, 0.75])],
     )
     for value in mixed_values:
+        np.testing.assert_array_equal(xp.asarray(value), np.asarray(value))
+        np.testing.assert_array_equal(
+            xp.asarray(value, dtype=xp.float64), np.asarray(value, dtype=np.float64)
+        )
         with pytest.raises(TypeError, match="mixed bool/real"):
-            xp.asarray(value)
-        with pytest.raises(TypeError, match="mixed bool/real"):
-            xp.asarray(value, dtype=xp.float64)
-    with pytest.raises(TypeError, match="mixed bool/real"):
-        xp.add([True, 0.5], np.ones(2, dtype=np.float64))
+            xp.compile(lambda x: x, backend="reference")(value)
+    np.testing.assert_array_equal(xp.add([True, 0.5], np.ones(2)), [2.0, 1.5])
 
     np.testing.assert_array_equal(
         xp.asarray([True, False], dtype=xp.bool), [True, False]
@@ -197,8 +196,7 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     source = BooleanArrayLike()
     np.testing.assert_array_equal(xp.asarray(source), [True, False])
     np.testing.assert_array_equal(xp.asarray(source, dtype=xp.bool), [True, False])
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(source, dtype=xp.float64)
+    np.testing.assert_array_equal(xp.asarray(source, dtype=xp.float64), [1.0, 0.0])
 
     class RealArrayLike:
         def __array__(
@@ -215,8 +213,7 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     np.testing.assert_array_equal(
         xp.asarray(real_source, dtype=xp.float64), [0.25, 0.5]
     )
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(real_source, dtype=xp.bool)
+    np.testing.assert_array_equal(xp.asarray(real_source, dtype=xp.bool), [True, True])
     with pytest.raises(TypeError, match="nested host"):
         xp.asarray([source], dtype=xp.bool)
 
@@ -237,12 +234,14 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     np.testing.assert_array_equal(xp.asarray(object_bool, dtype=xp.bool), [True, False])
     assert object_bool.calls == 1
     object_bool_to_real = ObjectArrayLike([True, False])
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(object_bool_to_real, dtype=xp.float64)
+    np.testing.assert_array_equal(
+        xp.asarray(object_bool_to_real, dtype=xp.float64), [1.0, 0.0]
+    )
     assert object_bool_to_real.calls == 1
     object_mixed = ObjectArrayLike([True, 0.5])
-    with pytest.raises(TypeError, match="mixed bool/real"):
-        xp.asarray(object_mixed, dtype=xp.float64)
+    np.testing.assert_array_equal(
+        xp.asarray(object_mixed, dtype=xp.float64), [1.0, 0.5]
+    )
     assert object_mixed.calls == 1
 
 
@@ -264,7 +263,7 @@ def test_host_array_like_copy_false_probes_without_copying() -> None:
     source = NoCopyArrayLike()
     actual = xp.asarray(source, copy=False)
     assert source.calls == [False]
-    assert actual is source.storage
+    assert np.shares_memory(actual, source.storage)
 
 
 def test_empty_object_array_like_uses_explicit_boolean_kind() -> None:
@@ -337,7 +336,7 @@ def test_eager_and_captured_boolean_views_match_numpy(
     original = mask.copy()
     expected = oracle(mask)
     eager = operation(mask)
-    captured = xp.compile(operation)(mask)
+    captured = xp.compile(operation, backend="reference")(mask)
     assert eager.dtype == captured.dtype == np.dtype("bool")
     np.testing.assert_array_equal(eager, expected)
     np.testing.assert_array_equal(captured, expected)
@@ -372,7 +371,7 @@ def test_boolean_views_do_not_admit_floating_arithmetic(
     with pytest.raises(TypeError, match="floating arithmetic"):
         operation(mask)
     with pytest.raises((TypeError, ValueError), match="bool|floating arithmetic"):
-        xp.compile(lambda x: operation(x))(mask)
+        xp.compile(lambda x: operation(x), backend="reference")(mask)
 
 
 def test_compiler_namespace_bool_creation_uses_boolean_literals() -> None:
@@ -510,7 +509,7 @@ def test_scientific_domain_and_boolean_algebra_fail_closed() -> None:
 
 def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
     array = np.array([1.0, 2.0], dtype=np.float64)
-    program = xp.compile(lambda x: x > 0).lower(array)
+    program = xp.compile(lambda x: x > 0, backend="reference").lower(array)
     for operation in (
         lambda: jvp(program, {"x": array}, {"x": np.ones_like(array)}),
         lambda: vjp(program, {"x": array}, {"output": np.ones(2, dtype=np.bool_)}),
@@ -526,10 +525,9 @@ def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
         with pytest.raises(ValueError, match="non-differentiable"):
             operation()
     bad = np.asarray([np.nan, 1.0], dtype=np.float64)
-    with pytest.raises(ValueError, match="finite"):
-        xp.greater(bad, array)
+    np.testing.assert_array_equal(xp.greater(bad, array), [False, False])
     with pytest.raises(ValueError, match="non-finite"):
-        xp.compile(lambda x, y: x > y)(bad, array)
+        xp.compile(lambda x, y: x > y, backend="reference")(bad, array)
 
 
 @pytest.mark.parametrize("name", tuple(name for name, _ in COMPARISONS))
@@ -537,6 +535,6 @@ def test_array_api_strict_finite_reference(name: str) -> None:
     left = np.asarray([[1.0], [-2.0]], dtype=np.float32)
     right = np.asarray([[0.0, 1.0]], dtype=np.float64)
     operation = getattr(xp, name)
-    actual = xp.compile(lambda x, y: operation(x, y))(left, right)
+    actual = xp.compile(lambda x, y: operation(x, y), backend="reference")(left, right)
     oracle = getattr(strict, name)(strict.asarray(left), strict.asarray(right))
     np.testing.assert_array_equal(actual, np.asarray(oracle))

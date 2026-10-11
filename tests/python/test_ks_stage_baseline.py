@@ -28,7 +28,9 @@ def read_history(
         summary.fock_builds = len(changes) + 4
         if rows is not None:
             assert capacity == len(changes)
-            for iteration, (row, change) in enumerate(zip(rows, changes), 1):
+            for iteration, (row, change) in enumerate(
+                zip(rows, changes, strict=True), 1
+            ):
                 row.iteration = iteration
                 row.energy_change = change
                 row.nuclear_energy = 1.0

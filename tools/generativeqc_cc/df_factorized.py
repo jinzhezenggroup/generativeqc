@@ -401,7 +401,10 @@ class PreparedDFCCSD:
 
     def pack(self, t1: np.ndarray, t2: np.ndarray) -> np.ndarray:
         return np.concatenate(
-            [layout.pack(value) for layout, value in zip(self.layouts, (t1, t2))]
+            [
+                layout.pack(value)
+                for layout, value in zip(self.layouts, (t1, t2), strict=True)
+            ]
         )
 
     def unpack(self, vector: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -498,7 +501,10 @@ def _run(prepared: PreparedDFCCSD) -> DFCCSDResult:
                 trial = tuple(
                     amplitude + (1 - options.damping) * residual_value / denominator
                     for amplitude, residual_value, denominator in zip(
-                        current, (r1, r2), prepared.denominators
+                        current,
+                        (r1, r2),
+                        prepared.denominators,
+                        strict=True,
                     )
                 )
             trial_out = prepared.evaluate(*trial)

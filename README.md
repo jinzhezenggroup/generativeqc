@@ -140,16 +140,16 @@ generated metadata from the pinned Libxc sources. `Calculator(method=...)`
 accepts qualified `<method>-rks` / `<method>-uks` selectors without requiring
 one ABI-manifest row per functional.
 
-Run the Python frontend (`python -m generativeqc methods`) for the current MethodIR-aware
-public discovery set. MethodIR representation is
+Run the Python-free C++ CLI (`generativeqc methods`) for the current MethodIR-aware
+native discovery set. The standalone compiler tuner is `generativeqc-tune`. MethodIR representation is
 not by itself an execution promise: missing primitive lowerers, unsupported
 backends/models, or method-specific requirements such as an explicit hybrid
 grid fail closed. The Python API also accepts the composite selectors
 `r2scan-3c`, `r2scan-3c-rks`, and `r2scan-3c-uks`.
 
 ```bash
-python -m generativeqc methods
-python -m generativeqc methods --json
+generativeqc methods
+generativeqc methods --compositions --json
 ```
 
 ## Python API

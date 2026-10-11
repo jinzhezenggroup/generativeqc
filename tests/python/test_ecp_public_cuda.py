@@ -100,7 +100,7 @@ def test_public_ecp_force_analytic_and_reconverged_fd(
         for sign in (1, -1):
             moved = [
                 (a, np.asarray(r) + sign * step * d)
-                for (a, r), d in zip(atoms, direction)
+                for (a, r), d in zip(atoms, direction, strict=True)
             ]
             energies.append(
                 calc.singlepoint(
@@ -168,7 +168,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             warm = batch.execute(strict=True)
             record_property("batch_warm_seconds", perf_counter() - started)
         assert all(item.warm_start_used for item in warm.items)
-        for a, b in zip(cold.items, warm.items):
+        for a, b in zip(cold.items, warm.items, strict=True):
             np.testing.assert_allclose(a.forces, b.forces, atol=1e-9, rtol=0)
         xyz = mol.atom_coords()
         moved = xyz.copy()
@@ -177,7 +177,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             started = perf_counter()
             replay = batch.execute(coordinates=[moved, None], strict=True)
             record_property("batch_changed_geometry_seconds", perf_counter() - started)
-        fresh_atoms = [(a, r) for (a, _), r in zip(atoms, moved)]
+        fresh_atoms = [(a, r) for (a, _), r in zip(atoms, moved, strict=True)]
         fresh = calc.singlepoint(fresh_atoms, charge=charge, multiplicity=multiplicity)
         np.testing.assert_allclose(
             replay.items[0].forces, fresh.forces, atol=1e-9, rtol=0

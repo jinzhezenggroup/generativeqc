@@ -221,6 +221,7 @@ CUDA_MODULES["cuda_scf_kernels"] = (
     "scf_convergence_kernels",
     "scf_convergence_policy",
     "basis_transform_kernels",
+    "structured_matrix",
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
@@ -229,6 +230,8 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
     "tensor/ring_gram.hpp",
+    "scf/cuda/matrix_library.hpp",
+    "scf/cuda/runtime_support.hpp",
 )
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
@@ -249,6 +252,8 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
     "scf/cuda/runtime_support.",
     "scf/cuda/scf_matrix_kernels.",
     "scf/cuda/launch_geometry.",
+    "tensor/cuda_matrix_product.hpp",
+    "tensor/cuda_structured_product.hpp",
 )
 # Device queue owners consume borrowed metadata and screening contracts. They
 # cannot acquire host bucket/graph ownership or integral recurrence code.
@@ -594,6 +599,19 @@ CUDA_ALLOWED["cuda_rhf_resident_values"] = (
     "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/rhf_graph.hpp",
     "scf/cuda/rhf_resident_values.",
+    "scf/cuda/direct_jk_source_lease.hpp",
+    "scf/cuda/runtime_support.hpp",
+    "scf/cuda_direct_jk_device.hpp",
+)
+# Source lifetime/admission cannot acquire method graphs or recurrences.
+CUDA_MODULES["cuda_direct_jk_source_lease"] = ("direct_jk_source_lease",)
+CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
+    "molecule/basis.hpp",
+    "posthf/capacity.hpp",
+    "runtime/df_progress_trace.hpp",
+    "runtime/resource_cuda.cuh",
+    "scf/cuda/direct_jk_source_lease.",
+    "scf/cuda/direct_jk_source_policy.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda_direct_jk_device.hpp",
 )
@@ -660,6 +678,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/scf_diis_kernels.hpp",
     "scf/cuda/scf_matrix_kernels.hpp",
     "scf/cuda/scf_state_kernels.hpp",
@@ -684,6 +703,7 @@ CUDA_ALLOWED["cuda_hf_driver"] += (
 )
 CUDA_MODULES["cuda_reference_export"] = ("reference_export", "reference_eri_policy")
 CUDA_ALLOWED["cuda_reference_export"] = (
+    "scf/cuda/direct_jk_source_policy.hpp",
     "posthf/capacity.hpp",
     "scf/mean_field.hpp",
     "tensor/cuda_error.hpp",

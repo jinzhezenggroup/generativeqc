@@ -25,8 +25,10 @@ For the rationale and pinned historical receipts, see the
 | Direct CUDA public plan and cache lifetime | `src/scf/cuda/rhf_bucket.*` | Topology/options identity, admission, invalidation, retry, diagnostics and warm cache |
 | Direct CUDA Graph lifetime | `src/scf/cuda/rhf_graph.*` | Capture, instantiate/upload, replay and teardown |
 | Optional exact-reference value lease | `src/scf/cuda/rhf_resident_values.*` | One-call admission, common Direct provider borrowing, local graphs and retirement before correlation |
+| Common phase-local ERI source | `src/scf/cuda/direct_jk_source_lease.*` | Bounded immutable full-range FP64 values and raw compensated restricted J/K; no method assembly or graph ownership |
 | Coupled direct CUDA execution | `src/scf/cuda_rhf.cpp` and bounded `src/scf/cuda/direct_*` owners | Host launch/dataflow orchestration is separate from scientific device kernels |
 | CUDA generic numeric services | `src/scf/cuda/eigensolver.*`, `src/solver/cuda/symmetric_eigen_handles.*` and `src/scf/cuda/resources.*` | Solver/library/stream/workspace lifetime; borrowers retain their method-specific policies |
+| CUDA structured matrix execution | `src/scf/cuda/structured_matrix.*`, `src/tensor/cuda_structured_product.hpp` | Borrowed immutable Gram/inverse-root/basis bindings; device masks, charged scratch and publication, not method/provider selection policy |
 | CUDA density fitting | `src/scf/cuda/df_plan*`, `df_source*`, `df_jk*`, `df_rhf_scf.*`, `df_uhf_scf.*` | Separate source preparation, plan lifetime, J/K, response and persistent iteration |
 | Direct work preparation | `src/scf/cuda/queue_plan.*` and `direct_*` task/queue owners | Bounded ranges, compaction, launch descriptors and diagnostics, not duplicated HF equations |
 
@@ -103,7 +105,8 @@ propagate instead of masquerading as pressure. Preparation finite-audits values
 before publication. A completed action must report zero recurrence evaluations
 and a canonical census matching the source inventory before reference export.
 
-The lease borrows the RHF stream and owns separate iteration graphs. Every
+The RHF adapter borrows the stream and owns separate iteration graphs; its
+method-neutral `DirectJkSourceLease` owns values and compensation only. Every
 admitted call recaptures those graphs, including changed/restored geometry when
 explicitly forced. Refusal uses ordinary bucket graphs, capturing them lazily
 if an earlier resident-only call never created them.
@@ -114,6 +117,102 @@ numeric capacity includes the transient phase peak. Progress scopes distinguish
 submitted/built source work, completed Fock actions, refused admission and the
 mandatory versus complete phase capacity; graph-capture callbacks are not
 counted as completed actions.
+
+### Optional phase-local Global-Hybrid KS values
+
+Unset or `GENERATIVEQC_KS_RESIDENT_VALUES=auto` selects bounded phase-source
+reuse for restricted exact-FP64 full-range Global-Hybrid solves.
+Explicit `0` retains the incumbent schedule; `1` requests a source without
+bypassing scientific or resource admission; other values are rejected.
+Automatic selection includes screened through-d cold
+candidates as well as the incumbent generic f-shell domain, with at least
+64 public/128 Cartesian AOs and eight permitted iterations. Through-d
+candidates require a positive prepared Schwarz threshold; actual compact
+census and complete capacity admission decide whether values fit. These
+eligibility gates do not predict profitability or actual iteration count.
+Warm reuse and externally supplied initial densities skip source preparation, including
+provider cloning and row sorting. An unseeded moved geometry is a new cold
+candidate; a moved solve carrying a warm snapshot is not. Native cold initial
+guesses retain explicit owner provenance through `CudaKsSeedOrigin`; a non-null
+density pointer alone does not distinguish a production cold guess from a
+user seed. Seed normalization and the initial-guess mathematics are unchanged.
+Forced selection still requires at least 64 public AOs, four permitted
+iterations, a compatible canonical source and complete capacity admission.
+
+KS keeps its prepared mathematical specification, exact-exchange coefficient,
+XC, DIIS, convergence and final-state consumers. Source replay preserves the
+prepared Schwarz threshold on the canonical Direct contraction. The source
+produces raw J/K only; KS applies its scientific coefficients exactly once.
+For a positive preparation threshold, the source freezes the existing
+geometry-only Schwarz row tails and stores only their compact canonical values.
+Construction and replay use identical bucket offsets and bounded work extents;
+a replay threshold below the frozen preparation mask is rejected. This does
+not introduce a different screening approximation or density-dependent cache.
+No ERI recurrence is evaluated during replay, and no derivative ERIs are cached.
+The source-only Direct factory skips unrelated generated/MD/range leases and
+releases sort staging after the row-construction fence. KS supplies its existing
+raw J/K outputs; only compensation and audits need additional source scratch.
+
+Admission includes mandatory KS, grid, XC, DIIS, eigensolver and provider
+device/host storage before the optional source's preparation peak, compensation
+and diagnostics. The existing internal `ScfOptions::reference_memory_budget_bytes`
+can bound this complete phase inventory; zero imposes no finite internal phase
+budget. KS default `auto` permits at most 16 GiB for screened through-d values
+and retains the 8-GiB ceiling for generic f-shell values; explicit KS `1`
+permits at most 16 GiB. All retain the 256-MiB free-device reserve and
+complete admission. RHF's unscreened layout and 8-GiB ceiling are unchanged.
+After metadata preparation, admission rechecks live free memory without charging
+already allocated provider storage twice; the complete numeric budget still
+includes the conservative preparation peak.
+Public resource-ledger requests retain the original exact route until their
+complete resource planner explicitly reserves optional source storage. This
+includes forced selection; a diagnostic cannot bypass a public memory budget.
+
+UKS, fitted J/K, range/nonlocal corrections, lower precision and incremental
+J/K retain their existing paths. Resource/capability refusal preserves exact
+fallback; driver or numerical failure propagates. KS retires compiled/graph
+borrowers before releasing the phase source at terminal completion, restart,
+failure or destruction. Values never persist into force/response evaluation,
+another solve or another geometry. Existing Hybrid graph qualification is not
+widened. `CudaKsTransfers` reports source construction, completed submitted Fock
+actions and numeric/source peaks separately from SCF iterations.
+
+After a successful source-backed solve that updates the warm cache, KS retires
+the source and evaluates incumbent J/K once at the unchanged final density.
+The compensated energy uses the retained XC at that density and anchors the
+next warm solve to its actual provider, rather than comparing different FP64
+summation schedules. This cache-only handoff leaves the returned energy,
+physical Fock, residual, convergence gates and derivative generation unchanged.
+It is counted in `fock_builds`, `post_scf_fock_builds`, the finalization precision
+timeline and `CudaKsTransfers::warm_energy_rebase_fock_actions`, not as an SCF
+iteration or resident replay. Frozen warm caches do not perform this work;
+failed handoffs invalidate the new cache and cannot publish a successful state.
+Ordinary warm/seeded solves still skip source preparation and pass all existing
+energy, density and physical-residual gates.
+If forced `1` admits another source on a warm solve, that phase does not borrow
+the incumbent energy baseline: its first resident build establishes new energy
+history, as the device-chunk path already does. This is an explicit bounded
+fallback, not a cross-provider convergence shortcut.
+
+The bounded default decision and its limits are recorded in
+`.agents/notes/implemented/performance/2026-10-11-hybrid-phase-source-default.md`.
+Source-matched default routing, warm handoff and complete E+F qualification
+recipes are in `benchmarks/results/hybrid-phase-source-default-20261011/README.md`.
+
+The independent raw J/K, same-grid PySCF energy and optional complete cold energy
+endpoint gates are in `tests/python/test_ks_phase_resident_values_cuda.py`. Run
+them only through a finite-time Slurm allocation with
+`GENERATIVEQC_DFT_CUDA_TEST=1`; add
+`GENERATIVEQC_KS_PHASE_VALUES_ENDPOINT_TEST=1` for complete energy endpoints,
+including provider preparation and source/Fock work counts. The legacy direct
+C-API KS method owner rejects nuclear-gradient requests; its optional
+`GENERATIVEQC_KS_PHASE_VALUES_FORCE_TEST=1` is a separate capability gate, not
+force evidence. The high-level Python PBE0 endpoint instead uses the existing
+compiled stationary force owner and supports complete E+F with matching AOT
+assets. Qualify the 96-atom def2-SVP endpoint with `benchmarks.readme_pbe0`, its
+independent reference, unchanged grid/tolerances and complete preparation plus
+E+F timing. Retain strict-FP64 source construction and Fock counts to distinguish
+actual reuse from a successful bounded fallback.
 
 The direct path separates a method-facing bucket (identity and cache),
 a Graph owner (capture and teardown), generic runtime allocations/libraries,

@@ -37,6 +37,31 @@ two affine scans, excluding padding. Diagnostics charge one driver submission
 and both semantic products/summands. `tests/native/test_native_contraction_pair_cuda.cu`
 qualifies only this API, independently of the ordinary provider matrix tests.
 
+## HF/KS Matrix Products
+
+HF and ordinary KS square matrix products use immutable
+`tensor::CudaMatrixProductBinding` metadata on the existing prepared resource
+owner. The compiler describes column-major products, left transposition,
+system/spin broadcasting and uniform scalar scaling as TensorIR regions.
+Ten bounded sites share strict-FP64 portfolios; providers cannot infer lower
+precision. Actual CUDA device/runtime and borrowed provider versions are recorded
+at preparation, alongside the resolved shape bound.
+
+`launch_matrix_product` and `launch_spin_matrix_product` accept no implementation
+switch. A view must match the prepared stream, handle, matrix dimension and
+system/spin bounds. Nonfinite scale fails before submission. Library execution
+stays in the shared tensor backend; SCF owns the existing device-mask publication
+and caller-precharged scratch, preserving inactive bytes on ordinary execution
+and Graph replay. Singleton systems use ordinary GEMM; multiple systems use
+strided batching, with one submission per broadcast spin.
+
+HF/KS capacity reports include a bounded 16 KiB preparation-host envelope. The
+binding acquires no handle or device storage, and retains the existing generated
+small-shape/resource fallback or borrowed FP64 library incumbent without
+inventing missing endpoint costs. RHF's upstream profitability/resource/retry
+selectors remain classified migration debt. This adapter migration does not
+qualify complete energy/force endpoints, a new crossover, or shell-span transforms.
+
 ## Prepared Scientific Sites
 
 COSX value assembly requests `AO * D`, `seed + AO^T * potential` and the
@@ -499,6 +524,61 @@ algorithm and rank. The shared table exposes these records per variant/slot via
 `visit_optional_provenance`; released or stale bindings cannot report live plans.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.
+
+## Borrowed structured SCF regions
+
+`tensor.structured_scf` defines seven strict-FP64 regions: occupied Gram,
+signed weighted Gram, inverse-root overlap reconstruction, and the four
+public/direct basis stages. Gram regions reuse the canonical rank-k recognizer;
+the final Fock region includes the fused hcore addition in its request identity.
+Native preparation freezes the generated/GEMM/SYRK offers alongside explicit
+negative SYR2K, cuBLASLt, cuTENSOR and CUTLASS offers for unsupported domains.
+`CudaStructuredProductBinding::candidates()` reports resolved resource charges
+and rejection reasons; its dimension/system/spin accessors report the borrowed
+domain. Missing complete endpoint costs remain unknown.
+
+The conventional RHF/UHF owner consumes shared density, orthogonalizer and
+dense basis-stage bindings. The KS owner consumes shared ordinary and signed
+density bindings. KS shell-span basis transforms retain their existing sparse
+owner. `scf/cuda/structured_matrix.*` owns device scaling, publication and
+failure isolation; vendor submissions remain in the tensor backend. No new
+stream, handle or provider allocation is introduced.
+
+The structured library routes are **not enabled by default**. Production
+bindings retain the generated kernels until complete scientific endpoints
+qualify a crossover. Test-hook bindings permit primitive ablations, not public
+provider pinning. A shell-span invocation always retains the bounded native
+stage rather than packing to dense storage. Basis scratch has zero arena size
+while the production gate is closed. Arena planning consumes workspace-presence
+facts, not tensor/CUDA provider policy.
+
+Active masks are read on device on every invocation/replay. Inactive and
+rejected output bytes are preserved. Orthogonalizer reconstruction rejects
+nonfinite or `<= 1e-10` eigenvalues per system, without a host round trip. Signed
+density sanitizes both panels to exclude poisoned virtual orbitals. Temporary
+charges include scaled columns and masked publication (two square spans), plus
+the sanitized coefficient panel for signed density (three spans). Dense basis
+stages charge one maximum-square span. Preparation charges a 32 KiB host
+envelope in addition to the existing square-product binding; the existing
+96 MiB provider reservation is borrowed, not added a second time to the ledger.
+
+`tools/qualify_structured_scf_routes.sh` builds the independent long-double
+primitive oracle driver with verified ccache. Use `build-only` for compilation
+without a GPU. Real execution requires clean committed source and a finite
+Slurm GPU allocation; for example, on a node exposing a 5090 on `main`:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:10:00 bash tools/qualify_structured_scf_routes.sh \
+  "$PWD/.artifacts/structured-qualification" /path/to/cuda 120 /path/to/python
+```
+
+The driver covers asymmetric rectangular stages, spin broadcast, masks,
+changed-data Graph replay, signed weights, poisoned virtual columns, invalid
+eigenvalues, alias rejection and short scratch. Its receipt deliberately reports
+`complete_endpoint_qualified: false`. RHF/UHF/RKS/UKS energy/Fock/density/force
+gates, through-d/f and moved-geometry cases, cold/warm setup and matched complete
+endpoint profitability remain prerequisites for default promotion.
 
 The [decision note](../../.agents/notes/implemented/architecture/2026-10-04-joint-lowering-contract.md)
 records the compatibility and identity rationale.

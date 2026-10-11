@@ -118,8 +118,7 @@ class ScalarKernel:
                 or not _IDENTIFIER.fullmatch(name)
                 or name in _RESERVED
                 or name.startswith("_")
-                or name.startswith("v")
-                and name[1:].isdigit()
+                or (name.startswith("v") and name[1:].isdigit())
             ):
                 raise ValueError("kernel names must be safe, nonreserved C identifiers")
         if any(root.graph is not self.graph for root in self.roots):

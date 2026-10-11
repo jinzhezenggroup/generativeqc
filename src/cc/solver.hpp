@@ -50,7 +50,9 @@ struct SolverOptions {
   /** Opt-in FP32 auxiliary preconvergence; final iterations, DIIS history,
    * independent residual replay and every response consumer remain FP64. */
   bool df_mixed_precision{false};
-  double df_mixed_precision_switch_residual{1e-7};
+  // Use the same binary64 boundary as admission at the largest legal residual
+  // tolerance; the decimal literal 1e-7 is one representable step smaller.
+  double df_mixed_precision_switch_residual{100.0 * 1e-9};
   unsigned df_mixed_precision_max_evaluations{24};
 };
 

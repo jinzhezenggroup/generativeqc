@@ -231,6 +231,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Audit generated CUDA ABI call coverage
+        run: python3 tools/generate_nvidia_host_api.py --check-usage
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
@@ -1215,7 +1217,7 @@ jobs:
           retention-days: 30
 
       - name: Set up pinned artifact-only CodSpeed diagnostic
-        if: github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true'
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true' && contains(github.event.pull_request.labels.*.name, 'ci/codspeed-paired')
         uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
         env:
           CODSPEED_SKIP_UPLOAD: "true"
@@ -1227,7 +1229,7 @@ jobs:
           allow-empty: "true"
 
       - name: Compare exact baseline and head on this runner
-        if: github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true'
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true' && contains(github.event.pull_request.labels.*.name, 'ci/codspeed-paired')
         env:
           CODSPEED_SKIP_UPLOAD: "true"
           CODSPEED_MERGE_SHA: ${{ github.sha }}
@@ -1240,7 +1242,7 @@ jobs:
             --output "$RUNNER_TEMP/codspeed-paired"
 
       - name: Preserve bounded same-runner diagnostic
-        if: always() && github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true'
+        if: always() && github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true' && contains(github.event.pull_request.labels.*.name, 'ci/codspeed-paired')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: codspeed-paired-diagnostic-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1321,7 +1323,7 @@ jobs:
     name: Pass CI checks
     timeout-minutes: 5
     needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}
     steps:
       - name: Accept an orphaned merge-group run

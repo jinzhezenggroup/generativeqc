@@ -64,7 +64,7 @@ def _emit_axis_permutations(maximum_angular_momentum: int = 3) -> typing.Any:
         for axis in (1, 2):
             powers = [component.count(a) for a in "xyz"]
             powers[0], powers[axis] = powers[axis], powers[0]
-            transformed = "".join(a * n for a, n in zip("xyz", powers))
+            transformed = "".join(a * n for a, n in zip("xyz", powers, strict=True))
             choices.append(components.index(transformed))
         lines.append(
             f"    case {index}U: return axis == 1 ? {choices[0]}U : {choices[1]}U;"

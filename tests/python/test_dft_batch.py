@@ -54,7 +54,7 @@ def warm_snapshot(prepared: typing.Any, index: typing.Any) -> typing.Any:
 def restore_snapshots(prepared: typing.Any, snapshots: typing.Any) -> typing.Any:
     """Keep the caller-owned arrays alive through the atomic native import."""
     states = (_native.HfWarmState * len(snapshots))()
-    for state, snapshot in zip(states, snapshots):
+    for state, snapshot in zip(states, snapshots, strict=True):
         state.struct_size, state.abi_version = ctypes.sizeof(state), _native.ABI_VERSION
         if snapshot is None:
             continue
@@ -125,7 +125,10 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
         prepared.set_warm_start_updates(False)
         before = [warm_snapshot(prepared, i) for i in range(3)]
         changed = np.array([[0, 0, -0.85], [0, 0, 0.85]])
-        target = [(atom[0], position) for atom, position in zip(systems[0], changed)]
+        target = [
+            (atom[0], position)
+            for atom, position in zip(systems[0], changed, strict=True)
+        ]
         moved = prepared.execute(
             [changed, None, None], strict=True, properties=("energy",)
         )
