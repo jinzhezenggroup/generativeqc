@@ -178,6 +178,23 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         assert path_name in section
 
 
+def test_python_shard_run_step_stays_below_github_actions_size_limit() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    ).read_text(encoding="utf-8")
+    section = workflow.split("      - name: Run Python tests with coverage\n", 1)[
+        1
+    ].split("      - name: Save native Python probes\n", 1)[0]
+    raw_script = section.split("        run: |\n", 1)[1]
+    script = "\n".join(
+        line[10:] for line in raw_script.splitlines() if line.startswith("          ")
+    )
+    # GitHub rejects a run: command longer than 21,000 characters *before*
+    # creating any jobs. Reserve at least 1,000 characters of headroom.
+    assert len(script) < 20_000, len(script)
+    assert "source .github/scripts/ci_select_python_shard.sh" in script
+
+
 def test_python_ci_keeps_history_for_offline_retention_checks() -> None:
     # test_retention_20260925_objects.py recovers the actual trimmed inventories
     # from their recorded historical commit, with network and lazy fetch disabled.
