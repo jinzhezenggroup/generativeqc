@@ -27,8 +27,8 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 3823,
-      "sha256": "b1f2ec0ee98281a25faffc60f605297a599f324b78ecc174470103c7a4742de6"
+      "bytes": 3909,
+      "sha256": "32459eae2d77025c5ddcc502e6bc61b94d6c1a294a3440e56ce5cb1ac702b151"
     },
     {
       "path": "measured-source.patch.gz",
@@ -43,10 +43,12 @@
       "sha256": "032e3db0a279cd47ec3d8b0985b8f5d1836896016721b0f23d0894cd86ed9ce3"
     },
     {
-      "path": "samples.json.gz",
+      "path": "samples.json.xz",
       "role": "samples",
-      "bytes": 214312,
-      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c"
+      "bytes": 110308,
+      "sha256": "b0f7f00ec62dcb7ecf54682fe7ce93c733a72f08e4393c984d595c4c79143c2d",
+      "decoded_bytes": 1247516,
+      "decoded_sha256": "04549733293d35cad2ce3d0aeb1e1b5fac23a8141b6107204ab48454b583ee93"
     },
     {
       "path": "validation.json.gz",
