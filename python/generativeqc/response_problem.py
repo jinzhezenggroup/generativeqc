@@ -370,7 +370,11 @@ class ResponseProblem:
         return self
 
     def validate_rhs(self, values: typing.Any) -> typing.Any:
-        """Return an immutable ``(dimension,k)`` RHS with a matching layout."""
+        """Return an immutable ``(dimension,k)`` RHS, including zero columns.
+
+        Labels describe the exact request, not an implicit subset of a larger
+        perturbation set. Empty and partial requests must carry matching labels.
+        """
         rhs = np.asarray(values)
         if rhs.ndim == 1:
             rhs = rhs[:, None]
@@ -378,7 +382,7 @@ class ResponseProblem:
             raise ValueError(
                 f"RHS must have shape ({self.dimension},k), got {rhs.shape}"
             )
-        if rhs.shape[1] < 1 or np.iscomplexobj(rhs) or not np.isfinite(rhs).all():
+        if np.iscomplexobj(rhs) or not np.isfinite(rhs).all():
             raise ValueError("RHS must contain finite real FP64 columns")
         if self.perturbation_labels and len(self.perturbation_labels) != rhs.shape[1]:
             raise ValueError("perturbation labels do not match RHS columns")

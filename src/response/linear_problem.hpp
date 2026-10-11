@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -27,6 +28,9 @@ enum class LinearResponseSymmetry { General, Symmetric };
  * inputs so one prepared physical operator can serve multiple perturbations.
  * Symmetry is explicit: a future nonsymmetric CC Jacobian cannot inherit the
  * primal action as its transpose merely because its vector shape matches.
+ * Copies preserve one logical problem binding; construction starts a fresh
+ * binding even for identical dimensions/actions. Method adapters still own
+ * borrowed-state lifetime and scientific/provider-generation validation.
  */
 class LinearResponseProblem {
  public:
@@ -34,14 +38,30 @@ class LinearResponseProblem {
                         LinearResponseSymmetry symmetry = LinearResponseSymmetry::General,
                         LinearOperator apply_transpose = {})
       : dimension_(dimension),
-        apply_(std::move(apply)),
+        apply_(checked_operator(dimension, std::move(apply))),
         symmetry_(symmetry),
-        apply_transpose_(std::move(apply_transpose)) {
+        apply_transpose_(checked_operator(dimension, std::move(apply_transpose))) {
     if (!dimension_) throw std::invalid_argument("response problem dimension must be positive");
     if (!apply_) throw std::invalid_argument("response problem operator callback is empty");
+    if (symmetry_ != LinearResponseSymmetry::General &&
+        symmetry_ != LinearResponseSymmetry::Symmetric)
+      throw std::invalid_argument("response problem operator symmetry is invalid");
     if (symmetry_ == LinearResponseSymmetry::Symmetric && apply_transpose_)
       throw std::invalid_argument(
           "symmetric response problem cannot provide a distinct transpose operator");
+    binding_ = std::make_shared<const Binding>();
+  }
+
+  LinearResponseProblem(const LinearResponseProblem&) = default;
+  LinearResponseProblem(LinearResponseProblem&&) noexcept = default;
+  LinearResponseProblem& operator=(LinearResponseProblem&&) noexcept = default;
+  LinearResponseProblem& operator=(const LinearResponseProblem& other) {
+    if (this != &other) {
+      // Callback copies can throw. Commit the operator and its token together.
+      LinearResponseProblem replacement(other);
+      *this = std::move(replacement);
+    }
+    return *this;
   }
 
   [[nodiscard]] std::size_t dimension() const noexcept { return dimension_; }
@@ -58,10 +78,25 @@ class LinearResponseProblem {
   }
 
  private:
+  friend class ResponsePlan;
+  struct Binding {};
+
+  /** The same FP64 shape gate protects direct JVP/VJP calls and solver actions. */
+  static LinearOperator checked_operator(std::size_t dimension, LinearOperator action) {
+    if (!action) return {};
+    return [dimension, action = std::move(action)](std::span<const double> input,
+                                                   std::span<double> output) {
+      if (input.size() != dimension || output.size() != dimension)
+        throw std::invalid_argument("response operator input/output dimensions do not match");
+      action(input, output);
+    };
+  }
+
   std::size_t dimension_{};
   LinearOperator apply_;
   LinearResponseSymmetry symmetry_{LinearResponseSymmetry::General};
   LinearOperator apply_transpose_;
+  std::shared_ptr<const Binding> binding_;
 };
 
 }  // namespace generativeqc::response
