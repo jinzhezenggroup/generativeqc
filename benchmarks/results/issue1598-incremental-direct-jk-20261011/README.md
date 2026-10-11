@@ -31,21 +31,15 @@ iteration branches, incremental diagnostics and the native-build identity; the
 
 ## Key measured results
 
-| Population | Baseline | Incremental | Outcome |
-| --- | --- | --- | --- |
-| 96 AO (old) | warm 0.23 s | warm 0.38 s | no delta opportunity |
-| 192 AO (old) | converges | 4/4 attempts fail ("SCF did not converge") | convergence failure |
-| 384 AO (old) | cold 71.0 / warm 7.09 s | cold 100.5 / warm 13.77 s | warm +94%, cold +42% |
-| 768 AO (old) | converges | round 1 converges (30 it); round 2 fails 2/2 | instability |
-| 192 AO (new) | converges | 4/4 attempts fail | failure reproduces |
-| 384 AO (new) | cold 71.1 / warm 6.83 s | cold 100.2 / warm 13.86 s | warm +103%, cold +41% |
-| 768 AO (new) | converges | 4/4 attempts fail | failure reproduces |
+96 AO: no delta opportunity (warm 0.23 vs 0.38 s). 192 AO: incremental fails
+4/4 attempts on both revisions; baseline converges. 384 AO: warm +94% (old)
+/+103% (new), cold +42%/+41% slower; gates pass. 768 AO: run-to-run
+instability on the old revision (round 1 converges in 30 iterations, round 2
+fails 2/2) and 4/4 failures on the new revision.
 
-All comparable numerical gates pass (|ΔE| ≤ 1e-8 Eh, |ΔF| ≤ 1e-7 Eh/Bohr plus
-the comparator's independent reference gates). The KS control measurements are
-retained but their independent acceptance could not be re-established on the
-new master because the retained composed-baseline oracle predates the merged
-DFT force changes (#2246); see the decision note.
+All comparable numerical gates pass (|ΔE| ≤ 1e-8 Eh, |ΔF| ≤ 1e-7 Eh/Bohr).
+The KS control could not be re-accepted on the new master because the retained
+oracle predates #2246; see the decision note.
 
 ## Reproduction
 
