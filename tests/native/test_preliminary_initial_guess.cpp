@@ -15,6 +15,12 @@
 #include "scf/reference/linalg.hpp"
 #include "scf/reference/observation.hpp"
 
+// Private shape-only resource query; deliberately not added to the stable public ABI.
+extern "C" int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
+                                                               const std::int32_t* atomic_numbers,
+                                                               std::size_t atom_count,
+                                                               std::uint64_t* output);
+
 namespace {
 using namespace generativeqc;
 using namespace scf::initial_guess;
@@ -94,6 +100,28 @@ void check() {
   invalid([&] { preliminary_options(&descriptor); });
 
   const auto system = water();
+  PreliminaryOptions minao_resource_policy;
+  minao_resource_policy.kind = PreliminaryKind::Minao;
+  const std::int32_t z[] = {8, 1, 1};
+  std::uint64_t minao_query_bytes = 0;
+  const auto exact_native_bytes = preliminary_numeric_capacity(system, minao_resource_policy);
+  require(generativeqc_resource_minao_numeric_capacity_v1(molecule::ao_count(system), z, 3,
+                                                          &minao_query_bytes) == 0 &&
+              minao_query_bytes == exact_native_bytes,
+          "MINAO shape-only resource query differs from preparation admission");
+  minao_query_bytes = 123;
+  require(generativeqc_resource_minao_numeric_capacity_v1(0, z, 3, &minao_query_bytes) != 0 &&
+              minao_query_bytes == 123,
+          "invalid native MINAO AO topology overwrote the result");
+  const std::int32_t unsupported[] = {19};
+  require(generativeqc_resource_minao_numeric_capacity_v1(molecule::ao_count(system), unsupported,
+                                                          1, &minao_query_bytes) != 0 &&
+              minao_query_bytes == 123,
+          "unsupported native MINAO element overwrote the result");
+  require(generativeqc_resource_minao_numeric_capacity_v1(molecule::ao_count(system), nullptr, 3,
+                                                          &minao_query_bytes) != 0 &&
+              minao_query_bytes == 123,
+          "null native MINAO atom inventory overwrote the result");
   auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, .25);
   scf::PreparedFockPlan plan(system, nullptr, scf::resolve_fock_build(spec, scf::FockBackend::Cpu));
   dft::AoBasis basis(system);

@@ -6,6 +6,7 @@ import json
 import math
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,11 +16,16 @@ MOLECULE = Path(sys.argv.pop(1)).resolve()
 
 class NativeDftDfCliTests(unittest.TestCase):
     def call_named(self, method: str, *flags: str) -> subprocess.CompletedProcess[str]:
+        return self.call_xyz(MOLECULE, method, *flags)
+
+    def call_xyz(
+        self, xyz: Path, method: str, *flags: str
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 str(CLI),
                 "run",
-                str(MOLECULE),
+                str(xyz),
                 "--method",
                 method,
                 "--basis",
@@ -154,6 +160,98 @@ class NativeDftDfCliTests(unittest.TestCase):
             self.assertTrue(all(math.isfinite(component) for component in vector))
         for axis in range(3):
             self.assertAlmostEqual(force[0][axis] + force[1][axis], 0.0, delta=2e-5)
+
+    def test_scf_control_overrides_and_rejection(self) -> None:
+        flags = ("--backend", "cpu", "--density-fitting", "cpu")
+        baseline = self.call(*flags)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        controlled = self.call(
+            *flags,
+            "--max-iterations",
+            "120",
+            "--energy-tolerance",
+            "1e-12",
+            "--density-tolerance",
+            "1e-10",
+            "--screening-tolerance",
+            "1e-14",
+        )
+        self.assertEqual(controlled.returncode, 0, controlled.stderr)
+        self.assertAlmostEqual(
+            json.loads(controlled.stdout)["energy_hartree"],
+            json.loads(baseline.stdout)["energy_hartree"],
+            delta=1e-9,
+        )
+        for flag, value, reason in (
+            ("--max-iterations", "0", "must be positive"),
+            ("--max-iterations", "2147483648", "must fit int32"),
+            ("--energy-tolerance", "nan", "positive finite number"),
+            ("--energy-tolerance", "inf", "positive finite number"),
+            ("--density-tolerance", "0", "positive finite number"),
+            ("--screening-tolerance", "-1e-12", "positive finite number"),
+            ("--screening-tolerance", "1e-14junk", "positive finite number"),
+        ):
+            with self.subTest(flag=flag, value=value):
+                result = self.call(*flags, flag, value)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(reason, result.stderr)
+
+    def test_cpu_df_pbe0_analytic_force_reconverged_finite_difference(self) -> None:
+        # This is a complete molecular E+F gate, not the fixed-density XC
+        # derivative test. Both displaced geometries must reconverge natively.
+        flags = (
+            "--backend",
+            "cpu",
+            "--density-fitting",
+            "cpu",
+            "--max-iterations",
+            "200",
+            "--energy-tolerance",
+            "1e-12",
+            "--density-tolerance",
+            "1e-10",
+        )
+        result = self.call_named("pbe0-rks", *flags, "--forces")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(math.isfinite(data["energy_hartree"]))
+        self.assertEqual(data["method"], "pbe0-rks")
+        self.assertEqual(len(data["method_ir_identity"]), 64)
+        force = data["forces_hartree_per_bohr"]
+        self.assertEqual(len(force), 2)
+        self.assertTrue(
+            all(
+                len(vector) == 3 and all(math.isfinite(x) for x in vector)
+                for vector in force
+            )
+        )
+        for axis in range(3):
+            self.assertAlmostEqual(force[0][axis] + force[1][axis], 0.0, delta=2e-5)
+
+        step = 5e-4  # Bohr, matching --units bohr
+        original = MOLECULE.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(int(original[0]), 2)
+        displaced_energies = []
+        with tempfile.TemporaryDirectory(
+            prefix="generativeqc-pbe0-force-"
+        ) as directory:
+            for sign, label in ((1.0, "plus"), (-1.0, "minus")):
+                lines = list(original)
+                atom = lines[3].split()
+                self.assertEqual(len(atom), 4)
+                atom[3] = f"{float(atom[3]) + sign * step:.12f}"
+                lines[3] = " ".join(atom)
+                geometry = Path(directory) / f"{label}.xyz"
+                geometry.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                displaced = self.call_xyz(geometry, "pbe0-rks", *flags)
+                self.assertEqual(displaced.returncode, 0, displaced.stderr)
+                displaced_energies.append(
+                    json.loads(displaced.stdout)["energy_hartree"]
+                )
+        fd_force = -(displaced_energies[0] - displaced_energies[1]) / (2 * step)
+        self.assertTrue(math.isfinite(fd_force))
+        self.assertAlmostEqual(force[1][2], fd_force, delta=2e-3)
 
     def test_cpu_auto_df_same_orbital_default(self) -> None:
         result = self.call("--backend", "cpu", "--density-fitting", "auto")

@@ -28,6 +28,7 @@
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_component_trace.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
@@ -468,15 +469,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
 
-  cudaDeviceProp direct_device_properties{};
+  // Reuse the visibility-safe facts owner and its complete provider fallback.
+  // Unbatched HF does not need the unrelated full-property grid limits.
+  runtime::CudaTargetInfo direct_target{};
+  char direct_device_name[256]{};
   const cudaError_t direct_target_error =
-      cudaGetDeviceProperties(&direct_device_properties, device_id);
+      runtime::cuda_device_facts(device_id, direct_target, direct_device_name);
   if (direct_target_error != cudaSuccess) {
     fill_global_failure(outputs, cuda_status(direct_target_error));
     return outputs;
   }
-  const runtime::CudaTargetInfo direct_target =
-      runtime::cuda_target_info_from_properties(direct_device_properties);
   const cuda_policy::DirectJkSchedulePolicy direct_schedule =
       cuda_policy::resolve_direct_jk_schedule_policy(direct_target);
 
@@ -544,6 +546,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spin_batch_size, batch_size,
+                                                       spin_batch_size};
+  const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
+      cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
+  const bool use_cublas = plan.cublas_enabled && small_hf_profitability.use_cublas;
   const std::size_t total_atoms = host.atomic_numbers.size();
   const std::size_t total_shells = host.shell_atoms.size();
   const std::size_t total_shell_pairs = host.shell_pair_first.size();
@@ -667,6 +674,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         first_setup ? requested_bounded_direct_streaming : plan.bounded_direct_streaming;
     total_shell_quartet_tiles =
         requested_bounded_direct_streaming ? 0 : plan.total_shell_quartet_tiles;
+  }
+  // Query the authoritative batched grid limit before any device geometry or
+  // retained plan state is changed. A provider error must leave a warm plan
+  // reusable at its previous geometry. Single-system and bounded-streaming
+  // plans never consume this property.
+  std::size_t maximum_compaction_grid_y = 0;
+  if (requested_quartet_direct && !requested_bounded_direct_streaming && batch_size > 1) {
+    cudaDeviceProp compaction_properties{};
+    const auto compaction_target_error = cudaGetDeviceProperties(&compaction_properties, device_id);
+    if (compaction_target_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(compaction_target_error));
+      return outputs;
+    }
+    maximum_compaction_grid_y = static_cast<std::size_t>(compaction_properties.maxGridSize[1]);
   }
   // Per-item mixed-capable tile census: the FP32-error budget is evaluated for
   // every system on its own count. Bounded streaming keeps zeros, which the
@@ -881,7 +902,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             requested_transformed_direct, shell_class_profiling, inactive_eigensolver_profiling,
             bounded_fock_class_timing, requested_bounded_direct_streaming,
             requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
-            requested_incremental_diis_gram)) {
+            requested_incremental_diis_gram, use_cublas)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1129,11 +1150,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   plan.resident_warm_positions.clear();
   plan.resident_warm_density.clear();
   plan.resident_previous_energy.clear();
-  const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spin_batch_size, batch_size,
-                                                       spin_batch_size};
-  const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
-      cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
-  const bool use_cublas = plan.cublas_enabled && small_hf_profitability.use_cublas;
   std::size_t reference_base_bytes = 0;
   const std::size_t reference_provider_allowance =
       (use_cublas ? 96ULL << 20 : 0) + (use_cusolver ? 96ULL << 20 : 0);
@@ -1463,6 +1479,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto nuclear_repulsion = arena_pointer<double>(resources.arena_, layout.nuclear_repulsion);
   auto orthogonalizer = arena_pointer<double>(resources.arena_, layout.orthogonalizer);
   auto temporary = arena_pointer<double>(resources.arena_, layout.temporary);
+  auto masked_matrix_output =
+      use_cublas ? arena_pointer<double>(resources.arena_, layout.masked_matrix_output) : nullptr;
   auto eigensystem = arena_pointer<double>(resources.arena_, layout.eigensystem);
   auto coefficients = arena_pointer<double>(resources.arena_, layout.coefficients);
   auto eigenvalues = arena_pointer<double>(resources.arena_, layout.eigenvalues);
@@ -2028,8 +2046,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   dim3 direct_shell_quartet_compaction_grid(1U, 1U, 1U);
   if (requested_quartet_direct && !requested_bounded_direct_streaming) {
     direct_shell_quartet_compaction_grid = dim3(blocks_for(total_shell_quartets), 1U, 1U);
-    if (batch_size > 1 &&
-        batch_size <= static_cast<std::size_t>(direct_device_properties.maxGridSize[1])) {
+    if (batch_size > 1 && batch_size <= maximum_compaction_grid_y) {
       const std::int64_t first_count =
           host.system_shell_quartet_offsets[1] - host.system_shell_quartet_offsets[0];
       bool uniform_quartet_count = first_count > 0;
@@ -2050,9 +2067,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   const auto multiply_matrices = [&](const double* left, bool transpose_left, const double* right,
                                      double* output, double scale = 1.0) {
-    const generativeqc_status product_status = launch_matrix_product(
-        resources.matrix_view(), static_cast<int>(batch_size), static_cast<int>(nbf), left,
-        transpose_left, right, active, output, use_cublas, scale);
+    const generativeqc_status product_status =
+        launch_matrix_product(resources.matrix_view(masked_matrix_output, spin_matrix_elements),
+                              static_cast<int>(batch_size), static_cast<int>(nbf), left,
+                              transpose_left, right, active, output, use_cublas, scale);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
@@ -2062,8 +2080,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                           bool transpose_left, const double* right,
                                           bool right_is_spin, double* output) {
     const generativeqc_status product_status = launch_spin_matrix_product(
-        resources.matrix_view(), static_cast<int>(batch_size), 2, static_cast<int>(nbf), left,
-        left_is_spin, transpose_left, right, right_is_spin, active, output, use_cublas);
+        resources.matrix_view(masked_matrix_output, spin_matrix_elements),
+        static_cast<int>(batch_size), 2, static_cast<int>(nbf), left, left_is_spin, transpose_left,
+        right, right_is_spin, active, output, use_cublas);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }

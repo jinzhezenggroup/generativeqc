@@ -24,7 +24,12 @@ from generativeqc_compiler.tensor import (
     linearize,
 )
 
-from .spec import MethodIR, SemilocalXCPrimitive, UnsupportedMethod
+from .spec import (
+    ExactExchangePrimitive,
+    MethodIR,
+    SemilocalXCPrimitive,
+    UnsupportedMethod,
+)
 from .stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
@@ -110,6 +115,14 @@ _SEMILOCAL_HVP_SOURCES = (
         "xc_weight",
         "semilocal_xc",
         ("feature-hessian", "density-response", "partition-weight-direction"),
+    ),
+)
+_EXACT_EXCHANGE_HVP_SOURCES = (
+    HVPSource(
+        "exact_exchange",
+        "exact_exchange",
+        ("density-response", "first-integral-direction", "second-integral-hvp"),
+        ("density_left", "density_right"),
     ),
 )
 _ENVELOPE_HVP_SUFFIX = (
@@ -201,7 +214,15 @@ _PRIMITIVE_HVP_RULES = MappingProxyType(
             ("energy-density", "feature-gradient", "feature-hessian"),
             ("rho", "sigma"),
             _SEMILOCAL_HVP_SOURCES,
-        )
+        ),
+        ExactExchangePrimitive: HVPPrimitiveRule(
+            "full-range-exact-exchange-v1",
+            ExactExchangePrimitive,
+            "exact_exchange",
+            ("energy", "fock", "eri-first-derivative"),
+            (),
+            _EXACT_EXCHANGE_HVP_SOURCES,
+        ),
     }
 )
 
@@ -248,12 +269,13 @@ def _input(
 
 @dataclass(frozen=True)
 class StationaryHVPPlan:
-    """Inspect a MethodIR and derive the first common LDA/GGA HVP topology.
+    """Compose semilocal and full-range-exchange HVP primitive contracts.
 
-    The first admitted compiler slice is intentionally narrow: direct,
-    all-electron, real FP64, fixed-integer RKS/UKS with rho/sigma semilocal XC.
-    New functionals inside that primitive family inherit this plan automatically.
-    New physics remains fail-closed until its primitive second-order rule exists.
+    Planning admits direct, all-electron, real FP64, fixed-integer RKS/UKS
+    with rho/sigma XC and optional full-range exact exchange. Hybrid plans
+    reuse stationary-gradient exchange weights and their TensorIR JVP;
+    this never grants a complete hybrid molecular Hessian endpoint.
+    Other primitives remain fail-closed without a second-order rule.
     """
 
     method: MethodIR
@@ -272,6 +294,10 @@ class StationaryHVPPlan:
             raise UnsupportedMethod(
                 "stationary HVP first slice requires an all-electron Hamiltonian"
             )
+        # Integral lowering reuses the semilocal stationary-gradient envelope.
+        # An exchange-only graph cannot publish an executable source plan yet.
+        if self.semilocal is None:
+            raise UnsupportedMethod("stationary HVP requires a semilocal XC primitive")
 
         rules = tuple(
             _primitive_hvp_rule(primitive) for primitive in self.method.primitives

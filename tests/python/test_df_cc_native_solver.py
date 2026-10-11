@@ -523,11 +523,15 @@ def test_packed_history_capacity_and_asymmetry_fallback(
 
 
 def _run(
-    probe: tuple[Path, bool], arrays: dict[str, np.ndarray], **kwargs: typing.Any
+    probe: tuple[Path, bool],
+    arrays: dict[str, np.ndarray],
+    *,
+    diis_input_residual: bool = False,
+    **kwargs: typing.Any,
 ) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
     executable, cuda = probe
     process = subprocess.run(
-        [str(executable)],
+        [str(executable), *(["--input-residual"] if diis_input_residual else [])],
         input=_stream(arrays, cuda, **kwargs),
         capture_output=True,
         check=True,
@@ -543,6 +547,50 @@ def _run(
     values = np.fromstring(lines[1], sep=" ")
     o, v = arrays["t1"].shape
     return status, values[: o * v].reshape(o, v), values[o * v :].reshape(o, o, v, v)
+
+
+@pytest.mark.parametrize("diis", (0, 6))
+@pytest.mark.parametrize("limit", (1, 100))
+def test_input_residual_mixing_observes_updated_state(
+    solver_probe: tuple[Path, bool], diis: int, limit: int
+) -> None:
+    """The runtime opt-in must publish fresh final states, not incoming errors."""
+    fock, integrals, arrays = _case(2, 3, 5)
+    schedule = {"df": True, "diis": diis, "max_iterations": limit}
+    legacy, old_t1, old_t2 = _run(solver_probe, arrays, **schedule)
+    mixed, t1, t2 = _run(solver_probe, arrays, diis_input_residual=True, **schedule)
+    assert mixed["iterations_called"] == mixed["iterations"]
+    for field in ("capacity", "device_bytes", "provider_capacity", "h2d"):
+        assert mixed[field] == legacy[field]
+    if diis == 0 or limit == 1:
+        np.testing.assert_array_equal(t1, old_t1)
+        np.testing.assert_array_equal(t2, old_t2)
+        assert mixed["energy"] == legacy["energy"]
+    energy, r1, r2 = DeterminantOracle(fock, integrals, 2).evaluate_full(t1, t2)
+    np.testing.assert_allclose(mixed["energy"], energy, atol=2e-12, rtol=0)
+    if limit == 1:
+        assert mixed["status"] == 1 and mixed["iterations"] == 2
+        assert mixed["replays_called"] == 0
+    else:
+        assert mixed["status"] == 0 and mixed["replays_called"] == 1
+        assert max(np.max(np.abs(r1)), np.max(np.abs(r2))) <= 1e-10
+        np.testing.assert_allclose(mixed["r1"], np.max(np.abs(r1)), atol=2e-12, rtol=0)
+        np.testing.assert_allclose(mixed["r2"], np.max(np.abs(r2)), atol=2e-12, rtol=0)
+        if diis:
+            assert legacy["iterations_called"] > legacy["iterations"]
+
+
+def test_input_residual_default_is_cuda_df_energy_only() -> None:
+    """Keep the qualified dispatch narrower than the internal solver opt-in."""
+    header = (ROOT / "src/cc/solver.hpp").read_text()
+    source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+    assert "bool diis_input_residual{false};" in header
+    assert (
+        "execution.cuda_requested() && correlation_auxiliary && !retain_df_response;"
+        in source
+    )
+    force = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
+    assert "&auxiliary, forces," in force
 
 
 @pytest.mark.parametrize("o,v,q,diis", [(1, 1, 1, 0), (2, 3, 4, 6), (3, 2, 3, 6)])

@@ -14,6 +14,11 @@ namespace generativeqc::scf::cuda_execution {
 struct MatrixLibraryResources {
   cudaStream_t stream_{};
   cublasHandle_t blas_{};
+  /** Caller-owned, precharged scratch for masked library results. It must be
+   * disjoint from both operands, output and mask, and live through stream/Graph
+   * completion. Native and unmasked library products do not use it. */
+  double* masked_output_{};
+  std::size_t masked_output_elements_{};
 };
 
 /** Prepared host-safe owner for the shared SCF matrix adapter.
@@ -41,7 +46,10 @@ class MatrixLibraryOwner {
   void reset() noexcept;
 
   bool library_enabled() const noexcept { return blas_ != nullptr; }
-  MatrixLibraryResources view() const noexcept { return {stream_, blas_}; }
+  MatrixLibraryResources view(double* masked_output = nullptr,
+                              std::size_t masked_output_elements = 0) const noexcept {
+    return {stream_, blas_, masked_output, masked_output_elements};
+  }
   std::size_t retained_bytes() const noexcept { return retained_bytes_; }
 
  private:
@@ -57,6 +65,11 @@ class MatrixLibraryOwner {
  * singleton physical batches use ordinary GEMM and true multi-system batches use
  * strided-batched GEMM. The caller owns every input/output allocation and borrowed
  * library handles.
+ * A non-null device mask requires batch_size * spin_count * nbf * nbf scratch
+ * elements for the library route (spin_count is one for plain products). GEMM
+ * writes only scratch; a stream-ordered masked copy preserves inactive output
+ * bytes, including on Graph replay. Missing/undersized/overlapping scratch is
+ * rejected before submission; explicit library selection never becomes native.
  * The optional scale is applied by both the native and cuBLAS routes, allowing
  * occupation normalization without a separate matrix pass.
  */

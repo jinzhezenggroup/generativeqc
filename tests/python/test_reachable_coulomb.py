@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def recurrence(tmp_path_factory: pytest.TempPathFactory) -> Callable:
+def recurrence_owner(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
         pytest.skip("host C++ compiler and ccache required")
@@ -67,7 +67,17 @@ def recurrence(tmp_path_factory: pytest.TempPathFactory) -> Callable:
         np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     ]
     owner.evaluate.restype = ctypes.c_int
-    return owner.evaluate
+    owner.evaluate_full.argtypes = [ctypes.c_uint] + [
+        np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
+    ]
+    owner.evaluate_full.restype = ctypes.c_int
+    return owner
+
+
+@pytest.fixture(scope="module")
+def recurrence(recurrence_owner: ctypes.CDLL) -> Callable:
+    """Expose the existing component-domain probe from the shared host build."""
+    return recurrence_owner.evaluate
 
 
 def _closure(x: int, y: int, z: int) -> set[tuple[int, ...]]:
@@ -163,11 +173,83 @@ def test_invalid_component_domain_retains_complete_recurrence(
     np.testing.assert_array_equal(actual, expected)
 
 
+@pytest.mark.parametrize("order", range(13))
+def test_full_simplex_overwrites_poison_without_initial_zero_stores(
+    recurrence_owner: ctypes.CDLL, order: int
+) -> None:
+    """Check every FP64/jet cell, not just the roots selected by a consumer."""
+    count = math.comb(order + 4, 4)
+    actual = np.empty(count * 5)
+    assert recurrence_owner.evaluate_full(order, actual) == count
+    nodes, weights = np.polynomial.legendre.leggauss(96)
+    points = (nodes + 1) / 2
+    weights = weights / 2
+    argument = 0.7 * (0.19**2 + 0.27**2 + 0.11**2)
+    moments = [
+        np.dot(weights, points ** (2 * degree) * np.exp(-argument * points**2))
+        for degree in range(order + 2)
+    ]
+    expected = []
+    for degree in range(order + 1):
+        for first in range(order - degree + 1):
+            for second in range(order - degree - first + 1):
+                for third in range(order - degree - first - second + 1):
+                    factor = (-1.4) ** degree
+                    shifted = moments[degree:]
+                    value = factor * _oracle(first, second, third, shifted)
+                    expected.extend(
+                        (
+                            value,
+                            factor * _oracle(first + 1, second, third, shifted),
+                            factor * _oracle(first, second + 1, third, shifted),
+                            factor * _oracle(first, second, third + 1, shifted),
+                            value,
+                        )
+                    )
+    np.testing.assert_allclose(actual, expected, rtol=2e-10, atol=2e-11)
+
+
 PROBE = r"""
 #include <cmath>
 #include <limits>
 #include "scf/cuda/coulomb_auxiliary.cuh"
 using namespace generativeqc::scf::cuda_execution;
+template<unsigned Order> int full_simplex(double* out) {
+  CoulombAuxiliary<Dual3, Order> jet_auxiliary;
+  CoulombAuxiliary<double, Order> value_auxiliary;
+  const double poison = std::numeric_limits<double>::quiet_NaN();
+  for (auto& item : jet_auxiliary.data) item = {poison, poison, poison, poison};
+  for (auto& item : value_auxiliary.data) item = poison;
+  const Vec3<Dual3> jet_product{{0.19,1,0,0},{-0.27,0,1,0},{0.11,0,0,1}};
+  const Vec3<Dual3> jet_center{{0,0,0,0},{0,0,0,0},{0,0,0,0}};
+  const Vec3<double> value_product{0.19,-0.27,0.11}, value_center{0,0,0};
+  fill_coulomb<Order>(0.7, jet_product, jet_center, jet_auxiliary);
+  fill_coulomb<Order>(0.7, value_product, value_center, value_auxiliary);
+  unsigned written = 0;
+  for (unsigned degree=0; degree<=Order; ++degree)
+    for (unsigned first=0; first+degree<=Order; ++first)
+      for (unsigned second=0; second+first+degree<=Order; ++second)
+        for (unsigned third=0; third+second+first+degree<=Order; ++third) {
+          const auto jet = jet_auxiliary.at(degree, first, second, third);
+          const auto value = value_auxiliary.at(degree, first, second, third);
+          written += std::isfinite(jet.value) && std::isfinite(jet.derivative_x) &&
+              std::isfinite(jet.derivative_y) && std::isfinite(jet.derivative_z) &&
+              std::isfinite(value);
+          *out++=jet.value; *out++=jet.derivative_x; *out++=jet.derivative_y;
+          *out++=jet.derivative_z; *out++=value;
+        }
+  return static_cast<int>(written);
+}
+extern "C" int evaluate_full(unsigned order, double* out) {
+  switch(order) {
+#define FULL_CASE(Order) case Order: return full_simplex<Order>(out)
+    FULL_CASE(0); FULL_CASE(1); FULL_CASE(2); FULL_CASE(3); FULL_CASE(4);
+    FULL_CASE(5); FULL_CASE(6); FULL_CASE(7); FULL_CASE(8); FULL_CASE(9);
+    FULL_CASE(10); FULL_CASE(11); FULL_CASE(12);
+#undef FULL_CASE
+  }
+  return -2;
+}
 template<unsigned L> int run(unsigned x, unsigned y, unsigned z, unsigned radial,
                              unsigned selected, double* out) {
   CoulombAuxiliary<Dual3, L> auxiliary;

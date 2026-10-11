@@ -16,7 +16,8 @@ namespace generativeqc::scf::cuda_execution {
  * powers. Its x-first dependency graph needs n+t<=x, then n+u<=x+y
  * on the t=0 plane, and n+v<=L on the t=u=0 line. This prunes recurrence
  * states, never integrals or small numerical values. Unselected or invalid
- * domains retain the complete simplex and its original initialization.
+ * domains retain the complete simplex. Its z/y/x traversal overwrites every
+ * state before consumption, including each dependency of the next plane.
  */
 struct CoulombComponentDomain {
   unsigned x{};
@@ -78,11 +79,9 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
                                     CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary,
                                     CoulombComponentDomain domain = {}) {
   const bool reachable = domain.valid<MaximumAngular>();
-  if (!reachable) {
-    for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item) {
-      auxiliary.data[item] = scalar<Scalar>(0.0);
-    }
-  }
+  // Roots and the successive z/y/x planes write the entire full-domain
+  // simplex exactly once. Clearing it first only adds per-primitive stores;
+  // neither the complete nor the reachable recurrence reads an unwritten cell.
   const Vec3<Scalar> pc{product.x - center.x, product.y - center.y, product.z - center.z};
   Scalar boys[MaximumAngular + 1];
   boys_values<MaximumAngular>(exponent * distance_squared(product, center), boys);

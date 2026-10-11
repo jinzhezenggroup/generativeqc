@@ -89,6 +89,24 @@ for paired E+F validation and the limits of the retained configuration evidence.
 
 ## Prepared identity and ABI
 
+### CUDA final-state validation
+
+Native CUDA KS automatically reuses resident final-state matrix products for
+full-precision, exact-direct PBE0/RKS owners with at least 384 AOs. Selection
+also requires the existing matrix-library handle, charged reduction storage,
+and no already-published stationary W/total-D scratch lease. Other owners retain
+the reference route. Repeated reads preserve their published bindings.
+
+`GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION=0` forces the reference route.
+Explicit `=1` requests the resident route outside the automatic scope, but does
+not bypass resource, identity, lease or numerical gates. Unset selects the
+automatic policy; other values are errors. This changes only execution of the
+shared strict proof: scientific acceptance gates, dense host exports and the
+orbital-energy expression for KS weighted density remain unchanged.
+
+See the [default-selection decision](../../.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md)
+for its evidence and limits.
+
 ### Experimental incremental Direct-J/K and resource budgets
 
 The benchmark-only `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=1` (or `on`)

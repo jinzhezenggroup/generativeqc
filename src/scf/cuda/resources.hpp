@@ -26,8 +26,11 @@ class CudaResources {
   /** Borrow library state while retaining ownership in the prepared bucket. */
   EigensolverResources eigensolver_view() const;
 
-  /** Borrow only the stream and BLAS handle; matrix execution owns no bucket state. */
-  MatrixLibraryResources matrix_view() const { return {stream_, blas_}; }
+  /** Borrow execution state and a precharged arena span; acquire no ownership. */
+  MatrixLibraryResources matrix_view(double* masked_output = nullptr,
+                                     std::size_t masked_output_elements = 0) const {
+    return {stream_, blas_, masked_output, masked_output_elements};
+  }
 
   int device_id_{-1};
   cudaStream_t stream_{};

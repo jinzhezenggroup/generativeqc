@@ -5,7 +5,7 @@ derivatives across all 64 s/p/d/f shell classes. `shell-sp` retains the original
 seven non-SSS s/p classes as a comparison subset. Automatic consumer admission
 uses the centralized [work profile](df_tuning.md#derivative-consumer-admission),
 separate from device-metric/source/state/resource correctness gates. Small work
-and unknown target profiles retain the generic consumer. Serial mappings and
+and unprobed targets retain the generic consumer. Serial mappings and
 attribution probes retain their explicit fallbacks. The packed occupied-response
 layout remains separately qualified; shell admission never grants that layout.
 

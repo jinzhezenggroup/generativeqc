@@ -59,6 +59,7 @@ from generativeqc_compiler.method.stationary_resources import (
 
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
+from ._ks_snapshot import _integral_source_resources
 from ._resident_ao_maps import (
     ResidentAoMapCache,
     ResidentAoMapDomain,
@@ -625,21 +626,18 @@ class PreparedCompositeStationaryCudaGradient:
             "active_ao_producer": active_ao_producer,
             "active_ao_max_active_fraction": active_ao_max_active_fraction,
             "native_integral_resources": dict(
-                zip(
-                    (
-                        "retained_device_bytes",
-                        "source_host_preparation_bytes",
-                        "one_electron_device_peak_bytes",
-                        "one_electron_host_peak_bytes",
-                        "one_electron_h2d_bytes",
-                        "one_electron_d2h_bytes",
-                        "final_state_export_d2h_bytes",
-                        "final_state_export_reads",
-                        "final_state_export_synchronizations",
-                    ),
-                    map(int, native_usage),
-                    strict=True,
+                _integral_source_resources(
+                    native_usage,
+                    mixed_rsh_df=bool(getattr(source, "density_fitted", False)),
                 )
+            ),
+            **(
+                {
+                    "density_fitted_response_resources_included": 0,
+                    "additional_bounds_exclude_df_response": True,
+                }
+                if bool(getattr(source, "density_fitted", False))
+                else {}
             ),
             "prepared_execution_reused": reused,
             "execution_index": self.executions,

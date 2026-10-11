@@ -56,6 +56,10 @@ struct RunOptions {
   int device_id{0};
   int charge{0};
   std::uint32_t multiplicity{1};
+  std::optional<std::uint32_t> max_iterations;
+  std::optional<double> energy_tolerance;
+  std::optional<double> density_tolerance;
+  std::optional<double> screening_tolerance;
   bool input_angstrom{true};
   bool basis_explicit{false};
   bool auxiliary_basis_explicit{false};
@@ -93,6 +97,19 @@ std::uint32_t parse_positive_u32(std::string_view text, std::string_view name) {
   const int value = parse_int(text, name);
   if (value < 1) throw UsageError(std::string(name) + " must be positive");
   return static_cast<std::uint32_t>(value);
+}
+
+double parse_positive_finite_double(std::string_view text, std::string_view name) {
+  std::size_t consumed = 0;
+  double value = 0.0;
+  try {
+    value = std::stod(std::string(text), &consumed);
+  } catch (const std::exception&) {
+    throw UsageError(std::string(name) + " must be a positive finite number");
+  }
+  if (consumed != text.size() || !std::isfinite(value) || value <= 0.0)
+    throw UsageError(std::string(name) + " must be a positive finite number");
+  return value;
 }
 
 int atomic_number(std::string token) {
@@ -222,6 +239,10 @@ void print_usage(std::ostream& out) {
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
+         "  --max-iterations N       Maximum SCF iterations (default: 100)\n"
+         "  --energy-tolerance X     Positive finite SCF energy tolerance (Hartree)\n"
+         "  --density-tolerance X    Positive finite SCF density tolerance\n"
+         "  --screening-tolerance X  Positive finite Gaussian integral screening threshold\n"
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
          "  --grid-radial-points N  Radial count for explicit MethodIR reference grid\n"
          "  --grid-polar-points N   Polar count for explicit MethodIR reference grid\n"
@@ -354,6 +375,10 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
   descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
   descriptor.screening_tolerance = is_gfn2(options) ? 0.0 : 1.0e-14;
+  if (options.max_iterations) descriptor.max_iterations = *options.max_iterations;
+  if (options.energy_tolerance) descriptor.energy_tolerance = *options.energy_tolerance;
+  if (options.density_tolerance) descriptor.density_tolerance = *options.density_tolerance;
+  if (options.screening_tolerance) descriptor.screening_tolerance = *options.screening_tolerance;
   descriptor.density_fitting_mode = options.density_fitting;
   descriptor.density_fitting_auxiliary_basis =
       auxiliary_basis == nullptr ? nullptr : auxiliary_basis->get();
@@ -451,6 +476,14 @@ RunOptions parse_run(int argc, char** argv) {
       options.charge = parse_int(value(), "charge");
     } else if (option == "--multiplicity") {
       options.multiplicity = parse_positive_u32(value(), "multiplicity");
+    } else if (option == "--max-iterations") {
+      options.max_iterations = parse_positive_u32(value(), "maximum iterations");
+    } else if (option == "--energy-tolerance") {
+      options.energy_tolerance = parse_positive_finite_double(value(), "energy tolerance");
+    } else if (option == "--density-tolerance") {
+      options.density_tolerance = parse_positive_finite_double(value(), "density tolerance");
+    } else if (option == "--screening-tolerance") {
+      options.screening_tolerance = parse_positive_finite_double(value(), "screening tolerance");
     } else if (option == "--units") {
       const std::string selected = lower(std::string(value()));
       if (selected == "angstrom")
@@ -480,6 +513,8 @@ RunOptions parse_run(int argc, char** argv) {
                            options.density_fitting_explicit || options.auxiliary_basis_explicit))
     throw UsageError(
         "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags do not apply");
+  if (is_gfn2(options) && options.screening_tolerance)
+    throw UsageError("--screening-tolerance requires a Gaussian HF/DFT method");
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");

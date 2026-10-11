@@ -34,6 +34,7 @@ AUDITED_PREFIXES = (
     "public-model:",
     "initial-guess:",
     "cc-option:",
+    "cc-execution:",
     "response-option:",
 )
 
@@ -217,6 +218,45 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
+    """Keep default selection separate from explicit experimental admission."""
+    relative = Path("src/dft/cuda_ks.cpp")
+    source = re.sub(r"\s+", " ", _read(root / relative))
+    policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
+    if not re.search(
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        policy,
+    ) or any(
+        fragment not in policy
+        for fragment in (
+            "fock_exchange_coefficient == -0.125",
+            "semilocal_exchange_scale == 0.75",
+            "semilocal_correlation_scale == 1.0",
+            "if (!setting) return default_eligible;",
+            'std::strcmp(setting, "0") == 0) return false;',
+            'std::strcmp(setting, "1") == 0) return true;',
+            "throw std::invalid_argument",
+        )
+    ):
+        raise ValueError("KS final-validation default scope or opt-out drifted")
+    if any(
+        fragment not in source
+        for fragment in (
+            "pbe0_rks_final_validation_composition(",
+            "is_semilocal_family(functional, SemilocalFamily::Pbe)",
+            "options.semilocal_exchange_scale, options.semilocal_correlation_scale",
+            "has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction",
+            "!nonlocal_correlation;",
+            "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
+            "final_validation_partial && matrix_products.library_enabled()",
+            "!final_stationary_weights_ready;",
+        )
+    ):
+        raise ValueError("KS final-validation default owner or resource guard drifted")
+    return {"dft-policy:ks-device-final-validation-auto": relative.as_posix()}
+
+
 def _discover_md_j_default(root: Path) -> dict[str, str]:
     """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
     relative = Path("src/scf/cuda/direct_jk.cpp")
@@ -239,18 +279,68 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
 
 
 def _discover_rys_task_default(root: Path) -> dict[str, str]:
-    """Require renewed qualification when the target/class guard is broadened."""
+    """Guard shared capability defaults and exact-tuned profile overrides."""
     preference_relative = Path(
         "python/generativeqc_compiler/integral/production_rys_tasks.py"
     )
     preference = _read(root / preference_relative)
-    preferred = re.search(r"preferred\s*=\s*(\{[^}]+\})", preference)
+    manifest_relative = Path(
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
+    profile_relative = Path(
+        "python/generativeqc_compiler/integral/production_profile.py"
+    )
+    manifest = json.loads(_read(root / manifest_relative))
+    profiles = manifest.get("architectures")
+    qualified: dict[str, set[str]] = {}
+    if not isinstance(profiles, dict):
+        raise TypeError("Rys-task default target/class admission drifted")
+    for name, profile in profiles.items():
+        if not isinstance(profile, dict):
+            raise TypeError("Rys-task default target/class admission drifted")
+        classes = profile.get("preferred_rys_task_fock_shell_classes", [])
+        if (
+            not isinstance(classes, list)
+            or any(not isinstance(item, str) or not item for item in classes)
+            or len(classes) != len(set(classes))
+        ):
+            raise ValueError("Rys-task default target/class admission drifted")
+        if "preferred_rys_task_fock_shell_classes" in profile:
+            qualified[name] = set(classes)
+    resolution = _read(root / profile_relative)
+    preferred = re.search(r"preferred = (\{[^\n]+\})", preference)
     if (
         preferred is None
         or ast.literal_eval(preferred.group(1))
         != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
-        or 'profile.target.architecture != "sm_120" or profile.profile != "sm_120"'
+        or qualified
+        != {
+            "sm_120": {
+                "psps",
+                "ppps",
+                "dsss",
+                "dpss",
+                "dsps",
+                "ddss",
+                "dsds",
+                "dpps",
+                "dspp",
+            }
+        }
+        or "if profile.portable:" not in preference
+        or "schedule_candidates(integral, profile.target)" not in preference
+        or "if schedule is None:" not in preference
+        or 'profile.target.architecture != "sm_120"' in preference
+        or "override = profile.preferred_rys_task_fock_shell_classes if profile.tuned else None"
         not in preference
+        or "if override is not None:" not in preference
+        or "preferred = set(override)" not in preference
+        or "missing = preferred - available" not in preference
+        or "match == ProfileMatch.EXACT" not in resolution
+        or '_profile_kind(profile_name, profile_payload) == "tuned"' not in resolution
+        or "return tuple(raw) if tuned else None" not in resolution
+        or 'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return None'
+        not in resolution
     ):
         raise ValueError("Rys-task default target/class admission drifted")
     lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
@@ -362,6 +452,45 @@ def _discover_cc_options(root: Path) -> dict[str, str]:
     return {f"cc-option:{name}": relative.as_posix() for name in names}
 
 
+def _discover_cc_execution(root: Path) -> dict[str, str]:
+    """Audit the energy-only source alias default without inventing a user flag."""
+    relative = Path("src/cc/df_triples_cuda.cu")
+    source = _read(root / relative)
+    energy_start = source.find("DFCudaResult evaluate_df_cuda(")
+    response_start = source.find("static DFCudaResponseResult pullback_df_cuda_impl(")
+    if energy_start < 0 or response_start <= energy_start:
+        raise ValueError("missing audited DF triples energy/response boundary")
+    body = re.sub(
+        r"//[^\n]*|/\*.*?\*/", " ", source[energy_start:response_start], flags=re.DOTALL
+    )
+    body = re.sub(r"\s+", "", body)
+    required = (
+        "constbooldistinct_moments=result.w_contraction_storage_bits==64&&result.w_contraction_compute_bits==64&&result.w_contraction_accumulation_bits==64;",
+        "constboolalias_tile=distinct_moments&&(i==j||j==k);",
+        "constautosources=alias_tile?generated_df::occupied_moment_sources(i,j,k):generated_df::MomentSourceMap{};",
+        "if(sources.index[permutation]!=permutation)continue;",
+        "if(alias_tile)generated_df::energy_distinct_tile(o,v,i,j,k,degeneracy,threshold,in,moments,sources,p.blocks,partials,context.error,context.stream);elsegenerated_df::energy_tile(o,v,i,j,k,degeneracy,threshold,in,moments,p.blocks,partials,context.error,context.stream);",
+    )
+    if any(body.count(fragment) != 1 for fragment in required) or any(
+        fragment in source[response_start:]
+        for fragment in ("MomentSourceMap", "energy_distinct_tile")
+    ):
+        raise ValueError("DF triples distinct-moment FP64 energy admission drifted")
+    traversal = (
+        "detail::visit_occupied_tiles(o,distinct_moments&&p.panel_capacity==3,visit_tile);",
+        "reduce<<<1,256,0,context.stream>>>(partials,p.blocks,energies+canonical_tile,context.error);",
+    )
+    if (
+        any(body.count(fragment) != 1 for fragment in traversal)
+        or "visit_occupied_tiles" in source[response_start:]
+    ):
+        raise ValueError("DF triples bounded panel traversal admission drifted")
+    return {
+        "cc-execution:df-triples-distinct-moments": relative.as_posix(),
+        "cc-execution:df-triples-panel-traversal": relative.as_posix(),
+    }
+
+
 def _discover_response_options(root: Path) -> dict[str, str]:
     relative = Path("src/hf/rhf_frame_response.hpp")
     source = _read(root / relative)
@@ -454,11 +583,13 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
+        _discover_ks_final_validation_default(root),
         _discover_md_j_default(root),
         _discover_rys_task_default(root),
         _discover_direct_k_work_default(root),
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
+        _discover_cc_execution(root),
         _discover_response_options(root),
         _discover_df_rhf_preconvergence(root),
         _discover_rhf_phase_values_default(root),
@@ -580,7 +711,7 @@ def validate_inventory(
 
     try:
         discovered = discover_controls(root)
-    except (SyntaxError, ValueError) as exc:
+    except (SyntaxError, TypeError, ValueError) as exc:
         return errors + [f"control discovery failed: {exc}"]
 
     missing = sorted(set(discovered) - set(registered))

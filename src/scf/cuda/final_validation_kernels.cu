@@ -56,23 +56,26 @@ __global__ void eigen_kernel(ValidationInputs in, const double* fc, const double
   for (std::size_t k = blockIdx.x * blockDim.x + threadIdx.x; k < in.n * in.n;
        k += gridDim.x * blockDim.x) {
     const auto column = k / in.n, row = k % in.n;
+    const auto operator_index = in.transposed_operators ? row * in.n + column : k;
     const double rhs = sc[k] * in.values[column], residual = fc[k] - rhs;
     const double metric = gram[k] - (row == column ? 1.0 : 0.0);
-    r.invalid |= !isfinite(in.f[k]) || !isfinite(in.c[k]) || !isfinite(in.s[k]) ||
-                 !isfinite(in.values[column]) || !isfinite(fc[k]) || !isfinite(sc[k]) ||
-                 !isfinite(gram[k]) || !isfinite(rhs) || !isfinite(residual) ||
-                 (column && in.values[column] < in.values[column - 1]);
-    if (in.expected_density && (!isfinite(in.d[k]) || in.d[k] != in.expected_density[k]))
+    r.invalid |= !isfinite(in.f[operator_index]) || !isfinite(in.c[k]) ||
+                 !isfinite(in.s[operator_index]) || !isfinite(in.values[column]) ||
+                 !isfinite(fc[k]) || !isfinite(sc[k]) || !isfinite(gram[k]) || !isfinite(rhs) ||
+                 !isfinite(residual) || (column && in.values[column] < in.values[column - 1]);
+    if (in.expected_density && (!isfinite(in.d[operator_index]) ||
+                                in.d[operator_index] != in.expected_density[operator_index]))
       r.invalid |= validation_input_failure;
     if (in.generation && (!isfinite(in.c[k]) || !isfinite(in.values[column])))
       r.invalid |= validation_input_failure;
     if (in.physical_fock) {
-      const double other = in.f[column + row * in.n];
-      if (!isfinite(in.f[k]) ||
-          fabs(in.f[k] - other) > 1e-12 * fmax(1.0, fmax(fabs(in.f[k]), fabs(other))))
+      const double other = in.f[in.transposed_operators ? k : column + row * in.n];
+      if (!isfinite(in.f[operator_index]) ||
+          fabs(in.f[operator_index] - other) >
+              1e-12 * fmax(1.0, fmax(fabs(in.f[operator_index]), fabs(other))))
         r.invalid |= validation_input_failure;
     }
-    r.norm_f = hypot(r.norm_f, in.f[k]);
+    r.norm_f = hypot(r.norm_f, in.f[operator_index]);
     r.norm_c = hypot(r.norm_c, in.c[k]);
     r.norm_rhs = hypot(r.norm_rhs, rhs);
     r.norm_residual = hypot(r.norm_residual, residual);
@@ -92,9 +95,11 @@ __global__ void density_kernel(ValidationInputs in, const double* reconstructed,
   double ec = 0, tc = 0;
   for (std::size_t k = blockIdx.x * blockDim.x + threadIdx.x; k < in.n * in.n;
        k += gridDim.x * blockDim.x) {
-    const double drift = reconstructed[k] - in.d[k];
-    const double idempotency = dsd[k] - in.weight * in.d[k];
-    const double energy = in.d[k] * (.5 * in.h[k] + .5 * in.f[k]);
+    const auto operator_index = in.transposed_operators ? (k % in.n) * in.n + k / in.n : k;
+    const double drift = reconstructed[k] - in.d[operator_index];
+    const double idempotency = dsd[k] - in.weight * in.d[operator_index];
+    const double energy =
+        in.d[operator_index] * (.5 * in.h[operator_index] + .5 * in.f[operator_index]);
     r.invalid |= !isfinite(reconstructed[k]) || !isfinite(ds[k]) || !isfinite(dsd[k]) ||
                  !isfinite(drift) || !isfinite(idempotency) || !isfinite(energy);
     r.norm_density = hypot(r.norm_density, drift);

@@ -46,16 +46,76 @@ struct Fixture {
   KsFinalStateCandidate candidate{id, 9, true, {{{-1, 3}, {1 / std::sqrt(2.0), 0, 0, .5}}}};
   solver::FinalStateLimits limits;
 
-  bool validate(bool weighted = false, VerifiedKsFinalState* retained = nullptr) const {
+  bool validate(bool weighted = false, VerifiedKsFinalState* retained = nullptr,
+                const solver::FinalStateOperations* operations = nullptr) const {
     VerifiedKsFinalState state;
     std::string detail;
-    const bool valid =
-        validate_ks_final_state(id, s, h, physical, candidate, limits, weighted, state, detail);
+    const bool valid = validate_ks_final_state(id, s, h, physical, candidate, limits, weighted,
+                                               state, detail, operations);
     if (valid && retained) *retained = std::move(state);
     return valid;
   }
   void sync() { physical.identity = candidate.identity = id; }
 };
+
+void backend_product_policy() {
+  Fixture fixture;
+  fixture.limits.require_canonicality = true;
+  solver::FinalStateOperations operations;
+  unsigned calls = 0;
+  operations.products = [&](const auto& identity, const auto& metric, const auto& core,
+                            double nuclear, const auto& densities, const auto& fock,
+                            const auto& orbitals, const auto& limits, auto& diagnostic,
+                            auto& detail) {
+    ++calls;
+    require(identity == fixture.id.determinant && metric == fixture.s && core == fixture.h &&
+                densities == fixture.physical.density && fock.spins == fixture.physical.fock &&
+                orbitals.spins[0].vectors == fixture.candidate.spins[0].vectors,
+            "KS validation lost its physical products");
+    return solver::validate_final_state(identity, metric, core, nuclear, densities, fock, orbitals,
+                                        limits, diagnostic, detail);
+  };
+  operations.weighted = [](const auto&, const auto&, const auto&) -> std::vector<Matrix> {
+    throw std::runtime_error("KS must not substitute the HF physical-Fock weighted callback");
+  };
+  VerifiedKsFinalState state;
+  require(fixture.validate(true, &state, &operations) && calls == 1,
+          "KS did not delegate validation products");
+  near(state.diagnostic.component_energy, -1.4, "backend replaced the KS component energy");
+  near(state.weighted_density[0][0], -1, "backend changed orbital-energy KS weights");
+
+  Fixture stale = fixture;
+  ++stale.candidate.identity.determinant.factor.density_generation;
+  require(!stale.validate(false, nullptr, &operations) && calls == 1,
+          "stale identity reached backend products");
+  operations.products = [](const auto&, const auto&, const auto&, double, const auto&, const auto&,
+                           const auto&, const auto&, auto& diagnostic, auto&) {
+    diagnostic.eigenframes.resize(1);
+    diagnostic.maximum_canonical_error = 2e-8;
+    return true;
+  };
+  require(!fixture.validate(false, nullptr, &operations),
+          "backend products waived the shared canonicality gate");
+  operations.products = [](const auto&, const auto&, const auto&, double, const auto&, const auto&,
+                           const auto&, const auto&, auto& diagnostic, auto&) {
+    diagnostic.eigenframes.resize(1);
+    diagnostic.maximum_density_error = std::numeric_limits<double>::quiet_NaN();
+    return true;
+  };
+  require(!fixture.validate(false, nullptr, &operations),
+          "nonfinite backend products passed the shared gates");
+  operations.products = [](const auto&, const auto&, const auto&, double, const auto&, const auto&,
+                           const auto&, const auto&, auto&, auto&) -> bool {
+    throw std::runtime_error("injected backend product failure");
+  };
+  bool failed = false;
+  try {
+    fixture.validate(false, nullptr, &operations);
+  } catch (const std::runtime_error&) {
+    failed = true;
+  }
+  require(failed, "KS silently fell back after a backend product failure");
+}
 
 void residual_norm_contract() {
   for (double tolerance : {1e-12, 1e-10, 1e-7}) {
@@ -260,6 +320,7 @@ void model_and_state_rejection() {
 int main() {
   try {
     residual_norm_contract();
+    backend_product_policy();
     analytic_rks_and_uks();
     cuda_global_hybrid_identity();
     identity_rejection();

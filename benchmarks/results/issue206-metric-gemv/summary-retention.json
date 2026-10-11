@@ -1,0 +1,14 @@
+{
+  "schema": "generativeqc.lossless-evidence-compaction.v1",
+  "scope": "Storage-only compaction of an already merged historical summary; no samples, values, ordering or scientific acceptance change.",
+  "archive": "summary.json.gz",
+  "archive_bytes": 32282,
+  "archive_sha256": "aa2b2d5a0a6a35dae7ba79afeeef9f9740655b89309fe5a990fdcfae61b3ff27",
+  "original": "summary.json",
+  "original_bytes": 311536,
+  "original_sha256": "cd1221cbef74564eaa89943c405f0110f43c05418a2c8c094464ecaf9307a714",
+  "original_git_commit": "c820ad08de1ceb33bc19c79115e0af2d52b01784",
+  "original_git_blob": "eb4fa911ad60876c799ff363d8d6d6c3e0dac55d",
+  "restore_verified_byte_identical_before_removal": true,
+  "no_release_or_external_publication": true
+}

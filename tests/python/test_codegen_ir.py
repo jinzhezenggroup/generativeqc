@@ -372,7 +372,9 @@ def test_ppps_resident_rys_lowering_uses_nonfinal_recovery_centers() -> None:
         contractions=(force,),
         recurrence="rys3",
     )
-    source = emit_ppps_resident_bra_rys3_cuda(integral=integral)
+    source = emit_ppps_resident_bra_rys3_cuda(
+        target=TEST_CUDA_TARGET, integral=integral
+    )
 
     # A/C/D are independent under center-B recovery and must occupy dense
     # slots 0..8; the resident path must not regress to a force_9 write.

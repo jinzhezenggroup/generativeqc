@@ -8,13 +8,14 @@ import subprocess
 import typing
 
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral import emit_ppps_resident_bra_rys3_cuda
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
 
 
-def _cuda_source() -> str:
+def _cuda_source(architecture: str) -> str:
     """Return the resident source with a tiny compile-only Boys stub."""
 
     boys_stub = """
@@ -27,13 +28,17 @@ __device__ __forceinline__ void boys_values(
   }
 }
 """
-    return boys_stub + emit_ppps_resident_bra_rys3_cuda()
+    return boys_stub + emit_ppps_resident_bra_rys3_cuda(
+        target=cuda_target_info(architecture)
+    )
 
 
 def test_ppps_resident_bra_source_shape_is_complete() -> None:
     """Keep the 1110 mapping and force invariants visible in generated CUDA."""
 
-    source = emit_ppps_resident_bra_rys3_cuda()
+    with pytest.raises(TypeError, match="target"):
+        emit_ppps_resident_bra_rys3_cuda()
+    source = emit_ppps_resident_bra_rys3_cuda(target=cuda_target_info("sm_120"))
     assert "struct GeneratedPppsResidentTask" in source
     assert "std::uint32_t bra_pair;" in source
     assert "std::uint32_t ket_begin;" in source
@@ -81,7 +86,7 @@ def test_ppps_resident_bra_sm120_resource_probe_when_nvcc_is_configured(
     architecture = os.environ.get("GENERATIVEQC_CUDA_ARCH", "sm_90")
     source_path = tmp_path / "generated_ppps_resident_rys3.cu"
     cubin_path = tmp_path / "generated_ppps_resident_rys3.cubin"
-    source_path.write_text(_cuda_source(), encoding="utf-8")
+    source_path.write_text(_cuda_source(architecture), encoding="utf-8")
     result = subprocess.run(
         [
             nvcc,

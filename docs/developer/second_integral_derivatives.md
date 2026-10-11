@@ -129,7 +129,9 @@ The timing scope is the prepared primitive provider, with external-weight
 preparation and independent reference construction outside the samples.
 
 `tools/validate_second_ownership.py --backend cpu --output <new-directory>`
-builds ASan/UBSan lifecycle executables. The CUDA mode uses compute-sanitizer
-memcheck, including leak checks; execute it under a finite Slurm allocation.
+builds ASan/UBSan lifecycle executables. The CUDA mode requires an explicit
+`--cuda-target sm_XX` and uses compute-sanitizer memcheck, including leak checks;
+execute it under a finite Slurm allocation. The generated driver takes both
+compute-capability numbers from that target, rather than assuming Blackwell.
 It exercises attraction HVPs, four-center HVPs and the f/f/f/f raw moment bound,
 with invalid/empty chunks and successful replay after failure.

@@ -90,48 +90,49 @@ def test_plan_identity_depends_on_semantics_not_method_name() -> None:
     assert alias.to_payload() == pbe.to_payload()
 
 
-@pytest.mark.parametrize("method", ["PBE0", "CAM-B3LYP"])
-def test_unqualified_exchange_primitives_fail_closed(method: typing.Any) -> None:
+def test_unqualified_range_exchange_primitive_still_fails_closed() -> None:
     with pytest.raises(UnsupportedMethod, match="second-order rule"):
-        plan(method)
+        plan("CAM-B3LYP")
 
 
-def test_primitive_rule_registration_extends_plan_without_method_dispatch(
+def test_builtin_full_range_exchange_composes_without_method_dispatch() -> None:
+    semilocal = plan("PBE")
+    hybrid = plan("PBE0")
+    assert "exact_exchange" not in semilocal.source_names
+    assert hybrid.source_names == (
+        "one_electron",
+        "coulomb",
+        "xc_ao",
+        "xc_grid",
+        "xc_weight",
+        "exact_exchange",
+        "overlap_pulay",
+        "nuclear",
+    )
+    assert [rule.identifier for rule in hybrid.primitive_rules] == [
+        "semilocal-rho-sigma-v1",
+        "full-range-exact-exchange-v1",
+    ]
+    block = hybrid.integral_block("exact_exchange", terms=2)
+    assert block.response_inputs == ("density_left", "density_right")
+
+
+def test_removed_full_range_exchange_rule_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    exchange_source = stationary_hvp_module.HVPSource(
-        "exact_exchange",
-        "exact_exchange",
-        ("density-response", "first-integral-direction", "second-integral-hvp"),
-        ("density_left", "density_right"),
-    )
-    exchange_rule = stationary_hvp_module.HVPPrimitiveRule(
-        "test-full-range-exchange-v1",
-        ExactExchangePrimitive,
-        "exact_exchange",
-        ("energy", "fock", "eri-first-derivative"),
-        (),
-        (exchange_source,),
-    )
     monkeypatch.setattr(
         stationary_hvp_module,
         "_PRIMITIVE_HVP_RULES",
         MappingProxyType(
             {
-                **dict(stationary_hvp_module._PRIMITIVE_HVP_RULES),
-                ExactExchangePrimitive: exchange_rule,
+                primitive_type: rule
+                for primitive_type, rule in stationary_hvp_module._PRIMITIVE_HVP_RULES.items()
+                if primitive_type is not ExactExchangePrimitive
             }
         ),
     )
-
-    hybrid = plan("PBE0")
-    assert "exact_exchange" in hybrid.source_names
-    assert [rule.identifier for rule in hybrid.primitive_rules] == [
-        "semilocal-rho-sigma-v1",
-        "test-full-range-exchange-v1",
-    ]
-    block = hybrid.integral_block("exact_exchange", terms=2)
-    assert block.response_inputs == ("density_left", "density_right")
+    with pytest.raises(UnsupportedMethod, match="no stationary-HVP second-order rule"):
+        plan("PBE0")
 
 
 def test_primitive_rule_cannot_collide_with_envelope_source(

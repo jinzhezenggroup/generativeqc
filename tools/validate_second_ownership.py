@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
 from generativeqc_compiler.common.compiler_process import run_compiler
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral.second_derivatives import (
     build_eri_second_ir,
     build_one_electron_second_ir,
@@ -47,7 +48,7 @@ int main() {
   auto check = [&](bool condition) {
     if (!condition) { std::fprintf(stderr, "ownership failure: %s\n", detail); std::exit(2); }
   };
-  check(generativeqc_second_create_v1(0, @MAJOR@, 0, 2, 1, 4096, &handle, detail, sizeof(detail)) == GENERATIVEQC_STATUS_SUCCESS);
+  check(generativeqc_second_create_v1(0, @MAJOR@, @MINOR@, 2, 1, 4096, &handle, detail, sizeof(detail)) == GENERATIVEQC_STATUS_SUCCESS);
   double output[@OUTPUTS@]{};
   auto run = [&](std::size_t count, std::size_t stride = sizeof(SecondRecord)) {
     return generativeqc_second_run_v1(handle, count ? records : nullptr, count, stride, 1, output, 0, detail, sizeof(detail));
@@ -78,12 +79,18 @@ def main() -> typing.Any:
     """Compile finite fixtures, then execute only inside the declared backend."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("cpu", "cuda"), required=True)
+    parser.add_argument(
+        "--cuda-target", help="explicit CUDA target architecture (e.g. sm_90)"
+    )
     parser.add_argument("--compiler")
     parser.add_argument("--sanitizer", default="compute-sanitizer")
     parser.add_argument("--compile-only", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     cuda = args.backend == "cuda"
+    if cuda and not args.cuda_target:
+        parser.error("--backend cuda requires --cuda-target")
+    target = cuda_target_info(args.cuda_target) if cuda else None
     if cuda and not args.compile_only and not os.environ.get("SLURM_JOB_ID"):
         raise ValueError("real CUDA sanitizer execution requires a Slurm allocation")
     args.output.mkdir(parents=True, exist_ok=False)
@@ -123,14 +130,15 @@ def main() -> typing.Any:
             "@DIRECTIONS@": 3 * len(integral.requested_derivative_centers)
             if integral.contractions[0].output == "weighted_hvp"
             else 0,
-            "@MAJOR@": 12 if cuda else 0,
+            "@MAJOR@": target.compute_capability_major if target else 0,
+            "@MINOR@": target.compute_capability_minor if target else 0,
         }.items():
             source = source.replace(token, str(value))
         path = args.output / (name + (".cu" if cuda else ".cpp"))
         path.write_text(source)
         executable = (args.output / name).resolve()
         flags = (
-            ["-arch=sm_120", "-O3", "--fmad=false"]
+            [f"-arch={target.architecture}", "-O3", "--fmad=false"]
             if cuda
             else [
                 "-O1",

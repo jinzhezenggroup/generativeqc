@@ -1156,8 +1156,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     arena.stream = reinterpret_cast<cudaStream_t>(stream_handle);
     arena.owns_stream = false;
     const auto o = arena.upload(host_o), x = arena.upload(host_a);
-    // Work-based schedule selection is independent of correctness eligibility.
-    // Preserve source/metric/diagnostic gates; small or unknown targets retain
+    // Work-based admission is architecture-independent, and does not replace
+    // source/metric/diagnostic eligibility. Small or unprobed targets retain
     // the generic route. Packed response has a separate qualification boundary.
     bool promoted_default = false;
     unsigned derivative_architecture = 0;
@@ -1194,9 +1194,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
     const bool full_shell_domain = execution == "shell";
-    // The measured sm_120 shell domain admits one absolute force-component
-    // budget. Unknown architectures and small automatic workloads stay strict;
-    // explicit controls can independently qualify their shell consumers.
+    // A work-qualified shell domain admits the same analytically bounded
+    // force-component screen on every CUDA architecture. Small or diagnostic
+    // workloads stay strict; explicit controls remain independent.
     if (!shell_screen_control && promoted_default) shell_target = 1e-10;
     const char* pair_control = std::getenv("GENERATIVEQC_DF_DERIVATIVE_PAIRS");
     const std::string_view pair_policy = pair_control ? pair_control : "auto";

@@ -80,6 +80,20 @@ def test_missing_native_feature_is_not_silently_ignored() -> None:
 
 
 def test_minao_resource_inventory_is_explicit() -> None:
+    # A private native query, rather than duplicated Python sizing arithmetic,
+    # must own the production planner's MINAO inventory when available.
+    observed = []
+
+    def native_minao_capacity(
+        n: int, atomic_numbers: typing.Sequence[int], count: int, output: object
+    ) -> int:
+        observed.append((n, tuple(atomic_numbers[i] for i in range(count))))
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_uint64))[0] = 32768
+        return 0
+
+    library = SimpleNamespace(
+        generativeqc_resource_minao_numeric_capacity_v1=native_minao_capacity
+    )
     topology = json.dumps(
         {
             "items": [
@@ -110,7 +124,7 @@ def test_minao_resource_inventory_is_explicit() -> None:
             ),
         ),
     )
-    calc = SimpleNamespace(_initial_guess=InitialGuessSpec("minao"))
+    calc = SimpleNamespace(_initial_guess=InitialGuessSpec("minao"), _library=library)
     combined = with_initial_guess_resources(target, calc, [WATER], [0], [1])
     extra = combined.candidates[0].estimates[1:]
     assert [item.name for item in extra] == [
@@ -119,7 +133,16 @@ def test_minao_resource_inventory_is_explicit() -> None:
     ]
     assert all(item.bytes > 0 for item in extra)
     assert extra[0].bytes == 8 * 13 * 13
-    assert sum(item.bytes for item in extra) == _minao_numeric_capacity(13, [8, 1, 1])
+    assert sum(item.bytes for item in extra) == 32768
+    assert observed == [(13, (8, 1, 1))]
+    query = library.generativeqc_resource_minao_numeric_capacity_v1
+    assert query.argtypes == [
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    assert query.restype is ctypes.c_int
     # Batch owners retain all seeds but serialize only the largest workspace.
     two = replace(
         target,
@@ -136,6 +159,7 @@ def test_minao_resource_inventory_is_explicit() -> None:
     two_extra = two_result.candidates[0].estimates[1:]
     assert two_extra[0].bytes == 2 * extra[0].bytes
     assert two_extra[1].bytes == extra[1].bytes
+    assert observed == [(13, (8, 1, 1))] * 3
 
 
 def request(name: str, size: int) -> ResourceRequest:
@@ -189,6 +213,35 @@ def test_global_budget_includes_both_live_owners(
         plan_resources((combined,), ResourceBudget(host_bytes=150)).require_feasible()
     calc._initial_guess = None
     assert with_initial_guess_resources(target, calc, [WATER], [0], [1]) is target
+
+
+@pytest.mark.parametrize(
+    "nbf,atomic_numbers",
+    [(2, [1, 1]), (7, [8, 1, 1]), (13, [6, 1, 1, 1, 1]), (7, list(range(1, 19)))],
+)
+def test_native_minao_shape_query_is_authoritative(
+    native: None, nbf: int, atomic_numbers: list[int]
+) -> None:
+    library = _native.load_library(device="cpu")
+    query = getattr(library, "generativeqc_resource_minao_numeric_capacity_v1", None)
+    if query is None:
+        pytest.fail("current native library must expose MINAO numeric capacity")
+    expected = _minao_numeric_capacity(nbf, atomic_numbers)
+    assert _minao_numeric_capacity(nbf, atomic_numbers, library) == expected
+    with pytest.raises(ValueError, match="H-Ar"):
+        _minao_numeric_capacity(nbf, [19], library)
+    output = ctypes.c_uint64(9876)
+    assert query(nbf, (ctypes.c_int32 * 1)(19), 1, ctypes.byref(output)) != 0
+    assert output.value == 9876
+
+
+def test_native_minao_query_failure_does_not_fall_back_to_python() -> None:
+    def reject(*_: object) -> int:
+        return 1
+
+    library = SimpleNamespace(generativeqc_resource_minao_numeric_capacity_v1=reject)
+    with pytest.raises(ValueError, match="rejected topology"):
+        _minao_numeric_capacity(7, [8], library)
 
 
 @pytest.fixture

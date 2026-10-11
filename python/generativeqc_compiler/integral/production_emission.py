@@ -1040,6 +1040,7 @@ def _emit_ppps_resident_source(selection: KernelSelection) -> str:
     )
     resident_integral = _selection_integral(selection, recurrence="rys3")
     return emit_ppps_resident_bra_rys3_cuda(
+        target=cuda_target_info(selection.architecture),
         include_shared_definitions=False,
         include_rys3_roots=not ordinary_owns_resident_roots,
         integral=resident_integral,

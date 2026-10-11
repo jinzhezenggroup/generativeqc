@@ -298,7 +298,9 @@ def main() -> None:
     parser.add_argument(
         "--nvcc", type=Path, default=Path("/group/software/cuda-12.9.1/bin/nvcc")
     )
-    parser.add_argument("--target", default="sm_120")
+    parser.add_argument(
+        "--target", help="explicit CUDA target architecture (e.g. sm_90)"
+    )
     parser.add_argument(
         "--functionals", nargs="+", choices=tuple(CATALOG), default=list(CATALOG)
     )
@@ -322,6 +324,8 @@ def main() -> None:
     parser.add_argument("--points", type=int, default=4096)
     parser.add_argument("--repeats", type=int, default=5)
     args = parser.parse_args()
+    if args.tier != "cpu" and not args.target:
+        parser.error("CUDA validation tiers require --target")
     if args.points < 1 or args.repeats < 1:
         parser.error("points and repeats must be positive")
     device = None

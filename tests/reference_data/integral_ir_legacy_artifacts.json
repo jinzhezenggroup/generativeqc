@@ -2,7 +2,7 @@
   "baseline_revision": "2414c57dbc7a11c7cd33e3f81fad333be44422e4",
   "generator_abi": 1,
   "manifest_schema": 2,
-  "manifest_sha256": "992f5aa94b9ea021b6dcdc9000aecc85cbfad8064f11e2ec1304909afd9b975a",
+  "manifest_sha256": "4327a87909b22a3af1518948cf9417d3b347289e86c0de8bebfa20dc7a189a64",
   "architectures": [
     "sm_120",
     "sm_90"
@@ -843,6 +843,15 @@
         "sm_90"
       ],
       "reason": "Integrate the reviewed compensated Fock sink with the Rys-task and task-work routes. Both exact parents independently reproduce every recorded bundle hash, and bf39 reproduces all six retained-source hashes. All ten combined bundles and six retained sources reproduce bf39 byte-for-byte after reversing only the compensation include, output template/types, Fock launch alias and resulting line wrapping. The four empty portable shards gain only the runtime header; generated registry header, manifest and catalog remain unchanged. Explicitly reconcile task/task-work registry declarations and disabled stubs with the already-upgraded shared emitter; host executables check all six selector routes, both spin modes and present/absent correction planes. Keep the low-word state, rolled ddds schedule and widened mixed pair products. Frozen GPU receipts keep their original source identities; these regenerated hashes and host tests do not qualify a rebuilt combined binary."
+    },
+    {
+      "task": "rys-task-qualified-profile-preferences-20261010",
+      "source_revision": "5e15210873384c5fcced2a8ec21e79effac043c2",
+      "integrated_base_revision": "42a1728dd0cc88ca96a06e7e428882682d13a13c",
+      "paths": [
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
+      ],
+      "reason": "Move the existing nine-class sm_120 Rys-task preference into explicit qualified profile metadata. Independently regenerate the integrated base and source revision: all ten full bundles, all six retained scientific sources and the shell catalog reproduce the existing fixture unchanged. Only the manifest fingerprint changes; generated arithmetic, schedules, dispatch masks and portable artifacts retain their exact bytes. Reduced test profiles project the qualification list onto their selected inventory while production continues to reject unavailable qualified classes. No new target or GPU performance qualification is claimed."
     }
   ]
 }

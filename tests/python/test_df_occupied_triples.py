@@ -390,10 +390,10 @@ def test_native_energy_work_budget_fallback_and_repeatability(
     tiles = o * (o + 1) * (o + 2) // 6
     assert counts[0] == v * (v + 1) * (v + 2) // 6
     assert counts[1] == tiles and counts[5] == min(3, o)
-    assert counts[7] == 12 * tiles
+    assert counts[7] == 2 * o**3
     assert counts[8] == tiles and counts[9] == tiles + 1
     assert counts[10] == tiles * v**3
-    assert counts[11] == counts[6] * q * v**3 + 6 * tiles * (v**4 + o * v**3)
+    assert counts[11] == counts[6] * q * v**3 + o**3 * (v**4 + o * v**3)
     assert counts[12] == sum(x.nbytes for x in inputs) and counts[13] == 12
     assert counts[4] <= 96 << 20 and counts[23] > 0
     assert counts[2] == counts[3] + (96 << 20) + counts[23]

@@ -109,7 +109,15 @@ def test_runtime_and_tuning_api_share_cuda_target_info() -> None:
     runtime = (root / "src/runtime/cuda_runtime.cu").read_text(encoding="utf-8")
     tuning = (root / "src/api/c_api_tuning.cpp").read_text(encoding="utf-8")
     direct = (root / "src/scf/cuda_rhf.cpp").read_text(encoding="utf-8")
+    facts = (root / "src/runtime/cuda_device_facts.cpp").read_text(encoding="utf-8")
 
-    assert "cuda_device_facts" in runtime
-    assert "cuda_device_facts" in tuning
-    assert "cuda_target_info_from_properties" in direct
+    assert "cuda_device_facts(state.device_id, target, device_name)" in runtime
+    assert "cuda_device_facts(device_id, target, device_name)" in tuning
+    assert (
+        "runtime::cuda_device_facts(device_id, direct_target, direct_device_name)"
+        in direct
+    )
+    assert "resolve_direct_jk_schedule_policy(direct_target)" in direct
+    # The common facts owner retains the authoritative full-property fallback.
+    assert "cudaGetDeviceProperties(&properties, device)" in facts
+    assert "candidate = cuda_target_info_from_properties(properties)" in facts

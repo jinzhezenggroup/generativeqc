@@ -211,9 +211,18 @@ struct CudaState {
 struct ReplayCudaState : CudaState {
   tensor::PreparedContractions contractions;
 };
+struct BatchedReplayCudaState : CudaState {
+  tensor::PreparedContractions contractions;
+};
 constexpr std::size_t replay_binding_host_bytes() { return 128; }
+constexpr std::size_t batch_replay_binding_host_bytes(std::size_t) { return 256; }
+bool refuse_batch_binding=false;
 void prepare_virtual_replay(ReplayCudaState&,tensor::CudaContractionContext&,
                             std::size_t&,std::size_t&) {}
+void prepare_virtual_batch(BatchedReplayCudaState&,tensor::CudaContractionContext&,
+                          std::size_t,std::size_t,std::size_t&,std::size_t&) {
+  if(refuse_batch_binding) throw std::bad_alloc();
+}
 }
 namespace dfhoist {
 struct CudaState : dfcore::CudaState {
@@ -322,6 +331,34 @@ int main() {
   }
   }
   if (!saw_matrix) return 11;
+  p.naux=18; p.df_bov.assign(18,0.1); p.df_bvv.assign(18,0.1);
+  {
+    generativeqc::cc::SolverOptions options;
+    options.df_auxiliary_batch_limit=32;
+    std::size_t old_capacity=0,old_device=0,old_primal=0;
+    calls=fail_at=0;
+    { generativeqc::cc::Owner old(p,options,0);
+      old_capacity=old.diagnostic.numeric_capacity_bytes;
+      old_device=old.diagnostic.owned_device_bytes;
+      old_primal=old.plan.auxiliary_batch_size;
+    }
+    options.df_replay_auxiliary_batch=true;
+    for(const bool refused : {false,true}) {
+      generativeqc::cc::generated::df::refuse_batch_binding=refused;
+      generativeqc::cc::Owner batch(p,options,0);
+      if(batch.diagnostic.owned_device_bytes!=old_device ||
+         batch.plan.auxiliary_batch_size!=old_primal || !batch.replay_matrix ||
+         (refused ? batch.replay_batch!=0 : batch.replay_batch<=1)) return 45;
+    }
+    generativeqc::cc::generated::df::refuse_batch_binding=false;
+    options.max_bytes=old_capacity;
+    { generativeqc::cc::Owner bounded(p,options,0);
+      if(bounded.replay_batch || !bounded.replay_matrix ||
+         bounded.plan.auxiliary_batch_size!=old_primal ||
+         bounded.diagnostic.owned_device_bytes!=old_device ||
+         bounded.diagnostic.numeric_capacity_bytes!=old_capacity) return 46;
+    }
+  }
   p.naux=2; p.df_bov.assign(2,0.1); p.df_bvv.assign(2,0.1);
   // Allocation rejection exercises the actual production retry chain: a Q
   // tile may lose its arena while the admitted matrix provider stays usable.

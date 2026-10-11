@@ -942,6 +942,35 @@ class PreparedBatch:
             finally:
                 state._source.close()
 
+    def _native_dft_force_eligible(self) -> bool:
+        """Use only the native *prepared* item capability for force routing.
+
+        This deliberately does not duplicate PBE/PBE0, CPU/DF, spin, ECP, or
+        MethodIR admission predicates in Python. Older libraries and native
+        contexts without the full force provider keep the existing Python
+        force path; an actual query error is never silently downgraded.
+        """
+        query = getattr(
+            self._library, "generativeqc_ks_batch_supported_properties_v1", None
+        )
+        if query is None:
+            return False
+        query.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32),
+        ]
+        query.restype = ctypes.c_int
+        for index in range(len(self._systems)):
+            properties = ctypes.c_uint32()
+            status = query(self._batch, index, ctypes.byref(properties))
+            if status == _native.STATUS_NOT_IMPLEMENTED:
+                return False
+            _native.check(self._library, status, context=self._context)
+            if not properties.value & _native.PROPERTY_FORCES:
+                return False
+        return True
+
     def _execution_resource_request(self, properties: frozenset[str]) -> typing.Any:
         """Rebudget optional CPU force scratch without changing resident owners."""
         calculator = self._calculator
@@ -1050,13 +1079,15 @@ class PreparedBatch:
             compute_forces
             and self._calculator._capabilities.family == "density_functional"
         )
-        native_compute_forces = compute_forces and not public_dft_forces
         if self._calculator._initial_guess != self._initial_guess_spec:
             raise RuntimeError("preliminary SCF policy changed; prepare a new batch")
         if self._calculator._model_signature() != self._model_signature:
             raise RuntimeError(
                 "prepared basis/model identity changed; prepare a new batch before reusing densities or Fock/DIIS state"
             )
+        native_dft_forces = public_dft_forces and self._native_dft_force_eligible()
+        public_dft_forces = public_dft_forces and not native_dft_forces
+        native_compute_forces = compute_forces and not public_dft_forces
         if compute_forces and self._output_aware_cpu_forces:
             # Energy-default preparation admits only value operators. Recheck
             # derivative support before a later explicit force replay; never

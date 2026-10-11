@@ -14,6 +14,25 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize("unrelated", ("cuda_architecture.hpp", "resource_ledger.hpp"))
+def test_hf_driver_can_borrow_only_qualified_device_facts(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """Qualified facts do not open a general runtime dependency for HF."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "runtime").mkdir()
+    (source / "runtime/cuda_device_facts.hpp").write_text("\n")
+    (source / "runtime" / unrelated).write_text("\n")
+    owner = source / "scf/cuda_rhf.cpp"
+    owner.write_text('#include "runtime/cuda_device_facts.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "runtime/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_hf_driver dependency on runtime/{unrelated}" in errors[0]
+
+
 @pytest.mark.parametrize(
     ("owner", "header"),
     [

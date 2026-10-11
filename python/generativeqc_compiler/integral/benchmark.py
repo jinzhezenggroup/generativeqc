@@ -1455,6 +1455,8 @@ def emit_ppps_resident_bra_benchmark_cuda(
     positive_values = (task_count, primitive_count, iterations, samples)
     if any(value <= 0 for value in positive_values) or warmups < 0:
         raise ValueError("benchmark sizes must be positive and warmups non-negative")
+    if target is None:
+        raise ValueError("CUDA target must be explicit for resident ppps benchmark")
     spec = FUSED_SHELL_SPEC_BY_NAME["ppps"]
     schedule = ScheduleIR(
         kind=ScheduleKind.THREAD_TASKS,
@@ -1495,7 +1497,7 @@ def emit_ppps_resident_bra_benchmark_cuda(
     host = _specialize_dppp_identifiers(host, spec)
     return (
         _CUDA_PRELUDE
-        + emit_ppps_resident_bra_rys3_cuda()
+        + emit_ppps_resident_bra_rys3_cuda(target=target)
         + emit_uncached_primitive_geometry_cuda(spec)
         + _benchmark_unfused_kernel(spec, plan)
         + host

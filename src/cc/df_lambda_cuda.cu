@@ -243,6 +243,7 @@ struct DFLambdaActions::Impl {
     const auto scalar_cursor = cursor, scalar_staged_arena = staged_arena;
     const bool scalar_reduction = metrics.df_auxiliary_reduction;
     std::size_t binding_host_bytes = 0, core_reuse_offset = 0, audit_offset = 0;
+    std::size_t matrix_scratch_elements = 0;
     auto capacity = [&] {
       metrics.owned_device_bytes = checked_add(cursor, metrics.df_provider_allowance_bytes);
       metrics.numeric_capacity_bytes =
@@ -250,6 +251,7 @@ struct DFLambdaActions::Impl {
     };
     auto scalar_plan = [&] {
       binding_host_bytes = 0;
+      matrix_scratch_elements = 0;
       metrics.df_matrix_gemm = false;
       metrics.df_core_reuse = false;
       metrics.df_core_reuse_bytes = 0;
@@ -293,6 +295,7 @@ struct DFLambdaActions::Impl {
           metrics.df_auxiliary_batch_size = batch;
           metrics.df_provider_allowance_bytes = kProviderAllowance;
           staged_arena = matrix_arena;
+          matrix_scratch_elements = matrix_scratch;
           cursor = candidate;
           break;
         }
@@ -346,7 +349,13 @@ struct DFLambdaActions::Impl {
       binding_host_bytes = matrix_binding_host_bytes;
       capacity();
     };
-    if (metrics.df_matrix_gemm && options.df_core_reuse) {
+    // The immutable frontier has its own lease; both preparation and dynamic
+    // temporaries borrow the already-budgeted matrix arena between Q consumers.
+    // Refuse retention if a future graph needs more scratch, never reduce Q or
+    // silently grow the mandatory owner to admit an optional cache.
+    if (metrics.df_matrix_gemm && options.df_core_reuse &&
+        generated_response::staged_core_reuse_scratch_arena_elements(o, v) <=
+            matrix_scratch_elements) {
       auto candidate = cursor;
       const auto retained_bytes = bytes(generated_response::staged_core_reuse_arena_elements(o, v));
       const auto offset = reserve(candidate, retained_bytes);

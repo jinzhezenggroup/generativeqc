@@ -188,7 +188,7 @@ def test_cuda_df_one_electron_borrows_final_stationary_weights() -> None:
         in method
     )
     assert "execute_cuda_stationary_one_electron_pair(" in method
-    assert "system_, {}, {}, 0, maximum_bytes" in method
+    assert "one_electron_device_maximum_bytes.value_or(maximum_bytes)" in method
     assert "resident_weights.density, resident_weights.weighted_density" in method
     assert "if (!resident_one_electron)" in method
     assert method.index("resident_final_stationary_weights") < method.index(

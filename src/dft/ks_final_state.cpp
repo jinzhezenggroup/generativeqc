@@ -210,7 +210,8 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const KsFinalStateCandidate& candidate,
                              const scf::solver::FinalStateLimits& limits,
                              bool compute_weighted_density, VerifiedKsFinalState& output,
-                             std::string& detail) {
+                             std::string& detail,
+                             const scf::solver::FinalStateOperations* operations) {
   output = {};
   detail.clear();
   if (!valid_model(current) || physical.identity != current || candidate.identity != current ||
@@ -240,7 +241,7 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
   scf::solver::FinalStateDiagnostic determinant;
   if (!scf::solver::validate_final_state(current.determinant, overlap, hcore,
                                          physical.components.nuclear, physical.density, fock,
-                                         orbitals, limits, determinant, detail))
+                                         orbitals, limits, determinant, detail, operations))
     return false;
   determinant.energy = component_energy;
   determinant.energy_change = 0;
