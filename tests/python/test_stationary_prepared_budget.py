@@ -35,9 +35,7 @@ def test_prepared_artifact_resources_close_when_publication_fails(
     monkeypatch.setattr(runtime, "_layout", lambda _basis: (None, None, (), None))
     monkeypatch.setattr(runtime, "_component_mode", lambda _expansions: False)
     monkeypatch.setattr(runtime, "stationary_runtime_sources", lambda _plan: ())
-    stationary = SimpleNamespace(
-        metadata={"key": "a" * 64, "binary_sha256": "b" * 64}
-    )
+    stationary = SimpleNamespace(metadata={"key": "a" * 64, "binary_sha256": "b" * 64})
     grid = SimpleNamespace(
         metadata={
             "key": "a" * 64 if failure == "artifact-collision" else "c" * 64,
@@ -63,6 +61,7 @@ def test_prepared_artifact_resources_close_when_publication_fails(
     monkeypatch.setattr(runtime, "_CudaSources", lambda *_a, **_kw: resource("sources"))
 
     if failure == "lease-install":
+
         def reject_install(*_args, **_kwargs):
             raise RuntimeError("injected lease installation failure")
 

@@ -32,7 +32,6 @@ from tools.generate_gfn2_electronic_cuda import cuda_header
 ROOT = Path(__file__).resolve().parents[2]
 
 
-
 def _mutation(case: str, weighted: bool) -> Program:
     specs = weighted_density_input_specs(1, 3, spin_count=2, orbital_count=3)
     if case == "dtype":
@@ -197,7 +196,6 @@ def test_generated_paired_loop_against_independent_order_and_math_oracles(
         timeout=60,
     )
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=20)
-
 
 
 def test_native_executor_consumes_the_selected_candidate_type(

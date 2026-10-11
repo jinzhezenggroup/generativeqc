@@ -11,12 +11,13 @@ import argparse
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 from generativeqc.elements import atomic_number
