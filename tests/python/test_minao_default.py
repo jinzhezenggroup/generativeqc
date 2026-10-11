@@ -312,6 +312,9 @@ def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
         "generativeqc_initial_guess_capabilities_v1",
         lambda: _native.INITIAL_GUESS_CAPABILITY_MINAO,
     )
+    monkeypatch.setattr(
+        _native, "load_library", lambda *args, **kwargs: automatic._library
+    )
     legacy = Calculator(method, basis, device="cpu", **options)
     assert legacy.initial_guess is None
 
