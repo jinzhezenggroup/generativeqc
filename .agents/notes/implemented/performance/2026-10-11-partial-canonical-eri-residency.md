@@ -176,8 +176,23 @@ preparation. KS consumers do not read the RHF environment controls.
 The frozen reconstruction, binaries and three-pair timing evidence remain
 unchanged. Post-merge checks establish numerical/ownership compatibility, not a
 new comparison against the later master or a broader default promotion.
-The compatibility host suite passes 328 tests, including the shared screened
+The compatibility host suite passes 330 tests, including the shared screened
 lease's unchanged automatic admission and explicit partial-screening refusal.
+
+n1 Slurm job 7500 completes the full Release/CUDA 12.9.1/SM120 integration
+build with reused ccache, all 88 independent frame-response GPU tests, and a
+four-phase 6-atom TZVPD native E+F smoke endpoint through the shared lease.
+All nine modified native source/header hashes match the remote build inputs.
+The rebuilt library SHA-256 is
+`e4a55e4003557a14be3f00c3d8171ad1fbb06b3087db295a51f93a52af3e9ba9`.
+Independent maximum energy/force errors are `4.831690603168681e-13` Eh and
+`1.2463684815125498e-9` Eh/Bohr. Every SCF phase admits 16,916,331 packed values
+(135,330,648 bytes), visits 34,084,896 candidates and evaluates exactly
+17,168,565 uncached recurrences per action; every response also uses the partial
+source. These are numerical compatibility checks, not additional timed pairs.
+Raw outcome, oracle, full forces, source receipts and binary identities remain
+under the ignored `.artifacts/selective-eri-cache/n1-integration-83398629/`
+and the n1 integration artifact root.
 
 The first integration CI tested a newer synthetic merge with master `5b577dbb`,
 whose additional evidence left less than 48 KiB of the aggregate checkout
