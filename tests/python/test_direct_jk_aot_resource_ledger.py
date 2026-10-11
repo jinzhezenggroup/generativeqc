@@ -18,6 +18,24 @@ from generativeqc_compiler.common.compiler_process import CompileResult
 from tools import validate_direct_jk_aot_resources as validator
 
 
+def _production_cache(**overrides: str) -> str:
+    fields = {
+        "GENERATIVEQC_AOT_SHARDS": "8",
+        "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS": "1",
+        "GENERATIVEQC_ENABLE_CUDA": "ON",
+        "GENERATIVEQC_ENABLE_AOT_SHELLS": "ON",
+        "GENERATIVEQC_AOT_UNIT_MODE": "stable-shards",
+        "GENERATIVEQC_AOT_PROFILE": "sm_120",
+        "GENERATIVEQC_AOT_PROFILES": "",
+        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
+        "GENERATIVEQC_CUDA_ARCHITECTURES": "",
+        "CMAKE_CUDA_ARCHITECTURES": "120",
+        "GENERATIVEQC_AOT_SHELL_MANIFEST": str(validator.MANIFEST),
+    }
+    fields.update(overrides)
+    return "".join(f"{field}:STRING={value}\n" for field, value in fields.items())
+
+
 def _identity(**overrides: object) -> dict[str, object]:
     payload = {
         "architecture": validator.QUALIFIED_ARCHITECTURE,
@@ -691,9 +709,144 @@ class TestProductionContextBinding:
         self, tmp_path: Path, cache_type: str
     ) -> None:
         cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(_production_cache().replace(":STRING=", f":{cache_type}="))
+        validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize("profile", ["auto", "sm_120"])
+    @pytest.mark.parametrize("profiles", ["", "sm_120"])
+    def test_equivalent_qualified_profile_selection(
+        self, tmp_path: Path, profile: str, profiles: str
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
         cache.write_text(
-            f"// production configuration\nGENERATIVEQC_AOT_SHARDS:{cache_type}=8\n"
-            f"GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:{cache_type}=1\n"
+            _production_cache(
+                GENERATIVEQC_AOT_PROFILE=profile, GENERATIVEQC_AOT_PROFILES=profiles
+            )
+        )
+        validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize("value", ["ON", "YES", "TRUE", "Y", "1", "true"])
+    def test_enabled_cmake_boolean_spellings(self, tmp_path: Path, value: str) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(
+            _production_cache(
+                GENERATIVEQC_ENABLE_CUDA=value, GENERATIVEQC_ENABLE_AOT_SHELLS=value
+            )
+        )
+        validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize("duplicate", [False, True])
+    def test_profile_map_must_be_declared_once(
+        self, tmp_path: Path, duplicate: bool
+    ) -> None:
+        entry = "GENERATIVEQC_AOT_PROFILES:STRING=\n"
+        contents = _production_cache()
+        contents = contents + entry if duplicate else contents.replace(entry, "")
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(contents)
+        with pytest.raises(ValueError, match="GENERATIVEQC_AOT_PROFILES"):
+            validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("GENERATIVEQC_ENABLE_CUDA", "OFF"),
+            ("GENERATIVEQC_ENABLE_AOT_SHELLS", "OFF"),
+            ("GENERATIVEQC_AOT_UNIT_MODE", "class"),
+            ("GENERATIVEQC_AOT_PROFILE", "portable"),
+            ("GENERATIVEQC_AOT_PROFILES", "portable"),
+            ("GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES", "90"),
+            ("GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES", "120;90"),
+            ("GENERATIVEQC_AOT_SHELL_MANIFEST", "/other/production.json"),
+        ],
+    )
+    def test_generation_context_override_fails_before_work(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, field: str, value: str
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(_production_cache(**{field: value}))
+
+        def unexpected_generation(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("production context mismatch must fail before generation")
+
+        monkeypatch.setattr(
+            validator, "generate_production_shards", unexpected_generation
+        )
+        with pytest.raises(ValueError, match="production"):
+            validator.run_measurement(
+                nvcc=Path("/fake/nvcc"),
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=tmp_path / "generated",
+                cmake_cache=cache,
+                timeout=23,
+            )
+
+    @pytest.mark.parametrize("mode", ["missing", "duplicate", "empty"])
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "GENERATIVEQC_ENABLE_CUDA",
+            "GENERATIVEQC_ENABLE_AOT_SHELLS",
+            "GENERATIVEQC_AOT_UNIT_MODE",
+            "GENERATIVEQC_AOT_PROFILE",
+            "GENERATIVEQC_AOT_SHELL_MANIFEST",
+        ],
+    )
+    def test_incomplete_generation_context_fails_closed(
+        self, tmp_path: Path, field: str, mode: str
+    ) -> None:
+        contents = _production_cache()
+        line = next(
+            line for line in contents.splitlines(True) if line.startswith(field + ":")
+        )
+        if mode == "missing":
+            contents = contents.replace(line, "")
+        elif mode == "duplicate":
+            contents += line
+        else:
+            contents = contents.replace(line, f"{field}:STRING=\n")
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(contents)
+        with pytest.raises(ValueError, match=field):
+            validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES",
+            "GENERATIVEQC_CUDA_ARCHITECTURES",
+            "CMAKE_CUDA_ARCHITECTURES",
+        ],
+    )
+    def test_explicit_target_precedence(self, tmp_path: Path, field: str) -> None:
+        targets = dict.fromkeys(
+            [
+                "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES",
+                "GENERATIVEQC_CUDA_ARCHITECTURES",
+                "CMAKE_CUDA_ARCHITECTURES",
+            ],
+            "",
+        )
+        targets[field] = "120"
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(_production_cache(**targets))
+        validator.validate_production_shard_count(cache)
+        targets[field] = ""
+        cache.write_text(_production_cache(**targets))
+        with pytest.raises(ValueError, match="explicit CUDA target"):
+            validator.validate_production_shard_count(cache)
+
+    def test_target_precedence_ignores_unused_lower_priority_values(
+        self, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(
+            _production_cache(
+                GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES="120",
+                GENERATIVEQC_CUDA_ARCHITECTURES="90",
+                CMAKE_CUDA_ARCHITECTURES="90",
+            )
         )
         validator.validate_production_shard_count(cache)
 

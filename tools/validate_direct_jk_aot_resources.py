@@ -115,7 +115,7 @@ def generator_abi() -> int:
 
 
 def validate_production_shard_count(cmake_cache: Path) -> None:
-    """Require the qualified partition and optimizer-sensitive split setting."""
+    """Bind the fixed qualification to CMake's actual production generator inputs."""
     configured = cmake_cache.read_text(encoding="utf-8")
     for field, expected in (
         ("GENERATIVEQC_AOT_SHARDS", QUALIFIED_SHARDS),
@@ -130,6 +130,54 @@ def validate_production_shard_count(cmake_cache: Path) -> None:
                 f"{field}={expected}; found {values!r}; "
                 "requalify the production compile context deliberately"
             )
+
+    def configured_value(field: str, *, optional: bool = False) -> str:
+        values = re.findall(
+            rf"^{field}:[^=\r\n]+=([^\r\n]*)$", configured, re.MULTILINE
+        )
+        if optional and not values:
+            return ""
+        if len(values) != 1:
+            raise ValueError(
+                f"production CMake cache must contain exactly one {field}; "
+                f"found {values!r}"
+            )
+        return values[0]
+
+    for field in ("GENERATIVEQC_ENABLE_CUDA", "GENERATIVEQC_ENABLE_AOT_SHELLS"):
+        if configured_value(field).upper() not in {"1", "ON", "YES", "TRUE", "Y"}:
+            raise ValueError(f"production qualification requires {field}=ON")
+    for field, allowed in (
+        ("GENERATIVEQC_AOT_UNIT_MODE", {QUALIFIED_UNIT_MODE}),
+        ("GENERATIVEQC_AOT_PROFILE", {"auto", QUALIFIED_ARCHITECTURE}),
+        ("GENERATIVEQC_AOT_PROFILES", {"", QUALIFIED_ARCHITECTURE}),
+    ):
+        if configured_value(field) not in allowed:
+            raise ValueError(
+                f"production qualification requires {field} in {sorted(allowed)!r}"
+            )
+
+    # Use CMakeLists.txt's priority order for explicit numeric targets. An ambient CUDAARCHS
+    # fallback cannot be reconstructed reliably from this cache, so fail closed.
+    architecture = ""
+    for field in (
+        "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES",
+        "GENERATIVEQC_CUDA_ARCHITECTURES",
+        "CMAKE_CUDA_ARCHITECTURES",
+    ):
+        architecture = configured_value(field, optional=True)
+        if architecture:
+            break
+    if architecture != QUALIFIED_ARCHITECTURE.removeprefix("sm_"):
+        raise ValueError(
+            "production qualification requires one explicit CUDA target 120"
+        )
+
+    manifest = configured_value("GENERATIVEQC_AOT_SHELL_MANIFEST")
+    if not manifest or Path(manifest).resolve() != MANIFEST.resolve():
+        raise ValueError(
+            "production GENERATIVEQC_AOT_SHELL_MANIFEST must match the qualified manifest"
+        )
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -631,7 +679,7 @@ def main(argv: list[str] | None = None) -> int:
         "--cmake-cache",
         type=Path,
         default=ROOT / "build" / "cuda-release-sm120" / "CMakeCache.txt",
-        help="production CMakeCache.txt whose shard count and split setting must match",
+        help="production CMakeCache.txt whose generator context and split must match",
     )
     parser.add_argument(
         "--generated-dir",
