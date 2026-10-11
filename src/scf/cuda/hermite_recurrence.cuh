@@ -1,7 +1,6 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
+#include "integrals/execution_qualifiers.hpp"
 #include "scf/cuda/integral_limits.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
@@ -13,18 +12,19 @@ template <typename Scalar>
 struct HermiteCoefficients {
   Scalar data[kHermiteIDimension * kHermiteJDimension * kHermiteTDimension];
 
-  __device__ inline Scalar& at(unsigned i, unsigned j, unsigned t) {
+  GENERATIVEQC_ERI_DEVICE inline Scalar& at(unsigned i, unsigned j, unsigned t) {
     return data[(i * kHermiteJDimension + j) * kHermiteTDimension + t];
   }
-  __device__ inline const Scalar& at(unsigned i, unsigned j, unsigned t) const {
+  GENERATIVEQC_ERI_DEVICE inline const Scalar& at(unsigned i, unsigned j, unsigned t) const {
     return data[(i * kHermiteJDimension + j) * kHermiteTDimension + t];
   }
 };
 
 template <typename Scalar>
-__device__ inline void fill_hermite(unsigned maximum_i, unsigned maximum_j, Scalar product,
-                                    Scalar center_a, Scalar center_b, double alpha, double beta,
-                                    HermiteCoefficients<Scalar>& coefficients) {
+GENERATIVEQC_ERI_DEVICE inline void fill_hermite(unsigned maximum_i, unsigned maximum_j,
+                                                 Scalar product, Scalar center_a, Scalar center_b,
+                                                 double alpha, double beta,
+                                                 HermiteCoefficients<Scalar>& coefficients) {
   for (int item = 0; item < kHermiteIDimension * kHermiteJDimension * kHermiteTDimension; ++item) {
     coefficients.data[item] = scalar<Scalar>(0.0);
   }

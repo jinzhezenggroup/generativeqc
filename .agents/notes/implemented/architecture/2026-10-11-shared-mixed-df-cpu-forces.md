@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-11
 
+The CPU s/p-only boundary recorded here is superseded by
+[shared range recurrence d/f qualification](2026-10-11-shared-range-cpu-df-shells.md).
+The historical rationale and original evidence below remain unchanged.
+
 ## Problem
 
 The CUDA mixed-DF force qualification in PR #2246 does not alone qualify CPU.

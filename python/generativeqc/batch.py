@@ -827,7 +827,9 @@ class PreparedBatch:
         from generativeqc_compiler.dft import NativeAO
 
         from ._cpu_force_resources import (
+            CPU_DF_FORCE_PRIMITIVE_CAP,
             CPU_FORCE_HOST_CAP,
+            CPU_MIXED_DF_INTEGRAL_TERMS,
             cpu_force_inventory,
             qualified_basis,
             qualified_direct_semilocal_context,
@@ -903,6 +905,13 @@ class PreparedBatch:
                 * grid.angular_polar
                 * grid.angular_azimuth,
                 ecp_terms=len(terms),
+                native_fitted_integrals=density_fitted_all_electron,
+                integral_terms=(
+                    CPU_MIXED_DF_INTEGRAL_TERMS
+                    if density_fitted_all_electron
+                    and calculator._ks_options.has_range_exchange
+                    else 32
+                ),
                 range_exchange_sources=(
                     1
                     if density_fitted_all_electron
@@ -941,6 +950,17 @@ class PreparedBatch:
                     basis,
                     execution="native",
                     max_host_bytes=CPU_FORCE_HOST_CAP,
+                    integral_terms=(
+                        CPU_MIXED_DF_INTEGRAL_TERMS
+                        if density_fitted_all_electron
+                        and calculator._ks_options.has_range_exchange
+                        else 32
+                    ),
+                    max_primitive_records=(
+                        CPU_DF_FORCE_PRIMITIVE_CAP
+                        if density_fitted_all_electron
+                        else 2_000_000
+                    ),
                     cache=Path(
                         os.environ.get(
                             "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cpu"

@@ -306,10 +306,25 @@ def test_cpu_mixed_snapshot_is_revoked_by_warm_replay() -> None:
             snapshot.close()
 
 
-def test_cpu_mixed_d_shell_rejects_before_snapshot_export(
+def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from types import SimpleNamespace
+
+    from generativeqc import _cpu_force_resources
     from generativeqc._dft_gradient import StationaryKsState
+
+    original_inventory = _cpu_force_resources.cpu_force_inventory
+
+    def oversized_inventory(basis: Any, **options: Any) -> Any:
+        metadata = SimpleNamespace(
+            natom=basis.natom, nao=65, nprimitive=basis.nprimitive, shells=basis.shells
+        )
+        return original_inventory(metadata, **options)
+
+    monkeypatch.setattr(
+        _cpu_force_resources, "cpu_force_inventory", oversized_inventory
+    )
 
     def unexpected_export(*args: Any, **kwargs: Any) -> None:
         raise AssertionError(
@@ -333,7 +348,7 @@ def test_cpu_mixed_d_shell_rejects_before_snapshot_export(
     )
     with (
         calc.prepare_batch([atoms]) as batch,
-        pytest.raises(NotImplementedError, match="s/p"),
+        pytest.raises(ValueError, match="dense-export"),
     ):
         batch._public_dft_cpu_force(0, atoms)
 
@@ -348,6 +363,10 @@ def test_cpu_mixed_d_shell_rejects_before_snapshot_export(
         (0, "spherical", "sto-3g-water"),
         (0, "spherical", "def2-svp"),
         (0, "spherical", "def2-tzvp"),
+        (0, "cartesian", "def2-svp"),
+        (0, "cartesian", "def2-tzvp"),
+        (2, "spherical", "def2-svp"),
+        (2, "spherical", "def2-tzvp"),
     ),
 )
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
@@ -358,8 +377,6 @@ def test_complete_mixed_df_forces_against_independent_energies(
         pytest.skip("requires an allocated native CUDA library/device")
     if device == "cuda":
         assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
-    if device == "cpu" and basis_name not in ("sto-3g", "sto-3g-water"):
-        pytest.skip("CPU range derivative consumer is bounded to s/p AOs")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
         atoms.append(("H", (1.8, -0.1, -0.3)))

@@ -47,18 +47,31 @@ for fitted K. Semilocal, VV10, Pulay, nuclear and moving-grid sources reuse the
 existing complete CPU stationary consumer. Production execution does not call
 PySCF or a reference oracle.
 
-The CPU mixed-force domain is currently all-electron s/p orbitals, at most
-8 atoms, 16 AOs and 128 primitives, with native unpruned grids and distinct
+The CPU mixed-force domain covers all-electron s/p/d/f orbitals, at most
+8 atoms, 64 AOs and 128 primitives, with native unpruned grids and distinct
 nuclei. Its 256 MiB additional numeric inventory excludes DF response internals,
 Python/compiler objects and opaque BLAS/runtime storage, so it is not a complete
-force or process-memory bound. The consumer also enforces 2,000,000 primitive
+force or process-memory bound. The fitted consumer also enforces 32,000,000 primitive
 records and 100,000,000 grid-pair visits; the exact LR quartet traversal and
 quadratic VV10 work are included. These semantic limits describe generated
 consumer work; native DF response work is separately owned and unreported.
-d/f orbital forces are not promoted on CPU;
-the resident CUDA domain is unchanged. Independent reconverged mixed-DF energy
-finite differences qualify RKS/UKS, Cartesian/spherical s bases and spherical
-s/p water, with warm replay and orbital/auxiliary geometry rebuilds.
+The exact LR schedule visits each canonical eightfold quartet once and sums
+its distinct compiler-generated density weights before differentiation. Packed
+public-AO coefficients retain Cartesian normalization and real-spherical
+pullbacks. CPU and CUDA share the same bounded Hermite/forward-AD recurrence
+and radial moments, while their host versus resident-device scheduling stays
+backend-specific. CPU retains one generic operator-frozen provider, not one
+compiled artifact per Cartesian component. Public mixed-DF force requests use
+512-quartet weight tiles; the additional inventory charges those tiles and the
+bounded scalar recurrence workspace. Primitive visits and actual atom-seeded
+recurrence evaluations are reported separately. Native DF response work is
+still outside these counters.
+
+The resident CUDA domain is unchanged. Independent reconverged mixed-DF energy
+finite differences cover RKS/UKS, Cartesian/spherical bases through f, with
+warm replay and orbital/auxiliary geometry rebuilds. Primitive dddd/ffff tests
+independently check both SR and LR derivatives against libcint, including
+normalization, spherical expansions and repeated-center pullbacks.
 
 ```python
 from generativeqc import Calculator
