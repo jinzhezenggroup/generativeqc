@@ -205,9 +205,72 @@ _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
     },
 }
 
+# Reviewed frontend lowerings, not an intersection of frontend/primitive names:
+# e.g. subtract/negative lower to add, mean to reduce/add, and matmul to einsum.
+# Keep this allowlist explicit so new reference operations fail closed. Source
+# emission tests check every entry against tensor.cpu without importing that
+# backend here (which would introduce a compiler-package import cycle).
+_NATIVE_CPU_OPERATIONS = frozenset(
+    {
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "negative",
+        "pow",
+        "exp",
+        "log",
+        "sqrt",
+        "square",
+        "reciprocal",
+        "zeros",
+        "ones",
+        "full",
+        "zeros_like",
+        "ones_like",
+        "full_like",
+        "sum",
+        "mean",
+        "reshape_explicit_indices",
+        "permute_dims",
+        "reshape",
+        "broadcast_to",
+        "broadcast_arrays",
+        "expand_dims",
+        "squeeze",
+        "moveaxis",
+        "flip",
+        "broadcast_to_explicit_indices",
+        "matrix_transpose",
+        "slice",
+        "take",
+        "slice_static",
+        "take_static",
+        "matmul",
+        "einsum_extension",
+    }
+)
+
+_NATIVE_CPU_NOTES: dict[str, str] = {
+    **{
+        name: "unsupported-boolean-results-and-comparison-primitives"
+        for name in _OPERATION_GROUPS["real-comparison"]
+    },
+    "astype": (
+        "dtype-conversion-unsupported; float64-identity-only-after-cast-elision"
+    ),
+    "broadcast_shapes": "python-static-shape; no-native-operation",
+    "broadcast_arrays": "unpack-tuple-into-array-or-mapping-trace-outputs",
+    "pow": "static-exact-scalar-exponent; strictly-positive-base",
+    "log": "strictly-positive-input",
+    "sqrt": "nonnegative-input",
+    "divide": "nonzero-denominator",
+    "reciprocal": "nonzero-input; generic-arrays-only",
+}
+
 
 def _operation_matrix() -> dict[str, dict[str, object]]:
-    """Describe admitted reference operations without implying backend conformance."""
+    """Separate reference admission from bounded native lowering qualification."""
     return {
         name: {
             "function": _OPERATION_FUNCTIONS.get(name, name),
@@ -215,9 +278,18 @@ def _operation_matrix() -> dict[str, dict[str, object]]:
             "dtypes": _OPERATION_DTYPES[category],
             "device": "device-none-cpu-reference",
             "eager": "numpy-reference",
-            "capture": "tensorir-reference",
+            "capture": "tensorir",
             "ad": _AD_STATUS[category],
-            "native_cpu": False,
+            "native_cpu": name in _NATIVE_CPU_OPERATIONS,
+            "native_cpu_dtypes": (
+                ("float64",) if name in _NATIVE_CPU_OPERATIONS else ()
+            ),
+            "native_cpu_notes": _NATIVE_CPU_NOTES.get(
+                name,
+                "subject-to-native_cpu_requires"
+                if name in _NATIVE_CPU_OPERATIONS
+                else "not-qualified",
+            ),
             "native_cuda": False,
             "audited_keywords": dict(_AUDITED_KEYWORDS.get(name, {})),
             **_OPERATION_OVERRIDES.get(name, {}),
@@ -237,6 +309,14 @@ def capabilities() -> dict[str, object]:
         "operation_matrix_schema": "generativeqc.array-api-operation-coverage.v1",
         "operation_matrix_scope": "compiler-preview-inventory-excludes-public-helpers",
         "operation_matrix": _operation_matrix(),
+        "native_cpu_scope": "bounded-tensorir-subset-not-array-api-conformance",
+        "native_cpu_requires": (
+            "all-live-nodes-float64",
+            "all-live-primitives-supported-by-CPU_PRIMITIVES",
+            "frontend-operation-and-keyword-constraints",
+            "finite-runtime-values-and-operation-domains",
+            "static-shapes-within-byte-work-node-budgets",
+        ),
         "array_namespace_protocol": False,
         "implicit_broadcast": "generic-arrays",
         "reshape_requires_explicit_indices": "scientific-arrays-only",

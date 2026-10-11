@@ -100,6 +100,7 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
     assert row["solver_host"] == expected
     assert row["solver_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
     assert row["matrix_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
+    assert row["structured_binding_host"] == (32 * 1024 if backend == "cuda" else 0)
     retained_fields = (
         "metadata",
         "grid",
@@ -110,6 +111,7 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
         "solver_host",
         "solver_binding_host",
         "matrix_binding_host",
+        "structured_binding_host",
         "xc_schedule_staging",
         "nonlocal_provider",
     )
@@ -133,6 +135,7 @@ def test_matrix_binding_host_envelope_is_independent_of_provider_and_xc(
         model=model,
     )
     assert row["matrix_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
+    assert row["structured_binding_host"] == (32 * 1024 if backend == "cuda" else 0)
 
 
 def _library(quadrature_status: int = 0) -> SimpleNamespace:

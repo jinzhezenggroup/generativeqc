@@ -236,6 +236,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/scf_matrix_kernels.cu
       src/scf/cuda/mean_field_setup.cu
       src/scf/cuda/scf_density_kernels.cu
+      src/scf/cuda/structured_matrix.cu
       src/scf/cuda/scf_diis_kernels.cu
       src/scf/cuda/scf_convergence_kernels.cu
       src/scf/cuda/basis_transform_kernels.cu

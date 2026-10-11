@@ -40,6 +40,7 @@
 #include "scf/cuda/scf_density_kernels.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
+#include "scf/cuda/structured_matrix.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/eigensolver_workspace.hpp"
@@ -450,6 +451,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                      left_is_spin, transpose_left, right, right_is_spin, active,
                                      output),
           "CUDA KS spin matrix product failed");
+  }
+
+  void build_density(const double* orbital_frame, const double* energies,
+                     const std::uint8_t* active, double* destination) {
+    // tmp2 is dead after back-transformation. Signed force reconstruction runs
+    // after the final-frame solve/proof, when effective is also dead scratch.
+    check(launch_structured_density(matrix_products.view(masked_matrix_output, elements), 1,
+                                    static_cast<int>(spins), static_cast<int>(n), occupied,
+                                    orbital_frame, energies, active, destination, tmp2, elements,
+                                    energies ? effective : nullptr, energies ? elements : 0),
+          "CUDA KS structured density failed");
   }
 
   void retain_final_fitted_projection() {
@@ -1054,7 +1066,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
         sizeof(host_all_spins) + sizeof(host_one) +
-        tensor::CudaMatrixProductBinding::kPreparationHostBytes;
+        tensor::CudaMatrixProductBinding::kPreparationHostBytes +
+        tensor::CudaStructuredProductBinding::kPreparationHostBytes;
     if (!host_unfused)
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes, CudaXcLayout::lowering_host_bytes);
@@ -1524,7 +1537,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     check(eigensolver->launch(spins, tmp2, effective, eigenvalues, solver_info, spin_enabled),
           "CUDA KS eigensolver launch failed");
     multiply(x, false, false, tmp2, true, enabled, tmp1);
-    launch_build_density_kernel(blocks, 128, 0, stream, 1, n, occupied, tmp1, enabled, proposal);
+    build_density(tmp1, nullptr, enabled, proposal);
     check(cudaGetLastError());
     auto* record = scalar_records + slot;
     cuda_ks_detail::diagnostics(
@@ -2148,12 +2161,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       check(eigensolver->launch(spins, tmp2, effective, eigenvalues, solver_info, spin_enabled),
             "CUDA KS eigensolver launch failed");
       multiply(x, false, false, tmp2, true, tmp1);
-      if (spins == 1)
-        launch_build_density_kernel(blocks, 128, 0, stream, 1, n, occupied, tmp1, enabled,
-                                    proposal);
-      else
-        launch_build_spin_density_kernel(blocks, 128, 0, stream, 1, spins, n, occupied, tmp1,
-                                         enabled, proposal);
+      build_density(tmp1, nullptr, enabled, proposal);
       check(cudaGetLastError());
       cuda_ks_detail::diagnostics(
           stream, n, spins, density, proposal, residual, hcore, overlap, j, exchange,
@@ -2492,17 +2500,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     bool staged_stationary_weights = false;
     const auto stage_stationary_weights = [&] {
       constexpr unsigned threads = 128;
-      const auto weight_elements = spins == 1 ? matrix : elements;
-      const auto weight_blocks = static_cast<unsigned>((weight_elements + threads - 1) / threads);
       if (spins == 1) {
-        launch_build_weighted_density_kernel(
-            weight_blocks, threads, 0, stream, 1, static_cast<std::int32_t>(n), occupied,
-            final_coefficients, final_eigenvalues, final_enabled, tmp1);
+        build_density(final_coefficients, final_eigenvalues, final_enabled, tmp1);
         check(cudaGetLastError());
       } else {
-        launch_build_spin_weighted_density_kernel(
-            weight_blocks, threads, 0, stream, 1, static_cast<std::int32_t>(n), occupied,
-            final_coefficients, final_eigenvalues, final_enabled, tmp1);
+        build_density(final_coefficients, final_eigenvalues, final_enabled, tmp1);
         check(cudaGetLastError());
         const auto matrix_blocks = static_cast<unsigned>((matrix + threads - 1) / threads);
         // One batch permits the total to overwrite the first spin block.

@@ -117,6 +117,11 @@ the same TensorIR scientific-domain guarantees.
 
 ## References
 
+The eager discovery/conformance boundary is superseded by the
+[2026-10-11 standard CPU eager decision](2026-10-11-array-api-standard-eager-boundary.md).
+The compiler/scientific boundary remains deliberately bounded; VibeArray still
+does not advertise standardized discovery.
+
 - #633
 - `docs/user/experimental_array_api.md`
 - `docs/developer/array_api_frontend.md`
