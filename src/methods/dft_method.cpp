@@ -2556,6 +2556,8 @@ class KsPreparedBatch final : public PreparedBatch {
         try {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
+            if (!result.target_fock_work) result.target_fock_work.emplace();
+            result.target_fock_work->begin_attempt();
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
             cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
                         !attempt && !reuse && preliminary_seeds[i]
@@ -2608,6 +2610,7 @@ class KsPreparedBatch final : public PreparedBatch {
               throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                                 "CUDA KS physical evaluation failed");
             finish(i, cuda->result(false));
+            results[i].target_fock_work->finish_attempt(cuda->completed_fock_builds());
           } catch (...) {
             results[i].status = item_exception_status();
             running[i] = false;

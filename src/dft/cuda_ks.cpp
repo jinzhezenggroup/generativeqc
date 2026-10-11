@@ -2727,6 +2727,22 @@ scf::ScfResult CudaKsPlan::result(bool export_density) {
   if (export_density) result.density = impl_->download(impl_->density);
   return result;
 }
+std::optional<std::uint64_t> CudaKsPlan::completed_fock_builds() const noexcept {
+  if (!impl_->started || impl_->is_active || impl_->is_pending || impl_->is_failed ||
+      !impl_->complete_precision_inventory_domain())
+    return std::nullopt;
+  const auto& work = impl_->output.precision_work;
+  const auto recorded =
+      std::count_if(work.events.begin(), work.events.end(), [](const auto& event) {
+        return event.kind == scf::PrecisionWorkEventKind::MixedFock ||
+               event.kind == scf::PrecisionWorkEventKind::StrictFock ||
+               event.kind == scf::PrecisionWorkEventKind::PostScfFock;
+      });
+  // A terminal nonconverged attempt has no FinalAudit. Its physical build
+  // ledger must nevertheless cover every build; audit flags stay unchanged.
+  if (static_cast<std::uint64_t>(recorded) != impl_->output.fock_builds) return std::nullopt;
+  return impl_->output.fock_builds;
+}
 scf::ScfResult CudaKsPlan::run(const std::vector<double>* seed, bool reuse_warm,
                                bool export_density, CudaKsSeedOrigin seed_origin) {
   begin(seed, reuse_warm, seed_origin);
