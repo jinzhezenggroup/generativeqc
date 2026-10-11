@@ -283,8 +283,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     options.density_fitting_relative_threshold = descriptor.density_fitting_relative_threshold;
   options.density_fitting_memory_budget_bytes = descriptor.density_fitting_memory_budget_bytes;
   const auto precision_mode = checked_precision_mode(descriptor);
-  if (precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-      backend != GENERATIVEQC_BACKEND_CUDA)
+  if (precision_mode == GENERATIVEQC_PRECISION_AUTO && backend != GENERATIVEQC_BACKEND_CUDA)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DFT automatic precision currently requires CUDA");
   if (precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)

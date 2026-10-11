@@ -43,8 +43,7 @@ void verify_scf_defaults() {
   descriptor.screening_tolerance = 5.0e-13;
   options = common_scf_options(descriptor);
   require(options.max_iterations == 37 && options.diis_history == 5 &&
-              options.energy_tolerance == 3.0e-11 &&
-              options.density_tolerance == 4.0e-9 &&
+              options.energy_tolerance == 3.0e-11 && options.density_tolerance == 4.0e-9 &&
               options.screening_tolerance == 5.0e-13,
           "HF/KS explicit SCF overrides changed");
 
@@ -74,8 +73,8 @@ void verify_scf_defaults() {
 }
 
 void verify_incremental_selectors() {
-  using generativeqc::scf::IncrementalDirectJkControl;
   using generativeqc::scf::classify_incremental_direct_jk_control;
+  using generativeqc::scf::IncrementalDirectJkControl;
   require(classify_incremental_direct_jk_control(nullptr) == IncrementalDirectJkControl::Disabled,
           "unset incremental selector changed");
   for (const char* text : {"0", "off"})
@@ -99,8 +98,7 @@ void verify_incremental_selectors() {
   require(parse_incremental_direct_jk_rebuild_interval(name, maximum.c_str()) ==
               std::numeric_limits<unsigned>::max(),
           "maximum unsigned rebuild interval was rejected");
-  for (const char* value : {"", "-1", "+1", " 1", "1 ", "1x",
-                            "999999999999999999999999999"})
+  for (const char* value : {"", "-1", "+1", " 1", "1 ", "1x", "999999999999999999999999999"})
     rejects_invalid([&] { (void)parse_incremental_direct_jk_rebuild_interval(name, value); },
                     "must be an unsigned integer");
 }

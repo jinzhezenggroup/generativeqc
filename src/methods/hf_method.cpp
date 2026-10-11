@@ -1,5 +1,4 @@
 #include "methods/hf_method.hpp"
-#include "methods/scf_common_options.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +11,7 @@
 #include <utility>
 
 #include "api/handles.hpp"
+#include "methods/scf_common_options.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_prepared.hpp"
