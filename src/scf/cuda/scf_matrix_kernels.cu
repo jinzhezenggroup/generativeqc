@@ -70,7 +70,7 @@ __global__ void build_orthogonalizer_kernel(std::int32_t batch_size, std::int32_
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (element >= static_cast<std::size_t>(batch_size) * matrix_size) return;
   const std::int32_t system = static_cast<std::int32_t>(element / matrix_size);
-  if (active[system] == 0) return;
+  if (active != nullptr && active[system] == 0) return;
   const std::size_t local = element % matrix_size;
   const std::size_t row = local % n;
   const std::size_t column = local / n;
@@ -78,7 +78,7 @@ __global__ void build_orthogonalizer_kernel(std::int32_t batch_size, std::int32_
   const double* values = eigenvalues + static_cast<std::size_t>(system) * n;
   double result = 0.0;
   for (std::size_t orbital = 0; orbital < n; ++orbital) {
-    if (!(values[orbital] > 1.0e-10)) {
+    if (!(values[orbital] > 1.0e-10) || !isfinite(values[orbital])) {
       failed[system] = 1;
       return;
     }

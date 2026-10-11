@@ -105,7 +105,15 @@ def _item_host_inventory(
     # including generated small-shape and host-unfused XC execution. It is not
     # part of the independent eigensolver or XC binding reservations.
     matrix_binding_host = 16 * 1024 if backend == "cuda" else 0
-    retained += solver_host + solver_binding_host + matrix_binding_host
+    # Structured Gram/basis bindings borrow the same provider, but retain a
+    # separate preparation envelope even while library qualification is closed.
+    structured_binding_host = 32 * 1024 if backend == "cuda" else 0
+    retained += (
+        solver_host
+        + solver_binding_host
+        + matrix_binding_host
+        + structured_binding_host
+    )
     quadrature = 16 * (model.grid.radial_points + model.grid.angular_polar) + 8 * a
     if backend == "cuda":
         # Shared rule/center/radius upload coexists with the small rule vectors.
@@ -189,6 +197,7 @@ def _item_host_inventory(
             "solver_host": solver_host,
             "solver_binding_host": solver_binding_host,
             "matrix_binding_host": matrix_binding_host,
+            "structured_binding_host": structured_binding_host,
             "xc_schedule_staging": xc_schedule_staging,
             "nonlocal_provider": nonlocal_provider,
             "ao_grid_cache": ao_grid_cache,
@@ -524,6 +533,7 @@ def ks_resource_request(
         "solver_host",
         "solver_binding_host",
         "matrix_binding_host",
+        "structured_binding_host",
         "xc_schedule_staging",
         "nonlocal_provider",
     ):
