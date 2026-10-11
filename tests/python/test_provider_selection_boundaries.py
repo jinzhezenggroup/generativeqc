@@ -51,6 +51,29 @@ def test_repository_provider_selection_inventory_is_complete() -> None:
     assert audit_provider_selection_boundaries()["errors"] == []
 
 
+@pytest.mark.parametrize(
+    "filename,schedule",
+    [("cuda_plan.py", "TensorSchedule"), ("cuda_search.py", "TensorScheduleSpace")],
+)
+@pytest.mark.parametrize(
+    "axis",
+    [
+        'reduction_backend: str = "cub"',
+        'engine: tuple[str, ...] = ("generated", "cub")',
+        'algorithm: Literal["nvidia.cublas", "cutensor"] = "automatic"',
+    ],
+)
+def test_renamed_provider_schedule_axes_cannot_evade_guard(
+    tmp_path: Path, filename: str, schedule: str, axis: str
+) -> None:
+    _fixture(tmp_path, "bool use_cublas = true;")
+    source = tmp_path / "python/generativeqc_compiler/tensor" / filename
+    source.parent.mkdir(parents=True)
+    source.write_text(f"class {schedule}:\n    {axis}\n")
+    errors = audit_provider_selection_boundaries(tmp_path)["errors"]
+    assert len(errors) == 1 and "provider-named schedule axis" in errors[0]
+
+
 def test_rhf_mask_workspace_uses_keep_exact_migration_classification(
     tmp_path: Path,
 ) -> None:
@@ -61,7 +84,7 @@ def test_rhf_mask_workspace_uses_keep_exact_migration_classification(
     # using the already-resolved route. They do not add a provider decision.
     assert entry["classification"] == "migration"
     assert entry["contract"] == "#1890"
-    assert entry["selectors"] == {"use_cublas": 14, "use_cusolver": 4}
+    assert entry["selectors"] == {"use_cublas": 12, "use_cusolver": 4}
 
     source = (ROOT / path).read_text()
     file = _fixture(tmp_path, source, path=path)
@@ -69,10 +92,10 @@ def test_rhf_mask_workspace_uses_keep_exact_migration_classification(
     assert audit_provider_selection_boundaries(tmp_path)["errors"] == []
     file.write_text(source + "\nconst bool unclassified_copy = use_cublas;\n")
     errors = audit_provider_selection_boundaries(tmp_path)["errors"]
-    assert len(errors) == 1 and "count 15 != classified 14" in errors[0]
+    assert len(errors) == 1 and "count 13 != classified 12" in errors[0]
     file.write_text(source.replace("use_cublas", "renamed_route", 1))
     errors = audit_provider_selection_boundaries(tmp_path)["errors"]
-    assert len(errors) == 1 and "count 13 != classified 14" in errors[0]
+    assert len(errors) == 1 and "count 11 != classified 12" in errors[0]
 
 
 @pytest.mark.parametrize(

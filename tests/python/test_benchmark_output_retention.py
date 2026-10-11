@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import sys
 import typing
 from pathlib import Path
 
@@ -107,6 +108,40 @@ def test_argparse_reports_bad_output_without_starting_work(
         parser.parse_args(["--output", str(tmp_path / "benchmarks/results/x.json")])
     assert error.value.code == 2
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_array_api_rhf_rejects_retained_output_before_work(
+    tmp_path: typing.Any, monkeypatch: typing.Any, destination_kind: str
+) -> None:
+    from benchmarks import _retention, array_api_rhf_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        raise AssertionError("invalid output reached benchmark work")
+
+    monkeypatch.setattr(array_api_rhf_endpoint, "_scheduler_guard", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["array_api_rhf_endpoint", "--output", str(destination / existing.name)],
+    )
+    with pytest.raises(SystemExit) as error:
+        array_api_rhf_endpoint.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
 
 
 def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None:

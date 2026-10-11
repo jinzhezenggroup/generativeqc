@@ -13,6 +13,7 @@
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/df_progress_trace.hpp"
+#include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::cc::detail {
 namespace {
@@ -120,6 +121,7 @@ struct DFLambdaActions::Impl {
   generated_response::CudaState state;
   generated_virtual::CudaState auxiliary;
   generated_response::StagedCudaState staged;
+  generated_response::MixedAuxiliaryCudaState mixed;
   std::size_t q{}, n1{}, n2{}, vv{};
   const double *bov{}, *bvv{};
   double *sum1{}, *sum2{};
@@ -128,6 +130,9 @@ struct DFLambdaActions::Impl {
   std::array<std::size_t, 6> cut_sizes{};
   LambdaDiagnostic metrics;
   bool parameters_admitted{};
+  bool mixed_active{}, mixed_finished{};
+  float *mixed_bov{}, *mixed_bvv{};
+  std::array<float*, 6> mixed_cut_seeds{};
 
   Impl(const Problem& p, const SolverResult& cc, const LambdaOptions& options, int device,
        bool with_source, bool with_parameters)
@@ -160,12 +165,23 @@ struct DFLambdaActions::Impl {
       for (const auto& item : parameters) scratch = std::max(scratch, item.arena(o, v));
       scratch = std::max(scratch, generated_virtual::factor_vjp_cuda_arena_elements(o, v));
     }
-    const auto arena = reserve(cursor, bytes(scratch));
+    std::size_t scratch_elements = scratch, allocation_bytes = 0, scratch_offset_shift = 0;
+    const auto arena = reserve(cursor, options.serial_scratch_reuse ? 0 : bytes(scratch));
+    // Shared scratch precedes the persistent suffix. Every producer and
+    // its borrowed-output consumer use this owner's one stream; cuts, seeds,
+    // publications and the invariant frontier retain separate storage.
+    const auto with_scratch = [&](std::size_t persistent, std::size_t elements) {
+      if (options.serial_scratch_reuse) {
+        auto amount = bytes(elements);
+        if (amount % 256) amount = checked_add(amount, 256 - amount % 256);
+        persistent = checked_add(persistent, amount);
+      }
+      return persistent;
+    };
     const auto sums1 = reserve(cursor, bytes(n1)), sums2 = reserve(cursor, bytes(n2));
     const auto seed0 = reserve(cursor, sizeof(double)), seed1 = reserve(cursor, bytes(n1)),
                seed2 = reserve(cursor, bytes(n2));
     const auto error = reserve(cursor, sizeof(int));
-    metrics.owned_device_bytes = cursor;
     // Conservative simultaneous host bound: both packed layouts (validation
     // and owner), dense seeds/actions/results, packed RHS/audits, GMRES storage,
     // optional external energy seeds and all detached parameter publications.
@@ -196,15 +212,16 @@ struct DFLambdaActions::Impl {
     const auto device_limit = std::min(available_device_bytes, options.df_max_device_bytes);
     metrics.df_available_device_bytes = available_device_bytes;
     metrics.df_device_limit_bytes = device_limit;
-    const auto device_fits = [&](std::size_t candidate, std::size_t allowance) {
-      return checked_add(candidate, allowance) <= device_limit;
+    const auto device_fits = [&](std::size_t candidate, std::size_t allowance,
+                                 std::size_t elements) {
+      return checked_add(with_scratch(candidate, elements), allowance) <= device_limit;
     };
     std::size_t staged_arena = arena, tau_offset = 0, tau_seed_offset = 0;
     std::array<std::size_t, 6> cut_offsets{}, seed_offsets{};
     cut_sizes = {vv, n2, n2, n2, n2, n1};
     if (options.df_auxiliary_reduction) {
-      // All cached cuts belong to this immutable Problem/T owner. The original
-      // arena remains available for expanded physical replay and Lambda audit.
+      // Cached cuts belong to this immutable Problem/T owner; expanded replay
+      // and the staged operator use scratch at different points on one stream.
       const auto before = checked_add(
           generated_response::transpose_contraction_terms(o, v),
           checked_mul(q, generated_response::virtual_amplitude_vjp_contraction_terms(o, v)));
@@ -225,27 +242,39 @@ struct DFLambdaActions::Impl {
         for (const auto& item : parameters)
           staged_scratch = std::max(staged_scratch, item.staged_arena(o, v));
       }
-      if (staged_scratch > scratch) staged_arena = reserve(candidate, bytes(staged_scratch));
+      staged_scratch = std::max(scratch, staged_scratch);
+      if (!options.serial_scratch_reuse && staged_scratch > scratch)
+        staged_arena = reserve(candidate, bytes(staged_scratch));
       tau_offset = reserve(candidate, bytes(n2));
       tau_seed_offset = reserve(candidate, bytes(n2));
       for (std::size_t x = 0; x < cuts.size(); ++x) {
         cut_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
         seed_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
       }
-      if (after < before && checked_add(host_bytes, candidate) <= options.max_bytes &&
-          device_fits(candidate, 0)) {
+      if (after < before &&
+          checked_add(host_bytes, with_scratch(candidate, staged_scratch)) <= options.max_bytes &&
+          device_fits(candidate, 0, staged_scratch)) {
         metrics.df_auxiliary_reduction = true;
         cursor = candidate;
+        scratch_elements = staged_scratch;
       }
     }
     // Keep the scalar staged layout as a bounded fallback. The matrix arena
     // is optional and includes explicit IR packing/broadcast intermediates.
-    const auto scalar_cursor = cursor, scalar_staged_arena = staged_arena;
+    const auto scalar_cursor = cursor, scalar_scratch = scratch_elements,
+               scalar_staged_arena = staged_arena;
     const bool scalar_reduction = metrics.df_auxiliary_reduction;
     std::size_t binding_host_bytes = 0, core_reuse_offset = 0, audit_offset = 0;
     std::size_t matrix_scratch_elements = 0;
     auto capacity = [&] {
-      metrics.owned_device_bytes = checked_add(cursor, metrics.df_provider_allowance_bytes);
+      allocation_bytes = cursor;
+      if (options.serial_scratch_reuse) {
+        allocation_bytes = with_scratch(cursor, scratch_elements);
+        scratch_offset_shift = allocation_bytes - cursor;
+        staged_arena = audit_offset = arena;
+      }
+      metrics.owned_device_bytes =
+          checked_add(allocation_bytes, metrics.df_provider_allowance_bytes);
       metrics.numeric_capacity_bytes =
           checked_add(checked_add(host_bytes, binding_host_bytes), metrics.owned_device_bytes);
     };
@@ -257,16 +286,23 @@ struct DFLambdaActions::Impl {
       metrics.df_core_reuse_bytes = 0;
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
+      metrics.df_shared_scratch_bytes = metrics.df_scratch_avoided_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
       metrics.df_auxiliary_reduction = scalar_reduction;
-      staged_arena = scalar_staged_arena;
       cursor = scalar_cursor;
+      scratch_elements = scalar_scratch;
+      staged_arena = scalar_staged_arena;
       capacity();
     };
     if (scalar_reduction && options.df_matrix_gemm) {
-      for (auto batch = std::min(q, options.df_auxiliary_batch_limit); batch; batch /= 2) {
+      // The opt-in schedule trades a smaller strict Q tile for half-width
+      // warmup storage. Default FP64 admission and all equations are unchanged.
+      const auto batch_limit = options.df_mixed_precision
+                                   ? std::max<std::size_t>(1, options.df_auxiliary_batch_limit / 2)
+                                   : options.df_auxiliary_batch_limit;
+      for (auto batch = std::min(q, batch_limit); batch; batch /= 2) {
         std::size_t matrix_scratch = 0;
         bool fits = true;
         auto include = [&](const Stage& stage, std::size_t extent) {
@@ -283,17 +319,21 @@ struct DFLambdaActions::Impl {
           for (const auto& item : parameters) include(item.stage, 1);
         }
         auto candidate = scalar_cursor;
-        const auto matrix_arena = reserve(candidate, bytes(matrix_scratch));
+        const auto candidate_scratch = std::max(scratch, matrix_scratch);
+        const auto matrix_arena =
+            options.serial_scratch_reuse ? 0 : reserve(candidate, bytes(matrix_scratch));
         const auto descriptor_bytes =
             generated_response::contraction_host_bytes(q % batch ? 2 : 1, with_parameters);
         if (fits &&
-            checked_add(checked_add(checked_add(host_bytes, descriptor_bytes), candidate),
+            checked_add(checked_add(checked_add(host_bytes, descriptor_bytes),
+                                    with_scratch(candidate, candidate_scratch)),
                         kProviderAllowance) <= options.max_bytes &&
-            device_fits(candidate, kProviderAllowance)) {
+            device_fits(candidate, kProviderAllowance, candidate_scratch)) {
           binding_host_bytes = descriptor_bytes;
           metrics.df_matrix_gemm = true;
           metrics.df_auxiliary_batch_size = batch;
           metrics.df_provider_allowance_bytes = kProviderAllowance;
+          scratch_elements = candidate_scratch;
           staged_arena = matrix_arena;
           matrix_scratch_elements = matrix_scratch;
           cursor = candidate;
@@ -301,12 +341,15 @@ struct DFLambdaActions::Impl {
         }
       }
     }
-    const auto operator_cursor = cursor, operator_binding_host_bytes = binding_host_bytes;
+    const auto operator_cursor = cursor, operator_binding_host_bytes = binding_host_bytes,
+               operator_scratch = scratch_elements;
     auto drop_audit = [&] {
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
+      metrics.df_shared_scratch_bytes = metrics.df_scratch_avoided_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
       cursor = operator_cursor;
+      scratch_elements = operator_scratch;
       binding_host_bytes = operator_binding_host_bytes;
       capacity();
     };
@@ -318,22 +361,33 @@ struct DFLambdaActions::Impl {
         const auto descriptors =
             generated_response::audit_contraction_host_bytes(q % batch ? 2 : 1);
         const bool replay_fit = options.df_primal_matrix_gemm && primal_virtual.fit(o, v, batch);
-        // Fresh replay and the later independent audit have disjoint lifetimes.
+        // Solver, parameter, fresh-replay and independent-audit outputs are
+        // consumed before the next stage on this owner's stream. Share their
+        // scratch lease, not their values or equations. The matrix lease is
+        // the final allocation at operator_cursor, so enlarging it cannot
+        // overwrite pinned inputs, reduced cuts, seeds or detached outputs.
         // Replay storage refusal must not refuse the existing matrix audit.
         for (const bool replay : {replay_fit, false}) {
           auto candidate = cursor;
           const auto arena_bytes =
               replay ? std::max(audit_bytes, bytes(primal_virtual.matrix_arena(o, v, batch)))
                      : audit_bytes;
-          const auto offset = reserve(candidate, arena_bytes);
+          const auto candidate_scratch = std::max(scratch_elements, arena_bytes / sizeof(double));
+          const auto offset = options.serial_scratch_reuse ? 0 : staged_arena;
+          if (!options.serial_scratch_reuse)
+            candidate = std::max(candidate, checked_add(offset, arena_bytes));
           if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
-                          checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
-                  options.max_bytes &&
-              device_fits(candidate, metrics.df_provider_allowance_bytes)) {
+                          checked_add(with_scratch(candidate, candidate_scratch),
+                                      metrics.df_provider_allowance_bytes)) <= options.max_bytes &&
+              device_fits(candidate, metrics.df_provider_allowance_bytes, candidate_scratch)) {
             metrics.df_audit_matrix_gemm = true;
             metrics.df_audit_arena_bytes = arena_bytes;
+            metrics.df_shared_scratch_bytes = std::max(bytes(matrix_scratch_elements), arena_bytes);
+            metrics.df_scratch_avoided_bytes =
+                std::min(bytes(matrix_scratch_elements), arena_bytes);
             metrics.df_primal_matrix_gemm = replay;
             cursor = candidate;
+            scratch_elements = candidate_scratch;
             audit_offset = offset;
             binding_host_bytes = checked_add(binding_host_bytes, descriptors);
             break;
@@ -341,11 +395,13 @@ struct DFLambdaActions::Impl {
         }
       }
     }
-    const auto matrix_cursor = cursor, matrix_binding_host_bytes = binding_host_bytes;
+    const auto matrix_cursor = cursor, matrix_binding_host_bytes = binding_host_bytes,
+               matrix_scratch = scratch_elements;
     auto drop_core_reuse = [&] {
       metrics.df_core_reuse = false;
       metrics.df_core_reuse_bytes = 0;
       cursor = matrix_cursor;
+      scratch_elements = matrix_scratch;
       binding_host_bytes = matrix_binding_host_bytes;
       capacity();
     };
@@ -361,9 +417,9 @@ struct DFLambdaActions::Impl {
       const auto offset = reserve(candidate, retained_bytes);
       const auto descriptors = generated_response::core_reuse_contraction_host_bytes();
       if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
-                      checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
-              options.max_bytes &&
-          device_fits(candidate, metrics.df_provider_allowance_bytes)) {
+                      checked_add(with_scratch(candidate, scratch_elements),
+                                  metrics.df_provider_allowance_bytes)) <= options.max_bytes &&
+          device_fits(candidate, metrics.df_provider_allowance_bytes, scratch_elements)) {
         metrics.df_core_reuse = true;
         metrics.df_core_reuse_bytes = retained_bytes;
         core_reuse_offset = offset;
@@ -379,25 +435,25 @@ struct DFLambdaActions::Impl {
     parameters_admitted = with_parameters;
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
     if (metrics.df_matrix_gemm && !storage.contractions.prepare(storage.stream)) scalar_plan();
-    auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     if (allocation == cudaErrorMemoryAllocation && metrics.df_core_reuse) {
       // Refuse only the optional owner-local retention before dropping GEMM.
       // Numerical, launch and driver failures must propagate, not retry.
       (void)cudaGetLastError();
       drop_core_reuse();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_audit_matrix_gemm) {
       (void)cudaGetLastError();
       drop_audit();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_matrix_gemm) {
       (void)cudaGetLastError();
       std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
       storage.contractions.release_locked();
       scalar_plan();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_auxiliary_reduction) {
       // Only allocation failure may discard optional cuts; arithmetic errors
@@ -405,8 +461,9 @@ struct DFLambdaActions::Impl {
       (void)cudaGetLastError();
       metrics.df_auxiliary_reduction = false;
       cursor = fallback_cursor;
+      scratch_elements = scratch;
       capacity();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     cuda_check(allocation);
     auto at = [&](std::size_t offset) { return reinterpret_cast<double*>(storage.base + offset); };
@@ -423,12 +480,12 @@ struct DFLambdaActions::Impl {
     state.v = v;
     state.stream = storage.stream;
     state.response_arena = state.replay_arena = at(arena);
-    state.error = reinterpret_cast<int*>(storage.base + error);
-    state.bar_correlation_energy = at(seed0);
-    state.bar_singles_residual = at(seed1);
-    state.bar_doubles_residual = at(seed2);
-    sum1 = at(sums1);
-    sum2 = at(sums2);
+    state.error = reinterpret_cast<int*>(storage.base + checked_add(error, scratch_offset_shift));
+    state.bar_correlation_energy = at(checked_add(seed0, scratch_offset_shift));
+    state.bar_singles_residual = at(checked_add(seed1, scratch_offset_shift));
+    state.bar_doubles_residual = at(checked_add(seed2, scratch_offset_shift));
+    sum1 = at(checked_add(sums1, scratch_offset_shift));
+    sum2 = at(checked_add(sums2, scratch_offset_shift));
     state.df_virtual_singles = sum1;
     state.df_virtual_doubles = sum2;
     auxiliary.o = o;
@@ -443,8 +500,8 @@ struct DFLambdaActions::Impl {
     if (metrics.df_auxiliary_reduction) {
       static_cast<generated_response::CudaState&>(staged) = state;
       staged.response_arena = at(staged_arena);
-      tau = at(tau_offset);
-      tau_seed = at(tau_seed_offset);
+      tau = at(checked_add(tau_offset, scratch_offset_shift));
+      tau_seed = at(checked_add(tau_seed_offset, scratch_offset_shift));
       staged.df_tau = tau;
       staged.bar_df_tau = tau_seed;
       const std::array<const double**, 6> values{
@@ -454,8 +511,8 @@ struct DFLambdaActions::Impl {
           &staged.bar_df_Lvv, &staged.bar_df_Wvoov,         &staged.bar_df_Wvovo,
           &staged.bar_df_Xv,  &staged.bar_df_D05_vv_ladder, &staged.bar_df_singles_residual};
       for (std::size_t x = 0; x < cuts.size(); ++x) {
-        *values[x] = cuts[x] = at(cut_offsets[x]);
-        *seeds[x] = cut_seeds[x] = at(seed_offsets[x]);
+        *values[x] = cuts[x] = at(checked_add(cut_offsets[x], scratch_offset_shift));
+        *seeds[x] = cut_seeds[x] = at(checked_add(seed_offsets[x], scratch_offset_shift));
       }
       if (metrics.df_matrix_gemm) {
         // Pre-bind both complete batches and the final Q tail. A partial batch
@@ -475,7 +532,7 @@ struct DFLambdaActions::Impl {
         metrics.audit_schedule_hash = generated_response::audit_matrix_operator_hash;
       }
       if (metrics.df_core_reuse) {
-        staged.core_reuse_arena = at(core_reuse_offset);
+        staged.core_reuse_arena = at(checked_add(core_reuse_offset, scratch_offset_shift));
         generated_response::prepare_core_reuse_contractions(
             staged, storage.contractions, metrics.df_gemm_calls, metrics.df_gemm_summands);
         runtime::df_progress::Scope preparation("df_lambda_core_reuse_preparation");
@@ -497,10 +554,76 @@ struct DFLambdaActions::Impl {
         : metrics.df_auxiliary_reduction ? generated_response::staged_operator_hash
                                          : generated_response::operator_hash;
     metrics.independent_program_hash = generated_response::independent_operator_hash;
+    if (options.df_mixed_precision && metrics.df_matrix_gemm) {
+      const auto batch = metrics.df_auxiliary_batch_size;
+      const auto scratch_bytes = checked_mul(
+          generated_response::mixed_auxiliary_arena_elements(o, v, batch), sizeof(float));
+      // Only core/auxiliary/tau actions run during the warmup epoch. Keep its
+      // typed input tail outside every such action's scratch high-water mark.
+      // Later strict replay/audit/VJP work may overwrite this tail, but only
+      // after finish_mixed_precision has permanently invalidated the epoch.
+      const auto input_offset =
+          std::max({scratch_bytes, bytes(core_stage.matrix_arena(o, v, 1)),
+                    metrics.df_core_reuse
+                        ? bytes(generated_response::staged_core_reuse_scratch_arena_elements(o, v))
+                        : 0,
+                    bytes(prepare_stage.matrix_arena(o, v, 1))});
+      const auto input_elements =
+          checked_add(checked_add(checked_mul(q, checked_add(n1, vv)), checked_add(n1, n2)),
+                      checked_add(checked_add(vv, n1), checked_mul(4, n2)));
+      const auto storage_bytes =
+          checked_add(input_offset, checked_mul(input_elements, sizeof(float)));
+      const auto shared_bytes =
+          std::max(bytes(matrix_scratch_elements), metrics.df_audit_arena_bytes);
+      const auto descriptors = generated_response::mixed_contraction_host_bytes(q % batch ? 2 : 1);
+      const auto extra_host_bytes = checked_add(descriptors, bytes(dim));
+      if (storage_bytes <= shared_bytes &&
+          checked_add(metrics.numeric_capacity_bytes, extra_host_bytes) <= options.max_bytes) {
+        mixed.o = o;
+        mixed.v = v;
+        mixed.stream = storage.stream;
+        mixed.error = state.error;
+        mixed.response_arena = reinterpret_cast<float*>(staged.response_arena);
+        auto* inputs = reinterpret_cast<float*>(
+            reinterpret_cast<unsigned char*>(staged.response_arena) + input_offset);
+        mixed_bov = inputs;
+        inputs += checked_mul(q, n1);
+        mixed_bvv = inputs;
+        inputs += checked_mul(q, vv);
+        mixed.t1 = inputs;
+        inputs += n1;
+        mixed.df_tau = inputs;
+        inputs += n2;
+        const std::array<const float**, 6> seeds{
+            &mixed.bar_df_Lvv, &mixed.bar_df_Wvoov,         &mixed.bar_df_Wvovo,
+            &mixed.bar_df_Xv,  &mixed.bar_df_D05_vv_ladder, &mixed.bar_df_singles_residual};
+        for (std::size_t index = 0; index < seeds.size(); ++index) {
+          *seeds[index] = mixed_cut_seeds[index] = inputs;
+          inputs += cut_sizes[index];
+        }
+        try {
+          generated_response::prepare_mixed_contractions(mixed, storage.contractions, batch,
+                                                         q % batch, metrics.df_fp32_gemm_calls,
+                                                         metrics.df_fp32_gemm_summands);
+          binding_host_bytes = checked_add(binding_host_bytes, descriptors);
+          host_bytes = checked_add(host_bytes, bytes(dim));
+          capacity();
+          metrics.df_mixed_precision = true;
+          metrics.df_mixed_storage_bytes = storage_bytes;
+          metrics.df_mixed_input_offset_bytes = input_offset;
+          metrics.mixed_program_hash = generated_response::mixed_auxiliary_program_hash;
+        } catch (const tensor::ContractionPreparationUnavailable&) {
+          mixed.contractions = {};
+        } catch (const std::bad_alloc&) {
+          mixed.contractions = {};
+        }
+      }
+    }
+    metrics.df_mixed_precision_refused = options.df_mixed_precision && !metrics.df_mixed_precision;
     metrics.cuda_actions = true;
   }
 
-  void record_stage(const Stage& stage) {
+  void record_stage(const Stage& stage, bool fp32 = false) {
     if (!metrics.df_matrix_gemm) {
       record(stage.work, stage.operations);
       return;
@@ -511,8 +634,9 @@ struct DFLambdaActions::Impl {
     // provider-internal kernels are deliberately not guessed or counted here.
     metrics.df_generated_kernels =
         checked_add(metrics.df_generated_kernels, stage.matrix_operations);
-    metrics.df_packing_output_bytes = checked_add(metrics.df_packing_output_bytes,
-                                                  bytes(stage.packing(state.o, state.v, staged.q)));
+    metrics.df_packing_output_bytes = checked_add(
+        metrics.df_packing_output_bytes, checked_mul(stage.packing(state.o, state.v, staged.q),
+                                                     fp32 ? sizeof(float) : sizeof(double)));
   }
   void record_core_reuse(bool preparation) {
     const auto terms = preparation
@@ -576,6 +700,14 @@ struct DFLambdaActions::Impl {
     cuda_check(
         cudaMemcpyAsync(target, source, bytes(count), cudaMemcpyDeviceToDevice, storage.stream));
   }
+  void cast_fp32(const double* source, float* target, std::size_t count) {
+    generativeqc_tensor::convert_fp64_to_fp32_kernel<<<generativeqc_tensor::blocks(count, 256), 256,
+                                                       0, storage.stream>>>(source, target, count,
+                                                                            state.error, 0);
+    cuda_check(cudaGetLastError());
+    metrics.df_precision_cast_elements = checked_add(metrics.df_precision_cast_elements, count);
+    ++metrics.df_generated_kernels;
+  }
   void prepare_cuts() {
     runtime::df_progress::Scope preparation("df_lambda_cuts_preparation");
     clear_error();
@@ -617,15 +749,26 @@ struct DFLambdaActions::Impl {
   }
   void reduced_transpose() {
     core_seeds();
+    if (mixed_active)
+      for (std::size_t index = 0; index < cut_seeds.size(); ++index)
+        cast_fp32(cut_seeds[index], mixed_cut_seeds[index], cut_sizes[index]);
     cuda_check(cudaMemsetAsync(tau_seed, 0, bytes(n2), storage.stream));
     for (std::size_t Q = 0; Q < q; Q += metrics.df_auxiliary_batch_size) {
       select(Q, std::min(metrics.df_auxiliary_batch_size, q - Q));
-      const auto out = generated_response::run_staged_auxiliary_cuda(staged);
-      // The compiler declaration fixes the output order: inspect the IR rather
-      // than assuming the tau cut replaces direct T2 dependence.
-      generated_response::accumulate_staged_auxiliary_cuda(staged, out, tau_seed, sum1, sum2);
+      if (mixed_active) {
+        mixed.q = staged.q;
+        mixed.bov = mixed_bov + Q * n1;
+        mixed.bvv = mixed_bvv + Q * vv;
+        const auto out = generated_response::run_mixed_auxiliary_cuda(mixed);
+        generated_response::accumulate_mixed_auxiliary_cuda(mixed, out, tau_seed, sum1, sum2);
+      } else {
+        const auto out = generated_response::run_staged_auxiliary_cuda(staged);
+        // The compiler declaration fixes the output order: inspect the IR rather
+        // than assuming the tau cut replaces direct T2 dependence.
+        generated_response::accumulate_staged_auxiliary_cuda(staged, out, tau_seed, sum1, sum2);
+      }
       ++metrics.df_generated_kernels;
-      record_stage(auxiliary_stage);
+      record_stage(auxiliary_stage, mixed_active);
     }
     staged.q = 1;
     const auto out = generated_response::run_staged_prepare_cuda(staged);
@@ -633,6 +776,10 @@ struct DFLambdaActions::Impl {
     ++metrics.df_generated_kernels;
     record_stage(prepare_stage);
     ++metrics.df_reduced_actions;
+    if (mixed_active)
+      ++metrics.df_mixed_actions;
+    else
+      ++metrics.df_strict_actions;
   }
   void add(const double* one, const double* two) {
     accumulate<<<generativeqc_tensor::blocks(n1, 256), 256, 0, storage.stream>>>(one, n1, sum1,
@@ -661,8 +808,33 @@ DFLambdaActions::DFLambdaActions(const Problem& p, const SolverResult& cc,
 DFLambdaActions::~DFLambdaActions() = default;
 const LambdaDiagnostic& DFLambdaActions::diagnostic() const noexcept { return impl_->metrics; }
 
+bool DFLambdaActions::begin_mixed_precision() {
+  auto& owner = *impl_;
+  if (!owner.metrics.df_mixed_precision) return false;
+  if (owner.mixed_active || owner.mixed_finished)
+    throw std::logic_error("DF Lambda mixed warmup is a single-use epoch");
+  owner.clear_error();
+  owner.cast_fp32(owner.bov, owner.mixed_bov, checked_mul(owner.q, owner.n1));
+  owner.cast_fp32(owner.bvv, owner.mixed_bvv, checked_mul(owner.q, owner.vv));
+  owner.cast_fp32(owner.state.t1, const_cast<float*>(owner.mixed.t1), owner.n1);
+  owner.cast_fp32(owner.tau, const_cast<float*>(owner.mixed.df_tau), owner.n2);
+  owner.finish();
+  owner.mixed_active = true;
+  return true;
+}
+
+void DFLambdaActions::finish_mixed_precision() {
+  auto& owner = *impl_;
+  if (!owner.mixed_active) return;
+  owner.mixed_active = false;
+  owner.mixed_finished = true;
+  ++owner.metrics.df_precision_switches;
+}
+
 void DFLambdaActions::replay(double& energy, std::vector<double>& r1, std::vector<double>& r2) {
   auto& s = *impl_;
+  if (s.mixed_active)
+    throw std::logic_error("DF Lambda strict replay cannot invalidate an active warmup epoch");
   s.clear_error();
   cuda_check(cudaMemsetAsync(s.sum1, 0, bytes(s.n1), s.storage.stream));
   cuda_check(cudaMemsetAsync(s.sum2, 0, bytes(s.n2), s.storage.stream));
@@ -713,6 +885,8 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
                                 std::vector<double>& out_two) {
   auto& s = *impl_;
   Fence fence{s.storage.stream};
+  if (independent && s.mixed_active)
+    throw std::logic_error("DF Lambda independent audit requires a finished FP32 epoch");
   if (one.size() != s.n1 || two.size() != s.n2)
     throw std::invalid_argument("DF Lambda transpose seed shape mismatch");
   s.clear_error();
@@ -768,6 +942,8 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
 
 void DFLambdaActions::seeds(std::span<const double> one, std::span<const double> two) {
   auto& s = *impl_;
+  if (s.mixed_active)
+    throw std::logic_error("DF Lambda parameter seeds require a finished FP32 epoch");
   const double energy = 1;
   Fence fence{s.storage.stream};
   if (!s.parameters_admitted || one.size() != s.n1 || two.size() != s.n2)
@@ -782,6 +958,8 @@ void DFLambdaActions::seeds(std::span<const double> one, std::span<const double>
 
 std::vector<double> DFLambdaActions::parameter(std::string_view name, std::size_t count) {
   auto& s = *impl_;
+  if (s.mixed_active)
+    throw std::logic_error("DF Lambda parameter VJP requires a finished FP32 epoch");
   if (!s.parameters_admitted) throw std::logic_error("DF parameter storage not admitted");
   const auto found = std::find_if(parameters.begin(), parameters.end(),
                                   [&](const auto& p) { return p.name == name; });
@@ -814,6 +992,7 @@ std::vector<double> DFLambdaActions::parameter(std::string_view name, std::size_
 
 std::pair<std::vector<double>, std::vector<double>> DFLambdaActions::virtual_factors() {
   auto& s = *impl_;
+  if (s.mixed_active) throw std::logic_error("DF Lambda factor VJP requires a finished FP32 epoch");
   if (!s.parameters_admitted) throw std::logic_error("DF factor publication not admitted");
   std::pair<std::vector<double>, std::vector<double>> result{
       std::vector<double>(checked_mul(s.q, s.n1)), std::vector<double>(checked_mul(s.q, s.vv))};

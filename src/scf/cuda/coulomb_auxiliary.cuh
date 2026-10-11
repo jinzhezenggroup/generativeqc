@@ -1,7 +1,6 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
+#include "integrals/execution_qualifiers.hpp"
 #include "integrals/range_moments.hpp"
 #include "scf/cuda/boys_table.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
@@ -9,6 +8,12 @@
 // Retained Coulomb auxiliary recurrence, bounded by the instantiated
 // angular order. Layout assertions guard the existing workspace contract.
 namespace generativeqc::scf::cuda_execution {
+
+/** Clip response bounds without host-only standard-library calls in CUDA. */
+GENERATIVEQC_ERI_SHARED_HD inline unsigned coulomb_domain_bound(unsigned requested,
+                                                                unsigned capacity) {
+  return requested < capacity ? requested : capacity;
+}
 
 /** Optional exact dependency domain of one Cartesian component contraction.
  *
@@ -18,36 +23,41 @@ namespace generativeqc::scf::cuda_execution {
  * states, never integrals or small numerical values. Unselected or invalid
  * domains retain the complete simplex. Its z/y/x traversal overwrites every
  * state before consumption, including each dependency of the next plane.
+ * A first-response domain includes one raised Cartesian root per axis. Its
+ * bounds enclose all three response faces and their dependencies, clipped to
+ * the L+1 simplex; the AO/component domain itself is unchanged.
  */
 struct CoulombComponentDomain {
   unsigned x{};
   unsigned y{};
   unsigned z{};
   bool selected{};
+  bool first_response{};
 
   template <unsigned MaximumAngular>
-  __host__ __device__ bool valid() const {
+  GENERATIVEQC_ERI_SHARED_HD bool valid() const {
     return selected && x <= MaximumAngular && y <= MaximumAngular && z <= MaximumAngular &&
-           x + y + z == MaximumAngular;
+           x + y + z + static_cast<unsigned>(first_response) == MaximumAngular;
   }
 };
 
 template <typename Scalar, unsigned MaximumAngular>
 struct CoulombAuxiliary {
-  static_assert(MaximumAngular <= kMaximumCoulombOrder);
+  static_assert(MaximumAngular <= kMaximumCoulombResponseOrder);
 
-  __host__ __device__ static constexpr unsigned choose3(unsigned value) {
+  GENERATIVEQC_ERI_SHARED_HD static constexpr unsigned choose3(unsigned value) {
     return value < 3 ? 0 : value * (value - 1) * (value - 2) / 6;
   }
 
-  __host__ __device__ static constexpr unsigned choose4(unsigned value) {
+  GENERATIVEQC_ERI_SHARED_HD static constexpr unsigned choose4(unsigned value) {
     return value < 4 ? 0 : value * (value - 1) * (value - 2) * (value - 3) / 24;
   }
 
   static constexpr unsigned kStateCount = choose4(MaximumAngular + 4);
   Scalar data[kStateCount];
 
-  __device__ inline unsigned index(unsigned n, unsigned t, unsigned u, unsigned v) const {
+  GENERATIVEQC_ERI_DEVICE inline unsigned index(unsigned n, unsigned t, unsigned u,
+                                                unsigned v) const {
     const unsigned total = choose4(MaximumAngular + 4);
     const unsigned n_offset = total - choose4(MaximumAngular - n + 4);
     const unsigned remaining_after_n = MaximumAngular - n;
@@ -57,10 +67,11 @@ struct CoulombAuxiliary {
     return n_offset + t_offset + u_offset + v;
   }
 
-  __device__ inline Scalar& at(unsigned n, unsigned t, unsigned u, unsigned v) {
+  GENERATIVEQC_ERI_DEVICE inline Scalar& at(unsigned n, unsigned t, unsigned u, unsigned v) {
     return data[index(n, t, u, v)];
   }
-  __device__ inline const Scalar& at(unsigned n, unsigned t, unsigned u, unsigned v) const {
+  GENERATIVEQC_ERI_DEVICE inline const Scalar& at(unsigned n, unsigned t, unsigned u,
+                                                  unsigned v) const {
     return data[index(n, t, u, v)];
   }
 };
@@ -72,13 +83,14 @@ static_assert(CoulombAuxiliary<double, 1>::kStateCount == 5);
 static_assert(CoulombAuxiliary<double, 2>::kStateCount == 15);
 static_assert(CoulombAuxiliary<double, 6>::kStateCount == 210);
 static_assert(CoulombAuxiliary<double, 12>::kStateCount == 1820);
+static_assert(CoulombAuxiliary<double, 13>::kStateCount == 2380);
 
 template <unsigned MaximumAngular, typename Scalar>
-__device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<Scalar>& product,
-                                    const Vec3<Scalar>& center,
-                                    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary,
-                                    CoulombComponentDomain domain = {}) {
+GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
+    EvaluationReal<Scalar> exponent, const Vec3<Scalar>& product, const Vec3<Scalar>& center,
+    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, CoulombComponentDomain domain = {}) {
   const bool reachable = domain.valid<MaximumAngular>();
+  const unsigned halo = reachable && domain.first_response ? 1U : 0U;
   // Roots and the successive z/y/x planes write the entire full-domain
   // simplex exactly once. Clearing it first only adds per-primitive stores;
   // neither the complete nor the reachable recurrence reads an unwritten cell.
@@ -93,7 +105,7 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
 
   // Every reachable read has an earlier write in this unchanged z/y/x
   // recurrence order. Unused simplex cells need neither evaluation nor zeroing.
-  const unsigned maximum_v = reachable ? domain.z : MaximumAngular;
+  const unsigned maximum_v = reachable ? domain.z + halo : MaximumAngular;
   for (unsigned v = 1; v <= maximum_v; ++v) {
     for (unsigned n = 0; n + v <= MaximumAngular; ++n) {
       Scalar value = pc.z * auxiliary.at(n + 1, 0, 0, v - 1);
@@ -104,9 +116,12 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
     }
   }
   for (unsigned v = 0; v <= maximum_v; ++v) {
-    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    const unsigned maximum_u =
+        reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 1; u <= maximum_u; ++u) {
-      const unsigned maximum_n = reachable ? domain.x + domain.y - u : MaximumAngular - u - v;
+      const unsigned maximum_n =
+          reachable ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
+                    : MaximumAngular - u - v;
       for (unsigned n = 0; n <= maximum_n; ++n) {
         Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
         if (u > 1) {
@@ -117,11 +132,16 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
     }
   }
   for (unsigned v = 0; v <= maximum_v; ++v) {
-    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    const unsigned maximum_u =
+        reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 0; u <= maximum_u; ++u) {
-      const unsigned maximum_t = reachable ? domain.x : MaximumAngular - u - v;
+      const unsigned maximum_t = reachable
+                                     ? coulomb_domain_bound(domain.x + halo, MaximumAngular - u - v)
+                                     : MaximumAngular - u - v;
       for (unsigned t = 1; t <= maximum_t; ++t) {
-        const unsigned maximum_n = reachable ? domain.x - t : MaximumAngular - t - u - v;
+        const unsigned maximum_n =
+            reachable ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
+                      : MaximumAngular - t - u - v;
         for (unsigned n = 0; n <= maximum_n; ++n) {
           Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
           if (t > 1) {
@@ -141,14 +161,14 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
  * rounding remain unchanged.
  */
 template <unsigned MaximumAngular, typename Scalar>
-__device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& product,
-                                          const Vec3<Scalar>& center,
-                                          generativeqc::integrals::CoulombRange range, double omega,
-                                          CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary,
-                                          CoulombComponentDomain domain = {}) {
-  static_assert(MaximumAngular <= kMaximumCoulombOrder);
+GENERATIVEQC_ERI_DEVICE inline bool fill_range_coulomb(
+    double exponent, const Vec3<Scalar>& product, const Vec3<Scalar>& center,
+    generativeqc::integrals::CoulombRange range, double omega,
+    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, CoulombComponentDomain domain = {}) {
+  static_assert(MaximumAngular <= kMaximumCoulombResponseOrder);
   if (range == generativeqc::integrals::CoulombRange::Full) return false;
   const bool reachable = domain.valid<MaximumAngular>();
+  const unsigned halo = reachable && domain.first_response ? 1U : 0U;
   if (!reachable) {
     for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item)
       auxiliary.data[item] = scalar<Scalar>(0.0);
@@ -178,7 +198,7 @@ __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& p
     auxiliary.at(n, 0, 0, 0) = factor * moment;
     factor *= -2.0 * exponent;
   }
-  const unsigned maximum_v = reachable ? domain.z : MaximumAngular;
+  const unsigned maximum_v = reachable ? domain.z + halo : MaximumAngular;
   for (unsigned v = 1; v <= maximum_v; ++v) {
     for (unsigned n = 0; n + v <= MaximumAngular; ++n) {
       Scalar value = pc.z * auxiliary.at(n + 1, 0, 0, v - 1);
@@ -187,9 +207,12 @@ __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& p
     }
   }
   for (unsigned v = 0; v <= maximum_v; ++v) {
-    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    const unsigned maximum_u =
+        reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 1; u <= maximum_u; ++u) {
-      const unsigned maximum_n = reachable ? domain.x + domain.y - u : MaximumAngular - u - v;
+      const unsigned maximum_n =
+          reachable ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
+                    : MaximumAngular - u - v;
       for (unsigned n = 0; n <= maximum_n; ++n) {
         Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
         if (u > 1) value = value + static_cast<double>(u - 1) * auxiliary.at(n + 1, 0, u - 2, v);
@@ -198,11 +221,16 @@ __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& p
     }
   }
   for (unsigned v = 0; v <= maximum_v; ++v) {
-    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    const unsigned maximum_u =
+        reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 0; u <= maximum_u; ++u) {
-      const unsigned maximum_t = reachable ? domain.x : MaximumAngular - u - v;
+      const unsigned maximum_t = reachable
+                                     ? coulomb_domain_bound(domain.x + halo, MaximumAngular - u - v)
+                                     : MaximumAngular - u - v;
       for (unsigned t = 1; t <= maximum_t; ++t) {
-        const unsigned maximum_n = reachable ? domain.x - t : MaximumAngular - t - u - v;
+        const unsigned maximum_n =
+            reachable ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
+                      : MaximumAngular - t - u - v;
         for (unsigned n = 0; n <= maximum_n; ++n) {
           Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
           if (t > 1) value = value + static_cast<double>(t - 1) * auxiliary.at(n + 1, t - 2, u, v);

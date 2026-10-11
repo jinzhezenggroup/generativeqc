@@ -23,6 +23,7 @@
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
+#include "response/solve.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "scf/types.hpp"
 #include "tensor/cpu_linalg.hpp"
@@ -866,8 +867,10 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   z_options.restart = 30;
   z_options.max_iterations = 200;
   z_options.max_workspace_bytes = max_bytes;
-  const auto z_plan = response::prepare_gmres(dimension, z_options);
-  auto z = response::solve_gmres(z_plan, apply, correlation.orbital_rhs);
+  const response::LinearResponseProblem response_problem(
+      dimension, apply, response::LinearResponseSymmetry::Symmetric);
+  const auto z_plan = response::prepare_response(response_problem, z_options);
+  auto z = response::solve_response(z_plan, response_problem, correlation.orbital_rhs);
   if (!z.converged())
     throw std::runtime_error("RCCSD(T) physical orbital response did not converge");
   std::vector<double> independent(dimension, 0.0);

@@ -47,6 +47,13 @@ struct SolverOptions {
   // Independent expanded physical replay only. Optional tiles may reuse the
   // admitted DF scratch, never grow it or displace a primal/pair schedule.
   bool df_replay_auxiliary_batch{false};
+  /** Opt-in FP32 auxiliary preconvergence; final iterations, DIIS history,
+   * independent residual replay and every response consumer remain FP64. */
+  bool df_mixed_precision{false};
+  // Use the same binary64 boundary as admission at the largest legal residual
+  // tolerance; the decimal literal 1e-7 is one representable step smaller.
+  double df_mixed_precision_switch_residual{100.0 * 1e-9};
+  unsigned df_mixed_precision_max_evaluations{24};
 };
 
 enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
@@ -143,6 +150,12 @@ struct SolverDiagnostic {
   std::size_t df_pair_evaluations{}, df_pair_refusals{}, df_pair_projection_calls{};
   std::size_t df_pair_projection_bytes{}, df_pair_geometry_elements{};
   std::size_t df_pair_capacity_bytes{}, df_pair_binding_host_bytes{};
+  bool df_mixed_precision{}, df_mixed_precision_refused{};
+  std::size_t df_mixed_evaluations{}, df_fp32_gemm_calls{}, df_fp32_gemm_summands{};
+  std::size_t df_precision_cast_elements{}, df_precision_switches{};
+  std::size_t df_mixed_pair_projection_calls{}, df_mixed_pair_projection_bytes{};
+  std::size_t df_strict_auxiliary_batch_size{1};
+  const char* df_mixed_program_hash{};
   double tensor_seconds{};
   double iteration_seconds{};
   double replay_seconds{};

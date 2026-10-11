@@ -229,9 +229,10 @@ class Calculator:
         ``<method>-d4-rks/uks`` selectors whose electronic lowerers are
         qualified, a spin-explicit PBE-family MethodIR with one production
         D3(BJ) correction, or the canonical r2SCAN-3c MethodIR. Automatic Libxc
-        selectors are currently
-        CPU FP64 energy/SCF only and use structural admission plus the explicit
-        negative blacklist. The composite forms bind the exact def2-mTZVPP basis
+        selectors use CPU FP64 structural admission plus the explicit negative
+        blacklist. Direct all-electron s/p/d contexts additionally support
+        explicitly requested bounded analytic forces; energy remains the default.
+        The composite forms bind the exact def2-mTZVPP basis
         and compose r2SCAN + D4 + gCP without a named native scientific driver.
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
         tile schedule. ``dispersion_memory_budget_bytes`` independently bounds
@@ -868,7 +869,7 @@ class Calculator:
             )
         cpu_direct_semilocal_force = qualified_direct_semilocal_context(self)
         semilocal_force = (
-            self._automatic_libxc_name is None
+            (self._automatic_libxc_name is None or cpu_direct_semilocal_force)
             and self._ks_options is not None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
@@ -896,7 +897,9 @@ class Calculator:
         from .ks import (
             SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
+            cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
+            mixed_density_fitted_force_eligible,
         )
 
         cuda_hybrid_force = (
@@ -925,10 +928,28 @@ class Calculator:
             and self._automatic_libxc_name is None
             and self._dispersion_method_ir is None
             and self._ks_options is not None
-            and self._ks_options.execution_plan.nonlocal_correlation is None
-            and all(
-                term.operator == "full-range"
-                for term in self._ks_options.execution_plan.exchange
+            and (
+                (
+                    self._ks_options.execution_plan.nonlocal_correlation is None
+                    and all(
+                        term.operator == "full-range"
+                        for term in self._ks_options.execution_plan.exchange
+                    )
+                )
+                or (
+                    self._device_name == "cuda"
+                    and self._ks_options.xc_schedule == "device_fused"
+                    and cuda_nonlocal_force_basis_eligible(self._basis)
+                    and cuda_mixed_density_fitted_force_eligible(
+                        self._ks_options.method_ir
+                    )
+                )
+                or (
+                    self._device_name == "cpu"
+                    and mixed_density_fitted_force_eligible(
+                        self._ks_options.method_ir, backend="cpu"
+                    )
+                )
             )
             and (self._device_name == "cpu" or self._device_name == "cuda")
         )
@@ -1044,24 +1065,25 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
-        if (
-            self._automatic_initial_guess
-            and (
-                self._device_name == "cpu"
-                or self._capabilities.family == "density_functional"
+        native_per_item_guess = False
+        if self._automatic_initial_guess:
+            from .initial_guess import (
+                _automatic_minao_model_eligible,
+                _uses_native_automatic_cpu,
             )
-            and self._precision_mode == _native.PRECISION_FP64
-            and self._density_fitting_mode == _native.DENSITY_FITTING_NONE
-            and restricted
-            and not basis_has_ecp
-            and self._capabilities.family in ("hartree_fock", "density_functional")
-        ):
-            from .initial_guess import supports_automatic_minao
 
-            # Automatic preparation must not make an optional native feature
-            # mandatory for an otherwise supported default calculation.
-            if supports_automatic_minao(self._library):
-                self._initial_guess = InitialGuessSpec("minao")
+            if _automatic_minao_model_eligible(
+                self,
+                restricted=restricted,
+                has_ecp=False,
+            ):
+                # A basis package can contain unused ECP records. Only the qualified
+                # native per-item path may defer those facts to actual target admission.
+                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
+                    self
+                )
+                if not basis_has_ecp or native_per_item_guess:
+                    self._initial_guess = InitialGuessSpec("minao")
 
         if self._initial_guess is not None:
             from .initial_guess import require_initial_guess_library
@@ -1077,7 +1099,10 @@ class Calculator:
                 or self._precision_mode != _native.PRECISION_FP64
                 or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                 or not restricted
-                or basis_has_ecp
+                or (
+                    basis_has_ecp
+                    and not (self._automatic_initial_guess and native_per_item_guess)
+                )
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):
@@ -1238,11 +1263,16 @@ class Calculator:
             descriptor.ccsd_damping = self._ccsd_damping
             descriptor.ccsd_level_shift = self._ccsd_level_shift
             descriptor.ccsd_frozen_core = self._ccsd_frozen_core
-        from .initial_guess import initial_guess_for_systems
+        from .initial_guess import (
+            _uses_native_automatic_cpu,
+            initial_guess_for_systems,
+        )
 
         policy = initial_guess_for_systems(self, systems)
         if policy is not None:
-            descriptor.initial_guess = ctypes.pointer(policy.native())
+            descriptor.initial_guess = ctypes.pointer(
+                policy.native(automatic_cpu=_uses_native_automatic_cpu(self))
+            )
         return descriptor
 
     def _precision_provenance(

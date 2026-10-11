@@ -111,7 +111,7 @@ jobs:
           uv pip install --python .venv/bin/python numpy
 
       - name: Install CuMetal build prerequisites and ccache
-        run: brew install llvm z3 ninja ccache
+        run: brew install llvm z3 ninja ccache nlohmann-json openssl@3 libarchive
 
       - name: Restore CuMetal toolchain
         id: cache-cumetal
@@ -266,6 +266,7 @@ jobs:
         run: |
           FAKE_CUDA="$CUMETAL_SOURCE/build/cumetal-cuda-toolkit"
           PATH="$FAKE_CUDA/bin:$PATH" cmake -S . -B "$GENERATIVEQC_BUILD" -G Ninja \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix openssl@3);$(brew --prefix libarchive);$(brew --prefix nlohmann-json)" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER="$(brew --prefix llvm)/bin/clang" \
             -DCMAKE_CXX_COMPILER="$(brew --prefix llvm)/bin/clang++" \

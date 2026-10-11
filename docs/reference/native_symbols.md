@@ -13,6 +13,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_options_version](#native-c-generativeqc-ks-options-version)
 - [generativeqc_initial_guess_options_version](#native-c-generativeqc-initial-guess-options-version)
 - [generativeqc_initial_guess_capabilities_v1](#native-c-generativeqc-initial-guess-capabilities-v1)
+- [generativeqc_initial_guess_auto_kind_v1](#native-c-generativeqc-initial-guess-auto-kind-v1)
+- [generativeqc_initial_guess_auto_system_kind_v1](#native-c-generativeqc-initial-guess-auto-system-kind-v1)
 - [generativeqc_calculation_get_initial_guess_diagnostic](#native-c-generativeqc-calculation-get-initial-guess-diagnostic)
 - [generativeqc_batch_get_initial_guess_diagnostic](#native-c-generativeqc-batch-get-initial-guess-diagnostic)
 - [generativeqc_get_abi_version](#native-c-generativeqc-get-abi-version)
@@ -110,6 +112,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Context::get](#native-cpp-generativeqc-context-get)
 - [generativeqc::System](#native-cpp-generativeqc-system)
 - [generativeqc::System::System](#native-cpp-generativeqc-system-system)
+- [generativeqc::System::System-ecp](#native-cpp-generativeqc-system-system-ecp)
 - [generativeqc::System::~System](#native-cpp-generativeqc-system-destructor-system)
 - [generativeqc::System::System-copy](#native-cpp-generativeqc-system-system-copy)
 - [generativeqc::System::operator=-copy](#native-cpp-generativeqc-system-copy-assignment-copy)
@@ -191,13 +194,65 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_capabilities_v1 ( void ) ;
 ```
 
-**Behavior.** Return additive HF, LDA, and MINAO provider capability bits.
+**Behavior.** Return additive HF, LDA, MINAO, and CPU automatic-policy capability bits.
 
 **Outputs.** Ignore unknown bits. A positive bit does not waive the provider-specific backend,
 spin, basis, derivative, and resource admission checks documented with
 generativeqc_initial_guess_options.
 
 **Execution.** Synchronous, context-free discovery; no device initialization or allocation.
+
+(native-c-generativeqc-initial-guess-auto-kind-v1)=
+## generativeqc_initial_guess_auto_kind_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v1 ( const generativeqc_initial_guess_auto_policy * request , uint32_t * resolved_kind ) ;
+```
+
+**Behavior.** Resolve automatic MINAO eligibility using the native admission policy.
+
+**Inputs.** request carries the current struct_size/abi_version, a registered method, CPU or
+CUDA backend, valid precision and density-fitting modes, Boolean restricted/has_ecp,
+and either a nonempty atomic-number list (1..118) or NULL with atom_count=0.
+
+**Outputs.** On SUCCESS, writes GENERATIVEQC_INITIAL_GUESS_MINAO or zero (Hcore). Model-only
+admission is not a complete system or execution capability. Explicit initial-guess choices
+do not use this query; preparation retains its singlet, basis, density, and budget gates.
+
+**Lifetime.** Borrows the request and atomic_numbers for this call only; retains nothing.
+
+**Errors.** Invalid requests return INVALID_ARGUMENT, descriptor version/size mismatches return
+ABI_MISMATCH, and unknown methods return NOT_IMPLEMENTED. Preserves output on failure.
+
+**Execution.** Synchronous, allocation-free discovery. No context, device initialization,
+compiler, Python interpreter, or scientific integral evaluation is required.
+
+(native-c-generativeqc-initial-guess-auto-system-kind-v1)=
+## generativeqc_initial_guess_auto_system_kind_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind_v1 ( const generativeqc_initial_guess_auto_policy * request , int64_t electron_count , uint32_t multiplicity , uint32_t * resolved_kind ) ;
+```
+
+**Behavior.** Resolve automatic MINAO or Hcore for one system, including its population.
+
+**Inputs.** request has the same contract as generativeqc_initial_guess_auto_kind_v1 but
+requires a nonempty atomic-number list. electron_count is nonnegative and multiplicity
+is positive. Neither coordinates nor a prepared scientific owner are required.
+
+**Outputs.** On SUCCESS, writes MINAO only for an eligible positive even-electron singlet,
+otherwise zero (Hcore). This shape query does not waive seed-budget or density gates.
+
+**Lifetime.** Borrows the request and atomic_numbers for this call only; retains nothing.
+
+**Errors.** Uses the model query's status codes; invalid populations return INVALID_ARGUMENT.
+Preserves output on failure, including an empty system request.
+
+**Execution.** Synchronous, allocation-free, context-free discovery; no device or science work.
 
 (native-c-generativeqc-calculation-get-initial-guess-diagnostic)=
 ## generativeqc_calculation_get_initial_guess_diagnostic
@@ -3012,6 +3067,27 @@ Allocation failures may throw standard exceptions.
 
 **Units.** Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
 forces; memory limits are bytes.
+
+(native-cpp-generativeqc-system-system-ecp)=
+## generativeqc::System::System-ecp
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+System ( Context & context , const generativeqc_system_descriptor & descriptor , std :: span < const std :: int32_t > core_electrons , std :: span < const generativeqc_ecp_term > terms )
+```
+
+**Behavior.** Create an owned scalar-ECP system through the native ECP constructor.
+
+**Inputs.** Core counts must match atom_count; scalar term admission follows the C API.
+
+**Lifetime.** Copies all basis/core/term arrays; the Context must outlive this owner.
+
+**Errors.** Throws Error on invalid dimensions or native preparation/admission failure.
+
+**Execution.** Synchronous; serialize operations involving this owner and its Context.
+
+**Units.** Coordinates and Gaussian residual terms use atomic units.
 
 (native-cpp-generativeqc-system-destructor-system)=
 ## generativeqc::System::~System

@@ -28,6 +28,8 @@ from tools.generate_rccsd_native import (
     _cuda_program,
     _label_dims,
     _required_function,
+    add_cross_size_arena_argument,
+    cross_size_arena_candidate,
 )
 
 RESPONSE_INPUTS = (
@@ -240,16 +242,18 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for suffix, emit in (
-        ("_cpu.hpp", cpu_header),
-        ("_cuda.cuh", cuda_header),
-        ("_cuda.cu", cuda_source),
-    ):
-        (args.output_dir / ("generated_df_cc_source" + suffix)).write_text(
-            emit(), encoding="utf-8"
-        )
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for suffix, emit in (
+            ("_cpu.hpp", cpu_header),
+            ("_cuda.cuh", cuda_header),
+            ("_cuda.cu", cuda_source),
+        ):
+            (args.output_dir / ("generated_df_cc_source" + suffix)).write_text(
+                emit(), encoding="utf-8"
+            )
 
 
 if __name__ == "__main__":

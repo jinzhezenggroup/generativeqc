@@ -3,7 +3,7 @@
 /*
  * Minimal NVIDIA host-library ABI declarations used by GenerativeQC's provider-free
  * Linux wheels. This GenerativeQC-owned interface header declares only opaque types,
- * stable enum values, and C function signatures that GenerativeQC actually calls.
+ * stable enum values, and generated C function signatures for APIs GenerativeQC actually calls.
  *
  * Native SDK builds continue to use NVIDIA's cublas_v2.h/cusolverDn.h. Wheel
  * builds put this directory first on the include path so nvcc needs only its
@@ -46,86 +46,6 @@ typedef enum { CUBLAS_DIAG_NON_UNIT = 0, CUBLAS_DIAG_UNIT = 1 } cublasDiagType_t
 typedef enum { CUBLAS_POINTER_MODE_HOST = 0, CUBLAS_POINTER_MODE_DEVICE = 1 } cublasPointerMode_t;
 typedef enum { CUBLAS_DEFAULT_MATH = 0, CUBLAS_PEDANTIC_MATH = 2 } cublasMath_t;
 
-cublasStatus_t cublasCreate_v2(cublasHandle_t* handle);
-cublasStatus_t cublasDestroy_v2(cublasHandle_t handle);
-cublasStatus_t cublasGetProperty(libraryPropertyType type, int* value);
-cublasStatus_t cublasGetVersion_v2(cublasHandle_t handle, int* version);
-cublasStatus_t cublasSetWorkspace_v2(cublasHandle_t handle, void* workspace,
-                                     size_t workspace_size_in_bytes);
-cublasStatus_t cublasGetStream_v2(cublasHandle_t handle, cudaStream_t* stream);
-cublasStatus_t cublasSetStream_v2(cublasHandle_t handle, cudaStream_t stream);
-cublasStatus_t cublasGetPointerMode_v2(cublasHandle_t handle, cublasPointerMode_t* mode);
-cublasStatus_t cublasSetPointerMode_v2(cublasHandle_t handle, cublasPointerMode_t mode);
-cublasStatus_t cublasSetMathMode(cublasHandle_t handle, cublasMath_t mode);
-cublasStatus_t cublasDaxpy_v2(cublasHandle_t handle, int n, const double* alpha, const double* x,
-                              int incx, double* y, int incy);
-cublasStatus_t cublasDcopy_v2(cublasHandle_t handle, int n, const double* x, int incx, double* y,
-                              int incy);
-cublasStatus_t cublasDdot_v2(cublasHandle_t handle, int n, const double* x, int incx,
-                             const double* y, int incy, double* result);
-cublasStatus_t cublasDnrm2_v2(cublasHandle_t handle, int n, const double* x, int incx,
-                              double* result);
-cublasStatus_t cublasDscal_v2(cublasHandle_t handle, int n, const double* alpha, double* x,
-                              int incx);
-cublasStatus_t cublasDgemv_v2(cublasHandle_t handle, cublasOperation_t trans, int m, int n,
-                              const double* alpha, const double* a, int lda, const double* x,
-                              int incx, const double* beta, double* y, int incy);
-cublasStatus_t cublasSgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
-                              cublasOperation_t transb, int m, int n, int k, const float* alpha,
-                              const float* a, int lda, const float* b, int ldb, const float* beta,
-                              float* c, int ldc);
-cublasStatus_t cublasSgemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-                                         cublasOperation_t transb, int m, int n, int k,
-                                         const float* alpha, const float* a, int lda,
-                                         long long int stride_a, const float* b, int ldb,
-                                         long long int stride_b, const float* beta, float* c,
-                                         int ldc, long long int stride_c, int batch_count);
-cublasStatus_t cublasDgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
-                              cublasOperation_t transb, int m, int n, int k, const double* alpha,
-                              const double* a, int lda, const double* b, int ldb,
-                              const double* beta, double* c, int ldc);
-cublasStatus_t cublasDsyrk_v2(cublasHandle_t handle, cublasFillMode_t uplo, cublasOperation_t trans,
-                              int n, int k, const double* alpha, const double* a, int lda,
-                              const double* beta, double* c, int ldc);
-cublasStatus_t cublasDsyr2k_v2(cublasHandle_t handle, cublasFillMode_t uplo,
-                               cublasOperation_t trans, int n, int k, const double* alpha,
-                               const double* a, int lda, const double* b, int ldb,
-                               const double* beta, double* c, int ldc);
-cublasStatus_t cublasDgemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-                                         cublasOperation_t transb, int m, int n, int k,
-                                         const double* alpha, const double* a, int lda,
-                                         long long int stride_a, const double* b, int ldb,
-                                         long long int stride_b, const double* beta, double* c,
-                                         int ldc, long long int stride_c, int batch_count);
-cublasStatus_t cublasDgeam(cublasHandle_t handle, cublasOperation_t transa,
-                           cublasOperation_t transb, int m, int n, const double* alpha,
-                           const double* a, int lda, const double* beta, const double* b, int ldb,
-                           double* c, int ldc);
-cublasStatus_t cublasDtrsmBatched(cublasHandle_t handle, cublasSideMode_t side,
-                                  cublasFillMode_t uplo, cublasOperation_t trans,
-                                  cublasDiagType_t diag, int m, int n, const double* alpha,
-                                  const double* const* a, int lda, double* const* b, int ldb,
-                                  int batch_count);
-
-#define cublasCreate cublasCreate_v2
-#define cublasDestroy cublasDestroy_v2
-#define cublasGetVersion cublasGetVersion_v2
-#define cublasSetWorkspace cublasSetWorkspace_v2
-#define cublasGetStream cublasGetStream_v2
-#define cublasSetStream cublasSetStream_v2
-#define cublasGetPointerMode cublasGetPointerMode_v2
-#define cublasSetPointerMode cublasSetPointerMode_v2
-#define cublasDaxpy cublasDaxpy_v2
-#define cublasDcopy cublasDcopy_v2
-#define cublasDdot cublasDdot_v2
-#define cublasDnrm2 cublasDnrm2_v2
-#define cublasDscal cublasDscal_v2
-#define cublasDgemv cublasDgemv_v2
-#define cublasDgemm cublasDgemm_v2
-#define cublasSgemm cublasSgemm_v2
-#define cublasDsyrk cublasDsyrk_v2
-#define cublasDsyr2k cublasDsyr2k_v2
-
 typedef struct cusolverDnContext* cusolverDnHandle_t;
 typedef struct cusolverDnParams* cusolverDnParams_t;
 typedef struct syevjInfo* syevjInfo_t;
@@ -144,51 +64,8 @@ enum {
 };
 typedef enum { CUSOLVER_EIG_MODE_NOVECTOR = 0, CUSOLVER_EIG_MODE_VECTOR = 1 } cusolverEigMode_t;
 
-cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t* handle);
-cusolverStatus_t cusolverDnDestroy(cusolverDnHandle_t handle);
-cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t handle, cudaStream_t stream);
-cusolverStatus_t cusolverDnCreateParams(cusolverDnParams_t* params);
-cusolverStatus_t cusolverDnDestroyParams(cusolverDnParams_t params);
-cusolverStatus_t cusolverDnCreateSyevjInfo(syevjInfo_t* info);
-cusolverStatus_t cusolverDnDestroySyevjInfo(syevjInfo_t info);
-cusolverStatus_t cusolverDnXsyevjSetTolerance(syevjInfo_t info, double tolerance);
-cusolverStatus_t cusolverDnXsyevjSetMaxSweeps(syevjInfo_t info, int max_sweeps);
-cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t info, int sort_eig);
-cusolverStatus_t cusolverDnDsyevjBatched_bufferSize(cusolverDnHandle_t handle,
-                                                    cusolverEigMode_t jobz, cublasFillMode_t uplo,
-                                                    int n, const double* a, int lda,
-                                                    const double* w, int* lwork, syevjInfo_t params,
-                                                    int batch_size);
-cusolverStatus_t cusolverDnDsyevjBatched(cusolverDnHandle_t handle, cusolverEigMode_t jobz,
-                                         cublasFillMode_t uplo, int n, double* a, int lda,
-                                         double* w, double* work, int lwork, int* info,
-                                         syevjInfo_t params, int batch_size);
-cusolverStatus_t cusolverDnXsyevd_bufferSize(cusolverDnHandle_t handle, cusolverDnParams_t params,
-                                             cusolverEigMode_t jobz, cublasFillMode_t uplo,
-                                             int64_t n, cudaDataType data_type_a, const void* a,
-                                             int64_t lda, cudaDataType data_type_w, const void* w,
-                                             cudaDataType compute_type,
-                                             size_t* workspace_bytes_device,
-                                             size_t* workspace_bytes_host);
-cusolverStatus_t cusolverDnXsyevd(cusolverDnHandle_t handle, cusolverDnParams_t params,
-                                  cusolverEigMode_t jobz, cublasFillMode_t uplo, int64_t n,
-                                  cudaDataType data_type_a, void* a, int64_t lda,
-                                  cudaDataType data_type_w, void* w, cudaDataType compute_type,
-                                  void* workspace_device, size_t workspace_bytes_device,
-                                  void* workspace_host, size_t workspace_bytes_host, int* info);
-cusolverStatus_t cusolverDnXsyevBatched_bufferSize(
-    cusolverDnHandle_t handle, cusolverDnParams_t params, cusolverEigMode_t jobz,
-    cublasFillMode_t uplo, int64_t n, cudaDataType data_type_a, const void* a, int64_t lda,
-    cudaDataType data_type_w, const void* w, cudaDataType compute_type,
-    size_t* workspace_bytes_device, size_t* workspace_bytes_host, int64_t batch_size);
-cusolverStatus_t cusolverDnXsyevBatched(cusolverDnHandle_t handle, cusolverDnParams_t params,
-                                        cusolverEigMode_t jobz, cublasFillMode_t uplo, int64_t n,
-                                        cudaDataType data_type_a, void* a, int64_t lda,
-                                        cudaDataType data_type_w, void* w,
-                                        cudaDataType compute_type, void* workspace_device,
-                                        size_t workspace_bytes_device, void* workspace_host,
-                                        size_t workspace_bytes_host, int* info, int64_t batch_size);
-cusolverStatus_t cusolverGetProperty(libraryPropertyType type, int* value);
+// Declarations and _v2 aliases are generated from NVIDIA SDK headers.
+#include "generativeqc_nvidia_host_functions.h"
 
 #ifdef __cplusplus
 }  // extern "C"

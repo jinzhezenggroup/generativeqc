@@ -45,7 +45,7 @@ def emit_cpu(program: typing.Any, *, function_name: typing.Any) -> typing.Any:
             if op == "add":
                 terms = [
                     f"({float(Fraction(*c)).hex()}*{v}[z])"
-                    for v, c in zip(operands, node.attrs["coefficients"])
+                    for v, c in zip(operands, node.attrs["coefficients"], strict=True)
                 ]
                 expr = "+".join(terms)
             elif op in ("multiply", "divide"):

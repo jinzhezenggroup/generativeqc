@@ -19,6 +19,7 @@ from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from tools.generate_xc_split_hybrid_registry import (
     GGA_CODE_BASE,
     MGGA_CODE_BASE,
+    emit_dft_point_consumers,
     emit_python_registry,
     emit_registry,
     registry_entries,
@@ -99,6 +100,22 @@ def test_split_hybrid_fast_paths_follow_program_class_not_identifier() -> None:
 def test_split_hybrid_python_registry_is_fresh() -> None:
     committed = ROOT / "python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     assert emit_python_registry() == committed.read_text(encoding="utf-8")
+
+
+def test_split_hybrid_dft_point_bindings_share_registry_authority() -> None:
+    """Launch bindings remain fresh and contain no XC scientific dependencies."""
+    from generativeqc_compiler.dft._generated_split_hybrid_consumers import (
+        SPLIT_HYBRID_POINT_CONSUMERS,
+    )
+
+    committed = (
+        ROOT / "python/generativeqc_compiler/dft/_generated_split_hybrid_consumers.py"
+    )
+    assert emit_dft_point_consumers() == committed.read_text(encoding="utf-8")
+    assert SPLIT_HYBRID_POINT_CONSUMERS == tuple(
+        (record["functional_code"], {"gga": 4, "mgga": 5}[record["family"]])
+        for record in SPLIT_HYBRIDS.values()
+    )
 
 
 @pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))

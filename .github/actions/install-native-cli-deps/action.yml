@@ -1,0 +1,9 @@
+name: Native CLI dependencies
+description: Install the native JSON, hashing and safe ZIP development libraries
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev

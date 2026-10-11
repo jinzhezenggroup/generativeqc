@@ -106,7 +106,7 @@ def test_padded_partial_weights_are_frozen_and_psss_is_one_record_per_primitive(
     assert calls == [request]
     assert stream.record_count == 2
     assert stream.host_peak_bytes <= consumer.memory_budget_bytes
-    for record, coefficient in zip(first, (0.7, -0.2)):
+    for record, coefficient in zip(first, (0.7, -0.2), strict=True):
         fields = PRIMITIVE_RECORD.unpack(record)
         assert fields[:2] == (1, 7)
         np.testing.assert_allclose(

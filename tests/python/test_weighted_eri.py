@@ -72,7 +72,7 @@ def test_fused_external_weights_match_raw_component_derivatives(
     variables = primitive_variables(EXPONENTS, centers, integral.maximum_coulomb_order)
     weights = np.random.default_rng(144).normal(size=kernel.spec.component_count)
     raw_value, raw_gradient = 0.0, np.zeros((4, 3))
-    for weight, component in zip(weights, kernel.spec.components):
+    for weight, component in zip(weights, kernel.spec.components, strict=True):
         raw = build_shell_class_component_kernel(
             kernel.spec, component, integral=integral
         )
@@ -157,7 +157,7 @@ def test_arbitrary_weight_atomic_gradient_matches_multistep_raw_scalar_differenc
         )
         return sum(
             w * c.graph.evaluate(c.value, variables)
-            for w, c in zip(weights, components)
+            for w, c in zip(weights, components, strict=True)
         )
 
     variables = primitive_variables(EXPONENTS, centers, integral.maximum_coulomb_order)

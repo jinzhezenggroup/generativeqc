@@ -1,6 +1,6 @@
 {
   "path": "src/scf/cuda/coulomb_auxiliary.cuh",
-  "reason": "Shared retained full-range recurrence and bounded CPU/generated SR/LR moments. Coordinate Dual/Dual3 seeds use dM_n/dT = -M_(n+1); no duplicate radial formula is introduced. Full-range value arithmetic remains unchanged.",
+  "reason": "Shared retained full-range recurrence and bounded CPU/generated SR/LR moments, including the bounded first-spatial-response domain halo. Coordinate Dual/Dual3 seeds use dM_n/dT = -M_(n+1); no duplicate radial formula is introduced. Full-range value arithmetic remains unchanged.",
   "regions": [],
   "role": "scientific",
   "subsystem": "direct_integrals"

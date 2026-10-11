@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-10
 
+Follow-up: the [default-off memory candidates](../performance/2026-10-11-memory-aware-native-arena-candidates.md)
+add conservative cross-size coalescing and serialized owner scratch sharing.
+The default equal-product and retained-storage contracts recorded here remain.
+
 ## Problem and audit boundary
 
 The audit starts from master

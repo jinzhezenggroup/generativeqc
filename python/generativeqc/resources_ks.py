@@ -101,7 +101,19 @@ def _item_host_inventory(
     # Match the native two-candidate solver metadata reservation independently
     # of queried numeric workspace; tiny native matrices also retain a binding.
     solver_binding_host = 16 * 1024 if backend == "cuda" else 0
-    retained += solver_host + solver_binding_host
+    # The immutable matrix-product binding has its own preparation envelope,
+    # including generated small-shape and host-unfused XC execution. It is not
+    # part of the independent eigensolver or XC binding reservations.
+    matrix_binding_host = 16 * 1024 if backend == "cuda" else 0
+    # Structured Gram/basis bindings borrow the same provider, but retain a
+    # separate preparation envelope even while library qualification is closed.
+    structured_binding_host = 32 * 1024 if backend == "cuda" else 0
+    retained += (
+        solver_host
+        + solver_binding_host
+        + matrix_binding_host
+        + structured_binding_host
+    )
     quadrature = 16 * (model.grid.radial_points + model.grid.angular_polar) + 8 * a
     if backend == "cuda":
         # Shared rule/center/radius upload coexists with the small rule vectors.
@@ -184,6 +196,8 @@ def _item_host_inventory(
             "provider": provider,
             "solver_host": solver_host,
             "solver_binding_host": solver_binding_host,
+            "matrix_binding_host": matrix_binding_host,
+            "structured_binding_host": structured_binding_host,
             "xc_schedule_staging": xc_schedule_staging,
             "nonlocal_provider": nonlocal_provider,
             "ao_grid_cache": ao_grid_cache,
@@ -326,7 +340,15 @@ def ks_resource_request(
             "KS planning supports electronic contributions only; "
             "post-SCF corrections require a separate resource owner"
         )
-    if "tau" in model.functional.ingredients:
+    from .ks import _automatic_semilocal_name
+
+    automatic_name = _automatic_semilocal_name(model.method_ir)
+    if automatic_name is not None and backend != "cpu":
+        raise NotImplementedError(
+            "automatic Libxc KS resource planning currently supports CPU only"
+        )
+    automatic_cpu = automatic_name is not None
+    if "tau" in model.functional.ingredients and not automatic_cpu:
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
         )
@@ -367,6 +389,8 @@ def ks_resource_request(
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
     cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
+    # Imported CPU tau uses the same four AO jets and dense potential matrices
+    # as GGA; tau and its point differential are fixed-size stack values.
     requires_first_ao_derivatives = bool(model.ao_order)
     unrestricted = model.method_ir.spin == "polarized"
     items = []
@@ -508,6 +532,8 @@ def ks_resource_request(
         "provider",
         "solver_host",
         "solver_binding_host",
+        "matrix_binding_host",
+        "structured_binding_host",
         "xc_schedule_staging",
         "nonlocal_provider",
     ):

@@ -125,7 +125,7 @@
     },
     "libxc-bulk-graph-catalog": {
       "canonical_inputs": {
-        "python/generativeqc_compiler/xc/libxc_bulk.py": "4fb2cfc1f2a43d239e48a6f999e2aea977224f52ce48c83ad70bed9fb19a596b",
+        "python/generativeqc_compiler/xc/libxc_bulk.py": "1469c75ef2d22bca13474fea805c885a97fbfe4ec44bc28cd0ab1e034c85a290",
         "python/generativeqc_compiler/xc/libxc_maple.py": "3d08bdc3bd0474de18090d49624772d93bce3e1586afe55f64840166cfbe8ed7",
         "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b"
       },
@@ -137,7 +137,7 @@
       ],
       "outputs": {
         "docs/libxc_bulk_import.md": "e7f870e11ff1477938901a69d77321792b286a410a0ae7a55729ace83456e6e1",
-        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "b504b9607a8c5d18c44023e1cc63abc26dd07fabde4909834051653b598a8ca4"
+        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "46c288e528a7c200f3d05b1f47473d4afdba0560ad7b17bf9682c5eeba0abf1d"
       }
     },
     "libxc-method-metadata": {

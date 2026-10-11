@@ -17,8 +17,11 @@
 
 #include "api/handles.hpp"
 #include "dft/ao_grid.hpp"
+#include "dft/cuda_ks_final_validation_policy.hpp"
+#include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
+#include "dft/incremental_direct_jk_control.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
@@ -217,12 +220,11 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
 /** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
  * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
 bool incremental_direct_jk_benchmark_requested(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
-    return false;
-  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
-  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                    std::string(name) + " must be 0/off or 1/on");
+  const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
+  if (control == dft::IncrementalDirectJkControl::Invalid)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be 0/off or 1/on");
+  return control == dft::IncrementalDirectJkControl::Enabled;
 }
 
 std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {
@@ -335,7 +337,8 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   scf::FockBuildSpec fock;
   fock.spin =
       unrestricted(execution_plan) ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
-  if (options.preliminary_guess && fock.spin != scf::FockSpin::Restricted)
+  if (options.preliminary_guess && !options.preliminary_guess->automatic_cpu &&
+      fock.spin != scf::FockSpin::Restricted)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "preliminary SCF requires a restricted target");
   fock.derivative_order = 0;
@@ -854,6 +857,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
+    scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
@@ -893,6 +897,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
    * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
    * providers is currently admitted; UKS, CUDA, Direct, corrections and
    * unrepresented XC graphs remain fail-closed until separately qualified. */
+  [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
+      const noexcept {
+    return options_.preliminary_guess;
+  }
+
   [[nodiscard]] bool supports_native_pbe_force() const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE ||
@@ -1248,8 +1257,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
         !system_.ecp_terms.empty() ||
         ((execution_plan_.range_exchange || execution_plan_.nonlocal_correlation) &&
          !allow_mixed_rsh_primary) ||
-        (allow_mixed_rsh_primary &&
-         (!execution_plan_.range_exchange || backend_ != GENERATIVEQC_BACKEND_CUDA))) {
+        (allow_mixed_rsh_primary && !execution_plan_.range_exchange)) {
       detail =
           "density-fitted stationary derivatives require qualified all-electron full-range primary";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -1489,6 +1497,33 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
+  /** Only this method owner can authenticate the full PBE0 composition.
+   * Generic/HF/RSH derivative consumers do not infer it from a K coefficient. */
+  bool qualified_spatial_force_default() const {
+    const auto& strategy = fock_.strategy();
+    const auto& spec = strategy.spec;
+    const bool direct_pbe0 =
+        dft::pbe0_rks_final_validation_composition(
+            execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe,
+            spec.exchange.coefficient, options_.semilocal_exchange_scale,
+            options_.semilocal_correlation_scale) &&
+        strategy.backend == scf::FockBackend::Cuda && spec.derivative_order == 0 &&
+        spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
+        spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        spec.coulomb.op == scf::FockOperator::FullRange && spec.exchange.present &&
+        spec.exchange.approximation == scf::FockApproximation::Exact &&
+        spec.exchange.op == scf::FockOperator::FullRange &&
+        options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        !execution_plan_.range_exchange && !range_strategy_ &&
+        !execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction &&
+        system_.ecp_terms.empty() &&
+        std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    return dft::spatial_spd_force_default_eligible(
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0,
+        options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
+  }
+
   generativeqc_status cuda_full_range_integral_derivatives(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::string& detail) {
@@ -1514,7 +1549,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
     status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
         fock_, resident_density.alpha, resident_density.beta, resident_density.matrix_elements,
-        output, detail);
+        output, detail, true, qualified_spatial_force_default());
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       output.clear();
       return status;
@@ -1534,26 +1569,66 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
-  /** Private source-only bridge for a mixed full-range DF primary and an
-   * independent exact LR correction.  Public mixed-DF forces remain excluded
-   * until complete meta-GGA/VV10/moving-grid and independent E/F qualification.
+  generativeqc_status cuda_integral_gradient_additional_device_bytes(
+      const dft::CudaKsFinalStateToken& expected, std::size_t& bytes, std::string& detail) {
+    bytes = 0;
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_ || backend_ != GENERATIVEQC_BACKEND_CUDA) {
+      detail = "CUDA integral derivative capacity requires a CUDA KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "CUDA integral derivative capacity token is stale";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    if (execution_plan_.range_exchange &&
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      if (!range_strategy_ || !range_correction_ || !range_correction_->matches_system(system_) ||
+          range_correction_->strategy() != *range_strategy_ ||
+          fock_.strategy().backend != scf::FockBackend::Cuda ||
+          fock_.strategy().spec.coulomb.approximation != scf::FockApproximation::DensityFitted) {
+        detail = "mixed RSH-DF derivative capacity lacks its resolved CUDA providers";
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      }
+      // Keep cold and warm admission identical: this is the same conservative
+      // capacity used before constructing the separate first-order LR owner.
+      bytes = ks_provider_bytes(system_, backend_, 1U);
+    }
+    detail.clear();
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    (void)expected;
+    detail = "CUDA integral derivative capacity requires CUDA";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
+  /** Stationary bridge for a mixed full-range DF primary and an independent
+   * exact LR correction. Public admission separately qualifies the complete
+   * semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
    *
    * The first-derivative LR source is prepared on demand: energy-only solves
    * never pay its angular workspace or compilation costs. */
-  generativeqc_status cuda_mixed_rsh_df_integral_gradient(
+  generativeqc_status mixed_rsh_df_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density,
-      const std::vector<scf::reference::Matrix>* cached_weighted_density) {
-#if GENERATIVEQC_HAS_CUDA
+      const std::vector<scf::reference::Matrix>* cached_weighted_density,
+      std::span<const double> cpu_lr_correction = {}) {
     output.clear();
     work = {};
-    if (!cuda_ || !range_strategy_ || !range_correction_ ||
-        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA ||
+    // AUTO retains its descriptor spelling after resolving a CUDA DF primary.
+    // Backend/approximation identities below, not that spelling, own execution.
+    if (!range_strategy_ || !range_correction_ ||
+        (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend_ != GENERATIVEQC_BACKEND_CUDA) ||
+        options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
         options_.precision_mode != GENERATIVEQC_PRECISION_FP64 || !execution_plan_.range_exchange ||
         !system_.ecp_terms.empty() || !range_correction_->matches_system(system_) ||
         range_correction_->strategy() != *range_strategy_) {
-      detail = "mixed RSH-DF stationary sources require live strict-FP64 CUDA providers";
+      detail = "mixed RSH-DF stationary sources require live strict-FP64 providers";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const auto& primary = fock_.strategy();
@@ -1562,8 +1637,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto& c = correction.spec;
     const double spin_factor = p.spin == scf::FockSpin::Restricted ? -0.5 : -1.0;
     const double full_coefficient = p.exchange.present ? p.exchange.coefficient : 0.0;
+    const auto provider_backend =
+        backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     const bool matched =
-        primary.backend == scf::FockBackend::Cuda && correction.backend == scf::FockBackend::Cuda &&
+        primary.backend == provider_backend && correction.backend == provider_backend &&
         primary.screening_tolerance == correction.screening_tolerance && p.spin == c.spin &&
         p.derivative_order == 0 && c.derivative_order == 0 && p.coulomb.present &&
         p.coulomb.coefficient == 1.0 && p.coulomb.op == scf::FockOperator::FullRange &&
@@ -1601,6 +1678,39 @@ class KsPreparedCalculation final : public PreparedCalculation {
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       cached_density = &exported.density;
       cached_weighted_density = &exported.weighted_density;
+    }
+    if (backend_ == GENERATIVEQC_BACKEND_CPU_REFERENCE) {
+      // CPU executes the compiler-owned ordered LR contraction in bounded
+      // tiles. Only its compact weighted result crosses this private bridge;
+      // provider identity and DF/SR/LR recomposition are shared with CUDA.
+      if (cpu_lr_correction.size() != nc) {
+        detail = "mixed RSH-DF CPU source requires one compact LR correction";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      std::vector<double> fitted_four;
+      auto status =
+          density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
+                                           fitted_four, maximum_bytes, work, detail, true);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      status = dft::compose_mixed_rsh_df_integral_sources(fitted_four, cpu_lr_correction, nc,
+                                                          full_coefficient, c.exchange.coefficient,
+                                                          output, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      work[3] = std::max<std::uint64_t>(work[3], 10U * nc * sizeof(double));
+      dft::CudaKsFinalStateToken current;
+      status = final_state_token(current, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS || current != expected) {
+        output.clear();
+        detail = "mixed RSH-DF CPU source token changed during response";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      detail.clear();
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_ || !cpu_lr_correction.empty()) {
+      detail = "mixed RSH-DF CUDA source requires its resident density owner";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     dft::CudaKsResidentDensityBinding resident;
     auto status = cuda_->resident_final_density(expected, resident, detail);
@@ -1728,8 +1838,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
     if (fitted && execution_plan_.range_exchange && !combined_two_electron)
-      return cuda_mixed_rsh_df_integral_gradient(expected, output, maximum_bytes, work, detail,
-                                                 cached_density, cached_weighted_density);
+      return mixed_rsh_df_integral_gradient(expected, output, maximum_bytes, work, detail,
+                                            cached_density, cached_weighted_density);
     if (fitted && ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
       detail =
           "CUDA density-fitted stationary derivatives require the qualified semilocal DF-J domain";
@@ -1865,7 +1975,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                          resident_density.matrix_elements, value, detail)
                    : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
                          fock_, resident_density.alpha, resident_density.beta,
-                         resident_density.matrix_elements, value, detail, !combined_two_electron);
+                         resident_density.matrix_elements, value, detail, !combined_two_electron,
+                         qualified_spatial_force_default());
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       candidate.insert(candidate.end(), value.begin(), value.end());
     }
@@ -1995,7 +2106,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const auto* seed = initial_density ? initial_density : (prepared ? &*prepared : nullptr);
       scf::ScfResult native;
       try {
-        native = cuda_->run(seed, reuse_warm && !prepared, false);
+        native = cuda_->run(
+            seed, reuse_warm && !prepared, false,
+            prepared ? dft::CudaKsSeedOrigin::NativeColdGuess : dft::CudaKsSeedOrigin::External);
       } catch (const generativeqc::Error& error) {
         // CUDA helpers may also throw untyped runtime errors for device faults.
         // Only an explicitly numerical failure may consume the seed retry.
@@ -2363,10 +2476,11 @@ class KsPreparedBatch final : public PreparedBatch {
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
 #if GENERATIVEQC_HAS_CUDA
-        if (item.plan->cuda_plan() && options_.preliminary_guess) {
+        if (item.plan->cuda_plan() && item.plan->initial_guess_policy()) {
           auto& diagnostic = preliminary_diagnostics[i];
           preliminary_requested[i] = true;
-          diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+          diagnostic.requested_kind =
+              static_cast<std::uint32_t>(item.plan->initial_guess_policy()->kind);
           diagnostic.target_attempts = 1;
           if (result.warm_start_used) {
             diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
@@ -2443,7 +2557,10 @@ class KsPreparedBatch final : public PreparedBatch {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i]);
+            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
+                        !attempt && !reuse && preliminary_seeds[i]
+                            ? dft::CudaKsSeedOrigin::NativeColdGuess
+                            : dft::CudaKsSeedOrigin::External);
             running[i] = true;
             continue;
           }
@@ -2454,10 +2571,10 @@ class KsPreparedBatch final : public PreparedBatch {
           const bool discarded_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
           auto native = item.plan->run(seed, reuse && item.resident_warm,
                                        warm_enabled_ && warm_updates_, !attempt);
-          if (attempt && options_.preliminary_guess) {
+          if (attempt && item.plan->initial_guess_policy()) {
             auto& diagnostic = native.preliminary_guess;
             diagnostic.requested_kind =
-                static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+                static_cast<std::uint32_t>(item.plan->initial_guess_policy()->kind);
             diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
             diagnostic.target_attempts = 2;
             diagnostic.discarded_target_iterations = discarded_iterations;
@@ -2668,6 +2785,17 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status cuda_integral_gradient_additional_device_bytes(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::size_t& bytes,
+      std::string& detail) {
+    bytes = 0;
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->cuda_integral_gradient_additional_device_bytes(expected, bytes,
+                                                                                detail);
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status density_fitted_integral_gradient(
       std::size_t index, const dft::CudaKsFinalStateToken& expected,
       const std::vector<scf::reference::Matrix>& density,
@@ -2686,6 +2814,21 @@ class KsPreparedBatch final : public PreparedBatch {
       std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->cuda_full_range_integral_derivatives(expected, output, detail);
+    output.clear();
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status mixed_density_fitted_integral_gradient(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected,
+      const std::vector<scf::reference::Matrix>& density,
+      const std::vector<scf::reference::Matrix>& weighted_density,
+      std::span<const double> lr_correction, std::vector<double>& output, std::size_t maximum_bytes,
+      std::array<std::uint64_t, 9>& work, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->mixed_rsh_df_integral_gradient(expected, output, maximum_bytes,
+                                                                work, detail, &density,
+                                                                &weighted_density, lr_correction);
     output.clear();
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -2856,6 +2999,16 @@ generativeqc_status dft_cuda_full_range_integral_derivatives(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::size_t& bytes, std::string& detail) {
+  bytes = 0;
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->cuda_integral_gradient_additional_device_bytes(index, expected, bytes, detail);
+  detail = "CUDA integral derivative capacity requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                std::vector<double>& output,
@@ -2879,6 +3032,21 @@ generativeqc_status dft_density_fitted_integral_gradient_cached(
                                                 maximum_bytes, work, detail);
   output.clear();
   detail = "density-fitted integral gradient requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_mixed_density_fitted_integral_gradient_cached(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density,
+    std::span<const double> lr_correction, std::vector<double>& output, std::size_t maximum_bytes,
+    std::array<std::uint64_t, 9>& work, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks)
+    return ks->mixed_density_fitted_integral_gradient(index, expected, density, weighted_density,
+                                                      lr_correction, output, maximum_bytes, work,
+                                                      detail);
+  detail = "mixed density-fitted integral gradient requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 

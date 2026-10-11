@@ -221,6 +221,7 @@ CUDA_MODULES["cuda_scf_kernels"] = (
     "scf_convergence_kernels",
     "scf_convergence_policy",
     "basis_transform_kernels",
+    "structured_matrix",
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
@@ -229,6 +230,8 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
     "tensor/ring_gram.hpp",
+    "scf/cuda/matrix_library.hpp",
+    "scf/cuda/runtime_support.hpp",
 )
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
@@ -249,6 +252,8 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
     "scf/cuda/runtime_support.",
     "scf/cuda/scf_matrix_kernels.",
     "scf/cuda/launch_geometry.",
+    "tensor/cuda_matrix_product.hpp",
+    "tensor/cuda_structured_product.hpp",
 )
 # Device queue owners consume borrowed metadata and screening contracts. They
 # cannot acquire host bucket/graph ownership or integral recurrence code.
@@ -286,6 +291,8 @@ CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 # such as generated_shell_task.hpp.cuh must not acquire device implementation.
 CUDA_EXACT_ALLOWED = {
     "cuda_direct_fock_lowering": ("scf/generated_shell_task.hpp",),
+    # Qualifier-only leaf permits the same numerical owner to lower on CPU.
+    "cuda_integral_numerics": ("integrals/execution_qualifiers.hpp",),
     # Generic rounded accumulation changes no compiler-owned spin/operator
     # equations. Admit this leaf only, not the broader runtime implementation.
     "cuda_direct_contractions": ("runtime/compensated_atomic.cuh",),
@@ -306,6 +313,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/direct_block_schedule.hpp",
     "scf/cuda/direct_jk.",
     "scf/cuda/direct_jk_plan.",
@@ -357,6 +365,7 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
 )
 CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
     "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
@@ -448,6 +457,14 @@ CUDA_MODULES["cuda_direct_order_seven_pages"] = ("direct_order_seven_pages.cuh",
 CUDA_ALLOWED["cuda_direct_order_seven_pages"] = ()
 CUDA_MODULES["cuda_direct_force_class_pages"] = ("direct_force_class_pages.cuh",)
 CUDA_ALLOWED["cuda_direct_force_class_pages"] = ()
+CUDA_MODULES["cuda_direct_spd_force_schedule"] = ("direct_spd_force_schedule.hpp",)
+CUDA_ALLOWED["cuda_direct_spd_force_schedule"] = ()
+CUDA_MODULES["cuda_direct_bounded_queue_page"] = ("direct_bounded_queue_page.cuh",)
+CUDA_ALLOWED["cuda_direct_bounded_queue_page"] = (
+    "scf/cuda/direct_queue_index.cuh",
+    "scf/direct_block_domain.hpp",
+    "scf/direct_task_layout.hpp",
+)
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -513,7 +530,7 @@ CUDA_ALLOWED["cuda_direct_consumers"] = (
         "scf/cuda/" + Path(name).stem + ".hpp"
         for name in CUDA_MODULES["cuda_direct_consumers"]
     )
-    + ("scf/cuda_weighted_eri.hpp",)
+    + ("scf/cuda_weighted_eri.hpp", "scf/cuda/direct_bounded_queue_page.cuh")
 )
 CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_cached_tensor_kernels.hpp",
@@ -531,6 +548,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
 )
 CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
     "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/direct_force_sources.hpp",
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",
@@ -581,6 +599,19 @@ CUDA_ALLOWED["cuda_rhf_resident_values"] = (
     "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/rhf_graph.hpp",
     "scf/cuda/rhf_resident_values.",
+    "scf/cuda/direct_jk_source_lease.hpp",
+    "scf/cuda/runtime_support.hpp",
+    "scf/cuda_direct_jk_device.hpp",
+)
+# Source lifetime/admission cannot acquire method graphs or recurrences.
+CUDA_MODULES["cuda_direct_jk_source_lease"] = ("direct_jk_source_lease",)
+CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
+    "molecule/basis.hpp",
+    "posthf/capacity.hpp",
+    "runtime/df_progress_trace.hpp",
+    "runtime/resource_cuda.cuh",
+    "scf/cuda/direct_jk_source_lease.",
+    "scf/cuda/direct_jk_source_policy.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda_direct_jk_device.hpp",
 )
@@ -647,6 +678,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/scf_diis_kernels.hpp",
     "scf/cuda/scf_matrix_kernels.hpp",
     "scf/cuda/scf_state_kernels.hpp",
@@ -671,6 +703,7 @@ CUDA_ALLOWED["cuda_hf_driver"] += (
 )
 CUDA_MODULES["cuda_reference_export"] = ("reference_export", "reference_eri_policy")
 CUDA_ALLOWED["cuda_reference_export"] = (
+    "scf/cuda/direct_jk_source_policy.hpp",
     "posthf/capacity.hpp",
     "scf/mean_field.hpp",
     "tensor/cuda_error.hpp",

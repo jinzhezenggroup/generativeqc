@@ -14,8 +14,10 @@ matching GenerativeQC source checkout. The baseline native library must be a Rel
 build with `GENERATIVEQC_CUDA_FAST_COMPILE=OFF`. Rebuild it after changing native code,
 generator code, or Python runtime policy; the command checks its source identity
 before starting a search. A wheel installation can pass `--source-dir` pointing
-to the matching source checkout. CPU use and profile management do not require
-CUDA tools or a GPU allocation.
+to the matching source checkout. CPU use and non-probing profile operations
+(`show`, `clear`, `validate`, `export`) need no GPU allocation. Profile install
+and diagnostics require the allocated visible GPU; accepted binaries can replay
+without CUDA compiler tools. See [native CLI ownership](native_cli.md).
 
 XYZ coordinates default to Angstrom and are converted to Bohr. Use `--units
 bohr` for a Bohr XYZ file. Charge, multiplicity, RHF/UHF method, Cartesian or
@@ -25,15 +27,16 @@ logical CUDA device 0 within the allocated visibility.
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=02:00:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
-  generativeqc autotune --quick water.xyz --basis def2-svp
+  generativeqc-tune --quick water.xyz --basis def2-svp
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=04:00:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
-  generativeqc autotune --full water.xyz --basis def2-tzvp --batch 4 \
+  generativeqc-tune --full water.xyz --basis def2-tzvp --batch 4 \
   --budget-seconds 14000 --export local-profile.zip
 ```
 
-The same commands are available through `python -m generativeqc`. On systems without
+These searches deliberately use a separate Python compiler frontend exposed as
+`generativeqc-tune`; the C++ runtime command never imports or spawns it. On systems without
 Slurm, run inside the allocation provided by the local scheduler. The tuner and
 its child processes preserve `CUDA_VISIBLE_DEVICES`; they do not request a
 second allocation. Set `CUDA_PATH` or `--nvcc` to select a toolkit.
@@ -186,9 +189,8 @@ diagnose` probes the allocated GPU and prints the same selection. Static
 management commands require no GPU:
 
 ```bash
-generativeqc autotune --show-profile
 generativeqc profile show
-generativeqc autotune --clear-profile
+generativeqc profile clear
 ```
 
 Clearing profiles deactivates them while preserving immutable binaries already

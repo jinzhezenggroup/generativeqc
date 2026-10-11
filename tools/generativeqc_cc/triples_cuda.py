@@ -325,7 +325,7 @@ class CudaTriplesTiles:
                         "a_end": tile.a_end,
                         "plan_peak_bytes": pb,
                     }
-                    for tile, pb in zip(tiles, peak_bytes_per_tile)
+                    for tile, pb in zip(tiles, peak_bytes_per_tile, strict=True)
                 ],
                 "oracle_enabled": oracle,
             },

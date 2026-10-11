@@ -17,6 +17,7 @@ import typing
 from dataclasses import asdict, dataclass, field, replace
 from functools import cached_property
 from math import prod
+from types import MappingProxyType
 
 from generativeqc_compiler.common.backend import TargetScheduleShape
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
@@ -44,7 +45,12 @@ from .precision import PrecisionSchedule, ValuePrecision, describe_precision
 from .program import Program, _hash
 from .types import checked_size
 
-PLAN_SCHEMA = 5
+if typing.TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from generativeqc_compiler.common.lowering_selection import LoweringBinding
+
+PLAN_SCHEMA = 6
 ALIGNMENT = 256
 INT_MAX = 2**31 - 1
 MIN_PROVIDER_BYTES = 96 * 1024**2
@@ -139,7 +145,6 @@ class TensorSchedule:
     recompute: bool = False
     stream_reductions: bool = field(default=False, kw_only=True)
     streamed_gemm_reduction: bool = field(default=False, kw_only=True)
-    reduction_provider: str = field(default="generated", kw_only=True)
     inplace_donation: bool = field(default=False, kw_only=True)
     direct_gemm: bool = True
     layouts: bool = False
@@ -169,8 +174,6 @@ class TensorSchedule:
         ):
             if type(getattr(self, name)) is not bool:
                 raise TypeError(f"{name} must be boolean")
-        if self.reduction_provider not in ("generated", "cub"):
-            raise ValueError("reduction_provider must be 'generated' or 'cub'")
         if self.streamed_gemm_reduction and not self.stream_reductions:
             raise ValueError("streamed_gemm_reduction requires stream_reductions")
 
@@ -235,6 +238,25 @@ class TensorPlan:
     estimated_flops: int
     estimated_traffic_bytes: int
     layout_decision: LayoutDecision
+    lowering_bindings: tuple[tuple[int, LoweringBinding], ...] = field(
+        default=(), kw_only=True
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "lowering_bindings",
+            tuple((index, binding) for index, binding in self.lowering_bindings),
+        )
+        if self.lowering_bindings:
+            from .cuda_providers import validate_reduction_bindings
+
+            validate_reduction_bindings(self)
+
+    @cached_property
+    def lowering_by_step(self) -> Mapping[int, LoweringBinding]:
+        """Index immutable prepared recipes once, not once per emitted step."""
+        return MappingProxyType(dict(self.lowering_bindings))
 
     @cached_property
     def precision(self) -> str:
@@ -493,6 +515,10 @@ class TensorPlan:
             "fp32_flush_to_zero": False,
             "target": self.target.to_payload(),
             "schedule": asdict(self.schedule),
+            "lowering_bindings": [
+                {"step": index, "identity": binding.cache_identity}
+                for index, binding in self.lowering_bindings
+            ],
             "reservations": asdict(self.reservations),
             "max_bytes": self.max_bytes,
             "arena_bytes": self.arena_bytes,
@@ -758,6 +784,9 @@ def plan_cuda(
     preserve the original contraction tree. Programs carrying an explicit
     precision-execution contract keep their original tree until intermediate
     precision propagation through reassociation is defined.
+
+    Scalar functions retain each value's float32/float64 type and the shared
+    finite-domain diagnostics; their CUDA spelling is owned by the scalar emitter.
     """
     if not isinstance(program, Program) or not isinstance(target, CudaTargetInfo):
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
@@ -778,10 +807,6 @@ def plan_cuda(
     TargetScheduleShape(schedule.threads, target.warp_size).validate_for(
         target.target_info
     )
-    if schedule.reduction_provider == "cub" and not schedule.stream_reductions:
-        raise ValueError(
-            "CUB reduction provider requires stream_reductions for the pilot"
-        )
     nodes, inputs, outputs = _occurrences(program, schedule.recompute)
     mixed_accumulation_steps = frozenset[int]()
     if program.provenance.get("precision_execution") is not None:
@@ -808,10 +833,6 @@ def plan_cuda(
     if any(n.op in TRANSCENDENTALS for n, _ in nodes) and len(nodes) > INT_MAX // 2:
         raise ValueError("too many steps for transcendental domain diagnostics")
     for node, _ in nodes:
-        if node.op in TRANSCENDENTALS and node.spec.dtype != "float64":
-            raise ValueError(
-                "CUDA transcendental primitives are qualified only for float64"
-            )
         scalar = None if node.spec.dtype == "int64" else scalar_type(node.spec.dtype)
         checked_size(node.spec.size * node.spec.itemsize, "tensor bytes")
         for stride in strides(node.spec.shape):

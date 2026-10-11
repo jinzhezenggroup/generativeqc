@@ -8,9 +8,12 @@ only specialization removed here is the concrete occupied/virtual extent.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import typing
 from collections import Counter
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 
@@ -376,8 +379,8 @@ def _input_access(name: str, *, cuda: bool = False) -> str:
 
 def _label_dims(node: typing.Any) -> dict[typing.Any, str]:
     result = {}
-    for operand, labels in zip(node.inputs, node.attrs["labels"]):
-        for index, label in zip(operand.spec.indices, labels):
+    for operand, labels in zip(node.inputs, node.attrs["labels"], strict=True):
+        for index, label in zip(operand.spec.indices, labels, strict=True):
             dim = _dim(index)
             previous = result.setdefault(label, dim)
             if previous != dim:
@@ -387,8 +390,8 @@ def _label_dims(node: typing.Any) -> dict[typing.Any, str]:
 
 def _label_kinds(node: typing.Any) -> dict[typing.Any, str]:
     result = {}
-    for operand, labels in zip(node.inputs, node.attrs["labels"]):
-        for index, label in zip(operand.spec.indices, labels):
+    for operand, labels in zip(node.inputs, node.attrs["labels"], strict=True):
+        for index, label in zip(operand.spec.indices, labels, strict=True):
             kind = _kind(index)
             previous = result.setdefault(label, kind)
             if previous != kind:
@@ -400,7 +403,7 @@ def _flat_index(labels: tuple[typing.Any, ...], spec: TensorSpec) -> str:
     if not labels:
         return "0"
     expression = f"l{labels[0]}"
-    for label, index in zip(labels[1:], spec.indices[1:]):
+    for label, index in zip(labels[1:], spec.indices[1:], strict=True):
         expression = f"({expression}*{_dim(index)}+l{label})"
     return expression
 
@@ -409,7 +412,7 @@ def _flat_coords(coords: list[str], spec: TensorSpec) -> str:
     if not coords:
         return "0"
     expression = coords[0]
-    for coord, index in zip(coords[1:], spec.indices[1:]):
+    for coord, index in zip(coords[1:], spec.indices[1:], strict=True):
         expression = f"({expression}*{_dim(index)}+{coord})"
     return expression
 
@@ -529,6 +532,39 @@ def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
     )
 
 
+_cross_size_arena = ContextVar("native_cross_size_arena", default=False)
+
+
+def cross_size_arena_selected() -> bool:
+    """Expose the emission selection to consumers protecting retained siblings."""
+    return _cross_size_arena.get()
+
+
+def add_cross_size_arena_argument(parser: argparse.ArgumentParser) -> None:
+    """Expose one explicit selection for paired capacity and pointer emissions."""
+    parser.add_argument(
+        "--cross-size-arena",
+        action="store_true",
+        help="coalesce disjoint FP64 scratch slots in all selected CPU/CUDA outputs",
+    )
+
+
+@contextmanager
+def cross_size_arena_candidate(enabled: bool = True) -> typing.Iterator[None]:
+    """Select a default-off storage candidate for a paired CPU/CUDA emission.
+
+    Thread-local scope keeps imported DF emitters consistent with admission
+    headers without changing equations, cache policy or subsequent emissions.
+    """
+    if type(enabled) is not bool:
+        raise TypeError("cross-size arena selection must be bool")
+    token = _cross_size_arena.set(enabled)
+    try:
+        yield
+    finally:
+        _cross_size_arena.reset(token)
+
+
 def _arena_plan(
     program: Program, *, retained_nodes: tuple[typing.Any, ...] = ()
 ) -> SymbolicArenaPlan:
@@ -538,6 +574,12 @@ def _arena_plan(
         dimension_symbol=_dim,
         execution_nodes=_execution_nodes(program),
         retained_nodes=retained_nodes,
+        **(
+            {"storage_dtype": "float32"}
+            if all(node.spec.dtype == "float32" for node in program.live_nodes)
+            else {}
+        ),
+        cross_size_reuse=cross_size_arena_selected(),
     )
 
 
@@ -549,7 +591,9 @@ def _cpu_node(
     lines = [f"  double* {out}={storage};"]
     if node.op == "add":
         terms = []
-        for source, coefficient in zip(node.inputs, node.attrs["coefficients"]):
+        for source, coefficient in zip(
+            node.inputs, node.attrs["coefficients"], strict=True
+        ):
             terms.append(f"{_fraction(coefficient)}*{names[source._emit_index]}[i]")
         lines += [
             f"  for(std::size_t i=0;i<{size};++i){{",
@@ -617,7 +661,7 @@ def _cpu_node(
             )
             indent += "  "
         factors = []
-        for source, source_labels in zip(node.inputs, labels):
+        for source, source_labels in zip(node.inputs, labels, strict=True):
             factors.append(
                 f"{names[source._emit_index]}[{_flat_index(tuple(source_labels), source.spec)}]"
             )
@@ -809,7 +853,9 @@ def _cpu_node(
         if any(coord is None for coord in source_coords):
             raise ValueError("invalid native RCCSD transpose coordinate map")
         index = typing.cast("list[str]", source_coords)[0] if source_coords else "0"
-        for coord, spec_index in zip(source_coords[1:], source.spec.indices[1:]):
+        for coord, spec_index in zip(
+            source_coords[1:], source.spec.indices[1:], strict=True
+        ):
             index = f"({index}*{_dim(spec_index)}+{coord})"
         lines += [
             f"    const double value={names[source._emit_index]}[{index}];",
@@ -1582,8 +1628,17 @@ def _cuda_kernel(
             f"{_fraction(c)}*a{i}[flat]"
             for i, c in enumerate(node.attrs["coefficients"])
         ]
+        expression = " + ".join(terms)
+        if node.spec.dtype == "float32":
+            terms = [
+                f"__fmul_rn({_float32_native_source(_fraction(coefficient))},a{index}[flat])"
+                for index, coefficient in enumerate(node.attrs["coefficients"])
+            ]
+            expression = terms[0]
+            for term in terms[1:]:
+                expression = f"__fadd_rn({expression},{term})"
         lines += [
-            f"    const double value={' + '.join(terms)};",
+            f"    const double value={expression};",
             f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     elif node.op == "divide":
@@ -1705,7 +1760,9 @@ def _cuda_kernel(
             )
             indent += "  "
         factors = []
-        for i, (source, source_labels) in enumerate(zip(node.inputs, labels)):
+        for i, (source, source_labels) in enumerate(
+            zip(node.inputs, labels, strict=True)
+        ):
             factors.append(f"a{i}[{_flat_index(tuple(source_labels), source.spec)}]")
         product = factors[0]
         for factor in factors[1:]:
@@ -1790,7 +1847,9 @@ def _cuda_kernel(
         if any(coord is None for coord in source_coords):
             raise ValueError("invalid native RCCSD CUDA transpose coordinate map")
         index = typing.cast("list[str]", source_coords)[0] if source_coords else "0"
-        for coord, spec_index in zip(source_coords[1:], source.spec.indices[1:]):
+        for coord, spec_index in zip(
+            source_coords[1:], source.spec.indices[1:], strict=True
+        ):
             index = f"({index}*{_dim(spec_index)}+{coord})"
         lines += [
             f"    const double value=a0[{index}];",
@@ -1799,7 +1858,23 @@ def _cuda_kernel(
     else:
         raise ValueError(f"unsupported native RCCSD CUDA op {node.op}")
     lines += ["  }", "}"]
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if node.spec.dtype == "float32":
+        source = _float32_native_source(source)
+    return source
+
+
+def _float32_native_source(source: str) -> str:
+    """Spell the uniform FP32 native schedule with round-to-nearest arithmetic.
+
+    The caller supplies a typed FP32 TensorIR graph; this only selects C++
+    scalar spellings, literals and CUDA intrinsics, never rewrites equations.
+    Mixed-dtype programs are refused by the native emitter instead of relying
+    on implicit pointer casts. FP64 schedules do not pass through this helper.
+    """
+    source = re.sub(r"\bdouble\b", "float", source)
+    source = re.sub(r"\b__d(mul|add|sub|div)_rn\b", r"__f\1_rn", source)
+    return re.sub(r"(?<![\w.])(\d+\.0)(?![\w.])", r"\1f", source)
 
 
 def _packed_matrix_gemm(node: typing.Any) -> tuple[str, str, str, str, str] | None:
@@ -1913,6 +1988,10 @@ def _cuda_program(
     reuse_storage_nodes: tuple[typing.Any, ...] | None = None,
     retained_arena_field: str | None = None,
 ) -> str:
+    dtypes = {node.spec.dtype for node in program.live_nodes} - {"int64"}
+    if len(dtypes) != 1 or not dtypes <= {"float32", "float64"}:
+        raise ValueError("native CUDA schedules require uniform floating storage")
+    scalar_type = "float" if dtypes == {"float32"} else "double"
     names = _prepare_program(program)
     if (reuse_plan is None) != (reuse_phase is None):
         raise ValueError("reuse emission requires both a plan and phase")
@@ -2002,7 +2081,7 @@ def _cuda_program(
         *(["  const auto q=s.q;"] if batch_dim else []),
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
-        "  auto allocate=[&](std::size_t count)->double*{double* p=arena+cursor;cursor=checked_add(cursor,count);return p;};",
+        f"  auto allocate=[&](std::size_t count)->{scalar_type}*{{{scalar_type}* p=arena+cursor;cursor=checked_add(cursor,count);return p;}};",
         *(
             [
                 f"  auto* retained_arena=s.{retained_arena_field};",
@@ -2013,7 +2092,7 @@ def _cuda_program(
             else []
         ),
         *[
-            f"  double* slot{slot}="
+            f"  {scalar_type}* slot{slot}="
             + (
                 "retain"
                 if retained_arena_field is not None and slot < len(retained)
@@ -2040,10 +2119,12 @@ def _cuda_program(
                 if input_name in input_overrides
                 else _input_access(input_name, cuda=True)
             )
-            ctype = "std::int64_t" if node.spec.dtype == "int64" else "double"
+            ctype = "std::int64_t" if node.spec.dtype == "int64" else scalar_type
             lines.append(f"  const {ctype}* {names[number]}={access};")
             continue
-        lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
+        lines.append(
+            f"  {scalar_type}* {names[number]}=slot{arena_plan.node_slots[number]};"
+        )
         if reuse_phase is not None and (
             (id(node) in invariant_ids) != (reuse_phase == "prepare")
         ):
@@ -2604,7 +2685,24 @@ def main() -> None:
     parser.add_argument("--triples-cuda-source", type=Path)
     parser.add_argument("--triples-fock-cpu-header", type=Path)
     parser.add_argument("--triples-fock-cuda-source", type=Path)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
+    if not any(
+        (
+            args.cpu_header,
+            args.cuda_source,
+            args.triples_cuda_source,
+            args.triples_fock_cpu_header,
+            args.triples_fock_cuda_source,
+        )
+    ):
+        parser.error("select a CPU header or CUDA source output")
+    with cross_size_arena_candidate(args.cross_size_arena):
+        _emit_requested(args)
+
+
+def _emit_requested(args: argparse.Namespace) -> None:
+    """Keep all outputs in the same storage-selection scope."""
     for path, emit in (
         (args.triples_fock_cpu_header, triples_fock_cpu_header),
         (args.triples_fock_cuda_source, triples_fock_cuda_source),
@@ -2623,16 +2721,6 @@ def main() -> None:
         args.triples_cuda_source.write_text(
             triples_response_cuda_source(), encoding="utf-8"
         )
-    if not any(
-        (
-            args.cpu_header,
-            args.cuda_source,
-            args.triples_cuda_source,
-            args.triples_fock_cpu_header,
-            args.triples_fock_cuda_source,
-        )
-    ):
-        parser.error("select a CPU header or CUDA source output")
 
 
 if __name__ == "__main__":

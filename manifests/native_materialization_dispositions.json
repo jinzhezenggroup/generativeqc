@@ -129,11 +129,11 @@
         "path": "src/posthf/mp2_derivative_common.cpp",
         "symbol": "conventional_derivative_accumulate: symmetric_eri_weight -> first"
       },
-      "reason": "Retained dense-input pullback with a source-known production RCCSD(T) caller: src/cc/rccsdt_force.cpp assigns weights.two_electron = total_eri and dispatches conventional_derivative_cpu/cuda. The helper-aware classifier keeps this stage visible; no pass was removed when its source read moved behind symmetric_eri_weight. Production reachability does not establish fusion legality or profitability.",
+      "reason": "Retained dense-input pullback with a source-known production RCCSD(T) caller: src/cc/rccsdt_force.cpp assigns weights.two_electron = total_eri and dispatches conventional_derivative_cpu/cuda. The helper-aware classifier keeps this stage visible; no pass was removed when its source read moved behind symmetric_eri_weight. Production reachability does not establish fusion legality or profitability. Revalidated after the RCCSD(T) orbital Z solve adopted the bound shared response problem: the total_eri producer, weights.two_electron assignment, and conventional_derivative_cpu/cuda dispatch remain unchanged from 4a8715f357dad436f9fe60f435309d1e14ff5f2c, so the dense derivative staging ownership, lifetime, and unresolved evidence gaps are unchanged.",
       "residency": "Host std::vector<double>, di*N^3 elements from dense two-electron weights",
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
-        "src/cc/rccsdt_force.cpp": "b76df21995b58c617ae25e85cabdc18c2ade75733e996612e8a6221fbbc3de63",
+        "src/cc/rccsdt_force.cpp": "f0b198654caf6b962f1b790ea6144f8a8fce4a072d1ffbccf8012e3b9df50297",
         "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
         "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",

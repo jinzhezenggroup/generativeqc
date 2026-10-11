@@ -47,6 +47,23 @@ PLACEHOLDER = re.compile(
     r"\b(?:TODO|FIXME|TBD|XXX|placeholder|undocumented)\b", re.IGNORECASE
 )
 DEFINITION = (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+NUMPY_PUBLIC_DTYPES = {
+    "bool",
+    "bool_",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+    "float32",
+    "float64",
+    "complex64",
+    "complex128",
+}
+NUMPY_PUBLIC_CONSTANTS = {"e", "pi", "inf", "nan"}
 
 
 @dataclass(frozen=True)
@@ -376,7 +393,7 @@ def _resolve_export(
             and value.func.attr == "dtype"
             and len(value.args) == 1
             and isinstance(value.args[0], ast.Constant)
-            and value.args[0].value in ("bool", "float32", "float64")
+            and value.args[0].value in NUMPY_PUBLIC_DTYPES
             and not value.keywords
         ):
             numpy_binding = _binding(tree, value.func.value.id, node.lineno)
@@ -386,6 +403,18 @@ def _resolve_export(
                 for alias in numpy_binding.names
             ):
                 return Declaration(path, symbol, "dtype", node)
+        if (
+            isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.attr in NUMPY_PUBLIC_DTYPES | NUMPY_PUBLIC_CONSTANTS
+        ):
+            numpy_binding = _binding(tree, value.value.id, node.lineno)
+            if isinstance(numpy_binding, ast.Import) and any(
+                alias.name == "numpy" and (alias.asname or alias.name) == value.value.id
+                for alias in numpy_binding.names
+            ):
+                kind = "dtype" if value.attr in NUMPY_PUBLIC_DTYPES else "constant"
+                return Declaration(path, symbol, kind, node)
         try:
             _checked_literal(tree, node)
         except (ValueError, TypeError) as error:
@@ -489,12 +518,13 @@ def _check_class_bindings(declaration: Declaration) -> None:
             known_callable = (
                 bool(names & callable_names)
                 or isinstance(value, ast.Lambda)
-                or isinstance(value, ast.Name)
-                and value.id in callable_names
-                or isinstance(value, ast.Call)
-                and (
-                    isinstance(value.func, ast.Name)
-                    and value.func.id in {"staticmethod", "classmethod", "property"}
+                or (isinstance(value, ast.Name) and value.id in callable_names)
+                or (
+                    isinstance(value, ast.Call)
+                    and (
+                        isinstance(value.func, ast.Name)
+                        and value.func.id in {"staticmethod", "classmethod", "property"}
+                    )
                 )
             )
             if known_callable:
@@ -507,12 +537,12 @@ def _check_class_bindings(declaration: Declaration) -> None:
                 if isinstance(annotation, ast.Subscript):
                     annotation = annotation.value
                 class_variable = (
-                    isinstance(annotation, ast.Name)
-                    and annotation.id == "ClassVar"
-                    or isinstance(annotation, ast.Attribute)
+                    isinstance(annotation, ast.Name) and annotation.id == "ClassVar"
+                ) or (
+                    isinstance(annotation, ast.Attribute)
                     and annotation.attr == "ClassVar"
                 )
-                if value is None or dataclass_record and not class_variable:
+                if value is None or (dataclass_record and not class_variable):
                     continue  # Ordinary dataclass fields/default factories are data.
                 if isinstance(value, ast.Name):
                     module_tree = ast.parse(declaration.path.read_text())

@@ -97,7 +97,10 @@ struct Problem {
     ovvv{1.0},ovoo{1.0},oooo{1.0},vvvv{1.0},d1{1.0},d2{1.0};
 };
 struct SolverResult { TrackingVector t1{1.0},t2{1.0}; };
-struct LambdaOptions { std::size_t max_bytes=1U<<20; };
+struct LambdaOptions {
+  std::size_t max_bytes=1U<<20;
+  bool serial_scratch_reuse=false;
+};
 struct LambdaDiagnostic {
   std::size_t owned_device_bytes{},numeric_capacity_bytes{},h2d_bytes{},d2h_bytes{},synchronizations{};
   std::size_t df_auxiliary_slices{},df_contraction_terms{},df_generated_kernels{};
@@ -114,7 +117,13 @@ struct LambdaDiagnostic {
   const char* core_reuse_plan_hash{};
   bool df_audit_matrix_gemm{};
   std::size_t df_audit_arena_bytes{};
+  std::size_t df_shared_scratch_bytes{},df_scratch_avoided_bytes{};
   bool df_primal_matrix_gemm{};
+  bool df_mixed_precision{},df_mixed_precision_refused{};
+  std::size_t df_mixed_storage_bytes{},df_mixed_input_offset_bytes{};
+  std::size_t df_mixed_actions{},df_strict_actions{},df_precision_switches{};
+  std::size_t df_fp32_gemm_calls{},df_fp32_gemm_summands{},df_precision_cast_elements{};
+  const char* mixed_program_hash{};
   const char* audit_schedule_hash{};
   const char *shared_program_hash{},*independent_program_hash{};
 };
@@ -129,6 +138,8 @@ struct DFLambdaActions {
   const LambdaDiagnostic& diagnostic() const { static LambdaDiagnostic d;return d; }
   void replay(double&,TrackingVector&,TrackingVector&) { throw std::logic_error("DF action"); }
   void rhs(bool,TrackingVector&,TrackingVector&) { throw std::logic_error("DF action"); }
+  bool begin_mixed_precision() { throw std::logic_error("DF action"); }
+  void finish_mixed_precision() { throw std::logic_error("DF action"); }
   void transpose(bool,std::span<const double>,std::span<const double>,TrackingVector&,TrackingVector&) { throw std::logic_error("DF action"); }
   void seeds(std::span<const double>,std::span<const double>) { throw std::logic_error("DF action"); }
   TrackingVector parameter(std::string_view,std::size_t) { throw std::logic_error("DF action"); }
@@ -140,9 +151,10 @@ std::size_t lambda_cpu_numeric_capacity(const Problem&,const SolverResult&,
 """
 DRIVER = r"""
 int main(int argc,char** argv) {
-  if(argc!=4)return 99;
+  if(argc!=5)return 99;
   const std::string op=argv[1], mode=argv[2]; const int index=std::atoi(argv[3]);
   Problem p; SolverResult cc; LambdaOptions options;
+  options.serial_scratch_reuse=std::string(argv[4])=="1";
   {
     CudaLambdaActions owner(p,cc,options,1,false,true);
     copies=sync_count=0;
@@ -278,6 +290,7 @@ OPERATIONS = (
 )
 
 
+@pytest.mark.parametrize("sharing", (False, True))
 @pytest.mark.parametrize(
     "operation,mode,index",
     [
@@ -295,10 +308,11 @@ OPERATIONS = (
     ],
 )
 def test_lambda_call_drains_borrowed_host_buffers(
-    lambda_lifetime_probe: Path, operation: str, mode: str, index: int
+    lambda_lifetime_probe: Path, operation: str, mode: str, index: int, sharing: bool
 ) -> None:
+    """Sharing must preserve host-borrow retirement without adding normal fences."""
     result = subprocess.run(
-        [str(lambda_lifetime_probe), operation, mode, str(index)],
+        [str(lambda_lifetime_probe), operation, mode, str(index), str(int(sharing))],
         check=False,
         capture_output=True,
         text=True,

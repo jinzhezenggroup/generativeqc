@@ -47,6 +47,7 @@ from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 from .spec import SemilocalXCPrimitive, resolve_method
 from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
+    COMPOSITE_STATIONARY_EXTERNAL_SOURCES,
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -81,6 +82,10 @@ def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
 
 _NATIVE_EXTERNAL_PROVIDER_SOURCES = frozenset(("ecp_local", "ecp_nonlocal"))
 
+# One authority for the complete resident range/nonlocal consumer inventory.
+# Admission still requires the native semilocal and Fock provider capabilities.
+COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES = COMPOSITE_STATIONARY_EXTERNAL_SOURCES
+
 
 def stationary_external_provider_sources(
     plan: StationaryGradientPlan,
@@ -88,11 +93,10 @@ def stationary_external_provider_sources(
     """Return plan sources intentionally owned outside the shared CUDA arena."""
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError("stationary source inventory requires StationaryGradientPlan")
-    runtime = set(stationary_runtime_sources(plan))
     return tuple(
         source
-        for source in plan.source_names
-        if source not in runtime and source not in _NATIVE_EXTERNAL_PROVIDER_SOURCES
+        for source in plan.external_source_names
+        if source not in _NATIVE_EXTERNAL_PROVIDER_SOURCES
     )
 
 
@@ -401,7 +405,8 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     double* grad, StationaryPointValue& xc, double& becke_seed, int* error) {
   const size_t np = view.npoint;
   double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
-  if (stationary_functional != 0)
+  // Consume the emitted ingredient layout, never a functional's numeric code.
+  if (stationary_coefficients > 1)
     for (size_t s = 0; s < 2; ++s)
       for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
   if (stationary_coefficients == 5)
@@ -409,7 +414,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
   if constexpr (restricted_point) {
-    static_assert(!restricted_point || stationary_pbe0_restricted_point_capable);
+    static_assert(!restricted_point || stationary_restricted_point_capable);
     if (external) {
       atomicExch(error, 1);
       return false;

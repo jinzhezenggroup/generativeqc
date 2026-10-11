@@ -44,6 +44,8 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
         "std::size_t canonical_bucket_values(",
         "struct DirectJkDownloadFence",
         "template <class Function>\ngenerativeqc_status direct_jk_guard(",
+        "static std::size_t direct_jk_resident_bucket_count(",
+        "generativeqc_status prepare_cuda_direct_jk_resident_layout(",
         "std::size_t cuda_direct_jk_resident_value_bytes(",
         "generativeqc_status prepare_cuda_direct_jk_resident_values(",
         "bool cuda_direct_jk_linear_available(",
@@ -142,6 +144,10 @@ cudaError_t cudaMemcpyAsync(void* d, const void* s, size_t n, int, cudaStream_t)
 }
 namespace generativeqc {
 namespace runtime {
+template <class Value>
+size_t vector_bytes(const std::vector<Value>& values) {
+  return values.capacity() * sizeof(Value);
+}
 bool checked_multiply(size_t a, size_t b, size_t& o) {
   if (b && a > SIZE_MAX / b) return false;
   o = a * b;
@@ -187,6 +193,8 @@ struct CanonicalBatch {
 struct CudaDirectJkPlan {
   const int* canonical_pairs{reinterpret_cast<const int*>(1)};
   double screening_tolerance{};
+  const std::uint64_t* canonical_row_prefix{};
+  std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
   std::vector<std::array<size_t, 8>> canonical_pair_offsets{{{0, 2, 2, 2, 2, 2, 2, 2}}};
   int device_id{};
   double* resident_values{};
@@ -207,8 +215,9 @@ int direct_jk_pair_rows(CudaDirectJkPlan*, unsigned, size_t) { return 0; }
 void launch_canonical_jk_kernel(cudaStream_t, CanonicalBatch, int, int, unsigned, const int*, int, size_t,
                                 size_t n, size_t, size_t m, bool same, bool, bool, bool,
                                 DirectCoulombRange, double, double, const double*, const double*,
-                                double*, double*, std::uint64_t*, double* target) {
-  size_t count = same ? n * (n + 1) / 2 : n * m;
+                                double*, double*, std::uint64_t*, double* target,
+                                double*, double*, size_t work_limit) {
+  size_t count = std::min(same ? n * (n + 1) / 2 : n * m, work_limit);
   for (size_t i = 0; i < count; ++i)
     target[i] = state.nan ? std::numeric_limits<double>::quiet_NaN() : double(i + 1);
   if (count) ++state.launches;
@@ -378,6 +387,34 @@ int main() {
     ++passed;
     std::cout << "PASS " << name << "\n";
   };
+  {
+    CudaDirectJkPlan compact;
+    compact.screening_tolerance = 1e-12;
+    std::string detail;
+    check(prepare_cuda_direct_jk_resident_layout(&compact, detail) ==
+              GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "positive mask admitted without Schwarz rows");
+    std::array<std::uint64_t, 14> prefix{};
+    prefix[1] = 2;
+    compact.canonical_row_prefix = prefix.data();
+    check(cuda_direct_jk_resident_value_bytes(&compact) == 0,
+          "unfrozen screened layout exposed a value extent");
+    check(prepare_cuda_direct_jk_resident_layout(&compact, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              cuda_direct_jk_resident_value_bytes(&compact) == 2 * sizeof(double),
+          "compact source did not use the incumbent row tail");
+    state.copy = cudaErrorLaunchFailure;
+    check(prepare_cuda_direct_jk_resident_layout(&compact, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          "frozen layout downloaded rows again");
+    state.copy = cudaSuccess;
+    check(prepare_cuda_direct_jk_resident_values(&compact, 2 * sizeof(double), detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              compact.diagnostic.resident_values_completed == 2 &&
+              compact.diagnostic.resident_value_count == 2,
+          "compact allocation/construction used a dense extent");
+  }
+  reset();
   test("cache fits but constructor mandatory owner does not", [&] {
     state.limit = resident + 4096;
     auto r = call();

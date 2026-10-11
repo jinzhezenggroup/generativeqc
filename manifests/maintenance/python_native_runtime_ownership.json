@@ -1,0 +1,1245 @@
+{
+  "schema": "generativeqc.python-native-runtime-ownership.v1",
+  "source_sha": "140160231f23d61cea6ce103ec5a46a0da915b31",
+  "catalog": "manifests/public_methods.json",
+  "coverage": "baseline-call-paths-not-qualification",
+  "interpretation": "Axes describe audited dispatch domains, not a Cartesian product of supported capabilities. Native source presence, Python wrapper parity, and a test path are not endpoint or numerical acceptance. Runtime capability and independent exact-head evidence remain separate authorities. Source SHA pins the pre-cutover baseline; follow-up migrations do not silently rewrite it.",
+  "required_slices": [
+    "R0",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6"
+  ],
+  "rows": [
+    {
+      "id": "hf-energy-force",
+      "method_families": [
+        "hartree_fock"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.prepare_batch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch.execute",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/hf_method.cpp",
+        "src/scf/solver/mean_field_driver.cpp",
+        "src/scf/gradient/hf_gradient.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp",
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/native/test_rhf.cpp",
+        "tests/native/test_uhf_final_state.cpp",
+        "tests/python/test_calculator.py"
+      ],
+      "trackers": [
+        "#933",
+        "#934"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "rhf",
+        "uhf"
+      ]
+    },
+    {
+      "id": "ks-energy",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "energy"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting",
+        "cosx",
+        "range-separated",
+        "nonlocal"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.prepare_batch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch.execute",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/dft_method.cpp",
+        "src/dft/xc.hpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp",
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/native/test_dft.cpp",
+        "tests/python/test_dft_batch.py"
+      ],
+      "trackers": [
+        "#926",
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "ks-native-df-force",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cpu"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "forces"
+      ],
+      "spins": [
+        "restricted"
+      ],
+      "approximations": [
+        "density-fitting-pbe-pbe0-full-range-all-electron"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.prepare_batch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch.execute",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch._native_dft_force_eligible",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/dft_method.cpp",
+        "src/api/c_api_ks_snapshot.cpp",
+        "src/dft/xc.hpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp",
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/native/test_cli_dft_df.py",
+        "tests/python/test_dft_batch.py"
+      ],
+      "trackers": [
+        "#2227",
+        "#2151"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "pbe-rks",
+        "method-ir:PBE0/unpolarized"
+      ]
+    },
+    {
+      "id": "ks-python-cpu-force",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cpu"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting-range-separated",
+        "ecp",
+        "nonlocal",
+        "corrections"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch._public_dft_cpu_force",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/_stationary_cpu.py",
+          "symbol": "complete_rks_gradient_diagnostic",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/dft_method.cpp",
+        "src/api/c_api_ks_snapshot.cpp",
+        "src/api/c_api_ecp.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_ks_snapshot.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Per-item stationary source preparation and force assembly; qualified native DF-PBE/PBE0 takes the separate native row."
+      ],
+      "tests": [
+        "tests/python/test_stationary_cpu_work.py",
+        "tests/python/test_ecp_stationary_cpu.py"
+      ],
+      "trackers": [
+        "#2151",
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "ks-python-cuda-force",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting",
+        "cosx",
+        "range-separated",
+        "meta-gga",
+        "nonlocal",
+        "corrections"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch._public_dft_cuda_force",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/_stationary_cuda.py",
+          "symbol": "complete_rks_cuda_gradient_diagnostic",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/dft_method.cpp",
+        "src/api/c_api_ks_snapshot.cpp",
+        "src/dft/stationary_gradient_cuda.cuh"
+      ],
+      "native_callers": [
+        "src/api/c_api_ks_snapshot.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Tile/task, AO/Becke/XC/correction scheduling and complete force publication remain Python-owned. Native source bridges are not native force endpoints."
+      ],
+      "tests": [
+        "tests/python/test_stationary_aot_no_compiler.py",
+        "tests/python/test_stationary_cuda_merge_boundary.py"
+      ],
+      "trackers": [
+        "#2151",
+        "#1423",
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "posthf-energy-force",
+      "method_families": [
+        "perturbation",
+        "coupled_cluster"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "conventional",
+        "density-fitting"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.prepare_batch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch.execute",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/mp2_method.cpp",
+        "src/methods/ump2_method.cpp",
+        "src/methods/rccsd_method.cpp",
+        "src/methods/rccsdt_method.cpp",
+        "src/methods/df_rccsdt_method.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp",
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/python/test_calculator.py",
+        "tests/python/test_df_ccsdt_capability_ownership.py"
+      ],
+      "trackers": [
+        "#926",
+        "#932"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:perturbation",
+        "catalog-family:coupled_cluster"
+      ]
+    },
+    {
+      "id": "gfn2-energy-force",
+      "method_families": [
+        "semiempirical"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "native-xtb"
+      ],
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "gfn2"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.prepare_batch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch.execute",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/xtb_method.cpp",
+        "src/xtb/native/src/model/gfn2/force.cpp",
+        "src/xtb/native/src/runtime/gfn2_cuda_execution.cu"
+      ],
+      "native_callers": [
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp",
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/python/test_xtb_shared_ownership.py"
+      ],
+      "trackers": [
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "gfn2-xtb"
+      ]
+    },
+    {
+      "id": "ks-molecular-second-order",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cpu"
+      ],
+      "representations": [
+        "cartesian"
+      ],
+      "properties": [
+        "hvp",
+        "hessian"
+      ],
+      "spins": [
+        "restricted"
+      ],
+      "approximations": [
+        "direct-lda-pbe-all-electron"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.hessian_vector_product",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/rks_hessian.py",
+          "symbol": "rks_hvp",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/rks_hessian.py",
+          "symbol": "rks_hessian",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/rks_hessian_directional.py",
+          "symbol": "native_rks_xc_hvp_components",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/stationary_nuclear.py",
+          "symbol": "solve_stationary_nuclear_perturbations",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/api/c_api_ks_snapshot.cpp",
+        "src/integrals/hvp_assembly_runtime.cu",
+        "src/response/native_gmres.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_ks_snapshot.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Method-specific nuclear RHS, response schedule, seven stationary HVP sources, grid response and Cartesian-column publication remain Python-owned. A native source/action is not a complete SDK HVP."
+      ],
+      "tests": [
+        "tests/python/test_rks_hessian_production_owner.py",
+        "tests/python/test_stationary_hvp_plan.py"
+      ],
+      "trackers": [
+        "#932",
+        "#1905",
+        "#2224"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "lda-rks",
+        "pbe-rks"
+      ]
+    },
+    {
+      "id": "shared-response-control",
+      "method_families": [
+        "hartree_fock",
+        "density_functional",
+        "perturbation",
+        "coupled_cluster"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "response",
+        "hvp",
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "cphf-cpks",
+        "lambda-z",
+        "nonsymmetric-cc"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/response_solver.py",
+          "symbol": "solve",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/response_solver.py",
+          "symbol": "solve_many",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/response_xc.py",
+          "symbol": "FixedDensityXCDerivativeKernel",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/response/native_gmres.cpp",
+        "src/response/resident_gmres.cpp",
+        "src/response/linear_problem.hpp"
+      ],
+      "native_callers": [],
+      "remaining_python_runtime": [
+        "Native vector/Krylov owners coexist with Python method-specific operator callbacks, RHS/block/recycle schedules and XC tiles. Do not replace distinct CPHF, Lambda or CC equations with one symmetric operator."
+      ],
+      "tests": [
+        "tests/python/test_stationary_nuclear_batch_host.py",
+        "tests/python/test_posthf_low_rank_blas_ownership.py"
+      ],
+      "trackers": [
+        "#932",
+        "#2224"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional",
+        "catalog-family:perturbation",
+        "catalog-family:coupled_cluster"
+      ]
+    },
+    {
+      "id": "resource-planning",
+      "method_families": [
+        "hartree_fock",
+        "density_functional",
+        "perturbation",
+        "coupled_cluster",
+        "semiempirical"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical",
+        "native-xtb"
+      ],
+      "properties": [
+        "resources"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting",
+        "cosx",
+        "range-separated",
+        "nonlocal"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/resources_hf.py",
+          "symbol": "hf_resource_request",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/resources_ks.py",
+          "symbol": "ks_resource_request",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/resources_df.py",
+          "symbol": "density_fitting_tile_plan",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/resources_native.py",
+          "symbol": "NativeDeviceLedger",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/api/c_api_resources.cpp",
+        "src/runtime/resource_ledger.hpp",
+        "src/runtime/tracked_allocator.hpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_resources.cpp",
+        "src/cli/resources.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Python still computes endpoint inventories and admission candidates. Native allocation receipts do not prove complete planner coverage; MINAO numeric capacity is already a native additive query."
+      ],
+      "tests": [
+        "tests/python/test_resources.py",
+        "tests/python/test_minao_default.py"
+      ],
+      "trackers": [
+        "#933",
+        "#934"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional",
+        "catalog-family:perturbation",
+        "catalog-family:coupled_cluster",
+        "catalog-family:semiempirical"
+      ]
+    },
+    {
+      "id": "automatic-and-progressive-policy",
+      "method_families": [
+        "hartree_fock",
+        "density_functional"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "energy",
+        "forces",
+        "hvp"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/initial_guess.py",
+          "symbol": "initial_guess_for_systems",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/progressive_controller.py",
+          "symbol": "run_progressive_hf",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/force_aware_scf.py",
+          "symbol": "ForceAwareScfPolicy",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/scf/preliminary_guess.cpp",
+        "src/scf/initial_guess/minao.cpp",
+        "src/runtime/execution_precision.hpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_calculation.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Baseline automatic model/element selection, progressive/coarse-to-fine stages and force-aware strict closure are Python-owned; the bounded native MINAO seed and retry state machine already exists."
+      ],
+      "tests": [
+        "tests/python/test_minao_default.py",
+        "tests/python/test_progressive_controller_native.py"
+      ],
+      "trackers": [
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "prepared-snapshot-grid-ao-lifetime",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "forces",
+        "hvp",
+        "hessian"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "direct",
+        "density-fitting",
+        "range-separated",
+        "nonlocal"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/_ks_snapshot.py",
+          "symbol": "NativeKsSnapshot",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_snapshot_grid_cache.py",
+          "symbol": "SnapshotGridCache",
+          "classification": "scientific-runtime"
+        },
+        {
+          "path": "python/generativeqc/_resident_ao_maps.py",
+          "symbol": "ResidentDeviceAoMapOwner",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/api/c_api_ks_snapshot.cpp",
+        "src/api/ks_snapshot.hpp",
+        "src/methods/dft_method.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_ks_snapshot.cpp"
+      ],
+      "remaining_python_runtime": [
+        "The native final-state token is authoritative, but cross-endpoint grid/AO cache lifetimes and task schedules still have Python owners."
+      ],
+      "tests": [
+        "tests/python/test_stationary_lifetime_plan.py",
+        "tests/python/test_stationary_resident_nonlocal_join.py"
+      ],
+      "trackers": [
+        "#933",
+        "#1423"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "method-and-basis-resolution",
+      "method_families": [
+        "hartree_fock",
+        "density_functional",
+        "perturbation",
+        "coupled_cluster",
+        "semiempirical"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical",
+        "native-xtb"
+      ],
+      "properties": [
+        "model-resolution"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "builtin",
+        "custom-basis",
+        "custom-method"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/calculator.py",
+          "symbol": "Calculator.__init__",
+          "classification": "compiler-ad"
+        },
+        {
+          "path": "python/generativeqc/ks.py",
+          "symbol": "KsOptions",
+          "classification": "compiler-ad"
+        },
+        {
+          "path": "python/generativeqc/_model_resolution.py",
+          "symbol": "resolve_model_identity",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/basis.py",
+          "symbol": "BasisSet",
+          "classification": "wrapper"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/methods/generated_method_manifest.hpp",
+        "src/methods/registry.cpp",
+        "src/cli/native_basis.cpp"
+      ],
+      "native_callers": [
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Python built-in Calculator construction still imports compiler MethodIR/model resolution. Native CLI expands its generated basis/catalog independently; custom Python MethodIR remains explicit compiler work."
+      ],
+      "tests": [
+        "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/python/test_api_ownership_boundaries.py"
+      ],
+      "trackers": [
+        "#926",
+        "#558"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional",
+        "catalog-family:perturbation",
+        "catalog-family:coupled_cluster",
+        "catalog-family:semiempirical"
+      ]
+    },
+    {
+      "id": "native-cli-resource-profile",
+      "method_families": [
+        "hartree_fock",
+        "density_functional",
+        "perturbation",
+        "coupled_cluster",
+        "semiempirical"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical",
+        "native-xtb"
+      ],
+      "properties": [
+        "resources",
+        "profile"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "builtin",
+        "custom-basis"
+      ],
+      "python_sites": [],
+      "native_scientific_sources": [
+        "src/cli/main.cpp",
+        "src/cli/resources.cpp",
+        "src/cli/profiles.cpp"
+      ],
+      "native_callers": [
+        "src/cli/main.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/native/test_cli_runtime.py",
+        "tests/native/test_cli_profile_cache.py",
+        "tests/python/test_native_cli_dispatch.py"
+      ],
+      "trackers": [
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional",
+        "catalog-family:perturbation",
+        "catalog-family:coupled_cluster",
+        "catalog-family:semiempirical"
+      ]
+    },
+    {
+      "id": "explicit-tuning-compiler",
+      "method_families": [
+        "hartree_fock",
+        "density_functional"
+      ],
+      "backends": [
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "autotune"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "explicit-code-generation"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/tune_cli.py",
+          "symbol": "main",
+          "classification": "compiler-ad"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/api/c_api_tuning.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_tuning.cpp"
+      ],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/python/test_native_tune_cli.py",
+        "tests/python/test_compiler_cli_ownership.py"
+      ],
+      "trackers": [
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "prepared-corrections-and-nonlocal",
+      "method_families": [
+        "density_functional",
+        "semiempirical"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical",
+        "native-xtb"
+      ],
+      "properties": [
+        "energy",
+        "forces",
+        "hvp"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "d3",
+        "d4",
+        "gcp",
+        "vv10"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/dispersion.py",
+          "symbol": "D3CorrectionBatch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/dispersion.py",
+          "symbol": "D4CorrectionBatch",
+          "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/nonlocal_runtime.py",
+          "symbol": "NativeNonlocalPairProvider",
+          "classification": "scientific-runtime"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/api/c_api_d3.cpp",
+        "src/api/c_api_d4.cpp",
+        "src/api/c_api_gcp.cpp",
+        "src/api/c_api_nonlocal.cpp"
+      ],
+      "native_callers": [
+        "src/api/c_api_d3.cpp",
+        "src/api/c_api_d4.cpp",
+        "src/api/c_api_gcp.cpp",
+        "src/api/c_api_nonlocal.cpp"
+      ],
+      "remaining_python_runtime": [
+        "Correction kernels have native owners; composition, nonlocal source schedules and complete derivative publication must still be audited per method/property. No blanket second-order qualification."
+      ],
+      "tests": [
+        "tests/python/test_nonlocal_resident_force_owner.py",
+        "tests/python/test_nonlocal_python_compatibility.py"
+      ],
+      "trackers": [
+        "#926",
+        "#932"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:density_functional",
+        "catalog-family:semiempirical"
+      ]
+    },
+    {
+      "id": "explicit-symbolic-compiler",
+      "method_families": [
+        "density_functional"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "code-generation",
+        "ad"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "method-ir"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc_compiler/method/stationary_hvp.py",
+          "symbol": "StationaryHVPPlan",
+          "classification": "compiler-ad"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/integrals/hvp_assembly_runtime.cu"
+      ],
+      "native_callers": [],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/python/test_stationary_hvp_plan.py"
+      ],
+      "trackers": [
+        "#926"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:density_functional"
+      ]
+    },
+    {
+      "id": "independent-oracles",
+      "method_families": [
+        "hartree_fock",
+        "density_functional",
+        "perturbation",
+        "coupled_cluster",
+        "semiempirical"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical",
+        "native-xtb"
+      ],
+      "properties": [
+        "reference-energy",
+        "reference-forces",
+        "reference-hvp"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "independent-reference"
+      ],
+      "python_sites": [
+        {
+          "path": "tests/native/test_cli_dft_df.py",
+          "symbol": "NativeDftDfCliTests.test_cpu_df_pbe0_analytic_force_reconverged_finite_difference",
+          "classification": "reference-oracle"
+        }
+      ],
+      "native_scientific_sources": [],
+      "native_callers": [],
+      "remaining_python_runtime": [],
+      "tests": [
+        "tests/native/test_cli_dft_df.py",
+        "tests/python/test_hessian_public_rks.py"
+      ],
+      "trackers": [
+        "#2227"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional",
+        "catalog-family:perturbation",
+        "catalog-family:coupled_cluster",
+        "catalog-family:semiempirical"
+      ]
+    },
+    {
+      "id": "old-native-library-compatibility",
+      "method_families": [
+        "hartree_fock",
+        "density_functional"
+      ],
+      "backends": [
+        "cpu",
+        "cuda"
+      ],
+      "representations": [
+        "cartesian",
+        "spherical"
+      ],
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "spins": [
+        "restricted",
+        "unrestricted"
+      ],
+      "approximations": [
+        "missing-additive-symbol"
+      ],
+      "python_sites": [
+        {
+          "path": "python/generativeqc/initial_guess.py",
+          "symbol": "supports_automatic_minao",
+          "classification": "compatibility"
+        },
+        {
+          "path": "python/generativeqc/batch.py",
+          "symbol": "PreparedBatch._native_dft_force_eligible",
+          "classification": "compatibility"
+        }
+      ],
+      "native_scientific_sources": [
+        "src/api/c_api_calculation.cpp",
+        "src/api/c_api_batch.cpp"
+      ],
+      "native_callers": [],
+      "remaining_python_runtime": [
+        "Keep older-library Hcore and separately qualified stationary-force behavior until native per-prepared admission is positively available."
+      ],
+      "tests": [
+        "tests/python/test_initial_guess_capabilities.py",
+        "tests/python/test_dft_batch.py"
+      ],
+      "trackers": [
+        "#933"
+      ],
+      "qualification": "source-inventory-only",
+      "method_selectors": [
+        "catalog-family:hartree_fock",
+        "catalog-family:density_functional"
+      ]
+    }
+  ]
+}

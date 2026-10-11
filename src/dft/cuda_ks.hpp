@@ -46,6 +46,14 @@ struct CudaKsResources {
  * Explicit seed spectral inputs count as setup H2D; their orbital frames
  * count as matrix D2H and eigenvalues/status as scalar D2H. */
 struct CudaKsTransfers {
+  /** Source construction and completed submitted Focks, including a bounded
+   * unused chunk slot. Peaks include source setup, not just retained values. */
+  std::uint64_t phase_resident_values_built{}, phase_resident_fock_actions{};
+  /** Incumbent J/K evaluations at the unchanged final density to anchor the
+   * warm energy cache after retiring a phase source. Counted in fock_builds,
+   * not in SCF iterations or source replays; XC and final F[D] are retained. */
+  std::uint64_t warm_energy_rebase_fock_actions{};
+  std::size_t phase_resident_value_bytes{}, phase_resident_numeric_peak_bytes{};
   std::uint64_t setup_h2d_bytes{}, density_h2d_bytes{}, scalar_d2h_bytes{}, matrix_d2h_bytes{};
   std::uint64_t final_state_d2h_bytes{}, final_state_reads{};
   std::uint64_t synchronizations{}, iterations{};
@@ -176,6 +184,11 @@ struct CudaKsFixedDensityProfile {
   std::uint32_t present_mask{};
 };
 
+/** Only the native initial-guess owner may identify its generated cold seed.
+ * Caller-supplied and warm-projected densities retain External provenance.
+ */
+enum class CudaKsSeedOrigin { External, NativeColdGuess };
+
 /** Native ordinary-stream LDA/PBE RKS/UKS trajectory. The borrowed common
  * Fock plan must outlive it. Model/grid/functional identity is immutable;
  * changing it requires a new owner. Symmetric overlap and core initial density
@@ -211,8 +224,10 @@ class CudaKsPlan {
   CudaKsPlan& operator=(const CudaKsPlan&) = delete;
 
   /** Start fresh DIIS/history. A null seed reuses a compatible last-good
-   * device density when requested; explicit seeds are normalized per spin. */
-  void begin(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true);
+   * device density when requested; explicit seeds are normalized per spin.
+   * The native cold-guess origin changes source eligibility, not seed math. */
+  void begin(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
+             CudaKsSeedOrigin seed_origin = CudaKsSeedOrigin::External);
   bool active() const noexcept;
   bool pending() const noexcept;
   bool failed() const noexcept;
@@ -223,7 +238,8 @@ class CudaKsPlan {
   scf::ScfResult result(bool export_density = true);
   /** Energy-only adapters leave the final density resident by disabling export. */
   scf::ScfResult run(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
-                     bool export_density = true);
+                     bool export_density = true,
+                     CudaKsSeedOrigin seed_origin = CudaKsSeedOrigin::External);
   /** Read-only last-good seed availability; no CUDA call or density export. */
   bool has_warm_start() const noexcept;
   /** Export only the last converged state for a changed-geometry rebuild. */

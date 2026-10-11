@@ -96,6 +96,9 @@ struct Owner {
   struct Nonlocal { int parameters() { return 0; } } nonlocal_owner;
   Nonlocal* nonlocal_correlation = &nonlocal_owner;
   template<class F> void run_resident_nonlocal_cuda(F operation) { operation(); }
+  template<class... Arguments> generativeqc_status enqueue_primary_jk(Arguments&&...) {
+    event("primary"); return primary_status;
+  }
 """
 
 DRIVER = r"""

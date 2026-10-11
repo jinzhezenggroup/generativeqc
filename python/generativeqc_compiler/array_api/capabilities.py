@@ -6,6 +6,71 @@ from .interop import DLPACK_INTEROP_VERSION
 
 FRONTEND_VERSION = 1
 
+## The 2025.12 standard is a comparison target, not an implementation claim.
+# Group definitions own the bounded preview inventory and its matrix together.
+_OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
+    "real-elementwise": (
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "negative",
+        "pow",
+        "exp",
+        "log",
+        "sqrt",
+        "square",
+        "reciprocal",
+    ),
+    "real-comparison": (
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
+    ),
+    "array-creation": (
+        "zeros",
+        "ones",
+        "full",
+        "zeros_like",
+        "ones_like",
+        "full_like",
+    ),
+    "dtype-conversion": ("astype",),
+    "real-reduction": (
+        "sum",
+        "mean",
+    ),
+    "shape-transform": (
+        "reshape_explicit_indices",
+        "permute_dims",
+        "reshape",
+        "broadcast_to",
+        "broadcast_shapes",
+        "broadcast_arrays",
+        "expand_dims",
+        "squeeze",
+        "moveaxis",
+        "flip",
+        "broadcast_to_explicit_indices",
+        "matrix_transpose",
+    ),
+    "static-indexing": (
+        "slice",
+        "take",
+        "slice_static",
+        "take_static",
+    ),
+    "tensor-algebra": (
+        "matmul",
+        "einsum_extension",
+    ),
+}
+
+# Keep the public export statically resolvable by the API contract checker.
+# test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
     {
         "add",
@@ -55,6 +120,184 @@ SUPPORTED_FUNCTIONS = frozenset(
     }
 )
 
+_OPERATION_DTYPES: dict[str, str] = {
+    "real-elementwise": "float32|float64",
+    "real-comparison": "float32|float64 -> bool",
+    "array-creation": "bool|float32|float64 (operation-specific admission)",
+    "dtype-conversion": "float32|float64",
+    "real-reduction": "float32|float64",
+    "shape-transform": "bool|float32|float64 (generic-array restrictions)",
+    "static-indexing": "bool|float32|float64 (generic-array restrictions)",
+    "tensor-algebra": "float32|float64",
+}
+
+_AD_STATUS: dict[str, str] = {
+    "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
+    "real-comparison": "non-differentiable",
+    "array-creation": "constant-no-input-adjoint",
+    "dtype-conversion": "TensorIR-rule-if-explicitly-differentiable",
+    "real-reduction": "TensorIR-rule-if-explicitly-differentiable",
+    "shape-transform": "operation-dependent-TensorIR-rule",
+    "static-indexing": "operation-dependent-TensorIR-rule",
+    "tensor-algebra": "TensorIR-rule-if-explicitly-differentiable",
+}
+
+# Only reviewed keyword constraints are enumerated; empty means not audited.
+_AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "sum": {
+        "axis": "static-int|tuple|None",
+        "keepdims": "generic-arrays-only",
+        "dtype": "conversion-unsupported",
+    },
+    "mean": {
+        "axis": "static-int|tuple|None",
+        "keepdims": "generic-arrays-only",
+    },
+    "reshape": {
+        "shape": "static; at most one -1",
+    },
+    "expand_dims": {
+        "axis": "static-int|tuple",
+    },
+    "flip": {
+        "axis": "static-int|tuple|None",
+        "capture": "gather extent <= 65536",
+    },
+    "astype": {
+        "dtype": "real float32/float64 only; bool identity unsupported",
+        "copy": "eager-copy-policy",
+        "device": "None-only",
+    },
+    "full": {
+        "dtype": "bool|float32|float64; unsupported integer default",
+        "device": "None-only",
+    },
+    "take": {
+        "indices": "static nonnegative in-bounds tuple",
+        "axis": "static",
+    },
+    "slice": {
+        "ranges": "static in-bounds half-open",
+    },
+    "einsum_extension": {
+        "equation": "explicit-output; no ellipsis",
+    },
+}
+
+# Retain the existing capability IDs while identifying their callable endpoints.
+_OPERATION_FUNCTIONS: dict[str, str] = {
+    "reshape_explicit_indices": "reshape",
+    "broadcast_to_explicit_indices": "broadcast_to",
+    "slice_static": "slice",
+    "take_static": "take",
+    "einsum_extension": "einsum",
+}
+
+_OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "reshape_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
+    "broadcast_to_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
+    "broadcast_shapes": {
+        "dtypes": "not-applicable-static-shape-tuples",
+        "device": "not-applicable-static-shape-tuples",
+        "eager": "python-static-shape",
+        "capture": "python-static-shape",
+        "ad": "not-applicable-static-shape-tuples",
+    },
+}
+
+# Reviewed frontend lowerings, not an intersection of frontend/primitive names:
+# e.g. subtract/negative lower to add, mean to reduce/add, and matmul to einsum.
+# Keep this allowlist explicit so new reference operations fail closed. Source
+# emission tests check every entry against tensor.cpu without importing that
+# backend here (which would introduce a compiler-package import cycle).
+_NATIVE_CPU_OPERATIONS = frozenset(
+    {
+        "add",
+        "subtract",
+        "multiply",
+        "divide",
+        "negative",
+        "pow",
+        "exp",
+        "log",
+        "sqrt",
+        "square",
+        "reciprocal",
+        "zeros",
+        "ones",
+        "full",
+        "zeros_like",
+        "ones_like",
+        "full_like",
+        "sum",
+        "mean",
+        "reshape_explicit_indices",
+        "permute_dims",
+        "reshape",
+        "broadcast_to",
+        "broadcast_arrays",
+        "expand_dims",
+        "squeeze",
+        "moveaxis",
+        "flip",
+        "broadcast_to_explicit_indices",
+        "matrix_transpose",
+        "slice",
+        "take",
+        "slice_static",
+        "take_static",
+        "matmul",
+        "einsum_extension",
+    }
+)
+
+_NATIVE_CPU_NOTES: dict[str, str] = {
+    **{
+        name: "unsupported-boolean-results-and-comparison-primitives"
+        for name in _OPERATION_GROUPS["real-comparison"]
+    },
+    "astype": (
+        "dtype-conversion-unsupported; float64-identity-only-after-cast-elision"
+    ),
+    "broadcast_shapes": "python-static-shape; no-native-operation",
+    "broadcast_arrays": "unpack-tuple-into-array-or-mapping-trace-outputs",
+    "pow": "static-exact-scalar-exponent; strictly-positive-base",
+    "log": "strictly-positive-input",
+    "sqrt": "nonnegative-input",
+    "divide": "nonzero-denominator",
+    "reciprocal": "nonzero-input; generic-arrays-only",
+}
+
+
+def _operation_matrix() -> dict[str, dict[str, object]]:
+    """Separate reference admission from bounded native lowering qualification."""
+    return {
+        name: {
+            "function": _OPERATION_FUNCTIONS.get(name, name),
+            "category": category,
+            "dtypes": _OPERATION_DTYPES[category],
+            "device": "device-none-cpu-reference",
+            "eager": "numpy-reference",
+            "capture": "tensorir",
+            "ad": _AD_STATUS[category],
+            "native_cpu": name in _NATIVE_CPU_OPERATIONS,
+            "native_cpu_dtypes": (
+                ("float64",) if name in _NATIVE_CPU_OPERATIONS else ()
+            ),
+            "native_cpu_notes": _NATIVE_CPU_NOTES.get(
+                name,
+                "subject-to-native_cpu_requires"
+                if name in _NATIVE_CPU_OPERATIONS
+                else "not-qualified",
+            ),
+            "native_cuda": False,
+            "audited_keywords": dict(_AUDITED_KEYWORDS.get(name, {})),
+            **_OPERATION_OVERRIDES.get(name, {}),
+        }
+        for category, names in _OPERATION_GROUPS.items()
+        for name in names
+    }
+
 
 def capabilities() -> dict[str, object]:
     """Return a detached capability description for diagnostics/tests."""
@@ -62,6 +305,18 @@ def capabilities() -> dict[str, object]:
         "frontend_version": FRONTEND_VERSION,
         "surface": "array-api-shaped-internal-preview",
         "array_api_version": None,
+        "target_standard_for_gap_analysis": "2025.12",
+        "operation_matrix_schema": "generativeqc.array-api-operation-coverage.v1",
+        "operation_matrix_scope": "compiler-preview-inventory-excludes-public-helpers",
+        "operation_matrix": _operation_matrix(),
+        "native_cpu_scope": "bounded-tensorir-subset-not-array-api-conformance",
+        "native_cpu_requires": (
+            "all-live-nodes-float64",
+            "all-live-primitives-supported-by-CPU_PRIMITIVES",
+            "frontend-operation-and-keyword-constraints",
+            "finite-runtime-values-and-operation-domains",
+            "static-shapes-within-byte-work-node-budgets",
+        ),
         "array_namespace_protocol": False,
         "implicit_broadcast": "generic-arrays",
         "reshape_requires_explicit_indices": "scientific-arrays-only",

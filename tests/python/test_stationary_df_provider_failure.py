@@ -296,10 +296,18 @@ def _cpu_selection(source: object, execution: str) -> bool:
     compiled = next(
         c for c in code.co_consts if isinstance(c, CodeType) and c.co_name == "select"
     )
+    defaults = {
+        argument.arg: ast.literal_eval(default)
+        for argument, default in zip(
+            owner.args.kwonlyargs, owner.args.kw_defaults, strict=True
+        )
+        if default is not None
+    }
     return FunctionType(
         compiled,
         {
             "__builtins__": builtins.__dict__,
+            **defaults,
             "state": SimpleNamespace(_source=source),
             "execution": execution,
         },

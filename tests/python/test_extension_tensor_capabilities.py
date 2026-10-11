@@ -10,6 +10,7 @@ import pytest
 from generativeqc.extensions import tensor
 from generativeqc_compiler.common import cpp_adapter
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.tensor import cast
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 
@@ -20,8 +21,10 @@ def _program() -> tensor.Program:
     return tensor.Program({"value": node})
 
 
+@pytest.mark.parametrize("primitive", ["identity", "exp"])
 def test_compile_capabilities_reports_lowering_without_toolchain_activation(
     monkeypatch: pytest.MonkeyPatch,
+    primitive: str,
 ) -> None:
     def forbidden(*args: object, **kwargs: object) -> None:
         raise AssertionError("capability inspection must not activate a toolchain")
@@ -36,6 +39,8 @@ def test_compile_capabilities_reports_lowering_without_toolchain_activation(
     monkeypatch.setattr(tensor_cpu, "CppCompilerAdapter", ForbiddenCompilerAdapter)
 
     program = _program()
+    if primitive == "exp":
+        program = tensor.Program({"value": tensor.exp(program.outputs["value"])})
     report = tensor.compile_capabilities(
         program,
         max_bytes=4096,
@@ -159,7 +164,9 @@ def test_compile_capabilities_reports_unsupported_target_or_mode(
 
 def test_compile_capabilities_reports_unsupported_ir_without_promotion() -> None:
     program = _program()
-    unsupported = tensor.Program({"value": tensor.exp(program.outputs["value"])})
+    # Transcendentals such as exp are supported; a real precision conversion
+    # remains outside the bounded FP64 CPU lowering contract.
+    unsupported = tensor.Program({"value": cast(program.outputs["value"], "float32")})
 
     report = tensor.compile_capabilities(unsupported)
 
@@ -170,7 +177,8 @@ def test_compile_capabilities_reports_unsupported_ir_without_promotion() -> None
     assert report["production_promoted"] is False
     assert report["identity"] is None
     assert report["resources"] is None
-    assert "unsupported CPU primitive" in report["reason"]
+    assert report["toolchain_checked"] is False
+    assert "unsupported CPU primitive: cast" in report["reason"]
 
 
 def test_compile_capabilities_applies_requested_resource_bounds() -> None:

@@ -14,6 +14,7 @@ from generativeqc_compiler.integral.expr import AlgebraForm, ScalarDomain
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .domain import feature_domains
+from .equal_spin import EQUAL_SPIN_BINDINGS, equal_spin_roots
 from .expression_dispatch import (
     build_energy_expression,
     build_pointwise_energy_expression,
@@ -117,12 +118,15 @@ def emit_polarized_semilocal(
     declarations: tuple[str, ...] = (),
     function_qualifier: str = "inline",
     pointwise_bulk: bool = False,
+    equal_spin_function_name: str | None = None,
 ) -> str:
     """Emit polarized LDA/GGA/MGGA E/vxc from the canonical scalar Graph.
 
     function_qualifier is a backend ABI choice such as inline on the host or
     __device__ inline for CUDA. It does not participate in the mathematical
-    expression identity.
+    expression identity. Every CUDA lowering gets an equal-spin sibling,
+    independently of functional identity. It shares already-built polarized
+    partials only after paired work inputs have been proven identical.
     """
 
     feature_count = polarized_feature_count(spec)
@@ -165,7 +169,7 @@ def emit_polarized_semilocal(
     emitter = ScalarCEmitter(graph, {name: name for name in spec.features})
     emitter.emit(roots)
     references = [emitter.reference(root) for root in roots]
-    return "\n".join(
+    source = "\n".join(
         [
             f"struct {value_type} {{",
             "  double energy_density;",
@@ -177,6 +181,34 @@ def emit_polarized_semilocal(
             *prelude,
             *emitter.lines,
             "  return {" + references[0] + ", {" + ", ".join(references[1:]) + "}};",
+            "}",
+            "",
+        ]
+    )
+    if equal_spin_function_name is None and "__device__" in function_qualifier.split():
+        equal_spin_function_name = f"{function_name}_equal_spin"
+    if equal_spin_function_name is None:
+        return source
+    restricted_roots = equal_spin_roots(graph, roots)
+    restricted_emitter = ScalarCEmitter(graph, {name: name for name in spec.features})
+    restricted_emitter.emit(restricted_roots)
+    restricted_refs = [restricted_emitter.reference(root) for root in restricted_roots]
+    restricted_identity = canonical_hash(
+        {"expression": expression_hash, "equal_spin_bindings": EQUAL_SPIN_BINDINGS}
+    )
+    return source + "\n".join(
+        [
+            f'inline constexpr const char* {identity_constant}EqualSpin = "{restricted_identity}";',
+            "// Requires identical paired work inputs; polarized partials are preserved.",
+            f"{function_qualifier} {value_type} {equal_spin_function_name}(",
+            *signature[1:],
+            *prelude,
+            *restricted_emitter.lines,
+            "  return {"
+            + restricted_refs[0]
+            + ", {"
+            + ", ".join(restricted_refs[1:])
+            + "}};",
             "}",
             "",
         ]
@@ -216,10 +248,18 @@ def emit_r2scan_program(
     function_name: str,
     identity_constant: str,
     qualifier: str,
+    include_equal_spin: bool | None = None,
 ) -> str:
-    """Emit component-wise r2SCAN with compiler-owned Libxc boundary semantics."""
+    """Emit r2SCAN with unchanged component-wise Libxc boundary semantics.
 
+    The optional equal-spin sibling applies the same thresholds, work-input
+    floors and original-density energy rescaling before sharing scalar work.
+    """
+
+    if include_equal_spin is None:
+        include_equal_spin = "__device__" in qualifier.split()
     component_rows = []
+    roots_for_component = {}
     for tag, component in (
         ("X", "MGGA_X_R2SCAN"),
         ("C", "MGGA_C_R2SCAN"),
@@ -229,6 +269,7 @@ def emit_r2scan_program(
         )
         emitter = ScalarCEmitter(graph, {name: name for name in work_domains})
         emitter.emit(roots)
+        roots_for_component[tag] = roots
         references = [emitter.reference(root) for root in roots]
         component_rows.append(
             (tag, component, expression_hash, policy, emitter, references)
@@ -277,7 +318,30 @@ def emit_r2scan_program(
                 "",
             ]
         )
+        if include_equal_spin:
+            restricted_roots = equal_spin_roots(emitter.graph, roots_for_component[tag])
+            restricted_emitter = ScalarCEmitter(emitter.graph, emitter.variables)
+            restricted_emitter.emit(restricted_roots)
+            restricted_refs = [
+                restricted_emitter.reference(root) for root in restricted_roots
+            ]
+            lines.extend(
+                [
+                    f"{qualifier} {value_type} {raw_name}_equal_spin(",
+                    "    double rho_a, double rho_b, double sigma_aa, double sigma_ab,",
+                    "    double sigma_bb, double tau_a, double tau_b) {",
+                    *restricted_emitter.lines,
+                    "  return {"
+                    + restricted_refs[0]
+                    + ", {"
+                    + ", ".join(restricted_refs[1:])
+                    + "}};",
+                    "}",
+                    "",
+                ]
+            )
 
+    wrapper_start = len(lines)
     lines.extend(
         [
             f"{qualifier} {value_type} {function_name}(",
@@ -313,4 +377,19 @@ def emit_r2scan_program(
             ]
         )
     lines.extend(["  return out;", "}", ""])
+    if include_equal_spin:
+        wrapper = "\n".join(lines[wrapper_start:])
+        restricted_identity = canonical_hash(
+            {"expression": identity, "equal_spin_bindings": EQUAL_SPIN_BINDINGS}
+        )
+        lines.append(
+            f'inline constexpr const char* {identity_constant}EqualSpin = "{restricted_identity}";'
+        )
+        for symbol in (
+            function_name,
+            f"{function_name}_x_raw",
+            f"{function_name}_c_raw",
+        ):
+            wrapper = wrapper.replace(f"{symbol}(", f"{symbol}_equal_spin(")
+        lines.append(wrapper)
     return "\n".join(lines)

@@ -280,7 +280,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
     )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
-        "fa8c4ff2a644fd45ab4eb828a995c4e42c49c80adbe712b32d50f90b3d98fb74"
+        "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
     )
     assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
         "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
@@ -317,7 +317,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
+            "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
         ),
         "global_hybrid_force_predicate_sha256": (
             "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -329,7 +329,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
         ),
         "prepared_aot_selection_sha256": (
-            "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
+            "be6bb17a3c4dfafbb6da09d8d2df4a1dae65a7c8c7570f37b34ecf46089c2f77"
         ),
     }
 
@@ -429,6 +429,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+        "density_jet_policy_sha256": "2a117b6ec5c566b996f75795650288182faa93a83b263689431f62d6c8e3a529",
+        "restricted_point_policy_sha256": "14eb08de9be6003c466bff8f9449c95749a38e3bcbb9cf13bcad3d4420ccca51",
+        "kind_table_sha256": "eeec6bd71f566741e4d0978df5b354095c875be183b0cf3138df3a1e8fd47a6a",
+        "component_arrays_sha256": "08ea283e18c790a26edcdcac01479def6a7188d9c1a96b8831b4f2b71c8d6045",
+        "component_page_sha256": "09be8b78cfee217fef2e37ed5bb26b7a5231f63bd5303dcccacdb6fd1ccb4d9b",
+        "descriptor_packer_sha256": "92af808cc0d0551072b0a00c29631b86f9c4b65e95bacd68701c4cfbdab926e0",
         "exact_ao_map_resources_sha256": "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9",
         "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
         "public_wrapper_sha256": (
@@ -450,19 +456,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
         ),
         "metrics_sha256": (
-            "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
+            "135d534e3b9c2205a13dcb21268f1a83c5281eeabc14ec3595cef56cea817a57"
         ),
         "ordinary_tile_resources_sha256": (
-            "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
+            "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
         ),
         "initializer_sha256": (
-            "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
+            "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
         ),
         "bulk_sha256": (
-            "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
+            "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
         ),
         "scalar_sha256": (
             "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
@@ -546,7 +552,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
+            "9716c5ab6a7e91e7cd990769132d517d581143f9393fe0b58d696cbd705d8062"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -615,7 +621,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
+            "c6f25b0a324bd9532d22a6ce4120bcab758a97ba3ff42db016a5bbfc617746d4"
         ),
         "grid_cache_sha256": (
             "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
@@ -633,7 +639,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "source_resources.allocation_bytes"
     )
     assert result["admission_limits"]["host_bound_definition"].startswith(
-        "grid_plan.host_bytes + 8 * (34 * primitive_tile"
+        "grid_plan.host_bytes + 8 * (82 * primitive_tile"
     )
     assert result["admission_limits"]["available_device_bytes_definition"] == (
         "max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes"
@@ -857,7 +863,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         "stationary_center_geometry_bytes"
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_187_488 + 4_851_008 + grid_binding_host_bytes
+        192_187_488 + 4_851_008 + grid_binding_host_bytes + 8 * (48 * 4096 + 7 * 768)
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -1337,10 +1343,11 @@ def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
         encoding="utf-8"
     )
     old = "if np.any(primitive_work > self.page_work_budget):"
-    assert old in source
+    position = source.index(old, source.index("    def integral_page("))
+    replacement = "if np.any(primitive_work >= self.page_work_budget):"
     stationary_contract_tree(
         tmp_path,
-        source.replace(old, "if np.any(primitive_work >= self.page_work_budget):", 1),
+        source[:position] + replacement + source[position + len(old) :],
     )
 
     with pytest.raises(RuntimeError, match="bulk page contract changed"):
@@ -1963,6 +1970,7 @@ def test_spherical_ao_count_fails_closed_when_native_count_moves(
     "guard,occurrence",
     [
         ("self._automatic_libxc_name is None", 0),
+        ("cpu_direct_semilocal_force", 0),
         ("self._ks_options is not None", 0),
         ("self._ks_options.coefficients == (1.0, 1.0, 0.0)", 0),
         ('self._device_name == "cuda"', 0),
@@ -2996,7 +3004,9 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
     # Combined publishes three channels and Separate four, but neither may
     # discount the conservative paired-provider reserve or its v1 fallback.
     # Keep that reserve and add the separate grid binding once.
-    assert memory["additional_host_numeric_bound"] == 197_047_712 + (32 << 10)
+    assert memory["additional_host_numeric_bound"] == (
+        197_047_712 + (32 << 10) + 8 * (48 * 4096 + 7 * 768)
+    )
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
         + memory["stationary_native_pair_reserve_bytes"]
@@ -3849,6 +3859,66 @@ def test_restricted_point_metric_deltas_remain_source_bound(
 
 
 @pytest.mark.parametrize(
+    "marker,old,new,gate",
+    [
+        (
+            "def _stationary_density_jet_count(",
+            'record["requires_tau"]',
+            "False",
+            "density_jet_policy_sha256",
+        ),
+        (
+            "def _resolve_restricted_point_policy(",
+            'mode not in {"off", "on"}',
+            "False",
+            "restricted_point_policy_sha256",
+        ),
+        (
+            "    def _kind_table(",
+            "self.kind_tables[key] = table",
+            "self.kind_tables[key] = None",
+            "kind_table page",
+        ),
+        (
+            "    def _component_arrays(",
+            "if self.component_page_arrays is None:",
+            "if True:",
+            "component_arrays page",
+        ),
+        (
+            "    def _component_integral_page(",
+            "capacity = len(self.tasks)",
+            "capacity = len(self.tasks) * 81",
+            "component_page page",
+        ),
+        (
+            "    def _pack_integral_descriptors(",
+            "descriptor_room = len(self.tasks) - self.used",
+            "descriptor_room = len(self.tasks)",
+            "descriptor_packer page",
+        ),
+    ],
+)
+def test_generic_optimization_capacity_helpers_remain_source_bound(
+    tmp_path: Path,
+    marker: str,
+    old: str,
+    new: str,
+    gate: str,
+) -> None:
+    """Every transitive page helper and generic request keeps a fail-closed gate."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    position = source.index(old, source.index(marker))
+    (tmp_path / "python/generativeqc/_stationary_cuda.py").write_text(
+        source[:position] + new + source[position + len(old) :]
+    )
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
     "relative,marker,old,new,gate",
     [
         (
@@ -3868,7 +3938,7 @@ def test_restricted_point_metric_deltas_remain_source_bound(
         (
             "src/dft/stationary_gradient_cuda.cuh",
             "void launch_geometry(",
-            "restricted_point && stationary_pbe0_restricted_point_capable && !external",
+            "!external && stationary_restricted_point_selected(restricted_point)",
             "restricted_point",
             "native_launch_geometry_sha256",
         ),

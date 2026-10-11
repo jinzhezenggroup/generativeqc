@@ -57,6 +57,23 @@ def test_topology_controls_and_spin_bind_the_resource_identity() -> None:
         assert estimate_ks_resources([H2], **options).identity != base.identity
 
 
+@pytest.mark.parametrize(
+    "method", ("libxc:LDA_C_CHACHIYO", "libxc:GGA_X_APBE", "libxc:MGGA_X_LTA")
+)
+def test_automatic_cpu_planning_keeps_exact_source_and_optional_force_work(
+    method: str,
+) -> None:
+    energy = estimate_ks_resources([H2], method=method)
+    force = estimate_ks_resources([H2], method=method, include_forces=True)
+    assert energy.status == force.status == "feasible"
+    assert energy.identity != force.identity
+    assert energy.requests[0].identity.observables == ("energy",)
+    assert force.requests[0].identity.observables == ("energy", "forces")
+    assert force.peak_bytes["host"] >= 256 << 20
+    with pytest.raises(NotImplementedError, match="supports CPU only"):
+        estimate_ks_resources([H2], method=method, backend="cuda")
+
+
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
 def test_cpu_budget_covers_prepare_replay_rebuild_and_singlepoint(
     method: typing.Any,
@@ -155,45 +172,6 @@ def test_failed_preparation_keeps_evidence_and_failed_scf_keeps_samples(
     assert diagnostics["phase"] == "observation"
     assert diagnostics["preparation"]["status"] == "observed"
     assert diagnostics["observation"]["sampled_item_peak_host_bytes"] > 0
-
-
-def test_cli_ks_dry_run_does_not_load_a_native_runtime(
-    monkeypatch: typing.Any, tmp_path: typing.Any, capsys: typing.Any
-) -> None:
-    import json
-
-    from generativeqc import _native
-    from generativeqc.__main__ import main
-
-    path = tmp_path / "h2.xyz"
-    path.write_text("2\nbohr\nH 0 0 -0.7\nH 0 0 0.7\n")
-
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("KS CLI dry run loaded a native runtime")
-
-    monkeypatch.setattr(_native, "load_library", forbidden)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "generativeqc",
-            "resources",
-            str(path),
-            "--method",
-            "pbe-uks",
-            "--charge",
-            "1",
-            "--multiplicity",
-            "2",
-            "--units",
-            "bohr",
-            "--host-bytes",
-            "1",
-        ],
-    )
-    assert main() == 2
-    output = json.loads(capsys.readouterr().out)
-    assert output["status"] == "infeasible"
-    assert output["requests"][0]["name"] == "ks"
 
 
 @pytest.mark.parametrize(

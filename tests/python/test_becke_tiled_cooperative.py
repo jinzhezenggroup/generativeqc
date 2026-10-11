@@ -162,9 +162,9 @@ def test_tiled_multi_strip_independent_decimal_directional_derivative(
             return [
                 [
                     Decimal(str(x)) + sign * h * Decimal(str(dx))
-                    for x, dx in zip(row, dr)
+                    for x, dx in zip(row, dr, strict=True)
                 ]
-                for row, dr in zip(values, motion)
+                for row, dr in zip(values, motion, strict=True)
             ]
 
         plus, minus = [
@@ -177,7 +177,7 @@ def test_tiled_multi_strip_independent_decimal_directional_derivative(
         ]
         expected = sum(
             Decimal(str(seed)) * (p[owner] - m[owner]) / (2 * h)
-            for seed, p, m, owner in zip(seeds, plus, minus, owners)
+            for seed, p, m, owner in zip(seeds, plus, minus, owners, strict=True)
         )
     assert abs(float(expected) - np.sum(gradient * direction)) < 2e-12
     np.testing.assert_allclose(gradient.sum(axis=0), 0, atol=2e-13)

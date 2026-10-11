@@ -39,7 +39,7 @@ class ProfileCacheTests(unittest.TestCase):
         self.assertFalse((self.cache / "active.json").exists())
         valid = {"compatibility": 'bundle-"\\\n\u2603'}
         (self.cache / "active.json").write_text(json.dumps(valid))
-        result = self.cli("autotune", "--show-profile")
+        result = self.cli("profile", "show")
         self.assertEqual(json.loads(result.stdout)["active"], valid)
         for invalid in (
             "{garbage}",
@@ -136,7 +136,7 @@ class ProfileCacheTests(unittest.TestCase):
         self.assertEqual(sentinel.read_text(), "keep this immutable bundle")
         self.assertFalse((self.cache / "active.json").is_symlink())
         self.assertEqual(json.loads((self.cache / "active.json").read_text()), {})
-        self.assertEqual(self.cli("autotune", "--clear-profile").returncode, 0)
+        self.assertEqual(self.cli("profile", "clear").returncode, 0)
 
     @unittest.skipUnless(os.name == "posix", "POSIX atomic cache administration")
     def test_failed_replace_leaves_existing_target_and_no_temporary_files(self) -> None:

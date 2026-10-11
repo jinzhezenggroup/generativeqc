@@ -51,6 +51,19 @@ def test_stoll_rewrite_fails_closed_on_changed_modified_pw_parameters() -> None:
         stabilize_m06_2x_stoll(raw, altered, record)
 
 
+def test_stoll_rewrite_uses_physical_spin_nodes_and_keeps_source_guard() -> None:
+    record = _bound_component("MGGA_C_M06_2X", allow_hybrid_exchange=False)
+    catalog, source_root = _catalog(), _root()
+    raw = libxc_bulk.build_record(record, catalog["source_files"], source_root)
+    module = libxc_bulk.import_record(record, catalog["source_files"], source_root)
+    stabilized = stabilize_m06_2x_stoll(raw, module, record)
+    assert stabilized.energy.identifier != raw.energy.identifier
+    assert stabilized.identity != raw.identity
+    altered = replace(raw, energy=raw.variables[0] + raw.variables[1])
+    with pytest.raises(MapleImportError, match="perpendicular PW terms changed"):
+        stabilize_m06_2x_stoll(altered, module, record)
+
+
 def test_emitted_mgga_work_adapter(tmp_path: Path) -> None:
     plain = SplitHybridWorkPolicy(1e-15, 1e-40, 1e-20, False, "test")
     fhc = SplitHybridWorkPolicy(1e-15, 1e-40, 1e-20, True, "test")

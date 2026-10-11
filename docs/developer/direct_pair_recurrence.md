@@ -3,7 +3,7 @@
 ## Automatic canonical J/K values
 
 Canonical Cartesian Direct sources automatically reuse the prepared primitive-pair
-cache for total-angular-order-five-through-nine shell quartets, including spherical public
+cache for total-angular-order-three-through-nine shell quartets, including spherical public
 projections. This route is independent of the legacy HF value switch below:
 neither an unset switch nor `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=0`
 disables its admission. It applies by source capability, not by method, basis
@@ -17,14 +17,28 @@ canonical row-major bounds, not a recomputed bound or a symmetry assumption.
 Full J/K, J-only, and standalone full/SR/LR K publish separate positive sources
 through the existing compiler-owned recurrence and orbit scatter.
 
-One CTA owns the complete admitted component domain: order five
-uses one 256-lane packet, order six uses two register slots per lane, and order
-seven uses three, order eight uses six, and order nine uses nine. The largest
+One CTA owns the complete admitted component domain. Orders three/four/five
+use 32-thread CTAs with one/three/six component slots per lane, covering their
+maximum 27/81/162 components. Orders six/seven/eight/nine retain 256-thread
+CTAs with two/three/six/nine slots per lane. The largest
 order-nine domain is fddd (2160 components), not ffdp (1800). These bounds cover
 every s/p/d/f shell composition, including
 partial tails and repeated physical shell pairs. Equal angular buckets retain
 their symmetry-unique sorted triangle. All slots share one primitive recurrence;
 inactive lanes still participate in publication and retirement barriers.
+The low-order owner is a complete CTA, not a warp-private region within a larger
+CTA. It retains the same CTA barriers and recurrence lifetime. Slot stride is
+the owner's lane count; legacy packet tile offsets remain multiples of 256.
+The persistent launch is capped by the dense shell-pair product and 4096 CTAs.
+Each product factor is clamped before multiplication, avoiding overflow and
+guaranteed-idle CTAs without reading a device count back to the host.
+
+The order-three owner prepares its three Cartesian Hermite axes in disjoint
+lanes. Each lane borrows immutable primitive-pair geometry directly; it does
+not read the leader's still-unpublished shared metadata. The original complete
+Hermite initialization, coefficient multiplication order, and Coulomb owner
+remain unchanged. Existing CTA barriers publish all axes and retire their
+readers. Other orders and legacy packet consumers keep serial axis preparation.
 
 Admission borrows an existing immutable geometry cache and charges the complete
 index, five row-prefix planes, sort/scan workspace and bounds view to the provider budget, including the
@@ -40,6 +54,89 @@ The [multi-packet decision](../../.agents/notes/implemented/performance/2026-10-
 records the extended ownership bounds and excluded lower-order schedule.
 The [order-eight/nine decision](../../.agents/notes/implemented/performance/2026-10-11-automatic-canonical-orders-eight-nine.md)
 records the complete six/nine-slot bounds and their resource/endpoint gates.
+The [low-order scheduling decision](../../.agents/notes/implemented/performance/2026-10-11-canonical-small-cta-scheduling.md)
+records the 32-thread ownership bounds and the retained full initialization.
+
+## Bounded long-range force scheduling
+
+Ordinary long-range exchange force launches use the established 128-thread
+bounded force width instead of the default 256-thread value width. Selection
+depends on the radial source and ordinary one-dimensional launch shape, not
+the functional, basis, molecule, omega, or a runtime opt-in. Short-range sources
+and custom launch shapes retain their existing scheduling.
+
+Queue storage and shell-block ownership do not change. Candidate admission
+advances by the actual force CTA width, so narrowing a CTA does not omit the
+second half of a queue page. The existing component screening, density gates,
+radial recurrence, spin coefficients, and force scatter remain authoritative.
+
+## Bounded independent-center force responses
+
+Ordinary full-range and long-range Cartesian force components of total angular
+order seven through eleven reuse one scalar Coulomb simplex per primitive
+quartet across all independent atoms. The compiler emits this consumer in
+`direct_pair_materialized_gradient_cuda.py`; native queue traversal, screening,
+density weights and output scatter remain unchanged. It is a production default
+and requires neither a new selector nor resident primitive-pair storage.
+
+The scalar simplex extends to L+1: a Coulomb spatial response is its next
+Cartesian state. One first-center `Dual` response per Hermite axis supplies the
+opposite second-center response because pair coefficients depend only on A-B.
+Repeated atoms therefore scale the same pair response rather than rebuilding
+its geometry. The product-center response still includes both exponent-weighted
+centers. All N-1 independent atoms consume the existing Cartesian contraction
+body; translation recovers the final atom. Individual primitive and normalized
+AO coefficients are never reconstructed by dividing Gaussian factors.
+
+The private workspace is bounded by the instantiated angular order and existing
+through-f Hermite limits; no global derivative tensor or retained lease is
+introduced. This shared owner's L+1 simplex must fit the existing primal Coulomb
+order bound, so order twelve retains generic forward AD. Orders zero through six
+retain their specialized owners. Short-range production requests and separately
+selected reachable or convolved derivative algebra also retain their existing
+consumers.
+
+## Generic high-order first responses
+
+The compiler lowers the generic order-7--12 `Dual3` Cartesian consumer to one
+FP64 scalar Coulomb simplex of degree `L+1`. First spatial derivatives are the
+next Cartesian states of the existing Coulomb recurrence; a lightweight view
+applies all nine product-center geometry seeds when the unchanged Hermite
+contraction reads a root. It does not retain three tangent simplexes. Exponents
+and the full/LR/SR radial boundary are fixed under these geometry derivatives.
+
+This lowering changes preparation/storage, not the six-loop contraction order,
+primitive traversal, scientific screening, force scatter, or thread geometry.
+The optional Hermite-convolution consumer also borrows the response view without
+changing its separate selection policy. Reachable preparation encloses the
+component box and its three raised faces, clips every bound to the `L+1` simplex,
+and falls back to complete preparation for invalid diagnostic extents. The extra
+response degree does not admit a higher-angular-momentum AO basis.
+
+The independent-center full/LR owner above already shares scalar states for
+orders seven through eleven and remains unchanged. This lowering covers its
+retained generic consumers, including order twelve, short-range requests and
+selected reachable/convolved derivative algebra.
+
+Low-order specializations, value-only arithmetic, single-direction `Dual`, mixed
+precision, and resident cooperative/materialized consumers retain their owners.
+In particular, an admitted s/p/d order-seven cooperative task already shares a
+scalar recurrence: it does not use this generic fallback. Generic preparation
+still repeats for each independently seeded atom unless another qualified owner
+shares it. Reduced storage alone is not proof of reduced endpoint work or time.
+
+`tests/python/test_reachable_coulomb.py` poisons unused scalar storage and checks
+every high-order response face against independent radial quadrature.
+`tests/python/test_hermite_convolution.py` and
+`tests/python/test_shared_rsh_preparation.py` check integral/jet semantics against
+independently raised/lowered Gaussian integrals. Real-device qualification uses
+`tests/python/test_direct_spatial_response_cuda.py`, enabled by
+`GENERATIVEQC_DIRECT_SPATIAL_RESPONSE_CUDA_TEST=1` only inside a finite Slurm GPU
+allocation. Its linked shell-pair probe resources and event intervals are not
+production-library resource or complete energy-plus-force endpoint receipts.
+
+The [lowering decision](../../.agents/notes/implemented/performance/2026-10-11-generic-coulomb-spatial-responses.md)
+records measured storage, retained fallbacks and remaining qualification gates.
 
 ## Legacy HF and dddd qualification
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -300,6 +301,22 @@ def ledger_probe(
 ) -> Path:
     """Link actual ledger C APIs; discard unrelated CPU shape-query sections."""
     folder = tmp_path_factory.mktemp("device-ledger-requests")
+    # The production resource translation unit also owns the ECP shape query.
+    # Generate its real policy header instead of relying on a prior CMake build.
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            str(ROOT / "tools/generate_ecp_kernels.py"),
+            "--output",
+            str(folder / "generated_ecp_ao.cuh"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     source = folder / "probe.cpp"
     source.write_text(DRIVER)

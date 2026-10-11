@@ -100,6 +100,14 @@ def _single_workspace_bytes(n: typing.Any, options: typing.Any) -> typing.Any:
     )
 
 
+def _validate_resident_engine(operator: typing.Any) -> None:
+    """Validate a borrowed vector owner even when no Krylov action will run."""
+    engine = getattr(operator, "_krylov_engine", None)
+    validate = getattr(engine, "validate_problem", None)
+    if callable(validate):
+        validate(operator.problem)
+
+
 def _block_workspace_bytes(
     n: typing.Any, nrhs: typing.Any, options: typing.Any, max_columns: typing.Any
 ) -> typing.Any:
@@ -232,9 +240,13 @@ class DiagonalPreconditioner:
     def __init__(
         self, diagonal: typing.Any, *, relative_threshold: typing.Any = 1e-14
     ) -> None:
-        value = np.asarray(diagonal, dtype=np.float64)
-        if value.ndim != 1 or not np.isfinite(value).all():
-            raise ValueError("preconditioner diagonal must be a finite vector")
+        raw = np.asarray(diagonal)
+        if raw.ndim != 1 or raw.dtype.kind not in "iuf" or not np.isfinite(raw).all():
+            raise ValueError("preconditioner diagonal must be a finite real vector")
+        with np.errstate(over="ignore", invalid="ignore"):
+            value = np.asarray(raw, dtype=np.float64)
+        if not np.isfinite(value).all():
+            raise ValueError("preconditioner diagonal must be representable in FP64")
         if not np.isfinite(relative_threshold) or relative_threshold < 0:
             raise ValueError("relative_threshold must be finite and nonnegative")
         scale = max(float(np.max(np.abs(value))), 1.0)
@@ -248,9 +260,15 @@ class DiagonalPreconditioner:
         self.inverse = immutable(1.0 / value)
 
     def apply(self, vector: typing.Any) -> typing.Any:
-        value = np.asarray(vector, dtype=np.float64)
-        if value.shape != self.diagonal.shape:
+        raw = np.asarray(vector)
+        if raw.shape != self.diagonal.shape:
             raise ValueError("preconditioner vector shape mismatch")
+        if raw.dtype.kind not in "iuf" or not np.isfinite(raw).all():
+            raise ValueError("preconditioner vector must be finite real data")
+        with np.errstate(over="ignore", invalid="ignore"):
+            value = np.asarray(raw, dtype=np.float64)
+        if not np.isfinite(value).all():
+            raise ValueError("preconditioner vector must be representable in FP64")
         return self.inverse * value
 
 
@@ -292,7 +310,12 @@ class SolveResult:
 
 @dataclass(frozen=True)
 class MultiRHSResult:
-    """Results and aggregate costs for one multi-RHS strategy."""
+    """Results and aggregate costs for one multi-RHS strategy.
+
+    ``dimension`` preserves the row count of an empty request. Its default keeps
+    existing positional construction compatible; nonempty results carry their
+    dimension in each solution as before.
+    """
 
     results: tuple[SolveResult, ...]
     strategy: str
@@ -301,6 +324,7 @@ class MultiRHSResult:
     peak_workspace_bytes: int
     rhs_rank: int
     rank_deficient_rhs: bool
+    dimension: int = 0
 
     @property
     def converged(self) -> typing.Any:
@@ -309,7 +333,7 @@ class MultiRHSResult:
     @property
     def solution(self) -> typing.Any:
         if not self.results:
-            return np.empty((0, 0))
+            return np.empty((self.dimension, 0), dtype=np.float64)
         return np.column_stack([result.solution for result in self.results])
 
     def _aggregate_seconds(self, field: str) -> float:
@@ -370,12 +394,19 @@ class _HostKrylovEngine:
         return float(np.dot(left, right))
 
     def apply(self, operator: typing.Any, value: typing.Any) -> typing.Any:
-        return np.asarray(operator.apply(value), dtype=np.float64)
+        return self._action_result(operator.apply(value), "operator")
+
+    def _action_result(self, value: typing.Any, name: str) -> np.ndarray:
+        """Check method callback shape/domain before any narrowing conversion."""
+        raw = np.asarray(value)
+        if raw.shape != (self.dimension,) or raw.dtype.kind not in "iuf":
+            raise ValueError(f"{name} must return a real vector of operator dimension")
+        return np.asarray(raw, dtype=np.float64)
 
     def precondition(self, preconditioner: typing.Any, value: typing.Any) -> typing.Any:
         if preconditioner is None:
             return self.copy(value)
-        return np.asarray(preconditioner.apply(value), dtype=np.float64)
+        return self._action_result(preconditioner.apply(value), "preconditioner")
 
     def orthogonalize(
         self,
@@ -964,6 +995,7 @@ def solve(
     # A live reference lease must hold even when a zero RHS skips all actions.
     validate_current = getattr(operator, "validate_current", lambda: None)
     validate_current()
+    _validate_resident_engine(operator)
     options = GMRESOptions() if options is None else options
     if solution_consumer is not None and not callable(solution_consumer):
         raise TypeError("solution_consumer must be callable")
@@ -1300,7 +1332,9 @@ def _block_solve(
                 for value, candidate in zip(b, solution, strict=True)
             ]
         )
-        history = [float(max(old, new)) for old, new in zip(history, norms)]
+        history = [
+            float(max(old, new)) for old, new in zip(history, norms, strict=True)
+        ]
         targets = np.maximum(
             options.atol,
             options.rtol * rhs_norms,
@@ -1369,6 +1403,7 @@ def _solve_many_impl(
     """Compare sequential, blocked and recycled multi-RHS response solves."""
     validate_current = getattr(operator, "validate_current", lambda: None)
     validate_current()
+    _validate_resident_engine(operator)
     if strategy not in ("sequential", "blocked", "recycled"):
         raise ValueError("strategy must be sequential, blocked or recycled")
     if strategy == "blocked" and preconditioner is not None:
@@ -1377,6 +1412,12 @@ def _solve_many_impl(
             "or recycled, or add an explicitly tested block preconditioner"
         )
     options = GMRESOptions() if options is None else options
+    if not isinstance(options, GMRESOptions):
+        raise TypeError("multi-RHS options must be GMRESOptions")
+    if preconditioner is not None and not callable(
+        getattr(preconditioner, "apply", None)
+    ):
+        raise TypeError("preconditioner must provide a callable apply action")
     values = operator.problem.validate_rhs(rhs)
     consumers = (
         (None,) * values.shape[1]
@@ -1388,6 +1429,28 @@ def _solve_many_impl(
     ):
         raise ValueError("solution_consumers must match the multi-RHS column count")
     started = time.perf_counter()
+    if recycle is not None:
+        recycle.assert_compatible(operator.problem)
+        if recycle._engine is not None and recycle._engine is not getattr(
+            operator, "_krylov_engine", None
+        ):
+            raise ResponseCompatibilityError(
+                "recycle vectors belong to another resident owner"
+            )
+    if values.shape[1] == 0:
+        # Admission/lifetime checks still apply, but no SVD, vector engine,
+        # workspace reservation, preconditioner or consumer is executed.
+        validate_current()
+        return MultiRHSResult(
+            (),
+            strategy,
+            time.perf_counter() - started,
+            0,
+            0,
+            0,
+            False,
+            dimension=values.shape[0],
+        )
     # validate_rhs publishes an owned immutable array for real ResponseProblems.
     # Charge it even when a test/custom operator happens to return a view.
     input_bytes = values.nbytes

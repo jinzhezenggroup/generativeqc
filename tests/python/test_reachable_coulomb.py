@@ -67,6 +67,8 @@ def recurrence_owner(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
         np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     ]
     owner.evaluate.restype = ctypes.c_int
+    owner.evaluate_response.argtypes = owner.evaluate.argtypes
+    owner.evaluate_response.restype = ctypes.c_int
     owner.evaluate_full.argtypes = [ctypes.c_uint] + [
         np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
     ]
@@ -111,7 +113,9 @@ def _oracle(t: int, u: int, v: int, moments: Sequence[float]) -> float:
     for pairs in itertools.product(*(range(power // 2 + 1) for power in powers)):
         order = sum(powers) - sum(pairs)
         term = (-1.4) ** order * moments[order]
-        for power, pair, coordinate in zip(powers, pairs, (0.19, -0.27, 0.11)):
+        for power, pair, coordinate in zip(
+            powers, pairs, (0.19, -0.27, 0.11), strict=True
+        ):
             term *= (
                 math.factorial(power)
                 / (2**pair * math.factorial(pair) * math.factorial(power - 2 * pair))
@@ -171,6 +175,63 @@ def test_invalid_component_domain_retains_complete_recurrence(
     assert recurrence(6, 1, 1, 0, 1, 0, expected) == 210
     assert recurrence(6, 1, 1, 0, 1, 1, actual) == 210
     np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("radial", [0, 1, 2])
+@pytest.mark.parametrize("order", range(7, 13))
+def test_scalar_response_faces_overwrite_poison_and_match_independent_quadrature(
+    recurrence_owner: ctypes.CDLL, radial: int, order: int
+) -> None:
+    """All high-order component boxes include every raised root and dependency."""
+    nodes, weights = np.polynomial.legendre.leggauss(96)
+    theta = 0.3 / math.sqrt(0.7 + 0.3**2)
+    lower, upper = ((0.0, 1.0), (0.0, theta), (theta, 1.0))[radial]
+    points = lower + (nodes + 1) * (upper - lower) / 2
+    weights = weights * (upper - lower) / 2
+    argument = 0.7 * (0.19**2 + 0.27**2 + 0.11**2)
+    moments = [
+        np.dot(weights, points ** (2 * degree) * np.exp(-argument * points**2))
+        for degree in range(order + 2)
+    ]
+    for axis_x in range(order + 1):
+        for axis_y in range(order - axis_x + 1):
+            axis_z = order - axis_x - axis_y
+            size = (axis_x + 1) * (axis_y + 1) * (axis_z + 1) * 4
+            dense, selected = np.empty(size), np.empty(size)
+            assert recurrence_owner.evaluate_response(
+                order, axis_x, axis_y, axis_z, radial, 0, dense
+            ) == math.comb(order + 5, 4)
+            writes = recurrence_owner.evaluate_response(
+                order, axis_x, axis_y, axis_z, radial, 1, selected
+            )
+            assert 0 < writes <= math.comb(order + 5, 4)
+            np.testing.assert_array_equal(selected, dense)
+            expected = []
+            for first, second, third in itertools.product(
+                range(axis_x + 1), range(axis_y + 1), range(axis_z + 1)
+            ):
+                expected.extend(
+                    (
+                        _oracle(first, second, third, moments),
+                        _oracle(first + 1, second, third, moments),
+                        _oracle(first, second + 1, third, moments),
+                        _oracle(first, second, third + 1, moments),
+                    )
+                )
+            np.testing.assert_allclose(selected, expected, rtol=2e-10, atol=2e-11)
+
+
+def test_invalid_response_domain_retains_complete_scalar_simplex(
+    recurrence_owner: ctypes.CDLL,
+) -> None:
+    """Response halo validation must precede all unsigned bound arithmetic."""
+    expected, actual = np.empty(16), np.empty(16)
+    for radial in range(3):
+        assert (
+            recurrence_owner.evaluate_response(8, 1, 1, 0, radial, 0, expected) == 715
+        )
+        assert recurrence_owner.evaluate_response(8, 1, 1, 0, radial, 1, actual) == 715
+        np.testing.assert_array_equal(actual, expected)
 
 
 @pytest.mark.parametrize("order", range(13))
@@ -249,6 +310,36 @@ extern "C" int evaluate_full(unsigned order, double* out) {
 #undef FULL_CASE
   }
   return -2;
+}
+template<unsigned Order> int response_roots(unsigned axis_x, unsigned axis_y, unsigned axis_z,
+    unsigned radial, unsigned selected, double* out) {
+  CoulombAuxiliary<double, Order+1> auxiliary;
+  for (auto& item : auxiliary.data) item = std::numeric_limits<double>::quiet_NaN();
+  const Vec3<double> product{0.19,-0.27,0.11}, center{0,0,0};
+  const CoulombComponentDomain domain{axis_x,axis_y,axis_z,selected != 0,true};
+  if (radial == 0) fill_coulomb<Order+1>(0.7, product, center, auxiliary, domain);
+  else if (!fill_range_coulomb<Order+1>(0.7, product, center,
+      static_cast<generativeqc::integrals::CoulombRange>(radial), 0.3, auxiliary, domain)) return -2;
+  unsigned written = 0;
+  for (const auto& item : auxiliary.data) written += std::isfinite(item);
+  for (unsigned first=0; first<=axis_x; ++first)
+    for (unsigned second=0; second<=axis_y; ++second)
+      for (unsigned third=0; third<=axis_z; ++third) {
+        *out++=auxiliary.at(0,first,second,third);
+        *out++=auxiliary.at(0,first+1,second,third);
+        *out++=auxiliary.at(0,first,second+1,third);
+        *out++=auxiliary.at(0,first,second,third+1);
+      }
+  return static_cast<int>(written);
+}
+extern "C" int evaluate_response(unsigned order, unsigned axis_x, unsigned axis_y, unsigned axis_z,
+    unsigned radial, unsigned selected, double* out) {
+  switch(order) {
+#define RESPONSE_CASE(Order) case Order: return response_roots<Order>(axis_x,axis_y,axis_z,radial,selected,out)
+    RESPONSE_CASE(7);RESPONSE_CASE(8);RESPONSE_CASE(9);RESPONSE_CASE(10);RESPONSE_CASE(11);RESPONSE_CASE(12);
+#undef RESPONSE_CASE
+  }
+  return -1;
 }
 template<unsigned L> int run(unsigned x, unsigned y, unsigned z, unsigned radial,
                              unsigned selected, double* out) {

@@ -28,6 +28,7 @@ AUDITED_PREFIXES = (
     "scf-option:",
     "public-policy:",
     "hf-runtime:",
+    "ks-runtime:",
     "tensor-schedule:",
     "tensor-execution:",
     "dft-policy:",
@@ -141,7 +142,6 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
     if schedule is None:
         raise ValueError("missing audited TensorSchedule")
     result: dict[str, str] = {}
-    reduction_provider_seen = False
     for node in schedule.body:
         if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
             continue
@@ -154,15 +154,6 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
                     f"TensorSchedule.{name} has a non-literal boolean default"
                 )
             result[f"tensor-schedule:{name}"] = relative.as_posix()
-        elif name == "reduction_provider":
-            if _literal_default(node.value) != "generated":
-                raise ValueError(
-                    "TensorSchedule.reduction_provider default drifted from generated"
-                )
-            reduction_provider_seen = True
-            result["tensor-schedule:reduction_provider"] = relative.as_posix()
-    if not reduction_provider_seen:
-        raise ValueError("missing audited TensorSchedule.reduction_provider")
     return result
 
 
@@ -269,13 +260,55 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
         or 'std::strcmp(disabled, "1") == 0' not in source
         or "host.nbf < 8" not in source
         or "return angular > 2;" not in source
-        or "md_ready = !runtime::active_device_resource_ledger" not in source
+        or "!resident_source_only && !runtime::active_device_resource_ledger"
+        not in source
     ):
         raise ValueError("MD-J default admission/opt-out guard drifted")
     return {
         "dft-policy:md-j-default": relative.as_posix(),
         "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),
     }
+
+
+def _discover_spatial_force_default(root: Path) -> dict[str, str]:
+    """Audit method-owned scope without conflating explicit cache requests with auto."""
+    relative = Path("src/dft/cuda_spd_force_policy.hpp")
+    policy = _read(root / relative)
+    schedule = re.sub(
+        r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
+    )
+    if not re.search(
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        policy,
+    ) or any(
+        fragment not in schedule
+        for fragment in (
+            "if (selector.empty()) return DirectSpdForceSchedule::Automatic;",
+            'selector == "1" || selector == "spatial-reuse"',
+            "return DirectSpdForceSchedule::Incumbent;",
+            "if (captured == DirectSpdForceSchedule::Automatic)",
+            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent;",
+        )
+    ):
+        raise ValueError("Spatial force default scope or opt-out drifted")
+    owner = re.sub(r"\s+", " ", _read(root / "src/methods/dft_method.cpp"))
+    if any(
+        fragment not in owner
+        for fragment in (
+            "dft::pbe0_rks_final_validation_composition(",
+            "spec.coulomb.approximation == scf::FockApproximation::Exact",
+            "spec.exchange.approximation == scf::FockApproximation::Exact",
+            "spec.coulomb.op == scf::FockOperator::FullRange",
+            "spec.exchange.op == scf::FockOperator::FullRange",
+            "!execution_plan_.range_exchange && !range_strategy_",
+            "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
+            "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
+            "system_.ecp_terms.empty()",
+            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+        )
+    ):
+        raise ValueError("Spatial force default method authentication drifted")
+    return {"dft-policy:spatial-spd-force-auto": relative.as_posix()}
 
 
 def _discover_rys_task_default(root: Path) -> dict[str, str]:
@@ -435,25 +468,31 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
 
 
 def _discover_cc_options(root: Path) -> dict[str, str]:
-    relative = Path("src/cc/solver.hpp")
-    source = _read(root / relative)
-    match = re.search(
-        r"struct\s+SolverOptions\s*\{(?P<body>.*?)\n\};",
-        source,
-        flags=re.DOTALL,
-    )
-    if match is None:
-        raise ValueError("missing audited cc::SolverOptions")
-    body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
-    names = re.findall(
-        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
-        body,
-    )
-    return {f"cc-option:{name}": relative.as_posix() for name in names}
+    """Discover default-off primal and Lambda controls in distinct namespaces."""
+    result = {}
+    for relative, structure, prefix in (
+        (Path("src/cc/solver.hpp"), "SolverOptions", "cc-option:"),
+        (Path("src/cc/lambda_response.hpp"), "LambdaOptions", "cc-option:lambda."),
+    ):
+        source = _read(root / relative)
+        match = re.search(
+            rf"struct\s+{structure}\s*\{{(?P<body>.*?)\n\}};",
+            source,
+            flags=re.DOTALL,
+        )
+        if match is None:
+            raise ValueError(f"missing audited cc::{structure}")
+        body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
+        names = re.findall(
+            r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+            body,
+        )
+        result.update({f"{prefix}{name}": relative.as_posix() for name in names})
+    return result
 
 
 def _discover_cc_execution(root: Path) -> dict[str, str]:
-    """Audit the energy-only source alias default without inventing a user flag."""
+    """Audit bounded energy execution defaults without inventing user flags."""
     relative = Path("src/cc/df_triples_cuda.cu")
     source = _read(root / relative)
     energy_start = source.find("DFCudaResult evaluate_df_cuda(")
@@ -485,9 +524,29 @@ def _discover_cc_execution(root: Path) -> dict[str, str]:
         or "visit_occupied_tiles" in source[response_start:]
     ):
         raise ValueError("DF triples bounded panel traversal admission drifted")
+    independent_pair = (
+        "constautounpaired_layout=p;",
+        "if(p.panel_capacity==3&&execution_plan.pair_pointer_bytes())",
+        "if(paired.total<=max_bytes)p=paired;",
+        "std::array<std::size_t,6>seed_permutations{};",
+        "if(seed_count==2&&p.paired_pointer_bytes)",
+        "moments+seed_permutations[0]*p.v3,moments+seed_permutations[1]*p.v3,context.arena+p.paired_pointers)",
+    )
+    generator = re.sub(
+        r"\s+", "", _read(root / "tools/generate_df_occupied_triples.py")
+    )
+    if (
+        any(body.count(fragment) != 1 for fragment in independent_pair)
+        or "build_w_pair" in source[response_start:]
+        or "precision.arithmetic.is_strict_fp64()&&algorithm()==tensor::ContractionAlgorithm::PedanticBlas"
+        not in generator
+        or "second_output!=first_output+v3" not in generator
+    ):
+        raise ValueError("DF triples independent-pair admission drifted")
     return {
         "cc-execution:df-triples-distinct-moments": relative.as_posix(),
         "cc-execution:df-triples-panel-traversal": relative.as_posix(),
+        "cc-execution:df-triples-independent-pair": relative.as_posix(),
     }
 
 
@@ -550,27 +609,81 @@ def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
 
 def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
     """Keep automatic source construction tied to its qualified bounded domain."""
-    policy_relative = Path("src/scf/cuda/reference_eri_policy.hpp")
+    policy_relative = Path("src/scf/cuda/direct_jk_source_policy.hpp")
     policy = _read(root / policy_relative)
     required = (
         '!value || std::string_view(value) == "auto"',
-        "if (!cold_reference)",
+        "if (!cold_phase)",
         "maximum_angular != 3 || !generic_fock",
         "nbf < 64 || direct_nbf < 128",
         "maximum_iterations < 8",
     )
     owner_relative = Path("src/scf/cuda/rhf_resident_values.cpp")
     owner = _read(root / owner_relative)
-    if any(fragment not in policy for fragment in required) or any(
-        fragment not in owner
-        for fragment in (
-            'std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES")',
-            "budget, 8ULL << 30",
-            "device_overhead, 256ULL << 20",
+    source = " ".join(_read(root / "src/scf/cuda/direct_jk_source_lease.cpp").split())
+    header = _read(root / "src/scf/cuda/direct_jk_source_lease.hpp")
+    facade = _read(root / "src/scf/cuda/reference_eri_policy.hpp")
+    if (
+        any(fragment not in policy for fragment in required)
+        or 'std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES")' not in owner
+        or "return direct_jk_source_selection(value)" not in facade
+        or "return direct_jk_source_auto_refusal(" not in facade
+        or "value_ceiling = 8ULL << 30" not in header
+        or any(
+            fragment not in source
+            for fragment in (
+                "budget, value_ceiling",
+                "device_overhead, 256ULL << 20",
+            )
         )
     ):
         raise ValueError("RHF phase-value auto default or admission domain drifted")
     return {"hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES": owner_relative.as_posix()}
+
+
+def _discover_ks_phase_values(root: Path) -> dict[str, str]:
+    """Default auto cannot broaden the cold domain or public resource plan."""
+    relative = Path("src/dft/cuda_ks.cpp")
+    source = _read(root / relative)
+    if any(
+        fragment not in source
+        for fragment in (
+            'std::getenv("GENERATIVEQC_KS_RESIDENT_VALUES")',
+            "const auto requested = direct_jk_source_selection(selection);",
+            "if (requested == DirectJkSourceSelection::disabled) return;",
+            "runtime::active_device_resource_ledger",
+            "runtime::active_device_resource_ledger ||",
+            "precision_schedule.any_lower_precision()",
+            "has_range_correction",
+            "spins != 1 || !has_exchange || fitted_coulomb || fitted_exchange || has_range_correction",
+            "nonlocal_correlation || incremental_direct_jk",
+            "strategy.spec.coulomb.op != scf::FockOperator::FullRange",
+            "strategy.spec.exchange.op != scf::FockOperator::FullRange",
+            "strategy.screening_tolerance,",
+            "constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;",
+            "direct_jk_source_auto_refusal(",
+            'trace("cuda_ks_resident_values_skip", "host_decision")',
+            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,",
+        )
+    ):
+        raise ValueError("KS phase-value auto default or admission domain drifted")
+    if "if (!selection) return;" in source:
+        raise ValueError("KS phase-value auto default or admission domain drifted")
+    policy = _read(root / "src/scf/cuda/direct_jk_source_policy.hpp")
+    if any(
+        fragment not in policy
+        for fragment in (
+            'if (!value || std::string_view(value) == "auto")',
+            "policy == DirectJkSourceAutoPolicy::screened_cold && maximum_angular <= 2",
+            "if (!(screening > 0.0))",
+            "return 16ULL << 30;",
+            "return 8ULL << 30;",
+        )
+    ) or source.index("direct_jk_source_auto_refusal(") > source.index(
+        "phase_source = std::make_unique<DirectJkSourceLease>"
+    ):
+        raise ValueError("KS phase-value auto default or admission domain drifted")
+    return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
 
 
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
@@ -579,11 +692,13 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_scf_options(root),
         _discover_public_precision(root),
         _discover_runtime_controls(root),
+        _discover_ks_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_ks_final_validation_default(root),
+        _discover_spatial_force_default(root),
         _discover_md_j_default(root),
         _discover_rys_task_default(root),
         _discover_direct_k_work_default(root),

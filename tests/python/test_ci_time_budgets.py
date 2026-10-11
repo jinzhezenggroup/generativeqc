@@ -45,9 +45,9 @@ def test_cpu_budget_preserves_required_work_and_early_cache_save() -> None:
         assert "if:" not in block
         assert "continue-on-error:" not in block
     assert (
-        section.index("name: Build")
-        < section.index("name: Save ccache immediately after build")
-        < section.index("name: Test")
+        section.index("      - name: Build\n")
+        < section.index("      - name: Save ccache immediately after build\n")
+        < section.index("      - name: Test\n")
     )
     save = step("Save ccache immediately after build")
     assert "uses: actions/cache/save@" in save
@@ -88,7 +88,11 @@ def test_full_qualification_has_a_separate_finite_budget(
     assert routine == routine_minutes
     assert 60 <= full <= 120
     if filename == "ci.yml":
-        assert '!= "schedule"' in section and '!= "workflow_dispatch"' in section
+        assert "source .github/scripts/ci_select_python_shard.sh" in section
+        selector = (
+            path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
+        ).read_text(encoding="utf-8")
+        assert '!= "schedule"' in selector and '!= "workflow_dispatch"' in selector
 
 
 def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> None:
@@ -98,14 +102,34 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
+    # The large Bash selector is sourced to keep the CI step below 21K.
+    # Combine both source files for the policy assertions below.
+    section += (
+        path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
+    ).read_text(encoding="utf-8")
     assert (
-        "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
+        "shard: [core-a, core-b, core-c, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
         in section
     )
+    # Keep one additional bounded core worker, not another Python workflow/job.
+    assert "python-nightly:" not in section
+    assert "env: &python_ci_env" not in section
+    assert "steps: &python_ci_steps" not in section
+    assert "source .github/scripts/ci_select_python_shard.sh" in section
+    assert "test_targets+=(tests/python/test_wb97mv_complete.py)" in section
+    assert 'test_targets+=("${nightly_hessian_paths[@]}")' in section
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
     assert "rebalance_paths=(" in section
     assert "rebalance_lookup" in section
+    assert "pinned_core_owner" in section
+    assert "current_index % 3" in section
+    assert (
+        "coverage-report-python-core-c"
+        in path.read_text()
+        .split("\n  upload-coverage:\n", 1)[1]
+        .split("\n  pass:\n", 1)[0]
+    )
     assert "name: python (${{ matrix.shard }})" in section
     assert "coverage-report-python-${{ matrix.shard }}" in section
     assert "benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}" in section
@@ -166,6 +190,23 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         assert path_name in section
 
 
+def test_python_shard_run_step_stays_below_github_actions_size_limit() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    ).read_text(encoding="utf-8")
+    section = workflow.split("      - name: Run Python tests with coverage\n", 1)[
+        1
+    ].split("      - name: Save native Python probes\n", 1)[0]
+    raw_script = section.split("        run: |\n", 1)[1]
+    script = "\n".join(
+        line[10:] for line in raw_script.splitlines() if line.startswith("          ")
+    )
+    # GitHub rejects a run: command longer than 21,000 characters *before*
+    # creating any jobs. Reserve at least 1,000 characters of headroom.
+    assert len(script) < 20_000, len(script)
+    assert "source .github/scripts/ci_select_python_shard.sh" in script
+
+
 def test_python_ci_keeps_history_for_offline_retention_checks() -> None:
     # test_retention_20260925_objects.py recovers the actual trimmed inventories
     # from their recorded historical commit, with network and lazy fetch disabled.
@@ -223,6 +264,9 @@ def test_routine_python_ci_defers_qualification_scale_megatests() -> None:
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
+    section += (
+        path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
+    ).read_text(encoding="utf-8")
     for nodeid in (
         "tests/python/test_ccsd_t_complete_gradient.py::test_complete_ccsdt_gradient_matches_pinned_pyscf[nh3]",
         "tests/python/test_ecp_spd_cartesian_cpu.py::test_spd_force_analytic_and_reconverged_fd[pbe-rks]",

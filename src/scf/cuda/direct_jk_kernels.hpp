@@ -5,8 +5,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "scf/cuda/direct_force_schedule.hpp"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
 
@@ -44,7 +46,7 @@ cudaError_t prepare_materialized_pair_order(cudaStream_t stream, DeviceBatch bat
                                             std::int32_t* sorted_order, void* workspace,
                                             std::size_t workspace_bytes);
 
-/** Persistent, indexed order-five-through-nine shell CTAs; up to nine
+/** Persistent, indexed order-three-through-nine shell CTAs; up to nine
  * register packets own the complete component domain. Full J/K or a single
  * SR/LR K reuses one primitive recurrence.
  * No task tensor, density screening, or new mathematical evaluator is used. */
@@ -133,7 +135,8 @@ void launch_canonical_jk_kernel(
     DirectCoulombRange exchange_range, double exchange_omega, double screening,
     const double* bounds, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_count, double* source_values = nullptr,
-    double* coulomb_correction = nullptr, double* exchange_correction = nullptr);
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
+    std::size_t work_limit = std::numeric_limits<std::size_t>::max());
 
 /** Reuse the canonical orbit scatter with an immutable full-range value source.
  * No integral recurrence is instantiated in this replay kernel. */
@@ -143,7 +146,8 @@ void launch_resident_canonical_jk_kernel(
     std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
     bool unrestricted, const double* source_values, const double* density, double* coulomb,
     double* exchange, std::uint64_t* work_count, double* coulomb_correction = nullptr,
-    double* exchange_correction = nullptr);
+    double* exchange_correction = nullptr, double screening = 0.0, const double* bounds = nullptr,
+    std::size_t work_limit = std::numeric_limits<std::size_t>::max());
 
 /** Fold an admitted correction plane before AO projection and finite audit. */
 void launch_jk_compensation_fold(cudaStream_t stream, double* sum, const double* correction,
@@ -188,7 +192,8 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
     detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true,
-    const GeneratedShellPairStream* force_topology = nullptr);
+    const GeneratedShellPairStream* force_topology = nullptr,
+    DirectSpdForceSchedule spd_schedule = DirectSpdForceSchedule::Incumbent);
 
 /** Qualification-only angular partition behind the provider launch boundary.
  * Full publishes separate J/K channels; Long publishes one K channel. Short
