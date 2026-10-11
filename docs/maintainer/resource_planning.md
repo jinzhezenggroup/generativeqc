@@ -34,21 +34,21 @@ itself can select a profile and initialize the CUDA runtime; use the standalone
 estimator or CLI for a dry run without those side effects.
 
 ```bash
-python -m generativeqc resources molecule.xyz --basis def2-svp --method rhf \
+generativeqc resources molecule.xyz --basis def2-svp --method rhf \
   --backend cpu --host-bytes 1073741824 --headroom-fraction 0.1
 ```
 
-The Python source-only administration interface emits the composable
-`ResourcePlan` schema described here. The installed runtime entry point routes
-to the Python-free [native CLI allocation inventory](../user/native_cli.md),
-whose explicit scope is not a `ResourcePlan` checkpoint. Native estimation uses
-the linked library's scalar layout queries, not `GENERATIVEQC_LIBRARY` or
-profile selection.
+The Python estimator APIs return the composable `ResourcePlan` schema described
+here. The Python-free [native CLI allocation inventory](../user/native_cli.md)
+has a separate explicit scope and is not a `ResourcePlan` checkpoint. Native
+estimation uses the linked library's scalar layout queries, not
+`GENERATIVEQC_LIBRARY` or profile selection.
 
-XYZ units default to angstrom; `--units bohr` is available. Both CLIs emit JSON
-and exits 2 for unsupported or infeasible plans. CUDA estimation uses scalar
-layout queries from the library selected by `GENERATIVEQC_LIBRARY`, loaded without
-profile selection or a device query. It does not choose a GPU by free memory.
+XYZ units default to angstrom; `--units bohr` is available. The native CLI emits
+JSON and exits 2 for unsupported or infeasible plans. The Python CUDA estimator
+uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
+loaded without profile selection or a device query. Neither estimator chooses a
+GPU by free memory.
 
 ## Accounting contract
 

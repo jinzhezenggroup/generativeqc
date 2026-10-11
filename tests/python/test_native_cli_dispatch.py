@@ -52,29 +52,23 @@ def test_only_python_entrypoint_is_explicit_tuner() -> None:
 
 
 @pytest.fixture(scope="module")
-def compiled_launcher(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def compiled_launcher(
+    native_cxx: object, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
     if os.name != "posix":
         pytest.skip("native wheel entrypoint is a POSIX executable")
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler not installed")
     output = tmp_path_factory.mktemp("native-wheel-launcher") / "generativeqc"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [ROOT / "src/cli/wheel_launcher.cpp"],
+        output,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-pedantic",
-            str(ROOT / "src/cli/wheel_launcher.cpp"),
-            "-o",
-            str(output),
-        ],
-        check=True,
-        timeout=90,
-        capture_output=True,
-        text=True,
+        ),
+        compile_timeout=90,
     )
     return output
 
@@ -137,3 +131,54 @@ def test_wheel_launcher_rejects_ambiguous_interpreter_installations(
     )
     assert result.returncode == 127
     assert "found 2" in result.stderr
+
+
+def test_wheel_launcher_relocates_target_installation(
+    compiled_launcher: Path, tmp_path: Path
+) -> None:
+    original = tmp_path / "original target"
+    _install_fake_wheel(original, compiled_launcher)
+    packaged = original / "generativeqc/bin/generativeqc"
+    packaged.parent.mkdir(parents=True)
+    (original / "lib/python3.11/site-packages/generativeqc/bin/generativeqc").rename(
+        packaged
+    )
+    relocated = tmp_path / "relocated target"
+    original.rename(relocated)
+    result = subprocess.run(
+        [str(relocated / "bin/generativeqc"), "resources", "Input With Spaces.xyz"],
+        env={"PATH": ""},
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 23
+    assert result.stdout.splitlines() == ["resources", "Input With Spaces.xyz"]
+
+
+@pytest.mark.parametrize("alias", [False, True])
+def test_wheel_launcher_checks_target_and_site_packages_together(
+    compiled_launcher: Path, tmp_path: Path, alias: bool
+) -> None:
+    launcher = _install_fake_wheel(tmp_path, compiled_launcher)
+    package = tmp_path / "lib/python3.11/site-packages/generativeqc"
+    target_package = tmp_path / "generativeqc"
+    if alias:
+        target_package.symlink_to(package, target_is_directory=True)
+    else:
+        shutil.copytree(package, target_package)
+    result = subprocess.run(
+        [str(launcher), "methods"],
+        env={"PATH": ""},
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    if alias:
+        assert result.returncode == 23
+        assert result.stdout.splitlines() == ["methods"]
+    else:
+        assert result.returncode == 127
+        assert "found 2" in result.stderr

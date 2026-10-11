@@ -66,6 +66,10 @@ std::set<fs::path> find_candidates(const fs::path& launcher) {
   // never select a binary from another environment.
   const fs::path prefix = launcher.parent_path().parent_path();
   std::set<fs::path> found;
+  // pip --target installs the package directly beside the scripts directory.
+  // Admit it alongside conventional layouts so mixed installations still fail
+  // closed unless all paths resolve to the same native executable.
+  search_site_packages(prefix, launcher, found);
   for (const char* root : {"lib", "lib64", "Lib"}) {
     const fs::path base = prefix / root;
     search_site_packages(base / "site-packages", launcher, found);
