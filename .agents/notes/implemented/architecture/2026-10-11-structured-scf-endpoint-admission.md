@@ -65,6 +65,28 @@ building the main library does not rebuild optional stationary force companions;
 their old compiler contracts correctly failed closed. Build the companion manifest
 targets and retain the rejected rows, rather than relabeling old binaries.
 
+## Complete-endpoint retry and value-schedule evidence
+
+The first matched endpoint sweep exposed a cold HF lifetime error: the arena
+already reserved dense basis publication scratch, but its pointer was resolved
+before the immutable structured binding existed. The initial library capture
+therefore failed and the established retry rebuilt the owner with generated
+kernels. Resolve the span after binding preparation. Scientific agreement alone
+did not reveal this loss of the candidate; successful final binding diagnostics
+and actual submission records did.
+
+An abandoned cuBLAS capture must not be authenticated by a later generated
+Graph launch. Endpoint reports now require a successful HF row to retain the
+same operation's cuBLAS binding before crediting stream/captured library work.
+Keep failed attempts as diagnostics, not positive adoption evidence.
+
+Semilocal KS can use its independent MD-J value schedule, which does not submit
+the four public/direct basis stages. The explicit diagnostic `--disable-md-j`
+ablation exercises the shared Direct value owner without changing its default.
+Record provider controls in timing identities and retain default-schedule and
+MD-disabled evidence separately; never compare their costs as a provider-only
+speedup. Error receipts retain the same frozen provenance as successful rows.
+
 ## Rejected alternatives
 
 - Store a KS binding in the integral source: risks dangling views after geometry

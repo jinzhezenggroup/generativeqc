@@ -526,6 +526,11 @@ def main() -> int:
     parser.add_argument("--graph", action="store_true")
     parser.add_argument("--repeat", type=int, default=0)
     parser.add_argument("--instrumented", action="store_true")
+    parser.add_argument(
+        "--disable-md-j",
+        action="store_true",
+        help="diagnostic Direct value schedule ablation; not a production default",
+    )
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     spec = model(args.case, args.method)
@@ -553,6 +558,8 @@ def main() -> int:
     )
     os.environ["GENERATIVEQC_CUDA_KS_CHUNK"] = "2" if args.graph else "1"
     os.environ["GENERATIVEQC_CUDA_KS_REPLAY"] = "1" if args.graph else "0"
+    if args.disable_md_j:
+        os.environ["GENERATIVEQC_DISABLE_MD_J"] = "1"
     from generativeqc.autotune import source_identity
 
     loaded = ctypes.CDLL(str(args.library.resolve()))
@@ -567,6 +574,45 @@ def main() -> int:
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
     library_sha256 = hashlib.sha256(args.library.read_bytes()).hexdigest()
+    provenance = {
+        "model": spec,
+        "mask": args.mask,
+        "batch": args.batch,
+        "graph": args.graph or args.method.endswith("hf"),
+        "repeat": args.repeat,
+        "instrumented": args.instrumented
+        or any(
+            os.environ.get(name)
+            for name in ("GENERATIVEQC_DF_TRACE", "GENERATIVEQC_DF_PROGRESS_TRACE")
+        ),
+        "host": platform.node(),
+        "gpu_inventory": subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=uuid,name,driver_version",
+                "--format=csv,noheader",
+            ],
+            text=True,
+        ).strip(),
+        "source": source,
+        "source_identity": loaded.generativeqc_get_source_identity().decode(),
+        "library_sha256": library_sha256,
+        "slurm_job": os.environ["SLURM_JOB_ID"],
+        "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
+        "provider_controls": {
+            name: os.environ.get(name)
+            for name in (
+                "GENERATIVEQC_DISABLE_MD_J",
+                "GENERATIVEQC_CUDA_KS_CHUNK",
+                "GENERATIVEQC_CUDA_KS_REPLAY",
+                "GENERATIVEQC_KS_RESIDENT_VALUES",
+                "OMP_NUM_THREADS",
+                "OPENBLAS_NUM_THREADS",
+            )
+        },
+        "profitable": None,
+        "default_promoted": False,
+    }
     try:
         reference_sha256 = {
             str(moved): hashlib.sha256(
@@ -574,6 +620,7 @@ def main() -> int:
             ).hexdigest()
             for moved in (0, 1)
         }
+        provenance["reference_sha256"] = reference_sha256
         rows = (
             hf_probe(spec, args.output, args.driver.resolve(), args.mask, args.batch)
             if args.method.endswith("hf")
@@ -613,50 +660,19 @@ def main() -> int:
         write_json(
             args.output / "receipt.json",
             {
+                **provenance,
                 "status": "ERROR",
                 "failure": str(error),
                 "failure_type": type(error).__name__,
-                "model": spec,
-                "mask": args.mask,
-                "batch": args.batch,
-                "source": source,
-                "profitable": None,
-                "default_promoted": False,
             },
         )
         raise
     receipt = {
+        **provenance,
         "status": "PASS"
         if all(row["assessment"]["accepted"] for row in rows)
         else "FAIL",
-        "model": spec,
         "rows": rows,
-        "mask": args.mask,
-        "batch": args.batch,
-        "graph": args.graph or args.method.endswith("hf"),
-        "repeat": args.repeat,
-        "instrumented": args.instrumented
-        or any(
-            os.environ.get(name)
-            for name in ("GENERATIVEQC_DF_TRACE", "GENERATIVEQC_DF_PROGRESS_TRACE")
-        ),
-        "host": platform.node(),
-        "gpu_inventory": subprocess.check_output(
-            [
-                "nvidia-smi",
-                "--query-gpu=uuid,name,driver_version",
-                "--format=csv,noheader",
-            ],
-            text=True,
-        ).strip(),
-        "source": source,
-        "source_identity": loaded.generativeqc_get_source_identity().decode(),
-        "library_sha256": library_sha256,
-        "reference_sha256": reference_sha256,
-        "slurm_job": os.environ["SLURM_JOB_ID"],
-        "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
-        "profitable": None,
-        "default_promoted": False,
     }
     write_json(args.output / "receipt.json", receipt)
     return int(receipt["status"] != "PASS")

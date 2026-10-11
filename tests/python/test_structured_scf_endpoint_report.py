@@ -18,6 +18,7 @@ def receipt(mask: int, repeat: int, seconds: float = 1.0) -> dict:
         "gpu_inventory": "GPU-uuid, RTX5090, driver",
         "cuda_visible_devices": "1",
         "reference_sha256": {"0": "reference0", "1": "reference1"},
+        "provider_controls": {},
         "mask": mask,
         "repeat": repeat,
         "status": "PASS",
@@ -169,9 +170,25 @@ def test_hf_captured_density_requires_successful_post_eigen_graph_launches() -> 
     ]
     for row in measured["rows"]:
         row["graph_post_launches"] = 1
+        row["bindings"] = [{"operation": 0, "provider": "cublas"}]
     assert report.execution_observation(measured, [trace("graph_capture")])[
         "library_operations"
     ] == [0]
+
+
+@pytest.mark.parametrize("execution", ["stream", "graph_capture"])
+def test_failed_hf_library_attempt_cannot_authenticate_generated_retry(
+    execution: str,
+) -> None:
+    measured = receipt(127, 0)
+    measured["instrumented"] = True
+    measured["model"]["method"] = "rhf"
+    for row in measured["rows"]:
+        row["graph_post_launches"] = 1
+        row["bindings"] = [{"operation": 0, "provider": "generated.cuda"}]
+    assert not report.execution_observation(measured, [trace(execution)])[
+        "library_operations"
+    ]
 
 
 def test_invalid_trace_is_not_library_execution_evidence() -> None:

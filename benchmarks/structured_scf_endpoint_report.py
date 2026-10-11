@@ -19,6 +19,7 @@ IDENTITY_FIELDS = (
     "gpu_inventory",
     "cuda_visible_devices",
     "reference_sha256",
+    "provider_controls",
 )
 
 
@@ -72,13 +73,28 @@ def execution_observation(receipt: dict, records: list[dict]) -> dict:
         counters = record["counters"]
         operation = counters["operation"]
         executed = record["execution"] == "stream"
+        successful_hf_rows = (
+            [
+                row
+                for row in receipt["rows"]
+                if any(
+                    binding["operation"] == operation
+                    and binding["provider"] == "cublas"
+                    for binding in row.get("bindings", [])
+                )
+            ]
+            if receipt["model"]["method"].endswith("hf")
+            else []
+        )
+        if receipt["model"]["method"].endswith("hf") and not successful_hf_rows:
+            executed = False
         if record["execution"] == "graph_capture" and receipt["model"][
             "method"
         ].endswith("hf"):
             launch_field = (
                 "graph_post_launches" if operation == 0 else "graph_iteration_launches"
             )
-            executed = any(row.get(launch_field, 0) > 0 for row in receipt["rows"])
+            executed = any(row.get(launch_field, 0) > 0 for row in successful_hf_rows)
         if executed and counters["provider_cublas"] and counters["submitted_states"]:
             operations.add(operation)
     observed["library_operations"] = sorted(operations)

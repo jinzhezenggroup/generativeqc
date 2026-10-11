@@ -543,7 +543,11 @@ admits each region, not merely its isolated primitive.
 compares at least three independent process pairs with `--repeat` identifiers.
 Scientific inputs, source/library identity, graph mode and GPU environment must
 match. It counts each batch once, includes KS preparation in cold cost, retains
-SCF iteration work, and rejects instrumented or failed endpoints. Region-specific
+SCF iteration work, and rejects instrumented or failed endpoints. Provider-control
+environment values are part of matching: `--disable-md-j` is an explicit diagnostic
+Direct value-schedule ablation, not a default change or a comparison with normal
+MD-J execution. Failed HF library attempts cannot authenticate a generated retry;
+observations must also match the successful retained operation binding. Region-specific
 target phases require a 3% median benefit with non-regressing lower quartiles;
 every other phase has a 5% regression guard. This diagnostic report never promotes
 defaults or substitutes prepared candidates for actual traced execution evidence.
@@ -589,16 +593,19 @@ domain. Missing complete endpoint costs remain unknown.
 
 The conventional RHF/UHF owner consumes shared density, orthogonalizer and
 dense basis-stage bindings. The KS owner consumes shared ordinary and signed
-density bindings. KS shell-span basis transforms retain their existing sparse
-owner. `scf/cuda/structured_matrix.*` owns device scaling, publication and
+density bindings and lends its matrix view to the generated Direct value source
+for public/direct stages. Other admitted value schedules, including MD-J, need
+not execute these stages. Shell-span transforms retain their bounded sparse
+provider. `scf/cuda/structured_matrix.*` owns device scaling, publication and
 failure isolation; vendor submissions remain in the tensor backend. No new
 stream, handle or provider allocation is introduced.
 
 The structured library routes are **not enabled by default**. Production
 bindings retain the generated kernels until complete scientific endpoints
-qualify a crossover. Test-hook bindings permit primitive ablations, not public
-provider pinning. A shell-span invocation always retains the bounded native
-stage rather than packing to dense storage. Basis scratch has zero arena size
+qualify a crossover. Test-hook bindings permit diagnostic ablations, not public
+provider pinning. Production shell-span invocations retain the bounded native
+stage rather than packing to dense storage; diagnostic dense submissions record
+the original span facts and are separately qualified. Basis scratch has zero arena size
 while the production gate is closed. Arena planning consumes workspace-presence
 facts, not tensor/CUDA provider policy.
 
