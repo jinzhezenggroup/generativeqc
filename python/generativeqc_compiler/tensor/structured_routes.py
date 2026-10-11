@@ -14,6 +14,7 @@ rounding, intermediate storage or publication/failure semantics.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -83,7 +84,7 @@ def _family(node: Node, contract: GemmContract) -> str:
     return "dot"
 
 
-def _version(features: dict[str, object], name: str) -> str | None:
+def _version(features: Mapping[str, object], name: str) -> str | None:
     value = features.get(name)
     return value if type(value) is str and value.strip() else None
 
