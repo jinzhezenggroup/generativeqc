@@ -7,6 +7,23 @@ import pytest
 from generativeqc import _native_cli
 
 
+def test_native_basis_header_is_self_contained(
+    native_cxx: typing.Any, tmp_path: Path
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = tmp_path / "native_basis_header.cpp"
+    source.write_text(
+        '#include "cli/native_basis.hpp"\n'
+        "static_assert(sizeof(std::int32_t) == 4);\n"
+        "generativeqc::cli::NativeBasisData basis;\n"
+    )
+    native_cxx.compile_object(
+        source,
+        tmp_path / "native_basis_header.o",
+        args=("-std=c++20", "-I", str(root / "src"), "-I", str(root / "include")),
+    )
+
+
 def test_native_json_is_a_build_dependency_not_a_runtime_python_dependency() -> None:
     tomllib = pytest.importorskip("tomllib")
     root = Path(__file__).resolve().parents[2]
@@ -66,6 +83,22 @@ def test_invalid_override_is_not_silently_replaced(monkeypatch: typing.Any) -> N
     monkeypatch.setenv("GENERATIVEQC_NATIVE_CLI", "/invalid/override")
     with pytest.raises(RuntimeError, match="native CLI was not found"):
         _native_cli.dispatch(["profile", "show"])
+
+
+def test_relative_override_never_searches_path(
+    monkeypatch: typing.Any, tmp_path: Path
+) -> None:
+    binary = tmp_path / "generativeqc"
+    binary.write_text("fixture")
+    binary.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GENERATIVEQC_NATIVE_CLI", "./generativeqc")
+    calls = []
+    monkeypatch.setattr(
+        _native_cli.subprocess, "call", lambda arguments: calls.append(arguments) or 0
+    )
+    assert _native_cli.dispatch(["profile", "show"]) == 0
+    assert calls == [[str(binary), "profile", "show"]]
 
 
 def test_source_only_discovery_remains_available(

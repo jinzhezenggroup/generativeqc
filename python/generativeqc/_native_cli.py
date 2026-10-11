@@ -32,7 +32,7 @@ def dispatch(arguments: list[str]) -> int | None:
         return None
     configured = os.environ.get("GENERATIVEQC_NATIVE_CLI")
     executable = (
-        Path(configured).expanduser()
+        Path(configured).expanduser().resolve()
         if configured
         else Path(__file__).resolve().parent / "bin/generativeqc"
     )

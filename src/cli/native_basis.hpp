@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_CLI_NATIVE_BASIS_HPP
 #define GENERATIVEQC_CLI_NATIVE_BASIS_HPP
 
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>

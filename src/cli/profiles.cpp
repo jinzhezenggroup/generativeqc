@@ -548,7 +548,7 @@ Json validate_profile_bundle(const std::filesystem::path& directory) {
   require(artifacts.is_object() && artifacts.size() == 3, "incomplete local profile artifacts");
   for (const auto name : {"libgenerativeqc.so", "manifest.json", "evidence.json"}) {
     require(artifacts.at(name).is_string() && is_digest(artifacts.at(name).get<std::string>()) &&
-                file_hash(directory / name) == artifacts.at(name),
+                file_hash(directory / name) == artifacts.at(name).get<std::string>(),
             std::string("local profile artifact hash differs: ") + name);
   }
   const auto kernels = profile.value("kernels", Json::array());

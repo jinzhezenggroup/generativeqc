@@ -467,6 +467,18 @@ class RuntimeTests(unittest.TestCase):
             self.cli("profile", "validate", str(directory)).returncode, 0
         )
 
+    def test_artifact_digests_require_exact_strings(self) -> None:
+        directory = self.bundle()
+        original = json.loads((directory / "profile.json").read_text())
+        for digest_value in (None, 0, True, [], {}, "0" * 64):
+            with self.subTest(digest=digest_value):
+                profile = copy.deepcopy(original)
+                profile["artifacts"]["libgenerativeqc.so"] = digest_value
+                (directory / "profile.json").write_text(json.dumps(profile))
+                result = self.cli("profile", "validate", str(directory))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+
     def test_archive_traversal_duplicates_and_failed_install_preserve_index(
         self,
     ) -> None:
