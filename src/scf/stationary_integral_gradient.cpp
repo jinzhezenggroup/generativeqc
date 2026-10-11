@@ -33,8 +33,9 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
     const auto pairs = runtime::size_mul(atoms, atoms - 1) / 2;
     const auto square = runtime::size_mul(primitive_sum, primitive_sum);
     const auto records = runtime::size_add(
-        pairs, runtime::size_add(runtime::size_mul(hybrid ? 2 : 1, runtime::size_mul(square, square)),
-                                 runtime::size_mul(runtime::size_add(atoms, 2), square)));
+        pairs,
+        runtime::size_add(runtime::size_mul(hybrid ? 2 : 1, runtime::size_mul(square, square)),
+                          runtime::size_mul(runtime::size_add(atoms, 2), square)));
     const auto tiles = runtime::size_add(grid_points / tile_points,
                                          static_cast<std::size_t>(grid_points % tile_points != 0));
     const auto visits =
@@ -53,8 +54,7 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
       method != CpuStationaryGga::B3lyp)
     throw std::invalid_argument("unknown stationary Direct GGA method");
   const bool hybrid = method != CpuStationaryGga::Pbe;
-  const double exchange_coefficient =
-      method == CpuStationaryGga::Pbe0 ? -0.125 : -0.1;
+  const double exchange_coefficient = method == CpuStationaryGga::Pbe0 ? -0.125 : -0.1;
   const auto& strategy = target.strategy();
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || (term.approximation == FockApproximation::Exact &&
