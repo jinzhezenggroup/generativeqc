@@ -15,7 +15,7 @@
 #include "scf/fock_prepared.hpp"
 
 namespace generativeqc::scf {
-bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool pbe0,
+bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool hybrid,
                                                std::size_t grid_points,
                                                std::size_t tile_points) noexcept {
   try {
@@ -33,7 +33,7 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
     const auto pairs = runtime::size_mul(atoms, atoms - 1) / 2;
     const auto square = runtime::size_mul(primitive_sum, primitive_sum);
     const auto records = runtime::size_add(
-        pairs, runtime::size_add(runtime::size_mul(pbe0 ? 2 : 1, runtime::size_mul(square, square)),
+        pairs, runtime::size_add(runtime::size_mul(hybrid ? 2 : 1, runtime::size_mul(square, square)),
                                  runtime::size_mul(runtime::size_add(atoms, 2), square)));
     const auto tiles = runtime::size_add(grid_points / tile_points,
                                          static_cast<std::size_t>(grid_points % tile_points != 0));
@@ -47,7 +47,14 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
 
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
-    std::span<const double> weighted_density, bool pbe0, std::size_t maximum_numeric_bytes) {
+    std::span<const double> weighted_density, CpuStationaryGga method,
+    std::size_t maximum_numeric_bytes) {
+  if (method != CpuStationaryGga::Pbe && method != CpuStationaryGga::Pbe0 &&
+      method != CpuStationaryGga::B3lyp)
+    throw std::invalid_argument("unknown stationary Direct GGA method");
+  const bool hybrid = method != CpuStationaryGga::Pbe;
+  const double exchange_coefficient =
+      method == CpuStationaryGga::Pbe0 ? -0.125 : -0.1;
   const auto& strategy = target.strategy();
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || (term.approximation == FockApproximation::Exact &&
@@ -56,11 +63,11 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   if (strategy.backend != FockBackend::Cpu || strategy.spec.spin != FockSpin::Restricted ||
       !exact(strategy.spec.coulomb) || !exact(strategy.spec.exchange) ||
       !strategy.spec.coulomb.present || strategy.spec.coulomb.coefficient != 1.0 ||
-      strategy.spec.exchange.present != pbe0 ||
-      (pbe0 && strategy.spec.exchange.coefficient != -0.125))
-    throw std::invalid_argument("stationary PBE integral weights disagree with the prepared model");
+      strategy.spec.exchange.present != hybrid ||
+      (hybrid && strategy.spec.exchange.coefficient != exchange_coefficient))
+    throw std::invalid_argument("stationary GGA integral weights disagree with the prepared model");
   const auto& system = target.system();
-  if (!cpu_stationary_direct_force_work_admitted(system, pbe0, 0, 1))
+  if (!cpu_stationary_direct_force_work_admitted(system, hybrid, 0, 1))
     throw std::invalid_argument("stationary Direct integral work exceeds its qualified envelope");
   if (!system.ecp_terms.empty() || std::any_of(system.atoms.begin(), system.atoms.end(),
                                                [](const auto& atom) { return atom.ecp_core != 0; }))
@@ -90,7 +97,7 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   const auto largest_quartet = runtime::size_mul(largest_pair, largest_pair);
   const auto elements = runtime::size_add(
       runtime::size_add(runtime::size_mul(matrix, 3), runtime::size_mul(ncoord, 6)),
-      runtime::size_mul(runtime::size_add(largest_quartet, 12), pbe0 ? 2 : 1));
+      runtime::size_mul(runtime::size_add(largest_quartet, 12), hybrid ? 2 : 1));
   const auto capacity = runtime::size_add(runtime::size_mul(elements, sizeof(double)),
                                           runtime::vector_bytes(offsets));
   if (capacity > maximum_numeric_bytes) throw std::bad_alloc();
@@ -117,12 +124,12 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   std::copy(pulay.begin(), pulay.end(), result.sources.begin() + ncoord);
   std::vector<double> coulomb_weights, exchange_weights;
   coulomb_weights.reserve(largest_quartet);
-  if (pbe0) exchange_weights.reserve(largest_quartet);
+  if (hybrid) exchange_weights.reserve(largest_quartet);
   const auto retained_capacity =
       runtime::vector_capacities(offsets, result.sources, hcore_weights, pulay_weights, zeros,
                                  hcore, pulay, coulomb_weights, exchange_weights);
   result.numeric_capacity =
-      runtime::size_add(retained_capacity, runtime::size_mul(pbe0 ? 24 : 12, sizeof(double)));
+      runtime::size_add(retained_capacity, runtime::size_mul(hybrid ? 24 : 12, sizeof(double)));
   if (result.numeric_capacity > maximum_numeric_bytes) throw std::bad_alloc();
   for (std::size_t first = 0; first < system.shells.size(); ++first)
     for (std::size_t second = 0; second < system.shells.size(); ++second)
@@ -142,14 +149,17 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
                       static_cast<std::int64_t>(ao_third), static_cast<std::int64_t>(ao_fourth)};
                   coulomb_weights.push_back(generated::pbe::coulomb(
                       density.data(), weighted_density.data(), nbf, indices));
-                  if (pbe0)
+                  if (method == CpuStationaryGga::Pbe0)
                     exchange_weights.push_back(generated::pbe0::exact_exchange(
+                        density.data(), weighted_density.data(), nbf, indices));
+                  else if (method == CpuStationaryGga::B3lyp)
+                    exchange_weights.push_back(generated::b3lyp::exact_exchange(
                         density.data(), weighted_density.data(), nbf, indices));
                 }
           const std::array<std::span<const double>, 2> channels{coulomb_weights, exchange_weights};
           std::uint64_t evaluations = 0;
           const auto derivatives = integrals::contract_weighted_eri_shell_derivatives(
-              system, shells, std::span(channels).first(pbe0 ? 2 : 1), &evaluations,
+              system, shells, std::span(channels).first(hybrid ? 2 : 1), &evaluations,
               integrals::WeightedEriDerivativeExecution::PackagedCpu);
           if (evaluations >
               std::numeric_limits<std::uint64_t>::max() - result.primitive_evaluations)
