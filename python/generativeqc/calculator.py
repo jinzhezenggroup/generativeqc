@@ -1072,15 +1072,18 @@ class Calculator:
                 _uses_native_automatic_cpu,
             )
 
-            native_per_item_guess = _uses_native_automatic_cpu(self)
-            # A basis package can contain unused ECP records. Only the qualified
-            # native per-item path may defer those facts to actual target admission.
             if _automatic_minao_model_eligible(
                 self,
                 restricted=restricted,
-                has_ecp=basis_has_ecp and not native_per_item_guess,
+                has_ecp=False,
             ):
-                self._initial_guess = InitialGuessSpec("minao")
+                # A basis package can contain unused ECP records. Only the qualified
+                # native per-item path may defer those facts to actual target admission.
+                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
+                    self
+                )
+                if not basis_has_ecp or native_per_item_guess:
+                    self._initial_guess = InitialGuessSpec("minao")
 
         if self._initial_guess is not None:
             from .initial_guess import require_initial_guess_library
