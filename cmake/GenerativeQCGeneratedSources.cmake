@@ -1263,7 +1263,14 @@ macro(generativeqc_register_cuda_generated_sources target)
   target_include_directories(generativeqc_libxc_semilocal_cuda PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}")
-  target_link_libraries(generativeqc_libxc_semilocal_cuda PRIVATE CUDA::cudart)
+  # Wheel objects need CUDA headers for the host registry, but resolve runtime
+  # providers through the final library's Implib trampolines, not SDK targets.
+  if(GENERATIVEQC_PYTHON_WHEEL)
+    generativeqc_ensure_cuda_wheel_import_interface()
+    target_link_libraries(generativeqc_libxc_semilocal_cuda PRIVATE generativeqc_cuda_wheel_imports)
+  else()
+    target_link_libraries(generativeqc_libxc_semilocal_cuda PRIVATE CUDA::cudart)
+  endif()
   set_target_properties(generativeqc_libxc_semilocal_cuda PROPERTIES
     POSITION_INDEPENDENT_CODE ON CXX_STANDARD 20 CUDA_STANDARD 20
     CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
