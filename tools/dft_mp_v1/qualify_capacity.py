@@ -260,19 +260,20 @@ CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256 = (
 NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256 = (
     "120936d57b90062a8a888892ce4d514ca8a62a0b2ced671afe3fce660b0414d5"
 )
+# Reviewed strict Cartesian x/y/z pairing preserves the native basis layout.
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
-    "fa8c4ff2a644fd45ab4eb828a995c4e42c49c80adbe712b32d50f90b3d98fb74"
+    "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
 )
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
 )
-# The complete predicate now also admits a bounded all-electron CPU branch.
-# The capability refactor keeps that branch inside the CPU device guard. CUDA
+# The complete predicate also admits exact automatic Libxc components through
+# the bounded all-electron CPU owner. Its shared context rejects CUDA. CUDA
 # coefficients, automatic-Libxc/nonlocal exclusions and runtime ownership retain
 # their contracts; structural D4/ECP rejection preserves the admitted D3 owner.
 # Keep hashing the full predicate so future guard drift fails closed.
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
+    "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
@@ -319,8 +320,9 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
     "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
 )
+# Explicit strict pairing retains the fixed native counter-array arities.
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
+    "b6fd50bdaee3f2b7d51884e4672a705ec91726152c150d89bb5c957cbddc1e3d"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
     "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
@@ -399,8 +401,9 @@ NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
 )
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
+# Strict pairing of the three export counters changes source identity only.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
+    "c6f25b0a324bd9532d22a6ce4120bcab758a97ba3ff42db016a5bbfc617746d4"
 )
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (

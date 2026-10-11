@@ -170,13 +170,10 @@ __global__ void shared_components(
   __shared__ MaterializedDirectPairRecurrence<Order> shared;
   // Match complete-domain production ownership through order nine, including
   // the maximum fddd domain. Higher orders retain independent qualification.
-  constexpr unsigned whole_slots = Order <= 5   ? 1
-                                   : Order == 6 ? 2
-                                   : Order == 7 ? 3
-                                   : Order == 8 ? 6
-                                   : Order == 9 ? 9
-                                                : 40;
-  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1>(
+  constexpr unsigned whole_slots = Order <= 9 ? canonical_materialized_component_slots(Order) : 40;
+  constexpr unsigned lanes =
+      WholeShell && Order <= 9 ? canonical_materialized_component_lanes(Order) : 256;
+  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1, lanes>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
       channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
 }
@@ -258,6 +255,8 @@ void qualify(
     bool same_pair, bool coincident, double threshold,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   constexpr auto order = A + B + C + D;
+  constexpr unsigned lanes =
+      WholeShell && order <= 9 ? canonical_materialized_component_lanes(order) : 256;
   Fixture fixture({D, C, B, A}, Unrestricted, coincident);
   const auto n = std::size_t(fixture.batch.direct_nbf), matrix = n * n;
   const unsigned first_pair = 8, second_pair = same_pair ? 8 : 1;
@@ -282,7 +281,7 @@ void qualify(
     work.clear();
     materialized.clear();
     fock.clear();
-    shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), 256>>>(
+    shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), lanes>>>(
         fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data,
         channel, work.data, materialized.data, range);
     check(cudaGetLastError());
@@ -341,7 +340,7 @@ void qualify(
   active.clear();
   work.clear();
   fock.clear();
-  shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), 256>>>(
+  shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), lanes>>>(
       fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data, 0,
       work.data, materialized.data);
   check(cudaGetLastError());
@@ -600,6 +599,28 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold,
     throw std::runtime_error("zero-density materialized derivative prepared recurrence");
 }
 
+/** Small CTAs must cover complete domains, including slot tails and empty work. */
+void qualify_low_canonical_orders() {
+  for (auto range :
+       {generativeqc::integrals::CoulombRange::Full, generativeqc::integrals::CoulombRange::Short,
+        generativeqc::integrals::CoulombRange::Long}) {
+    qualify<3, 0, 0, 0, false, true>(false, false, 0.0, range);
+    qualify<2, 1, 0, 0, true, true>(false, true, 0.8, range);
+    qualify<1, 1, 1, 0, false, true>(false, false, 0.0, range);
+    qualify<3, 1, 0, 0, true, true>(false, false, 0.8, range);
+    qualify<2, 2, 0, 0, false, true>(false, true, 0.0, range);
+    qualify<2, 1, 1, 0, true, true>(false, false, 0.8, range);
+    qualify<1, 1, 1, 1, true, true>(true, true, 0.8, range);
+    qualify<1, 1, 1, 1, false, true>(false, false, 0.0, range);
+    qualify<3, 2, 0, 0, false, true>(false, false, 0.0, range);
+    qualify<3, 1, 1, 0, true, true>(false, true, 0.8, range);
+    qualify<2, 2, 1, 0, true, true>(false, false, 0.8, range);
+    qualify<2, 1, 1, 1, false, true>(false, false, 0.0, range);
+    qualify<2, 1, 1, 1, true, true>(false, true, 2.0, range);
+  }
+  std::cout << "canonical order-three/four/five production lanes and exact work PASS\n";
+}
+
 /** Qualify the production six/nine-slot bounds, not the legacy forty-slot CTA. */
 void qualify_high_canonical_orders() {
   for (auto range :
@@ -619,8 +640,91 @@ void qualify_high_canonical_orders() {
   std::cout << "canonical order-eight/nine production slots and exact work PASS\n";
 }
 
+/** Sample the full Cartesian domain of every supported scalar-response order.
+ * Retained AD supplies all unique atoms, including the translational tail.
+ * Exact counters distinguish one primitive recurrence from N-1 replays. */
+template <unsigned First, unsigned Second, unsigned Third, unsigned Fourth>
+__global__ void shared_response_probe(DeviceBatch batch, double* actual, double* expected,
+                                      MaterializedDirectPairWork* work,
+                                      generativeqc::integrals::CoulombRange range) {
+  constexpr unsigned samples = 64U, order = First + Second + Third + Fourth;
+  const unsigned sample = blockIdx.x * blockDim.x + threadIdx.x;
+  if (sample >= samples) return;
+  std::int32_t aos[4]{}, atoms[4]{};
+  for (unsigned shell = 0; shell < 4U; ++shell) {
+    const auto begin = batch.shell_direct_ao_offsets[shell];
+    const auto count = batch.shell_direct_ao_offsets[shell + 1U] - begin;
+    aos[shell] = begin + (sample * (2U * shell + 1U) + shell) % count;
+    atoms[shell] = batch.shell_atoms[shell];
+  }
+  std::int32_t unique[4]{};
+  const unsigned centers = direct_force_unique_center_atoms(atoms, unique);
+  const auto gradient = contracted_direct_shared_response_gradient<order>(
+      batch, 0, aos[0], aos[1], aos[2], aos[3], unique, centers, range, 0.37, work);
+  double sum[3]{};
+  for (unsigned center = 0; center < centers; ++center) {
+    const auto raw =
+        contracted_eri_cartesian_source_shell_class<First, Second, Third, Fourth, Dual3>(
+            batch, aos[0], aos[1], aos[2], aos[3], 0, 1, 2, 3, std::int64_t(unique[center]) * 3,
+            range, 0.37);
+    const double derivatives[3]{raw.derivative_x, raw.derivative_y, raw.derivative_z};
+    for (unsigned axis = 0; axis < 3U; ++axis) {
+      const unsigned index = (sample * 4U + center) * 3U + axis;
+      actual[index] = center + 1U < centers ? gradient.center[center][axis] : -sum[axis];
+      expected[index] = derivatives[axis];
+      sum[axis] += actual[index];
+    }
+  }
+}
+
+template <unsigned First, unsigned Second, unsigned Third, unsigned Fourth>
+void qualify_shared_response_order() {
+  for (const auto atoms :
+       {std::vector<std::int32_t>{0, 1, 2, 3}, {0, 0, 1, 2}, {0, 1, 0, 1}, {0, 0, 0, 0}}) {
+    Fixture fixture({First, Second, Third, Fourth}, false, false);
+    fixture.batch.shell_atoms = fixture.upload(atoms);
+    const unsigned centers = std::set<std::int32_t>(atoms.begin(), atoms.end()).size();
+    for (auto range : {generativeqc::integrals::CoulombRange::Full,
+                       generativeqc::integrals::CoulombRange::Long}) {
+      Device<double> actual(64U * 12U), expected(64U * 12U);
+      Device<MaterializedDirectPairWork> work(1);
+      shared_response_probe<First, Second, Third, Fourth>
+          <<<2, 32>>>(fixture.batch, actual.data, expected.data, work.data, range);
+      check(cudaGetLastError());
+      check(cudaDeviceSynchronize());
+      const auto values = actual.read(), reference = expected.read();
+      for (std::size_t index = 0; index < values.size(); ++index)
+        close(values[index], reference[index], "scalar spatial response differs from retained AD");
+      const auto counters = work.read()[0];
+      const unsigned live = centers > 1U ? 64U : 0U;
+      if (counters.bra_preparations != 4U * live || counters.ket_preparations != 16U * live ||
+          counters.coulomb_preparations != 16U * live ||
+          counters.component_contractions != 16U * (centers - 1U) * live ||
+          counters.published_components != live)
+        throw std::runtime_error("shared scalar response repeated or omitted primitive work");
+    }
+  }
+}
+
+void qualify_shared_responses() {
+  qualify_shared_response_order<3, 2, 2, 0>();
+  qualify_shared_response_order<3, 2, 2, 1>();
+  qualify_shared_response_order<3, 2, 2, 2>();
+  qualify_shared_response_order<3, 3, 2, 2>();
+  qualify_shared_response_order<3, 3, 3, 2>();
+  std::cout << "orders 7..11 shared scalar responses and exact primitive work PASS\n";
+}
+
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--shared-responses") == 0) {
+      qualify_shared_responses();
+      return 0;
+    }
+    if (argc == 2 && std::strcmp(argv[1], "--canonical-low-orders") == 0) {
+      qualify_low_canonical_orders();
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--canonical-high-orders") == 0) {
       qualify_high_canonical_orders();
       return 0;
@@ -680,6 +784,7 @@ int main(int argc, char** argv) {
       qualify<2, 2, 2, 1, true, true>(false, false, 0.0, range);
       qualify<3, 2, 1, 1, false, true>(false, false, 0.8, range);
     }
+    qualify_low_canonical_orders();
     qualify_high_canonical_orders();
     qualify<2, 1, 1, 1, false>(false, false, 0.0);
     qualify<2, 1, 1, 1, true>(false, true, 0.8);

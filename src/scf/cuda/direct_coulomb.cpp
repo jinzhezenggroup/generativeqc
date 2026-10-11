@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -380,6 +381,10 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
   plan->angular_force_opt_in = angular_force;
+  const auto* spd_selector = std::getenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS");
+  plan->spd_force_schedule =
+      force_capability ? select_direct_spd_force_schedule(spd_selector ? spd_selector : "")
+                       : DirectSpdForceSchedule::Incumbent;
   plan->bounded_value_capability = bounded_value_capability;
   plan->device_bytes = plan->shared->device_bytes;
   auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
@@ -731,7 +736,7 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources) {
+    bool separate_sources, bool allow_spatial_default) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
@@ -780,7 +785,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
-          exchange_coefficient, p.bounded_block_domain, separate_sources, shared.topology);
+          exchange_coefficient, p.bounded_block_domain, separate_sources, shared.topology,
+          resolve_direct_spd_force_schedule(p.spd_force_schedule, allow_spatial_default));
       if (error != cudaSuccess) return error;
     }
   }

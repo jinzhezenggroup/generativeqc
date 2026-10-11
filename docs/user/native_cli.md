@@ -8,9 +8,25 @@ Python is still a **build-time** dependency for source builds because repository
 code generation is currently implemented in Python. This is separate from the
 installed runtime dependency.
 
+Installed Python console scripts forward runtime commands to their packaged
+native executable. `GENERATIVEQC_NATIVE_CLI` can select an explicit executable;
+an invalid override fails instead of falling back. Source-only compiler installs
+retain their Python administration compatibility interface. The native executable
+never discovers, starts, or silently falls back to a Python interpreter.
+
 ## Install a native runtime
 
 For a CPU build:
+
+Native CLI builds also require nlohmann-json 3.7+, OpenSSL Crypto and libarchive
+development packages. On Debian/Ubuntu these are `nlohmann-json3-dev libssl-dev
+libarchive-dev`; on Homebrew they are `nlohmann-json openssl@3 libarchive` (add
+their prefixes to `CMAKE_PREFIX_PATH`). Library-only builds can set
+`GENERATIVEQC_BUILD_CLI=OFF`.
+
+Wheel builds can obtain the pinned JSON headers from their isolated build
+dependencies when no suitable system CMake package exists; that header package
+is not an installed Python runtime dependency.
 
 ```bash
 cmake -S . -B build -G Ninja -DGENERATIVEQC_ENABLE_CUDA=OFF
@@ -27,11 +43,19 @@ package-specific `LD_LIBRARY_PATH`.
 ```bash
 /opt/generativeqc/bin/generativeqc methods
 /opt/generativeqc/bin/generativeqc methods --json
+/opt/generativeqc/bin/generativeqc methods --libxc --json
 /opt/generativeqc/bin/generativeqc --version
 ```
 
 Method discovery comes from the same generated native method registry used by
 the C and C++ APIs.
+
+`methods --libxc` also exposes automatic pure-semilocal Libxc selectors using
+the compiler's structural admission and explicit blacklist at build time.
+`run --method libxc:GGA_X_APBE` (or `libxc-rks:GGA_X_APBE`) selects RKS;
+`libxc-uks:GGA_X_APBE` selects UKS. These programs execute through the existing
+native CPU KS lowerer, without importing Python at runtime. CUDA and mixed
+automatic component graphs remain unavailable rather than changing the method.
 
 MethodIR compositions have a separate build-time generated catalog. Query the
 full list, including backend qualification and unsupported-graph reasons:
@@ -119,6 +143,22 @@ Python frontend. The currently bundled names are reported by
 `generativeqc basis list`. GFN2-xTB continues to own its intrinsic basis, so
 passing `--basis` or `--representation` with GFN2 is rejected instead of
 being silently ignored.
+
+### Offline canonical local basis and ECP input
+
+`--basis FILE.json` and `--auxiliary-basis FILE.json` accept the checked
+[canonical local basis schema](external_basis.md). C++ verifies checksum,
+provenance, units, normalization, contraction dimensions and FP64 conversion;
+there is no BSE/PySCF/network lookup. Records retain their representation, and
+an explicitly conflicting `--representation` is rejected. Paths preserve case
+and underscores. Orbital ECP core counts and residual terms go through the
+native ECP system constructor and its existing method/backend/property gates.
+Auxiliary fitting records cannot contain ECP potentials. BSE-to-canonical
+conversion remains an explicit build-time import step.
+
+```bash
+generativeqc run molecule.xyz --method rhf --basis local-basis.json --forces --json
+```
 
 ## Select HF density fitting
 
@@ -263,6 +303,9 @@ the Python compiler or autotuner:
 ```bash
 generativeqc profile show
 generativeqc profile clear
+generativeqc profile validate accepted-bundle/
+generativeqc profile export accepted-bundle/ profile.zip
+generativeqc profile diagnose
 generativeqc autotune --show-profile
 generativeqc autotune --clear-profile
 ```
@@ -274,20 +317,80 @@ bundle directories that may still be used by live processes. The cache root
 uses `GENERATIVEQC_PROFILE_CACHE` first, then `XDG_CACHE_HOME`, then
 `~/.cache/generativeqc/profiles`, matching the Python frontend contract.
 
-This migration only covers cache administration. The native `run` path still
-uses the library selected by its native installation/linkage and does not yet
-discover or switch to a cached local profile library. Native local-profile
-selection is a separate runtime migration.
+`validate` and `export` verify artifact hashes, executable schedules, promotion
+gates and matching numerical/endpoint evidence without a GPU or compiler.
+Exports contain exactly the four existing bundle files. `install` rejects
+traversal, duplicates, links, oversized and corrupt ZIP entries, verifies the
+visible device/source/ABI and optional installed toolchain identities, and
+checks the binary before atomic activation. Failed installation preserves the
+previous active index. `install` and `diagnose` probe the visible GPU and must
+run inside a scheduler allocation:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:02:00 generativeqc profile install profile.zip
+```
+
+On Linux, CUDA `run` honors `GENERATIVEQC_PROFILE=off`, an explicit bundle
+directory, or the compatible active index. Complete kernel libraries are
+selected through native re-execution/loader interposition, with no Python or
+compilation. Device visibility is preserved and the binary is revalidated on
+replay. Missing/corrupt/incompatible profiles retain the linked baseline.
+Loader selection currently requires paths without spaces or colons. CPU runs
+never select profiles. DFT schedule-only winners are validated and reported,
+but not automatically applied: their workload-specific KS admission cannot be
+replaced by a binary-only shortcut.
+
+## Run correlated methods
+
+All registered native selectors reach the native preparation owner, including
+MP2/UMP2, RCCSD and RCCSD(T). Canonical correlated references default to
+unscreened integrals; positive screening overrides are rejected. Existing spin,
+basis, backend, precision and derivative gates remain authoritative. `--help`
+lists native `--precision`, DF threshold/memory, correlation memory/denominator
+and `--ccsd-*` convergence, DIIS, damping and level-shift controls.
+
+```bash
+generativeqc run molecule.xyz --method mp2 --basis sto-3g --forces --json
+generativeqc run molecule.xyz --method 'rccsd(t)' --basis def2-svp \
+  --ccsd-max-iterations 150 --correlation-memory-bytes 1073741824 --json
+```
+
+## Metadata-only resource dry runs
+
+```bash
+generativeqc resources molecule.xyz --method rhf --basis def2-svp \
+  --batch 4 --host-bytes 1073741824 --headroom-fraction 0.1
+```
+
+Resource planning resolves compact basis/spin metadata in C++ and uses native
+allocator-owned scalar layout queries. It never prepares a calculation,
+computes integrals, allocates scientific tensors, probes a device, selects a
+profile or starts Python. Fleet retained capacities are summed; serialized
+workspaces are charged once. Byte arithmetic has signed-64-bit overflow checks;
+reserve/headroom use exact integer rounding. Zero caps permit no allocation.
+`--diis-history 0` resolves to the native default of eight history vectors for
+both execution and planning; it does not disable DIIS or erase its capacities.
+
+Inventories cover CPU RHF/UHF including DF, CPU energy-only LDA/PBE RKS/UKS,
+small conventional CUDA HF, small CUDA DF resident/source/packed alternatives,
+and conventional CUDA KS energy arenas. ECP workspace uses the same generated
+two-grid/radial-batching policy as native execution. Existing ECP-DF, orbital/
+auxiliary-size and other provider admission limits remain fail-closed.
+Unqualified correlated/tau-dependent/other inventories return JSON
+`status: unsupported` and exit 2; budget failures return `infeasible` and exit 2;
+feasible plans exit 0. Output includes phase capacities, fleet peaks, resident
+storage, effective limits, controls, topology/source identities and exclusions.
+`scope: native-cli-allocation-inventory-v1` is not a Python `ResourcePlan`
+checkpoint, process-RSS cap or free-memory guarantee.
 
 ## Stable subcommand namespace
 
 The top-level CLI keeps one stable subcommand layout while implementations move
-from Python to the native runtime. The native executable currently owns
-`methods`, `run`, and the non-compiling `profile show/clear` operations.
-`resources`, `profile install/export/diagnose`, and the actual `autotune`
-search remain in the Python frontend because they still depend on Python-side
-basis/resource/compiler or bundle-validation machinery.
-
-Invoking one of those remaining operations from the native executable returns a
-clear unsupported message. The native runtime does **not** discover, spawn, or
-silently fall back to a Python interpreter.
+from Python to the native runtime. The native executable owns method/basis
+discovery, calculations, resource dry runs and profile administration,
+validation, installation and kernel-library selection. Actual `autotune`
+search remains an explicit **build-time compiler workflow**: it generates and
+compiles new kernels and collects independent reference gates. Use
+`python -m generativeqc autotune INPUT.xyz` for that source/toolchain operation;
+the SDK executable explains this boundary instead of starting an interpreter.

@@ -1,9 +1,9 @@
 """Shared legality and resource planning for TensorIR CUDA reductions.
 
 The scientific reduction remains TensorIR-owned.  This module only decides
-whether the existing cooperative CUDA reduction shape is active and which
-lowering provider is requested.  CUB is qualification-only: the production
-default remains the generated reduction.
+whether the existing cooperative CUDA reduction shape is active. Implementation
+choice comes only from a shared prepared lowering binding, never a schedule
+axis. Without a binding the qualified generated implementation remains active.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from .cuda_dtype import scalar_type
 from .cuda_plan import ELEMENTWISE
 
 ReductionProvider = Literal["generated", "cub"]
-REDUCTION_PROVIDERS: tuple[ReductionProvider, ...] = ("generated", "cub")
 
 
 @dataclass(frozen=True)
@@ -59,10 +58,8 @@ def reduction_extent(node: typing.Any) -> int:
     raise ValueError("reduction extent requires a TensorIR reduce or einsum node")
 
 
-def cooperative_reduction_provider(
-    plan: typing.Any, index: int
-) -> ReductionProvider | None:
-    """Return the active cooperative provider, or None for ordinary lowering."""
+def cooperative_reduction_eligible(plan: typing.Any, index: int) -> bool:
+    """Prove the semantic schedule/shape prerequisites without choosing a provider."""
 
     step = plan.steps[index]
     reduction_like = step.node.op == "reduce" or (
@@ -71,18 +68,30 @@ def cooperative_reduction_provider(
         and step.gemm == "none"
         and any(plan.steps[child].virtual for child in step.inputs)
     )
-    if (
-        not plan.schedule.stream_reductions
-        or step.virtual
-        or not reduction_like
-        or plan.target.warp_size != 32
-        or reduction_extent(step.node) < plan.target.warp_size
-    ):
+    return (
+        plan.schedule.stream_reductions
+        and not step.virtual
+        and reduction_like
+        and plan.target.warp_size == 32
+        and reduction_extent(step.node) >= plan.target.warp_size
+    )
+
+
+def cooperative_reduction_provider(
+    plan: typing.Any, index: int
+) -> ReductionProvider | None:
+    """Read validated execution provenance; unbound plans retain generated CUDA."""
+    if not cooperative_reduction_eligible(plan, index):
         return None
-    provider = plan.schedule.reduction_provider
-    if provider not in REDUCTION_PROVIDERS:
-        raise ValueError(f"unknown CUDA reduction provider {provider!r}")
-    return typing.cast("ReductionProvider", provider)
+    binding = plan.lowering_by_step.get(index)
+    if binding is None:
+        return "generated"
+    algorithm = binding.selected.execution.algorithm
+    if algorithm == "generated-cooperative":
+        return "generated"
+    if algorithm == "cub-block-reduce":
+        return "cub"
+    raise ValueError("unsupported prepared cooperative reduction algorithm")
 
 
 def cooperative_reduction_shared_bytes(plan: typing.Any, index: int) -> int:

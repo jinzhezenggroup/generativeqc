@@ -95,15 +95,12 @@ __global__ void materialized_canonical_jk_kernel(
   __shared__ MaterializedDirectPairRecurrence<AngularOrder> shared;
   // With s/p/d/f shells, these are the exact maximum packet counts for each
   // admitted total order. No component may be left for a second CTA owner.
-  static_assert(AngularOrder >= 5 && AngularOrder <= 9);
+  static_assert(AngularOrder >= 3 && AngularOrder <= 9);
   static_assert(kMaximumAngularMomentum == 3);
   // Order-nine fddd has 2160 components, exceeding ffdp's 1800. These
   // complete-domain bounds must not depend on the most common shell class.
-  constexpr unsigned component_slots = AngularOrder == 5   ? 1
-                                       : AngularOrder == 6 ? 2
-                                       : AngularOrder == 7 ? 3
-                                       : AngularOrder == 8 ? 6
-                                                           : 9;
+  constexpr unsigned component_slots = canonical_materialized_component_slots(AngularOrder);
+  constexpr unsigned component_lanes = canonical_materialized_component_lanes(AngularOrder);
   const auto count = rows.prefix[first_count - 1];
   // Every lane visits the same task and participates in all publication and
   // retirement barriers. Only the helper's original AO predicate admits work.
@@ -114,7 +111,8 @@ __global__ void materialized_canonical_jk_kernel(
     const ActiveShellQuartetTile task{static_cast<std::uint32_t>(rows.order[first_begin + first]),
                                       static_cast<std::uint32_t>(rows.order[second_begin + second]),
                                       0};
-    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots>(
+    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
+                                           component_lanes>(
         batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
         false, nullptr, false, range, omega, coulomb, exchange, work_census);
   }
@@ -314,7 +312,8 @@ __global__ void resident_canonical_jk_kernel(
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool same_bucket, std::size_t work_count, bool want_j, bool want_k,
     const double* source_values, const double* density, double* coulomb, double* exchange,
-    std::uint64_t* work_census, double* coulomb_correction, double* exchange_correction) {
+    std::uint64_t* work_census, double* coulomb_correction, double* exchange_correction,
+    double screening, const double* bounds) {
   const auto dimension = static_cast<std::size_t>(batch.nbf);
   const auto matrix = dimension * dimension;
   const auto physical_offset = static_cast<std::size_t>(system) * matrix;
@@ -332,6 +331,13 @@ __global__ void resident_canonical_jk_kernel(
         rows.order ? rows.order[second_begin + second_local] : second_begin + second_local;
     const auto first = pairs[2U * first_pair], second = pairs[2U * first_pair + 1U];
     const auto third = pairs[2U * second_pair], fourth = pairs[2U * second_pair + 1U];
+    if (work_census) ++candidates;
+    // Match the canonical Direct Schwarz predicate without ERI recurrences.
+    // Count visits before screening; replay evaluates zero new integrals.
+    if (screening > 0.0 && bounds[physical_offset + first * dimension + second] *
+                                   bounds[physical_offset + third * dimension + fourth] <
+                               screening)
+      continue;
     const auto value = source_values[work];
     if (want_j)
       accumulate_direct_fock_integral<Unrestricted>(
@@ -343,7 +349,6 @@ __global__ void resident_canonical_jk_kernel(
           dimension, physical_offset, spin_offset, density,
           runtime::CompensatedOutput{exchange, exchange_correction}, first, second, third, fourth,
           value, false, true);
-    if (work_census) ++candidates;
   }
   if (work_census && candidates)
     atomicAdd(reinterpret_cast<unsigned long long*>(work_census), candidates);
@@ -838,7 +843,14 @@ void launch_materialized_canonical_jk_kernel(
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
     double* coulomb, double* exchange, std::uint64_t* work_count) {
   if (!first_count || !second_count) return;
-  constexpr unsigned blocks = 4096, threads = detail::kDirectQuartetTileSize;
+  // Dense shell-pair products bound screened work without a device-to-host
+  // count read. Clamp each factor before multiplication to avoid overflow;
+  // small domains must not pay for thousands of guaranteed-idle CTAs.
+  constexpr std::size_t maximum_blocks = 4096;
+  const auto dense_upper_bound =
+      std::min(first_count, maximum_blocks) * std::min(second_count, maximum_blocks);
+  const auto blocks = static_cast<unsigned>(std::min(dense_upper_bound, maximum_blocks));
+  const unsigned threads = canonical_materialized_component_lanes(angular_order);
 #define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                       \
   case order:                                                                                  \
     if (unrestricted)                                                                          \
@@ -853,6 +865,8 @@ void launch_materialized_canonical_jk_kernel(
           work_count);                                                                         \
     break
   switch (angular_order) {
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(3);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(4);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(5);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(6);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(7);
@@ -932,9 +946,10 @@ void launch_canonical_jk_source(
     double exchange_omega, double screening, const double* bounds, const double* density,
     double* coulomb, double* exchange, std::uint64_t* work_census, double* range_exchange = nullptr,
     double* source_values = nullptr, double* coulomb_correction = nullptr,
-    double* exchange_correction = nullptr) {
-  const std::size_t work_count =
-      same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count;
+    double* exchange_correction = nullptr,
+    std::size_t work_limit = std::numeric_limits<std::size_t>::max()) {
+  const std::size_t work_count = std::min(
+      same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count, work_limit);
   if (!work_count) return;
   constexpr unsigned threads = 64U;
   const auto blocks =
@@ -995,19 +1010,19 @@ void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool car
                                 double screening, const double* bounds, const double* density,
                                 double* coulomb, double* exchange, std::uint64_t* work_census,
                                 double* source_values, double* coulomb_correction,
-                                double* exchange_correction) {
+                                double* exchange_correction, std::size_t work_limit) {
   if (cartesian)
     launch_canonical_jk_source<true>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, want_j, want_k, unrestricted, exchange_range, exchange_omega,
         screening, bounds, density, coulomb, exchange, work_census, nullptr, source_values,
-        coulomb_correction, exchange_correction);
+        coulomb_correction, exchange_correction, work_limit);
   else
     launch_canonical_jk_source<false>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, want_j, want_k, unrestricted, exchange_range, exchange_omega,
         screening, bounds, density, coulomb, exchange, work_census, nullptr, source_values,
-        coulomb_correction, exchange_correction);
+        coulomb_correction, exchange_correction, work_limit);
 }
 
 void launch_resident_canonical_jk_kernel(
@@ -1016,9 +1031,9 @@ void launch_resident_canonical_jk_kernel(
     std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
     bool unrestricted, const double* source_values, const double* density, double* coulomb,
     double* exchange, std::uint64_t* work_census, double* coulomb_correction,
-    double* exchange_correction) {
-  const auto count =
-      same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count;
+    double* exchange_correction, double screening, const double* bounds, std::size_t work_limit) {
+  const auto count = std::min(
+      same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count, work_limit);
   if (!count) return;
   constexpr unsigned threads = 128;
   const auto blocks =
@@ -1027,12 +1042,12 @@ void launch_resident_canonical_jk_kernel(
     resident_canonical_jk_kernel<true><<<blocks, threads, 0, stream>>>(
         batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,
         same_bucket, count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
-        coulomb_correction, exchange_correction);
+        coulomb_correction, exchange_correction, screening, bounds);
   else
     resident_canonical_jk_kernel<false><<<blocks, threads, 0, stream>>>(
         batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,
         same_bucket, count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
-        coulomb_correction, exchange_correction);
+        coulomb_correction, exchange_correction, screening, bounds);
 }
 
 namespace {
@@ -1191,13 +1206,13 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
     detail::BoundedDirectBlockDomain block_domain, bool separate_sources,
-    const GeneratedShellPairStream* force_topology) {
+    const GeneratedShellPairStream* force_topology, DirectSpdForceSchedule spd_schedule) {
   return launch_bounded_direct_shell_quartet_kernel_scaled(
       unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
       batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
       shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
       density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient,
-      separate_sources, block_domain, force_topology);
+      separate_sources, block_domain, force_topology, spd_schedule);
 }
 
 cudaError_t launch_bounded_shell_angular_energy_derivative(

@@ -1,5 +1,6 @@
 """CPU RSH stationary exchange binding against an independent integral oracle."""
 
+import ctypes as ct
 import os
 import shutil
 from itertools import product
@@ -10,6 +11,7 @@ import numpy as np
 import pytest
 from generativeqc._stationary_cpu import _PrimitiveExecutor
 from generativeqc._stationary_rsh_cpu import RangeExchangeExecutor
+from generativeqc.basis import BasisProvenance, BasisSet, BasisShell, ElementBasis
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -191,3 +193,147 @@ def test_range_exchange_executor_matches_fixed_density_finite_difference(
 
         np.testing.assert_allclose(actual, expected, atol=2e-8, rtol=2e-7)
         np.testing.assert_allclose(actual.sum(axis=0), 0, atol=2e-11, rtol=0)
+
+
+@pytest.mark.parametrize("angular", (2, 3))
+@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("operator", ("short-range", "long-range"))
+def test_cpu_range_df_components_against_libcint(
+    tmp_path: Path, angular: int, representation: str, operator: str
+) -> None:
+    """Qualify normalized dddd/ffff, expansion pullbacks and repeated centers."""
+    gto = pytest.importorskip("pyscf.gto")
+    from generativeqc._stationary_range_cpu import (
+        canonical_eri_quartets,
+        eri_quartet_orbits,
+    )
+
+    shell = BasisShell(angular, ("0.83", "0.29"), (("0.71", "-0.13"),))
+    local_basis = BasisSet(
+        "range-df-probe",
+        (ElementBasis(1, (shell,)),),
+        BasisProvenance("synthetic-test", "1", "test", "0" * 64),
+        representation=representation,
+    )
+    primitive = next(
+        item
+        for item in resolve_method("CAM-B3LYP", spin="unpolarized").primitives
+        if type(item) is RangeSeparatedExchangePrimitive and item.operator == operator
+    )
+    compiler_path = shutil.which("c++")
+    if compiler_path is None:
+        pytest.skip("native C++ compiler unavailable")
+    adapter = CppCompilerAdapter(Path(compiler_path))
+    with NativeAO(ATOMS, basis=local_basis, representation=representation) as basis:
+        executor = RangeExchangeExecutor(basis, tmp_path, 16, adapter)
+        component_count = basis.nao // 2
+        indices = (0, 1, component_count + 2, component_count + 3)
+        if representation == "spherical":
+            rows = executor.aos[:component_count]
+            expanded = int(np.argmax(rows[:, 3]))
+            indices = (expanded, 1, component_count + expanded, component_count + 3)
+            assert max(rows[:, 3]) > 1
+        try:
+            owners, slots = executor.integral(primitive, indices, 0.37)
+            actual = executor.integral_batch(primitive, (indices,), (0.37,))
+            scatter = np.zeros_like(actual)
+            np.add.at(scatter, owners, slots)
+            np.testing.assert_allclose(actual, scatter, atol=2e-11, rtol=2e-10)
+            assert len(executor._plans) == executor.runtime_compilations == 1
+            np.testing.assert_allclose(slots.sum(axis=0), 0, atol=2e-12)
+
+            coordinates = np.asarray([atom.position for atom in basis.atoms])
+            expected = np.zeros_like(actual)
+            signed_omega = float(primitive.omega) * (
+                -1 if operator == "short-range" else 1
+            )
+            for atom, axis in product(range(basis.natom), range(3)):
+                energies = []
+                for direction in (1, -1):
+                    displaced = coordinates.copy()
+                    displaced[atom, axis] += direction * 1e-4
+                    mol = gto.M(
+                        atom=list(zip(("H", "H"), displaced, strict=True)),
+                        unit="Bohr",
+                        basis={"H": [[angular, [0.83, 0.71], [0.29, -0.13]]]},
+                        cart=representation == "cartesian",
+                        verbose=0,
+                    )
+                    with mol.with_range_coulomb(signed_omega):
+                        scale = np.sqrt(
+                            np.prod(np.diag(mol.intor("int1e_ovlp"))[list(indices)])
+                        )
+                        energies.append(0.37 * mol.intor("int2e")[indices] / scale)
+                expected[atom, axis] = (energies[0] - energies[1]) / 2e-4
+            np.testing.assert_allclose(actual, expected, atol=3e-9, rtol=3e-7)
+
+            quartets = tuple(canonical_eri_quartets(basis.nao))[:31]
+            orbits, multiplicity = eri_quartet_orbits(quartets)
+            density = np.random.default_rng(271).normal(size=(basis.nao, basis.nao))
+            ordered = (
+                density[orbits[:, 0], orbits[:, 2]]
+                * density[orbits[:, 1], orbits[:, 3]]
+            )
+            expected_weights = [
+                sum(
+                    density[first, third] * density[second, fourth]
+                    for first, second, third, fourth in set(map(tuple, orbit))
+                )
+                for orbit in orbits.reshape(-1, 8, 4)
+            ]
+            np.testing.assert_allclose(
+                ordered.reshape(-1, 8).sum(axis=1) * multiplicity, expected_weights
+            )
+        finally:
+            executor.close()
+
+
+@pytest.mark.parametrize("invalid", ("exponent", "angular", "owner", "index", "weight"))
+def test_cpu_range_failure_is_transactional(tmp_path: Path, invalid: str) -> None:
+    """Malformed primitive metadata cannot publish gradients or work counts."""
+    compiler_path = shutil.which("c++")
+    if compiler_path is None:
+        pytest.skip("native C++ compiler unavailable")
+    basis = _fake_s_basis()
+    primitive = next(
+        item
+        for item in resolve_method("CAM-B3LYP", spin="unpolarized").primitives
+        if type(item) is RangeSeparatedExchangePrimitive
+        and item.operator == "long-range"
+    )
+    executor = RangeExchangeExecutor(
+        basis, tmp_path, 16, CppCompilerAdapter(Path(compiler_path))
+    )
+    try:
+        plan = executor._cpu_plan(primitive)
+        indices = np.array([[0, 1, 2, 3]], dtype=np.int64)
+        weights = np.ones(1)
+        if invalid == "exponent":
+            basis.packed[3 * basis.natom] = 0
+        elif invalid == "angular":
+            executor.aos[0, 4] = 4
+        elif invalid == "owner":
+            executor.aos[0, 0] = np.nan
+        elif invalid == "index":
+            indices[0, 0] = basis.nao
+        else:
+            weights[0] = np.inf
+        output = np.full((basis.natom, 3), 71.0)
+        visits = (ct.c_uint64 * 2)(113, 127)
+        status = plan.call(
+            basis.packed.ctypes.data_as(ct.POINTER(ct.c_double)),
+            basis.natom,
+            basis.nprimitive,
+            basis.nao,
+            indices.ctypes.data_as(ct.POINTER(ct.c_int64)),
+            weights.ctypes.data_as(ct.POINTER(ct.c_double)),
+            1,
+            False,
+            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            visits,
+        )
+        assert status != 0
+        np.testing.assert_array_equal(output, 71)
+        assert list(visits) == [113, 127]
+    finally:
+        executor.close()

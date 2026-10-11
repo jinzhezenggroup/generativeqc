@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
+from generativeqc_compiler.tensor.matrix_product import emit_matrix_product_cuda
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -40,6 +41,9 @@ def adapter(
     folder = tmp_path_factory.mktemp("matrix-mask")
     fixture = ROOT / "tests/native/fixtures/matrix_mask"
     copy = folder / "copy.cpp"
+    (folder / "generated_matrix_product_lowering.hpp").write_text(
+        emit_matrix_product_cuda()
+    )
     copy.write_text(
         '#include "cuda_runtime.h"\n#include <cstdint>\n'
         "#define __global__\ndim3 blockIdx, blockDim, threadIdx;\n"
@@ -55,15 +59,21 @@ void host_selected_copy(dim3 grid, dim3 block, int batch, int spins, int n,
 """
     )
     library = required_native_cxx.build_shared(
-        [ROOT / "src/scf/cuda/matrix_library.cpp", fixture / "mock.cpp", copy],
+        [
+            ROOT / "src/scf/cuda/matrix_library.cpp",
+            ROOT / "src/tensor/cuda_matrix_product.cpp",
+            fixture / "mock.cpp",
+            copy,
+        ],
         folder / "probe.so",
         compile_args=(
-            "-std=c++17",
+            "-std=c++20",
             "-O1",
             "-Wall",
             "-Wextra",
             "-Werror",
             f"-I{fixture}",
+            f"-I{folder}",
             f"-I{ROOT / 'src'}",
             f"-I{ROOT / 'include'}",
         ),
@@ -79,9 +89,50 @@ void host_selected_copy(dim3 grid, dim3 block, int batch, int spins, int n,
     probe.probe_replay.argtypes = []
     probe.probe_stat.argtypes = [ctypes.c_int]
     probe.probe_stat.restype = ctypes.c_int
+    probe.probe_binding.argtypes = [ctypes.c_int] * 5
+    probe.probe_binding.restype = ctypes.c_int
     probe.probe_matrix_offset.argtypes = [ctypes.c_int] * 3
     probe.probe_matrix_offset.restype = ctypes.c_longlong
     return probe
+
+
+@pytest.mark.parametrize("library", [0, 1])
+@pytest.mark.parametrize("change", range(8))
+def test_bound_context_shape_and_canonical_precision(
+    adapter: ctypes.CDLL, library: int, change: int
+) -> None:
+    assert adapter.probe_binding(7, 3, 2, library, change) == (change in (0, 6, 7))
+
+
+@pytest.mark.parametrize("shape", [(0, 1, 1), (1, 0, 1), (1, 1, 0), (2**31 - 1,) * 3])
+def test_invalid_bound_domain_rejected(
+    adapter: ctypes.CDLL, shape: tuple[int, ...]
+) -> None:
+    assert adapter.probe_binding(*shape, 0, 0) == -1
+
+
+@pytest.mark.parametrize("library", [0, 1])
+@pytest.mark.parametrize("scale", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_scalar_scale_rejected_before_submission(
+    adapter: ctypes.CDLL, library: int, scale: float
+) -> None:
+    values = np.ones(9)
+    output = np.full(9, 123.0)
+    adapter.probe_reset(0, 0)
+    status = _submit(
+        adapter,
+        (0, 1, 1, 3, 0, 0, 0),
+        values,
+        values,
+        None,
+        output,
+        None,
+        library=library,
+        scale=scale,
+    )
+    assert status == 1
+    assert adapter.probe_stat(5) == 0
+    np.testing.assert_array_equal(output, 123.0)
 
 
 @pytest.mark.parametrize(

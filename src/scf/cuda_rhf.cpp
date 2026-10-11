@@ -1157,6 +1157,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     reference_base_bytes = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
                                                            reference_provider_allowance,
                                                            options.reference_memory_budget_bytes);
+    reference_base_bytes = reference_detail::check_capacity(
+        reference_base_bytes, tensor::CudaMatrixProductBinding::kPreparationHostBytes,
+        options.reference_memory_budget_bytes);
     // The source frame must not inherit unordered Fock roundoff before the
     // correlated response starts. Charge the Cartesian (not public) plane.
     resources.reference_fock_correction_bytes_ =
@@ -1966,6 +1969,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   } else if (first_setup) {
     plan.lwork = 0;
   }
+  if (first_setup) {
+    try {
+      resources.matrix_binding_.emplace(resources.stream_, resources.blas_, static_cast<int>(nbf),
+                                        static_cast<int>(batch_size), static_cast<int>(spin_count));
+    } catch (const std::bad_alloc&) {
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+      return outputs;
+    } catch (const tensor::CudaMatrixProductBinding::PreparationFailure& failure) {
+      fill_global_failure(outputs, failure.status);
+      return outputs;
+    } catch (const std::exception&) {
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+      return outputs;
+    }
+  }
   if (options.export_physical_reference) {
     // Account for the actual eigensolver workspace before considering optional
     // residency. Cache-eligible references keep their matrix-direct arena so
@@ -2070,7 +2088,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     const generativeqc_status product_status =
         launch_matrix_product(resources.matrix_view(masked_matrix_output, spin_matrix_elements),
                               static_cast<int>(batch_size), static_cast<int>(nbf), left,
-                              transpose_left, right, active, output, use_cublas, scale);
+                              transpose_left, right, active, output, scale);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
@@ -2082,7 +2100,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     const generativeqc_status product_status = launch_spin_matrix_product(
         resources.matrix_view(masked_matrix_output, spin_matrix_elements),
         static_cast<int>(batch_size), 2, static_cast<int>(nbf), left, left_is_spin, transpose_left,
-        right, right_is_spin, active, output, use_cublas);
+        right, right_is_spin, active, output);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }

@@ -22,12 +22,18 @@
       "src/cc/solver.hpp",
       "src/cc/df_triples_cuda.cu",
       "src/dft/cuda_ks.cpp",
+      "src/dft/cuda_spd_force_policy.hpp",
+      "src/methods/dft_method.cpp",
+      "src/scf/cuda/direct_spd_force_schedule.hpp",
       "src/hf/rhf_frame_response.hpp",
       "src/methods/df_hf_guess.cpp",
       "src/scf/cuda/direct_jk.cpp",
       "src/scf/cuda/direct_md_j.hpp",
       "src/scf/cuda/direct_fock_lowering.hpp",
       "src/scf/cuda/reference_eri_policy.hpp",
+      "src/scf/cuda/direct_jk_source_policy.hpp",
+      "src/scf/cuda/direct_jk_source_lease.cpp",
+      "src/scf/cuda/direct_jk_source_lease.hpp",
       "src/scf/cuda/rhf_resident_values.cpp",
       "python/generativeqc_compiler/integral/production_rys_tasks.py",
       "python/generativeqc_compiler/integral/production_profile.py",
@@ -40,6 +46,31 @@
   },
   "entries": [
     {
+      "id": "scf.phase-local-global-hybrid-values",
+      "classification": "already-default",
+      "controls": ["ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES"],
+      "owner_issues": [1598],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/methods/dft_method.cpp",
+        "src/scf/cuda/direct_jk_source_policy.hpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp"
+      ],
+      "rationale": "Unset/auto selects phase-local full-range values only for admitted cold restricted exact FP64 Global-Hybrid KS. Explicit 0 restores the incumbent schedule. Positive-mask through-d candidates retain a 16-GiB value ceiling; generic f-shell auto retains 8 GiB and forced selection remains capped at 16 GiB. Complete consumer/source admission and the prepared Schwarz predicate remain mandatory. Warm/external-seeded auto skips cloning and sorting. A successful cold source charges one incumbent fixed-density warm-energy handoff after source retirement; this does not modify the returned physical state or relax convergence. Eligibility and an iteration limit are not profitability predictions. Values use compact incumbent geometry-only rows, not density-dependent screening. Public ledgers retain their incumbent path because no quartic allowance is reserved. Sources retire before derivatives or another solve; RSH, DF, UKS, mixed and incremental routes are excluded. The retained 96-atom endpoint campaign is bounded evidence, not a universal performance claim.",
+      "revisit_condition": "Reserve optional quartic storage in the complete public planner and renew source-matched cold/warm/seeded/budget-refusal E+F evidence with independent energy/force gates and semantic work counts before widening eligibility. Broaden resource-cliff, quickly converged cold, hardware and crossover coverage; retain explicit 0 rollback and separate historical opt-in from true unset-default evidence.",
+      "evidence": [
+        "docs/developer/scf_module_boundaries.md",
+        ".agents/notes/implemented/performance/2026-10-10-hybrid-phase-source-lease.md",
+        ".agents/notes/implemented/performance/2026-10-10-screened-hybrid-phase-source.md",
+        ".agents/notes/implemented/performance/2026-10-11-screened-hybrid-cold-auto.md",
+        ".agents/notes/implemented/performance/2026-10-11-hybrid-phase-source-default.md",
+        "benchmarks/results/hybrid-phase-source-default-20261011/README.md",
+        "tests/python/test_ks_phase_source_auto_policy.py",
+        "tests/python/test_ks_phase_resident_values_cuda.py",
+        "tests/python/test_rhf_resident_values_lifetime.py"
+      ]
+    },
+    {
       "id": "scf.phase-local-exact-reference-values",
       "classification": "already-default",
       "controls": [
@@ -48,6 +79,8 @@
       "owner_issues": [1598],
       "sources": [
         "src/scf/cuda/reference_eri_policy.hpp",
+        "src/scf/cuda/direct_jk_source_policy.hpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
         "src/scf/cuda/rhf_resident_values.cpp",
         "src/scf/cuda_rhf.cpp"
       ],
@@ -533,25 +566,6 @@
       ]
     },
     {
-      "id": "tensor.reduction-provider-cub",
-      "classification": "negative-evidence",
-      "controls": [
-        "tensor-schedule:reduction_provider"
-      ],
-      "owner_issues": [
-        971
-      ],
-      "sources": [
-        "python/generativeqc_compiler/tensor/cuda_plan.py"
-      ],
-      "rationale": "The CUB/CCCL reduction provider is qualification-only and retained evidence rejected the tested candidate; generated reduction remains the production/default provider.",
-      "revisit_condition": "Reconsider only after a new source/device/workload campaign crosses complete-endpoint and numerical gates; representability or a kernel microbenchmark is insufficient.",
-      "evidence": [
-        "issue:#971",
-        "benchmarks:benchmarks/results/issue971-cub-block-reduce-h200/summary.json"
-      ]
-    },
-    {
       "id": "tensor.cuda-graph-replay",
       "classification": "needs-qualification",
       "controls": [
@@ -614,6 +628,33 @@
         "docs:docs/user/ks_options.md",
         "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
         "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz"
+      ]
+    },
+    {
+      "id": "dft.spatial-spd-force-reuse",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
+        "dft-policy:spatial-spd-force-auto"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_pair_gradient_cuda.py",
+        "src/dft/cuda_spd_force_policy.hpp",
+        "src/methods/dft_method.cpp",
+        "src/scf/cuda/direct_spd_force_schedule.hpp",
+        "src/scf/cuda/direct_coulomb.cpp",
+        "src/scf/cuda/direct_force_class_domains.cu"
+      ],
+      "rationale": "Unset/empty automatically requests primitive-local order-six spatial Coulomb reuse only for method-authenticated exact-direct full-range PBE0/RKS, explicit FP64 and at least 384 public AOs. Existing scalar recurrence and gradient accumulation order are preserved while evaluations fall from 256 to 22-54 within at most 64 doubles. Four five-pair complete warm/moved E/F comparisons at 384/768 AOs pass the unchanged robust timing and independent numerical/work/checkpoint gates. Explicit zero and unknown values retain the incumbent; explicit one/spatial-reuse do not bypass resident token, primitive-pair, prefix, topology or derivative-capability checks. Generic/HF/RSH consumers supply no automatic hint. Both timing arms enable #2220 independently; its benefit is not attributed to this cache.",
+      "revisit_condition": "Extend automatic scope only with independent complete endpoints and unchanged scientific gates. Preserve bounded fallback, method authentication and opt-out. Earlier rejected schedules, the unexplained density failure, below-promotion two-pair pilots, full racecheck timeout and separate-output coverage-assertion failure remain historical evidence. Scoped gains do not imply cold-SCF, larger-system, other-method/device or broad formal performance/production qualification.",
+      "evidence": [
+        "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
+        "docs:docs/user/ks_options.md",
+        "benchmarks:benchmarks/results/pbe0-spd-spatial-reuse-20261011/validation.json.gz",
+        "tests:tests/python/test_pbe0_spatial_force_policy.py",
+        "tests:tests/python/test_direct_spatial_coulomb_cache.py"
       ]
     },
     {

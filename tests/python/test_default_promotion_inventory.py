@@ -93,30 +93,110 @@ def test_independent_pair_default_refuses_domain_or_capacity_drift(
 @pytest.mark.parametrize(
     "relative,before,after",
     [
-        ("src/scf/cuda/reference_eri_policy.hpp", "!value ||", "false ||"),
-        ("src/scf/cuda/reference_eri_policy.hpp", "if (!cold_reference)", "if (false)"),
         (
-            "src/scf/cuda/reference_eri_policy.hpp",
+            "src/dft/cuda_ks.cpp",
+            "const auto requested = direct_jk_source_selection(selection);",
+            "if (!selection) return; const auto requested = direct_jk_source_selection(selection);",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "if (requested == DirectJkSourceSelection::disabled) return;",
+            "if (false) return;",
+        ),
+        ("src/dft/cuda_ks.cpp", "strategy.screening_tolerance,", "0.0,"),
+        ("src/dft/cuda_ks.cpp", "spins != 1 ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "!has_exchange ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "fitted_coulomb ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "fitted_exchange ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "has_range_correction ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "nonlocal_correlation ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "incremental_direct_jk ||", "false ||"),
+        ("src/dft/cuda_ks.cpp", "precision_schedule.any_lower_precision()", "false"),
+        (
+            "src/dft/cuda_ks.cpp",
+            "runtime::active_device_resource_ledger ||",
+            "false ||",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "strategy.spec.coulomb.op !=",
+            "strategy.spec.coulomb.op ==",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "strategy.spec.exchange.op !=",
+            "strategy.spec.exchange.op ==",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "DirectJkSourceAutoPolicy::screened_cold;",
+            "DirectJkSourceAutoPolicy::generic_f;",
+        ),
+        (
+            "src/scf/cuda/direct_jk_source_policy.hpp",
+            "return 16ULL << 30;",
+            "return 32ULL << 30;",
+        ),
+        (
+            "src/scf/cuda/direct_jk_source_policy.hpp",
+            "return 8ULL << 30;",
+            "return 16ULL << 30;",
+        ),
+        (
+            "src/scf/cuda/direct_jk_source_policy.hpp",
+            "maximum_angular <= 2",
+            "maximum_angular <= 3",
+        ),
+        (
+            "src/scf/cuda/direct_jk_source_policy.hpp",
+            "if (!(screening > 0.0))",
+            "if (false)",
+        ),
+    ],
+)
+def test_ks_phase_value_domain_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Keep default auto, opt-out, the Schwarz mask and finite source ceilings."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "KS phase-value auto default or admission domain drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/scf/cuda/direct_jk_source_policy.hpp", "!value ||", "false ||"),
+        ("src/scf/cuda/direct_jk_source_policy.hpp", "if (!cold_phase)", "if (false)"),
+        (
+            "src/scf/cuda/direct_jk_source_policy.hpp",
             "maximum_angular != 3",
             "maximum_angular > 3",
         ),
         (
-            "src/scf/cuda/reference_eri_policy.hpp",
+            "src/scf/cuda/direct_jk_source_policy.hpp",
             "direct_nbf < 128",
             "direct_nbf < 64",
         ),
         (
-            "src/scf/cuda/reference_eri_policy.hpp",
+            "src/scf/cuda/direct_jk_source_policy.hpp",
             "maximum_iterations < 8",
             "maximum_iterations < 4",
         ),
         (
-            "src/scf/cuda/rhf_resident_values.cpp",
-            "budget, 8ULL << 30",
-            "budget, 16ULL << 30",
+            "src/scf/cuda/direct_jk_source_lease.hpp",
+            "value_ceiling = 8ULL << 30",
+            "value_ceiling = 16ULL << 30",
         ),
         (
-            "src/scf/cuda/rhf_resident_values.cpp",
+            "src/scf/cuda/direct_jk_source_lease.cpp",
             "device_overhead, 256ULL << 20",
             "device_overhead, 0",
         ),
@@ -132,8 +212,10 @@ def test_rhf_phase_value_default_domain_is_audited(
     original = source.read_text()
     assert before in original
     source.write_text(original.replace(before, after))
+    expected_owner = "KS" if before == "!value ||" else "RHF"
     assert any(
-        "RHF phase-value auto default or admission domain drifted" in error
+        f"{expected_owner} phase-value auto default or admission domain drifted"
+        in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 
@@ -225,6 +307,49 @@ def test_native_ks_final_validation_default_is_audited(
     source.write_text(original.replace(before, after))
     assert any(
         "KS final-validation default" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/dft/cuda_spd_force_policy.hpp", "aos >= 384", "aos >= 17"),
+        ("src/dft/cuda_spd_force_policy.hpp", "spins == 1", "spins <= 2"),
+        (
+            "src/scf/cuda/direct_spd_force_schedule.hpp",
+            "if (selector.empty()) return DirectSpdForceSchedule::Automatic;",
+            "if (selector.empty()) return DirectSpdForceSchedule::SpatialReuse;",
+        ),
+        (
+            "src/scf/cuda/direct_spd_force_schedule.hpp",
+            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse",
+            "return true ? DirectSpdForceSchedule::SpatialReuse",
+        ),
+        (
+            "src/methods/dft_method.cpp",
+            "!execution_plan_.d4_correction",
+            "true",
+        ),
+        (
+            "src/methods/dft_method.cpp",
+            "options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "options_.precision_mode == GENERATIVEQC_PRECISION_AUTO",
+        ),
+    ],
+)
+def test_spatial_force_default_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Widening automatic method admission requires a new scoped decision."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Spatial force default" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 
@@ -768,8 +893,8 @@ def test_new_response_default_off_option_must_be_registered(
         ("src/scf/cuda/direct_jk.cpp", "host.nbf < 8", "host.nbf < 4"),
         (
             "src/scf/cuda/direct_jk.cpp",
-            "md_ready = !runtime::active_device_resource_ledger",
-            "md_ready = true",
+            "md_ready = !resident_source_only && !runtime::active_device_resource_ledger",
+            "md_ready = !resident_source_only",
         ),
         (
             "src/scf/cuda/direct_jk.cpp",

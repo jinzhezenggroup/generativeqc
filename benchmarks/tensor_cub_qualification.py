@@ -50,6 +50,8 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 from generativeqc_compiler.tensor.cuda_tune import tune_cuda
 
+from tools.tensor_reduction_qualification import qualification_reduction_plan
+
 SCHEMA = "generativeqc.tensor.cub-qualification.v1"
 ROWS = 65
 INNER = 4097
@@ -209,7 +211,9 @@ def _cub_candidate(evidence: dict[str, Any]) -> dict[str, Any]:
     matches = [
         row
         for row in evidence["candidates"]
-        if row.get("plan", {}).get("schedule", {}).get("reduction_provider") == "cub"
+        if "nvidia.cccl.cub" in row.get("lowering", {}).get("providers", ())
+        # Historical receipts retain the retired schedule-axis spelling.
+        or row.get("plan", {}).get("schedule", {}).get("reduction_provider") == "cub"
     ]
     if len(matches) != 1:
         raise RuntimeError("qualification did not retain exactly one CUB candidate")
@@ -451,23 +455,16 @@ def main() -> None:
     baseline = plan_cuda(
         program,
         compiler.target,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="generated",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
     )
+    prepared = qualification_reduction_plan(baseline, compiler=compiler)
     selection = tune_cuda(
         baseline,
         compiler,
         fixtures,
         output / "cache",
-        schedules=(
-            TensorSchedule(
-                stream_reductions=True,
-                reduction_provider="generated",
-            ),
-            TensorSchedule(stream_reductions=True, reduction_provider="cub"),
-        ),
+        schedules=(baseline.schedule,),
+        prepare_lowering=lambda _plan: prepared,
         screening=None,
         repeats=args.repeats,
         maximum_seconds=args.maximum_seconds,

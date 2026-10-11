@@ -280,7 +280,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
     )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
-        "fa8c4ff2a644fd45ab4eb828a995c4e42c49c80adbe712b32d50f90b3d98fb74"
+        "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
     )
     assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
         "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
@@ -317,7 +317,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
+            "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
         ),
         "global_hybrid_force_predicate_sha256": (
             "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -450,7 +450,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
         ),
         "metrics_sha256": (
-            "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
+            "b6fd50bdaee3f2b7d51884e4672a705ec91726152c150d89bb5c957cbddc1e3d"
         ),
         "ordinary_tile_resources_sha256": (
             "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
@@ -615,7 +615,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
+            "c6f25b0a324bd9532d22a6ce4120bcab758a97ba3ff42db016a5bbfc617746d4"
         ),
         "grid_cache_sha256": (
             "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
@@ -1963,6 +1963,7 @@ def test_spherical_ao_count_fails_closed_when_native_count_moves(
     "guard,occurrence",
     [
         ("self._automatic_libxc_name is None", 0),
+        ("cpu_direct_semilocal_force", 0),
         ("self._ks_options is not None", 0),
         ("self._ks_options.coefficients == (1.0, 1.0, 0.0)", 0),
         ('self._device_name == "cuda"', 0),
