@@ -64,6 +64,22 @@ builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
   Publication rechecks that the current remote tag still identifies the built
   commit; a moved tag fails instead of receiving mismatched artifacts.
 
+### Pull-request packaging gate
+
+Relevant pull requests and merge groups must now **link, smoke-test, install
+and package a real monolithic CUDA CLI before passing CI**. Changes to CMake,
+CLI, packaging, or their CI configuration use the full release-mode
+code-generation settings. Other native/runtime/compiler changes use faster NVCC
+compilation, but still execute the static link, binary smoke tests, archive
+checksums and extracted-binary comparison. Documentation-only changes skip
+the expensive build; an unknown Git diff runs the full build rather than
+silently skipping it. PR archives are retained for seven days, without
+publishing any GitHub Release.
+
+The CI job summary reports exact unstripped ELF, a stripped ELF size estimate
+and `.tar.gz` byte counts. These compile-only checks are not a real-GPU runtime
+or performance qualification.
+
 After extracting the archive:
 
 ```bash

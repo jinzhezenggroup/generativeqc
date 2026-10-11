@@ -262,7 +262,9 @@ jobs:
         uses: ./.github/actions/install-native-cli-deps
       - name: Test native CLI archive/metadata contracts
         if: matrix.compiler == 'gcc'
-        run: python3 -m unittest discover -s tests/python -p test_native_cli_package.py
+        run: |
+          python3 -m unittest discover -s tests/python -p test_native_cli_package.py
+          python3 -m unittest discover -s tests/python -p test_native_cli_ci_scope.py
       - name: Configure
         env:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
@@ -1332,13 +1334,16 @@ jobs:
 
 
   native-cli-artifact:
-    name: Production C++ CUDA CLI (sm_120)
-    # Full release NVCC codegen is kept off ordinary PR/merge-queue CI.
-    # Publishing requires the existing fast CUDA compile gate to pass first.
+    name: Native C++ CUDA CLI package (sm_120)
+    # Build and package affected PR/merge-group native changes before merge.
+    # Linker/package changes use release NVCC; other source changes use fast
+    # NVCC but still link and package a genuine executable.
     needs: cuda-compile
     if: >-
       needs.cuda-compile.result == 'success' &&
-      ((github.event_name == 'push' &&
+      (github.event_name == 'pull_request' ||
+       github.event_name == 'merge_group' ||
+       (github.event_name == 'push' &&
         (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
@@ -1356,7 +1361,19 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Classify native CLI packaging impact
+        id: cli_scope
+        shell: bash
+        env:
+          CLI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+        run: |
+          set -euo pipefail
+          tier="$(python3 tools/native_cli_ci_scope.py \
+            --event "$GITHUB_EVENT_NAME" --base-sha "$CLI_BASE_SHA" --head-sha "$GITHUB_SHA")"
+          echo "tier=$tier" >> "$GITHUB_OUTPUT"
+          echo "Native CLI build tier: $tier"
       - name: Validate semantic version tag before building
+        if: steps.cli_scope.outputs.tier != 'skip'
         id: cli_version
         shell: bash
         run: |
@@ -1376,6 +1393,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release=$release" >> "$GITHUB_OUTPUT"
       - name: Add NVIDIA CUDA repository
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           curl --fail --silent --show-error --location --output cuda-keyring.deb \
@@ -1383,6 +1401,7 @@ jobs:
           sudo dpkg -i cuda-keyring.deb
           sudo apt-get update -o Acquire::Retries=3
       - name: Install CUDA 12.9 build dependencies
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           sudo apt-get install --yes \
@@ -1393,6 +1412,7 @@ jobs:
             python3-numpy python3-pytest
           "$CUDACXX" --version
       - name: Install ccache 4.14
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
@@ -1404,8 +1424,12 @@ jobs:
             /usr/local/bin/ccache
           ccache --version
       - name: Test deterministic native CLI packager
-        run: python3 -m unittest discover -s tests/python -p test_native_cli_package.py
+        if: steps.cli_scope.outputs.tier != 'skip'
+        run: |
+          python3 -m unittest discover -s tests/python -p test_native_cli_package.py
+          python3 -m unittest discover -s tests/python -p test_native_cli_ci_scope.py
       - name: Restore production CUDA ccache
+        if: steps.cli_scope.outputs.tier != 'skip'
         id: cli_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1414,20 +1438,25 @@ jobs:
           restore-keys: |
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
-      - name: Build fully optimized precompiled C++ CUDA CLI
+      - name: Build monolithic C++ CUDA CLI (release or fast PR)
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
+        env:
+          CLI_FAST_COMPILE: ${{ steps.cli_scope.outputs.tier == 'fast' && 'ON' || 'OFF' }}
         run: |
           ccache --zero-stats
-          cmake --preset cuda-release-cli-sm120
+          cmake --preset cuda-release-cli-sm120 \
+            -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
       - name: Preserve compiler cache
-        if: ${{ always() && steps.cli_ccache.outputs.cache-primary-key != '' && steps.cli_ccache.outputs.cache-hit != 'true' }}
+        if: ${{ steps.cli_scope.outputs.tier != 'skip' && always() && steps.cli_ccache.outputs.cache-primary-key != '' && steps.cli_ccache.outputs.cache-hit != 'true' }}
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
           key: ${{ steps.cli_ccache.outputs.cache-primary-key }}
       - name: Smoke-test release-mode native command
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           cli="$PWD/build/cuda-release-cli-sm120/generativeqc"
@@ -1445,6 +1474,7 @@ jobs:
           ldd "$cli"
           ccache --show-stats
       - name: Install and package native command, AOT plug-ins and notices
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         env:
           CLI_RELEASE: ${{ steps.cli_version.outputs.release }}
@@ -1464,7 +1494,35 @@ jobs:
             "${args[@]}"
           (cd dist && sha256sum --check SHA256SUMS)
           test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 1
+      - name: Verify packaged executable and report byte sizes
+        if: steps.cli_scope.outputs.tier != 'skip'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(dist/*.tar.gz)
+          [[ "${#archives[@]}" -eq 1 ]]
+          archive="${archives[0]}"
+          cli="$PWD/build/cuda-release-cli-sm120/generativeqc"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          tar -xzf "$archive" -C "$stage"
+          packaged=("$stage"/*/bin/generativeqc)
+          [[ "${#packaged[@]}" -eq 1 && -f "${packaged[0]}" ]]
+          cmp "$cli" "${packaged[0]}"
+          cp "$cli" "$stage/generativeqc-stripped"
+          strip --strip-unneeded "$stage/generativeqc-stripped"
+          {
+            echo "### Native CUDA CLI sizes (${GITHUB_SHA:0:12})"
+            echo ""
+            echo '| Artifact | Size (bytes) |'
+            echo '|---|---:|'
+            echo "| Unstripped executable | $(stat -c '%s' "$cli") |"
+            echo "| Stripped executable (estimate) | $(stat -c '%s' "$stage/generativeqc-stripped") |"
+            echo "| tar.gz distribution | $(stat -c '%s' "$archive") |"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload latest native CUDA CLI to GitHub Actions Artifacts
+        if: steps.cli_scope.outputs.tier != 'skip'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: generativeqc-native-cli-cuda12.9-sm120-${{ github.sha }}
@@ -1473,7 +1531,7 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
           compression-level: 0
-          retention-days: 30
+          retention-days: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 7 || 30 }}
           overwrite: true
 
   native-cli-release:
@@ -1533,7 +1591,7 @@ jobs:
   pass:
     name: Pass CI checks
     timeout-minutes: 5
-    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
+    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python, native-cli-artifact]
     runs-on: ubuntu-slim
     if: ${{ !cancelled() && github.event_name != 'push' }}
     steps:
