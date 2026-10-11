@@ -289,14 +289,6 @@
       "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
     },
     {
-      "bytes": 146796,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/samples.json.gz",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "5caa3e5c5dfc60dba7eed5a8afcf80aeb6d5bb8056023e2b9e8c7f4715f18838"
-    },
-    {
       "bytes": 155087,
       "classification": "required-compact-accepted-evidence",
       "family": "cuda-ownership",

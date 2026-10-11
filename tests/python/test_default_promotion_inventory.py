@@ -442,6 +442,39 @@ def test_panel_traversal_refuses_domain_or_reduction_order_drift(
     )
 
 
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("d.w_contraction_storage_bits == 64", "true"),
+        ("d.w_contraction_compute_bits == 64", "true"),
+        ("d.w_contraction_accumulation_bits == 64", "true"),
+        ("const auto source = sources.index[perm];", "const auto source = perm;"),
+        (
+            "moments + perm * p.v3, moments + source * p.v3",
+            "bar_w + perm * p.v3, moments + source * p.v3",
+        ),
+        (
+            "bar_w + perm * p.v3, bar_panel, out, reverse_gemm",
+            "bar_w, bar_panel, out, reverse_gemm",
+        ),
+    ],
+)
+def test_force_distinct_default_refuses_precision_copy_or_cotangent_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Forward reuse must never broaden precision or collapse reverse slots."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "forward-only force admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_fixture_copies_registered_sources_outside_the_audited_scope(
     tmp_path: Path,
 ) -> None:
