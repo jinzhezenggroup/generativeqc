@@ -1,9 +1,9 @@
 # Incremental Direct-J/K default-promotion negative closeout
 
-This directory retains the measured evidence behind the #1598 DoD item 1
-decision: the exact incremental Direct-J/K route (#990/#1579) stays **opt-in**
-and the inventory entry `scf.incremental-direct-jk` is classified
-`negative-evidence`. No default/auto routing is introduced.
+Retains the measured evidence behind the #1598 DoD item 1 decision: the
+incremental Direct-J/K route (#990/#1579) stays **opt-in** and the inventory
+entry `scf.incremental-direct-jk` is `negative-evidence`. No default/auto
+routing is introduced.
 
 ## Measured populations
 
