@@ -1022,6 +1022,17 @@ def run_measurement(
         working_directory, nvcc, effective_launcher, generated_directory=generated
     )
     shards = generate_production_shards(working_directory, generated)
+    # Building a generated-source target may first rerun CMake and replace its
+    # cache/Ninja rules. Never compile using only the pre-regeneration binding.
+    if validate_production_shard_count(cmake_cache, nvcc) != (
+        working_directory,
+        cache_executable,
+        effective_launcher,
+    ):
+        raise ValueError("production compile context changed during source generation")
+    validate_generated_cuda_rules(
+        working_directory, nvcc, effective_launcher, generated_directory=generated
+    )
     shard = shards[QUALIFIED_SHARD_INDEX]
     toolchain = toolchain_versions(nvcc)
     identity = compile_identity(

@@ -514,6 +514,140 @@ class TestGenerationDeterminism:
         assert all(path.is_file() for path in shards)
 
 
+class TestCMakeRegenerationBinding:
+    @pytest.mark.skipif(
+        sys.platform != "linux", reason="configuration-only CUDA metadata fixture"
+    )
+    @pytest.mark.parametrize(
+        "mutation,diagnostic",
+        [
+            ("", "fixture measurement boundary"),
+            ("target_compile_options(generativeqc_aot_sm_120 PRIVATE -O0)", "FLAGS"),
+            (
+                'set_property(TARGET generativeqc_aot_sm_120 PROPERTY CUDA_COMPILER_LAUNCHER "/changed/sccache")',
+                "launcher/compiler",
+            ),
+            ('set(CMAKE_CUDA_COMPILER "/changed/nvcc")', "launcher/compiler"),
+            (
+                'set(GENERATIVEQC_RESOLVED_COMPILER_CACHE "/changed/ccache" CACHE FILEPATH "" FORCE)',
+                "context changed",
+            ),
+        ],
+    )
+    def test_real_cmake_regeneration_is_revalidated_before_measurement(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        mutation: str,
+        diagnostic: str,
+    ) -> None:
+        cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
+        if cmake is None or ninja is None:
+            pytest.skip("CMake and Ninja are required for the regeneration control")
+        project, build = tmp_path / "project", tmp_path / "build"
+        modules = project / "modules"
+        modules.mkdir(parents=True)
+        # CMake emits genuine CUDA Ninja rules, but every compiler probe is
+        # replaced by metadata. The only build target touches source files.
+        (modules / "CMakeDetermineCUDACompiler.cmake").write_text(
+            "set(CMAKE_CUDA_COMPILER /usr/bin/false)\n"
+            "set(CMAKE_CUDA_COMPILER_ID NVIDIA)\n"
+            "set(CMAKE_CUDA_COMPILER_VERSION 12.9)\n"
+            "set(CMAKE_CUDA_STANDARD_COMPUTED_DEFAULT 17)\n"
+            "set(CMAKE_CUDA_EXTENSIONS_COMPUTED_DEFAULT ON)\n"
+            "set(CMAKE_CUDA_COMPILER_FORCED TRUE)\n"
+            "set(CMAKE_CUDA_COMPILER_ENV_VAR CUDACXX)\n"
+            'configure_file("${CMAKE_ROOT}/Modules/CMakeCUDACompiler.cmake.in" '
+            '"${CMAKE_PLATFORM_INFO_DIR}/CMakeCUDACompiler.cmake" @ONLY)\n'
+        )
+        launcher = f"{cmake};-E;env;CCACHE_BASEDIR={build};{FAKE_CCACHE}"
+        cmakelists = project / "CMakeLists.txt"
+        cmakelists.write_text(
+            "cmake_minimum_required(VERSION 3.24)\n"
+            "project(QualifiedGeneration NONE)\n"
+            'list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/modules")\n'
+            "set(CMAKE_CUDA_COMPILER /usr/bin/false)\n"
+            "set(CMAKE_CUDA_COMPILER_LOADED TRUE)\n"
+            "set(CMAKE_CUDA_COMPILER_ID NVIDIA)\n"
+            "set(CMAKE_CUDA_COMPILER_VERSION 12.9)\n"
+            "set(CMAKE_CUDA_COMPILER_FORCED TRUE)\n"
+            "set(CMAKE_CUDA_STANDARD_COMPUTED_DEFAULT 17)\n"
+            "set(CMAKE_CUDA_EXTENSIONS_COMPUTED_DEFAULT ON)\n"
+            f'set(CMAKE_CUDA_COMPILER_LAUNCHER "{launcher}")\n'
+            "enable_language(CUDA)\n"
+            'set(generated "${CMAKE_BINARY_DIR}/generated")\n'
+            'file(MAKE_DIRECTORY "${generated}/sm_120")\n'
+            "set(shards)\n"
+            "foreach(i RANGE 0 7)\n"
+            '  list(APPEND shards "${generated}/sm_120/generativeqc_generated_shell_sm120_shard_${i}.cu")\n'
+            "endforeach()\n"
+            'add_custom_command(OUTPUT ${shards} COMMAND "${CMAKE_COMMAND}" -E touch ${shards})\n'
+            "add_library(generativeqc_aot_sm_120 OBJECT ${shards})\n"
+            f'target_include_directories(generativeqc_aot_sm_120 PRIVATE "{validator.ROOT / "src"}" "${{generated}}")\n'
+            "target_compile_definitions(generativeqc_aot_sm_120 PRIVATE GENERATIVEQC_HAS_CUDA=1)\n"
+            "set_target_properties(generativeqc_aot_sm_120 PROPERTIES CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)\n"
+        )
+        fields = _production_cache(
+            CMAKE_CUDA_COMPILER="/usr/bin/false",
+            GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER=launcher,
+        )
+        definitions = [
+            "-D" + line.replace(":STRING=", "=") for line in fields.splitlines()
+        ]
+        configured = subprocess.run(
+            [
+                cmake,
+                "-S",
+                str(project),
+                "-B",
+                str(build),
+                "-G",
+                "Ninja",
+                f"-DCMAKE_MAKE_PROGRAM={ninja}",
+                "-DCMAKE_BUILD_TYPE=Release",
+                *definitions,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert configured.returncode == 0, configured.stdout + configured.stderr
+        validator.validate_generated_cuda_rules(
+            build,
+            Path("/usr/bin/false"),
+            launcher,
+            generated_directory=build / "generated",
+        )
+        # A normal edit after configure leaves the old Ninja file valid until
+        # cmake --build reruns configuration, just before generating the source.
+        cmakelists.write_text(cmakelists.read_text() + "\n" + mutation + "\n")
+        monkeypatch.setattr(
+            validator,
+            "verify_compiler_cache",
+            lambda *args: CompilerCacheLauncher(FAKE_CCACHE, "ccache", "4.14"),
+        )
+
+        def measurement_boundary(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("fixture measurement boundary")
+
+        monkeypatch.setattr(validator, "toolchain_versions", measurement_boundary)
+        expected_error = ValueError if mutation else RuntimeError
+        with pytest.raises(expected_error, match=diagnostic):
+            validator.run_measurement(
+                nvcc=Path("/usr/bin/false"),
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=build / "generated",
+                cmake_cache=build / "CMakeCache.txt",
+                timeout=30,
+            )
+        assert all(
+            path.is_file()
+            for path in validator._production_shard_paths(build / "generated")
+        )
+
+
 class TestProductionCompile:
     def test_split_setting_matches_cmake_release_default(self) -> None:
         cmake = (validator.ROOT / "CMakeLists.txt").read_text()
