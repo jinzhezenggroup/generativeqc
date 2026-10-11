@@ -49,15 +49,9 @@ DFT force changes (#2246); see the decision note.
 
 ## Reproduction
 
-The campaign runner and reducer are retained in-tree:
-
-```bash
-bash benchmarks/run_issue1598_incremental_qualification.sh   # full matrix
-python tools/reduce_issue1598_incremental_qualification.py \
-  --input .artifacts/issue1598-incremental-direct-jk --output summary.json
-```
-
-Offline verification of the retained gates:
+The campaign runner and reducer are retained in-tree
+(`benchmarks/run_issue1598_incremental_qualification.sh`,
+`tools/reduce_issue1598_incremental_qualification.py`); offline verification:
 
 ```bash
 python benchmarks/results/issue1598-incremental-direct-jk-20261011/verify.py

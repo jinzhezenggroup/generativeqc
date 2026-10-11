@@ -18,175 +18,175 @@
  },
  "files": [
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-24-incremental-1.outcome.gz",
+   "path": "new/rhf/direct-24-incremental-1.outcome.gz",
    "bytes": 95,
    "sha256": "2f47164641068e3d3965a8ae9b16cac92771d0be2a279f7f30114e90ae6c0e8f",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-24-incremental-2.outcome.gz",
+   "path": "new/rhf/direct-24-incremental-2.outcome.gz",
    "bytes": 95,
    "sha256": "d90095a4a4fea29bc4e51dde5a63947f9822ee67fe200b692bec48b811f060bb",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-48-baseline-1.json.gz",
+   "path": "new/rhf/direct-48-baseline-1.json.gz",
    "bytes": 16538,
    "sha256": "44eae1e829793dd7926ff42358292ca3e41fd2f7f55408174f6d72bab56b11c0",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-48-baseline-1.outcome.gz",
+   "path": "new/rhf/direct-48-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "f438e15a0e3ef12e5b63a5a1198d8892c52ccf8492f87206dfdd5b4e2c6de73d",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-48-baseline-2.outcome.gz",
+   "path": "new/rhf/direct-48-baseline-2.outcome.gz",
    "bytes": 77,
    "sha256": "0cf4dffd2495c9f7b61a4046dee57cb9fbd7d08ff363d1d53b50a86d239458a9",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-48-incremental-1.json.gz",
+   "path": "new/rhf/direct-48-incremental-1.json.gz",
    "bytes": 16752,
    "sha256": "568bd83cc5d76fc57f6a6857a0ace751ed0b74d4a599b2ca235ac1756457bc9d",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-48-incremental-1.outcome.gz",
+   "path": "new/rhf/direct-48-incremental-1.outcome.gz",
    "bytes": 80,
    "sha256": "97babd71ae5350a0bcb2eded45aff10a67d7eb5191a38187c0844285bcc8f0fc",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-48-incremental-2.outcome.gz",
+   "path": "new/rhf/direct-48-incremental-2.outcome.gz",
    "bytes": 80,
    "sha256": "091d9571aebe8c7a366ffc6a0f128d9089dee0a2a1b9787053b5ea9998a0e1ae",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-96-baseline-1.outcome.gz",
+   "path": "new/rhf/direct-96-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "451c72ae271f03ebb86f43b8cac63e7068d55b82a5e51f0a36df4eb914c8076a",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-96-baseline-2.outcome.gz",
+   "path": "new/rhf/direct-96-baseline-2.outcome.gz",
    "bytes": 77,
    "sha256": "902d0111258c5d0da2ab17aed9d057749a3673290af90b342a5fd4f23c0e325f",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-96-incremental-1.outcome.gz",
+   "path": "new/rhf/direct-96-incremental-1.outcome.gz",
    "bytes": 95,
    "sha256": "69ef9303b74bacfcf9ab57dc4297bc52ecadb665bb1fa02e89dc729e10430e23",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/new/rhf/direct-96-incremental-2.outcome.gz",
+   "path": "new/rhf/direct-96-incremental-2.outcome.gz",
    "bytes": 95,
    "sha256": "a60b1752dbb707a79a091ae1fe6ad7e5cac5c62532b5e791b1e23f5049a4091d",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/library-sha.txt.gz",
+   "path": "old/library-sha.txt.gz",
    "bytes": 134,
    "sha256": "a12d76bce314c898ebe270307a1f367ae5e3f7e9c251ddd773666635fdc955a8",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-24-baseline-1.outcome.gz",
+   "path": "old/rhf/direct-24-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "4a4e7f2799958622521f4609ee72f5eb11f2247b2c2c35b3849c107a2006c0d3",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-24-baseline-2.outcome.gz",
+   "path": "old/rhf/direct-24-baseline-2.outcome.gz",
    "bytes": 77,
    "sha256": "2532b76331ab35b33f27f75640aa338b360dbd128c3f5dddc1e65ca328107e2a",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-24-incremental-1.outcome.gz",
+   "path": "old/rhf/direct-24-incremental-1.outcome.gz",
    "bytes": 95,
    "sha256": "2f47164641068e3d3965a8ae9b16cac92771d0be2a279f7f30114e90ae6c0e8f",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-24-incremental-2.outcome.gz",
+   "path": "old/rhf/direct-24-incremental-2.outcome.gz",
    "bytes": 95,
    "sha256": "d90095a4a4fea29bc4e51dde5a63947f9822ee67fe200b692bec48b811f060bb",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-48-baseline-1.outcome.gz",
+   "path": "old/rhf/direct-48-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "f438e15a0e3ef12e5b63a5a1198d8892c52ccf8492f87206dfdd5b4e2c6de73d",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-48-baseline-2.outcome.gz",
+   "path": "old/rhf/direct-48-baseline-2.outcome.gz",
    "bytes": 77,
    "sha256": "0cf4dffd2495c9f7b61a4046dee57cb9fbd7d08ff363d1d53b50a86d239458a9",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-48-incremental-1.outcome.gz",
+   "path": "old/rhf/direct-48-incremental-1.outcome.gz",
    "bytes": 80,
    "sha256": "97babd71ae5350a0bcb2eded45aff10a67d7eb5191a38187c0844285bcc8f0fc",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-48-incremental-2.outcome.gz",
+   "path": "old/rhf/direct-48-incremental-2.outcome.gz",
    "bytes": 80,
    "sha256": "091d9571aebe8c7a366ffc6a0f128d9089dee0a2a1b9787053b5ea9998a0e1ae",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-96-baseline-1.json.gz",
+   "path": "old/rhf/direct-96-baseline-1.json.gz",
    "bytes": 26307,
    "sha256": "d30a6e94bb8f7a45cc3b9c0f5e8787073e717cfa899c35806e523ff098c3ac77",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-96-baseline-1.outcome.gz",
+   "path": "old/rhf/direct-96-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "451c72ae271f03ebb86f43b8cac63e7068d55b82a5e51f0a36df4eb914c8076a",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-96-baseline-2.outcome.gz",
+   "path": "old/rhf/direct-96-baseline-2.outcome.gz",
    "bytes": 77,
    "sha256": "902d0111258c5d0da2ab17aed9d057749a3673290af90b342a5fd4f23c0e325f",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-96-incremental-1.outcome.gz",
+   "path": "old/rhf/direct-96-incremental-1.outcome.gz",
    "bytes": 80,
    "sha256": "02a62fc7d9b8f326079e5a1583c2a30ba9e93d26e8afe03318571b308480090a",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/rhf/direct-96-incremental-2.outcome.gz",
+   "path": "old/rhf/direct-96-incremental-2.outcome.gz",
    "bytes": 95,
    "sha256": "a60b1752dbb707a79a091ae1fe6ad7e5cac5c62532b5e791b1e23f5049a4091d",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/old/source-sha.txt.gz",
+   "path": "old/source-sha.txt.gz",
    "bytes": 74,
    "sha256": "053a61df0a6ca27314a4af5c5e580d0e9233de0a9bd906ba1e29529cd5dfae8d",
    "role": "samples"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/README.md",
-   "bytes": 3479,
-   "sha256": "e31ffdc43e41f03d74996d01ea3b32f9966e7a2c7f024c85c03dce35346be4ca",
+   "path": "README.md",
+   "bytes": 3411,
+   "sha256": "a7ac11dd47e1b8198616d441243dc58a6bf3701ae11a4ad767c3916f07b3da5f",
    "role": "reproduction"
   },
   {
-   "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011/verify.py",
+   "path": "verify.py",
    "bytes": 5054,
    "sha256": "f179e2dae0a1e981cfd42593ba3d0d7c8917df46f6128c8298a8679946c94adc",
    "role": "reproduction"
