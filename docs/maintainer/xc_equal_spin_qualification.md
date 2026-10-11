@@ -1,9 +1,9 @@
 # Equal-spin CUDA XC qualification
 
-The native RKS XC point producer can optionally share scalar work between its
-identical spin features. Enable the candidate with
-`GENERATIVEQC_CUDA_XC_EQUAL_SPIN=1`; `0` or an unset variable retains the incumbent
-point algebra. Other values are rejected. The selector applies to **every
+The native RKS XC point producer automatically shares scalar work when its
+spin-feature producer proves exact equality. It is **on by default**;
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN=0` restores the incumbent point algebra,
+while `1` explicitly enables sharing. Other values are rejected. The selector applies to **every
 registered native CUDA semilocal consumer**, including LDA/PBE and generated
 split-global-hybrid consumers, and the structurally registered automatic Libxc
 CUDA AOT point programs when that internal bundle is enabled. Coverage follows the registry, not a manually
@@ -40,14 +40,15 @@ Unclassified legacy consumers retain conservative first-derivative storage.
 
 ## Stationary point coverage
 
-The same equal-spin opt-in also makes every registered unpolarized stationary
-point lowering eligible for the existing precomputed geometry-point producer.
+The same default-on, capability-based policy makes every registered unpolarized
+stationary point lowering eligible for the precomputed geometry-point producer.
 `GENERATIVEQC_STATIONARY_RESTRICTED_POINT=off|on` controls its request and takes
 precedence over the retained `GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT`
-compatibility spelling. The request defaults to `on`; without the equal-spin
-opt-in, only the previously qualified composition retains its bound-point
-default and established subnormal continuation. Newly eligible consumers are
-not promoted to default execution by this change.
+compatibility spelling. The request defaults to `on` and registered,
+qualified consumers are selected without a functional-name whitelist.
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN=0` disables the restricted scalar schedule
+for all consumers, including PBE0. PBE0's established specialized mathematics
+and subnormal continuation remain unchanged.
 
 Execution still requires a current generation-bound equal-feature witness,
 phased storage with sufficient scratch, and no external/nonlocal point seed.
@@ -59,10 +60,10 @@ The v1 metrics ABI retains its old capability spelling;
 
 ## Stationary component packing
 
-For complete force endpoints, independently qualify the stationary Cartesian
-component producer with `GENERATIVEQC_STATIONARY_COMPONENT_PACKING=bulk`.
-An unset variable or `scalar` preserves scalar component packing; other values
-are rejected. This separate selector does not depend on equal-spin XC. It
+Stationary Cartesian component pages use bounded `bulk` packing by default.
+Set `GENERATIVEQC_STATIONARY_COMPONENT_PACKING=scalar` to select the old
+per-descriptor producer; an explicit `bulk` also works. Other values are
+rejected. This separate selector does not depend on equal-spin XC. It
 vectorizes descriptor construction for already-admitted s/p/d integral roots,
 without replacing force kernels, changing primitive work or widening method
 admission. Ragged expansions preserve scalar descriptor/FP64 coefficient order
@@ -73,6 +74,16 @@ Noncomponent pages retain their existing bulk producer. Validate complete
 cold/warm/moved timings, descriptor/primitive counts and independent molecular
 forces separately from the XC point ablation. See the
 [component-page rationale](../../.agents/notes/implemented/performance/2026-10-11-stationary-component-page-packing.md).
+
+## Direct derivative ownership
+
+For s/p/d Direct J/K plans, retained shell derivatives now automatically
+attempt the bounded generated derivative owner when the derivative order,
+producer and optional device-memory budget permit it. Set
+`GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK=0` to disable this attempt
+(`1` also enables it). Failed optional preparation keeps the existing
+bounded derivative route, and uncovered bounded SCF **values** remain
+unqualified and disabled independently of derivative ownership.
 
 ## Scalar contract
 
@@ -122,9 +133,16 @@ weighted point-total lane to independent Libxc, and retain separate memcheck and
 initcheck runs. Static ptxas stack/spill reports are resource diagnostics, not
 dynamic memory-work counts or endpoint speedups.
 
-## Endpoint promotion gates
+## Representative regressions and performance claims
 
-Keep the selector opt-in until complete public endpoints meet the
+Default eligibility depends on ingredient/spin contracts, exact producer
+equality and lineage, supported native capabilities, and bounded resource
+admission—not individual method names or one-off benchmark approvals.
+Routine Python CI exercises default-on/explicit-off selection, UKS/response
+exclusions, component descriptor parity, and derivative fallback under limited
+coverage and budgets. The generic routes remain available as reference controls.
+
+For claims of **measured whole-method speedups**, follow the
 [performance engineering checklist](performance_engineering.md):
 
 - Compare explicit `0` and `1` in the same authenticated native binary, with
@@ -134,13 +152,16 @@ Keep the selector opt-in until complete public endpoints meet the
   system. Synchronization and host return belong inside the measured endpoint.
 - Retain actual SCF/Fock counts, grid/XC points, AO work, force work, memory
   admission and the executed specialization. Point-kernel timings alone cannot
-  support a default-selection or whole-method speed claim.
+  support a whole-method speed claim.
 - Validate every observation against an independent molecular reference using
   unchanged method-appropriate energy and force gates. Record route fallbacks,
   UKS and response regressions separately rather than silently excluding them.
+- Monitor representative LDA, GGA, meta-GGA, hybrid/range-separated,
+  RKS and UKS cases in CI or finite Slurm runs, including compile resources,
+  fallback rate and cold/warm/moved endpoints; never rebuild a method whitelist.
 - Assess the complete endpoint reduction against
-  `max(2%, 2*(relative_MAD_baseline + relative_MAD_candidate))` and preserve failed
-  cohorts. Do not pool changed sources, profiler runs or partial jobs.
+  `max(2%, 2*(relative_MAD_baseline + relative_MAD_candidate))` for a speedup
+  claim and preserve failed cohorts. Do not pool changed sources or partial jobs.
 - For WB97M-V include range-separated exchange and VV10; for r2SCAN-3c include
   its prescribed basis, D4 and gCP. Optimizing their semilocal point consumers
   is not qualification of these complete compositions or the other wB97 variants.

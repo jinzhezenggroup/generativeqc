@@ -134,6 +134,13 @@ create a parallel scientific implementation. Retain a bounded generic fallback
 for unsupported classes or resource regimes, and record how much production
 work still uses that fallback.
 
+Default to mathematically equivalent generated optimizations after verifying
+exact producer/ingredient proofs, capability and bounded resource admission.
+Keep explicit disable controls and fail-closed fallback. Monitor representative
+ingredient/spin/resource classes in CI rather than per-functional whitelists.
+Absent hardware work counters do not alone veto a correctness-qualified default;
+complete, source-matched endpoint observations remain necessary for speedup claims.
+
 ### Tune GPU resource use after the work is right
 
 Use low-level tuning after semantic work, representation, and dispatch are
