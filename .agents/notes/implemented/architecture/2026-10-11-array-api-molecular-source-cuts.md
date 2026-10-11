@@ -178,6 +178,19 @@ domains. The measured extra 0.65-0.76 ms on H2 warrants endpoint profiling befor
 proposing residency, capture or Python/IR caching changes; these timings alone
 do not identify its cause.
 
+### Preserve the frozen receipt bytes through CI
+
+Pre-commit's automatic whitespace/EOF fix rewrites the original failed-gate
+traceback and appends newlines to three JUnit files. Git whitespace attributes
+alone do not prevent that formatter mutation; it invalidates the independently
+recorded raw-file hashes even though the numerical samples are unchanged.
+Restore the frozen receipt bytes and narrowly exclude only this campaign's
+logs/XML from those two formatters. The scientific retention checker still runs:
+each of its ten small receipts has an exact-hash owner/reason entry in
+`benchmarks/evidence-policy.json`, with no file-size or aggregate-budget waiver.
+Routine future run dumps remain transient. Both formatter hooks and the evidence
+retention/publication gate pass after this correction.
+
 ## Revisit when
 
 Add other native method sources only with independently qualified complete

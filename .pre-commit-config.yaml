@@ -8,10 +8,10 @@ repos:
     hooks:
       - id: trailing-whitespace
         # Reconstruction patches and checksum-bound receipts retain exact bytes.
-        exclude: ^benchmarks/results/(?:.*\.patch|.*/receipts\.txt)$
+        exclude: ^benchmarks/results/(?:.*\.patch|.*/receipts\.txt|array-api-rhf-slurm-20261011/.*\.log)$
       - id: end-of-file-fixer
-        # Keep archived Basis Set Exchange response bytes unchanged.
-        exclude: ^benchmarks/results/.*\.bse\.json$
+        # Keep archived reference responses and checksum-bound GPU receipts unchanged.
+        exclude: ^benchmarks/results/(?:.*\.bse\.json|array-api-rhf-slurm-20261011/.*\.(?:log|xml))$
       - id: check-yaml
       - id: check-json
       - id: check-added-large-files
