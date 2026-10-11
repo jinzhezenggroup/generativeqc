@@ -1225,14 +1225,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
     const auto status = read_final_state(expected, true, state, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    // These are the provider's actual metric and the collocation/grid sources
-    // used by this immutable KS owner, not caller-supplied identity labels.
-    output = {std::move(state), system_,        fock_.one_electron().overlap,
-              basis_.packed,    grid_.points(), grid_.weights(),
-              grid_.owners()};
-    // Both backends collocate this owner's exact host-built quadrature. Export
-    // its raw measures directly; dividing partitioned weights loses tail data.
-    output.atomic_weights = grid_.atomic_weights();
+    const auto sources_status = read_derivative_sources(expected, output, detail);
+    if (sources_status != GENERATIVEQC_STATUS_SUCCESS) return sources_status;
+    output.state = std::move(state);
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
       const auto after = cuda_->transfers();
@@ -1241,6 +1236,31 @@ class KsPreparedCalculation final : public PreparedCalculation {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status read_derivative_sources(const dft::CudaKsFinalStateToken& expected,
+                                              KsDerivativeSnapshot& output, std::string& detail) {
+    output = {};
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "KS derivative sources have a stale final-state token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    // These are the provider's actual metric and the collocation/grid sources
+    // used by this immutable KS owner, not caller-supplied identity labels.
+    output.system = system_;
+    output.overlap = fock_.one_electron().overlap;
+    output.packed_basis = basis_.packed;
+    output.points = grid_.points();
+    output.weights = grid_.weights();
+    output.grid_owners = grid_.owners();
+    // Both backends collocate this owner's exact host-built quadrature. Export
+    // its raw measures directly; dividing partitioned weights loses tail data.
+    output.atomic_weights = grid_.atomic_weights();
+    output.resident_grid = grid_.cuda_view();
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -2785,6 +2805,16 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status read_derivative_sources(std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              KsDerivativeSnapshot& output, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->read_derivative_sources(expected, output, detail);
+    output = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status cuda_integral_gradient_additional_device_bytes(
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::size_t& bytes,
       std::string& detail) {
@@ -3137,6 +3167,16 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
                                               KsDerivativeSnapshot& output, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->read_derivative_state(index, expected, output, detail);
+  output = {};
+  detail = "prepared batch is not a KS final-state owner";
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+}
+
+generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_t index,
+                                                const dft::CudaKsFinalStateToken& expected,
+                                                KsDerivativeSnapshot& output, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->read_derivative_sources(index, expected, output, detail);
   output = {};
   detail = "prepared batch is not a KS final-state owner";
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

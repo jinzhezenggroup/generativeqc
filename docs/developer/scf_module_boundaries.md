@@ -25,7 +25,7 @@ For the rationale and pinned historical receipts, see the
 | Direct CUDA public plan and cache lifetime | `src/scf/cuda/rhf_bucket.*` | Topology/options identity, admission, invalidation, retry, diagnostics and warm cache |
 | Direct CUDA Graph lifetime | `src/scf/cuda/rhf_graph.*` | Capture, instantiate/upload, replay and teardown |
 | Optional exact-reference value lease | `src/scf/cuda/rhf_resident_values.*` | One-call admission, common Direct provider borrowing, local graphs and retirement before correlation |
-| Common phase-local ERI source | `src/scf/cuda/direct_jk_source_lease.*` | Bounded immutable full-range FP64 values and raw compensated restricted J/K; no method assembly or graph ownership |
+| Common immutable ERI value source | `src/scf/cuda/direct_jk_source_lease.*` | Bounded full-range FP64 values and raw compensated RKS/UKS J/K; no method assembly, derivative integrals or graph ownership |
 | Coupled direct CUDA execution | `src/scf/cuda_rhf.cpp` and bounded `src/scf/cuda/direct_*` owners | Host launch/dataflow orchestration is separate from scientific device kernels |
 | CUDA generic numeric services | `src/scf/cuda/eigensolver.*`, `src/solver/cuda/symmetric_eigen_handles.*` and `src/scf/cuda/resources.*` | Solver/library/stream/workspace lifetime; borrowers retain their method-specific policies |
 | CUDA structured matrix execution | `src/scf/cuda/structured_matrix.*`, `src/tensor/cuda_structured_product.hpp` | Borrowed immutable Gram/inverse-root/basis bindings; device masks, charged scratch and publication, not method/provider selection policy |
@@ -160,10 +160,12 @@ submitted/built source work, completed Fock actions, refused admission and the
 mandatory versus complete phase capacity; graph-capture callbacks are not
 counted as completed actions.
 
-### Optional phase-local Global-Hybrid KS values
+### Optional prepared-owner KS values
 
 Unset or `GENERATIVEQC_KS_RESIDENT_VALUES=auto` selects bounded phase-source
-reuse for restricted exact-FP64 full-range Global-Hybrid solves.
+reuse for exact-FP64 full-range Direct RKS/UKS solves, including pure
+semilocal Coulomb-only and compatible nonlocal compositions. Eligibility
+depends on the integral/precision/resource contract, not the functional name.
 Explicit `0` retains the incumbent schedule; `1` requests a source without
 bypassing scientific or resource admission; other values are rejected.
 Automatic selection includes screened through-d cold
@@ -215,17 +217,20 @@ Public resource-ledger requests retain the original exact route until their
 complete resource planner explicitly reserves optional source storage. This
 includes forced selection; a diagnostic cannot bypass a public memory budget.
 
-UKS, fitted J/K, range/nonlocal corrections, lower precision and incremental
-J/K retain their existing paths. Resource/capability refusal preserves exact
-fallback; driver or numerical failure propagates. KS retires compiled/graph
-borrowers before releasing the phase source at terminal completion, restart,
-failure or destruction. Values never persist into force/response evaluation,
-another solve or another geometry. Existing Hybrid graph qualification is not
+Fitted J/K, range corrections, lower precision and incremental J/K retain
+their existing paths. Resource/capability refusal preserves exact fallback;
+driver or numerical failure propagates. KS retires compiled/graph borrowers
+and audits completed actions at successful terminal completion, but retains
+the immutable value lease with the converged prepared owner for post-SCF value
+consumers. Restart, failure or destruction releases it; it never crosses a
+new solve or geometry. Gradients continue to borrow the primary provider's
+first-derivative metadata and evaluate derivative integrals: ordinary ERI
+values are not derivative integrals. Existing Hybrid graph qualification is not
 widened. `CudaKsTransfers` reports source construction, completed submitted Fock
 actions and numeric/source peaks separately from SCF iterations.
 
-After a successful source-backed solve that updates the warm cache, KS retires
-the source and evaluates incumbent J/K once at the unchanged final density.
+After a successful source-backed solve that updates the warm cache, KS bypasses
+the retained value source and evaluates incumbent J/K once at the unchanged final density.
 The compensated energy uses the retained XC at that density and anchors the
 next warm solve to its actual provider, rather than comparing different FP64
 summation schedules. This cache-only handoff leaves the returned energy,

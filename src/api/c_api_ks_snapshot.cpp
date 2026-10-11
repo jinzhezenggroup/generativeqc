@@ -17,6 +17,7 @@
 #include "integrals/ecp_cuda.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "methods/dft_method.hpp"
+#include "molecule/basis.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
 #include "dft/grid_task_view.cuh"
@@ -53,7 +54,10 @@ struct generativeqc_ks_xc_response {
   // every buffer is also tied to the still-live stream on exceptional exit.
   generativeqc::runtime::OwnedCudaStream stream;
   generativeqc::runtime::OwnedCudaBuffer<std::byte> arena;
-  generativeqc::runtime::OwnedCudaBuffer<double> density, direction;
+  generativeqc::runtime::OwnedCudaBuffer<double> direction;
+  // The batch/token, not this response consumer, owns the converged D. Every
+  // response action rechecks that token before touching this borrowed pointer.
+  const double* density{};
   std::unique_ptr<generativeqc::dft::CudaXcPlan> plan;
 #endif
 };
@@ -374,7 +378,7 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
-    status = generativeqc::methods::detail::read_dft_derivative_state(
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
         *batch->plan, snapshot->index, snapshot->token, source, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
@@ -383,20 +387,35 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     const generativeqc::dft::AoBasis basis(source.system);
     if (basis.packed != source.packed_basis)
       throw std::invalid_argument("CUDA response packed basis differs from native state");
+    const auto borrow_grid = static_cast<bool>(source.resident_grid);
     const auto layout = generativeqc::dft::cuda_xc_layout_shape(
         basis.natom, basis.nprimitive, basis.nao, source.weights.size(), identity.model.functional,
-        identity.model.spins == 2, tile_points, true);
+        identity.model.spins == 2, tile_points, true, generativeqc::dft::CudaXcAoPrecision::Fp64,
+        identity.model.semilocal_exchange_scale, identity.model.semilocal_correlation_scale,
+        borrow_grid);
     using generativeqc::runtime::size_mul;
     const auto count = size_mul(size_mul(layout.spins, layout.nao, "XC response overflow"),
                                 layout.nao, "XC response overflow");
     const auto bytes = generativeqc::runtime::size_add(
-        layout.device_bytes, size_mul(count, 2 * sizeof(double), "XC response overflow"),
+        layout.device_bytes, size_mul(count, sizeof(double), "XC response overflow"),
         "XC response overflow");
     if (bytes > budget_bytes) throw std::bad_alloc();
-    std::vector<double> density;
-    for (const auto& spin : source.state.density)
-      density.insert(density.end(), spin.begin(), spin.end());
-    if (density.size() != count) throw std::invalid_argument("CUDA response spin shape mismatch");
+    int density_device = -1;
+    const double *alpha = nullptr, *beta = nullptr;
+    std::size_t matrix_elements = 0;
+    unsigned spins = 0;
+    void* source_stream = nullptr;
+    status = generativeqc::methods::detail::dft_cuda_resident_density(
+        *batch->plan, snapshot->index, snapshot->token, density_device, alpha, beta,
+        matrix_elements, spins, source_stream, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    if (density_device != identity.model.device || spins != layout.spins ||
+        matrix_elements != layout.nao * layout.nao || !alpha || !source_stream ||
+        (spins == 2 && beta != alpha + matrix_elements))
+      throw std::invalid_argument("CUDA response resident spin shape mismatch");
     auto result = std::make_unique<generativeqc_ks_xc_response>();
     result->index = snapshot->index;
     result->token = snapshot->token;
@@ -410,14 +429,16 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     result->stream.create(result->device);
     const auto stream = result->stream.get();
     result->arena.allocate(result->device, layout.device_bytes, stream);
-    result->density.allocate(result->device, count, stream);
+    result->density = alpha;
     result->direction.allocate(result->device, count, stream);
     result->plan = std::make_unique<generativeqc::dft::CudaXcPlan>(
         layout, source.packed_basis, source.points, source.weights, result->arena.get(),
-        layout.device_bytes, stream);
-    generativeqc::runtime::cuda_resource_check(
-        cudaMemcpyAsync(result->density.get(), density.data(), count * sizeof(double),
-                        cudaMemcpyHostToDevice, stream));
+        layout.device_bytes, stream, source.resident_grid);
+    // Grid and D remain with the prepared SCF owner. Establish the dependency
+    // once without an export/re-upload; snapshot freshness guards later actions.
+    generativeqc::runtime::OwnedCudaEvent ready(result->device, cudaEventDisableTiming);
+    ready.record(static_cast<cudaStream_t>(source_stream));
+    generativeqc::runtime::cuda_resource_check(cudaStreamWaitEvent(stream, ready.get(), 0));
     result->stream.synchronize();
     status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -452,7 +473,7 @@ generativeqc_status generativeqc_ks_xc_response_apply_v1(generativeqc_batch* bat
                                                                count * sizeof(double),
                                                                cudaMemcpyHostToDevice, stream));
     response->input_bytes += count * sizeof(double);
-    response->plan->enqueue_response(response->density.get(), response->direction.get(), count,
+    response->plan->enqueue_response(response->density, response->direction.get(), count,
                                      ++response->generation);
     const auto scalars = response->plan->read_scalars(response->generation);
     if (scalars.error) throw std::invalid_argument("invalid CUDA XC response direction/domain");
@@ -484,7 +505,7 @@ generativeqc_status generativeqc_ks_xc_response_diagnostic_v1(
   const auto& t = response->plan->transfers();
   const auto& l = response->plan->layout();
   const std::array<std::uint64_t, 12> result{response->device_bytes,
-                                             t.setup_h2d_bytes + response->count * sizeof(double),
+                                             t.setup_h2d_bytes,
                                              response->input_bytes,
                                              t.output_d2h_bytes,
                                              t.synchronizations + response->extra_synchronizations,
@@ -546,11 +567,11 @@ generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
-    status = generativeqc::methods::detail::read_dft_derivative_state(
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
         *batch->plan, snapshot->index, snapshot->token, source, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (source.system.ecp_terms.empty()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto n = source.state.orbitals.at(0).values.size();
+    const auto n = generativeqc::molecule::ao_count(source.system);
     const auto atoms = source.system.atoms.size();
     if (!n || atoms > std::numeric_limits<std::size_t>::max() / 6 / n / n ||
         count != 6 * atoms * n * n)

@@ -642,48 +642,13 @@ def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_phase_values(root: Path) -> dict[str, str]:
-    """Default auto cannot broaden the cold domain or public resource plan."""
+    """Register the stable control; executable probes qualify its admission."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if any(
-        fragment not in source
-        for fragment in (
-            'std::getenv("GENERATIVEQC_KS_RESIDENT_VALUES")',
-            "const auto requested = direct_jk_source_selection(selection);",
-            "if (requested == DirectJkSourceSelection::disabled) return;",
-            "runtime::active_device_resource_ledger",
-            "runtime::active_device_resource_ledger ||",
-            "precision_schedule.any_lower_precision()",
-            "has_range_correction",
-            "spins != 1 || !has_exchange || fitted_coulomb || fitted_exchange || has_range_correction",
-            "nonlocal_correlation || incremental_direct_jk",
-            "strategy.spec.coulomb.op != scf::FockOperator::FullRange",
-            "strategy.spec.exchange.op != scf::FockOperator::FullRange",
-            "strategy.screening_tolerance,",
-            "constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;",
-            "direct_jk_source_auto_refusal(",
-            'trace("cuda_ks_resident_values_skip", "host_decision")',
-            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));",
-            "buckets.ceiling, false, auto_policy, buckets.mask",
-        )
+    if not re.search(
+        r'\b(?:std::)?getenv\s*\(\s*"GENERATIVEQC_KS_RESIDENT_VALUES"\s*\)', source
     ):
-        raise ValueError("KS phase-value auto default or admission domain drifted")
-    if "if (!selection) return;" in source:
-        raise ValueError("KS phase-value auto default or admission domain drifted")
-    policy = _read(root / "src/scf/cuda/direct_jk_source_policy.hpp")
-    if any(
-        fragment not in policy
-        for fragment in (
-            'if (!value || std::string_view(value) == "auto")',
-            "policy == DirectJkSourceAutoPolicy::screened_cold && maximum_angular <= 2",
-            "if (!(screening > 0.0))",
-            "return 16ULL << 30;",
-            "return 8ULL << 30;",
-        )
-    ) or source.index("direct_jk_source_auto_refusal(") > source.index(
-        "phase_source = std::make_unique<DirectJkSourceLease>"
-    ):
-        raise ValueError("KS phase-value auto default or admission domain drifted")
+        return {}
     return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
 
 

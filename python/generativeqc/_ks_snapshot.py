@@ -1290,7 +1290,7 @@ class NativeKsSnapshot:
     def prepare_cuda_response(
         self, *, tile_points: int, budget_bytes: int
     ) -> typing.Any:
-        """Copy this live state's exact sources into a bounded CUDA XC owner."""
+        """Borrow this live owner's D/grid in a bounded CUDA XC response arena."""
         return _NativeCudaXCPlan(
             self, tile_points=tile_points, budget_bytes=budget_bytes
         )
@@ -1454,7 +1454,8 @@ class _NativeCudaXCPlan:
 
     Only density directions and final AO matrices cross the host/device seam.
     AO values, base/directional features, point derivatives and assembly execute
-    on device. Preparation retains the native reference density once.
+    on device. Preparation borrows the native reference D and immutable grid;
+    every action checks the source token before using those resident buffers.
     """
 
     def __init__(

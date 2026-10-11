@@ -178,8 +178,8 @@ generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
 generativeqc_status prepare_cuda_direct_jk_resident_layout(CudaDirectJkPlan*, std::string&) {
   return GENERATIVEQC_STATUS_SUCCESS;
 }
-std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*) {
-  return 2*direct_dimension*direct_dimension;
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins) {
+  return 2*spins*direct_dimension*direct_dimension;
 }
 generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
                                                          std::size_t, std::string&) {
@@ -209,8 +209,10 @@ CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* pl
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double*, std::size_t elements,
     double*, double*, double*, std::size_t correction, int* error, double threshold,
-    std::uint64_t* census, std::string&, bool resident) {
+    std::uint64_t* census, std::string&, bool resident,
+    const double* beta, double* beta_exchange) {
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
+          beta==nullptr && beta_exchange==nullptr &&
           correction==2*64*64 && threshold==((mode==30 || mode==31) ? 1e12 :
                                            (mode==20 || mode==21) ? 1e-12 : 0.0));
   if(mode==20) require(spec.exchange.coefficient==-0.125);
