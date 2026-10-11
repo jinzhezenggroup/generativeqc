@@ -402,6 +402,59 @@ void response_plan_binding_contract() {
   require(rejected, "unprepared response plan reached the solver");
 }
 
+void response_problem_assignment_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::LinearResponseSymmetry;
+  struct ThrowingCopyOperator {
+    bool* fail;
+    explicit ThrowingCopyOperator(bool& fail_copy) : fail(&fail_copy) {}
+    ThrowingCopyOperator(const ThrowingCopyOperator& other) : fail(other.fail) {
+      if (*fail) throw std::runtime_error("operator copy failed");
+    }
+    void operator()(std::span<const double> input, std::span<double> output) const {
+      output[0] = 3.0 * input[0];
+    }
+  };
+
+  bool fail_copy = false;
+  LinearResponseProblem original(
+      1, [](auto input, auto output) { output[0] = 2.0 * input[0]; },
+      LinearResponseSymmetry::Symmetric);
+  LinearResponseProblem replacement(
+      1, [](auto input, auto output) { output[0] = 3.0 * input[0]; },
+      LinearResponseSymmetry::General, ThrowingCopyOperator(fail_copy));
+  const auto original_plan = generativeqc::response::prepare_response(original, {});
+  const auto replacement_plan = generativeqc::response::prepare_response(replacement, {});
+  const std::array<double, 1> rhs{6.0};
+
+  // A failed late callback copy must not leave a new operator with the old token.
+  fail_copy = true;
+  bool rejected = false;
+  try {
+    original = replacement;
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected && original_plan.is_bound_to(original) &&
+              !replacement_plan.is_bound_to(original) &&
+              original.symmetry() == LinearResponseSymmetry::Symmetric,
+          "failed problem assignment changed the original binding or symmetry");
+  const auto preserved = generativeqc::response::solve_response(original_plan, original, rhs);
+  require(preserved.converged() && std::abs(preserved.solution[0] - 3.0) < 1e-12,
+          "failed problem assignment left a new operator under the old plan binding");
+
+  fail_copy = false;
+  original = replacement;
+  require(replacement_plan.is_bound_to(original) && !original_plan.is_bound_to(original),
+          "successful problem assignment did not replace the binding");
+  const auto assigned = generativeqc::response::solve_response(replacement_plan, original, rhs);
+  require(assigned.converged() && std::abs(assigned.solution[0] - 2.0) < 1e-12,
+          "assigned problem did not use its replacement operator");
+  original = std::move(replacement);
+  require(replacement_plan.is_bound_to(original) && !replacement_plan.is_bound_to(replacement),
+          "problem move assignment did not transfer the binding");
+}
+
 void response_batch_binding_contract() {
   using generativeqc::response::LinearResponseProblem;
   using generativeqc::response::ResponseSolveRequest;
@@ -815,6 +868,7 @@ int main() {
     exact_solve_and_true_residual();
     linear_response_problem_contract();
     response_plan_binding_contract();
+    response_problem_assignment_contract();
     response_batch_binding_contract();
     zero_rhs_is_transactional();
     restarted_and_exhausted_paths();
