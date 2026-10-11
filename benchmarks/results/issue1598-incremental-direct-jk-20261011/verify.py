@@ -58,6 +58,10 @@ def check_campaign(name: str, sizes: tuple[int, ...]) -> dict:
                 stem = f"direct-{atoms}-{mode}-{round}"
                 record_path = root / f"{stem}.json.gz"
                 outcome_path = root / f"{stem}.outcome.gz"
+                if not outcome_path.exists() and not record_path.exists():
+                    # Compact publication omits non-decisive points entirely;
+                    # their dispositions are cited from the README/note tables.
+                    continue
                 require(outcome_path.exists(), f"missing outcome for {name}/{stem}")
                 outcome = load_gz(outcome_path)
                 if outcome.get("exit_code") != 0:

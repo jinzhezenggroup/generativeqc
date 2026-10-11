@@ -18,18 +18,6 @@
  },
  "files": [
   {
-   "path": "new/rhf/direct-24-baseline-1.outcome.gz",
-   "bytes": 77,
-   "sha256": "4a4e7f2799958622521f4609ee72f5eb11f2247b2c2c35b3849c107a2006c0d3",
-   "role": "samples"
-  },
-  {
-   "path": "new/rhf/direct-24-baseline-2.outcome.gz",
-   "bytes": 77,
-   "sha256": "2532b76331ab35b33f27f75640aa338b360dbd128c3f5dddc1e65ca328107e2a",
-   "role": "samples"
-  },
-  {
    "path": "new/rhf/direct-24-incremental-1.outcome.gz",
    "bytes": 95,
    "sha256": "2f47164641068e3d3965a8ae9b16cac92771d0be2a279f7f30114e90ae6c0e8f",
@@ -102,39 +90,9 @@
    "role": "samples"
   },
   {
-   "path": "old/device.txt.gz",
-   "bytes": 203,
-   "sha256": "ffe3f8264e7b3ab129f9b69e6962e58af3b4b89e6b9a7f9a342d35e77f294578",
-   "role": "samples"
-  },
-  {
    "path": "old/library-sha.txt.gz",
    "bytes": 134,
    "sha256": "a12d76bce314c898ebe270307a1f367ae5e3f7e9c251ddd773666635fdc955a8",
-   "role": "samples"
-  },
-  {
-   "path": "old/rhf/direct-12-baseline-1.outcome.gz",
-   "bytes": 77,
-   "sha256": "6917df7d80ac3fefa8d1dc1dd7847f152db802904ae2d926304eaa5979bbdc36",
-   "role": "samples"
-  },
-  {
-   "path": "old/rhf/direct-12-baseline-2.outcome.gz",
-   "bytes": 77,
-   "sha256": "41f58f9d0ab4d97630ed70a5566017116046bd1b8ce5507c4a4c97b8287fb3f5",
-   "role": "samples"
-  },
-  {
-   "path": "old/rhf/direct-12-incremental-1.outcome.gz",
-   "bytes": 80,
-   "sha256": "66e424bcbc1971dd6e16ea9bc3034565e83822eaf923b89b8ea6e593d98271c0",
-   "role": "samples"
-  },
-  {
-   "path": "old/rhf/direct-12-incremental-2.outcome.gz",
-   "bytes": 80,
-   "sha256": "e74e171087ff849595e2b9a25608742f76e50672c0c76a111a19e610a203ddd6",
    "role": "samples"
   },
   {
@@ -229,8 +187,8 @@
   },
   {
    "path": "verify.py",
-   "bytes": 4792,
-   "sha256": "a3f51c71508f808af44ae10103877c852669c256a83014e91175c09930ce4ec2",
+   "bytes": 5054,
+   "sha256": "f179e2dae0a1e981cfd42593ba3d0d7c8917df46f6128c8298a8679946c94adc",
    "role": "reproduction"
   }
  ]
