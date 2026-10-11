@@ -59,9 +59,11 @@ All **38** independent complete-force/public tests and **17** joint response,
 mixed-precision exclusion, exact-copy-count, one/two-panel/partial-page,
 budget/sentinel and all-equal overflow tests pass. Large energy/residual/
 Lambda/Z and independent force-direction gates pass; water memcheck reports
-zero errors. Maximum matched force difference is 1.40e-14 Eh/bohr and maximum
-independent large directional error 7.11e-9 Eh/bohr. All 133 default-inventory
-tests pass, including six new precision/copy/cotangent drift rejections.
+zero errors. Maximum force difference is 2.00e-14 Eh/bohr across the two
+adjacent ABBA pairs, or 2.87e-14 across every control/candidate combination.
+Maximum independent large directional error is 7.11e-9 Eh/bohr. All 133
+default-inventory tests pass, including six new precision/copy/cotangent drift
+rejections.
 
 The two new diagnostic fields change a **private C++ result layout**. Rebuild
 the library, complete endpoint, force probe and primitive response probes

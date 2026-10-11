@@ -30,8 +30,10 @@ numeric scratch/provider. Copy payload is not measured DRAM traffic or peak VRAM
 
 **38** independent force/public cases, **17** joint derivative/precision/paging/
 budget/unsafe-arithmetic cases and all four large energy/residual/Lambda/Z/
-force-direction gates pass. Maximum force difference 1.40e-14 Eh/bohr; independent
-direction error 7.11e-9. Water memcheck: zero errors. **133** inventory tests pass.
+force-direction gates pass. Maximum force difference across the two adjacent
+ABBA pairs is 2.00e-14 Eh/bohr; across all control/candidate combinations it is
+2.87e-14 Eh/bohr. Independent direction error is 7.11e-9. Water memcheck: zero
+errors. **133** inventory tests pass.
 
 Raw receipts preserve exact lengths/SHA-256, runner, finite Slurm recipe, binary
 and device identities, all JSON/resources, test XML, original baseline sources,

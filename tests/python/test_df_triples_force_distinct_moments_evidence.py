@@ -107,6 +107,34 @@ def test_force_distinct_samples_reconcile_full_endpoint_and_copy_work() -> None:
         == campaign["descriptive_wall_saving_percent"]
     )
     assert medians["candidate"] < medians["baseline"]
+    # The descriptive force envelope includes all four cross-arm pairs, not only
+    # the first pair or the two adjacent ABBA pairs.
+    maximum_force_difference = max(
+        abs(candidate - control)
+        for candidate_sample in samples
+        if candidate_sample["arm"] == "candidate"
+        for control_sample in samples
+        if control_sample["arm"] == "baseline"
+        for candidate, control in zip(
+            candidate_sample["endpoint"]["forces"],
+            control_sample["endpoint"]["forces"],
+            strict=True,
+        )
+    )
+    assert maximum_force_difference == 2.864375403532904e-14
+    paired_maximum = max(
+        abs(candidate - control)
+        for candidate_index, control_index in ((1, 0), (2, 3))
+        for candidate, control in zip(
+            samples[candidate_index]["endpoint"]["forces"],
+            samples[control_index]["endpoint"]["forces"],
+            strict=True,
+        )
+    )
+    assert paired_maximum == 1.9984014443252818e-14
+    summary = (BUNDLE / "README.md").read_text()
+    assert "ABBA pairs is 2.00e-14 Eh/bohr" in summary
+    assert "2.87e-14 Eh/bohr" in summary
 
 
 def test_force_distinct_rebuildable_historical_owner_and_adapter(
