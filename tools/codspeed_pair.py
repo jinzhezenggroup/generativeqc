@@ -30,7 +30,6 @@ URIS = (
     f"{BENCHMARK}::test_cpu_warm_endpoint_walltime[water-pbe-sto3g]",
     f"{BENCHMARK}::test_cpu_warm_endpoint_walltime[water-wb97mv-smallgrid-sto3g]",
     f"{BENCHMARK}::test_cpu_pbe_force_walltime",
-    f"{BENCHMARK}::test_cpu_rhf_changed_geometry_pair_walltime",
 )
 ARMS = ("base-1", "head-1", "head-2", "base-2")
 REQUIRED_EVENTS = frozenset(
@@ -177,7 +176,7 @@ def parse_arm(folder: Path) -> list[dict[str, object]]:
                 processes.append(records)
     # A single pytest process must retain the full identical selection/history.
     if len(processes) != 1 or [x["uri"] for x in processes[0]] != list(URIS):
-        raise ValueError("expected exactly five ordered benchmarks in one process")
+        raise ValueError("expected exactly four ordered benchmarks in one process")
     return processes[0]
 
 
@@ -430,7 +429,7 @@ def execute(args: argparse.Namespace) -> int:
             )
         selection = baseline.benchmark_selection()
         if selection["tier"] != "pr" or selection["extra_cases"] != ["wb97mv"]:
-            raise ValueError("paired diagnostic requires the fixed five-case selector")
+            raise ValueError("paired diagnostic requires the fixed four-case selector")
         actual_base = baseline.tested_master_base(
             args.merge_sha, args.head_sha, args.base_ref
         )

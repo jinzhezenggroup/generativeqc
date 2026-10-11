@@ -58,6 +58,7 @@ def orbital_probe(
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 constexpr int cudaMemcpyDeviceToDevice = 3;
@@ -71,6 +72,10 @@ int cudaMemcpyAsync(void* target, const void* source, std::size_t bytes, int kin
 int cudaStreamSynchronize(void*) { ++fences; return 0; }
 void check(int status) { if (status) throw std::runtime_error("injected copy failure"); }
 struct Owner {
+  bool is_pending = false;
+  struct Source { bool active() const { return true; } };
+  std::unique_ptr<Source> phase_source;
+  int rebases = 0;
   bool device_chunk_mode = false, is_active = true, is_failed = false;
   bool warm_ready = true, warm_orbitals_ready = false, warm_updates = true;
   bool warm_energy_baseline = false, final_state_ready = false;
@@ -96,6 +101,16 @@ struct Owner {
   double density[8], proposal[8], warm[8], warm_orbitals[8], tmp2[8];
   void* stream = nullptr;
   std::string scenario;
+  void retire_phase_source(bool audit) {
+    phase_source.reset();
+    if (audit && scenario == "resident-audit") throw std::runtime_error("source audit");
+  }
+  void rebase_warm_energy() {
+    ++rebases;
+    if (scenario == "resident-rebase") throw std::runtime_error("energy rebase");
+    warm_energy = -3000.0;
+    warm_energy_correction = 0x1p-45;
+  }
   void retain_final_fitted_projection() { final_fitted_projection_ready = true; }
   Owner() {
     std::fill_n(density, 8, 10.0);
@@ -145,6 +160,13 @@ int main(int argc, char** argv) {
   if (scenario == "density") fail_copy = 1;
   if (scenario == "orbitals") fail_copy = 2;
   if (scenario == "converged") { owner.is_active = false; owner.output.converged = true; }
+  const bool resident = scenario.find("resident-") == 0;
+  if (resident) {
+    owner.phase_source = std::make_unique<Owner::Source>();
+    owner.is_active = false;
+    owner.output.converged = scenario != "resident-unconverged";
+    owner.warm_updates = scenario != "resident-frozen";
+  }
   bool thrown = false;
   try {
     owner.enqueue();
@@ -152,8 +174,26 @@ int main(int argc, char** argv) {
   } catch (const std::runtime_error&) { thrown = true; }
   const bool failed = scenario == "density" || scenario == "orbitals" ||
       scenario == "enqueue" || scenario == "completion" || scenario == "physical";
-  assert(thrown == (failed && scenario != "physical"));
-  if (failed) {
+  const bool handoff_failure = scenario == "resident-audit" || scenario == "resident-rebase";
+  assert(thrown == ((failed && scenario != "physical") || handoff_failure));
+  if (resident) {
+    assert(!owner.phase_source);
+    if (handoff_failure) {
+      assert(owner.is_failed && !owner.is_active && !owner.is_pending);
+      assert(!owner.output.converged && !owner.final_state_ready && !owner.warm_ready);
+      assert(owner.warm_energy == std::numeric_limits<double>::infinity());
+      assert(owner.warm_energy_correction == 0.0 && !owner.warm_orbitals_ready);
+      assert(fences >= 1);
+    } else if (scenario == "resident-converged") {
+      assert(owner.rebases == 1 && owner.warm_ready && owner.warm[0] == 10.0);
+      assert(owner.warm_energy == -3000.0 && owner.warm_energy_correction == 0x1p-45);
+      assert(owner.final_state_ready && owner.final_generation == owner.generation);
+    } else {
+      assert(owner.rebases == 0 && owner.warm_ready && owner.warm[0] == 42.0);
+      assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
+      assert(owner.final_state_ready == (scenario == "resident-frozen"));
+    }
+  } else if (failed) {
     assert(owner.is_failed && !owner.is_active);
     assert(!owner.warm_orbitals_ready);
     assert(owner.movement.warm_orbital_frame_invalidations == initially_ready);
@@ -229,6 +269,11 @@ int main(int argc, char** argv) {
         "success",
         "retry",
         "converged",
+        "resident-converged",
+        "resident-frozen",
+        "resident-unconverged",
+        "resident-audit",
+        "resident-rebase",
     ],
 )
 def test_failure_invalidates_only_the_intermediate_frame(

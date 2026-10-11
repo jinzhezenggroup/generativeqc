@@ -89,7 +89,9 @@ def test_numerator_inventory_matches_pinned_source_and_execution(
     )
     audited = sum(
         coefficient * np.einsum(subscripts, *args)
-        for (coefficient, subscripts, _), args in zip(W_TERMS + V_TERMS, operands)
+        for (coefficient, subscripts, _), args in zip(
+            W_TERMS + V_TERMS, operands, strict=True
+        )
     )
     np.testing.assert_allclose(audited, expected, atol=1e-13, rtol=1e-13)
     np.testing.assert_allclose(
@@ -557,7 +559,9 @@ def test_committed_production_reference_provenance() -> None:
     for row in data["molecules"]:
         nocc, nvir, *arrays = _endpoint_feeds(row["name"])
         assert (row["nocc"], row["nvir"]) == (nocc, nvir)
-        assert row["inputs_hash"] == array_hash(dict(zip(INPUT_NAMES, arrays)))
+        assert row["inputs_hash"] == array_hash(
+            dict(zip(INPUT_NAMES, arrays, strict=True))
+        )
         assert row["et_ground_truth"] == GROUND_TRUTH[row["name"]][2]
         np.testing.assert_allclose(
             [row["et_numpy"], row["et_pyscf_ccsd_t"]],

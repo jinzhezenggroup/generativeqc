@@ -34,7 +34,7 @@ def test_compiler_embedding_uses_physical_pair_metric(o: int, v: int, q: int) ->
     seeds = [rng.normal(size=s) for s in shapes]
     program = factor_embedding_vjp(o, v, q)
     result = execute(
-        program, dict(zip(("bar_boo", "bar_bov", "bar_bvv"), seeds))
+        program, dict(zip(("bar_boo", "bar_bov", "bar_bvv"), seeds, strict=True))
     ).outputs
     np.testing.assert_array_equal(result["bar_bmo"], embed(seeds, o, o + v))
     assert all(len(node.spec.indices) <= 3 for node in program.live_nodes)

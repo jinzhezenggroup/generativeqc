@@ -92,7 +92,7 @@ class NativeTensorProgramBundle:
             ]
         ] = []
         source_paths: list[Path] = []
-        for program, logical_id in zip(programs, logical_ids):
+        for program, logical_id in zip(programs, logical_ids, strict=True):
             symbol = f"tensor_cpu_bundle_{logical_id}"
             source, resources = emit_cpu(
                 program,

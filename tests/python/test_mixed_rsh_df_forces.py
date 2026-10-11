@@ -238,7 +238,9 @@ def _mixed_pyscf_energy(
         return result
 
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms)],
+        atom=[
+            (label, atom.position) for label, atom in zip(labels, atoms, strict=True)
+        ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
         cart=calc._representation_name == "cartesian",
@@ -482,7 +484,9 @@ def test_complete_mixed_df_forces_against_independent_energies(
             "H",
             tuple(
                 position + delta
-                for position, delta in zip(atoms[1][1], (0.03, -0.02, 0.04))
+                for position, delta in zip(
+                    atoms[1][1], (0.03, -0.02, 0.04), strict=True
+                )
             ),
         )
         rebound = batch.execute(

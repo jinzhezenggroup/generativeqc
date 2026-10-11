@@ -55,7 +55,9 @@ def test_arbitrary_nonsymmetric_weights_raw_fused_and_bounded_schedules(
             for s in inputs["shells"]
         ],
     )
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H"), inputs["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H"), inputs["coordinates"], strict=True)
+    ]
     values, derivative = reference_matrices(inputs)
     weights = np.random.default_rng(141).normal(size=values.shape)
     expected = np.einsum(
@@ -126,11 +128,11 @@ def test_generated_derivatives_preserve_complete_scf_forces(
     for mapping in ("thread", "shell_warp", "nucleus_cooperative"):
         monkeypatch.setenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING", mapping)
         actual = run_case(monkeypatch, mapping="thread", **options)
-        for left, right in zip(reference, actual):
+        for left, right in zip(reference, actual, strict=True):
             np.testing.assert_allclose(
                 left.energies, right.energies, atol=3e-10, rtol=0
             )
-            for expected, found in zip(left.items, right.items):
+            for expected, found in zip(left.items, right.items, strict=True):
                 assert found.executed_backend == "cuda"
                 np.testing.assert_allclose(
                     found.forces, expected.forces, atol=3e-9, rtol=0

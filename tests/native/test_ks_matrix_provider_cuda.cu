@@ -101,6 +101,13 @@ void run_case(const std::filesystem::path& folder, int id, int n, int batch, int
                         stream));
   check(cudaMemcpyAsync(da.data, active.data(), active.size(), cudaMemcpyHostToDevice, stream));
   check(cudaStreamSynchronize(stream));
+  // Qualification borrows the same real context for independently bound shapes.
+  // Forced primitive comparisons are test fixtures, not production selectors.
+  auto resources = owner.view(masked_output.data, output_size);
+  resources.blas_ = library ? resources.blas_ : nullptr;
+  const generativeqc::tensor::CudaMatrixProductBinding binding(stream, resources.blas_, n, batch,
+                                                               spins);
+  resources.binding_ = &binding;
   cudaEvent_t begin{}, end{};
   check(cudaEventCreate(&begin));
   check(cudaEventCreate(&end));
@@ -112,12 +119,11 @@ void run_case(const std::filesystem::path& folder, int id, int n, int batch, int
     reset_output<<<static_cast<unsigned>((output_size + 255) / 256), 256, 0, stream>>>(dout.data,
                                                                                        output_size);
     check(cudaPeekAtLastError());
-    status = ordinary ? matrix::launch_matrix_product(owner.view(masked_output.data, output_size),
-                                                      batch, n, dl.data, transpose, dr.data,
-                                                      da.data, dout.data, library, scale)
-                      : matrix::launch_spin_matrix_product(
-                            owner.view(masked_output.data, output_size), batch, spins, n, dl.data,
-                            left_spin, transpose, dr.data, right_spin, da.data, dout.data, library);
+    status = ordinary ? matrix::launch_matrix_product(resources, batch, n, dl.data, transpose,
+                                                      dr.data, da.data, dout.data, scale)
+                      : matrix::launch_spin_matrix_product(resources, batch, spins, n, dl.data,
+                                                           left_spin, transpose, dr.data,
+                                                           right_spin, da.data, dout.data);
   };
   if (graph_mode) {
     check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));

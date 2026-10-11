@@ -136,7 +136,7 @@ def build_one_electron_component_kernel(
     components = tuple(components)
     if len(components) != 2 or any(
         c not in cartesian_components(l)
-        for c, l in zip(components, integral.signature.angular)
+        for c, l in zip(components, integral.signature.angular, strict=True)
     ):
         raise ValueError("Cartesian components do not match the shell-pair signature")
     graph = Graph() if graph is None else graph
@@ -145,7 +145,7 @@ def build_one_electron_component_kernel(
     inverse_p = 1 / p
     a = tuple(graph.variable(f"a_{axis}") for axis in AXES)
     b = tuple(graph.variable(f"b_{axis}") for axis in AXES)
-    ab = tuple(x - y for x, y in zip(a, b))
+    ab = tuple(x - y for x, y in zip(a, b, strict=True))
     # Relative shifts avoid forming a large absolute Gaussian product center.
     pa = tuple(-beta * inverse_p * x for x in ab)
     pb = tuple(alpha * inverse_p * x for x in ab)
@@ -179,7 +179,8 @@ def build_one_electron_component_kernel(
 
     def overlap(first: typing.Any, second: typing.Any) -> typing.Any:
         return prefactor * graph.multiply_many(
-            hermite(k, i, j, 0) for k, (i, j) in enumerate(zip(first, second))
+            hermite(k, i, j, 0)
+            for k, (i, j) in enumerate(zip(first, second, strict=True))
         )
 
     boys_argument = None
@@ -211,7 +212,9 @@ def build_one_electron_component_kernel(
         boys_count = sum(first) + sum(second) + 1
         boys = tuple(graph.variable(f"boys_{n}") for n in range(boys_count))
         terms = []
-        for orders in product(*(range(i + j + 1) for i, j in zip(first, second))):
+        for orders in product(
+            *(range(i + j + 1) for i, j in zip(first, second, strict=True))
+        ):
             coefficient = graph.multiply_many(
                 hermite(k, first[k], second[k], t) for k, t in enumerate(orders)
             )
@@ -265,9 +268,12 @@ def evaluate_one_electron_primitive(
         raise ValueError("primitive exponents must be positive and all inputs finite")
     if not math.isfinite(sum(exponents)):
         raise ValueError("primitive exponent sum overflows")
-    variables = dict(zip(("alpha", "beta"), exponents))
-    for name, position in zip("abc", centers):
-        variables.update({f"{name}_{axis}": x for axis, x in zip(AXES, position)})
+    variables = dict(zip(("alpha", "beta"), exponents, strict=True))
+    # S/T have A/B only; V additionally binds C. Never truncate positions implicitly.
+    for name, position in zip("abc"[:expected], centers, strict=True):
+        variables.update(
+            {f"{name}_{axis}": x for axis, x in zip(AXES, position, strict=True)}
+        )
     if kernel.boys_argument is not None:
         argument = kernel.graph.evaluate(kernel.boys_argument, variables)
         variables.update(

@@ -38,8 +38,11 @@ def test_independent_decimal_fd_translation_permutation_and_tiles(
             values: typing.Any, motion: typing.Any, sign: typing.Any
         ) -> typing.Any:
             return [
-                [Decimal(str(x)) + sign * h * Decimal(str(dx)) for x, dx in zip(row, d)]
-                for row, d in zip(values, motion)
+                [
+                    Decimal(str(x)) + sign * h * Decimal(str(dx))
+                    for x, dx in zip(row, d, strict=True)
+                ]
+                for row, d in zip(values, motion, strict=True)
             ]
 
         plus, minus = [
@@ -50,7 +53,7 @@ def test_independent_decimal_fd_translation_permutation_and_tiles(
         ]
         expected = sum(
             Decimal(str(q)) * (p[o] - m[o]) / (2 * h)
-            for q, p, m, o in zip(SEEDS, plus, minus, OWNERS)
+            for q, p, m, o in zip(SEEDS, plus, minus, OWNERS, strict=True)
         )
         assert abs(derivative - float(expected)) < 2e-14
     errors = []
@@ -198,8 +201,11 @@ def test_one_rounded_zero_factor_keeps_nonzero_product_derivative(
             values: typing.Any, directions: typing.Any, sign: typing.Any
         ) -> typing.Any:
             return [
-                [Decimal(str(x)) + sign * h * Decimal(str(dx)) for x, dx in zip(row, d)]
-                for row, d in zip(values, directions)
+                [
+                    Decimal(str(x)) + sign * h * Decimal(str(dx))
+                    for x, dx in zip(row, d, strict=True)
+                ]
+                for row, d in zip(values, directions, strict=True)
             ]
 
         plus, minus = [
