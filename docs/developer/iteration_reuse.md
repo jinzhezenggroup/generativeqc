@@ -36,8 +36,9 @@ adapters bind indices to runtime extent identifiers and supply the already
 selected dependency order; they do not color slots or infer invariance.
 
 The planner reserves exclusive slots for declared retained nodes before coloring
-dynamic scratch by last reader. Only identical symbolic products can share a
-slot. Equal representative sizes do not prove equal capacities at runtime.
+dynamic scratch by last reader, using `common.storage.analyze_lifetimes` for the
+materialized ownership contract. The default plan shares identical symbolic
+products. Equal representative sizes do not prove equal capacities at runtime.
 An operation cannot overwrite its own inputs, and all borrowed outputs remain
 live through return. Slot assignments are immutable and deterministic. The
 storage identity describes capacities and assignments only: it does not establish
@@ -64,6 +65,75 @@ the full core evaluation; an optional allocation miss drops retention before
 retrying the bounded matrix route. Numerical/launch failures propagate without
 publishing partial output. This does not change batching, matrix-provider
 defaults, stationarity gates, or the independently expanded audit.
+
+## Native scratch planning
+
+`plan_symbolic_arena(..., cross_size_reuse=True)` additionally coalesces whole
+slots with disjoint owner lifetimes. Each resulting slot holds the runtime maximum
+of its original checked extent products, so capacity cannot exceed their sum,
+even when runtime dimensions reverse their representative ordering. This
+conservative candidate does not search new schedules or infer physical aliases.
+Borrowed outputs remain live through return; retained plans keep the default
+coloring. DF Lambda's matrix-core capacity query also retains the frontier
+scratch floor, so reducing the uncached layout cannot refuse the existing cache.
+
+Native source qualification selects it with
+`tools/generate_rccsd_native.py --cross-size-arena`. Generate matching CPU capacity
+headers and CUDA sources in the same scope. Imported DF emitters can use
+`tools.generate_rccsd_native.cross_size_arena_candidate()` around **all** associated
+headers and sources. Never combine smaller capacity queries with baseline pointer
+assignments. Storage identity uses schema v2 for maximum-product capacities;
+scientific equation identities are unchanged. Standalone CLI generation without
+the flag and direct planner calls retain the equal-product baseline.
+
+CMake selects the paired native CC/DF/RHF emitters with the default-on
+`GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA` option. Set it to `OFF` to build the
+equal-product fallback. The DF and RHF source generators
+also accept `--cross-size-arena`; the selection covers all outputs from one
+invocation. Use the CMake option rather than replacing individual generated
+files in a production build.
+
+`cc::LambdaOptions::serial_scratch_reuse` is a separate default-off owner candidate.
+Conventional Lambda shares fresh-replay and response scratch. DF Lambda shares
+expanded, staged, matrix, primal-replay and independent-audit scratch on its
+existing single stream. Every borrowed result is consumed before another producer
+reuses the region. Inputs, sums, seeds, immutable cuts and the optional invariant
+frontier remain disjoint. The compiler supplies checked capacities; the native
+owner supplies the serialized consumption contract. This is **not** a compiler
+proof of arbitrary cross-stream or cross-method lifetimes.
+
+DF admission charges one maximum-sized scratch region plus persistent storage,
+host publications/descriptors and the existing provider allowance. A fixed aligned
+scratch prefix after inputs shifts the persistent suffix without changing its
+alignment. Allocation-refusal steps recompute admitted bytes and the shift before
+binding pointers. Retention, audit, matrix and cut fallbacks retain their order;
+no GPU synchronization or scientific work is added.
+
+The internal `run_df_ccsdt_native` accepts the trailing
+`lambda_serial_scratch_reuse` selector after its reference-experiment pointer.
+`benchmarks/df_ccsdt_force_endpoint.cpp` accepts a trailing `0`/`1` selector and records
+`lambda_serial_scratch_reuse_requested`. Existing Lambda numeric-capacity and
+owned-device-byte fields describe the selected layout. `df_audit_arena_bytes`
+remains a logical audit/replay capacity requirement, not an additional allocation
+when scratch is shared.
+
+The next benchmark argument selects a three-call lifecycle: cold, same-process
+warm, and moved-warm after atom zero moves by `1e-4` Bohr in z. Both orbital and
+auxiliary bases use the displaced geometry. These calls rebuild native scientific
+owners; they are not prepared force replay. Recycle selection remains separate.
+
+Cross-size arena reuse is qualified independently of serial scratch; serial
+scratch remains experimental because it can change warm cache/provider admission.
+Static capacity reductions, source equivalence, host tests or CUDA compilation
+alone do not justify promotion. Promotion requires same-source FP64 numerical and
+independent-audit gates, complete cold/warm/moved-warm E+F noninferiority, matching
+iteration/action/task counts and the existing allocation journal. Observe numeric
+allocation high-water separately from process, provider and CUDA Graph retention;
+measure traffic, launches, registers and spills rather than inferring them from
+arena sizes. Real-device runs require finite Slurm allocations on allowed nodes.
+
+See the [memory-candidate decision](../../.agents/notes/implemented/performance/2026-10-11-memory-aware-native-arena-candidates.md)
+for rejected approaches and qualification boundaries.
 
 ## Native RCCSD consumer
 

@@ -19,6 +19,12 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCTests.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSourceIdentity.cmake")
 
 option(GENERATIVEQC_ENABLE_CUDA "Build the CUDA runtime backend" ON)
+option(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA
+       "Coalesce disjoint native FP64 scratch slots across symbolic capacities" ON)
+set(_generativeqc_native_arena_args)
+if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
+  list(APPEND _generativeqc_native_arena_args --cross-size-arena)
+endif()
 option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE
        "Reuse compiler-owned AO radial and axis work for 4/10 jets" ON)
 option(GENERATIVEQC_ENABLE_CUTENSOR "Link the optional native cuTENSOR provider" OFF)

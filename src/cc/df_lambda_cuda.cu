@@ -160,12 +160,23 @@ struct DFLambdaActions::Impl {
       for (const auto& item : parameters) scratch = std::max(scratch, item.arena(o, v));
       scratch = std::max(scratch, generated_virtual::factor_vjp_cuda_arena_elements(o, v));
     }
-    const auto arena = reserve(cursor, bytes(scratch));
+    std::size_t scratch_elements = scratch, allocation_bytes = 0, scratch_offset_shift = 0;
+    const auto arena = reserve(cursor, options.serial_scratch_reuse ? 0 : bytes(scratch));
+    // Shared scratch precedes the persistent suffix. Every producer and
+    // its borrowed-output consumer use this owner's one stream; cuts, seeds,
+    // publications and the invariant frontier retain separate storage.
+    const auto with_scratch = [&](std::size_t persistent, std::size_t elements) {
+      if (options.serial_scratch_reuse) {
+        auto amount = bytes(elements);
+        if (amount % 256) amount = checked_add(amount, 256 - amount % 256);
+        persistent = checked_add(persistent, amount);
+      }
+      return persistent;
+    };
     const auto sums1 = reserve(cursor, bytes(n1)), sums2 = reserve(cursor, bytes(n2));
     const auto seed0 = reserve(cursor, sizeof(double)), seed1 = reserve(cursor, bytes(n1)),
                seed2 = reserve(cursor, bytes(n2));
     const auto error = reserve(cursor, sizeof(int));
-    metrics.owned_device_bytes = cursor;
     // Conservative simultaneous host bound: both packed layouts (validation
     // and owner), dense seeds/actions/results, packed RHS/audits, GMRES storage,
     // optional external energy seeds and all detached parameter publications.
@@ -196,15 +207,16 @@ struct DFLambdaActions::Impl {
     const auto device_limit = std::min(available_device_bytes, options.df_max_device_bytes);
     metrics.df_available_device_bytes = available_device_bytes;
     metrics.df_device_limit_bytes = device_limit;
-    const auto device_fits = [&](std::size_t candidate, std::size_t allowance) {
-      return checked_add(candidate, allowance) <= device_limit;
+    const auto device_fits = [&](std::size_t candidate, std::size_t allowance,
+                                 std::size_t elements) {
+      return checked_add(with_scratch(candidate, elements), allowance) <= device_limit;
     };
     std::size_t staged_arena = arena, tau_offset = 0, tau_seed_offset = 0;
     std::array<std::size_t, 6> cut_offsets{}, seed_offsets{};
     cut_sizes = {vv, n2, n2, n2, n2, n1};
     if (options.df_auxiliary_reduction) {
-      // All cached cuts belong to this immutable Problem/T owner. The original
-      // arena remains available for expanded physical replay and Lambda audit.
+      // Cached cuts belong to this immutable Problem/T owner; expanded replay
+      // and the staged operator use scratch at different points on one stream.
       const auto before = checked_add(
           generated_response::transpose_contraction_terms(o, v),
           checked_mul(q, generated_response::virtual_amplitude_vjp_contraction_terms(o, v)));
@@ -225,27 +237,39 @@ struct DFLambdaActions::Impl {
         for (const auto& item : parameters)
           staged_scratch = std::max(staged_scratch, item.staged_arena(o, v));
       }
-      if (staged_scratch > scratch) staged_arena = reserve(candidate, bytes(staged_scratch));
+      staged_scratch = std::max(scratch, staged_scratch);
+      if (!options.serial_scratch_reuse && staged_scratch > scratch)
+        staged_arena = reserve(candidate, bytes(staged_scratch));
       tau_offset = reserve(candidate, bytes(n2));
       tau_seed_offset = reserve(candidate, bytes(n2));
       for (std::size_t x = 0; x < cuts.size(); ++x) {
         cut_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
         seed_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
       }
-      if (after < before && checked_add(host_bytes, candidate) <= options.max_bytes &&
-          device_fits(candidate, 0)) {
+      if (after < before &&
+          checked_add(host_bytes, with_scratch(candidate, staged_scratch)) <= options.max_bytes &&
+          device_fits(candidate, 0, staged_scratch)) {
         metrics.df_auxiliary_reduction = true;
         cursor = candidate;
+        scratch_elements = staged_scratch;
       }
     }
     // Keep the scalar staged layout as a bounded fallback. The matrix arena
     // is optional and includes explicit IR packing/broadcast intermediates.
-    const auto scalar_cursor = cursor, scalar_staged_arena = staged_arena;
+    const auto scalar_cursor = cursor, scalar_scratch = scratch_elements,
+               scalar_staged_arena = staged_arena;
     const bool scalar_reduction = metrics.df_auxiliary_reduction;
     std::size_t binding_host_bytes = 0, core_reuse_offset = 0, audit_offset = 0;
     std::size_t matrix_scratch_elements = 0;
     auto capacity = [&] {
-      metrics.owned_device_bytes = checked_add(cursor, metrics.df_provider_allowance_bytes);
+      allocation_bytes = cursor;
+      if (options.serial_scratch_reuse) {
+        allocation_bytes = with_scratch(cursor, scratch_elements);
+        scratch_offset_shift = allocation_bytes - cursor;
+        staged_arena = audit_offset = arena;
+      }
+      metrics.owned_device_bytes =
+          checked_add(allocation_bytes, metrics.df_provider_allowance_bytes);
       metrics.numeric_capacity_bytes =
           checked_add(checked_add(host_bytes, binding_host_bytes), metrics.owned_device_bytes);
     };
@@ -261,8 +285,9 @@ struct DFLambdaActions::Impl {
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
       metrics.df_auxiliary_reduction = scalar_reduction;
-      staged_arena = scalar_staged_arena;
       cursor = scalar_cursor;
+      scratch_elements = scalar_scratch;
+      staged_arena = scalar_staged_arena;
       capacity();
     };
     if (scalar_reduction && options.df_matrix_gemm) {
@@ -283,17 +308,21 @@ struct DFLambdaActions::Impl {
           for (const auto& item : parameters) include(item.stage, 1);
         }
         auto candidate = scalar_cursor;
-        const auto matrix_arena = reserve(candidate, bytes(matrix_scratch));
+        const auto candidate_scratch = std::max(scratch, matrix_scratch);
+        const auto matrix_arena =
+            options.serial_scratch_reuse ? 0 : reserve(candidate, bytes(matrix_scratch));
         const auto descriptor_bytes =
             generated_response::contraction_host_bytes(q % batch ? 2 : 1, with_parameters);
         if (fits &&
-            checked_add(checked_add(checked_add(host_bytes, descriptor_bytes), candidate),
+            checked_add(checked_add(checked_add(host_bytes, descriptor_bytes),
+                                    with_scratch(candidate, candidate_scratch)),
                         kProviderAllowance) <= options.max_bytes &&
-            device_fits(candidate, kProviderAllowance)) {
+            device_fits(candidate, kProviderAllowance, candidate_scratch)) {
           binding_host_bytes = descriptor_bytes;
           metrics.df_matrix_gemm = true;
           metrics.df_auxiliary_batch_size = batch;
           metrics.df_provider_allowance_bytes = kProviderAllowance;
+          scratch_elements = candidate_scratch;
           staged_arena = matrix_arena;
           matrix_scratch_elements = matrix_scratch;
           cursor = candidate;
@@ -301,12 +330,14 @@ struct DFLambdaActions::Impl {
         }
       }
     }
-    const auto operator_cursor = cursor, operator_binding_host_bytes = binding_host_bytes;
+    const auto operator_cursor = cursor, operator_binding_host_bytes = binding_host_bytes,
+               operator_scratch = scratch_elements;
     auto drop_audit = [&] {
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
       metrics.df_primal_matrix_gemm = false;
       cursor = operator_cursor;
+      scratch_elements = operator_scratch;
       binding_host_bytes = operator_binding_host_bytes;
       capacity();
     };
@@ -325,15 +356,17 @@ struct DFLambdaActions::Impl {
           const auto arena_bytes =
               replay ? std::max(audit_bytes, bytes(primal_virtual.matrix_arena(o, v, batch)))
                      : audit_bytes;
-          const auto offset = reserve(candidate, arena_bytes);
+          const auto candidate_scratch = std::max(scratch_elements, arena_bytes / sizeof(double));
+          const auto offset = options.serial_scratch_reuse ? 0 : reserve(candidate, arena_bytes);
           if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
-                          checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
-                  options.max_bytes &&
-              device_fits(candidate, metrics.df_provider_allowance_bytes)) {
+                          checked_add(with_scratch(candidate, candidate_scratch),
+                                      metrics.df_provider_allowance_bytes)) <= options.max_bytes &&
+              device_fits(candidate, metrics.df_provider_allowance_bytes, candidate_scratch)) {
             metrics.df_audit_matrix_gemm = true;
             metrics.df_audit_arena_bytes = arena_bytes;
             metrics.df_primal_matrix_gemm = replay;
             cursor = candidate;
+            scratch_elements = candidate_scratch;
             audit_offset = offset;
             binding_host_bytes = checked_add(binding_host_bytes, descriptors);
             break;
@@ -341,11 +374,13 @@ struct DFLambdaActions::Impl {
         }
       }
     }
-    const auto matrix_cursor = cursor, matrix_binding_host_bytes = binding_host_bytes;
+    const auto matrix_cursor = cursor, matrix_binding_host_bytes = binding_host_bytes,
+               matrix_scratch = scratch_elements;
     auto drop_core_reuse = [&] {
       metrics.df_core_reuse = false;
       metrics.df_core_reuse_bytes = 0;
       cursor = matrix_cursor;
+      scratch_elements = matrix_scratch;
       binding_host_bytes = matrix_binding_host_bytes;
       capacity();
     };
@@ -361,9 +396,9 @@ struct DFLambdaActions::Impl {
       const auto offset = reserve(candidate, retained_bytes);
       const auto descriptors = generated_response::core_reuse_contraction_host_bytes();
       if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
-                      checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
-              options.max_bytes &&
-          device_fits(candidate, metrics.df_provider_allowance_bytes)) {
+                      checked_add(with_scratch(candidate, scratch_elements),
+                                  metrics.df_provider_allowance_bytes)) <= options.max_bytes &&
+          device_fits(candidate, metrics.df_provider_allowance_bytes, scratch_elements)) {
         metrics.df_core_reuse = true;
         metrics.df_core_reuse_bytes = retained_bytes;
         core_reuse_offset = offset;
@@ -379,25 +414,25 @@ struct DFLambdaActions::Impl {
     parameters_admitted = with_parameters;
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
     if (metrics.df_matrix_gemm && !storage.contractions.prepare(storage.stream)) scalar_plan();
-    auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     if (allocation == cudaErrorMemoryAllocation && metrics.df_core_reuse) {
       // Refuse only the optional owner-local retention before dropping GEMM.
       // Numerical, launch and driver failures must propagate, not retry.
       (void)cudaGetLastError();
       drop_core_reuse();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_audit_matrix_gemm) {
       (void)cudaGetLastError();
       drop_audit();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_matrix_gemm) {
       (void)cudaGetLastError();
       std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
       storage.contractions.release_locked();
       scalar_plan();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_auxiliary_reduction) {
       // Only allocation failure may discard optional cuts; arithmetic errors
@@ -405,8 +440,9 @@ struct DFLambdaActions::Impl {
       (void)cudaGetLastError();
       metrics.df_auxiliary_reduction = false;
       cursor = fallback_cursor;
+      scratch_elements = scratch;
       capacity();
-      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), allocation_bytes);
     }
     cuda_check(allocation);
     auto at = [&](std::size_t offset) { return reinterpret_cast<double*>(storage.base + offset); };
@@ -423,12 +459,12 @@ struct DFLambdaActions::Impl {
     state.v = v;
     state.stream = storage.stream;
     state.response_arena = state.replay_arena = at(arena);
-    state.error = reinterpret_cast<int*>(storage.base + error);
-    state.bar_correlation_energy = at(seed0);
-    state.bar_singles_residual = at(seed1);
-    state.bar_doubles_residual = at(seed2);
-    sum1 = at(sums1);
-    sum2 = at(sums2);
+    state.error = reinterpret_cast<int*>(storage.base + checked_add(error, scratch_offset_shift));
+    state.bar_correlation_energy = at(checked_add(seed0, scratch_offset_shift));
+    state.bar_singles_residual = at(checked_add(seed1, scratch_offset_shift));
+    state.bar_doubles_residual = at(checked_add(seed2, scratch_offset_shift));
+    sum1 = at(checked_add(sums1, scratch_offset_shift));
+    sum2 = at(checked_add(sums2, scratch_offset_shift));
     state.df_virtual_singles = sum1;
     state.df_virtual_doubles = sum2;
     auxiliary.o = o;
@@ -443,8 +479,8 @@ struct DFLambdaActions::Impl {
     if (metrics.df_auxiliary_reduction) {
       static_cast<generated_response::CudaState&>(staged) = state;
       staged.response_arena = at(staged_arena);
-      tau = at(tau_offset);
-      tau_seed = at(tau_seed_offset);
+      tau = at(checked_add(tau_offset, scratch_offset_shift));
+      tau_seed = at(checked_add(tau_seed_offset, scratch_offset_shift));
       staged.df_tau = tau;
       staged.bar_df_tau = tau_seed;
       const std::array<const double**, 6> values{
@@ -454,8 +490,8 @@ struct DFLambdaActions::Impl {
           &staged.bar_df_Lvv, &staged.bar_df_Wvoov,         &staged.bar_df_Wvovo,
           &staged.bar_df_Xv,  &staged.bar_df_D05_vv_ladder, &staged.bar_df_singles_residual};
       for (std::size_t x = 0; x < cuts.size(); ++x) {
-        *values[x] = cuts[x] = at(cut_offsets[x]);
-        *seeds[x] = cut_seeds[x] = at(seed_offsets[x]);
+        *values[x] = cuts[x] = at(checked_add(cut_offsets[x], scratch_offset_shift));
+        *seeds[x] = cut_seeds[x] = at(checked_add(seed_offsets[x], scratch_offset_shift));
       }
       if (metrics.df_matrix_gemm) {
         // Pre-bind both complete batches and the final Q tail. A partial batch
@@ -475,7 +511,7 @@ struct DFLambdaActions::Impl {
         metrics.audit_schedule_hash = generated_response::audit_matrix_operator_hash;
       }
       if (metrics.df_core_reuse) {
-        staged.core_reuse_arena = at(core_reuse_offset);
+        staged.core_reuse_arena = at(checked_add(core_reuse_offset, scratch_offset_shift));
         generated_response::prepare_core_reuse_contractions(
             staged, storage.contractions, metrics.df_gemm_calls, metrics.df_gemm_summands);
         runtime::df_progress::Scope preparation("df_lambda_core_reuse_preparation");

@@ -97,7 +97,10 @@ struct Problem {
     ovvv{1.0},ovoo{1.0},oooo{1.0},vvvv{1.0},d1{1.0},d2{1.0};
 };
 struct SolverResult { TrackingVector t1{1.0},t2{1.0}; };
-struct LambdaOptions { std::size_t max_bytes=1U<<20; };
+struct LambdaOptions {
+  std::size_t max_bytes=1U<<20;
+  bool serial_scratch_reuse=false;
+};
 struct LambdaDiagnostic {
   std::size_t owned_device_bytes{},numeric_capacity_bytes{},h2d_bytes{},d2h_bytes{},synchronizations{};
   std::size_t df_auxiliary_slices{},df_contraction_terms{},df_generated_kernels{};
@@ -140,9 +143,10 @@ std::size_t lambda_cpu_numeric_capacity(const Problem&,const SolverResult&,
 """
 DRIVER = r"""
 int main(int argc,char** argv) {
-  if(argc!=4)return 99;
+  if(argc!=5)return 99;
   const std::string op=argv[1], mode=argv[2]; const int index=std::atoi(argv[3]);
   Problem p; SolverResult cc; LambdaOptions options;
+  options.serial_scratch_reuse=std::string(argv[4])=="1";
   {
     CudaLambdaActions owner(p,cc,options,1,false,true);
     copies=sync_count=0;
@@ -278,6 +282,7 @@ OPERATIONS = (
 )
 
 
+@pytest.mark.parametrize("sharing", (False, True))
 @pytest.mark.parametrize(
     "operation,mode,index",
     [
@@ -295,10 +300,11 @@ OPERATIONS = (
     ],
 )
 def test_lambda_call_drains_borrowed_host_buffers(
-    lambda_lifetime_probe: Path, operation: str, mode: str, index: int
+    lambda_lifetime_probe: Path, operation: str, mode: str, index: int, sharing: bool
 ) -> None:
+    """Sharing must preserve host-borrow retirement without adding normal fences."""
     result = subprocess.run(
-        [str(lambda_lifetime_probe), operation, mode, str(index)],
+        [str(lambda_lifetime_probe), operation, mode, str(index), str(int(sharing))],
         check=False,
         capture_output=True,
         text=True,

@@ -59,6 +59,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.df_auxiliary_reduction = !(mode & 4);
     response.df_matrix_gemm = !(mode & 8);
     response.df_core_reuse = !(mode & 64);
+    response.serial_scratch_reuse = mode & 4096;
     response.df_audit_matrix_gemm = !(mode & 128);
     if (!(mode & 2048)) {
       response.df_primal_matrix_gemm = mode & 1024;
