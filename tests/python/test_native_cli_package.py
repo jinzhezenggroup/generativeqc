@@ -80,6 +80,16 @@ class NativeCliPackageTests(unittest.TestCase):
         self.assertEqual(options["GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT"], "ON")
         self.assertEqual(options["GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS"], "")
 
+    def test_cuda_catalog_verification_respects_docs_only_cli_skip(self) -> None:
+        """Catalog verification must follow the optional CLI build tier."""
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/ci.yml").read_text()
+        step = workflow.split(
+            "      - name: Verify full automatic CUDA XC catalog is compiled for distribution\n",
+            1,
+        )[1].split("\n      - ", 1)[0]
+        self.assertIn("        if: steps.cli_scope.outputs.tier != 'skip'\n", step)
+
     def test_rejects_unexpected_shared_aot_plugin(self) -> None:
         libs = self.prefix / "lib"
         libs.mkdir()

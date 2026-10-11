@@ -1421,6 +1421,7 @@ jobs:
           cmake --preset cuda-release-cli-sm120
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
+        if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           PYTHONPATH=python python3 - <<'PY'
