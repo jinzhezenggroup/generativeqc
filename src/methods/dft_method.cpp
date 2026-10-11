@@ -4,7 +4,6 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
-#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -21,7 +20,6 @@
 #include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
-#include "dft/incremental_direct_jk_control.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
@@ -29,6 +27,7 @@
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "methods/scf_common_options.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/resource_usage.hpp"
@@ -217,31 +216,6 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
 
-/** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
- * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
-bool incremental_direct_jk_benchmark_requested(const char* name) {
-  const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
-  if (control == dft::IncrementalDirectJkControl::Invalid)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      std::string(name) + " must be 0/off or 1/on");
-  return control == dft::IncrementalDirectJkControl::Enabled;
-}
-
-std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr) return std::nullopt;
-  if (*value < '0' || *value > '9')
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      std::string(name) + " must be an unsigned integer");
-  errno = 0;
-  char* end = nullptr;
-  const unsigned long parsed = std::strtoul(value, &end, 10);
-  if (errno == ERANGE || end == value || *end != '\0' || parsed > UINT_MAX)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      std::string(name) + " must be an unsigned integer");
-  return static_cast<unsigned>(parsed);
-}
-
 std::optional<double> incremental_direct_jk_benchmark_density_rms_threshold(const char* name) {
   const char* value = std::getenv(name);
   if (value == nullptr) return std::nullopt;
@@ -259,16 +233,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   if (!std::isfinite(descriptor.energy_tolerance) || !std::isfinite(descriptor.density_tolerance) ||
       !std::isfinite(descriptor.screening_tolerance))
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "DFT tolerances must be finite");
-  scf::ScfOptions options;
-  options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
-  options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
-  options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
-  options.energy_tolerance =
-      descriptor.energy_tolerance > 0.0 ? descriptor.energy_tolerance : 1.0e-10;
-  options.density_tolerance =
-      descriptor.density_tolerance > 0.0 ? descriptor.density_tolerance : 1.0e-8;
-  options.screening_tolerance =
-      descriptor.screening_tolerance > 0.0 ? descriptor.screening_tolerance : 1.0e-12;
+  scf::ScfOptions options = common_scf_options(descriptor);
 
   const auto legacy_plan = legacy_ks_execution_plan(descriptor.method);
   const generativeqc_ks_options* ks_input = nullptr;
@@ -303,12 +268,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     semilocal = {execution_plan.semilocal_family, 1.0, 1.0};
   }
 
-  const auto mode = descriptor.density_fitting_mode;
-  if (mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
-      mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
-      mode != GENERATIVEQC_DENSITY_FITTING_CUDA && mode != GENERATIVEQC_DENSITY_FITTING_AUTO)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "unknown density-fitting execution mode");
+  const auto mode = checked_density_fitting_mode(descriptor);
   options.density_fitting_mode = mode;
   if ((mode == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
        backend != GENERATIVEQC_BACKEND_CPU_REFERENCE) ||
@@ -322,17 +282,14 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   if (descriptor.density_fitting_relative_threshold != 0.0)
     options.density_fitting_relative_threshold = descriptor.density_fitting_relative_threshold;
   options.density_fitting_memory_budget_bytes = descriptor.density_fitting_memory_budget_bytes;
-  if (descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
-      descriptor.precision_mode != GENERATIVEQC_PRECISION_AUTO)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "unknown floating-point precision mode");
-  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+  const auto precision_mode = checked_precision_mode(descriptor);
+  if (precision_mode == GENERATIVEQC_PRECISION_AUTO &&
       backend != GENERATIVEQC_BACKEND_CUDA)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DFT automatic precision currently requires CUDA");
-  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
+  if (precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
-  options.precision_mode = descriptor.precision_mode;
+  options.precision_mode = precision_mode;
 
   scf::FockBuildSpec fock;
   fock.spin =
