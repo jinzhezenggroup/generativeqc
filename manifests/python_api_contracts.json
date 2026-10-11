@@ -129,6 +129,7 @@
     "generativeqc.experimental.array_api.Index": "generativeqc_compiler/tensor/types.py:Index",
     "generativeqc.experimental.array_api.IndexSpace": "generativeqc_compiler/tensor/types.py:IndexSpace",
     "generativeqc.experimental.array_api.Program": "generativeqc_compiler/tensor/program.py:Program",
+    "generativeqc.experimental.array_api.RHF": "generativeqc/experimental/_array_api_molecular.py:RHF",
     "generativeqc.experimental.array_api.SUPPORTED_FUNCTIONS": "generativeqc_compiler/array_api/capabilities.py:SUPPORTED_FUNCTIONS",
     "generativeqc.experimental.array_api.TensorSpec": "generativeqc_compiler/tensor/types.py:TensorSpec",
     "generativeqc.experimental.array_api.VibeArray": "generativeqc_compiler/array_api/array.py:VibeArray",
@@ -2493,6 +2494,38 @@
       "profile": "module",
       "facets": {
         "behavior": "docstring"
+      }
+    },
+    "generativeqc/experimental/_array_api_molecular.py:RHF": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/_array_api_molecular.py:RHF.__call__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/_array_api_molecular.py:RHF.__init__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
     "generativeqc/experimental/array_api.py:<module>": {
