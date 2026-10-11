@@ -29,11 +29,26 @@ struct MaterializedDirectPairWork {
   unsigned long long component_contractions{}, published_components{};
 };
 
+/** Canonical whole-shell owners use fewer idle lanes in small domains.
+ * These compile-time bounds cover every s/p/d/f composition, not just the
+ * most frequent shell class. Legacy packet consumers retain 256 lanes. */
+__host__ __device__ inline constexpr unsigned canonical_materialized_component_lanes(
+    unsigned order) {
+  return order >= 3 && order <= 5 ? 32 : 256;
+}
+__host__ __device__ inline constexpr unsigned canonical_materialized_component_slots(
+    unsigned order) {
+  const unsigned maximum = order == 3 ? 27 : order == 4 ? 81 : order == 5 ? 162 :
+                           order == 6 ? 324 : order == 7 ? 648 : order == 8 ? 1296 : 2160;
+  const unsigned lanes = canonical_materialized_component_lanes(order);
+  return (maximum + lanes - 1) / lanes;
+}
+
 /** One CTA-owned recurrence, bounded independently of primitive contraction
  * length. No primitive/AO quartet tensor or geometry-dependent global cache. */
 template <unsigned AngularOrder>
 struct MaterializedDirectPairRecurrence {
-  static_assert(AngularOrder >= 5 && AngularOrder <= kMaximumCoulombOrder);
+  static_assert(AngularOrder >= 3 && AngularOrder <= kMaximumCoulombOrder);
   using Pair = ShellPairHermiteCoefficients<double, kMaximumAngularMomentum,
                                             kMaximumAngularMomentum>;
   Pair bra[3], ket[3];
@@ -46,12 +61,15 @@ static_assert(sizeof(MaterializedDirectPairRecurrence<12>) <= (48U << 10));
 /** Borrow cached p/mu/P and retain the incumbent axis-Gaussian arithmetic.
  * The cache's combined weighted_coefficient is deliberately not divided to
  * recover raw coefficients: zero/underflow would lose the scientific inputs.
- * Individual coefficient factors retain their original multiplication order. */
+ * Individual coefficient factors retain their original multiplication order.
+ * A disjoint axis interval lends the same complete Hermite initialization to
+ * independent lanes; the default interval preserves serial packet consumers. */
 template <class Pair>
 __device__ inline void prepare_materialized_direct_pair(
     const PrimitivePairData& cached, unsigned first_angular, unsigned second_angular,
-    const Vec3<double>& first, const Vec3<double>& second, Pair (&coefficients)[3]) {
-  for (unsigned axis = 0; axis < 3; ++axis) {
+    const Vec3<double>& first, const Vec3<double>& second, Pair (&coefficients)[3],
+    unsigned axis_begin = 0U, unsigned axis_end = 3U) {
+  for (unsigned axis = axis_begin; axis < axis_end; ++axis) {
     const double a = vec_axis(first, axis), b = vec_axis(second, axis), ab = a - b;
     fill_shell_pair_hermite_geometry<kMaximumAngularMomentum, kMaximumAngularMomentum>(
         first_angular, second_angular, vec_axis(cached.product_center, axis), a, b,
@@ -63,7 +81,8 @@ __device__ inline void prepare_materialized_direct_pair(
  * still participate in publication/retirement but never read an invalid AO.
  * All selected components consume one Coulomb recurrence per pair product.
  * J and K reuse each contracted ERI through the existing symmetry scatter. */
-template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1>
+template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1,
+          unsigned ComponentLanes = detail::kDirectQuartetTileSize>
 __device__ inline void contract_materialized_direct_pair_fock(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
@@ -98,13 +117,15 @@ __device__ inline void contract_materialized_direct_pair_fock(
   // quartet on the same precision/source route. The dddd stream supplies all
   // six possible packets; the incumbent packet queue supplies one.
   static_assert(ComponentSlots > 0);
+  static_assert(ComponentLanes >= 32 && ComponentLanes <= detail::kDirectQuartetTileSize &&
+                (ComponentLanes & (ComponentLanes - 1)) == 0);
   std::size_t i[ComponentSlots]{}, j[ComponentSlots]{}, k[ComponentSlots]{}, l[ComponentSlots]{};
   bool admitted[ComponentSlots]{};
   double value[ComponentSlots]{};
   bool any_admitted = false;
   for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
-    const std::size_t ordinal = (std::size_t(task.tile) + slot) * detail::kDirectQuartetTileSize +
-                                threadIdx.x;
+    const std::size_t ordinal = std::size_t(task.tile) * detail::kDirectQuartetTileSize +
+                                slot * ComponentLanes + threadIdx.x;
     admitted[slot] = ordinal < count &&
         decode_direct_tile_ao_ordinal(batch, task, ordinal, first_count, second_count,
                                       ao_begin, n, i[slot], j[slot], k[slot], l[slot]) &&
@@ -123,9 +144,17 @@ __device__ inline void contract_materialized_direct_pair_fock(
   const auto nb = batch.shell_primitive_offsets[sj + 1] - batch.shell_primitive_offsets[sj];
   const auto nd = batch.shell_primitive_offsets[sl + 1] - batch.shell_primitive_offsets[sl];
   for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
+    // Read immutable cached geometry directly: shared.first is not published
+    // until the existing barrier, so other axis owners must not borrow it yet.
+    if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+      if (threadIdx.x < 3U)
+        prepare_materialized_direct_pair(batch.shell_primitive_pairs[bra], li, lj, first, second,
+                                         shared.bra, threadIdx.x, threadIdx.x + 1U);
+    }
     if (threadIdx.x == 0) {
       shared.first = batch.shell_primitive_pairs[bra];
-      prepare_materialized_direct_pair(shared.first, li, lj, first, second, shared.bra);
+      if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+        prepare_materialized_direct_pair(shared.first, li, lj, first, second, shared.bra);
       const auto a = batch.shell_primitive_offsets[si] + (bra - bra_begin) / nb;
       const auto b = batch.shell_primitive_offsets[sj] + (bra - bra_begin) % nb;
       shared.coefficients[0] = batch.primitive_coefficients[a];
@@ -134,9 +163,16 @@ __device__ inline void contract_materialized_direct_pair_fock(
     }
     __syncthreads();
     for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
+      // All three axes retire with the unchanged Coulomb publication barrier.
+      if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+        if (threadIdx.x < 3U)
+          prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket], lk, ll, third, fourth,
+                                           shared.ket, threadIdx.x, threadIdx.x + 1U);
+      }
       if (threadIdx.x == 0) {
         shared.second = batch.shell_primitive_pairs[ket];
-        prepare_materialized_direct_pair(shared.second, lk, ll, third, fourth, shared.ket);
+        if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+          prepare_materialized_direct_pair(shared.second, lk, ll, third, fourth, shared.ket);
         const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
         const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
         shared.coefficients[2] = batch.primitive_coefficients[c];
@@ -175,8 +211,8 @@ __device__ inline void contract_materialized_direct_pair_fock(
   }
   for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
     if (!admitted[slot]) continue;
-    const std::size_t ordinal = (std::size_t(task.tile) + slot) * detail::kDirectQuartetTileSize +
-                                threadIdx.x;
+    const std::size_t ordinal = std::size_t(task.tile) * detail::kDirectQuartetTileSize +
+                                slot * ComponentLanes + threadIdx.x;
     // Qualification may inspect each final component without affecting the
     // production storage contract, where this borrowed address is null.
     if (checked_components) checked_components[ordinal] = value[slot];

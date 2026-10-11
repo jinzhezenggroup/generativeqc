@@ -861,7 +861,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
       const bool has_materialized_order = std::any_of(
           plan->canonical_pair_offsets.begin(), plan->canonical_pair_offsets.end(),
           [](const auto& offsets) {
-            for (unsigned order = 5; order <= 9; ++order)
+            for (unsigned order = 3; order <= 9; ++order)
               for (unsigned second = order > 6 ? order - 6 : 0; second <= order / 2; ++second) {
                 const unsigned first = order - second;
                 if (offsets[first + 1] > offsets[first] && offsets[second + 1] > offsets[second])
@@ -948,11 +948,11 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   static_cast<int>(order.size()), static_cast<int>(systems.size() * 7),
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
-              // Orders five through nine share five bounded prefix
+              // Orders three through nine share five bounded prefix
               // planes: a (first, second) angular block has exactly one order.
               // Equal angular buckets own only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
-                for (unsigned angular_order = 5; angular_order <= 9; ++angular_order)
+                for (unsigned angular_order = 3; angular_order <= 9; ++angular_order)
                   for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
                        second <= angular_order / 2; ++second) {
                     const unsigned first = angular_order - second;
@@ -1499,12 +1499,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->resident_values + value_offset, plan->canonical_density,
                   plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction);
-            else if (first + second >= 5 && first + second <= 9 && plan->materialized_pair_order &&
+            else if (first + second >= 3 && first + second <= 9 && plan->materialized_pair_order &&
                      !correction && !fixed &&
                      (!dispatch.canonical_coulomb || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {
-              // Orders five through seven need at most 162/324/648
-              // components: every lane owns up to three complete packets.
+              // The compiler owns complete-domain lanes/slots for orders 3--9.
+              // Low orders use smaller CTAs; higher orders retain wider owners.
               // Fixed-density screening, compensation and resident-value
               // layouts retain their established component-wise fallbacks.
               const auto& shells = plan->materialized_pair_offsets[item];

@@ -95,15 +95,12 @@ __global__ void materialized_canonical_jk_kernel(
   __shared__ MaterializedDirectPairRecurrence<AngularOrder> shared;
   // With s/p/d/f shells, these are the exact maximum packet counts for each
   // admitted total order. No component may be left for a second CTA owner.
-  static_assert(AngularOrder >= 5 && AngularOrder <= 9);
+  static_assert(AngularOrder >= 3 && AngularOrder <= 9);
   static_assert(kMaximumAngularMomentum == 3);
   // Order-nine fddd has 2160 components, exceeding ffdp's 1800. These
   // complete-domain bounds must not depend on the most common shell class.
-  constexpr unsigned component_slots = AngularOrder == 5   ? 1
-                                       : AngularOrder == 6 ? 2
-                                       : AngularOrder == 7 ? 3
-                                       : AngularOrder == 8 ? 6
-                                                           : 9;
+  constexpr unsigned component_slots = canonical_materialized_component_slots(AngularOrder);
+  constexpr unsigned component_lanes = canonical_materialized_component_lanes(AngularOrder);
   const auto count = rows.prefix[first_count - 1];
   // Every lane visits the same task and participates in all publication and
   // retirement barriers. Only the helper's original AO predicate admits work.
@@ -114,7 +111,8 @@ __global__ void materialized_canonical_jk_kernel(
     const ActiveShellQuartetTile task{static_cast<std::uint32_t>(rows.order[first_begin + first]),
                                       static_cast<std::uint32_t>(rows.order[second_begin + second]),
                                       0};
-    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots>(
+    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
+                                           component_lanes>(
         batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
         false, nullptr, false, range, omega, coulomb, exchange, work_census);
   }
@@ -838,7 +836,14 @@ void launch_materialized_canonical_jk_kernel(
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
     double* coulomb, double* exchange, std::uint64_t* work_count) {
   if (!first_count || !second_count) return;
-  constexpr unsigned blocks = 4096, threads = detail::kDirectQuartetTileSize;
+  // Dense shell-pair products bound screened work without a device-to-host
+  // count read. Clamp each factor before multiplication to avoid overflow;
+  // small domains must not pay for thousands of guaranteed-idle CTAs.
+  constexpr std::size_t maximum_blocks = 4096;
+  const auto dense_upper_bound =
+      std::min(first_count, maximum_blocks) * std::min(second_count, maximum_blocks);
+  const auto blocks = static_cast<unsigned>(std::min(dense_upper_bound, maximum_blocks));
+  const unsigned threads = canonical_materialized_component_lanes(angular_order);
 #define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                       \
   case order:                                                                                  \
     if (unrestricted)                                                                          \
@@ -853,6 +858,8 @@ void launch_materialized_canonical_jk_kernel(
           work_count);                                                                         \
     break
   switch (angular_order) {
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(3);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(4);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(5);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(6);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(7);

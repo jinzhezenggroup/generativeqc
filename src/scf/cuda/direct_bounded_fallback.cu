@@ -802,6 +802,11 @@ void launch_bounded_direct_range_exchange_force_kernel(
     unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega,
     double exchange_coefficient, detail::BoundedDirectBlockDomain block_domain) {
   if (radial_operator == DirectRangeOperator::Full) return;
+  // Admission follows blockDim.x, preserving every candidate in a queue page.
+  // Unmeasured short-range and custom launch shapes retain their original width.
+  if (radial_operator == DirectRangeOperator::Long && block.x == kBoundedDirectThreads &&
+      block.y == 1U && block.z == 1U)
+    block.x = kBoundedDirectForceThreads;
   // This consumer publishes only range-separated K derivatives. Select its
   // raw-K linear bound and same-spin force-product bounds; the mixed J/K
   // defaults would retain distant Coulomb-only shell quartets unnecessarily.
