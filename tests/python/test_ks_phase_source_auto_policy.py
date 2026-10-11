@@ -125,6 +125,17 @@ static_assert(direct_jk_source_allowance(768,100,required,overhead,
                                         required+overhead+values-1,16ULL<<30)<values);
 static_assert(direct_jk_source_allowance(768,100,maximum,1,maximum,16ULL<<30)==0);
 int main() {
+  for (const auto* mask : {"", "-1", "+1", "0X1", "0x", "1 ", "268435456", "4294967296"})
+    if (direct_jk_resident_bucket_policy(mask, nullptr).valid) return 2;
+  for (const auto* ceiling : {"", "-1", "+1", "18446744073709551616", "0x", "1 "})
+    if (direct_jk_resident_bucket_policy(nullptr, ceiling).valid) return 3;
+  const auto defaults = direct_jk_resident_bucket_policy(nullptr, nullptr, 16ULL << 30);
+  if (!defaults.valid || defaults.mask != (1U << 28) - 1 || defaults.ceiling != (16ULL << 30))
+    return 4;
+  const auto partial = direct_jk_resident_bucket_policy("0x1555", "2147483648");
+  if (!partial.valid || partial.mask != 0x1555 || partial.ceiling != (2ULL << 30)) return 5;
+  const auto disabled = direct_jk_resident_bucket_policy("0", "0");
+  if (!disabled.valid || disabled.mask || disabled.ceiling) return 6;
   return !direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,
                                        std::numeric_limits<double>::quiet_NaN());
 }

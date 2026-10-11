@@ -663,7 +663,8 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
             "constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;",
             "direct_jk_source_auto_refusal(",
             'trace("cuda_ks_resident_values_skip", "host_decision")',
-            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,",
+            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));",
+            "buckets.ceiling, false, auto_policy, buckets.mask",
         )
     ):
         raise ValueError("KS phase-value auto default or admission domain drifted")
@@ -686,6 +687,36 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
 
 
+def _discover_partial_phase_values(root: Path) -> dict[str, str]:
+    """Experimental masks must not silently replace the full-resident default."""
+    policy = _read(root / "src/scf/cuda/direct_jk_source_policy.hpp")
+    if any(
+        fragment not in policy
+        for fragment in (
+            "std::uint32_t mask{(1U << 28) - 1}",
+            "policy.ceiling = default_ceiling;",
+            "if (!text) return true;",
+            "policy.mask < (1U << 28)",
+        )
+    ):
+        raise ValueError("experimental partial source default or admission drifted")
+    result = {}
+    for method, relative in (
+        ("RHF", "src/scf/cuda/reference_eri_policy.hpp"),
+        ("KS", "src/dft/cuda_ks.cpp"),
+    ):
+        source = _read(root / relative)
+        if "direct_jk_resident_bucket_policy(" not in source:
+            raise ValueError("experimental partial source parser drifted")
+        prefix = "hf-runtime" if method == "RHF" else "ks-runtime"
+        for suffix in ("BUCKET_MASK", "MAX_BYTES"):
+            control = f"GENERATIVEQC_{method}_RESIDENT_{suffix}"
+            if f'std::getenv("{control}")' not in source:
+                raise ValueError("experimental partial source controls drifted")
+            result[f"{prefix}:{control}"] = relative
+    return result
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -693,6 +724,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_public_precision(root),
         _discover_runtime_controls(root),
         _discover_ks_phase_values(root),
+        _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),

@@ -124,7 +124,7 @@ namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& system) noexcept { return system.shells.size(); }
 }
 namespace generativeqc::scf {
-struct CudaDirectJkPlan { bool resident=false; };
+struct CudaDirectJkPlan { bool resident=false; std::uint32_t mask{(1U<<28)-1}; };
 FockBuildSpec make_hf_fock_spec(FockSpin spin, FockApproximation approximation) {
   FockBuildSpec spec; spec.spin=spin;
   spec.coulomb.approximation=spec.exchange.approximation=approximation;
@@ -160,6 +160,9 @@ void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept {
   require(!graph_live && fences>0); teardown.push_back(2); delete plan; --plans;
 }
 std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan*) { return 800; }
+std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan*, std::uint32_t mask) {
+  return !mask ? 0 : mask==(1U<<28)-1 ? 800 : 400;
+}
 generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
     std::size_t, std::size_t, std::size_t& bytes, std::string&) {
   ++layout_queries;
@@ -185,13 +188,22 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
   if(mode==8) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   plan->resident=true; ++fences; return GENERATIVEQC_STATUS_SUCCESS;
 }
+generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t mask, std::string& detail) {
+  const auto status=prepare_cuda_direct_jk_resident_values(plan, budget, detail);
+  if(status==GENERATIVEQC_STATUS_SUCCESS) plan->mask=mask;
+  return status;
+}
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept {
   CudaDirectJkDiagnostic diagnostic;
   if(plan && mode==12) {
     diagnostic.resident_values_submitted=100;
     diagnostic.resident_values_completed=100;
   }
-  if(plan && plan->resident) { diagnostic.resident_value_bytes=800; diagnostic.resident_value_count=100; }
+  if(plan && plan->resident) {
+    diagnostic.resident_value_count=plan->mask==(1U<<28)-1 ? 100 : 50;
+    diagnostic.resident_value_bytes=8*diagnostic.resident_value_count;
+  }
   return diagnostic;
 }
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
@@ -199,9 +211,13 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     double*, double*, double*, std::size_t correction, int* error, double threshold,
     std::uint64_t* census, std::string&, bool resident) {
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
-          correction==2*64*64 && threshold==((mode==20 || mode==21) ? 1e-12 : 0.0));
+          correction==2*64*64 && threshold==((mode==30 || mode==31) ? 1e12 :
+                                           (mode==20 || mode==21) ? 1e-12 : 0.0));
   if(mode==20) require(spec.exchange.coefficient==-0.125);
-  *error=mode==9; census[0]=mode==10 ? 99 : 100; census[1]=mode==11;
+  *error=mode==9; census[0]=mode==10 ? 99 : 100;
+  census[1]=plan->mask==(1U<<28)-1 ? mode==11 : mode==11 ? 49 : 50;
+  if(mode==30) census[1]=0;
+  if(mode==31) census[1]=51;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 }
@@ -251,6 +267,34 @@ int main(int argc, char** argv) {
               std::find(teardown.begin(),teardown.end(),2) || fatal || !admitted);
   }
   mode=0;
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","1",1);
+  for(mode=0;mode<=11;++mode) {
+    if(mode!=0 && mode!=9 && mode!=10 && mode!=11) continue;
+    {
+      RhfResidentValues partial(stream);
+      require(partial.prepare(0,systems,100,64,1000,16ULL<<30)==GENERATIVEQC_STATUS_SUCCESS);
+      require(partial.active() && partial.value_bytes()==400);
+      double matrix[64*64]{};
+      require(partial.enqueue(matrix,matrix,matrix)==GENERATIVEQC_STATUS_SUCCESS);
+      require((partial.audit()==GENERATIVEQC_STATUS_SUCCESS)==(mode==0));
+    }
+    require(allocations==0 && plans==0);
+  }
+  mode=0;
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","0",1);
+  {
+    RhfResidentValues empty(stream);
+    require(empty.prepare(0,systems,100,64,1000,16ULL<<30)==GENERATIVEQC_STATUS_SUCCESS);
+    require(!empty.active() && empty.value_bytes()==0);
+  }
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","invalid",1);
+  {
+    const auto before=creates;
+    RhfResidentValues invalid(stream);
+    require(invalid.prepare(0,systems,100,64,1000,16ULL<<30)==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    require(!invalid.active() && creates==before);
+  }
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK");
   for(const char* selection:{"0","bad"}) {
     setenv("GENERATIVEQC_RHF_RESIDENT_VALUES",selection,1);
     const auto before=creates;
@@ -287,6 +331,27 @@ int main(int argc, char** argv) {
     }
   }
   setenv("GENERATIVEQC_RHF_RESIDENT_VALUES","1",1);
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","1",1);
+  mode=0;
+  direct_dimension=64;
+  {
+    mode=21;
+    scf::cuda_execution::DirectJkSourceLease screened_partial(stream);
+    require(screened_partial.prepare(0,systems,100,64,1000,16ULL<<30,"1","partial-refusal",
+                                     false,false,1e-12,16ULL<<30,true,
+                                     scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,1)
+            ==GENERATIVEQC_STATUS_SUCCESS);
+    require(screened_partial.active() && screened_partial.value_bytes()==400);
+    auto spec=scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+    spec.derivative_order=0;
+    double matrix[64*64]{}; std::string detail;
+    for(mode=30;mode<=31;++mode) {
+      require(screened_partial.enqueue(spec,matrix,screened_partial.coulomb(),
+                                      screened_partial.exchange(),nullptr,1e12,detail)
+              ==GENERATIVEQC_STATUS_SUCCESS);
+      require((screened_partial.audit()==GENERATIVEQC_STATUS_SUCCESS)==(mode==30));
+    }
+  }
   mode=20;
   direct_dimension=64;
   {
@@ -301,6 +366,7 @@ int main(int argc, char** argv) {
             ==GENERATIVEQC_STATUS_SUCCESS);
     require(source.audit()==GENERATIVEQC_STATUS_SUCCESS && assemblies==before_assembly);
   }
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK");
   for(mode=21;mode<=25;++mode) {
     scf::cuda_execution::DirectJkSourceLease screened(stream);
     const auto before_queries=layout_queries;
