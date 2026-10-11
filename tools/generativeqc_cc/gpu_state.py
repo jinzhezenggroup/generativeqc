@@ -196,7 +196,7 @@ class AmplitudeSnapshot:
             raise ValueError("warm-start singles must be rank two")
         specs = amplitude_specs(*self.t1.shape)
         execute(
-            Program({k: input_tensor(k, s) for k, s in zip(("t1", "t2"), specs)}),
+            Program({k: input_tensor(k, s) for k, s in zip(("t1", "t2"), specs, strict=True)}),
             {"t1": self.t1, "t2": self.t2},
         )
         object.__setattr__(self, "t1", immutable(self.t1))
