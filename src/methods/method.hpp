@@ -12,6 +12,7 @@
 
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
+#include "runtime/compiled_execution_region.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/precision_work.hpp"
@@ -217,6 +218,10 @@ using Coordinates = std::vector<std::optional<std::vector<double>>>;
  */
 class PreparedCalculation {
  public:
+  explicit PreparedCalculation(generativeqc_backend backend = GENERATIVEQC_BACKEND_CPU_REFERENCE,
+                               int device = 0);
+  PreparedCalculation(const PreparedCalculation&) = delete;
+  PreparedCalculation& operator=(const PreparedCalculation&) = delete;
   virtual ~PreparedCalculation() = default;
   [[nodiscard]] virtual std::size_t atom_count() const noexcept = 0;
   [[nodiscard]] virtual const Capabilities& capabilities() const noexcept = 0;
@@ -232,7 +237,18 @@ class PreparedCalculation {
   }
   /** Execute only the requested output work. Energy and convergence
    * diagnostics are always produced; forces are opt-in per execution. */
-  virtual Result execute(bool compute_forces) = 0;
+  Result execute(bool compute_forces);
+  /** The original owner supplies scientific identity/leases and budget admission.
+   * This gate reports the endpoint transaction, not buffer/cache hit counts. */
+  [[nodiscard]] const runtime::CompiledExecutionRegion& execution_lifecycle() const noexcept {
+    return lifecycle_;
+  }
+  /** Revoke exports before recovery. Native owners retain only their existing
+   * last-good warm state; reset never manufactures a scientific generation. */
+  void reset_execution();
+  void close_execution();
+  /** Revoke publication if the ABI copy-out/validation transaction fails. */
+  void reject_execution() noexcept;
   virtual void invalidate_result() {}
   [[nodiscard]] virtual std::optional<KsTransportDiagnostic> ks_transport_diagnostic() const {
     return std::nullopt;
@@ -244,6 +260,13 @@ class PreparedCalculation {
   [[nodiscard]] virtual std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic() const {
     return std::nullopt;
   }
+
+ protected:
+  virtual Result execute_impl(bool compute_forces) = 0;
+  virtual void reset_execution_impl() {}
+
+ private:
+  runtime::CompiledExecutionRegion lifecycle_;
 };
 
 /** Prepared ragged execution. Method families choose their own batching policy.
@@ -252,6 +275,10 @@ class PreparedCalculation {
  */
 class PreparedBatch {
  public:
+  explicit PreparedBatch(generativeqc_backend backend = GENERATIVEQC_BACKEND_CPU_REFERENCE,
+                         int device = 0);
+  PreparedBatch(const PreparedBatch&) = delete;
+  PreparedBatch& operator=(const PreparedBatch&) = delete;
   virtual ~PreparedBatch() = default;
   [[nodiscard]] virtual std::size_t size() const noexcept = 0;
   /** Internal per-item immutable prepared capabilities, not the method-global
@@ -263,8 +290,13 @@ class PreparedBatch {
   }
   /** Output selection is per replay; retained scientific controls stay immutable.
    * A false force request skips response evaluation for the complete fleet. */
-  virtual std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                               bool compute_forces = true) = 0;
+  std::vector<BatchItemResult> execute(const Coordinates& coordinates, bool compute_forces = true);
+  [[nodiscard]] const runtime::CompiledExecutionRegion& execution_lifecycle() const noexcept {
+    return lifecycle_;
+  }
+  void reset_execution();
+  void close_execution();
+  void reject_execution() noexcept;
   /** Revoke exported-state eligibility even when API validation rejects a replay. */
   virtual void invalidate_result() {}
   virtual void clear_warm_starts() = 0;
@@ -302,6 +334,13 @@ class PreparedBatch {
   last_density_fitting_metric_diagnostics() const = 0;
   [[nodiscard]] virtual std::vector<InactiveEigensolverProfileEntry>
   last_inactive_eigensolver_profile() const = 0;
+
+ protected:
+  virtual std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                                    bool compute_forces) = 0;
+
+ private:
+  runtime::CompiledExecutionRegion lifecycle_;
 };
 
 /** Exception carrying an exact public status across the C++ method boundary. */

@@ -245,7 +245,8 @@ class HfPreparedCalculation final : public PreparedCalculation {
   HfPreparedCalculation(Capabilities capabilities, runtime::ExecutionContext execution,
                         core::System system, scf::ScfOptions options,
                         std::optional<core::System> auxiliary_template)
-      : capabilities_(capabilities),
+      : PreparedCalculation(execution.backend(), execution.device_id()),
+        capabilities_(capabilities),
         execution_(std::move(execution)),
         system_(std::move(system)),
         options_(options),
@@ -261,7 +262,7 @@ class HfPreparedCalculation final : public PreparedCalculation {
     return execution_.resources();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     // Keep the prepared scientific controls immutable. Output selection is an
     // execution property and must not leak into a later replay of this plan.
     scf::ScfOptions execution_options = options_;
@@ -276,6 +277,8 @@ class HfPreparedCalculation final : public PreparedCalculation {
     return adapt_result(std::move(native),
                         use_cuda ? GENERATIVEQC_BACKEND_CUDA : GENERATIVEQC_BACKEND_CPU_REFERENCE);
   }
+
+  void reset_execution_impl() override { fock_cache_.reset(); }
 
  private:
   Capabilities capabilities_;
@@ -294,7 +297,8 @@ class HfPreparedBatch final : public PreparedBatch {
   HfPreparedBatch(Capabilities capabilities, const runtime::ExecutionContext& execution,
                   std::vector<core::System> systems, scf::ScfOptions options,
                   generativeqc_batch_flags flags, std::optional<core::System> auxiliary_template)
-      : plan_(std::move(systems), capabilities.method, options,
+      : PreparedBatch(execution.backend(), execution.device_id()),
+        plan_(std::move(systems), capabilities.method, options,
               (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0,
               options.resolved_fock_build->schedule == scf::FockSchedule::CudaFused,
               (flags & GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING) != 0,
@@ -304,8 +308,8 @@ class HfPreparedBatch final : public PreparedBatch {
 
   [[nodiscard]] std::size_t size() const noexcept override { return plan_.size(); }
 
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces = true) override {
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces = true) override {
     std::vector<scf::FleetItemResult> native = plan_.execute(coordinates, compute_forces);
     std::vector<BatchItemResult> results;
     results.reserve(native.size());

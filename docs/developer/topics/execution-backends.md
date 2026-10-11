@@ -11,6 +11,7 @@ Execution backends, precision, tensor kernels, state transport, hardware schedul
 :caption: Execution and backends
 
 ../tensor_cuda
+../prepared_execution
 ../cuda_matrix_products
 ../cpu_linear_algebra
 ../cuda_time_estimator

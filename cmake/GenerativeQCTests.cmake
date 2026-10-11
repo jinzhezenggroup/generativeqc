@@ -206,6 +206,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
+  generativeqc_native_test(generativeqc_prepared_lifecycle_tests tests/native/test_prepared_lifecycle.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)
   generativeqc_native_test(generativeqc_cpu_compensated_sum_tests
                      tests/native/test_cpu_compensated_sum.cpp NO_GENERATIVEQC)

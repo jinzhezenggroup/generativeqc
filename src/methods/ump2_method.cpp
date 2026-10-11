@@ -48,7 +48,7 @@ class Ump2Prepared final : public PreparedCalculation {
     last_.reset();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     return execute_with_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
@@ -165,7 +165,8 @@ class Ump2PreparedBatch final : public PreparedBatch {
   Ump2PreparedBatch(Capabilities capabilities, core::ContextState& context,
                     std::vector<core::System> systems,
                     const generativeqc_method_descriptor& descriptor, bool warm_enabled)
-      : capabilities_(capabilities),
+      : PreparedBatch(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         context_(&context),
         systems_(std::move(systems)),
         warm_enabled_(warm_enabled),
@@ -185,9 +186,8 @@ class Ump2PreparedBatch final : public PreparedBatch {
   void invalidate_result() override {
     for (auto& owner : owners_) owner->invalidate_result();
   }
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("UMP2 batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
