@@ -47,6 +47,52 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 @pytest.mark.parametrize(
     "relative,before,after",
     [
+        (
+            "src/cc/df_triples_cuda.cu",
+            "p.panel_capacity == 3 && execution_plan.pair_pointer_bytes()",
+            "p.panel_capacity >= 2 && execution_plan.pair_pointer_bytes()",
+        ),
+        (
+            "src/cc/df_triples_cuda.cu",
+            "if (paired.total <= max_bytes) p = paired;",
+            "p = paired;",
+        ),
+        (
+            "src/cc/df_triples_cuda.cu",
+            "std::array<std::size_t, 6> seed_permutations{};",
+            "std::array<std::size_t, 2> seed_permutations{};",
+        ),
+        (
+            "tools/generate_df_occupied_triples.py",
+            "return precision.arithmetic.is_strict_fp64() &&",
+            "return true &&",
+        ),
+        (
+            "tools/generate_df_occupied_triples.py",
+            "second_output!=first_output+v3",
+            "second_output==nullptr",
+        ),
+    ],
+)
+def test_independent_pair_default_refuses_domain_or_capacity_drift(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Pair admission cannot widen or silently lose complete fallback groups."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "independent-pair admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
         ("src/scf/cuda/reference_eri_policy.hpp", "!value ||", "false ||"),
         ("src/scf/cuda/reference_eri_policy.hpp", "if (!cold_reference)", "if (false)"),
         (
