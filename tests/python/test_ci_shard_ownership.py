@@ -1,6 +1,7 @@
 """Exercise the real CI shell selection without building or running workloads."""
 
 import os
+import shlex
 import shutil
 import subprocess
 from collections import Counter
@@ -12,19 +13,21 @@ ROOT = Path(__file__).resolve().parents[2]
 SHARDS = ("core-a", "core-b", "runtime-heavy", "posthf", "ecp-forces", "compiler-heavy")
 
 
-def _selection(event: str, shard: str) -> tuple[str, list[str], list[str]]:
+def _selection(
+    event: str, shard: str, *, root: Path = ROOT
+) -> tuple[str, list[str], list[str]]:
     bash = shutil.which("bash")
     if bash is None:
         pytest.skip("CI selection uses Bash")
     selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
     assert selector.is_file()
-    script = "source .github/scripts/ci_select_python_shard.sh\n"
+    script = f"source {shlex.quote(str(selector))}\n"
     script += 'printf "%s\\0" "$dist_mode" "${test_targets[@]}" --extra-- "${extra_args[@]}"\n'
     result = subprocess.run(
         [bash, "-eu", "-c", script],
         check=True,
         capture_output=True,
-        cwd=ROOT,
+        cwd=root,
         env={
             **os.environ,
             "GITHUB_EVENT_NAME": event,
@@ -53,6 +56,50 @@ def test_every_python_test_file_has_exactly_one_ci_shard(event: str) -> None:
     )
     # Also reject duplicate entries within one shard and nonexistent paths.
     assert selected == expected
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_libxc_force_tail_uses_tracked_ownership_and_preserves_core_parity(
+    event: str, presence: str, tmp_path: Path
+) -> None:
+    # Exercise both the earlier PR tree and a merge tree containing master's
+    # force module without mutating the checkout or relying on its current base.
+    force = "tests/python/test_libxc_automatic_forces.py"
+    probes = [
+        "tests/python/test_aaa.py",
+        "tests/python/test_bbb.py",
+        "tests/python/test_libxc_aaa.py",
+        "tests/python/test_libxc_zzz.py",
+        "tests/python/test_zzz.py",
+    ]
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*probes, *([force] if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    if presence == "untracked":
+        (tmp_path / force).touch()
+    elif presence == "missing":
+        # A missing tracked file must remain selected so pytest fails closed.
+        (tmp_path / force).unlink()
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    owners = [
+        shard for shard, (_, targets, _) in selections.items() if force in targets
+    ]
+    assert owners == (["ecp-forces"] if tracked else [])
+    assert selections["ecp-forces"][0] == "loadfile"
+    for parity, shard in enumerate(("core-a", "core-b")):
+        assert selections[shard][1] == [
+            path for path in inventory[parity::2] if path != force
+        ]
+    for _, _, arguments in selections.values():
+        assert not any(force in argument for argument in arguments)
 
 
 @pytest.mark.parametrize("event", ("pull_request", "merge_group", "schedule"))

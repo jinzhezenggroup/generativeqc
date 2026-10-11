@@ -268,6 +268,10 @@ rebalance_paths=(
   tests/python/test_stationary_aot_generation.py
   tests/python/test_cc_shared_iteration_driver.py
   tests/python/test_rccsd_codegen_no_numpy.py
+  # Measured full Libxc force lifecycles took ~108 s each in run
+  # 38113859405. Count this file in core parity before transferring
+  # it, so no unrelated file changes owners as the long tail moves.
+  tests/python/test_libxc_automatic_forces.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -382,6 +386,15 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_ecp_stuttgart_dft.py
       tests/python/test_ecp_halogen_dft.py
     )
+    # This complete force matrix arrived on master after this router's
+    # branch point. Route it whenever the checked-out Git tree owns it;
+    # do not add a nonexistent target on the earlier branch itself.
+    # Its 17 tests start on an initial loadfile worker alongside the
+    # three larger routine ECP modules, rather than late in broad core.
+    # Preserve every functional, spin, lifecycle and finite difference.
+    if git ls-files --error-unmatch -- tests/python/test_libxc_automatic_forces.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_libxc_automatic_forces.py)
+    fi
     ;;
   compiler-heavy)
     test_targets=(
