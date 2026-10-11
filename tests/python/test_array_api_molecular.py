@@ -70,7 +70,7 @@ def polynomial_source(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
 
     from generativeqc_compiler.tensor import interpreter
 
-    monkeypatch.setattr(xp.RHF, "_calculator", factory)
+    monkeypatch.setattr(xp.MolecularModel, "_calculator", factory)
     monkeypatch.setattr(interpreter, "execute", forbidden)
     return owners
 
@@ -78,7 +78,7 @@ def polynomial_source(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
 def test_lowering_is_native_free_and_configuration_is_immutable(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
-    rhf = xp.RHF(("H", "H"))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), cache=tmp_path)
     lowered = compiled.lower(COORDINATES)
     assert lowered.provenance["molecular_ad"] == "native-analytic-first-order-jet"
@@ -99,7 +99,7 @@ def test_lowering_is_native_free_and_configuration_is_immutable(
 def test_compiled_geometry_and_nonlinear_source_chain_rule(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
-    rhf = xp.RHF(("H", "H"))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
 
     def expression(coordinates: Any, scale: Any) -> Any:
         energy = rhf(coordinates * scale)
@@ -122,7 +122,7 @@ def test_compiled_geometry_and_nonlinear_source_chain_rule(
 def test_jvp_vjp_snapshot_and_repeated_source_deduplication(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
-    rhf = xp.RHF(("H", "H"))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
 
     def expression(coordinates: Any) -> Any:
         return {
@@ -151,7 +151,7 @@ def test_jvp_vjp_snapshot_and_repeated_source_deduplication(
 def test_energy_only_recomputes_changed_geometry_and_prunes_unused_sources(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
-    rhf = xp.RHF(("H", "H"))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
     compiled = xp.compile(lambda coordinates: rhf(coordinates), cache=tmp_path)
     compiled(COORDINATES)
     moved = COORDINATES * 1.1
@@ -187,13 +187,13 @@ def test_energy_only_recomputes_changed_geometry_and_prunes_unused_sources(
 )
 def test_molecular_policy_fails_before_native_load(options: Any, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        xp.RHF(**options)
+        xp.MolecularModel(method="rhf", **options)
 
 
 def test_molecular_capture_gates_before_execution(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
-    rhf = xp.RHF(("H", "H"))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
     for backend in ("reference", "cuda"):
         compiled = xp.compile(lambda coordinates: rhf(coordinates), backend=backend)
         with pytest.raises(ValueError, match="same backend"):
@@ -222,7 +222,7 @@ def test_molecular_source_count_nested_dependencies_and_invalid_geometry_are_bou
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
     operators = tuple(
-        xp.RHF(("H", "H"), max_iterations=count + 1) for count in range(17)
+        xp.MolecularModel(("H", "H"), method="rhf", max_iterations=count + 1) for count in range(17)
     )
 
     def excessive(coordinates: Any) -> Any:
@@ -251,7 +251,7 @@ def test_molecular_source_count_nested_dependencies_and_invalid_geometry_are_bou
 def test_scientific_coordinate_domains_are_preserved_not_inferred_from_extents(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
-    rhf = xp.RHF(("H", "H"))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
     atoms = xp.IndexSpace("nuclei", "atom", 2)
     cartesian = xp.IndexSpace("xyz", "cartesian", 3)
     spec = xp.TensorSpec(
@@ -308,8 +308,8 @@ def test_molecular_publication_checks_apply_to_eager_and_compiled_calls(
     owner = SimpleNamespace(
         singlepoint=lambda *args, **kwargs: result, clear_cache=lambda: None
     )
-    monkeypatch.setattr(xp.RHF, "_calculator", lambda self: owner)
-    rhf = xp.RHF(("H", "H"))
+    monkeypatch.setattr(xp.MolecularModel, "_calculator", lambda self: owner)
+    rhf = xp.MolecularModel(("H", "H"), method="rhf")
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), cache=tmp_path)
     with pytest.raises(error_type):
         (compiled if compiled_call else rhf)(COORDINATES)
@@ -422,7 +422,7 @@ def test_molecular_source_phase_profiling_is_opt_in(
     polynomial_source: list[Any],
 ) -> None:
     monkeypatch.setenv("GENERATIVEQC_ARRAY_API_PROFILE", "1")
-    model = xp.RHF(("H", "H"))
+    model = xp.MolecularModel(("H", "H"), method="rhf")
     compiled = xp.value_and_grad(lambda geometry: model(geometry), cache=tmp_path)
     try:
         compiled(COORDINATES)
@@ -504,7 +504,7 @@ def test_complete_rhf_energy_nuclear_gradient_and_independent_finite_difference(
 ) -> None:
     from generativeqc import Calculator
 
-    rhf = xp.RHF(elements, basis=basis, charge=charge)
+    rhf = xp.MolecularModel(elements, method="rhf", basis=basis, charge=charge)
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), cache=tmp_path)
     value, gradient = compiled(coordinates)
     calculator = Calculator(
@@ -545,7 +545,7 @@ def test_complete_rhf_energy_nuclear_gradient_and_independent_finite_difference(
 def test_native_rhf_nonconvergence_publishes_no_source_snapshot(
     tmp_path: Path, native_library: None
 ) -> None:
-    rhf = xp.RHF(("O", "H", "H"), max_iterations=1)
+    rhf = xp.MolecularModel(("O", "H", "H"), method="rhf", max_iterations=1)
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), cache=tmp_path)
     coordinates = np.asarray([[0.0, 0.0, 0.0], [0.0, -1.43, 1.11], [0.0, 1.43, 1.11]])
     with pytest.raises(RuntimeError, match=r"converg|iteration"):
@@ -574,7 +574,7 @@ def test_native_geometry_composition_and_snapshot_pullback(
 
     if backend == "cuda":
         _require_scheduled_cuda()
-    rhf = xp.RHF(("H", "H"), backend=backend)
+    rhf = xp.MolecularModel(("H", "H"), method="rhf", backend=backend)
 
     def expression(coordinates: Any, scale: Any) -> Any:
         energy = rhf(coordinates * scale)
@@ -642,7 +642,7 @@ def test_native_molecular_resource_budget_is_independent_of_tensor_budget(
 ) -> None:
     from generativeqc import ResourceBudget
 
-    rhf = xp.RHF(("H", "H"), resource_budget=ResourceBudget(host_bytes=1))
+    rhf = xp.MolecularModel(("H", "H"), method="rhf", resource_budget=ResourceBudget(host_bytes=1))
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), cache=tmp_path)
     with pytest.raises(MemoryError, match="no supported plan fits"):
         compiled(COORDINATES)
@@ -653,7 +653,7 @@ def test_native_molecular_resource_budget_is_independent_of_tensor_budget(
 def test_molecular_cuda_lowering_does_not_probe_native_or_device(
     polynomial_source: list[Any],
 ) -> None:
-    rhf = xp.RHF(("H", "H"), backend="cuda")
+    rhf = xp.MolecularModel(("H", "H"), method="rhf", backend="cuda")
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), backend="cuda")
     lowered = compiled.lower(COORDINATES)
     assert lowered.provenance["molecular_sources"][0]["backend"] == "cuda"
@@ -685,7 +685,7 @@ def test_real_cuda_molecular_endpoint(
     from generativeqc import Calculator
 
     _require_scheduled_cuda()
-    rhf = xp.RHF(elements, basis=basis, charge=charge, backend="cuda")
+    rhf = xp.MolecularModel(elements, method="rhf", basis=basis, charge=charge, backend="cuda")
     compiled = xp.value_and_grad(
         lambda coordinates: rhf(coordinates),
         backend="cuda",
