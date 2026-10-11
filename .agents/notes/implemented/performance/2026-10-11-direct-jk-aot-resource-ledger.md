@@ -285,3 +285,12 @@ sccache version-probe timeout may fall through to ccache while the common
 deadline has budget, whereas exhausting all probes remains a timeout. These
 execution-context repairs require another canonical record before gate mode is
 restored; no existing resource row is relabeled in advance.
+
+Canonical record run 38151179076 at `29e37a713` exercised the generated-rule
+and effective-launcher checks, compiled through the recorded
+`/usr/local/bin/ccache` 4.14 launcher on a cache miss, and retained passing
+before/after statistics. The candidate ledger is byte-for-byte equal to the
+already committed ledger: no identity field, kernel inventory entry, or
+REG/STACK/SHARED/LOCAL value changed. Only the execution implementation key and
+its paired object/log receipts changed. Gate mode is restored for final
+exact-head qualification.
