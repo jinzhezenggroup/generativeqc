@@ -17,14 +17,18 @@ view of the public selector inventory. Sphinx renders it from:
 - public composite selectors; and
 - the automatic pinned-Libxc semilocal inventory and explicit blacklist.
 
-The equivalent runtime discovery command is:
+The Python-free runtime exposes native registrations and generated MethodIR
+compositions through separate discovery views:
 
 ```bash
-python -m generativeqc methods --json
+generativeqc methods --libxc --json
+generativeqc methods --compositions --json
 ```
 
 Discovery answers **which public method names exist**. It is not a blanket claim
 that every execution context for that name is qualified.
+See the [native CLI guide](../user/native_cli.md) for the scope of each view;
+the public catalog also includes Python API composite selectors.
 
 ## Execution-context capabilities
 
