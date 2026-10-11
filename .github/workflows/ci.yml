@@ -258,6 +258,9 @@ jobs:
         run: ccache --zero-stats
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
+      - name: Test native CLI archive/metadata contracts
+        if: matrix.compiler == 'gcc'
+        run: python3 -m unittest discover -s tests/python -p test_native_cli_package.py
       - name: Configure
         env:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
