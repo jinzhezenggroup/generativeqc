@@ -4,7 +4,7 @@
   "regions": [
     {
       "start": "struct Angular {",
-      "stop": "__device__ inline unsigned angular_axis(",
+      "stop": "GENERATIVEQC_ERI_DEVICE inline unsigned angular_axis(",
       "role": "scientific",
       "reason": "Retain the original conservative scientific classification of the Cartesian powers record."
     }

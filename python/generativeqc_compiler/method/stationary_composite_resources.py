@@ -41,6 +41,7 @@ def plan_composite_stationary_cuda_resources(
     max_host_bytes: int,
     tile_points: int | None = None,
     becke_primitive: bool = False,
+    native_derivative_bytes: int = 0,
 ) -> CompositeStationaryCudaResources:
     """Prefer 1024 points, retaining bounded smaller tiles under tight totals.
 
@@ -51,6 +52,9 @@ def plan_composite_stationary_cuda_resources(
     conservative inventory, including both host and device grid capacity.
     The AO owner supplies its dry tile-capacity query; this method planner does
     not duplicate AO layout formulas or acquire a dependency on the DFT owner.
+    Additional lazy integral owners use the caller's native dry capacity query.
+    Their device reserve is also charged conservatively to the host envelope;
+    a smaller AO tile cannot hide this independently retained owner.
     """
     for name, value in (
         ("grid_points", grid_points),
@@ -60,10 +64,21 @@ def plan_composite_stationary_cuda_resources(
     ):
         if type(value) is not int or not 0 < value < 2**64:
             raise ValueError(f"composite stationary {name} must be a positive uint64")
+    if (
+        type(native_derivative_bytes) is not int
+        or not 0 <= native_derivative_bytes < 2**64
+    ):
+        raise ValueError(
+            "composite stationary native_derivative_bytes must be a uint64"
+        )
     n, na = basis.nao, basis.natom
     # The prepared Direct owner is already charged to SCF. This reserve covers
     # the existing one-electron/transient native route and final-state export.
-    native_bytes = 256 * n * n + 1024 * (na + n + basis.nprimitive + len(basis.shells))
+    native_bytes = (
+        256 * n * n
+        + 1024 * (na + n + basis.nprimitive + len(basis.shells))
+        + native_derivative_bytes
+    )
 
     def admit(points: int) -> CompositeStationaryCudaResources:
         grid = grid_plan(points)

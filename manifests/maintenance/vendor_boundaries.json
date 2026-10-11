@@ -74,6 +74,7 @@
         "cublasDestroy_v2": 2,
         "cublasDgeam": 1,
         "cublasDgemm": 1,
+        "cublasDgemmBatched": 1,
         "cublasDgemmStridedBatched": 1,
         "cublasDgemm_v2": 2,
         "cublasDgemv": 1,

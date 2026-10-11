@@ -39,7 +39,7 @@ matched endpoint performance win.
 Use `method="wb97m-v-uks"` and an appropriate multiplicity for unrestricted
 spin. Energy-only requests avoid derivative work. Forces are the negative
 energy gradient. No CPU integral derivative, reference SCF or finite difference
-is part of the production force path.
+is part of the CUDA production force path.
 
 The through-f opt-in gates include def2-TZVP RKS/UKS and local def2-TZVPD RKS.
 When the optional retained Direct shell-force owner is unavailable, the existing
@@ -49,12 +49,16 @@ CPU derivative or oracle fallback; its H2D work is reported explicitly.
 The complete Python force consumer admits built-in STO-3G, def2-SVP and
 def2-TZVP, or explicit/local all-electron bases through f angular momentum, in
 Cartesian or spherical representation. A basis such as def2-TZVPD is not
-bundled and must be supplied as a local basis record. ECPs and density fitting
-remain outside this **force** contract. FP64 energy calculations may select
-density fitting for the full-range J/K primary; the omega-dependent long-range
+bundled and must be supplied as a local basis record. ECPs remain outside this
+**force** contract. FP64 energy and force calculations may select
+[density fitting](dft_density_fitting.md) for the full-range J/K primary;
+the omega-dependent long-range
 exchange correction remains exact Direct, and VV10 remains the existing
 grid/nonlocal consumer. This is a mixed provider composition, not
-range-separated RI-K. Component-wise `precision="auto"` is an SCF policy only;
+range-separated RI-K. CPU also supports mixed FP64 energy/forces in the bounded
+s/p/d/f domain documented by the [DF interface](dft_density_fitting.md); it shares
+provider validation and source composition, not CUDA resident storage.
+Component-wise `precision="auto"` is an SCF policy only;
 it does not lower stationary force arithmetic or expand the basis, ECP or
 resource domain.
 
