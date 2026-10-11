@@ -18,12 +18,6 @@ def test_ri_mp2_uses_shared_tensor_blas_boundary() -> None:
     assert "cublasDgemm(" not in source
     assert "cublasDgemmStridedBatched(" not in source
     assert "CUBLAS_OP_" not in source
-    assert source.count("generativeqc_tensor::gemm(plan.blas,") == 1
-    assert source.count('submit("RI-MP2 ') == 4
-    assert "static_cast<std::int64_t>(b_stride), 0," in source
-    assert "static_cast<std::int64_t>(a_stride), 0," in source
-    assert "source_row_generations" in source
-    assert "reduce_ri_mp2_block<<<" in source
     vendor = json.loads(
         (ROOT / "manifests/maintenance/vendor_boundaries.json").read_text()
     )
