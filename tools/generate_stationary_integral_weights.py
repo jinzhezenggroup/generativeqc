@@ -10,12 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.method import resolve_method
-from generativeqc_compiler.method.stationary_weight_lowering import _weight_expression
 from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from generativeqc_compiler.method.stationary_weight_lowering import _weight_expression
 
 
 def source() -> str:
