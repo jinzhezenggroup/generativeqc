@@ -40,7 +40,7 @@ def source_arguments(inputs: typing.Any) -> typing.Any:
     return {
         "atoms": tuple(
             Atom(z, tuple(x))
-            for z, x in zip(inputs["atomic_numbers"], inputs["coordinates"])
+            for z, x in zip(inputs["atomic_numbers"], inputs["coordinates"], strict=True)
         ),
         "basis": calculator_inputs(inputs)["basis"],
         "charge": inputs["charge"],
