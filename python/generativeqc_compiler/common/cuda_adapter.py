@@ -39,13 +39,15 @@ class CudaCompilerAdapter:
         includes: tuple[Path, ...] = (),
         options: tuple[str, ...] = (),
         standard: str = "c++17",
+        architecture_options: tuple[str, ...] | None = None,
     ) -> CudaCompileResult:
         """Compile one translation unit and terminate all NVCC children on timeout."""
 
+        target_options = architecture_options or (f"-arch={self.target.architecture}",)
         command = [
             str(self.nvcc),
             f"-std={standard}",
-            f"-arch={self.target.architecture}",
+            *target_options,
             "-O3",
             "-Xptxas=-v",
             *(f"-I{path}" for path in includes),

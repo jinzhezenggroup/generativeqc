@@ -8,6 +8,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,33 @@ def _production_cache(**overrides: str) -> str:
     }
     fields.update(overrides)
     return "".join(f"{field}:STRING={value}\n" for field, value in fields.items())
+
+
+def _direct_test_shards(output_directory: Path) -> tuple[Path, ...]:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(validator.GENERATOR),
+            "--production-manifest",
+            str(validator.MANIFEST),
+            "--output-directory",
+            str(output_directory),
+            "--shards",
+            str(validator.QUALIFIED_SHARDS),
+            "--unit-mode",
+            validator.QUALIFIED_UNIT_MODE,
+            "--target-architecture",
+            validator.QUALIFIED_ARCHITECTURE,
+            "--profile",
+            validator.QUALIFIED_ARCHITECTURE,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    return validator._production_shard_paths(output_directory)
 
 
 def _generated_ninja_fixture(
@@ -205,11 +233,15 @@ class TestLedgerValidation:
     def test_valid_ledger_passes(self) -> None:
         validator.validate_ledger(_ledger())
 
-    def test_committed_ledger_uses_the_current_pic_schema(self) -> None:
+    def test_record_mode_keeps_the_pre_codegen_tuple_ledger_as_a_negative(
+        self,
+    ) -> None:
         payload = json.loads(validator.LEDGER.read_text(encoding="utf-8"))
-        validator.validate_ledger(payload)
         assert payload["flags"]["host_compiler"] == "nvcc-default"
         assert payload["flags"]["host_options"] == ["-Xcompiler=-fPIC"]
+        assert "code_generation" not in payload["flags"]
+        with pytest.raises(validator.LedgerError, match="flags"):
+            validator.validate_ledger(payload)
         assert len(payload["kernels"]) == 86
 
     @pytest.mark.parametrize(
@@ -270,6 +302,9 @@ class TestLedgerValidation:
             ("host_options", []),
             ("host_options", "-Xcompiler=-fPIC"),
             ("host_options", ["-Xcompiler=-fno-PIC"]),
+            ("code_generation", []),
+            ("code_generation", ["-arch=sm_120"]),
+            ("code_generation", tuple(validator.QUALIFIED_CODE_GENERATION)),
             ("split_compile_threads", 8),
             ("split_compile_threads", True),
             ("split_compile_threads", 1.0),
@@ -434,8 +469,8 @@ class TestGenerationDeterminism:
         try:
             first = root / "first"
             second = root / "second"
-            shards_a = validator.generate_production_shards(first)
-            shards_b = validator.generate_production_shards(second)
+            shards_a = _direct_test_shards(first)
+            shards_b = _direct_test_shards(second)
             assert len(shards_a) == validator.QUALIFIED_SHARDS
             for shard_a, shard_b in zip(shards_a, shards_b, strict=True):
                 assert shard_a.read_bytes() == shard_b.read_bytes()
@@ -445,6 +480,38 @@ class TestGenerationDeterminism:
                 assert shell_class in text
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+    def test_production_generation_executes_the_cmake_edge(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        build = tmp_path / "build"
+        generated = build / "generated/production_shell_kernels"
+        build.mkdir()
+
+        def cmake_edge(
+            command: list[str], **kwargs: Any
+        ) -> subprocess.CompletedProcess[str]:
+            expected = validator._production_shard_paths(generated)
+            assert command == [
+                "cmake",
+                "--build",
+                str(build.resolve()),
+                "--target",
+                expected[validator.QUALIFIED_SHARD_INDEX]
+                .resolve()
+                .relative_to(build.resolve())
+                .as_posix(),
+            ]
+            assert kwargs["cwd"] == build
+            for path in expected:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(path.name)
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        monkeypatch.setattr(validator.subprocess, "run", cmake_edge)
+        shards = validator.generate_production_shards(build, generated)
+        assert len(shards) == validator.QUALIFIED_SHARDS
+        assert all(path.is_file() for path in shards)
 
 
 class TestProductionCompile:
@@ -503,7 +570,8 @@ class TestProductionCompile:
             assert label == "NVCC" and 0 < timeout <= 23
             assert not any(item.startswith("--split-compile") for item in command)
             assert "-O3" in command and "-std=c++20" in command
-            assert "-arch=sm_120" in command and "-Xptxas=-v" in command
+            assert "-arch=sm_120" not in command and "-Xptxas=-v" in command
+            assert command.count(validator.QUALIFIED_CODE_GENERATION[0]) == 1
             assert "-DGENERATIVEQC_HAS_CUDA=1" in command
             assert "-DNDEBUG" in command
             assert command.count("-Xcompiler=-fPIC") == 1
@@ -596,6 +664,8 @@ class TestProductionCompile:
             assert command[-1] == str(Path("generated/shard.cu"))
             assert kwargs["cwd"] == tmp_path
             assert command.count("-Xcompiler=-fPIC") == 1
+            assert "-arch=sm_120" not in command
+            assert command.count(validator.QUALIFIED_CODE_GENERATION[0]) == 1
             return subprocess.CompletedProcess(command, 0, b"preprocessed", b"")
 
         monkeypatch.setattr(validator.subprocess, "run", preprocess)

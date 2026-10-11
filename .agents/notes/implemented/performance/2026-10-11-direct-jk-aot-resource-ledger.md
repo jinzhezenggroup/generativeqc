@@ -318,6 +318,18 @@ The committed non-PIC ledger is retained as an explicit stale negative during
 record mode. A canonical CI record must measure the corrected PIC recipe before
 any ledger update or restoration of gate mode.
 
+The generator is likewise no longer reconstructed by the validator. The gate
+builds the qualified shard output through the configured CMake custom-command
+edge, so changes to the codegen runner, Python executable, generator path, or
+arguments are consumed before hashing the generated source. For compilation,
+the manual NVCC invocation now uses the explicit production
+`--generate-code=arch=compute_120,code=[compute_120,sm_120]` tuple and records it
+in the typed flag identity. CUDA 12.9 documents the `-arch=sm_120` shorthand as
+also adding a closest virtual target when no code option is present, so this is
+an exact-argv identity alignment rather than a claim that the earlier shorthand
+was proven to omit PTX or change resources. The PIC ledger remains a stale
+negative until this final recipe is recorded canonically.
+
 Canonical record run 38155416533 at `81d1c45b0` passed the real generated-rule
 checks and compiled the PIC recipe through `/usr/local/bin/ccache` 4.14 on a
 cache miss, with passing before/after statistics and paired object/log/cuobjdump

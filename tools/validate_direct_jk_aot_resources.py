@@ -79,6 +79,9 @@ QUALIFIED_FAST_COMPILE = False
 QUALIFIED_HOST_COMPILER = "nvcc-default"
 # The production OBJECT library sets POSITION_INDEPENDENT_CODE=ON.
 QUALIFIED_HOST_OPTIONS = ("-Xcompiler=-fPIC",)
+QUALIFIED_CODE_GENERATION = (
+    "--generate-code=arch=compute_120,code=[compute_120,sm_120]",
+)
 # Match the normal CMake release build: split compilation changes resources.
 QUALIFIED_SPLIT_COMPILE_THREADS = 1
 # CMake's NVIDIA Release rule adds NDEBUG alongside the target definition.
@@ -471,38 +474,50 @@ def validate_generated_cuda_rules(
         )
 
 
-def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
-    """Run the exact CMake generator command and return the shard sources."""
-    arguments = [
-        sys.executable,
-        str(GENERATOR),
-        "--production-manifest",
-        str(MANIFEST),
-        "--output-directory",
-        str(output_directory),
-        "--shards",
-        str(QUALIFIED_SHARDS),
-        "--unit-mode",
-        QUALIFIED_UNIT_MODE,
-        "--target-architecture",
-        QUALIFIED_ARCHITECTURE,
-        "--profile",
-        QUALIFIED_ARCHITECTURE,
-    ]
-    result = subprocess.run(
-        arguments, check=False, capture_output=True, text=True, timeout=600
-    )
-    if result.returncode:
-        raise RuntimeError(
-            "production AOT generation failed: "
-            + (result.stderr or result.stdout).strip()
-        )
+def _production_shard_paths(output_directory: Path) -> tuple[Path, ...]:
     profile = output_directory / QUALIFIED_ARCHITECTURE
-    shards = tuple(
+    return tuple(
         profile
         / f"generativeqc_generated_shell_sm{QUALIFIED_ARCHITECTURE[3:]}_shard_{index}.cu"
         for index in range(QUALIFIED_SHARDS)
     )
+
+
+def generate_production_shards(
+    working_directory: Path, output_directory: Path
+) -> tuple[Path, ...]:
+    """Execute CMake's production custom-command edge for the qualified shard."""
+    shards = _production_shard_paths(output_directory)
+    try:
+        target = (
+            shards[QUALIFIED_SHARD_INDEX]
+            .resolve()
+            .relative_to(working_directory.resolve())
+        )
+    except ValueError as error:
+        raise ValueError(
+            "production generated directory must be below the CMake build directory"
+        ) from error
+    arguments = [
+        "cmake",
+        "--build",
+        str(working_directory.resolve()),
+        "--target",
+        target.as_posix(),
+    ]
+    result = subprocess.run(
+        arguments,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=600,
+        cwd=working_directory,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "production CMake AOT generation edge failed: "
+            + (result.stderr or result.stdout).strip()
+        )
     missing = [str(path) for path in shards if not path.is_file()]
     if missing:
         raise RuntimeError(
@@ -535,7 +550,7 @@ def _preprocess_command(
     return [
         str(nvcc),
         f"-std={QUALIFIED_STANDARD}",
-        f"-arch={QUALIFIED_ARCHITECTURE}",
+        *QUALIFIED_CODE_GENERATION,
         *QUALIFIED_HOST_OPTIONS,
         *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
         f"-I{ROOT / 'src'}",
@@ -598,6 +613,7 @@ def qualified_flags() -> dict[str, Any]:
         "fast_compile": QUALIFIED_FAST_COMPILE,
         "host_compiler": QUALIFIED_HOST_COMPILER,
         "host_options": list(QUALIFIED_HOST_OPTIONS),
+        "code_generation": list(QUALIFIED_CODE_GENERATION),
         "split_compile_threads": QUALIFIED_SPLIT_COMPILE_THREADS,
         "definitions": list(QUALIFIED_DEFINITIONS),
         "ptxas_verbose": True,
@@ -766,6 +782,7 @@ def compile_shard(
                         *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
                     ),
                     standard=QUALIFIED_STANDARD,
+                    architecture_options=QUALIFIED_CODE_GENERATION,
                 )
             finally:
                 statistics["after"] = cache_statistics(launcher)
@@ -1004,7 +1021,7 @@ def run_measurement(
     validate_generated_cuda_rules(
         working_directory, nvcc, effective_launcher, generated_directory=generated
     )
-    shards = generate_production_shards(generated)
+    shards = generate_production_shards(working_directory, generated)
     shard = shards[QUALIFIED_SHARD_INDEX]
     toolchain = toolchain_versions(nvcc)
     identity = compile_identity(
