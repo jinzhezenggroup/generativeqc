@@ -1089,6 +1089,8 @@ class CompiledFunction:
                 raise TypeError(
                     "TensorIR compilation supports bool, float32 or float64 inputs"
                 )
+            if not np.isfinite(array).all():
+                raise ValueError(f"non-finite compiled input: {name}")
             feeds[name] = array
             spec = self._specs.get(name)
             if spec is not None:

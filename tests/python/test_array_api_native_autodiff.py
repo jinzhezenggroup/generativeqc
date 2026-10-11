@@ -213,6 +213,23 @@ def test_transform_validation_and_no_implicit_dtype_promotion(tmp_path: Path) ->
         xp.compile(lambda values: values, compile_timeout=float("inf"))
 
 
+def test_inactive_inputs_and_derivative_seeds_are_still_finite(tmp_path: Path) -> None:
+    def zero(values: Any) -> Any:
+        return xp.sum(values * 0)
+
+    with pytest.raises(ValueError, match="non-finite compiled input: values"):
+        xp.grad(zero, cache=tmp_path)(np.asarray([np.nan]))
+    with pytest.raises(ValueError, match="tangent values must be finite"):
+        xp.jvp(zero, (np.ones(1),), (np.asarray([np.nan]),), cache=tmp_path)
+    value, pullback = xp.vjp(zero, np.ones(1), cache=tmp_path)
+    assert float(value) == 0
+    try:
+        with pytest.raises(ValueError, match="cotangent output must be finite"):
+            pullback(np.asarray(np.inf))
+    finally:
+        pullback.close()
+
+
 @pytest.mark.parametrize(
     "operation,values", [(xp.log, [-1.0]), (xp.sqrt, [-1.0]), (xp.exp, [1000.0])]
 )

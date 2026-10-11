@@ -66,6 +66,8 @@ def _seed(value: Any, spec: Any, name: str) -> np.ndarray:
         raise TypeError(f"{name} must be a concrete array")
     if array.shape != spec.shape or array.dtype.name != spec.dtype:
         raise ValueError(f"{name} must match primal shape and dtype")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{name} must be finite")
     return array
 
 
