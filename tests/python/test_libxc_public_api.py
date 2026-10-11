@@ -45,7 +45,7 @@ def test_public_libxc_selector_executes_automatic_cpu_scf() -> None:
     assert abs(result.energy - pbe.energy) > 1e-6
 
 
-def test_public_libxc_capability_stays_energy_only() -> None:
+def test_public_libxc_backend_neutral_capability_stays_energy_only() -> None:
     capability = method_capabilities("libxc:GGA_X_APBE")
 
     assert capability.family == "density_functional"
@@ -54,8 +54,10 @@ def test_public_libxc_capability_stays_energy_only() -> None:
     assert capability.supported_properties == frozenset(("energy",))
 
     calculator = Calculator(method="libxc:GGA_X_APBE", basis="sto-3g")
-    with pytest.raises(ValueError, match="does not support properties.*forces"):
-        calculator.singlepoint(H2, properties=("energy", "forces"))
+    assert calculator.capabilities.supported_properties == frozenset(
+        ("energy", "forces")
+    )
+    assert calculator._default_properties() == frozenset(("energy",))
 
 
 @pytest.mark.parametrize(
@@ -110,3 +112,15 @@ def test_libxc_selector_parser_is_explicit_about_spin() -> None:
         "polarized",
     )
     assert parse_automatic_libxc_selector("pbe-rks") is None
+
+
+def test_automatic_resource_options_cannot_substitute_a_same_family_functional() -> (
+    None
+):
+    from generativeqc import KsOptions
+    from generativeqc.ks import resolve_ks_options
+    from generativeqc_compiler.method import resolve_bulk_ks
+
+    other = resolve_bulk_ks("GGA_X_PBE_SOL").method
+    with pytest.raises(NotImplementedError, match="exact component/spin"):
+        resolve_ks_options("libxc:GGA_X_APBE", KsOptions(composition=other))

@@ -676,6 +676,13 @@ def ks_range_exchange_parameters(method_ir: typing.Any) -> typing.Any:
 
 def resolve_ks_method(method: typing.Any) -> typing.Any:
     """Resolve a public KS selector from the compiler-owned MethodIR catalog."""
+    automatic = parse_automatic_libxc_selector(method)
+    if automatic is not None:
+        from generativeqc_compiler.method import resolve_bulk_ks
+
+        name, spin = automatic
+        resolution = resolve_bulk_ks(name, spin=spin, backend="cpu")
+        return resolution.method, resolution.plan.semilocal.functional
     identifier, spin = _public_dft_binding(method)
     method_ir = resolve_method(identifier, spin=spin)
 
@@ -825,6 +832,13 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
             selected = _native_pbe_d4_semilocal(method_ir)
         else:
             selected = _native_semilocal(method_ir)
+        if parse_automatic_libxc_selector(method) is not None and (
+            SemilocalXCPrimitive(selected).semantic_payload()
+            != SemilocalXCPrimitive(expected).semantic_payload()
+        ):
+            raise NotImplementedError(
+                "automatic Libxc selector disagrees with its exact component/spin"
+            )
         # The native selector chooses only the ingredient/spin family; all
         # scientific coefficients remain explicit in the supplied MethodIR.
         if (
@@ -880,7 +894,15 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
                 "global-hybrid grid policy requires an explicit GridSpec"
             )
         else:
-            grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
+            grid_method = method
+            if parse_automatic_libxc_selector(method) is not None:
+                family = "lda" if expected.ingredients == ("rho",) else "pbe"
+                grid_method = (
+                    f"{family}-{'uks' if method_ir.spin == 'polarized' else 'rks'}"
+                )
+            grid = GridPolicy(options.grid_accuracy).resolve(
+                grid_method, derivative_order=0
+            )
     domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(
