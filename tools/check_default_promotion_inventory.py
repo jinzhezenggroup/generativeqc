@@ -486,12 +486,17 @@ def _discover_cc_options(root: Path) -> dict[str, str]:
 
 
 def _discover_cc_execution(root: Path) -> dict[str, str]:
-    """Audit bounded energy execution defaults without inventing user flags."""
+    """Audit bounded physical execution defaults without inventing user flags."""
     relative = Path("src/cc/df_triples_cuda.cu")
     source = _read(root / relative)
     energy_start = source.find("DFCudaResult evaluate_df_cuda(")
     response_start = source.find("static DFCudaResponseResult pullback_df_cuda_impl(")
-    if energy_start < 0 or response_start <= energy_start:
+    joint_start = source.find("DFCudaCombinedResponseResult pullback_and_fock_df_cuda(")
+    if (
+        energy_start < 0
+        or response_start <= energy_start
+        or joint_start <= response_start
+    ):
         raise ValueError("missing audited DF triples energy/response boundary")
     body = re.sub(
         r"//[^\n]*|/\*.*?\*/", " ", source[energy_start:response_start], flags=re.DOTALL
@@ -505,10 +510,35 @@ def _discover_cc_execution(root: Path) -> dict[str, str]:
         "if(alias_tile)generated_df::energy_distinct_tile(o,v,i,j,k,degeneracy,threshold,in,moments,sources,p.blocks,partials,context.error,context.stream);elsegenerated_df::energy_tile(o,v,i,j,k,degeneracy,threshold,in,moments,p.blocks,partials,context.error,context.stream);",
     )
     if any(body.count(fragment) != 1 for fragment in required) or any(
-        fragment in source[response_start:]
+        fragment in source[response_start:joint_start]
         for fragment in ("MomentSourceMap", "energy_distinct_tile")
     ):
         raise ValueError("DF triples distinct-moment FP64 energy admission drifted")
+    joint = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source[joint_start:], flags=re.DOTALL)
+    joint = re.sub(r"\s+", "", joint)
+    forward_required = (
+        "constbooldistinct_moments=d.w_contraction_storage_bits==64&&d.w_contraction_compute_bits==64&&d.w_contraction_accumulation_bits==64;",
+        "constautosources=distinct_moments?generated_df::occupied_moment_sources(i,j,k):generated_df::MomentSourceMap{};",
+        "constautosource=sources.index[perm];",
+        "if(source!=perm){",
+        "cudaMemcpyAsync(moments+perm*p.v3,moments+source*p.v3,bytes(p.v3),cudaMemcpyDeviceToDevice,context.stream)",
+        "++fock.w_copy_calls;",
+        "fock.w_copy_bytes=checked_add(fock.w_copy_bytes,bytes(p.v3));",
+    )
+    reverse = joint.split("constautorun_pullback=", 1)[-1].split(
+        "constbooldistinct_moments=", 1
+    )[0]
+    if (
+        any(joint.count(fragment) != 1 for fragment in forward_required)
+        or "MomentSourceMap" in reverse
+        or "sources.index" in reverse
+        or "energy_distinct_tile" in joint
+        or "bar_w+perm*p.v3,bar_panel,out,reverse_gemm" not in reverse
+        or "for(std::size_tperm=0;perm<6;++perm)" not in reverse
+    ):
+        raise ValueError(
+            "DF triples distinct-moment FP64 forward-only force admission drifted"
+        )
     traversal = (
         "detail::visit_occupied_tiles(o,distinct_moments&&p.panel_capacity==3,visit_tile);",
         "reduce<<<1,256,0,context.stream>>>(partials,p.blocks,energies+canonical_tile,context.error);",

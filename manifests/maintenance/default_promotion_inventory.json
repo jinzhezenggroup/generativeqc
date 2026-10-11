@@ -926,12 +926,15 @@
         "src/cc/df_triples_cuda.cu",
         "tools/generate_df_occupied_triples.py"
       ],
-      "rationale": "Native DF triples energy-only tiles alias equal physical occupied W seeds only when actual storage, compute and accumulation are all FP64. Every original projected contribution, virtual permutation, occupied tile, denominator degeneracy and finite check remains. All-distinct tiles and FP32 retain the original complete materialization/kernel; forces and response retain independent full cotangents. No option, precision, arena or public ABI changes. Single-panel and generated-provider budget fallbacks remain bounded.",
-      "revisit_condition": "Broaden to mixed precision or response only with separate independent numerical/derivative gates and complete endpoint evidence. Preserve all-equal nonfinite failures; do not collapse projected terms or alias cotangents merely because primal W seeds agree.",
+      "rationale": "Native DF triples energy tiles alias equal physical occupied W seeds only when actual storage, compute and accumulation are all FP64. The strict-FP64 joint force/Fock owner instead copies duplicate forward values into every original canonical W slot while retaining all six independent cotangents and pullbacks. Every projected contribution, virtual permutation, occupied tile, denominator degeneracy and finite check remains. Non-FP64 and standalone response owners retain original computation. No option, precision, numeric arena or public ABI changes; private diagnostic-layout additions require all native consumers to be rebuilt. Single/two-panel, partial-page and generated-provider budget fallbacks remain bounded.",
+      "revisit_condition": "Broaden to mixed precision or change cotangent/storage ownership only with renewed independent numerical/derivative gates and complete endpoint evidence. Preserve all-equal nonfinite failures; do not collapse projected terms or alias cotangents merely because primal W seeds agree.",
       "evidence": [
         "tests/python/test_df_triples_distinct_moments.py",
         "docs/developer/df_ccsdt.md",
         "benchmarks/results/df-triples-distinct-moments-20261011/publication.json",
+        "benchmarks/results/df-triples-force-distinct-moments-20261012/publication.json",
+        ".agents/notes/implemented/performance/2026-10-12-df-triples-force-distinct-moments.md",
+        "tests/python/test_df_occupied_triples_fock.py",
         ".agents/notes/implemented/performance/2026-10-11-df-triples-distinct-moments.md",
         "docs/developer/rccsd_gpu.md"
       ]

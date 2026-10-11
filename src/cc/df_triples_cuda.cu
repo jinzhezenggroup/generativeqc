@@ -298,6 +298,7 @@ JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::siz
   JointResponseLayout r;
   r.fock = fock_layout(o, v, q, capacity, panels, 0, true);
   auto& p = r.fock.value;
+  (void)checked_mul(checked_mul(6, r.fock.cubes), bytes(p.v3));
   validate_response_work(o, v, q, p, include_gap_response);
   const auto scalar_points = checked_mul(p.tiles, p.v3);
   (void)checked_mul(scalar_points, generated_df::scalar_unfused_arithmetic_ops);
@@ -1380,6 +1381,9 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       ++response_tiles;
     };
 
+    const bool distinct_moments = d.w_contraction_storage_bits == 64 &&
+                                  d.w_contraction_compute_bits == 64 &&
+                                  d.w_contraction_accumulation_bits == 64;
     auto page = [&](std::size_t start, std::size_t j, std::size_t k, double* x, double* y,
                     bool run_response) {
       ++fock.page_builds;
@@ -1389,6 +1393,8 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       for (std::size_t lane = 0; lane < page_capacity && start + lane < o; ++lane) {
         const auto i = start + lane;
         const std::array<std::size_t, 3> occupied{i, j, k};
+        const auto sources = distinct_moments ? generated_df::occupied_moment_sources(i, j, k)
+                                              : generated_df::MomentSourceMap{};
         for (std::size_t index = 0; index < 3; ++index) {
           if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
               occupied.begin() + index)
@@ -1397,6 +1403,17 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
           for (std::size_t perm = 0; perm < 6; ++perm) {
             const auto* order = generated_df::permutations[perm];
             if (occupied[order[0]] != occupied[index]) continue;
+            // Equal physical tuples share only forward values. Populate every
+            // original slot so resolvent and all six pullbacks remain unchanged.
+            const auto source = sources.index[perm];
+            if (source != perm) {
+              generativeqc_tensor::cuda_check(
+                  cudaMemcpyAsync(moments + perm * p.v3, moments + source * p.v3, bytes(p.v3),
+                                  cudaMemcpyDeviceToDevice, context.stream));
+              ++fock.w_copy_calls;
+              fock.w_copy_bytes = checked_add(fock.w_copy_bytes, bytes(p.v3));
+              continue;
+            }
             if (w_execution) {
               const auto slot = static_cast<std::size_t>((panel - panels) / p.v3);
               w_execution->build_w(context, in, occupied[order[0]], occupied[order[1]],
