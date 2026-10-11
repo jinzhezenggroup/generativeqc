@@ -29,7 +29,10 @@ def test_master_cpu_seed_covers_exact_pr_and_queue_cache_modes() -> None:
     assert "compiler: [gcc, clang]" in header
     assert "mode: [plain]" in header
     assert "include:\n          - compiler: gcc\n            mode: coverage" in header
-    assert "timeout-minutes: ${{ matrix.mode == 'coverage' && 10 || 8 }}" in header
+    assert (
+        "timeout-minutes: ${{ matrix.mode == 'coverage' && 10 || "
+        "matrix.compiler == 'gcc' && 12 || 8 }}" in header
+    )
     assert "fail-fast: false" in header
     restore = _step("master-cpu-cache", "Restore CPU ccache")
     consumer = _step("cpu", "Restore ccache")
