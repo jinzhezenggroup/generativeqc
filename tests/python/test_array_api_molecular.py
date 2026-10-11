@@ -231,7 +231,8 @@ def test_molecular_source_count_nested_dependencies_and_invalid_geometry_are_bou
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
     operators = tuple(
-        xp.MolecularModel(("H", "H"), method="rhf", max_iterations=count + 1) for count in range(17)
+        xp.MolecularModel(("H", "H"), method="rhf", max_iterations=count + 1)
+        for count in range(17)
     )
 
     def excessive(coordinates: Any) -> Any:
@@ -651,7 +652,9 @@ def test_native_molecular_resource_budget_is_independent_of_tensor_budget(
 ) -> None:
     from generativeqc import ResourceBudget
 
-    rhf = xp.MolecularModel(("H", "H"), method="rhf", resource_budget=ResourceBudget(host_bytes=1))
+    rhf = xp.MolecularModel(
+        ("H", "H"), method="rhf", resource_budget=ResourceBudget(host_bytes=1)
+    )
     compiled = xp.value_and_grad(lambda coordinates: rhf(coordinates), cache=tmp_path)
     with pytest.raises(MemoryError, match="no supported plan fits"):
         compiled(COORDINATES)
@@ -694,7 +697,9 @@ def test_real_cuda_molecular_endpoint(
     from generativeqc import Calculator
 
     _require_scheduled_cuda()
-    rhf = xp.MolecularModel(elements, method="rhf", basis=basis, charge=charge, backend="cuda")
+    rhf = xp.MolecularModel(
+        elements, method="rhf", basis=basis, charge=charge, backend="cuda"
+    )
     compiled = xp.value_and_grad(
         lambda coordinates: rhf(coordinates),
         backend="cuda",

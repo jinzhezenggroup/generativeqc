@@ -149,7 +149,9 @@ def main() -> None:
                     or float(np.max(np.abs(np.asarray(gradient) + reference.forces)))
                     > 1e-8
                 ):
-                    raise RuntimeError("warm molecular replay failed numerical acceptance")
+                    raise RuntimeError(
+                        "warm molecular replay failed numerical acceptance"
+                    )
         ratio = statistics.median(samples["array_api"]) / statistics.median(
             samples["native"]
         )

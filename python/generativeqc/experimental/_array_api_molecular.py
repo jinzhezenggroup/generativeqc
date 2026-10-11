@@ -107,7 +107,9 @@ class MolecularModel:
             or multiplicity > electrons + 1
             or (electrons - multiplicity + 1) % 2
         ):
-            raise ValueError("molecular spin multiplicity is incompatible with electrons")
+            raise ValueError(
+                "molecular spin multiplicity is incompatible with electrons"
+            )
         if method == "rhf" and multiplicity != 1:
             raise ValueError("RHF requires singlet multiplicity")
         if not isinstance(basis, str) or not basis.strip():
@@ -120,7 +122,9 @@ class MolecularModel:
             type(value) is not int or not 0 < value < 2**32 - 1
             for value in (max_iterations, diis_history)
         ):
-            raise ValueError("molecular iteration counts must be positive uint32 values")
+            raise ValueError(
+                "molecular iteration counts must be positive uint32 values"
+            )
         for name, value in (
             ("energy_tolerance", energy_tolerance),
             ("density_tolerance", density_tolerance),
@@ -137,7 +141,11 @@ class MolecularModel:
         ):
             raise TypeError("molecular resource_budget must be a ResourceBudget")
         if not isinstance(density_fitting, str) or density_fitting.lower() not in (
-            "none", "auto", "cpu", "cpu_reference", "cuda"
+            "none",
+            "auto",
+            "cpu",
+            "cpu_reference",
+            "cuda",
         ):
             raise ValueError("unsupported molecular density_fitting mode")
         density_fitting = density_fitting.lower()
@@ -224,7 +232,9 @@ class MolecularModel:
         if coordinates.dtype != np.float64:
             raise TypeError("molecular coordinates must be float64")
         if coordinates.shape != (len(self._numbers), 3):
-            raise ValueError("molecular coordinates must have shape (number of nuclei, 3)")
+            raise ValueError(
+                "molecular coordinates must have shape (number of nuclei, 3)"
+            )
         if not np.isfinite(coordinates).all():
             raise ValueError("molecular coordinates must be finite")
         return np.array(coordinates, copy=True, order="C")
@@ -234,7 +244,9 @@ class MolecularModel:
     ) -> tuple[np.ndarray, np.ndarray | None]:
         expected_backend = "cpu_reference" if self._backend == "cpu" else "cuda"
         if not result.converged or result.executed_backend != expected_backend:
-            raise RuntimeError("molecular source did not converge on the selected backend")
+            raise RuntimeError(
+                "molecular source did not converge on the selected backend"
+            )
         energy = np.asarray(result.energy, dtype=np.float64)
         gradient = None
         if derivative:
@@ -253,7 +265,9 @@ class MolecularModel:
                 )
             )
         ):
-            raise ArithmeticError("molecular source returned invalid energy/nuclear gradient")
+            raise ArithmeticError(
+                "molecular source returned invalid energy/nuclear gradient"
+            )
         return energy, gradient
 
     def __call__(self, coordinates: Any) -> Any:
@@ -326,7 +340,9 @@ class _MolecularCapture:
         if coordinates.dtype != "float64":
             raise TypeError("molecular coordinates must be float64")
         if coordinates.shape != (len(operator._numbers), 3):
-            raise ValueError("molecular coordinates must have shape (number of nuclei, 3)")
+            raise ValueError(
+                "molecular coordinates must have shape (number of nuclei, 3)"
+            )
         if not symbolic._is_generic_array(coordinates):
             indices = coordinates.node.spec.indices
             if tuple(index.space.kind for index in indices) != (
