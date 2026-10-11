@@ -109,6 +109,52 @@ class ConventionalProvider:
             backend=self.backend,
         )
 
+    def admit(self, blocks: typing.Iterable[typing.Any]) -> int:
+        """Dry-run a complete block sequence before any AO reads or allocations.
+
+        Mirror get's spin-aware cache keys and pin/LRU transitions without
+        modifying the real cache. Return the largest numeric peak, including
+        existing retained blocks. Callers requiring atomic admission plus reads
+        must hold this provider's reentrant lock across both operations.
+        """
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("integral provider is closed")
+            if self.source.identity != self._source_identity:
+                raise ValueError("integral source changed; construct a fresh provider")
+            self.source._check_open()
+            cache = OrderedDict((key, cost) for key, (_, cost) in self._cache.items())
+            retained = self._retained
+            peak = retained + self.snapshot.numeric_bytes + self.source.numeric_bytes
+            if peak > self.budget_bytes:
+                raise MemoryError("MO block sequence exceeds provider budget")
+            for block in blocks:
+                plan = self.plan(block)
+                if plan.peak_bytes > self.budget_bytes:
+                    raise MemoryError("MO block sequence exceeds provider budget")
+                key = (self.snapshot.identity, self.source.identity, block.slots)
+                spins = getattr(block, "spins", None)
+                if spins is not None:
+                    key += (spins,)
+                if key in cache:
+                    cache.move_to_end(key)
+                    peak = max(peak, plan.peak_bytes)
+                    continue
+                while (
+                    cache
+                    and retained + plan.peak_bytes > self.budget_bytes
+                    and self.cache_policy == "lru"
+                ):
+                    _, cost = cache.popitem(last=False)
+                    retained -= cost
+                if retained + plan.peak_bytes > self.budget_bytes:
+                    raise MemoryError("MO block sequence exceeds provider budget")
+                peak = max(peak, retained + plan.peak_bytes)
+                cost = plan.retained_bytes
+                cache[key] = cost
+                retained += cost
+            return peak
+
     def get(self, block: typing.Any) -> typing.Any:
         """Return g[p,q,r,s] for explicit global MO columns; reuse exact identity."""
         with self._lock:
@@ -170,7 +216,7 @@ class ConventionalProvider:
             ]
             if plan.output_elements == 0:
                 values = immutable(np.zeros(block.shape))
-                retained = values.nbytes
+                retained = plan.retained_bytes
                 engine = None
             elif self.backend == "cuda":
                 from .cuda import CudaTransform
@@ -183,11 +229,11 @@ class ConventionalProvider:
                     self.cuda_artifact, plan, coefficients, device_id=self.device_id
                 )
                 values = engine
-                retained = plan.device_bytes
+                retained = plan.retained_bytes
             else:
                 engine = None
                 values = np.zeros(block.shape)
-                retained = values.nbytes
+                retained = plan.retained_bytes
             setup_seconds = time.perf_counter() - setup
             source_seconds = transform_seconds = 0.0
             tiles = 0

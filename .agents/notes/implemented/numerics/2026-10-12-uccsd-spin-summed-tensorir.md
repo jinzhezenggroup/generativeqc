@@ -76,5 +76,9 @@ equations or generated Hamiltonian adjoints.
 
 ## References
 
+The subsequent [shared provider/iteration decision](2026-10-12-uccsd-shared-iteration-provider.md)
+implements the conventional solver prerequisite without changing this
+equation-ownership decision. Triples and complete response remain separate work.
+
 - Issues #1821, #1822, #1824, #1825; amplitude-layout prerequisite PR #2234.
 - `docs/developer/uccsd_equations.md` and `docs/developer/uccsd_layout.md`.

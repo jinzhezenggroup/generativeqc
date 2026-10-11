@@ -37,6 +37,11 @@ class BlockPlan:
     def peak_bytes(self) -> typing.Any:
         return self.host_bytes + self.device_bytes
 
+    @property
+    def retained_bytes(self) -> int:
+        """Cache charge, including each resident CUDA library allowance."""
+        return self.device_bytes if self.backend == "cuda" else 8 * self.output_elements
+
 
 def plan_block(
     snapshot: typing.Any,

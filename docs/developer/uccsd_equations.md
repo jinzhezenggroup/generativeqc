@@ -13,6 +13,10 @@ legal mathematical blocks. This internal graph does **not** register a public
 UCCSD method, admit UHF references, supply integral providers or denominators,
 or implement an iterative solver, Lambda, triples, or nuclear forces.
 
+The separate [canonical UCCSD solver](uccsd_solver.md) binds this graph to
+validated UHF references, conventional spin providers and packed CPU/CUDA
+iteration state. Its reference/resource policies do not belong to this builder.
+
 ## Hamiltonian and residual convention
 
 Integral inputs are real antisymmetrized physicists' integrals
