@@ -71,8 +71,55 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Keep the public export statically resolvable by the API contract checker.
+# test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
-    name for operations in _OPERATION_GROUPS.values() for name in operations
+    {
+        "add",
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
+        "astype",
+        "zeros",
+        "ones",
+        "full",
+        "zeros_like",
+        "ones_like",
+        "full_like",
+        "subtract",
+        "multiply",
+        "divide",
+        "negative",
+        "pow",
+        "exp",
+        "log",
+        "sqrt",
+        "square",
+        "reciprocal",
+        "sum",
+        "mean",
+        "reshape_explicit_indices",
+        "permute_dims",
+        "reshape",
+        "broadcast_to",
+        "broadcast_shapes",
+        "broadcast_arrays",
+        "expand_dims",
+        "squeeze",
+        "moveaxis",
+        "flip",
+        "slice",
+        "take",
+        "broadcast_to_explicit_indices",
+        "slice_static",
+        "take_static",
+        "matmul",
+        "matrix_transpose",
+        "einsum_extension",
+    }
 )
 
 _OPERATION_DTYPES: dict[str, str] = {
