@@ -66,7 +66,7 @@ def reference_hf(symbol: typing.Any, mol: typing.Any) -> typing.Any:
         target.run(conv_tol=1e-12, init_guess=guess)
         assert target.converged
         solutions.append(target)
-    energies = {guess: target.e_tot for guess, target in zip(guesses, solutions)}
+    energies = {guess: target.e_tot for guess, target in zip(guesses, solutions, strict=True)}
     np.testing.assert_allclose(
         list(energies.values()), solutions[0].e_tot, atol=2e-9, rtol=0
     )

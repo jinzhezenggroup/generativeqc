@@ -174,7 +174,7 @@ def test_ecp_dft_budgeted_ragged_replay_and_isolation(
         )
         moved_mol = mol.copy().set_geom_(xyz, unit="Bohr")
         moved_atoms = [
-            (symbol, tuple(position)) for (symbol, _), position in zip(atoms, xyz)
+            (symbol, tuple(position)) for (symbol, _), position in zip(atoms, xyz, strict=True)
         ]
         target, _, _, _ = reference(
             moved_mol, moved_atoms, method, calc.ks_options.grid

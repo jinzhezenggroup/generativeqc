@@ -149,7 +149,7 @@ def independent_gradient(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
+        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
         basis=shells,
         unit="Bohr",
         cart=True,
@@ -227,7 +227,7 @@ def independent_converged_grid_reference(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
+        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
         basis=shells,
         unit="Bohr",
         cart=True,
@@ -439,7 +439,7 @@ def independent_uks_gradient(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
+        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
         basis=shells,
         unit="Bohr",
         cart=True,
@@ -499,7 +499,7 @@ def independent_semilocal_total_gradient(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
+        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
         basis=shells,
         unit="Bohr",
         cart=cart,
@@ -709,7 +709,8 @@ def test_complete_asymmetric_water_analytic_and_reconverged_fd(
                         [
                             (label, pos)
                             for (label, _), pos in zip(
-                                ATOMS, coordinates + sign * direction
+                                ATOMS, coordinates + sign * direction,
+                                strict=True,
                             )
                         ]
                     ).energy
@@ -865,7 +866,7 @@ def independent_global_hybrid_gradient(
         )
     uks = method.endswith("-uks")
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
+        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
         basis=shells,
         unit="Bohr",
         cart=basis.representation == "cartesian",
@@ -1086,7 +1087,7 @@ def test_failure_isolation_native_malformed_geometry_and_detached_state() -> Non
         batch.execute(coordinates=[changed, None], strict=True)
         with pytest.raises(ValueError, match="basis/overlap source"):
             StationaryKsState.from_native(batch, basis)
-        moved = [(a[0], p) for a, p in zip(ATOMS, changed)]
+        moved = [(a[0], p) for a, p in zip(ATOMS, changed, strict=True)]
         with NativeAO(moved) as moved_basis:
             new = StationaryKsState.from_native(batch, moved_basis)
             assert new.identity.owner != old.identity.owner

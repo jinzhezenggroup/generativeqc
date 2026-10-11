@@ -149,7 +149,7 @@ def test_native_matches_independent_scf(
             ]
         )
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms)],
+        atom=[(label, atom.position) for label, atom in zip(labels, atoms, strict=True)],
         basis=basis,
         charge=charge,
         spin=multiplicity - 1,
