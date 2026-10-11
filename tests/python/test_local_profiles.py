@@ -519,21 +519,20 @@ def test_xyz_units_and_incomplete_input(tmp_path: typing.Any) -> None:
         read_xyz(path)
 
 
-def test_installed_cli_help_and_show_need_no_native_library(
+def test_explicit_tuner_help_needs_no_native_library(
     tmp_path: typing.Any,
 ) -> None:
     import os
 
     env = {**os.environ, "GENERATIVEQC_PROFILE_CACHE": str(tmp_path)}
-    for args in (("--help",), ("autotune", "--help"), ("profile", "show")):
-        run = subprocess.run(
-            [sys.executable, "-m", "generativeqc", *args],
-            env=env,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        assert run.stdout
+    run = subprocess.run(
+        [sys.executable, "-m", "generativeqc.tune_cli", "--help"],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "generativeqc-tune" in run.stdout
 
 
 def test_generic_numerical_driver_supports_tuned_s_and_p_consumers() -> None:

@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_matrix_product.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Immutable prepared semantic matrix-product bindings and borrowed CUDA context. The compiler owns equations, canonical portfolios and precision admission.",
+  "regions": []
+}

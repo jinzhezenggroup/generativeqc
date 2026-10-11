@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc import (
@@ -14,9 +13,6 @@ from generativeqc import (
     estimate_ks_resources,
     resources_ks,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 H2 = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
 SELECTORS = (
@@ -216,39 +212,6 @@ def test_explicit_unbudgeted_experiment_keeps_native_admission_boundary(
     )
     with pytest.raises(RuntimeError, match="reached native context admission"):
         calculator.prepare_batch([H2])
-
-
-def test_incremental_cli_returns_unsupported_without_native_loading(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from generativeqc.__main__ import main
-
-    path = tmp_path / "h2.xyz"
-    path.write_text("2\nbohr\nH 0 0 -0.7\nH 0 0 0.7\n")
-    monkeypatch.setenv(SELECTORS[0], "on")
-    monkeypatch.setattr(_native, "load_library", _forbidden)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "generativeqc",
-            "resources",
-            str(path),
-            "--method",
-            "pbe-uks",
-            "--backend",
-            "cuda",
-            "--batch",
-            "2",
-            "--units",
-            "bohr",
-        ],
-    )
-    assert main() == 2
-    output = json.loads(capsys.readouterr().out)
-    assert output["status"] == "unsupported"
-    assert "incremental Direct-J/K" in output["diagnostic"]
 
 
 @pytest.mark.parametrize(

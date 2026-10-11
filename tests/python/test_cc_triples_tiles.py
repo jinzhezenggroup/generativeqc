@@ -257,7 +257,7 @@ def test_tile_tensorir_is_differentiable(
     from generativeqc_compiler.tensor import dot_test
 
     arrays = _random_case(o, v, seed)
-    feeds = {n: a for n, a in zip(INPUT_NAMES, arrays)}
+    feeds = {n: a for n, a in zip(INPUT_NAMES, arrays, strict=True)}
     prog = build_tile_triples_program(o, v)
     rng = np.random.default_rng(207)
     tangents = {k: rng.normal(size=x.shape) for k, x in feeds.items()}

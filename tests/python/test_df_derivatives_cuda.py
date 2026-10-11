@@ -72,7 +72,9 @@ def test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion(
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     oi, xi = fixture_inputs(representation, shared)
     o, x = calculator(oi), calculator(xi)
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
     a, m, da, dm = reference_df_matrices(oi, xi)
     rng = np.random.default_rng(143)
     wa, wm = rng.normal(size=a.shape), rng.normal(size=m.shape)
@@ -139,7 +141,9 @@ def test_cooperative_sparse_weights_and_ragged_primitive_partitions(
     wa.flat[::5] = np.linspace(-0.2, 0.3, wa.flat[::5].size)
     wm.flat[::3] = np.linspace(0.1, -0.4, wm.flat[::3].size)
     expected = np.einsum("axijp,ijp->ax", da, wa) + np.einsum("axpq,pq->ax", dm, wm)
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
     actual, _ = execute_df_gradient(
         calculator(oi),
         calculator(xi),
@@ -164,7 +168,9 @@ def test_mixed_representations_and_permuted_auxiliary_shells(
     xi["basis_representation"] = auxiliary_rep
     xi["shells"] = [xi["shells"][i] for i in (3, 0, 2, 1)]
     o, x = calculator(oi), calculator(xi)
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
     a, m, da, dm = reference_df_matrices(oi, xi)
     rng = np.random.default_rng(1431)
     wa, wm = rng.normal(size=a.shape), rng.normal(size=m.shape)
@@ -228,7 +234,9 @@ def test_complete_hf_replay_two_budgets_and_force_components(
     with calc.prepare_batch(
         [atoms], charges=[charge], multiplicities=[multiplicity]
     ) as batch:
-        for positions, reference in zip((base, base, moved, base), expected):
+        for positions, reference in zip(
+            (base, base, moved, base), expected, strict=True
+        ):
             actual = batch.execute([positions], strict=True).items[0]
             assert actual.executed_backend == "cuda"
             assert actual.energy == pytest.approx(reference.energy, abs=3e-10)
@@ -338,7 +346,9 @@ def test_metric_only_weight_response_moves_both_auxiliary_centers() -> None:
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     oi, xi = fixture_inputs("spherical", False)
     o, x = calculator(oi), calculator(xi)
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
     a, m, _, dm = reference_df_matrices(oi, xi)
     wm = np.random.default_rng(1432).normal(size=m.shape)
     expected = np.einsum("axpq,pq->ax", dm, wm)
@@ -358,7 +368,9 @@ def test_null_weight_channels_are_documented_zero_operators(
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     oi, xi = fixture_inputs("spherical", False)
     orbital, auxiliary = calculator(oi), calculator(xi)
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
     n = sum(2 * shell["angular_momentum"] + 1 for shell in oi["shells"])
     a = sum(2 * shell["angular_momentum"] + 1 for shell in xi["shells"])
     random = np.random.default_rng(1433)
@@ -401,7 +413,9 @@ def test_auxiliary_only_atom_hf_energy_derivative(
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     oi, xi = fixture_inputs("cartesian", False)
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"])]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
 
     def shells(inputs: typing.Any) -> typing.Any:
         return [

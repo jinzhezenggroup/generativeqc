@@ -35,6 +35,7 @@ def emit_contraction_region_portfolio(
     *,
     name: str,
     bounded_dense: bool = False,
+    blas_context_contract: str = "runtime-bound-pedantic",
 ) -> str:
     """Offer homogeneous prepared implementations for one compiler region.
 
@@ -57,13 +58,15 @@ def emit_contraction_region_portfolio(
         TargetCapabilities,
     )
 
+    if blas_context_contract not in ("runtime-bound-pedantic", "runtime-bound-fp64"):
+        raise ValueError("unsupported borrowed BLAS arithmetic contract")
     target = TargetCapabilities(
         TargetInfo("cuda", "current-aot-module", 32, 1024, None)
     )
     providers = tuple(
         ProviderDescriptor(provider, kind, "prepared-affine-region", version=version)
         for provider, kind, version in (
-            ("cublas", "library", "runtime-bound-pedantic"),
+            ("cublas", "library", blas_context_contract),
             ("generated.cuda", "generated", source_identity),
             ("cutensor", "library", "runtime-bound-qualified-2.x"),
             ("cublaslt", "library", "runtime-bound-qualified-matmul"),

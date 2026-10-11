@@ -211,13 +211,11 @@ void print_usage(std::ostream& out) {
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc profile show|clear\n"
-         "  generativeqc autotune --show-profile|--clear-profile\n"
          "  generativeqc resources INPUT.xyz [run and budget options]\n"
          "  generativeqc profile install ARCHIVE.zip\n"
          "  generativeqc profile export DIRECTORY DESTINATION.zip\n"
          "  generativeqc profile validate DIRECTORY\n"
          "  generativeqc profile diagnose\n"
-         "  generativeqc autotune ...    # source compilation is a build-time compiler workflow\n\n"
          "Resource budget options (JSON output; no calculation or device probe):\n"
          "  --batch N --host-bytes N --device-bytes N --pinned-host-bytes N\n"
          "  --host-reserve-bytes N --device-reserve-bytes N --headroom-fraction F\n\n"
@@ -1049,13 +1047,6 @@ int profile_command(int argc, char** argv) {
   throw UsageError("unknown profile operation: " + std::string(operation));
 }
 
-int compiler_subcommand() {
-  std::cerr << "generativeqc: autotune search generates and compiles new kernels; use the explicit "
-               "build-time compiler workflow (python -m generativeqc autotune INPUT.xyz). "
-               "Installed runtime operations never start Python.\n";
-  return 2;
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1110,16 +1101,6 @@ int main(int argc, char** argv) {
       return run(options);
     }
     if (command == "profile") return profile_command(argc, argv);
-    if (command == "autotune") {
-      if (argc == 3 && std::string_view(argv[2]) == "--show-profile") return profile_show();
-      if (argc == 3 && std::string_view(argv[2]) == "--clear-profile") return profile_clear();
-      if (argc == 3 &&
-          (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
-        print_usage(std::cout);
-        return 0;
-      }
-      return compiler_subcommand();
-    }
     if (command == "resources") {
       if (argc == 3 &&
           (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
@@ -1130,7 +1111,8 @@ int main(int argc, char** argv) {
       return generativeqc::cli::resources_command(options, read_xyz(options));
     }
 
-    throw UsageError("unknown command: " + std::string(command));
+    throw UsageError("unknown command: " + std::string(command) +
+                     "; explicit compiler searches use generativeqc-tune");
   } catch (const UsageError& error) {
     std::cerr << "generativeqc: " << error.what() << "\n\n";
     print_usage(std::cerr);

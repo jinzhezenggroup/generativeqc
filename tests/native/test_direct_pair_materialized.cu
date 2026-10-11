@@ -640,8 +640,87 @@ void qualify_high_canonical_orders() {
   std::cout << "canonical order-eight/nine production slots and exact work PASS\n";
 }
 
+/** Sample the full Cartesian domain of every supported scalar-response order.
+ * Retained AD supplies all unique atoms, including the translational tail.
+ * Exact counters distinguish one primitive recurrence from N-1 replays. */
+template <unsigned First, unsigned Second, unsigned Third, unsigned Fourth>
+__global__ void shared_response_probe(DeviceBatch batch, double* actual, double* expected,
+                                      MaterializedDirectPairWork* work,
+                                      generativeqc::integrals::CoulombRange range) {
+  constexpr unsigned samples = 64U, order = First + Second + Third + Fourth;
+  const unsigned sample = blockIdx.x * blockDim.x + threadIdx.x;
+  if (sample >= samples) return;
+  std::int32_t aos[4]{}, atoms[4]{};
+  for (unsigned shell = 0; shell < 4U; ++shell) {
+    const auto begin = batch.shell_direct_ao_offsets[shell];
+    const auto count = batch.shell_direct_ao_offsets[shell + 1U] - begin;
+    aos[shell] = begin + (sample * (2U * shell + 1U) + shell) % count;
+    atoms[shell] = batch.shell_atoms[shell];
+  }
+  std::int32_t unique[4]{};
+  const unsigned centers = direct_force_unique_center_atoms(atoms, unique);
+  const auto gradient = contracted_direct_shared_response_gradient<order>(
+      batch, 0, aos[0], aos[1], aos[2], aos[3], unique, centers, range, 0.37, work);
+  double sum[3]{};
+  for (unsigned center = 0; center < centers; ++center) {
+    const auto raw =
+        contracted_eri_cartesian_source_shell_class<First, Second, Third, Fourth, Dual3>(
+            batch, aos[0], aos[1], aos[2], aos[3], 0, 1, 2, 3, std::int64_t(unique[center]) * 3,
+            range, 0.37);
+    const double derivatives[3]{raw.derivative_x, raw.derivative_y, raw.derivative_z};
+    for (unsigned axis = 0; axis < 3U; ++axis) {
+      const unsigned index = (sample * 4U + center) * 3U + axis;
+      actual[index] = center + 1U < centers ? gradient.center[center][axis] : -sum[axis];
+      expected[index] = derivatives[axis];
+      sum[axis] += actual[index];
+    }
+  }
+}
+
+template <unsigned First, unsigned Second, unsigned Third, unsigned Fourth>
+void qualify_shared_response_order() {
+  for (const auto atoms :
+       {std::vector<std::int32_t>{0, 1, 2, 3}, {0, 0, 1, 2}, {0, 1, 0, 1}, {0, 0, 0, 0}}) {
+    Fixture fixture({First, Second, Third, Fourth}, false, false);
+    fixture.batch.shell_atoms = fixture.upload(atoms);
+    const unsigned centers = std::set<std::int32_t>(atoms.begin(), atoms.end()).size();
+    for (auto range : {generativeqc::integrals::CoulombRange::Full,
+                       generativeqc::integrals::CoulombRange::Long}) {
+      Device<double> actual(64U * 12U), expected(64U * 12U);
+      Device<MaterializedDirectPairWork> work(1);
+      shared_response_probe<First, Second, Third, Fourth>
+          <<<2, 32>>>(fixture.batch, actual.data, expected.data, work.data, range);
+      check(cudaGetLastError());
+      check(cudaDeviceSynchronize());
+      const auto values = actual.read(), reference = expected.read();
+      for (std::size_t index = 0; index < values.size(); ++index)
+        close(values[index], reference[index], "scalar spatial response differs from retained AD");
+      const auto counters = work.read()[0];
+      const unsigned live = centers > 1U ? 64U : 0U;
+      if (counters.bra_preparations != 4U * live || counters.ket_preparations != 16U * live ||
+          counters.coulomb_preparations != 16U * live ||
+          counters.component_contractions != 16U * (centers - 1U) * live ||
+          counters.published_components != live)
+        throw std::runtime_error("shared scalar response repeated or omitted primitive work");
+    }
+  }
+}
+
+void qualify_shared_responses() {
+  qualify_shared_response_order<3, 2, 2, 0>();
+  qualify_shared_response_order<3, 2, 2, 1>();
+  qualify_shared_response_order<3, 2, 2, 2>();
+  qualify_shared_response_order<3, 3, 2, 2>();
+  qualify_shared_response_order<3, 3, 3, 2>();
+  std::cout << "orders 7..11 shared scalar responses and exact primitive work PASS\n";
+}
+
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--shared-responses") == 0) {
+      qualify_shared_responses();
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--canonical-low-orders") == 0) {
       qualify_low_canonical_orders();
       return 0;

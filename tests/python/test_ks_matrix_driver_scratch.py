@@ -37,7 +37,7 @@ def test_driver_owns_exact_disjoint_scratch_outside_enqueue() -> None:
     assert case.index(allocation) < case.index("cudaStreamBeginCapture")
     # No reassignment, explicit free, aliasing or additional scratch use can hide
     # between the allocation and the two provider views checked below.
-    assert case.count("masked_output") == 3
+    assert case.count("masked_output") == 2
     assert "cudaFree" not in case
     buffer = _compact(_body(source, "struct DeviceBuffer"))
     assert "check(cudaMalloc(&data,count*sizeof(T)))" in buffer
@@ -51,17 +51,19 @@ def test_both_driver_calls_pass_exact_scratch_span(ordinary: bool) -> None:
     if ordinary:
         expected = (
             "matrix::launch_matrix_product("
-            "owner.view(masked_output.data,output_size),batch,n,dl.data,"
-            "transpose,dr.data,da.data,dout.data,library,scale)"
+            "resources,batch,n,dl.data,"
+            "transpose,dr.data,da.data,dout.data,scale)"
         )
     else:
         expected = (
             "matrix::launch_spin_matrix_product("
-            "owner.view(masked_output.data,output_size),batch,spins,n,dl.data,"
-            "left_spin,transpose,dr.data,right_spin,da.data,dout.data,library)"
+            "resources,batch,spins,n,dl.data,"
+            "left_spin,transpose,dr.data,right_spin,da.data,dout.data)"
         )
     assert expected in enqueue
-    assert enqueue.count("owner.view(masked_output.data,output_size)") == 2
+    assert "owner.view(masked_output.data,output_size)" in _compact(case)
+    assert "resources.binding_=&binding;" in _compact(case)
+    assert "owner.view" not in enqueue
     assert "owner.view()" not in enqueue
 
 

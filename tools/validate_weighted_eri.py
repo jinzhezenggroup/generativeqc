@@ -336,7 +336,7 @@ def main() -> None:
                 "input_hash": f["input_hash"],
                 "host_numeric_peak_bytes": s.host_peak_bytes,
             }
-            for f, s in zip(fixtures, streams)
+            for f, s in zip(fixtures, streams, strict=True)
         ],
         "runs": [],
     }
@@ -384,7 +384,9 @@ def main() -> None:
                 fd.append({**difference, "absolute_error": abs(finite - derivative)})
             # Response metadata/center ordering is also checked against the
             # independently contracted native oracle for every public tile.
-            for fixture, values, reference in zip(fixtures, actual, expected):
+            for fixture, values, reference in zip(
+                fixtures, actual, expected, strict=True
+            ):
                 np.testing.assert_allclose(
                     weighted_eri_response(fixture["request"], values).values,
                     weighted_eri_response(fixture["request"], reference).values,

@@ -537,7 +537,9 @@ def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.A
             (
                 "".join(
                     axis * int(power)
-                    for axis, power in zip("xyz", row[4 + 4 * term : 7 + 4 * term])
+                    for axis, power in zip(
+                        "xyz", row[4 + 4 * term : 7 + 4 * term], strict=True
+                    )
                 ),
                 float(row[7 + 4 * term]),
             )
@@ -1776,6 +1778,7 @@ class _CudaSources:
                     "becke_pair_state_evaluations",
                 ),
                 values,
+                strict=True,
             )
         )
         metrics["restricted_point_requested"] = int(
@@ -1835,6 +1838,7 @@ class _CudaSources:
                         "becke_primitive_reverse_pair_visits",
                     ),
                     primitive_values,
+                    strict=True,
                 )
             )
         becke_counters = getattr(
@@ -1849,7 +1853,7 @@ class _CudaSources:
             becke_values = (ct.c_uint64 * len(_BECKE_PHASE_COUNTER_NAMES))()
             if becke_counters(self.handle, becke_values, len(becke_values)):
                 raise RuntimeError("stationary Becke phase counters unavailable")
-            metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values))
+            metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values, strict=True))
             if zero_metrics is not None:
                 elided_pairs = (
                     metrics["becke_zero_seed_points"]
@@ -1890,7 +1894,9 @@ class _CudaSources:
             becke_times = (ct.c_double * len(_BECKE_PHASE_NAMES))()
             if becke_profile(self.handle, becke_times, len(becke_times)):
                 raise RuntimeError("stationary Becke phase profile unavailable")
-            metrics["becke_phase_ms"] = dict(zip(_BECKE_PHASE_NAMES, becke_times))
+            metrics["becke_phase_ms"] = dict(
+                zip(_BECKE_PHASE_NAMES, becke_times, strict=True)
+            )
             metrics["becke_phase_profile_scope"] = (
                 "phased kernels after AO/XC seeds; intrusive per-tile fence "
                 "when enabled; generic fallback is not split"
@@ -1920,6 +1926,7 @@ class _CudaSources:
                     "final_d2h_wall",
                 ),
                 profile,
+                strict=True,
             )
         )
         return metrics

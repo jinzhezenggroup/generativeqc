@@ -5,8 +5,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "generativeqc/generativeqc.h"
+#include "tensor/cuda_matrix_product.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -19,6 +21,8 @@ struct MatrixLibraryResources {
    * completion. Native and unmasked library products do not use it. */
   double* masked_output_{};
   std::size_t masked_output_elements_{};
+  /** Immutable semantic binding; no execution-time implementation selector. */
+  const tensor::CudaMatrixProductBinding* binding_{};
 };
 
 /** Prepared host-safe owner for the shared SCF matrix adapter.
@@ -42,13 +46,13 @@ class MatrixLibraryOwner {
   MatrixLibraryOwner(const MatrixLibraryOwner&) = delete;
   MatrixLibraryOwner& operator=(const MatrixLibraryOwner&) = delete;
 
-  generativeqc_status prepare(cudaStream_t stream, int nbf);
+  generativeqc_status prepare(cudaStream_t stream, int nbf, int systems = 1, int spins = 2);
   void reset() noexcept;
 
   bool library_enabled() const noexcept { return blas_ != nullptr; }
   MatrixLibraryResources view(double* masked_output = nullptr,
                               std::size_t masked_output_elements = 0) const noexcept {
-    return {stream_, blas_, masked_output, masked_output_elements};
+    return {stream_, blas_, masked_output, masked_output_elements, binding_ ? &*binding_ : nullptr};
   }
   std::size_t retained_bytes() const noexcept { return retained_bytes_; }
 
@@ -58,9 +62,11 @@ class MatrixLibraryOwner {
   cublasHandle_t blas_{};
   std::size_t retained_bytes_{};
   bool prepared_{};
+  std::optional<tensor::CudaMatrixProductBinding> binding_;
+  generativeqc_status prepare_provider(cudaStream_t stream, int nbf);
 };
 
-/** Use the resolved native/library route, preserving masks and column-major strides.
+/** Execute the immutable semantic binding, preserving masks and column-major strides.
  * Spin products broadcast physical operands through one library submission per spin;
  * singleton physical batches use ordinary GEMM and true multi-system batches use
  * strided-batched GEMM. The caller owns every input/output allocation and borrowed
@@ -69,20 +75,19 @@ class MatrixLibraryOwner {
  * elements for the library route (spin_count is one for plain products). GEMM
  * writes only scratch; a stream-ordered masked copy preserves inactive output
  * bytes, including on Graph replay. Missing/undersized/overlapping scratch is
- * rejected before submission; explicit library selection never becomes native.
- * The optional scale is applied by both the native and cuBLAS routes, allowing
+ * rejected before submission; a bound library recipe never silently becomes native.
+ * The optional scale is applied by both recipes, allowing
  * occupation normalization without a separate matrix pass.
  */
 generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
                                           const double* left, bool transpose_left,
                                           const double* right, const std::uint8_t* active,
-                                          double* output, bool use_cublas, double scale = 1.0);
+                                          double* output, double scale = 1.0);
 
 generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources, int batch_size,
                                                int spin_count, int nbf, const double* left,
                                                bool left_is_spin, bool transpose_left,
                                                const double* right, bool right_is_spin,
-                                               const std::uint8_t* active, double* output,
-                                               bool use_cublas);
+                                               const std::uint8_t* active, double* output);
 
 }  // namespace generativeqc::scf::cuda_execution

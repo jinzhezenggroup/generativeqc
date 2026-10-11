@@ -176,7 +176,9 @@ class _PrimitiveExecutor:
         self.aos = basis.packed[start + 2 * basis.nprimitive :].reshape(-1, 16)
         self.centers = basis.packed[:start].reshape(-1, 3)
         self.components = tuple(
-            "".join(axis * int(power) for axis, power in zip("xyz", r[4:7]))
+            "".join(
+                axis * int(power) for axis, power in zip("xyz", r[4:7], strict=True)
+            )
             for r in self.aos
         )
         if any(int(r[3]) != 1 for r in self.aos):
