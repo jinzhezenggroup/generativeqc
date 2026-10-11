@@ -144,6 +144,7 @@ def test_public_calculator_does_not_reselect_native_declined_policy(
         pytest.skip("native automatic-policy export required")
     query = PolicyQuery(0)
     monkeypatch.setattr(library, "generativeqc_initial_guess_auto_kind_v1", query)
+    monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: library)
     calc = Calculator("rhf", "sto-3g", device="cpu")
     assert calc.initial_guess is None
     assert query.requests and query.requests[0]["method"] == _native.METHOD_RHF
