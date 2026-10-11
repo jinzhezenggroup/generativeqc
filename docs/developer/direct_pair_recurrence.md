@@ -3,7 +3,7 @@
 ## Automatic canonical J/K values
 
 Canonical Cartesian Direct sources automatically reuse the prepared primitive-pair
-cache for total-angular-order-five-through-nine shell quartets, including spherical public
+cache for total-angular-order-three-through-nine shell quartets, including spherical public
 projections. This route is independent of the legacy HF value switch below:
 neither an unset switch nor `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=0`
 disables its admission. It applies by source capability, not by method, basis
@@ -17,14 +17,28 @@ canonical row-major bounds, not a recomputed bound or a symmetry assumption.
 Full J/K, J-only, and standalone full/SR/LR K publish separate positive sources
 through the existing compiler-owned recurrence and orbit scatter.
 
-One CTA owns the complete admitted component domain: order five
-uses one 256-lane packet, order six uses two register slots per lane, and order
-seven uses three, order eight uses six, and order nine uses nine. The largest
+One CTA owns the complete admitted component domain. Orders three/four/five
+use 32-thread CTAs with one/three/six component slots per lane, covering their
+maximum 27/81/162 components. Orders six/seven/eight/nine retain 256-thread
+CTAs with two/three/six/nine slots per lane. The largest
 order-nine domain is fddd (2160 components), not ffdp (1800). These bounds cover
 every s/p/d/f shell composition, including
 partial tails and repeated physical shell pairs. Equal angular buckets retain
 their symmetry-unique sorted triangle. All slots share one primitive recurrence;
 inactive lanes still participate in publication and retirement barriers.
+The low-order owner is a complete CTA, not a warp-private region within a larger
+CTA. It retains the same CTA barriers and recurrence lifetime. Slot stride is
+the owner's lane count; legacy packet tile offsets remain multiples of 256.
+The persistent launch is capped by the dense shell-pair product and 4096 CTAs.
+Each product factor is clamped before multiplication, avoiding overflow and
+guaranteed-idle CTAs without reading a device count back to the host.
+
+The order-three owner prepares its three Cartesian Hermite axes in disjoint
+lanes. Each lane borrows immutable primitive-pair geometry directly; it does
+not read the leader's still-unpublished shared metadata. The original complete
+Hermite initialization, coefficient multiplication order, and Coulomb owner
+remain unchanged. Existing CTA barriers publish all axes and retire their
+readers. Other orders and legacy packet consumers keep serial axis preparation.
 
 Admission borrows an existing immutable geometry cache and charges the complete
 index, five row-prefix planes, sort/scan workspace and bounds view to the provider budget, including the
@@ -40,6 +54,21 @@ The [multi-packet decision](../../.agents/notes/implemented/performance/2026-10-
 records the extended ownership bounds and excluded lower-order schedule.
 The [order-eight/nine decision](../../.agents/notes/implemented/performance/2026-10-11-automatic-canonical-orders-eight-nine.md)
 records the complete six/nine-slot bounds and their resource/endpoint gates.
+The [low-order scheduling decision](../../.agents/notes/implemented/performance/2026-10-11-canonical-small-cta-scheduling.md)
+records the 32-thread ownership bounds and the retained full initialization.
+
+## Bounded long-range force scheduling
+
+Ordinary long-range exchange force launches use the established 128-thread
+bounded force width instead of the default 256-thread value width. Selection
+depends on the radial source and ordinary one-dimensional launch shape, not
+the functional, basis, molecule, omega, or a runtime opt-in. Short-range sources
+and custom launch shapes retain their existing scheduling.
+
+Queue storage and shell-block ownership do not change. Candidate admission
+advances by the actual force CTA width, so narrowing a CTA does not omit the
+second half of a queue page. The existing component screening, density gates,
+radial recurrence, spin coefficients, and force scatter remain authoritative.
 
 ## Legacy HF and dddd qualification
 

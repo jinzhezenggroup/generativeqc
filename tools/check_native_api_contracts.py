@@ -255,6 +255,10 @@ def operation_name(owner: str | None, head: list[Token]) -> str:
             name += "-move"
         elif "&" in params and owner in params:
             name += "-copy"
+        elif (
+            owner == "System" and name == "System" and "generativeqc_ecp_term" in params
+        ):
+            name += "-ecp"
     return "generativeqc::" + (owner + "::" if owner else "") + name
 
 

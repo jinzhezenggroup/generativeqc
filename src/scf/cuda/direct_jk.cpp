@@ -861,7 +861,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
       const bool has_materialized_order = std::any_of(
           plan->canonical_pair_offsets.begin(), plan->canonical_pair_offsets.end(),
           [](const auto& offsets) {
-            for (unsigned order = 5; order <= 9; ++order)
+            for (unsigned order = 3; order <= 9; ++order)
               for (unsigned second = order > 6 ? order - 6 : 0; second <= order / 2; ++second) {
                 const unsigned first = order - second;
                 if (offsets[first + 1] > offsets[first] && offsets[second + 1] > offsets[second])
@@ -948,11 +948,11 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   static_cast<int>(order.size()), static_cast<int>(systems.size() * 7),
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
-              // Orders five through nine share five bounded prefix
+              // Orders three through nine share five bounded prefix
               // planes: a (first, second) angular block has exactly one order.
               // Equal angular buckets own only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
-                for (unsigned angular_order = 5; angular_order <= 9; ++angular_order)
+                for (unsigned angular_order = 3; angular_order <= 9; ++angular_order)
                   for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
                        second <= angular_order / 2; ++second) {
                     const unsigned first = angular_order - second;
@@ -1499,12 +1499,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->resident_values + value_offset, plan->canonical_density,
                   plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction);
-            else if (first + second >= 5 && first + second <= 9 && plan->materialized_pair_order &&
+            else if (first + second >= 3 && first + second <= 9 && plan->materialized_pair_order &&
                      !correction && !fixed &&
                      (!dispatch.canonical_coulomb || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {
-              // Orders five through seven need at most 162/324/648
-              // components: every lane owns up to three complete packets.
+              // The compiler owns complete-domain lanes/slots for orders 3--9.
+              // Low orders use smaller CTAs; higher orders retain wider owners.
               // Fixed-density screening, compensation and resident-value
               // layouts retain their established component-wise fallbacks.
               const auto& shells = plan->materialized_pair_offsets[item];
@@ -2098,7 +2098,8 @@ generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan*
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    std::vector<double>& derivatives, std::string& detail, bool separate_sources) {
+    std::vector<double>& derivatives, std::string& detail, bool separate_sources,
+    bool allow_spatial_default) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -2120,7 +2121,7 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     direct_jk_check(cudaSetDevice(plan->device_id));
     direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
         *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-        exchange_coefficient, derivatives, separate_sources));
+        exchange_coefficient, derivatives, separate_sources, allow_spatial_default));
     direct_jk_finite_result(derivatives);
   });
 }

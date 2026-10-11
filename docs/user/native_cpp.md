@@ -71,6 +71,15 @@ A native client can also use the C ABI's
 stable provider identities. Every native DFT request remains subject to
 runtime validation of its physical composition, backend and basis.
 
+## Scalar ECP systems
+
+`System` has an overload accepting the system descriptor, an atom-major
+`std::span<const std::int32_t>` of core counts and a
+`std::span<const generativeqc_ecp_term>` of residual terms. It checks the core
+array length, copies inputs through `generativeqc_system_create_ecp`, and keeps
+the all-electron constructor's RAII lifetime and fail-closed native admission.
+See [ECP conventions and capabilities](ecp.md).
+
 ## Density fitting and derivative boundary
 
 For energy-only calculations, configure

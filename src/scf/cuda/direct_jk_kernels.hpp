@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "scf/cuda/direct_force_schedule.hpp"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
 
@@ -44,7 +45,7 @@ cudaError_t prepare_materialized_pair_order(cudaStream_t stream, DeviceBatch bat
                                             std::int32_t* sorted_order, void* workspace,
                                             std::size_t workspace_bytes);
 
-/** Persistent, indexed order-five-through-nine shell CTAs; up to nine
+/** Persistent, indexed order-three-through-nine shell CTAs; up to nine
  * register packets own the complete component domain. Full J/K or a single
  * SR/LR K reuses one primitive recurrence.
  * No task tensor, density screening, or new mathematical evaluator is used. */
@@ -188,7 +189,8 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
     detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true,
-    const GeneratedShellPairStream* force_topology = nullptr);
+    const GeneratedShellPairStream* force_topology = nullptr,
+    DirectSpdForceSchedule spd_schedule = DirectSpdForceSchedule::Incumbent);
 
 /** Qualification-only angular partition behind the provider launch boundary.
  * Full publishes separate J/K channels; Long publishes one K channel. Short

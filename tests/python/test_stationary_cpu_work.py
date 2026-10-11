@@ -95,7 +95,12 @@ def test_range_hybrid_admission_counts_each_range_eri_derivative_pass() -> None:
     semilocal = admit(state, basis)["primitive_record_bound"]
     state._source.method_ir = resolve_method("CAM-B3LYP", spin="unpolarized")
     rsh = admit(state, basis)["primitive_record_bound"]
-    extra = 2 * sum(counts) ** 4
+    pairs = tuple((first, second) for first in range(3) for second in range(first + 1))
+    extra = 2 * sum(
+        counts[first] * counts[second] * counts[third] * counts[fourth]
+        for index, (first, second) in enumerate(pairs)
+        for third, fourth in pairs[: index + 1]
+    )
     assert rsh == semilocal + extra
     with pytest.raises(ValueError, match="primitive work budget"):
         admit(state, basis, max_primitive_records=rsh - 1)
@@ -107,6 +112,29 @@ def test_all_electron_has_no_ecp_work_or_dense_provider_limit() -> None:
     assert (
         admit(state, basis, max_ecp_pair_samples=1)["ecp_quadrature_pair_samples"] == 0
     )
+
+
+def test_mixed_df_admission_counts_exact_lr_work_without_direct_primary() -> None:
+    state, basis, counts = inputs(ecp=False)
+    state._source.method_ir = resolve_method("WB97M-V", spin="unpolarized")
+    pairs = tuple((first, second) for first in range(3) for second in range(first + 1))
+    expected = 3 + sum(
+        counts[first] * counts[second] * counts[third] * counts[fourth]
+        for index, (first, second) in enumerate(pairs)
+        for third, fourth in pairs[: index + 1]
+    )
+    work = admit(state, basis, native_fitted_integrals=True)
+    assert work["primitive_record_bound"] == expected
+    assert work["integral_quartet_passes"] == 1
+    assert work["ordered_quartets"] == basis.nao**4
+    assert work["nonlocal_pair_evaluations"] == 11**2
+    with pytest.raises(ValueError, match="primitive work budget"):
+        admit(
+            state,
+            basis,
+            native_fitted_integrals=True,
+            max_primitive_records=expected - 1,
+        )
 
 
 def test_multicomponent_work_counts_and_exact_budget() -> None:
@@ -140,7 +168,7 @@ def test_unsupported_component_count_rejected(components: int) -> None:
 def test_f_shell_rejected_before_work() -> None:
     state, basis, _ = inputs()
     basis.shells = (SimpleNamespace(angular_momentum=3),)
-    with pytest.raises(NotImplementedError, match="s/p/d"):
+    with pytest.raises(NotImplementedError, match="angular momentum"):
         admit(state, basis)
 
 
@@ -237,13 +265,9 @@ def test_cpu_force_inventory_accounts_retained_rsh_range_plans() -> None:
         primitive_tile=128,
         range_exchange_sources=2,
     )
-    component_labels = sum(
-        (l + 1) * (l + 2) // 2
-        for l in {shell.angular_momentum for shell in basis.shells}
+    assert rsh["range_exchange_providers"] == 2 * (
+        (256 << 10) + 8 * (12 + 3 * basis.natom) + 4**4 * (128 * 224 + 3 * 13 * 8 + 224)
     )
-    expected_plans = 2 * component_labels**4
-    per_plan = 128 * 224 + 3 * 13 * 8 + 224
-    assert rsh["range_exchange_providers"] == expected_plans * per_plan
     assert rsh["range_exchange_providers"] > semilocal["range_exchange_providers"] == 0
     assert sum(rsh.values()) < CPU_FORCE_HOST_CAP
 
@@ -256,4 +280,60 @@ def test_cpu_force_inventory_rejects_unqualified_range_source_count(
     with pytest.raises(ValueError, match="range-exchange source count"):
         cpu_force_inventory(
             basis, grid_points=11, ecp_terms=0, range_exchange_sources=sources
+        )
+
+
+@pytest.mark.parametrize("angular", (2, 3))
+def test_mixed_df_admits_df_shells_with_constant_range_capacity(angular: int) -> None:
+    state, basis, counts = inputs(ecp=False)
+    state._source.method_ir = resolve_method("WB97M-V", spin="unpolarized")
+    basis.shells = (SimpleNamespace(angular_momentum=angular),)
+    basis.packed[-48:].reshape(3, 16)[:, 3] = (1, 2, 3)
+    pairs = tuple((first, second) for first in range(3) for second in range(first + 1))
+    expected = 3 + sum(
+        counts[first]
+        * (first + 1)
+        * counts[second]
+        * (second + 1)
+        * counts[third]
+        * (third + 1)
+        * counts[fourth]
+        * (fourth + 1)
+        for index, (first, second) in enumerate(pairs)
+        for third, fourth in pairs[: index + 1]
+    )
+    work = admit(state, basis, native_fitted_integrals=True)
+    assert work["primitive_record_bound"] == expected
+    assert work["range_exchange_canonical_quartets"] == 21
+    inventory = cpu_force_inventory(
+        basis,
+        grid_points=11,
+        ecp_terms=0,
+        native_fitted_integrals=True,
+        range_exchange_sources=1,
+    )
+    assert inventory["component_dispatch"] == 0
+    assert inventory["range_exchange_providers"] == (256 << 10) + 8 * (
+        12 + 3 * basis.natom
+    )
+    assert sum(inventory.values()) < CPU_FORCE_HOST_CAP
+    basis.nao = 64
+    cpu_force_inventory(
+        basis, grid_points=11, ecp_terms=0, native_fitted_integrals=True
+    )
+    basis.nao = 65
+    with pytest.raises(ValueError, match="dense-export"):
+        cpu_force_inventory(
+            basis, grid_points=11, ecp_terms=0, native_fitted_integrals=True
+        )
+
+
+def test_mixed_df_rejects_g_shells_before_derivative_execution() -> None:
+    state, basis, _ = inputs(ecp=False)
+    basis.shells = (SimpleNamespace(angular_momentum=4),)
+    with pytest.raises(NotImplementedError, match="angular momentum"):
+        admit(state, basis, native_fitted_integrals=True)
+    with pytest.raises(NotImplementedError, match="angular momentum"):
+        cpu_force_inventory(
+            basis, grid_points=11, ecp_terms=0, native_fitted_integrals=True
         )

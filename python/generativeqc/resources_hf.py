@@ -38,6 +38,7 @@ _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     # Optional in historical checkpoints, but part of every new resource and
     # restart identity: changing the force schedule requires explicit admission.
     "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
+    "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
     "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
     "GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION",
     "GENERATIVEQC_CANONICAL_RSH_VALUES",

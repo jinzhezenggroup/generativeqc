@@ -530,3 +530,20 @@ def emit_direct_cartesian_contraction_headers() -> dict[str, str]:
     """Return generated Direct Cartesian/contraction headers by filename."""
 
     return dict(_SOURCES)
+
+
+def emit_direct_cartesian_cpu_header() -> str:
+    """Lower the same bounded Cartesian/AD recurrence to native-host FP64.
+
+    Only execution qualifiers change. In particular, CPU range derivatives
+    use CUDA's simplex workspace, radial-moment derivative seeds and exact
+    Cartesian contraction, rather than enumerating a JIT per component.
+    """
+    return (
+        _SOURCES["generated_direct_cartesian.cuh"]
+        .replace(
+            "#include <cuda_runtime.h>", '#include "integrals/execution_qualifiers.hpp"'
+        )
+        .replace("__device__", "GENERATIVEQC_ERI_DEVICE")
+        .replace("__noinline__", "__attribute__((noinline))")
+    )

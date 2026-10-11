@@ -58,6 +58,10 @@ SELECTOR_IDENTIFIERS = frozenset(
 _SELECTOR = re.compile(
     r"\b(?:" + "|".join(sorted(map(re.escape, SELECTOR_IDENTIFIERS))) + r")\b"
 )
+_SCHEDULE_IMPLEMENTATION = re.compile(
+    r"\b(?:generated|cub|cccl|cublas|cublaslt|cutensor|cutlass|cusolver|cusparse|nccl)\b",
+    re.IGNORECASE,
+)
 
 
 def _selector_references(source: str) -> Counter[str]:
@@ -138,6 +142,33 @@ def audit_provider_selection_boundaries(root: Path = ROOT) -> dict[str, typing.A
     entries = manifest["files"]
     inventory = source_inventory(root)
     errors: list[str] = []
+    for relative in (
+        "python/generativeqc_compiler/tensor/cuda_plan.py",
+        "python/generativeqc_compiler/tensor/cuda_search.py",
+    ):
+        path = root / relative
+        if not path.is_file():
+            continue
+        for schedule in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(schedule, ast.ClassDef) or schedule.name not in (
+                "TensorSchedule",
+                "TensorScheduleSpace",
+            ):
+                continue
+            for axis in schedule.body:
+                if not isinstance(axis, ast.AnnAssign) or not isinstance(
+                    axis.target, ast.Name
+                ):
+                    continue
+                if any(
+                    isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                    and _SCHEDULE_IMPLEMENTATION.search(value.value)
+                    for value in ast.walk(axis)
+                ):
+                    errors.append(
+                        f"{relative}: provider-named schedule axis {schedule.name}.{axis.target.id}"
+                    )
     for path in sorted(set(entries) | set(inventory)):
         actual = inventory.get(path, {})
         entry = entries.get(path)

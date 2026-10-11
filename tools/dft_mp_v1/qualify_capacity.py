@@ -267,13 +267,13 @@ STATIONARY_LAYOUT_CONTRACT_SHA256 = (
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
 )
-# The complete predicate now also admits a bounded all-electron CPU branch.
-# The capability refactor keeps that branch inside the CPU device guard. CUDA
+# The complete predicate also admits exact automatic Libxc components through
+# the bounded all-electron CPU owner. Its shared context rejects CUDA. CUDA
 # coefficients, automatic-Libxc/nonlocal exclusions and runtime ownership retain
 # their contracts; structural D4/ECP rejection preserves the admitted D3 owner.
 # Keep hashing the full predicate so future guard drift fails closed.
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
+    "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"

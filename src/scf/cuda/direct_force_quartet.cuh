@@ -25,7 +25,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-template <bool Unrestricted, unsigned AngularOrder, bool SeparateSources = false>
+template <bool Unrestricted, unsigned AngularOrder, bool SeparateSources = false,
+          bool SpatialReuse = false>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scaled(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
@@ -33,6 +34,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
     double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
+  static_assert(!SpatialReuse || AngularOrder == 6U);
   static_assert(AngularOrder >= 2U, "order-0/1 Direct force uses generated exact shell tasks");
   static_assert(AngularOrder != 3U,
                 "order-three Direct force is owned by generated shell-task workers");
@@ -140,7 +142,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
       } else {
-        explicit_gradient = contracted_eri_cartesian_source_order6_gradient(
+        explicit_gradient = contracted_eri_cartesian_source_order6_gradient<false, SpatialReuse>(
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
       }
