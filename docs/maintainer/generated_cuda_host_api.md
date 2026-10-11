@@ -26,7 +26,10 @@ python tools/generate_nvidia_host_api.py --check-usage
 
 This is run in the ordinary CPU CI and again before the manylinux wheel build.
 Missing functions, including newly introduced batched cuBLAS calls, fail early
-instead of waiting for a costly NVCC compile.
+instead of waiting for a costly NVCC compile. The generated inventory must be
+unconditional: commented declarations and aliases cannot satisfy coverage, and
+conditional or undefined declarations are rejected. Comments between a function
+name and its call parentheses do not hide an API from this check.
 
 ## Automatic regeneration from the NVIDIA SDK
 
@@ -52,7 +55,9 @@ python tools/generate_nvidia_host_api.py --check-usage
 The generator selects existing used declarations and any new API calls; it
 preserves versioned exported symbols and emits the same output given identical
 headers and source. If a symbol or declaration is unavailable, or its parameter
-shape is too complex to represent safely, generation stops. A CUDA SDK upgrade
+shape is too complex to represent safely, generation stops. Variadic signatures
+and explicit calling-convention attributes are rejected rather than silently
+rewritten. A CUDA SDK upgrade
 requires review of generated diffs, enum/type additions if any, and the existing
 host ABI, Implib, wheel payload and real CUDA smoke tests.
 

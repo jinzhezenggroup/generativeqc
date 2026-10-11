@@ -18,7 +18,16 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ROOT / "src/runtime/nvidia_host_api/generativeqc_nvidia_host_functions.h"
-API = re.compile(r"\b(cublas(?!Lt)[A-Z]\w*|cusolver(?:Dn|Get)[A-Z]\w*)\s*\(")
+API = re.compile(
+    r"\b(cublas(?!Lt)[A-Z]\w*|cusolver(?:Dn|Get)[A-Z]\w*)"
+    r"(?:\s|/\*.*?\*/|//[^\n]*)*\(",
+    re.DOTALL,
+)
+# Generated declarations must be live source, not examples or disabled comments.
+NON_CODE = re.compile(
+    r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|/\*.*?\*/|//[^\n]*',
+    re.DOTALL,
+)
 DECL = re.compile(
     r"\b(cublasStatus_t|cusolverStatus_t)\s+(cublas\w+|cusolver\w+)\s*\((.*?)\);",
     re.DOTALL,
@@ -50,12 +59,22 @@ def project_uses(root: Path) -> set[str]:
     return used
 
 
+def declaration_source(source: str) -> str:
+    """Mask comments and literals without joining previously separated tokens."""
+    source = NON_CODE.sub(lambda match: re.sub(r"[^\n]", " ", match.group()), source)
+    if re.search(
+        r"^\s*#\s*(?:if|ifdef|ifndef|elif|else|endif|undef)\b", source, re.MULTILINE
+    ):
+        raise ValueError("generated NVIDIA declarations must be unconditional")
+    return source
+
+
 def declarations(source: str) -> set[str]:
-    return {match.group(2) for match in DECL.finditer(source)}
+    return {match.group(2) for match in DECL.finditer(declaration_source(source))}
 
 
 def aliases(source: str) -> dict[str, str]:
-    return dict(ALIAS.findall(source))
+    return dict(ALIAS.findall(declaration_source(source)))
 
 
 def check_usage(root: Path, target: Path) -> None:
@@ -120,7 +139,7 @@ def ast_objects(output: str) -> list[dict[str, Any]]:
             break
         parsed, position = decoder.raw_decode(output, position)
         if not isinstance(parsed, dict):
-            raise ValueError("expected Clang declaration object")
+            raise ValueError("expected Clang declaration object")  # noqa: TRY004 - malformed SDK output
         objects.append(parsed)
     return objects
 
@@ -144,6 +163,10 @@ def sdk_functions(
             result = signature.split(" (", 1)[0]
             if result not in ("cublasStatus_t", "cusolverStatus_t"):
                 return
+            if node.get("variadic") or "..." in signature:
+                raise ValueError(f"unsupported variadic NVIDIA prototype: {name}")
+            if "__attribute__" in signature:
+                raise ValueError(f"unsupported NVIDIA calling convention: {name}")
             arguments = tuple(
                 child["type"]["qualType"]
                 for child in node.get("inner", [])

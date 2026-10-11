@@ -100,3 +100,67 @@ def test_sdk_regeneration_is_deterministic_with_real_clang(tmp_path: Path) -> No
     existing.write_text(first)
     assert codegen.generate(tmp_path, existing, compiler, [sdk]) == first
     codegen.check_usage(tmp_path, existing)
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "/* cublasStatus_t cublasNewThing(void); */",
+        "// cublasStatus_t cublasNewThing(void);",
+        'const char* example = "cublasStatus_t cublasNewThing(void);";',
+        (
+            "cublasStatus_t cublasNewThing_v2(void);\n"
+            "/*\n#define cublasNewThing cublasNewThing_v2\n*/"
+        ),
+        "#if 0\ncublasStatus_t cublasNewThing(void);\n#endif",
+    ],
+)
+def test_inactive_declarations_fail_closed(tmp_path: Path, declaration: str) -> None:
+    consumer = tmp_path / "src/consumer.cu"
+    consumer.parent.mkdir()
+    consumer.write_text("void f() { cublasNewThing(); }\n")
+    header = tmp_path / "functions.h"
+    header.write_text(declaration)
+    with pytest.raises(ValueError, match="cublasNewThing|unconditional"):
+        codegen.check_usage(tmp_path, header)
+
+
+@pytest.mark.parametrize("separator", ["/**/", " /* why */ ", " // why\n "])
+def test_comments_cannot_hide_missing_call(tmp_path: Path, separator: str) -> None:
+    consumer = tmp_path / "src/consumer.cu"
+    consumer.parent.mkdir()
+    consumer.write_text(f"void f() {{ cublasNewThing{separator}(); }}\n")
+    header = tmp_path / "functions.h"
+    header.write_text("")
+    with pytest.raises(ValueError, match="cublasNewThing"):
+        codegen.check_usage(tmp_path, header)
+    header.write_text("cublasStatus_t cublasNewThing(void);")
+    codegen.check_usage(tmp_path, header)
+
+
+@pytest.mark.parametrize(
+    ("signature", "extra", "message"),
+    [
+        ("cublasStatus_t (int, ...)", {"variadic": True}, "variadic"),
+        ("cublasStatus_t (int, ...)", {}, "variadic"),
+        ("cublasStatus_t (int) __attribute__((ms_abi))", {}, "calling convention"),
+    ],
+)
+def test_sdk_rejects_unrepresentable_function_abi(
+    monkeypatch: pytest.MonkeyPatch,
+    signature: str,
+    extra: dict[str, bool],
+    message: str,
+) -> None:
+    import json
+
+    node = {
+        "kind": "FunctionDecl",
+        "name": "cublasNewThing",
+        "type": {"qualType": signature},
+        "inner": [{"kind": "ParmVarDecl", "type": {"qualType": "int"}}],
+        **extra,
+    }
+    monkeypatch.setattr(codegen, "run_clang", lambda *args, **kwargs: json.dumps(node))
+    with pytest.raises(ValueError, match=message):
+        codegen.sdk_functions("clang++", [], "cublas_v2.h")

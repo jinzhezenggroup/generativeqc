@@ -62,17 +62,22 @@ def test_every_python_test_file_has_exactly_one_ci_shard(event: str) -> None:
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-def test_libxc_force_tail_uses_tracked_ownership_and_preserves_core_parity(
-    event: str, presence: str, tmp_path: Path
+@pytest.mark.parametrize(
+    "filename", ("test_libxc_automatic_forces.py", "test_mixed_rsh_df_forces.py")
+)
+def test_complete_force_tail_uses_tracked_ownership_and_preserves_core_parity(
+    event: str, presence: str, filename: str, tmp_path: Path
 ) -> None:
     # Exercise both the earlier PR tree and a merge tree containing master's
     # force module without mutating the checkout or relying on its current base.
-    force = "tests/python/test_libxc_automatic_forces.py"
+    force = f"tests/python/{filename}"
     probes = [
         "tests/python/test_aaa.py",
         "tests/python/test_bbb.py",
         "tests/python/test_libxc_aaa.py",
         "tests/python/test_libxc_zzz.py",
+        "tests/python/test_mixed_rsh_df_aaa.py",
+        "tests/python/test_mixed_rsh_df_zzz.py",
         "tests/python/test_zzz.py",
     ]
     tracked = presence in {"tracked", "missing"}
