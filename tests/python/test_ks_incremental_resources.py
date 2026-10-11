@@ -212,6 +212,8 @@ def test_explicit_unbudgeted_experiment_keeps_native_admission_boundary(
     )
     with pytest.raises(RuntimeError, match="reached native context admission"):
         calculator.prepare_batch([H2])
+
+
 @pytest.mark.parametrize(
     "generic,legacy", (("1", "0"), ("off", "on"), ("on", "off"), ("0", "false"))
 )

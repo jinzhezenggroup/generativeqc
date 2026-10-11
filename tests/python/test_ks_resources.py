@@ -172,6 +172,8 @@ def test_failed_preparation_keeps_evidence_and_failed_scf_keeps_samples(
     assert diagnostics["phase"] == "observation"
     assert diagnostics["preparation"]["status"] == "observed"
     assert diagnostics["observation"]["sampled_item_peak_host_bytes"] > 0
+
+
 @pytest.mark.parametrize(
     ("schema_version", "diagnostic"),
     (
