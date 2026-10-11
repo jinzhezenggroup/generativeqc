@@ -36,7 +36,16 @@ device memory.
 
 ## Complete endpoints
 
-[endpoints.json](endpoints.json) indexes the four original raw sample files and their hashes. To keep the normal checkout compact, those four full sample files are hash-pinned by [the 2026-09-25 retention manifest](../retention-2026-09-25/migration.json) and remain byte-for-byte recoverable from existing Git history. The current tree keeps the index, numerical gates, provenance and resource summaries.
+[endpoints.json.gz](endpoints.json.gz) indexes the four original raw sample files and their hashes. To keep the normal checkout compact, those four full sample files are hash-pinned by [the 2026-09-25 retention manifest](../retention-2026-09-25/migration.json) and remain byte-for-byte recoverable from existing Git history. The current tree keeps the index, numerical gates, provenance and resource summaries.
+
+The endpoint record is stored as deterministic gzip. Decompression restores all
+177,463 original bytes, SHA256
+`ccbf6dd63600d111015879194c1bae05cef12bad5e874cf8570af54dfebacdd7`,
+including every sample, failed gate, timing, resource count and provenance field.
+The original file remains available at
+`a9b991f723ae0482c4496d20c9e2dc0649b6ffe5:benchmarks/results/weighted-eri-144/endpoints.json`.
+Use `tools.generativeqc_validation.record.load_record` on the compressed path;
+this storage-only change does not requalify the historical measurements.
 The matrix contains 24 scenarios and 72 fresh-process endpoint runs: RHF/UHF,
 STO-3G/def2-SVP, batches 1/3, fixed/resident/paged queues, and previous-library,
 retained-expression, and generated-expression routes. Each endpoint includes
