@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import typing
@@ -580,14 +581,22 @@ def test_input_residual_mixing_observes_updated_state(
             assert legacy["iterations_called"] > legacy["iterations"]
 
 
-def test_input_residual_default_is_cuda_df_energy_only() -> None:
-    """Keep the qualified dispatch narrower than the internal solver opt-in."""
+def test_input_residual_default_is_cuda_df_including_retained_response() -> None:
+    """Only the native CUDA DF amplitude owner promotes incoming residuals.
+
+    Match this assignment specifically: the independently qualified physical
+    replay option still has an energy-only guard and must not satisfy this test.
+    Retaining source response does not change standalone or Lambda defaults.
+    """
     header = (ROOT / "src/cc/solver.hpp").read_text()
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     assert "bool diis_input_residual{false};" in header
-    assert (
-        "execution.cuda_requested() && correlation_auxiliary && !retain_df_response;"
-        in source
+    assignment = re.search(
+        r"solver_options\.diis_input_residual\s*=\s*([^;]+);", source
+    )
+    assert assignment is not None
+    assert " ".join(assignment.group(1).split()) == (
+        "execution.cuda_requested() && correlation_auxiliary"
     )
     force = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     assert "&auxiliary, forces," in force

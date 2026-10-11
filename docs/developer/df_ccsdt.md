@@ -183,10 +183,11 @@ Its retained states are validation artifacts, not production inputs.
 virtual representation. `ovvv` and `vvvv` must be empty; retained smaller
 blocks must describe the same fitted Hamiltonian. The native CPU/CUDA solver
 retains the conventional physical convergence gates and fresh expanded replay.
-CUDA DF energy calls use the
-[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies),
-while supplied-problem defaults and force/Lambda/response calls keep trial-state
-DIIS. All Q slices are accumulated for each actually evaluated amplitude state;
+Native CUDA DF energy and analytic-force calls use the
+[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies-and-forces),
+while supplied-problem defaults keep trial-state DIIS. Lambda and the complete
+response equations and their independent audits remain unchanged.
+All Q slices are accumulated for each actually evaluated amplitude state;
 incoming-residual mixing does not evaluate a separate outgoing Jacobi trial.
 The compiler derives
 the primary schedule in `cc/df_hoist.py` from the shared RCCSD inventory: prepare
