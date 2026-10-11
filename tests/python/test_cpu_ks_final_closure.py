@@ -114,6 +114,9 @@ Matrix commutator_residual(const Matrix& f,const Matrix&,const Matrix&,std::size
  return r;
 }
 Eigen generalized_eigen(const Matrix&,const Matrix&,std::size_t) { ++eigen_calls; return {}; }
+Matrix density_from_orbitals(const Matrix&, std::size_t, std::size_t, double) {
+ throw std::runtime_error("automatic canonical projection reached curated closure fixture");
+}
 """
         + norm
         + r"""
@@ -127,6 +130,9 @@ Result run(unsigned budget, bool incremental_xc, int scenario, unsigned& clears)
  Diis diis;
  struct { Matrix overlap; } ints;
  const std::size_t n=4;
+ const std::size_t occupied=1;
+ // This provider exercises curated closure; automatic projectors need real native tests.
+ struct { const void* program=nullptr; } evaluate_xc;
  Matrix density(16), orthogonalizer;
  Eigen orbitals;
  std::shared_ptr<const OccupiedDensityFactor> factor =
