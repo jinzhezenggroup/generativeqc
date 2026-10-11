@@ -101,6 +101,11 @@ def test_force_replay_historical_source_reconstructs_exactly(tmp_path: Path) -> 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw[f"baseline-source/{name}"]["data"].encode())
     patch = gzip.decompress((BUNDLE / "production-source.patch.gz").read_bytes())
+    # A workspace-local pytest temp directory can sit below another Git root.
+    # Give reconstruction its own root so git apply cannot silently skip paths.
+    subprocess.run(
+        ["git", "init", "--quiet", str(tmp_path)], check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "apply", "-"],
         cwd=tmp_path,
