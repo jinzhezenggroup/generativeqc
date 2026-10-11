@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from .compiler_cache import CompilerCacheLauncher
     from .cuda_target import CudaTargetInfo
 
 
@@ -28,6 +29,7 @@ class CudaCompilerAdapter:
     nvcc: Path
     target: CudaTargetInfo
     compile_timeout: float = 300.0
+    compiler_cache_launcher: CompilerCacheLauncher | None = None
 
     def compile(
         self,
@@ -120,7 +122,14 @@ class CudaCompilerAdapter:
 
     def _run_compiler(self, command: list[str]) -> CudaCompileResult:
         """Bound NVCC and every child for either object or shared-library builds."""
-        return run_cached_compiler(command, self.compile_timeout, label="NVCC")
+        if self.compiler_cache_launcher is None:
+            return run_cached_compiler(command, self.compile_timeout, label="NVCC")
+        return run_cached_compiler(
+            command,
+            self.compile_timeout,
+            label="NVCC",
+            launcher=self.compiler_cache_launcher,
+        )
 
     def link(
         self,

@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "python"), str(ROOT)]
 
-from generativeqc_compiler.common.compiler_cache import resolve_compiler_cache
+from generativeqc_compiler.common.compiler_cache import verify_compiler_cache
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.evidence import (
@@ -75,6 +75,7 @@ QUALIFIED_ARCHITECTURE = "sm_120"
 QUALIFIED_UNIT_MODE = "stable-shards"
 QUALIFIED_STANDARD = "c++20"
 QUALIFIED_FAST_COMPILE = False
+QUALIFIED_HOST_COMPILER = "nvcc-default"
 # Match the normal CMake release build: split compilation changes resources.
 QUALIFIED_SPLIT_COMPILE_THREADS = 1
 # CMake's NVIDIA Release rule adds NDEBUG alongside the target definition.
@@ -91,6 +92,7 @@ RESOURCE_FIELDS = ("REG", "STACK", "SHARED", "LOCAL")
 # changing an adapter option must not replay a cubin built with the old command.
 COMPILE_IMPLEMENTATIONS = (
     "tools/validate_direct_jk_aot_resources.py",
+    "python/generativeqc_compiler/common/compiler_cache.py",
     "python/generativeqc_compiler/common/cuda_adapter.py",
 )
 
@@ -119,7 +121,7 @@ def generator_abi() -> int:
     return int(payload["architectures"][QUALIFIED_ARCHITECTURE]["generator_abi"])
 
 
-def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> Path:
+def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> tuple[Path, Path]:
     """Bind the fixed qualification to CMake's actual production generator inputs."""
     configured = cmake_cache.read_text(encoding="utf-8")
     for field, expected in (
@@ -199,7 +201,18 @@ def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> Path:
             "production CMAKE_CUDA_COMPILER must match the measured --nvcc; "
             f"configured {configured_nvcc}, measured {nvcc.resolve()}"
         )
-    return cmake_cache.resolve().parent
+    host_compiler = configured_value("CMAKE_CUDA_HOST_COMPILER", optional=True)
+    if host_compiler:
+        raise ValueError(
+            "production qualification requires an empty CMAKE_CUDA_HOST_COMPILER "
+            f"(the {QUALIFIED_HOST_COMPILER} context); found {host_compiler!r}"
+        )
+    cache_executable = configured_value("GENERATIVEQC_RESOLVED_COMPILER_CACHE")
+    if not cache_executable:
+        raise ValueError(
+            "production GENERATIVEQC_RESOLVED_COMPILER_CACHE must be non-empty"
+        )
+    return cmake_cache.resolve().parent, Path(cache_executable).resolve()
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -326,6 +339,7 @@ def qualified_flags() -> dict[str, Any]:
         "standard": QUALIFIED_STANDARD,
         "optimization": "-O3",
         "fast_compile": QUALIFIED_FAST_COMPILE,
+        "host_compiler": QUALIFIED_HOST_COMPILER,
         "split_compile_threads": QUALIFIED_SPLIT_COMPILE_THREADS,
         "definitions": list(QUALIFIED_DEFINITIONS),
         "ptxas_verbose": True,
@@ -417,6 +431,7 @@ def compile_shard(
     identity: dict[str, Any],
     timeout: float,
     working_directory: Path,
+    launcher: CompilerCacheLauncher,
 ) -> tuple[Path, Path, dict[str, Any]]:
     """Compile one shard through the verified cache launcher with a bounded
     identity-keyed object cache; successful hits require matching metadata."""
@@ -462,10 +477,8 @@ def compile_shard(
                 nvcc,
                 cuda_target_info(QUALIFIED_ARCHITECTURE),
                 compile_timeout=timeout,
+                compiler_cache_launcher=launcher,
             )
-            # Use the same resolution arguments/cache as run_cached_compiler so the
-            # observed executable is the one actually selected by the adapter.
-            launcher = resolve_compiler_cache(timeout)
             statistics = {
                 "launcher": {
                     "name": launcher.name,
@@ -721,7 +734,10 @@ def run_measurement(
     """
     # Read CMake's configured values, including -D/preset overrides, before
     # generation or compilation. A constant alone cannot guard production drift.
-    working_directory = validate_production_shard_count(cmake_cache, nvcc)
+    working_directory, cache_executable = validate_production_shard_count(
+        cmake_cache, nvcc
+    )
+    launcher = verify_compiler_cache(cache_executable, min(timeout, 30))
     generated = generated_directory.resolve()
     shards = generate_production_shards(generated)
     shard = shards[QUALIFIED_SHARD_INDEX]
@@ -746,6 +762,7 @@ def run_measurement(
         identity=identity,
         timeout=timeout,
         working_directory=working_directory,
+        launcher=launcher,
     )
     kernels = dict(
         sorted(measure_resources(nvcc, object_path, cache_directory).items())

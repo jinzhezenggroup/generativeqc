@@ -252,3 +252,15 @@ byte-for-byte equal to the prior ledger. Only the preprocessed identity changed
 from `37433b5c...` to `e58a8a27...`, and the typed flag schema now records
 `fast_compile=false`. The reviewed candidate is installed and gate mode is
 restored; the subsequent gate run must still pass on the final exact head.
+
+A later review identified two remaining provenance gaps. A non-default
+`CMAKE_CUDA_HOST_COMPILER` would add NVCC `-ccbin` semantics that the qualified
+recipe does not record, so the bounded gate now rejects such a cache and the
+typed flag identity names the qualified `nvcc-default` host context. CMake also
+records the exact compiler-cache executable it resolved. The validator verifies
+that path and passes the resulting launcher object through the CUDA adapter,
+instead of independently applying the normal sccache-first selection policy.
+The launcher remains execution provenance and does not become scientific source
+identity, while its implementation hash and retained receipt prevent an old
+execution path from replaying silently. This typed-context change requires a
+second canonical record run before gate mode can be restored again.

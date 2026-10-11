@@ -38,6 +38,35 @@ class CompilerCacheLauncher:
         return [str(self.path), *command]
 
 
+def verify_compiler_cache(
+    executable: Path, timeout: float = 30.0
+) -> CompilerCacheLauncher:
+    """Verify one explicitly selected sccache/ccache executable."""
+    path = executable.absolute()
+    name = path.name.removesuffix(".exe")
+    if name not in {"sccache", "ccache"}:
+        raise ValueError(f"unsupported compiler cache launcher: {path}")
+    result = subprocess.run(
+        [str(path), "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if result.returncode:
+        diagnostic = (result.stderr or result.stdout).strip()
+        raise RuntimeError(
+            f"{name}: --version exited {result.returncode}"
+            + (f" ({diagnostic})" if diagnostic else "")
+        )
+    version = (result.stdout + result.stderr).strip()
+    if name == "sccache":
+        match = re.search(r"sccache (\d+)\.(\d+)\.(\d+)", version)
+        if match is None or tuple(map(int, match.groups())) < (0, 16, 0):
+            raise RuntimeError("sccache: version 0.16.0 or later is required")
+    return CompilerCacheLauncher(path=path, name=name, version=version)
+
+
 @functools.lru_cache(maxsize=8)
 def _resolve_compiler_cache(
     path_environment: str, timeout: float = 30.0
@@ -55,30 +84,15 @@ def _resolve_compiler_cache(
         if remaining <= 0:
             raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
         try:
-            result = subprocess.run(
-                [str(path), "--version"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=min(30, remaining),
-            )
-        except (OSError, subprocess.TimeoutExpired) as error:
+            return verify_compiler_cache(path, min(30, remaining))
+        except subprocess.TimeoutExpired:
+            raise
+        except OSError as error:
             failures.append(f"{name}: {error}")
             continue
-        if result.returncode:
-            diagnostic = (result.stderr or result.stdout).strip()
-            failures.append(
-                f"{name}: --version exited {result.returncode}"
-                + (f" ({diagnostic})" if diagnostic else "")
-            )
+        except (RuntimeError, ValueError) as error:
+            failures.append(str(error))
             continue
-        version = (result.stdout + result.stderr).strip()
-        if name == "sccache":
-            match = re.search(r"sccache (\d+)\.(\d+)\.(\d+)", version)
-            if match is None or tuple(map(int, match.groups())) < (0, 16, 0):
-                failures.append("sccache: version 0.16.0 or later is required")
-                continue
-        return CompilerCacheLauncher(path=path, name=name, version=version)
 
     if time.monotonic() >= deadline:
         raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
@@ -100,7 +114,11 @@ def cached_compiler_command(command: list[str]) -> list[str]:
 
 
 def run_cached_compiler(
-    command: list[str], timeout: float, *, label: str
+    command: list[str],
+    timeout: float,
+    *,
+    label: str,
+    launcher: CompilerCacheLauncher | None = None,
 ) -> CompileResult:
     """Cache compilation while owning every local compiler's finite lifetime.
 
@@ -132,11 +150,11 @@ def run_cached_compiler(
         )
 
     try:
-        launcher = resolve_compiler_cache(timeout)
-        if launcher.name != "sccache":
-            result = run_compiler(launcher.wrap(command), remaining(), label=label)
+        selected = launcher or resolve_compiler_cache(timeout)
+        if selected.name != "sccache":
+            result = run_compiler(selected.wrap(command), remaining(), label=label)
             return outcome(result)
-        result = _run_sccache(launcher, command, deadline, label=label)
+        result = _run_sccache(selected, command, deadline, label=label)
         return outcome(result)
     except subprocess.TimeoutExpired:
         return outcome(CompileResult(124, True, 0.0, "", ""))

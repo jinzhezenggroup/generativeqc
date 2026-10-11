@@ -19,11 +19,13 @@ from generativeqc_compiler.common.compiler_process import CompileResult
 from tools import validate_direct_jk_aot_resources as validator
 
 FAKE_NVCC = Path("/fake/nvcc").resolve()
+FAKE_CCACHE = Path("/verified/ccache").resolve()
 
 
 def _production_cache(**overrides: str) -> str:
     fields = {
         "CMAKE_CUDA_COMPILER": str(FAKE_NVCC),
+        "CMAKE_CUDA_HOST_COMPILER": "",
         "GENERATIVEQC_AOT_SHARDS": "8",
         "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS": "1",
         "GENERATIVEQC_ENABLE_CUDA": "ON",
@@ -34,6 +36,7 @@ def _production_cache(**overrides: str) -> str:
         "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
         "GENERATIVEQC_CUDA_ARCHITECTURES": "",
         "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "GENERATIVEQC_RESOLVED_COMPILER_CACHE": str(FAKE_CCACHE),
         "CMAKE_CUDA_ARCHITECTURES": "120",
         "GENERATIVEQC_AOT_SHELL_MANIFEST": str(validator.MANIFEST),
     }
@@ -148,10 +151,11 @@ class TestLedgerValidation:
     def test_valid_ledger_passes(self) -> None:
         validator.validate_ledger(_ledger())
 
-    def test_committed_ledger_uses_the_current_strict_schema(self) -> None:
+    def test_record_mode_preserves_the_stale_host_context_as_a_negative(self) -> None:
         payload = json.loads(validator.LEDGER.read_text(encoding="utf-8"))
-        validator.validate_ledger(payload)
-        assert len(payload["kernels"]) == 86
+        assert "host_compiler" not in payload["flags"]
+        with pytest.raises(validator.LedgerError, match="flags"):
+            validator.validate_ledger(payload)
 
     @pytest.mark.parametrize(
         "field,value",
@@ -207,6 +211,7 @@ class TestLedgerValidation:
             ("optimization", "-O0"),
             ("fast_compile", True),
             ("fast_compile", 0),
+            ("host_compiler", "/usr/bin/clang++"),
             ("split_compile_threads", 8),
             ("split_compile_threads", True),
             ("split_compile_threads", 1.0),
@@ -411,7 +416,6 @@ class TestProductionCompile:
         )
         original_directory = Path.cwd()
         original_basedir = os.environ.get("CCACHE_BASEDIR")
-        selections: list[float] = []
         events: list[str] = []
         arguments = {
             "nvcc": Path("/fake/nvcc"),
@@ -421,11 +425,8 @@ class TestProductionCompile:
             "identity": _identity(),
             "timeout": 23,
             "working_directory": tmp_path,
+            "launcher": launcher,
         }
-
-        def resolve(path: str, timeout: float) -> CompilerCacheLauncher:
-            selections.append(timeout)
-            return launcher
 
         def stats(
             command: list[str], **kwargs: Any
@@ -462,7 +463,13 @@ class TestProductionCompile:
                 returncode, timed_out, 0.1, "compile stdout", "compile stderr"
             )
 
-        monkeypatch.setattr(compiler_cache, "_resolve_compiler_cache", resolve)
+        monkeypatch.setattr(
+            compiler_cache,
+            "resolve_compiler_cache",
+            lambda timeout: pytest.fail(
+                "CMake-selected launcher must bypass automatic selection"
+            ),
+        )
         monkeypatch.setattr(compiler_cache, "run_compiler", compile_run)
         monkeypatch.setattr(validator.subprocess, "run", stats)
         if returncode:
@@ -472,7 +479,6 @@ class TestProductionCompile:
             _, _, metadata = validator.compile_shard(**arguments)
             assert metadata["cache_hit"] is False
         assert events == ["stats", "compile", "stats"]
-        assert selections == [23, 23]
         assert Path.cwd() == original_directory
         assert os.environ.get("CCACHE_BASEDIR") == original_basedir
         directory = next((tmp_path / "cache").iterdir())
@@ -499,7 +505,6 @@ class TestProductionCompile:
             previous_receipt = receipt_path.read_bytes()
             _, _, metadata = validator.compile_shard(**arguments)
             assert metadata["cache_hit"] is True
-            assert selections == [23, 23]
             assert events == ["stats", "compile", "stats"]
             assert receipt_path.read_bytes() == previous_receipt
 
@@ -562,9 +567,6 @@ class TestProductionCompile:
         launcher = CompilerCacheLauncher(
             Path("/verified/ccache"), "ccache", "ccache 4.14"
         )
-        monkeypatch.setattr(
-            validator, "resolve_compiler_cache", lambda timeout: launcher
-        )
         snapshots: list[int] = []
 
         def stats(selected: CompilerCacheLauncher) -> dict[str, Any]:
@@ -586,6 +588,7 @@ class TestProductionCompile:
                 identity=_identity(),
                 timeout=23,
                 working_directory=tmp_path,
+                launcher=launcher,
             )
         receipt = json.loads(
             next((tmp_path / "cache").glob("*/compiler-cache.json")).read_text()
@@ -664,13 +667,7 @@ class TestCompileImplementationIdentity:
         monkeypatch.setattr(
             validator, "COMPILE_IMPLEMENTATIONS", (str(implementation),)
         )
-        monkeypatch.setattr(
-            validator,
-            "resolve_compiler_cache",
-            lambda timeout: CompilerCacheLauncher(
-                Path("/fake/ccache"), "ccache", "4.14"
-            ),
-        )
+        launcher = CompilerCacheLauncher(Path("/fake/ccache"), "ccache", "4.14")
         monkeypatch.setattr(
             validator, "cache_statistics", lambda launcher: {"status": "pass"}
         )
@@ -694,6 +691,7 @@ class TestCompileImplementationIdentity:
             "identity": identity,
             "timeout": 23,
             "working_directory": tmp_path,
+            "launcher": launcher,
         }
         first_object, first_directory, first = validator.compile_shard(**arguments)
         _, _, replay = validator.compile_shard(**arguments)
@@ -732,6 +730,10 @@ class TestCompileImplementationIdentity:
             "python/generativeqc_compiler/common/cuda_adapter.py"
             in validator.COMPILE_IMPLEMENTATIONS
         )
+        assert (
+            "python/generativeqc_compiler/common/compiler_cache.py"
+            in validator.COMPILE_IMPLEMENTATIONS
+        )
 
 
 class TestProductionContextBinding:
@@ -753,6 +755,7 @@ class TestProductionContextBinding:
         [
             ("GENERATIVEQC_CUDA_FAST_COMPILE", "ON"),
             ("CMAKE_CUDA_COMPILER", str(Path("/other/nvcc").resolve())),
+            ("CMAKE_CUDA_HOST_COMPILER", str(Path("/usr/bin/clang++").resolve())),
         ],
     )
     def test_compile_context_override_fails_before_work(
@@ -762,6 +765,17 @@ class TestProductionContextBinding:
         cache.write_text(_production_cache(**{field: value}))
         with pytest.raises(ValueError, match=field):
             validator.validate_production_shard_count(cache, FAKE_NVCC)
+
+    def test_configured_cache_launcher_is_part_of_the_context(
+        self, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(_production_cache())
+        working_directory, launcher = validator.validate_production_shard_count(
+            cache, FAKE_NVCC
+        )
+        assert working_directory == tmp_path.resolve()
+        assert launcher == FAKE_CCACHE
 
     @pytest.mark.parametrize("cache_type", ["STRING", "UNINITIALIZED"])
     def test_accepts_configured_qualified_shard_count(
@@ -812,6 +826,7 @@ class TestProductionContextBinding:
             ("GENERATIVEQC_ENABLE_CUDA", "OFF"),
             ("GENERATIVEQC_ENABLE_AOT_SHELLS", "OFF"),
             ("GENERATIVEQC_CUDA_FAST_COMPILE", "ON"),
+            ("CMAKE_CUDA_HOST_COMPILER", str(Path("/usr/bin/clang++").resolve())),
             ("GENERATIVEQC_AOT_UNIT_MODE", "class"),
             ("GENERATIVEQC_AOT_PROFILE", "portable"),
             ("GENERATIVEQC_AOT_PROFILES", "portable"),
@@ -854,6 +869,7 @@ class TestProductionContextBinding:
             "GENERATIVEQC_AOT_SHELL_MANIFEST",
             "GENERATIVEQC_CUDA_FAST_COMPILE",
             "CMAKE_CUDA_COMPILER",
+            "GENERATIVEQC_RESOLVED_COMPILER_CACHE",
         ],
     )
     def test_incomplete_generation_context_fails_closed(
@@ -1026,4 +1042,8 @@ class TestProductionContextBinding:
             "- name: Qualify direct J/K AOT static resources (shard 6)", 1
         )[1].split("- name:", 1)[0]
         assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
-        assert "--record-output" not in step
+        assert "--record-output build/direct-jk-aot/ledger.candidate.json" in step
+
+    def test_cmake_records_the_resolved_compiler_cache(self) -> None:
+        cmake = (validator.ROOT / "CMakeLists.txt").read_text()
+        assert "GENERATIVEQC_RESOLVED_COMPILER_CACHE" in cmake

@@ -101,6 +101,10 @@ elseif(NOT GENERATIVEQC_COMPILER_CACHE STREQUAL "off"
     endif()
   endif()
 endif()
+set(GENERATIVEQC_RESOLVED_COMPILER_CACHE
+    "${_generativeqc_compiler_cache}" CACHE FILEPATH
+    "Compiler cache executable selected by GenerativeQC" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_COMPILER_CACHE)
 if(_generativeqc_compiler_cache)
   get_filename_component(_generativeqc_compiler_cache_name
                          "${_generativeqc_compiler_cache}" NAME)
