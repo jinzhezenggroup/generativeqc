@@ -317,6 +317,19 @@ applies those environment options outside explicit argv and append flags can
 override optimizer/resource settings without changing preprocessed bytes; they
 therefore cannot be allowed to replay a cubin under the qualified identity.
 
+Before cache lookup, the gate reads `ccache --show-config` in the same
+build-directory/base environment used for compilation. It requires the
+canonical base directory, `compiler_check=mtime`, enabled direct/hash-directory
+behavior, `disable=false`, and empty ignore/sloppiness settings; unsafe user or
+environment configuration fails instead of changing cache correctness silently.
+The accepted policy is part of the inner execution context and cache key.
+
+Building the CMake generation target can itself regenerate `CMakeCache.txt` and
+Ninja rules. The complete production context is therefore validated both before
+and after that target runs. The CLI's default generated directory is derived
+from the selected CMake tree (`generated/production_shell_kernels`); an explicit
+different directory is rejected rather than advertised as a usable default.
+
 ## Production Ninja recipe and PIC binding
 
 Independent CMake-shaped controls then showed that cache/config fields alone

@@ -541,6 +541,16 @@ def generate_production_shards(
     return shards
 
 
+def production_generated_directory(cmake_cache: Path, requested: Path | None) -> Path:
+    """Return the one production generated-source directory for this CMake tree."""
+    expected = cmake_cache.resolve().parent / "generated" / "production_shell_kernels"
+    if requested is not None and requested.resolve() != expected:
+        raise ValueError(
+            "--generated-dir must match the production CMake generated-source directory"
+        )
+    return expected
+
+
 def _relative_compile_source(shard: Path, working_directory: Path) -> Path:
     try:
         return shard.resolve().relative_to(working_directory.resolve())
@@ -688,6 +698,50 @@ def cache_statistics(launcher: CompilerCacheLauncher) -> dict[str, Any]:
     }
 
 
+def qualified_ccache_policy(working_directory: Path) -> dict[str, str]:
+    return {
+        "base_dir": str(working_directory.resolve()),
+        "compiler_check": "mtime",
+        "direct_mode": "true",
+        "disable": "false",
+        "hash_dir": "true",
+        "ignore_options": "",
+        "sloppiness": "",
+    }
+
+
+def validate_ccache_configuration(
+    launcher: CompilerCacheLauncher, working_directory: Path
+) -> dict[str, str]:
+    """Require identity-safe canonical ccache configuration before cache replay."""
+    result = subprocess.run(
+        [str(launcher.path), "--show-config"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "ccache --show-config failed: " + (result.stderr or result.stdout).strip()
+        )
+    configuration = {
+        match[1]: match[2]
+        for match in re.finditer(
+            r"^\([^\r\n)]*\)[ \t]+([a-z_]+)[ \t]*=[ \t]*(.*)$",
+            result.stdout,
+            re.MULTILINE,
+        )
+    }
+    expected = qualified_ccache_policy(working_directory)
+    measured = {field: configuration.get(field) for field in expected}
+    if measured != expected:
+        raise ValueError(
+            f"ccache configuration differs from the qualified policy: {measured!r}"
+        )
+    return expected
+
+
 @contextmanager
 def _production_compile_context(directory: Path) -> Iterator[None]:
     """Match CMake's ccache cwd/base contract for one finite compile.
@@ -733,6 +787,7 @@ def compile_shard(
         "working_directory": str(working_directory),
         "ccache_basedir": str(working_directory),
         "source_argument": source_argument.as_posix(),
+        "ccache_policy": qualified_ccache_policy(working_directory),
     }
     key = canonical_hash(
         {
@@ -1023,21 +1078,27 @@ def run_measurement(
     the qualified identity deliberately pins the preprocessed line markers of
     that exact path.
     """
-    # Read CMake's configured values, including -D/preset overrides, before
-    # generation or compilation. A constant alone cannot guard production drift.
-    validate_ambient_nvcc_flags()
-    working_directory, cache_executable, effective_launcher = (
-        validate_production_shard_count(cmake_cache, nvcc)
-    )
-    launcher = verify_compiler_cache(cache_executable, min(timeout, 30))
-    validate_effective_compiler_launcher(
-        working_directory, launcher, effective_launcher
-    )
     generated = generated_directory.resolve()
-    validate_generated_cuda_rules(
-        working_directory, nvcc, effective_launcher, generated_directory=generated
-    )
+
+    def validate_context() -> tuple[Path, CompilerCacheLauncher, str]:
+        validate_ambient_nvcc_flags()
+        working, cache_executable, effective = validate_production_shard_count(
+            cmake_cache, nvcc
+        )
+        selected = verify_compiler_cache(cache_executable, min(timeout, 30))
+        validate_effective_compiler_launcher(working, selected, effective)
+        validate_generated_cuda_rules(
+            working, nvcc, effective, generated_directory=generated
+        )
+        with _production_compile_context(working):
+            validate_ccache_configuration(selected, working)
+        return working, selected, effective
+
+    # CMake's build target may regenerate its own cache/rules. Validate both the
+    # configured input context and the effective post-generation context.
+    working_directory, launcher, _ = validate_context()
     shards = generate_production_shards(working_directory, generated)
+    working_directory, launcher, _ = validate_context()
     shard = shards[QUALIFIED_SHARD_INDEX]
     toolchain = toolchain_versions(nvcc)
     identity = compile_identity(
@@ -1092,9 +1153,8 @@ def main(argv: list[str] | None = None) -> int:
         "--generated-dir",
         type=Path,
         help=(
-            "production AOT source directory (default: <output>/generated); "
-            "the CI job passes the CMake production_shell_kernels path so the "
-            "pinned preprocessed identity matches the release build"
+            "production AOT source directory (default: "
+            "<cmake build>/generated/production_shell_kernels)"
         ),
     )
     parser.add_argument("--compile-timeout", type=float, default=900)
@@ -1113,6 +1173,9 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     cache.mkdir(parents=True, exist_ok=True)
+    generated_directory = production_generated_directory(
+        args.cmake_cache, args.generated_dir
+    )
 
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
@@ -1127,7 +1190,7 @@ def main(argv: list[str] | None = None) -> int:
             nvcc=nvcc,
             cache=cache,
             output=output,
-            generated_directory=args.generated_dir or output / "generated",
+            generated_directory=generated_directory,
             cmake_cache=args.cmake_cache,
             timeout=args.compile_timeout,
         )

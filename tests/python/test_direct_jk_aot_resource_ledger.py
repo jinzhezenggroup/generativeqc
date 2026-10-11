@@ -677,6 +677,60 @@ class TestProductionCompile:
         assert digest == validator.hashlib.sha256(b"preprocessed").hexdigest()
 
     @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("disable", "true"),
+            ("compiler_check", "none"),
+            ("ignore_options", "-O*"),
+            ("sloppiness", "time_macros"),
+            ("hash_dir", "false"),
+        ],
+    )
+    def test_unsafe_ccache_configuration_fails_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        field: str,
+        value: str,
+    ) -> None:
+        expected = validator.qualified_ccache_policy(tmp_path)
+        expected[field] = value
+        output = "".join(
+            f"(fixture) {name} = {setting}\n" for name, setting in expected.items()
+        )
+        monkeypatch.setattr(
+            validator.subprocess,
+            "run",
+            lambda command, **kwargs: subprocess.CompletedProcess(
+                command, 0, output, ""
+            ),
+        )
+        launcher = CompilerCacheLauncher(
+            FAKE_CCACHE, "ccache", validator.QUALIFIED_CCACHE_VERSION
+        )
+        with pytest.raises(ValueError, match="ccache configuration"):
+            validator.validate_ccache_configuration(launcher, tmp_path)
+
+    def test_canonical_ccache_configuration_passes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        expected = validator.qualified_ccache_policy(tmp_path)
+        output = "".join(
+            f"(fixture) {name} = {setting}\n" for name, setting in expected.items()
+        )
+        monkeypatch.setattr(
+            validator.subprocess,
+            "run",
+            lambda command, **kwargs: subprocess.CompletedProcess(
+                command, 0, output, ""
+            ),
+        )
+        launcher = CompilerCacheLauncher(
+            FAKE_CCACHE, "ccache", validator.QUALIFIED_CCACHE_VERSION
+        )
+        assert validator.validate_ccache_configuration(launcher, tmp_path) == expected
+
+    @pytest.mark.parametrize(
         "error", [OSError("stats unavailable"), subprocess.TimeoutExpired("ccache", 5)]
     )
     def test_statistics_errors_are_diagnostic(
@@ -884,6 +938,70 @@ class TestProductionContextBinding:
         monkeypatch.setenv("NVCC_PREPEND_FLAGS", "")
         monkeypatch.setenv("NVCC_APPEND_FLAGS", "")
         validator.validate_ambient_nvcc_flags()
+
+    def test_default_generated_directory_comes_from_cmake_tree(
+        self, tmp_path: Path
+    ) -> None:
+        cache = tmp_path / "build/CMakeCache.txt"
+        expected = tmp_path / "build/generated/production_shell_kernels"
+        assert (
+            validator.production_generated_directory(cache, None) == expected.resolve()
+        )
+        assert (
+            validator.production_generated_directory(cache, expected)
+            == expected.resolve()
+        )
+        with pytest.raises(ValueError, match="--generated-dir"):
+            validator.production_generated_directory(
+                cache, tmp_path / "report/generated"
+            )
+
+    def test_context_is_revalidated_after_cmake_generation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        build = tmp_path / "build"
+        generated = build / "generated"
+        effective = _generated_ninja_fixture(build)
+        cache = build / "CMakeCache.txt"
+        cache.write_text(
+            _production_cache(GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER=effective)
+        )
+        launcher = CompilerCacheLauncher(
+            FAKE_CCACHE, "ccache", validator.QUALIFIED_CCACHE_VERSION
+        )
+        monkeypatch.setattr(
+            validator, "verify_compiler_cache", lambda path, timeout: launcher
+        )
+        monkeypatch.setattr(
+            validator,
+            "validate_effective_compiler_launcher",
+            lambda working, selected, configured: None,
+        )
+        monkeypatch.setattr(
+            validator,
+            "validate_ccache_configuration",
+            lambda selected, directory: validator.qualified_ccache_policy(directory),
+        )
+
+        def regenerate(*args: Any, **kwargs: Any) -> tuple[Path, ...]:
+            cache.write_text(
+                cache.read_text().replace(
+                    "GENERATIVEQC_AOT_SHARDS:STRING=8",
+                    "GENERATIVEQC_AOT_SHARDS:STRING=7",
+                )
+            )
+            return ()
+
+        monkeypatch.setattr(validator, "generate_production_shards", regenerate)
+        with pytest.raises(ValueError, match="GENERATIVEQC_AOT_SHARDS=8"):
+            validator.run_measurement(
+                nvcc=FAKE_NVCC,
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=generated,
+                cmake_cache=cache,
+                timeout=23,
+            )
 
     def test_release_definition_is_in_preprocessing_and_flag_identity(self) -> None:
         command = validator._preprocess_command(
