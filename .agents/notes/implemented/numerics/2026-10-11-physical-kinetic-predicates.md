@@ -87,6 +87,10 @@ backend/runtime qualification should be recorded against its actual source.
 
 ## References
 
+The [exact raw-feature point follow-up](../../proposed/2026-10-12-exact-physical-kinetic-point-predicate.md)
+records remaining decimal ties and a proposed unchanged-work-input correction.
+It does not retroactively change this correction's recorded evidence or scope.
+
 - PR #2276: the same-input rank-one diagnosis supersedes the provisional review.
 - `tests/python/test_libxc_physical_kinetic_predicate.py`.
 - `tests/data/xc/physical-kinetic-predicate/tpss.json`.

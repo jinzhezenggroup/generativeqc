@@ -54,3 +54,10 @@ workspace accounting, including preconditioner failure isolation. Installed test
 cover empty/partial/ragged requests, stale owners, complex nuclear inputs and
 preserved nuclear algebra. The real-GPU empty resident regression checks vector
 leases and raw transfers/actions; it must execute under finite Slurm allocation.
+
+## Follow-up
+
+[The native Lambda resident binding](2026-10-11-native-lambda-resident-binding.md)
+partially supersedes the conventional CUDA vector gap through an opt-in shared
+resident/right-preconditioned schedule. Default conventional and DF Lambda still
+retain the historical host-vector path; other boundaries recorded here remain.

@@ -134,6 +134,8 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
 
 /** Publish the qualified conventional RCCSD(T) force through a CUDA derivative consumer.
  *
+ * The optional resident Lambda vector schedule is not a default promotion; its
+ * arena is admitted beside the generated action arena, with bounded fallback.
  * Generated triples/Lambda actions plus Hamiltonian/Fock/orbital TensorIR execute on
  * CUDA in the promoted response path, while the physical Z/GMRES control flow
  * remains host-owned. device_id selects the CUDA response/derivative device;
@@ -145,13 +147,15 @@ RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget);
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov = false);
 
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget);
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov = false);
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const integrals::ElectronInteractionSource& source,
@@ -159,13 +163,15 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold = 1e-10);
+                                    double denominator_threshold = 1e-10,
+                                    bool resident_lambda_krylov = false);
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const hf::PhysicalReference& reference, const Problem& problem,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold = 1e-10);
+                                    double denominator_threshold = 1e-10,
+                                    bool resident_lambda_krylov = false);
 
 }  // namespace generativeqc::cc

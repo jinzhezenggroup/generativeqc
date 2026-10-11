@@ -432,6 +432,17 @@
         "cublasDsyrk": 1
       }
     },
+    "src/tensor/cuda_krylov_vectors.cuh": {
+      "classification": "infrastructure",
+      "contract": "src/response/resident_krylov.hpp",
+      "reason": "Shared strict-FP64 resident vector operations use the existing bounded contraction context; method adapters do not submit vendor calls.",
+      "references": {
+        "cublasDaxpy": 1,
+        "cublasDdot": 1,
+        "cublasDnrm2": 1,
+        "cublasDscal": 1
+      }
+    },
     "src/tensor/cuda_vector_contraction.cpp": {
       "classification": "provider",
       "contract": "src/tensor/native_contraction.hpp",

@@ -312,7 +312,7 @@ def run_combined(
         *(np.full_like(x, np.nan) for x in arrays[:7]),
     ]
     values = np.full(3, np.nan)
-    counts = np.full(24 if precision is None else 29, 19, dtype=np.uintp)
+    counts = np.full(24 if precision is None else 31, 19, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     dp = ct.POINTER(ct.c_double)
     if precision is not None:
@@ -384,6 +384,65 @@ def test_mixed_forward_w_has_strict_budget_fallback(
         native_combined_probe, inputs, budget=budget - 1, rows=1, panels=1, precision=1
     )
     assert status != 0 and "budget" in error
+    assert all(np.isnan(value).all() for value in (*output, values))
+    np.testing.assert_array_equal(counts, 19)
+
+
+@pytest.mark.parametrize(
+    "o,v,q,rows,panels",
+    [(1, 3, 2, 0, 1), (2, 3, 4, 1, 1), (3, 2, 2, 0, 3), (3, 2, 2, 2, 2)],
+)
+@pytest.mark.parametrize("precision", [0, 1])
+def test_combined_distinct_w_keeps_all_slots_and_independent_cotangents(
+    native_combined_probe: typing.Any,
+    o: int,
+    v: int,
+    q: int,
+    rows: int,
+    panels: int,
+    precision: int,
+) -> None:
+    """Copies preserve six seeds; mixed precision and partial pages stay bounded."""
+    from test_df_occupied_triples_response import reverse
+
+    inputs, _ = case(o, v, q)
+    status, output, _, counts, error = run_combined(
+        native_combined_probe, inputs, rows=rows, panels=panels, precision=precision
+    )
+    assert status == 0, error
+    capacity = min(o, rows) if rows else o
+    seeds = 0
+    cubes = 0
+    for second in range(o):
+        for third in range(second + 1):
+            for left in range(0, o, capacity):
+                for start in range(left, o, capacity):
+                    for first in range(start, min(start + capacity, o)):
+                        cubes += 1
+                        tuples = {
+                            tuple((first, second, third)[index] for index in order)
+                            for order in PERMUTATIONS
+                        }
+                        seeds += len(tuples) if precision == 0 else 6
+    assert counts[10] == cubes
+    assert counts[11] == 2 * seeds
+    assert counts[29] == 6 * cubes - seeds
+    assert counts[30] == counts[29] * 8 * v**3
+    tolerance = 2e-6 if precision else 3e-12
+    expected = reverse(inputs)
+    for actual, reference in zip(output[2:], expected[:7], strict=True):
+        np.testing.assert_allclose(actual, reference, atol=tolerance, rtol=tolerance)
+
+
+def test_combined_distinct_all_equal_overflow_still_fails(
+    native_combined_probe: typing.Any,
+) -> None:
+    """Cancellation of equal-index projected terms must not hide unsafe W seeds."""
+    inputs, _ = case(1, 3, 2)
+    inputs[1].fill(1e200)
+    inputs[6].fill(1e200)
+    status, output, values, counts, error = run_combined(native_combined_probe, inputs)
+    assert status != 0 and ("nonfinite" in error or "unsafe" in error)
     assert all(np.isnan(value).all() for value in (*output, values))
     np.testing.assert_array_equal(counts, 19)
 
@@ -505,10 +564,21 @@ def test_combined_response_reuses_one_input_upload(
     assert counts[8] == counts[12] == tiles
     assert counts[9] == 12 * tiles
     assert counts[10] == fock_cubes
-    assert counts[11] == 12 * fock_cubes
+    seeds = sum(
+        len(
+            {
+                tuple((first, second, third)[index] for index in order)
+                for order in PERMUTATIONS
+            }
+        )
+        for second in range(o)
+        for third in range(second + 1)
+        for first in range(o)
+    )
+    assert counts[11] == 2 * seeds
     # Pullback no longer owns another forward W traversal.
     assert counts[13] == 0
-    assert counts[11] + counts[9] == 12 * (fock_cubes + tiles)
+    assert counts[11] + counts[9] == 2 * seeds + 12 * tiles
     assert counts[11] < 12 * (fock_cubes + tiles)
 
     # The original minimum-budget gate belongs to the retained unfused fallback.
