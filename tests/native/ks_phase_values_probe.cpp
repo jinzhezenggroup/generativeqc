@@ -14,6 +14,7 @@
 #include "api/handles.hpp"
 #include "dft/cuda_ks.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/direct_jk_source_lease.hpp"
@@ -161,6 +162,62 @@ void raw_oracle(const Fixture& fixture) {
   cuda_check(cudaStreamDestroy(stream));
 }
 
+/** UKS shares ERIs, not spin weights: signed beta checks J(total), K(alpha),
+ * K(beta) against the independent fixture for full and partial residency. */
+void raw_oracle_uks(const Fixture& fixture) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  const auto elements = fixture.density.size();
+  runtime::OwnedCudaBuffer<double> matrices;
+  runtime::OwnedCudaBuffer<int> error;
+  matrices.allocate(0, 5 * elements, stream.get());
+  error.allocate(0, 1, stream.get());
+  std::vector<double> beta_density = fixture.density;
+  for (auto& value : beta_density) value *= -0.5;
+  auto* alpha = matrices.get();
+  auto* beta = alpha + elements;
+  auto* coulomb = beta + elements;
+  auto* alpha_exchange = coulomb + elements;
+  auto* beta_exchange = alpha_exchange + elements;
+  cuda_check(cudaMemcpyAsync(alpha, fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  cuda_check(cudaMemcpyAsync(beta, beta_density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  const auto check_source = [&](double screening, std::uint32_t buckets) {
+    scf::cuda_execution::DirectJkSourceLease source(stream.get());
+    require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                           5 * elements * sizeof(double), 8ULL << 30, "1", "ks-uks-source-oracle",
+                           false, false, screening, 8ULL << 30, false,
+                           scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f, buckets,
+                           2) == GENERATIVEQC_STATUS_SUCCESS &&
+                source.active(),
+            source.reason());
+    for (const bool has_exchange : {true, false}) {
+      auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Unrestricted, 0.25);
+      if (!has_exchange) spec.exchange.present = false;
+      std::string detail;
+      require(
+          source.enqueue(spec, alpha, coulomb, has_exchange ? alpha_exchange : nullptr, error.get(),
+                         screening, detail, beta,
+                         has_exchange ? beta_exchange : nullptr) == GENERATIVEQC_STATUS_SUCCESS &&
+              source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+          "UKS shared source audit: " + detail);
+      std::vector<double> actual(elements);
+      for (unsigned channel = 0; channel < (has_exchange ? 3U : 1U); ++channel) {
+        const auto* expected = channel == 0 ? &fixture.coulomb : &fixture.exchange;
+        const double scale = channel == 0 ? 0.5 : channel == 1 ? 1.0 : -0.5;
+        cuda_check(cudaMemcpy(actual.data(), coulomb + channel * elements,
+                              elements * sizeof(double), cudaMemcpyDeviceToHost));
+        for (std::size_t index = 0; index < elements; ++index)
+          require(std::abs(actual[index] - scale * expected->at(index)) < 2e-9,
+                  "independent PySCF UKS J/K parity");
+      }
+    }
+  };
+  for (const double screening : {0.0, 1e-12})
+    for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) check_source(screening, buckets);
+}
+
 void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_base) {
   const auto strategy = scf::resolve_fock_build(
       scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, b3lyp ? 0.20 : 0.25),
@@ -215,9 +272,9 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
   require(bool(state), "independent energy assertion snapshot");
   require(plan.transfers().phase_resident_values_built > 0 &&
               plan.transfers().phase_resident_fock_actions > 0 &&
-              plan.resources().provider_device_bytes == base_bytes &&
+              plan.resources().provider_device_bytes > base_bytes &&
               !provider.diagnostic().direct.resident_value_count,
-          "phase source work/lifetime inventory");
+          "final-state source work/lifetime inventory");
   auto built = plan.transfers().phase_resident_values_built;
   const auto rebases = plan.transfers().warm_energy_rebase_fock_actions;
   require(rebases == 1 && resident.fock_builds == resident.iterations + 1 &&
@@ -230,6 +287,23 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
                              event.phase == scf::PrecisionWorkPhase::Finalization;
                     }) == 1,
       "warm handoff precision provenance");
+  dft::CudaKsFinalStateToken token;
+  dft::CudaKsResidentDensityBinding density_before, density_after;
+  std::string source_detail;
+  require(plan.final_state_token(token, source_detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              plan.resident_final_density(token, density_before, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+          "resident final-state value consumer binding: " + source_detail);
+  dft::CudaKsFixedDensityProfile profile;
+  require(plan.profile_fixed_density_components(token, profile, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              profile.present_mask == 11U &&
+              plan.resident_final_density(token, density_after, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              density_before.alpha == density_after.alpha &&
+              plan.transfers().phase_resident_values_built == built &&
+              plan.resources().provider_device_bytes > base_bytes,
+          "post-SCF value reuse lost the final density or rebuilt ERIs: " + source_detail);
   setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "auto", 1);
   const auto warm = plan.run(nullptr, true);
   require(warm.converged && std::abs(warm.energy - baseline.energy) < 2e-9 &&
@@ -439,6 +513,7 @@ int main(int argc, char** argv) {
       endpoint(fixture, true, compute_forces);
     } else {
       raw_oracle(fixture);
+      raw_oracle_uks(fixture);
       solve_parity(fixture, false, argv[1]);
       solve_parity(fixture, true, argv[1]);
     }

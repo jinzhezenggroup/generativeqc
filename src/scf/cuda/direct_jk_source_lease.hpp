@@ -8,11 +8,13 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-/** Method-neutral, phase-local lease of immutable full-range FP64 ERIs.
+/** Method-neutral lease of immutable full-range FP64 ERIs.
  * The common Direct provider remains the scientific owner. Consumers assemble
  * their own HF/KS equations and retire captured borrowers before this lease.
- * The caller-owned stream outlives destruction; no source survives into a
- * subsequent solve, geometry or derivative consumer.
+ * The caller-owned stream outlives destruction. An immutable-geometry owner may
+ * retain this lease for post-SCF value consumers, but these zero-order values
+ * never authorize a derivative action: gradients use the primary provider's
+ * derivative metadata and evaluate derivative integrals.
  */
 class DirectJkSourceLease {
  public:
@@ -39,20 +41,21 @@ class DirectJkSourceLease {
       const char* trace_name, bool cold_phase = false, bool generic_fock = false,
       double screening = 0.0, std::size_t value_ceiling = 8ULL << 30, bool own_outputs = true,
       DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
-      std::uint32_t bucket_mask = (1U << 28) - 1);
+      std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1);
   bool active() const noexcept { return direct_ != nullptr; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
   std::size_t value_bytes() const noexcept { return value_bytes_; }
   const std::string& reason() const noexcept { return reason_; }
 
-  /** Enqueue raw restricted J/K without applying scientific coefficients.
+  /** Enqueue raw RKS/UKS J/K without applying scientific coefficients.
    * Preserve the caller's Schwarz threshold on each contraction. A null error
    * slot uses the lease's own slot. No allocation, upload or success-path fence
    * occurs; caller outputs must outlive the final audit.
    */
   generativeqc_status enqueue(FockBuildSpec spec, const double* density, double* coulomb,
                               double* exchange, int* numerical_error, double screening,
-                              std::string& detail);
+                              std::string& detail, const double* beta = nullptr,
+                              double* beta_exchange = nullptr);
   /** Fence finite/census validation before publishing the last action.
    * At the frozen Schwarz threshold every uncached value must be evaluated.
    * A stricter replay predicate may skip recurrences but not source visits.
