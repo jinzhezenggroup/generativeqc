@@ -529,6 +529,39 @@ def _hf_rows(
     return rows, library_sha, failures
 
 
+def _ks_acceptance(
+    record: dict[str, Any], reference: dict[str, Any], atoms: int
+) -> dict[str, Any]:
+    """Recompute the producer's independent cold gate from retained values."""
+    cold = [row for row in reference["records"] if row.get("phase") == "cold"]
+    if len(cold) != 1 or cold[0].get("geometry") != 0 or cold[0].get("repeat") != 0:
+        raise ValueError("KS control requires one initial cold oracle")
+    oracle = cold[0]
+    if (
+        record.get("converged") is not True
+        or type(record.get("native_status")) is not int
+        or record["native_status"] != 0
+        or oracle.get("converged") is not True
+        or type(oracle.get("status")) is not int
+        or oracle["status"] != 0
+    ):
+        raise ValueError("KS control native/reference endpoint did not succeed")
+    for endpoint in (record, oracle):
+        forces = endpoint.get("forces")
+        if (
+            type(endpoint.get("energy")) not in (int, float)
+            or not isinstance(forces, list)
+            or len(forces) != atoms
+            or any(not isinstance(row, list) or len(row) != 3 for row in forces)
+        ):
+            raise ValueError("KS control requires scalar energy and atom-by-3 forces")
+    energy_error = _maximum_abs_difference(record["energy"], oracle["energy"])
+    force_error = _maximum_abs_difference(record["forces"], oracle["forces"])
+    if energy_error > 1e-8 or force_error > 1e-7:
+        raise ValueError("KS control recomputed independent acceptance failed")
+    return {"energy_error": energy_error, "force_error": force_error, "gate": True}
+
+
 def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -591,17 +624,23 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         if identity is not None and current != identity:
             raise ValueError("KS matrix did not use one build/device allocation")
         identity = current
-        seconds = _positive_seconds(record["complete_seconds"])
-        samples.setdefault((mode, atoms), []).append(seconds)
         if record["acceptance"].get("gate") is not True:
             raise ValueError(f"KS {mode}-{atoms} independent acceptance failed")
+        acceptance = _ks_acceptance(record, reference, atoms)
+        iterations = _count(record["iterations"])
+        fock_builds = _count(record["fock_builds"])
+        if iterations == 0 or fock_builds == 0:
+            raise ValueError("KS control requires positive iteration/build counts")
+        seconds = _positive_seconds(record["complete_seconds"])
+        samples.setdefault((mode, atoms), []).append(seconds)
         rows.append(
             {
                 "mode": mode,
                 "atoms": atoms,
                 "complete_seconds": seconds,
-                "iterations": record["iterations"],
-                "fock_builds": record["fock_builds"],
+                "iterations": iterations,
+                "fock_builds": fock_builds,
+                "recomputed_acceptance": acceptance,
                 "incremental_active": bool(
                     record["incremental_direct_jk"]
                     and record["incremental_direct_jk"].get("active")

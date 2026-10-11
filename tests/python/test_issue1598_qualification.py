@@ -39,6 +39,27 @@ def _ks_identity(atoms: int) -> dict:
     }
 
 
+def _ks_numerics(atoms: int) -> dict:
+    reference = json.loads(
+        gzip.decompress(
+            (
+                ROOT
+                / (
+                    "benchmarks/results/pbe0-composed-baseline-20261005/"
+                    f"reference-{atoms}.json.gz"
+                )
+            ).read_bytes()
+        )
+    )
+    oracle = next(row for row in reference["records"] if row["phase"] == "cold")
+    return {
+        "energy": oracle["energy"],
+        "forces": oracle["forces"],
+        "converged": True,
+        "native_status": 0,
+    }
+
+
 def _record(round: int) -> dict:
     record = {
         "benchmark": "compare_gpu4pyscf_batch",
@@ -346,6 +367,7 @@ def test_ks_reducer_consumes_check_endpoint_gate(
                 "schema": "issue1598.ks-cold-control.v1",
                 "status": "measured",
                 **_ks_identity(48),
+                **_ks_numerics(48),
                 "complete_seconds": 1.0,
                 "iterations": 2,
                 "fock_builds": 2,
@@ -554,6 +576,7 @@ def test_ks_samples_require_matched_identities(
             "schema": "issue1598.ks-cold-control.v1",
             "status": "measured",
             **_ks_identity(48),
+            **_ks_numerics(48),
             "complete_seconds": 1.0,
             "iterations": 2,
             "fock_builds": 2,
@@ -629,3 +652,126 @@ def test_finalization_does_not_substitute_for_missing_anchor_work(
         )
     with pytest.raises(ValueError, match="measurable anchor work"):
         reducer._incremental_work(record)
+
+
+@pytest.mark.parametrize("atoms", [48, 96])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "energy_shift",
+        "force_shift",
+        "energy_nan",
+        "force_nan",
+        "energy_inf",
+        "force_inf",
+        "energy_null",
+        "force_null",
+        "energy_bool",
+        "force_bool",
+        "energy_vector",
+        "force_short",
+        "force_broadcast",
+        "force_ragged",
+        "unconverged",
+        "converged_string",
+        "native_failure",
+        "native_status_bool",
+        "iterations_zero",
+        "fock_builds_negative",
+    ],
+)
+def test_ks_acceptance_is_recomputed_from_retained_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, atoms: int, damage: str | None
+) -> None:
+    monkeypatch.setattr(reducer, "KS_SAMPLES", (("off", atoms, 1),))
+    root = tmp_path / "ks"
+    root.mkdir()
+    record = {
+        "schema": "issue1598.ks-cold-control.v1",
+        "status": "measured",
+        **_ks_identity(atoms),
+        **_ks_numerics(atoms),
+        "complete_seconds": 1.0,
+        "iterations": 2,
+        "fock_builds": 2,
+        "incremental_direct_jk": {"active": False},
+        "acceptance": {"gate": True, "energy_error": 0.0, "force_error": 0.0},
+    }
+    if damage == "energy_shift":
+        record["energy"] += 1e-6
+    elif damage == "force_shift":
+        record["forces"][0][0] += 1e-5
+    elif damage in ("energy_nan", "energy_inf", "energy_null", "energy_bool"):
+        record["energy"] = {
+            "energy_nan": float("nan"),
+            "energy_inf": float("inf"),
+            "energy_null": None,
+            "energy_bool": True,
+        }[damage]
+    elif damage in ("force_nan", "force_inf", "force_bool"):
+        record["forces"][0][0] = {
+            "force_nan": float("nan"),
+            "force_inf": float("inf"),
+            "force_bool": True,
+        }[damage]
+    elif damage == "force_null":
+        record["forces"] = None
+    elif damage == "energy_vector":
+        record["energy"] = [record["energy"]]
+    elif damage == "force_short":
+        record["forces"].pop()
+    elif damage == "force_broadcast":
+        record["forces"] = [record["forces"][0]]
+    elif damage == "force_ragged":
+        record["forces"][0].pop()
+    elif damage == "unconverged":
+        record["converged"] = False
+    elif damage == "converged_string":
+        record["converged"] = "true"
+    elif damage == "native_failure":
+        record["native_status"] = 1
+    elif damage == "native_status_bool":
+        record["native_status"] = False
+    elif damage == "iterations_zero":
+        record["iterations"] = 0
+    elif damage == "fock_builds_negative":
+        record["fock_builds"] = -1
+    (root / f"pbe0-{atoms}-off-1.json").write_text(json.dumps(record))
+    (root / f"pbe0-{atoms}-off-1.outcome").write_text('{"exit_code":0,"attempt":1}')
+    if damage is not None:
+        with pytest.raises((ValueError, TypeError)):
+            reducer._ks_rows(tmp_path)
+    else:
+        rows, failures = reducer._ks_rows(tmp_path)
+        assert not failures and len(rows) == 2
+        assert rows[0]["recomputed_acceptance"] == {
+            "energy_error": 0.0,
+            "force_error": 0.0,
+            "gate": True,
+        }
+
+
+@pytest.mark.parametrize("damage", ["missing", "duplicate", "moved", "failed", "nan"])
+def test_ks_acceptance_requires_valid_unique_cold_oracle(damage: str) -> None:
+    record = _ks_numerics(48)
+    oracle = {
+        **copy.deepcopy(record),
+        "phase": "cold",
+        "geometry": 0,
+        "repeat": 0,
+        "status": 0,
+    }
+    reference = {"records": [oracle]}
+    if damage == "missing":
+        reference["records"] = []
+    elif damage == "duplicate":
+        reference["records"].append(copy.deepcopy(oracle))
+    elif damage == "moved":
+        oracle["geometry"] = 1
+    elif damage == "failed":
+        oracle["converged"] = False
+    else:
+        oracle["energy"] = float("nan")
+    with pytest.raises(ValueError):
+        reducer._ks_acceptance(record, reference, 48)
