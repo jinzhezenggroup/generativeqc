@@ -18,12 +18,6 @@
  },
  "files": [
   {
-   "path": "new/rhf/direct-24-baseline-1.json.gz",
-   "bytes": 11177,
-   "sha256": "49a66c9f5bda75e2824bd4d4c8253ced9b8edf81627627440c53a6f643967ad0",
-   "role": "samples"
-  },
-  {
    "path": "new/rhf/direct-24-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "4a4e7f2799958622521f4609ee72f5eb11f2247b2c2c35b3849c107a2006c0d3",
@@ -84,12 +78,6 @@
    "role": "samples"
   },
   {
-   "path": "new/rhf/direct-96-baseline-1.json.gz",
-   "bytes": 26328,
-   "sha256": "8e4ac59cb0dbe4d26b089730b596d0a5723692647ca19e87fa03be530633f829",
-   "role": "samples"
-  },
-  {
    "path": "new/rhf/direct-96-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "451c72ae271f03ebb86f43b8cac63e7068d55b82a5e51f0a36df4eb914c8076a",
@@ -126,12 +114,6 @@
    "role": "samples"
   },
   {
-   "path": "old/rhf/direct-12-baseline-1.json.gz",
-   "bytes": 8757,
-   "sha256": "85d6b492b0734b596a3b63f5e0536a69480ef6c553b8725c62a1f987ca1bc91c",
-   "role": "samples"
-  },
-  {
    "path": "old/rhf/direct-12-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "6917df7d80ac3fefa8d1dc1dd7847f152db802904ae2d926304eaa5979bbdc36",
@@ -144,12 +126,6 @@
    "role": "samples"
   },
   {
-   "path": "old/rhf/direct-12-incremental-1.json.gz",
-   "bytes": 8944,
-   "sha256": "c453fc7864e848cb3b19ddcd168657c3aa620b3148632427b208f34376b1440e",
-   "role": "samples"
-  },
-  {
    "path": "old/rhf/direct-12-incremental-1.outcome.gz",
    "bytes": 80,
    "sha256": "66e424bcbc1971dd6e16ea9bc3034565e83822eaf923b89b8ea6e593d98271c0",
@@ -159,12 +135,6 @@
    "path": "old/rhf/direct-12-incremental-2.outcome.gz",
    "bytes": 80,
    "sha256": "e74e171087ff849595e2b9a25608742f76e50672c0c76a111a19e610a203ddd6",
-   "role": "samples"
-  },
-  {
-   "path": "old/rhf/direct-24-baseline-1.json.gz",
-   "bytes": 11159,
-   "sha256": "0b6241e3c3afb959163b5817e2f1eacd4fed307b0b4e8fff5f3724b9506a9f62",
    "role": "samples"
   },
   {
@@ -192,12 +162,6 @@
    "role": "samples"
   },
   {
-   "path": "old/rhf/direct-48-baseline-1.json.gz",
-   "bytes": 16488,
-   "sha256": "88f0929fb38e26503ed848205329e41c2fd71cdbc71c499ebcd9854007b6425c",
-   "role": "samples"
-  },
-  {
    "path": "old/rhf/direct-48-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "f438e15a0e3ef12e5b63a5a1198d8892c52ccf8492f87206dfdd5b4e2c6de73d",
@@ -207,12 +171,6 @@
    "path": "old/rhf/direct-48-baseline-2.outcome.gz",
    "bytes": 77,
    "sha256": "0cf4dffd2495c9f7b61a4046dee57cb9fbd7d08ff363d1d53b50a86d239458a9",
-   "role": "samples"
-  },
-  {
-   "path": "old/rhf/direct-48-incremental-1.json.gz",
-   "bytes": 16717,
-   "sha256": "3b1615c0c5de94cbe29dc2672f8d7079ddb60216d9bc153028546ee47d5ddf4d",
    "role": "samples"
   },
   {
@@ -271,8 +229,8 @@
   },
   {
    "path": "verify.py",
-   "bytes": 4945,
-   "sha256": "d2e522c65a568272316c76bd3d46c0e3d2e0936f14e32af5742ee9c2a31565f3",
+   "bytes": 4792,
+   "sha256": "a3f51c71508f808af44ae10103877c852669c256a83014e91175c09930ce4ec2",
    "role": "reproduction"
   }
  ]
