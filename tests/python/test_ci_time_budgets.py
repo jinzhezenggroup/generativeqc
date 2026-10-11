@@ -101,9 +101,12 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     shard_matrix = next(
         line for line in section.splitlines() if line.strip().startswith("shard:")
     )
-    assert "fromJSON(" in shard_matrix
-    assert "github.event_name == 'schedule'" in shard_matrix
-    assert "github.event_name == 'workflow_dispatch'" in shard_matrix
+    assert "fromJSON(needs.merge_queue_liveness.outputs.python_shards)" in shard_matrix
+    workflow = path.read_text(encoding="utf-8")
+    selector = workflow.split(
+        "      - name: Select event-specific Python shards\n", 1
+    )[1].split("\n  master-cpu-cache:\n", 1)[0]
+    assert '"schedule"' in selector and '"workflow_dispatch"' in selector
     for shard in (
         "core-a",
         "core-b",
@@ -112,10 +115,10 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         "compiler-heavy",
         "ecp-forces",
     ):
-        # Routine shards exist in both branches of the event-specific matrix.
-        assert shard_matrix.count(f'"{shard}"') == 2
+        # Each routine shard is present in the routine and full JSON outputs.
+        assert selector.count(f'"{shard}"') == 2
     for shard in ("nightly-hessian", "nightly-wb97mv"):
-        assert shard_matrix.count(f'"{shard}"') == 1
+        assert selector.count(f'"{shard}"') == 1
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
     assert "rebalance_paths=(" in section
