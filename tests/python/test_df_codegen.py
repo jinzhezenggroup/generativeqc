@@ -111,7 +111,7 @@ def test_df_translation_and_only_declared_exchange_symmetry(
     kernel = build_df_component_kernel(build_df_value_ir(family, angular), components)
     value = evaluate_df_primitive(kernel, exponents, centers)
     translated = tuple(
-        tuple(x + shift for x, shift in zip(center, (1.1, -0.7, 0.4)))
+        tuple(x + shift for x, shift in zip(center, (1.1, -0.7, 0.4), strict=True))
         for center in centers
     )
     assert evaluate_df_primitive(kernel, exponents, translated) == pytest.approx(
@@ -157,7 +157,7 @@ def test_raw_df_values_match_independent_libcint_vertical_slices(
     components = tuple("x" * l for l in angular)
     kernel = build_df_component_kernel(build_df_value_ir(family, angular), components)
     value = evaluate_df_primitive(kernel, exponents, centers)
-    for a, l in zip(exponents, angular):
+    for a, l in zip(exponents, angular, strict=True):
         odd_double_factorial = math.prod(range(1, 2 * l, 2))
         value *= (
             (2 * a / math.pi) ** 0.75

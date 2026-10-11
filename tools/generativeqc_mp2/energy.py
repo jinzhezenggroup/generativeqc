@@ -261,7 +261,7 @@ class PreparedMP2Energy:
                     feeds.update(
                         {
                             "e" + k: eps[list(slot)]
-                            for k, slot in zip("ijab", (i, j, a, b))
+                            for k, slot in zip("ijab", (i, j, a, b), strict=True)
                         }
                     )
                     program = self._programs[shape]

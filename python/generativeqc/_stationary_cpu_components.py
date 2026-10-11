@@ -74,7 +74,9 @@ class ComponentPrimitiveExecutor:
                 (
                     "".join(
                         axis * int(power)
-                        for axis, power in zip("xyz", row[4 + 4 * t : 7 + 4 * t])
+                        for axis, power in zip(
+                            "xyz", row[4 + 4 * t : 7 + 4 * t], strict=True
+                        )
                     ),
                     row[7 + 4 * t],
                 )

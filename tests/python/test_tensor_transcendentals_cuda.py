@@ -97,7 +97,7 @@ def test_cuda_primal_jvp_vjp_ordinary_and_resident(
         raise AssertionError("CUDA delegated arithmetic to the CPU interpreter")
 
     monkeypatch.setattr(interpreter, "_evaluate", forbidden)
-    for (program, args), reference in zip(jobs, expected):
+    for (program, args), reference in zip(jobs, expected, strict=True):
         plan = plan_cuda(program, compiler.target, schedule=schedules[schedule_id])
         with PreparedCuda(plan, compile_cuda(plan, compiler, cache)) as prepared:
             for _ in range(2):

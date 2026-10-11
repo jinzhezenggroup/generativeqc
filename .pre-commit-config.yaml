@@ -103,25 +103,6 @@ repos:
         args: ["--fix"]
         types_or: [python, pyi, jupyter]
         exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$
-      # B905 is ratcheted through reviewed compiler index/shape domains first.
-      # Historical repo-wide baseline: 264 findings across 125 files.
-      # Keep fixes manual: Ruff's B905 fix chooses strict=False.
-      - id: ruff
-        name: Check strict zip contracts in core compiler modules
-        args:
-          - --select=B905
-          - --no-fix
-          - python/generativeqc_compiler/common/semantic_source_cache.py
-          - python/generativeqc_compiler/mp2/equations.py
-          - python/generativeqc_compiler/tensor/cuda_inline.py
-          - python/generativeqc_compiler/tensor/lowering.py
-          - python/generativeqc_compiler/integral/df_values.py
-          - python/generativeqc_compiler/integral/one_electron_values.py
-          - python/generativeqc_compiler/integral/blocks.py
-          - python/generativeqc_compiler/tensor/autodiff.py
-          - tools/generate_rccsd_native.py
-        pass_filenames: false
-        always_run: true
       # This hook discovers all published __all__ modules at runtime, follows
       # first-party reexports and audits explicitly defined exported class members.
       # Ruff D100-D107 also checks the discovered public facade modules.

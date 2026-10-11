@@ -438,6 +438,7 @@ def _jvp_segment_sum(
     result = _zeros(node.spec)
     source = np.moveaxis(tangents[0], node.attrs["axis"], 0)
     target = np.moveaxis(result, node.attrs["axis"], 0)
+    # Segment boundaries form one fewer adjacent (start, stop) intervals.
     for segment, (start, stop) in enumerate(pairwise(node.attrs["offsets"])):
         target[segment] = np.sum(source[start:stop], axis=0, dtype=node.spec.dtype)
     return result

@@ -852,7 +852,13 @@ class NativeKsSnapshot:
             self.grid_provenance = None
             self.atomic_weights = None
         self.export_work = MappingProxyType(
-            dict(zip(("d2h_bytes", "reads", "synchronizations"), map(int, take((3,)))))
+            dict(
+                zip(
+                    ("d2h_bytes", "reads", "synchronizations"),
+                    map(int, take((3,))),
+                    strict=True,
+                )
+            )
             if self.metadata[0] in (3, 5, 8, 9)
             else {}
         )
