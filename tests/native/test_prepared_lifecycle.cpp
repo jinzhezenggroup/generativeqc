@@ -1,9 +1,26 @@
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
+#include <new>
 #include <stdexcept>
 
 #include "methods/method.hpp"
 #include "molecule/basis.hpp"
+
+// Inject only inside reset. Ordinary numerical tests keep allocation enabled.
+// The sweep does not assume a particular std::string small-buffer capacity.
+namespace {
+thread_local int reset_allocations_before_failure = -1;
+}
+
+void* operator new(std::size_t bytes) {
+  if (reset_allocations_before_failure >= 0 && reset_allocations_before_failure-- == 0)
+    throw std::bad_alloc();
+  if (void* pointer = std::malloc(bytes ? bytes : 1)) return pointer;
+  throw std::bad_alloc();
+}
+void operator delete(void* pointer) noexcept { std::free(pointer); }
+void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
 
 namespace {
 void require(bool condition, const char* message) {
@@ -87,11 +104,42 @@ void cpu_consumers() {
     const auto recovery = owner->execute(false);
     require(recovery.convergence.converged && std::abs(cold.energy - recovery.energy) < 1e-10,
             "real CPU recovery changed the result");
+    // An allocation failure before or during reset must leave the original
+    // identity usable. In particular, do not copy it after invalidating it.
+    for (int fail_after = 0; fail_after != 8; ++fail_after) {
+      reset_allocations_before_failure = fail_after;
+      try {
+        owner->reset_execution();
+      } catch (const std::bad_alloc&) {
+      }
+      reset_allocations_before_failure = -1;
+      require(owner->execution_lifecycle().bound(), "reset allocation failure lost owner binding");
+      const auto recovered = owner->execute(false);
+      require(recovered.convergence.converged && std::abs(cold.energy - recovered.energy) < 1e-10,
+              "allocation-failed reset prevented real CPU recovery");
+    }
     owner->reset_execution();
     require(!owner->execution_lifecycle().warmed(), "reset retained warm eligibility");
     owner->close_execution();
     rejected([&] { owner->execute(false); });
     rejected([&] { owner->reset_execution(); });
+    auto fleet = methods::prepare_batch(context, {system}, descriptor,
+                                        GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
+    require(fleet->execute({}, false).front().status == GENERATIVEQC_STATUS_SUCCESS,
+            "real CPU fleet setup");
+    for (int fail_after = 0; fail_after != 8; ++fail_after) {
+      reset_allocations_before_failure = fail_after;
+      try {
+        fleet->reset_execution();
+      } catch (const std::bad_alloc&) {
+      }
+      reset_allocations_before_failure = -1;
+      require(fleet->execution_lifecycle().bound(), "reset allocation failure lost fleet binding");
+      const auto recovered = fleet->execute({}, false);
+      require(recovered.front().status == GENERATIVEQC_STATUS_SUCCESS &&
+                  std::abs(cold.energy - recovered.front().calculation.energy) < 1e-10,
+              "allocation-failed reset prevented real CPU fleet recovery");
+    }
   }
 }
 }  // namespace

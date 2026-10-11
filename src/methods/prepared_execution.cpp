@@ -46,9 +46,9 @@ void PreparedCalculation::reset_execution() {
   if (lifecycle_.failed())
     lifecycle_.recover();
   else {
-    const auto binding = lifecycle_.binding();
+    auto binding = lifecycle_.binding();
     lifecycle_.invalidate();
-    lifecycle_.bind(binding);
+    lifecycle_.bind(std::move(binding));
   }
 }
 
@@ -103,9 +103,9 @@ void PreparedBatch::reset_execution() {
   if (lifecycle_.failed())
     lifecycle_.recover();
   else {
-    const auto binding = lifecycle_.binding();
+    auto binding = lifecycle_.binding();
     lifecycle_.invalidate();
-    lifecycle_.bind(binding);
+    lifecycle_.bind(std::move(binding));
   }
 }
 
