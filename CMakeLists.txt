@@ -451,7 +451,9 @@ if(GENERATIVEQC_BUILD_TESTS)
     add_library(generativeqc_cli_profile_probe SHARED tests/native/cli_profile_probe.cpp)
     target_include_directories(generativeqc_cli_profile_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(generativeqc_cli_profile_probe PRIVATE cxx_std_20)
-    target_include_directories(generativeqc_cli_json_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_include_directories(generativeqc_cli_json_probe PRIVATE
+                               "${CMAKE_CURRENT_SOURCE_DIR}/src"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_link_libraries(generativeqc_cli_json_probe PRIVATE nlohmann_json::nlohmann_json OpenSSL::Crypto)
     target_compile_features(generativeqc_cli_json_probe PRIVATE cxx_std_20)
     add_test(NAME generativeqc_cli_runtime_contract

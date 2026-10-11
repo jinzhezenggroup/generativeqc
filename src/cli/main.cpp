@@ -31,6 +31,7 @@
 #include "cli/profiles.hpp"
 #include "cli/resources.hpp"
 #include "cli_method_catalog.hpp"
+#include "dft/grid.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
@@ -636,6 +637,14 @@ RunOptions parse_run(int argc, char** argv) {
     throw UsageError("--auxiliary-basis requires density fitting");
   if (options.grid_explicit && !options.composition)
     throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
+  if (is_dft(options) && !options.composition) {
+    // Registered methods leave ks_options null, so native preparation owns
+    // their grid defaults. Keep the metadata-only inventory on that same grid.
+    const generativeqc::dft::GridSpec native_grid;
+    options.grid.radial_points = native_grid.radial_points;
+    options.grid.angular_polar = native_grid.angular_polar;
+    options.grid.angular_azimuth = native_grid.angular_azimuth;
+  }
   if (options.composition) {
     const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA ? options.composition->cuda
                                                                        : options.composition->cpu;

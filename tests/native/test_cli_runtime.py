@@ -315,6 +315,31 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(unsupported.returncode, 2)
         self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
 
+    def test_registered_ks_inventory_uses_native_execution_grid(self) -> None:
+        probe = subprocess.run(
+            [str(PROBE), "--native-grid"],
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+        native_grid = json.loads(probe.stdout)
+        for method in ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"):
+            for backend in ("cpu", "cuda"):
+                with self.subTest(method=method, backend=backend):
+                    result = self.resources("--method", method, "--backend", backend)
+                    self.assertIn(result.returncode, (0, 2), result.stderr)
+                    if backend == "cpu":
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                    plan = json.loads(result.stdout)
+                    self.assertEqual(plan["controls"]["grid"], native_grid)
+                    if method == "pbe-rks" and backend == "cpu":
+                        # Eligible restricted GGA retains 32 bytes per point/AO.
+                        grid_cache = 32 * 2 * math.prod(native_grid) * 2
+                        self.assertGreaterEqual(
+                            plan["item_inventory"]["scf_workspace"], grid_cache
+                        )
+
     def test_invalid_resource_controls_fail_before_output(self) -> None:
         for arguments in (
             ("--host-bytes", "-1"),
