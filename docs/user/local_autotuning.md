@@ -27,16 +27,16 @@ logical CUDA device 0 within the allocated visibility.
 ```bash
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=02:00:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
-  python -m generativeqc autotune --quick water.xyz --basis def2-svp
+  generativeqc-tune --quick water.xyz --basis def2-svp
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=04:00:00 env GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
-  python -m generativeqc autotune --full water.xyz --basis def2-tzvp --batch 4 \
+  generativeqc-tune --full water.xyz --basis def2-tzvp --batch 4 \
   --budget-seconds 14000 --export local-profile.zip
 ```
 
-These searches deliberately use the build-time Python compiler frontend; the
-native SDK does not spawn it. On systems without
+These searches deliberately use a separate Python compiler frontend exposed as
+`generativeqc-tune`; the C++ runtime command never imports or spawns it. On systems without
 Slurm, run inside the allocation provided by the local scheduler. The tuner and
 its child processes preserve `CUDA_VISIBLE_DEVICES`; they do not request a
 second allocation. Set `CUDA_PATH` or `--nvcc` to select a toolkit.
@@ -189,9 +189,8 @@ diagnose` probes the allocated GPU and prints the same selection. Static
 management commands require no GPU:
 
 ```bash
-generativeqc autotune --show-profile
 generativeqc profile show
-generativeqc autotune --clear-profile
+generativeqc profile clear
 ```
 
 Clearing profiles deactivates them while preserving immutable binaries already

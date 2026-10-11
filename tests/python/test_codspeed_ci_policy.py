@@ -125,6 +125,10 @@ def test_paired_diagnostic_is_bounded_and_separate_from_qualified_upload() -> No
     ):
         assert "github.event_name == 'pull_request'" in step(name)
         assert "steps.baseline.outputs.paired_diagnostic == 'true'" in step(name)
+        assert (
+            "contains(github.event.pull_request.labels.*.name, 'ci/codspeed-paired')"
+            in step(name)
+        )
     run = step("Compare exact baseline and head on this runner")
     assert 'CODSPEED_SKIP_UPLOAD: "true"' in run
     assert "tools/codspeed_pair.py" in run

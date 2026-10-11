@@ -855,6 +855,28 @@ class RuntimeTests(unittest.TestCase):
         path.write_text(json.dumps(basis))
         self.assertNotEqual(self.resources("--basis", str(path)).returncode, 0)
 
+    def test_retired_autotune_aliases_are_not_runtime_commands(self) -> None:
+        for arguments in (
+            ("autotune", "unused.xyz"),
+            ("autotune", "--show-profile"),
+            ("autotune", "--clear-profile"),
+        ):
+            result = self.cli(*arguments)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("generativeqc-tune", result.stderr)
+            self.assertEqual(result.stdout, "")
+        # Profile administration remains natively available without Python.
+        result = self.cli("profile", "show")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_native_resources_reject_unqualified_hybrid_and_correlated_domains(
+        self,
+    ) -> None:
+        for method in ("pbe0-rks", "pbe0-uks", "rccsd"):
+            result = self.resources("--method", method)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
+
     def test_scalar_ecp_analytic_energy_forces_and_metadata_validation(self) -> None:
         # Keep this native-only contract runnable without Python packages.
         potential = [

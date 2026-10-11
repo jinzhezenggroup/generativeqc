@@ -124,6 +124,8 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         "test_stationary_aot_generation.py",
         "test_cc_shared_iteration_driver.py",
         "test_rccsd_codegen_no_numpy.py",
+        "test_dft_mp_v1_capacity.py",
+        "test_df_lambda_frontier.py",
     ):
         assert f"tests/python/{filename}" in targets
 
