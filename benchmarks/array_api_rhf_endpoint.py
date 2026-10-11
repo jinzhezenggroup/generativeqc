@@ -53,7 +53,7 @@ def _summary(samples: list[float]) -> dict[str, Any]:
 
 
 def main() -> None:
-    """Run identical FP64 exact-J/K endpoints and retain honest qualification gaps."""
+    """Compare identical native FP64 endpoints; RHF uses exact J/K by default."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--method", default="rhf", help="native Calculator selector")
@@ -158,6 +158,7 @@ def main() -> None:
             samples["native"]
         )
         info = compiled.compilation_info()
+        profile_instrumented = bool(info["molecular_profile_enabled"])
         warm_profile = {
             name: {
                 "warm_total_ns": total - cold_profile.get(name, 0),
@@ -171,7 +172,11 @@ def main() -> None:
         }
         matching_work = iterations["array_api"] == iterations["native"]
         record = {
-            "schema": "generativeqc.array-api-rhf-endpoint/v1",
+            "schema": (
+                "generativeqc.array-api-rhf-endpoint/v1"
+                if arguments.method.lower() == "rhf"
+                else "generativeqc.array-api-molecular-endpoint/v1"
+            ),
             "endpoint": "host Bohr coordinates -> converged total energy + nuclear gradient",
             "molecule": arguments.molecule,
             "method": arguments.method,
@@ -194,10 +199,10 @@ def main() -> None:
             "array_api_over_native": ratio,
             "observed_5pct_timing_target_met": (
                 matching_work and ratio <= 1.05
-                if not arguments.profile_molecular
+                if not profile_instrumented
                 else None
             ),
-            "profile_instrumented": arguments.profile_molecular,
+            "profile_instrumented": profile_instrumented,
             "warm_phase_profile": warm_profile,
             "profile_note": (
                 "CPU wall-clock phase timers include Python/native dispatch and "
