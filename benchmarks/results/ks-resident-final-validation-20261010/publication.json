@@ -12,7 +12,7 @@
   "files": [
     {
       "path": "README.md",
-      "sha256": "5c055d455e222bcd928b0323e8bf7d4cb098200fec5374d7de7ffa60c1844a9c",
+      "sha256": "9c03091203484b5b0279d09ee1699f0335401542c86de791558ff69ae6ee8a85",
       "bytes": 7796,
       "role": "summary"
     },
@@ -35,10 +35,12 @@
       "role": "source-patch"
     },
     {
-      "path": "validation.json.gz",
-      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c",
-      "bytes": 381579,
-      "role": "evidence"
+      "path": "validation.json.xz",
+      "sha256": "573a3132d73d971a93424f9226eac59823bf87fcb9baa124d815e685d4619204",
+      "bytes": 192100,
+      "role": "evidence",
+      "decoded_bytes": 2387350,
+      "decoded_sha256": "5325c0255c5f95d70ab1d04fe5b0b448aeaaa6a1caff85c73d5bc93fd3d0b70f"
     }
   ],
   "archives": [],
