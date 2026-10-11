@@ -34,6 +34,7 @@ def test_cooperative_levels_publish_every_dependency() -> None:
     assert schedule.levels[-1] == len(schedule.instructions)
     assert len(schedule.roots) == 165
     assert len(schedule.variables) == 13
+    # Adjacent schedule levels define intervals, not equal-length vectors.
     for begin, end in zip(schedule.levels, schedule.levels[1:], strict=False):
         assert begin < end
         for instruction in schedule.instructions[begin:end]:

@@ -225,6 +225,7 @@ def _evaluate(
         result = np.zeros(node.spec.shape, dtype=node.spec.dtype)
         source = np.moveaxis(value, a["axis"], 0)
         target = np.moveaxis(result, a["axis"], 0)
+        # Consecutive offset boundaries define one fewer reduction segments.
         for segment, (start, stop) in enumerate(zip(a["offsets"], a["offsets"][1:], strict=False)):
             target[segment] = np.sum(source[start:stop], axis=0, dtype=node.spec.dtype)
         return result

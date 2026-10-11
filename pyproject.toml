@@ -164,16 +164,18 @@ extend-select = [
   "RUF103",
   "RUF104",
   "A005",
-  # Keep exception translation and mixed boolean precedence explicit.
+  # Keep exception translation, zip arity and boolean precedence explicit.
   "B904",
+  "B905",
   "RUF021",
   # Require explicit None, boolean, and type comparison semantics.
   "E711",
   "E712",
   "E721",
 ]
-# Comparison rewrites can alter overloaded numerical equality semantics.
-unfixable = ["E711", "E712", "E721"]
+# B905's autofix chooses strict=False, which can hide shape/index mismatches.
+# Comparison rewrites can also alter overloaded numerical equality semantics.
+unfixable = ["B905", "E711", "E712", "E721"]
 # Assertions are pervasive internal/test invariants; subprocess invocation is a core compiler/tooling boundary.
 # Keep the narrower shell-injection checks active while avoiding blanket S603/S607 noise.
 ignore = ["ANN401", "S101", "S603", "S607"]

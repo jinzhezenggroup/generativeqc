@@ -125,6 +125,8 @@ class Gfn2ElectronicTopology:
     @property
     def matrix_offsets(self) -> tuple[int, ...]:
         offsets = [0]
+        # Consecutive systems occupy intervals between adjacent boundaries:
+        # the shifted offset slice intentionally has one fewer entry.
         for begin, end in zip(
             self.system_orbital_offsets,
             self.system_orbital_offsets[1:],
