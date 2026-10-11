@@ -452,28 +452,12 @@
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
     },
     {
-      "bytes": 166345,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-blas.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "502d55783e90f97419d96ab93491873653a74594fa94201a262cc7bbeec474a2"
-    },
-    {
       "bytes": 166398,
       "classification": "required-compact-accepted-evidence",
       "family": "issue206-metric-gemv",
       "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
       "role": "endpoint-or-numerical-samples",
       "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
-    },
-    {
-      "bytes": 267196,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b4-forces-blas.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "4afc40f038cc07ff8fc22a7ef52d73ea948ffb84bc0329a9666b052d33609e37"
     },
     {
       "bytes": 143684,
