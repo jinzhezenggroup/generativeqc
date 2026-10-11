@@ -994,6 +994,31 @@
       ]
     },
     {
+      "id": "cc.lambda-cuda-resident-krylov",
+      "classification": "needs-qualification",
+      "controls": [
+        "cc-option:lambda.cuda_resident_krylov"
+      ],
+      "owner_issues": [
+        932
+      ],
+      "sources": [
+        "src/cc/lambda_response.hpp",
+        "src/cc/lambda_response_cuda.cu",
+        "src/cc/df_lambda_cuda.cu",
+        "src/response/resident_krylov.hpp"
+      ],
+      "rationale": "Default-off native conventional/DF Lambda resident-vector binding uses the shared nonsymmetric response solver, method-owned right preconditioning and physical unpreconditioned residual acceptance. Budget or optional allocation refusal retains the host schedule and diagonal policy; numerical and stream failures propagate. Existing source-frozen receipts do not promote this integrated mixed-warmup composition or establish a performance improvement.",
+      "revisit_condition": "Promote only after source-matched representative complete-endpoint numerical, performance, simultaneous memory and resource/lifetime qualification; retain independent physical audits and bounded host fallback.",
+      "evidence": [
+        "pr:#2291",
+        "docs/developer/response.md",
+        ".agents/notes/implemented/compatibility/2026-10-11-resident-lambda-mixed-composition.md",
+        "tests/python/test_lambda_resident_mixed_composition.py",
+        "tests/python/test_df_lambda_resident_cuda.py"
+      ]
+    },
+    {
       "id": "cc.lambda-df-mixed-precision-warmup",
       "classification": "guarded-promotion-candidate",
       "controls": [

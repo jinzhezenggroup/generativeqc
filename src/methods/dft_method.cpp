@@ -793,7 +793,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                         NativeKsExecutionPlan execution_plan, scf::ScfOptions options,
                         dft::GridSpec grid, generativeqc_backend backend, int device,
                         const std::optional<core::System>& auxiliary)
-      : capabilities_(capabilities),
+      : PreparedCalculation(backend, device),
+        capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
         options_(std::move(options)),
@@ -998,6 +999,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
   }
 
   void invalidate_result() override { invalidate_final_state(); }
+  void reset_execution_impl() override { clear_warm_start(); }
 
   void invalidate_final_state() noexcept {
     cpu_physical_.reset();
@@ -2055,8 +2057,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
   }
 
-  Result execute(bool compute_forces) override {
-    invalidate_final_state();
+  Result execute_impl(bool compute_forces) override {
     if (compute_forces && !supports_native_gga_force()) {
       const char* issue = execution_plan_.automatic_program ? "#1122"
                           : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
@@ -2410,7 +2411,8 @@ class KsPreparedBatch final : public PreparedBatch {
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
                   generativeqc_backend backend, int device, bool warm_enabled,
                   std::optional<core::System> auxiliary)
-      : capabilities_(capabilities),
+      : PreparedBatch(backend, device),
+        capabilities_(capabilities),
         systems_(std::move(systems)),
         execution_plan_(execution_plan),
         options_(std::move(options)),
@@ -2440,9 +2442,8 @@ class KsPreparedBatch final : public PreparedBatch {
       if (item.plan) item.plan->invalidate_final_state();
   }
 
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     // A native force request is admitted only when *every* prepared item has
     // the source-complete CPU Direct/DF GGA owner. Mixed or missing contexts must
     // not quietly receive an energy-only result with an unfilled force buffer.

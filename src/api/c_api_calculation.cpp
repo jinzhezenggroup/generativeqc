@@ -6,6 +6,7 @@
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
+#include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
@@ -123,8 +124,14 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  generativeqc::api::PreparedPublication publication(*calculation->plan);
   calculation->precision_work.reset();
   calculation->initial_guess.reset();
+  calculation->precision = {};
+  calculation->incremental_direct_jk = {};
+  calculation->precision_available = false;
+  calculation->scf_diagnostic.reset();
+  calculation->ks_diagnostic.reset();
   // An attempted execution revokes any internal final-state token even if
   // the output descriptor is rejected before the method can run.
   try {
@@ -144,13 +151,6 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  // Reset to the conservative FP64 record before the run so a failed or
-  // fallback execution can never expose the previous successful mixed run.
-  calculation->precision = {};
-  calculation->incremental_direct_jk = {};
-  calculation->precision_available = false;
-  calculation->scf_diagnostic.reset();
-  calculation->ks_diagnostic.reset();
   try {
     // NULL/zero is an execution request, not merely a copy-out choice: the
     // backend must not launch or assemble analytic-force work in this mode.
@@ -179,6 +179,7 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
       // This completed nonconverged run is a new failure and replaces it;
       // successful calls continue to preserve borrowed diagnostic strings.
       calculation->context->last_detail = "SCF did not converge";
+      publication.commit();
       return GENERATIVEQC_STATUS_NOT_CONVERGED;
     }
     if (!omit_forces) {
@@ -188,9 +189,9 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
       std::copy(native.forces.begin(), native.forces.end(), output->forces);
     }
     calculation->precision_work = std::move(native.precision_work);
+    publication.commit();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    calculation->plan->invalidate_result();
     return generativeqc::api::map_exception(&calculation->context->last_detail);
   }
 }

@@ -652,7 +652,7 @@ def _generic_cuda_integral_gradient(methods: str) -> str:
     # Bound the single-system owner before the later batch overload. Match its
     # braces so unrelated CPU force methods between here and execute stay out.
     begin = methods.index("generativeqc_status cuda_integral_gradient(")
-    end = methods.index("Result execute(bool compute_forces)", begin)
+    end = methods.index("Result execute_impl(bool compute_forces)", begin)
     return cpp_function_definition(methods[begin:end], "cuda_integral_gradient")
 
 
