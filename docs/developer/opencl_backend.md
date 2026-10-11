@@ -8,49 +8,20 @@ the adapter loads the installed OpenCL ICD with `ctypes` only when constructed.
 
 ## Target audit and evidence
 
-The available non-CUDA API on this machine is NVIDIA OpenCL on the RTX 5090.
-This is a second compiler/runtime API on the same NVIDIA hardware, so it does
-not establish portability to another vendor. Domestic-GPU validation is
-**not-run**; no domestic GPU or toolchain was available for this issue.
+The archived OpenCL proof used **NVIDIA OpenCL on an RTX 5090**: this is
+another API on NVIDIA hardware, not evidence of cross-vendor portability.
+Non-NVIDIA and domestic GPU validation is **not-run**. Device limits and
+optional FP64, subgroup, compiler and library capabilities must be queried
+per device; historical values are not universal defaults.
 
-The [execution archive](../../benchmarks/results/opencl-rtx5090/report.json) records
-the exact queried device and compiler identity, generated sources, compile/link
-logs, seven event timings per kernel, resources and executable-cache roundtrips.
-It also records Python/NumPy/PySCF versions, source-file hashes, the base commit
-and dirty-worktree status. The integral source identity stays separate from its
-scientific equation identity and workgroup schedule identity.
-
-| Property | Audited boundary on this target |
-| --- | --- |
-| Device | NVIDIA GeForce RTX 5090, UUID `8e9c9e1ae183258c0b3a03a5ddebb2f8` |
-| Driver / runtime | `580.95.05` / `OpenCL 3.0 CUDA` |
-| Compiler / language | ICD online compiler supplied by this driver; queried `OpenCL C 1.2 `, compile and link available |
-| FP32 / FP64 | FP32 is required by OpenCL 1.2; FP64 extension and nonzero double capability queried; this lowering uses FP64 |
-| Subgroups | NVIDIA attribute query reports width 32; scalar kernels require no subgroup intrinsics |
-| Workgroup limits | Device maximum 1024 threads; compiled smoke kernels report maximum 256 and preferred multiple 32 |
-| Local memory | Device reports 49,152 bytes; dynamic arguments and compiled total are bounded before launch |
-| Atomics | Integer extensions are enumerated in the report; FP64 atomic add is unsupported by this adapter |
-| Math | OpenCL C builtins supply scalar math; the smoke exercises arithmetic and square root; full integral/Boys math coverage is pending |
-| Streams / events | Native in-order queues, explicit cross-queue dependencies and producer flushes, event waits and profiling |
-| Graphs / device enqueue | Unsupported; ordinary host submission is the correctness path |
-| GEMM / eigensolve / Cholesky | No native provider configured; explicit unsupported result before submission |
-| Profiling resources | Native event timestamps and queried workgroup/local/private memory; registers and spills are unknown |
-
-The compiler has no separately queried version string; its identity is the
-online compiler packaged with the exact driver above. Resource queries reported
-one local byte and zero private bytes for the smoke kernels. These are retained
-as vendor-reported values, not interpreted as register or spill counts.
-There is no portable OpenCL 1.2 register/spill query and no external profiler
-evidence in this gate.
-
-Vendor documentation was checked on 2026-09-09. NVIDIA's
-[OpenCL page](https://developer.nvidia.com/opencl) states OpenCL 3.0 conformance
-for R465 and later drivers on Linux/Windows x86. The adapter's ABI and queue
-semantics were checked against Khronos OpenCL-Headers and OpenCL-Docs;
-[document provenance](../../benchmarks/results/opencl-rtx5090/vendor-docs.json)
-retains exact blob identifiers, URLs, file hashes and retrieval date. OpenCL 3.0
-does not imply all optional 2.x features, so queried capabilities take precedence
-over a version-number assumption.
+The source-matched [execution report](../../benchmarks/results/opencl-rtx5090/report.json)
+preserves the exact driver/device/UUID, OpenCL C compiler, generated kernels,
+compile/link logs, queried limits, profiling samples and cache roundtrips.
+The [validation summary](../../benchmarks/results/opencl-rtx5090/validation-summary.json)
+retains reference errors and test results. The
+[vendor-source provenance](../../benchmarks/results/opencl-rtx5090/vendor-docs.json)
+contains the audited documentation identities and dates. These archives are
+historical qualification evidence, not current HF/DFT endpoint acceptance.
 
 ## Scientific and execution contracts
 
@@ -95,54 +66,31 @@ download/activate executable artifacts from a remote profile.
 
 ## Reproduction and numerical boundary
 
-CPU contract tests and an ordinary CPU build need no OpenCL installation:
+CPU lowering and contract checks do not need OpenCL:
 
 ```bash
 PYTHONPATH=python:. python -m pytest \
   tests/python/test_runtime_backend.py tests/python/test_opencl_lowering.py -q
-cmake -S . -B build-cpu -DGENERATIVEQC_ENABLE_CUDA=OFF \
-  -DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cpu --parallel 4
-ctest --test-dir build-cpu --output-on-failure
 ```
 
-All actual GPU execution, including the OpenCL ICD, uses a finite Slurm job:
+With an explicitly allocated OpenCL GPU and verified device identity, run:
 
 ```bash
-srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
-  --time=00:05:00 bash -lc 'set -e
-  export PYTHONPATH=python:.
-  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 GENERATIVEQC_OPENCL_TEST=1
+PYTHONPATH=python:. GENERATIVEQC_OPENCL_TEST=1 \
   python -m pytest tests/python/test_opencl_runtime_gpu.py -q
-  python tools/validate_opencl_backend.py --directory /tmp/opencl-gate'
+PYTHONPATH=python:. python tools/validate_opencl_backend.py \
+  --directory /tmp/opencl-gate
 ```
 
-The Slurm visibility environment is preserved. OpenCL ICDs may ignore CUDA
-visibility, so this machine's manual runner requires a single-GPU OpenCL
-inventory. Multi-GPU validation first needs an explicit scheduler-assigned
-device-to-OpenCL UUID mapping; a device ordinal alone is insufficient.
-
-The smoke first checks `2*x+y`, then lowers the existing normalized DF
-`(p_x|p_x)` Coulomb-metric expression with its radial prefactor. It compares
-three contracted references from independent PySCF/libcint: asymmetric centers,
-coincident centers, and long signed contractions, totaling 67 primitive rows.
-Workgroups 16/32/64 exercise partial final groups. The largest absolute error
-is `3.50e-13`, within `atol=1e-11, rtol=3e-12`. Every compiled binary is exported,
-installed in the private cache, reloaded and checked for identical outputs.
-
-Boys moments are host-generated fixture inputs and primitive outputs are summed
-on the host for this reference comparison. This is an expression/compiler/runtime
-proof, not a complete on-device integral provider. Separate GPU runtime tests
-verify native reductions at sizes 1, 17 and 8197, error cleanup, ownership,
-cross-queue events and unsupported operations. Timings are smoke-kernel samples;
-no HF endpoint performance or cross-vendor speedup is claimed.
-
-The archived validation passed 353 CPU Python tests (48 optional tiers skipped),
-13 native CPU tests and 9 OpenCL GPU tests with zero GPU skips. One Python
-source-identity test initially ran before the CPU library was available; its
-retry passed with the explicit completed-library path. Both logs are retained.
-The relocated CUDA scalar emitter has identical arithmetic implementation after
-renaming, and the existing CUDA generator/profile regression tests passed.
+An OpenCL ICD may not respect CUDA device visibility. Multi-GPU runs require
+a scheduler-assigned UUID-to-OpenCL mapping, not a guessed ordinal. The
+source-matched archive gives the exact earlier Slurm procedure, compiler
+versions, cases, numerical tolerances, errors, resource measurements and
+separately reported failures/skips. Its reference smoke uses host-generated
+Boys inputs and host contraction of primitive results: the tested scalar
+expression and reduction kernels are **not** a native integral provider or a
+complete HF/DFT energy/force endpoint. Dated timings are not current default
+performance claims.
 
 ## Next native HF integration
 
