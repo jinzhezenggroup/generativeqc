@@ -306,7 +306,9 @@ enter the liveness arena. `SolverOptions::df_auxiliary_batch_limit` caps the
 tile (default eight); admission halves larger candidates until the complete
 owner budget and provider dimension limits fit. A limit of one retains the
 matrix one-Q schedule. Allocation rejection retries one-Q before the existing
-scalar fallback. Independent expanded replay remains one-Q.
+scalar fallback. Independent expanded replay remains fresh; its optional
+[physical batching](rccsd_gpu.md#bounded-batches-for-independent-physical-replay)
+uses only admitted scratch and preserves every original Q addition.
 
 The complete `run_df_ccsdt_native` endpoint uses `ccsd_batch_limit=0` to request
 its endpoint-specific default: a cap of 32 for energy and analytic-force calls.
