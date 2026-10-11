@@ -13,12 +13,16 @@ import json
 import os
 import statistics
 import time
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 from generativeqc import Calculator
 from generativeqc.experimental import array_api as xp
+
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
 
 
 def _scheduler_guard(backend: str) -> None:
@@ -56,7 +60,7 @@ def main() -> None:
     parser.add_argument("--basis", default="sto-3g")
     parser.add_argument("--cuda-arch", default="sm_120")
     parser.add_argument("--repeats", type=int, default=10)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     arguments = parser.parse_args()
     if not 3 <= arguments.repeats <= 100:
         parser.error("--repeats must lie in [3, 100]")
@@ -175,7 +179,7 @@ def main() -> None:
         }
         rendered = json.dumps(record, indent=2, allow_nan=False) + "\n"
         if arguments.output is not None:
-            arguments.output.write_text(rendered)
+            raw_output_path(arguments.output).write_text(rendered, encoding="utf-8")
         print(rendered, end="")
     finally:
         compiled.close()
