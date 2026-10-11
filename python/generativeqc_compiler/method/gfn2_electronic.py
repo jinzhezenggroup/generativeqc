@@ -128,6 +128,7 @@ class Gfn2ElectronicTopology:
         for begin, end in zip(
             self.system_orbital_offsets,
             self.system_orbital_offsets[1:],
+            strict=False,
         ):
             orbitals = end - begin
             offsets.append(offsets[-1] + orbitals * orbitals)
