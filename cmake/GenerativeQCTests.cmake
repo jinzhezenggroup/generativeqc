@@ -137,6 +137,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_fock_provider_tests tests/native/test_fock_provider.cpp)
   generativeqc_native_test(generativeqc_fock_api_tests tests/native/test_fock_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_native_tests tests/native/test_rhf.cpp)
+  generativeqc_native_test(generativeqc_mean_field_options_tests
+                       tests/native/test_mean_field_options.cpp)
 
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_final_state_tests tests/native/test_final_state.cpp)
@@ -461,6 +463,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_dft_integral_sources_tests
                        tests/native/test_dft_integral_sources.cpp)
+  generativeqc_native_test(generativeqc_ks_host_resource_tests
+                       tests/native/test_ks_host_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)

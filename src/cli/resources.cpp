@@ -10,7 +10,8 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
-#include "dft/incremental_direct_jk_control.hpp"
+#include "scf/incremental_direct_jk_control.hpp"
+#include "scf/ks_host_resources.hpp"
 
 extern "C" int generativeqc_resource_small_hf_cuda_v2(std::size_t, std::size_t, std::size_t,
                                                       std::size_t, const std::uint8_t*,
@@ -173,58 +174,50 @@ Json hf_inventory(const Topology& orbital, const Topology* auxiliary, Bytes atom
 Json ks_inventory(const Topology& shape, Bytes atoms, Bytes spins, const RunOptions& options,
                   Bytes ecp_terms, Bytes ecp_workspace) {
   const bool cuda = options.backend == GENERATIVEQC_BACKEND_CUDA;
+  if (!cuda) {
+    const auto inventory = scf::cpu_ks_host_resources(
+        {atoms, shape.nbf, shape.cartesian_nbf, shape.shells, shape.primitives, spins,
+         shape.angular, ecp_terms,
+         product({atoms, options.grid.radial_points, options.grid.angular_polar,
+                  options.grid.angular_azimuth}),
+         options.grid.radial_points, options.grid.angular_polar, 256, options.diis_history,
+         options.max_iterations.value_or(100), options.method_name.starts_with("pbe"), false,
+         ecp_workspace});
+    Json result = Json::object();
+    for (std::size_t index = 0; index < inventory.size(); ++index)
+      result[scf::cpu_ks_host_resource_keys[index]] = inventory[index];
+    return result;
+  }
   const Bytes orbital_aos = shape.nbf, cartesian_aos = shape.cartesian_nbf;
   const Bytes n2 = product({orbital_aos, orbital_aos}),
               c2 = product({cartesian_aos, cartesian_aos});
   const Bytes points = product({atoms, options.grid.radial_points, options.grid.angular_polar,
                                 options.grid.angular_azimuth});
-  const bool gradients = options.method_name.starts_with("pbe");
   const Bytes packed = sum({3 * atoms, 2 * shape.primitives, 16 * orbital_aos});
   const Bytes metadata = sum({8192,
                               product({512, sum({atoms, shape.shells, shape.primitives, orbital_aos,
                                                  cartesian_aos, ecp_terms})}),
-                              cuda ? 16384u : 0u});
+                              16384u});
   const Bytes grid = product({36, points});
   const Bytes basis = product({8, packed});
   const Bytes warm = sum({product({8, n2, 4 + 4 * spins}), product({96, atoms})});
   const Bytes history = product({256, options.max_iterations.value_or(100)});
-  const Bytes provider = product({8, sum({2 * n2, cuda ? 0 : product({n2, n2})})});
-  const Bytes solver = cuda && orbital_aos > 16 ? sum({1024 * 1024, product({128, n2})}) : 0;
-  const Bytes retained =
-      sum({metadata, grid, basis, warm, history, provider, solver, cuda ? 16384u : 0u});
+  const Bytes provider = product({8, 2 * n2});
+  const Bytes solver = orbital_aos > 16 ? sum({1024 * 1024, product({128, n2})}) : 0;
+  const Bytes retained = sum({metadata, grid, basis, warm, history, provider, solver, 16384u});
   const Bytes matrix = sum({product({8, spins, n2, 128 + 2 * (options.diis_history + 1)}),
                             product({16, options.diis_history + 1, options.diis_history + 1})});
-  const Bytes tile =
-      cuda ? 0
-           : sum({product({8, std::min<Bytes>(points, 256), orbital_aos, gradients ? 4u : 1u}),
-                  product({8, spins, n2})});
-  // CPU restricted GGA retains the eligible AO grid cache for one serialized solve.
-  const Bytes cache_size = product({32, points, orbital_aos});
-  const Bytes cache =
-      !cuda && gradients && spins == 1 && cache_size <= 64 * 1024 * 1024 ? cache_size : 0;
-  const Bytes angular = shape.angular;
-  const Bytes order = 4 * angular + 1;
-  const Bytes recurrence =
-      product({64, sum({product({order, order, order, order}),
-                        product({6, angular + 3, angular + 3, 2 * angular + 4}), 256, atoms})});
-  const Bytes integrals =
-      cuda ? 0
-           : sum({product({64, sum({2 * c2, product({c2, c2})})}),
-                  std::max(recurrence, product({32, sum({product({c2, c2}), product({n2, n2}),
-                                                         cartesian_aos * orbital_aos, n2})}))});
   const Bytes quadrature =
       sum({product({16, sum({options.grid.radial_points, options.grid.angular_polar})}), 8 * atoms,
-           cuda ? product({8, sum({4 * atoms, 2 * (512 + 256)})}) : 0});
+           product({8, sum({4 * atoms, 2 * (512 + 256)})})});
   const Bytes pairs = shape.shells * (shape.shells + 1) / 2;
   const Bytes setup =
-      cuda ? sum({product({2048, sum({1, atoms, shape.shells, shape.primitives, orbital_aos,
-                                      cartesian_aos, pairs, product({pairs, pairs})})}),
-                  product({64, sum({c2, n2, product({orbital_aos, cartesian_aos})})}), quadrature,
-                  basis})
-           : sum({integrals, quadrature, basis});
+      sum({product({2048, sum({1, atoms, shape.shells, shape.primitives, orbital_aos, cartesian_aos,
+                               pairs, product({pairs, pairs})})}),
+           product({64, sum({c2, n2, product({orbital_aos, cartesian_aos})})}), quadrature, basis});
   return {{"retained", retained},
           {"setup_workspace", sum({setup, ecp_workspace})},
-          {"scf_workspace", sum({matrix, tile, cache})}};
+          {"scf_workspace", matrix}};
 }
 
 struct DfTiles {
@@ -453,10 +446,10 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   }
   if (ks) {
     const auto incremental_requested = [](const char* name) {
-      const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
-      if (control == dft::IncrementalDirectJkControl::Invalid)
+      const auto control = scf::classify_incremental_direct_jk_control(std::getenv(name));
+      if (control == scf::IncrementalDirectJkControl::Invalid)
         throw UsageError(std::string(name) + " must be 0/off or 1/on");
-      return control == dft::IncrementalDirectJkControl::Enabled;
+      return control == scf::IncrementalDirectJkControl::Enabled;
     };
     // Validate both eagerly, even when the first selector enables the mode.
     const bool generic = incremental_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");

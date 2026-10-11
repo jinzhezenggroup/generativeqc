@@ -402,6 +402,12 @@ int main(int argc, char** argv) {
       work_field("triples_scalar_fusion_arithmetic_ops",
                  result.triples_scalar_fusion.arithmetic_ops);
       work_field("fock_response_work", result.triples_fock.contraction_summands);
+      work_field("fock_response_w_gemms", result.triples_fock.w_gemms);
+      work_field("fock_response_w_copy_calls", result.triples_fock.w_copy_calls);
+      work_field("fock_response_w_copy_bytes", result.triples_fock.w_copy_bytes);
+      work_field("fock_response_panel_gemms", result.triples_fock.panel_gemms);
+      work_field("fock_response_page_builds", result.triples_fock.page_builds);
+      work_field("fock_response_vector_cubes", result.triples_fock.vector_cubes);
       work_field("lambda_work", result.lambda.df_contraction_terms);
       field("lambda_matrix_gemm", result.lambda.df_matrix_gemm);
       field("lambda_batch_size", result.lambda.df_auxiliary_batch_size);

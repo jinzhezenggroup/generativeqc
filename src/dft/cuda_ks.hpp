@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -236,6 +237,11 @@ class CudaKsPlan {
   bool finish_iteration();
   /** Terminal result; density export is optional and never used in an iteration. */
   scf::ScfResult result(bool export_density = true);
+  /** Count every physical build in a normally terminated, fully inventoried
+   * ordinary attempt, including nonconvergence and warm-energy rebasing.
+   * Failed/in-flight/chunk owners return no count. This does not certify a
+   * converged final state or the returned-state precision audit. */
+  std::optional<std::uint64_t> completed_fock_builds() const noexcept;
   /** Energy-only adapters leave the final density resident by disabling export. */
   scf::ScfResult run(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
                      bool export_density = true,

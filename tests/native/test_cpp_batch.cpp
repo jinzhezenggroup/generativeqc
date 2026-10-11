@@ -278,6 +278,55 @@ int main() {
     for (std::size_t axis = 0; axis < 3; ++axis)
       require(std::abs((*pbe0_forces.forces)[axis] + (*pbe0_forces.forces)[3 + axis]) < 2e-5,
               "C++ CPU DF-PBE0 force violates translation invariance");
+
+    // Empty beta occupation must still publish the complete native two-spin
+    // determinant. Each displaced energy uses a fresh SDK preparation/solve.
+    auto uks_system_descriptor = h2_descriptor;
+    uks_system_descriptor.charge = 1;
+    uks_system_descriptor.multiplicity = 2;
+    generativeqc::System h2_cation(context, uks_system_descriptor);
+    auto uks_descriptor = pbe0_descriptor;
+    uks_descriptor.method = GENERATIVEQC_METHOD_PBE_UKS;
+    const auto prepare_uks = [&](const generativeqc::System& system, bool hybrid) {
+      generativeqc::KsComposition composition(GENERATIVEQC_METHOD_PBE_UKS,
+                                              "semilocal-scaled-v1/pbe-spin-c2-1e-18", 2);
+      composition.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
+          .add_semilocal("GGA_C_PBE", 1.0)
+          .add_semilocal("GGA_X_PBE", hybrid ? 0.75 : 1.0);
+      if (hybrid) composition.add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
+      return composition.prepare(context, system, uks_descriptor);
+    };
+    for (const auto fitting :
+         {GENERATIVEQC_DENSITY_FITTING_NONE, GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE}) {
+      uks_descriptor.density_fitting_mode = fitting;
+      for (const bool hybrid : {false, true}) {
+        auto owner = prepare_uks(h2_cation, hybrid);
+        const bool eligible = owner.supported_properties() & GENERATIVEQC_PROPERTY_FORCES;
+        require(eligible || fitting == GENERATIVEQC_DENSITY_FITTING_NONE,
+                "C++ fitted UKS context did not advertise native forces");
+        if (!eligible) continue;
+        const auto result =
+            owner.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+        require(result.forces && result.forces->size() == 6 && std::isfinite(result.energy),
+                "C++ UKS failed native E+F publication");
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          require(std::isfinite((*result.forces)[axis]) &&
+                      std::abs((*result.forces)[axis] + (*result.forces)[3 + axis]) < 2e-5,
+                  "C++ UKS native force violates translation invariance");
+        constexpr double step = 2e-4;
+        std::array<double, 2> energies{};
+        for (std::size_t displacement = 0; displacement < energies.size(); ++displacement) {
+          auto atoms = h_atoms;
+          atoms[1].z += displacement == 0 ? step : -step;
+          auto descriptor = uks_system_descriptor;
+          descriptor.atoms = atoms.data();
+          generativeqc::System moved(context, descriptor);
+          energies[displacement] = prepare_uks(moved, hybrid).execute().energy;
+        }
+        require(std::abs((*result.forces)[5] + (energies[0] - energies[1]) / (2 * step)) < 2e-6,
+                "C++ UKS native force disagrees with reconverged energy differences");
+      }
+    }
     std::cout << "C++ ragged batch and explicit KS API: PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

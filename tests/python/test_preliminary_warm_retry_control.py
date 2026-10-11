@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,6 +25,16 @@ def between(text: str, begin: str, end: str) -> str:
     """Fail closed when a production seam moves instead of testing stale code."""
     start = text.index(begin)
     return text[start : text.index(end, start)]
+
+
+def dft_initial_guess_policy(source: str) -> str:
+    """Extract the accessor itself, independent of the next force capability."""
+    # Start at the return type to omit the optional [[nodiscard]] attribute,
+    # which the deliberately limited C++ contract parser does not consume.
+    begin = source.index(
+        "const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy("
+    )
+    return cpp_function_definition(source[begin:], "initial_guess_policy")
 
 
 def control_sources() -> tuple[str, str, str, str]:
@@ -47,12 +58,39 @@ def control_sources() -> tuple[str, str, str, str]:
         "    const auto* seed =\n        initial_density ? initial_density",
         "    scf::ScfResult native;",
     )
-    dft_policy = between(
-        dft,
-        "  [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()",
-        "\n\n  [[nodiscard]] bool supports_native_pbe_force()",
-    )
+    dft_policy = dft_initial_guess_policy(dft)
     return hf_retry, dft_retry, dft_options, dft_policy
+
+
+@pytest.mark.parametrize(
+    "neighbor",
+    ["supports_native_pbe_force", "supports_native_gga_force", "other_capability"],
+)
+def test_dft_policy_extraction_ignores_neighbor(neighbor: str) -> None:
+    """Neighbor names and braces in comments/literals cannot move the seam."""
+    policy = dft_initial_guess_policy((ROOT / "src/methods/dft_method.cpp").read_text())
+    changed = policy.replace(
+        "return options_.preliminary_guess;",
+        "// brace } must not end the accessor\n"
+        '    [[maybe_unused]] const char* marker = "}";\n'
+        "    return options_.preliminary_guess;",
+    )
+    source = changed + f"\n bool {neighbor}() {{ return false; }}\n"
+    assert dft_initial_guess_policy(source).strip() == changed.strip()
+    mutated = changed.replace(
+        "return options_.preliminary_guess;", "return other_policy;"
+    )
+    assert "return other_policy;" in dft_initial_guess_policy(mutated)
+
+
+def test_dft_policy_extraction_rejects_missing_or_ambiguous_accessor() -> None:
+    policy = dft_initial_guess_policy((ROOT / "src/methods/dft_method.cpp").read_text())
+    with pytest.raises(ValueError):
+        dft_initial_guess_policy(
+            policy.replace("initial_guess_policy", "missing_policy")
+        )
+    with pytest.raises(ValueError):
+        dft_initial_guess_policy(policy + "\n" + policy)
 
 
 def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:

@@ -144,6 +144,42 @@ def test_array_api_rhf_rejects_retained_output_before_work(
     assert not (tmp_path / ".artifacts").exists()
 
 
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_native_cpu_ks_rejects_retained_output_before_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination_kind: str
+) -> None:
+    from benchmarks import _retention, native_cpu_ks_force_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("invalid output reached benchmark work")
+
+    monkeypatch.delenv("GENERATIVEQC_LIBRARY", raising=False)
+    monkeypatch.setattr(native_cpu_ks_force_endpoint, "endpoint", forbidden)
+    monkeypatch.setattr(native_cpu_ks_force_endpoint._native, "load_library", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["native_cpu_ks_force_endpoint", "--output", str(destination / existing.name)],
+    )
+    with pytest.raises(SystemExit) as error:
+        native_cpu_ks_force_endpoint.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
 def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None:
     seen = []
     for path, node, options in active_runner_output_arguments():

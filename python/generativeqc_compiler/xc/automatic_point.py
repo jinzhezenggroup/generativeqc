@@ -15,6 +15,7 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .bulk_runtime import build_bulk_runtime_program
+from .equal_spin import equal_spin_roots
 from .libxc_work import automatic_work_policy, polarized_work_setup
 
 AUTOMATIC_POINT_LAYOUTS = {
@@ -67,7 +68,10 @@ class AutomaticPointSource:
 
 
 def emit_automatic_point(
-    name: str, *, backend: Literal["cpu", "cuda"] = "cpu"
+    name: str,
+    *,
+    backend: Literal["cpu", "cuda"] = "cpu",
+    equal_spin: bool = False,
 ) -> AutomaticPointSource:
     """Lower one ordinary semilocal Graph into the native physical-spin ABI.
 
@@ -76,10 +80,15 @@ def emit_automatic_point(
     original-density weighting, Cartesian gradients apply the sigma chain rule,
     and kinetic coefficients include the native half-vtau convention. CUDA
     reports invalid physical inputs/outputs with ``DevicePointValue.valid``;
-    CPU retains domain exceptions. This source grants no runtime admission.
+    CPU retains domain exceptions. The optional CUDA slice binds paired work
+    inputs after differentiation, retaining every polarized partial. Only a
+    producer proving equal physical spins may call that slice. This source
+    grants no runtime admission, and leaves CPU and incumbent emission intact.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
+    if equal_spin and backend != "cuda":
+        raise ValueError("automatic equal-spin point lowering requires CUDA")
     program = build_bulk_runtime_program(
         name,
         spin="polarized",
@@ -103,8 +112,11 @@ def emit_automatic_point(
     work_lines, work_arguments = polarized_work_setup(policy, features)
     variables = dict(zip(features, work_arguments, strict=True))
     emitter = ScalarCEmitter(program.graph, variables)
-    emitter.emit(program.roots)
-    refs = [emitter.reference(root) for root in program.roots]
+    roots = (
+        equal_spin_roots(program.graph, program.roots) if equal_spin else program.roots
+    )
+    emitter.emit(roots)
+    refs = [emitter.reference(root) for root in roots]
     expression_identity = canonical_hash(
         {
             "schema": "generativeqc.automatic-libxc-work-point.v1",
@@ -115,6 +127,8 @@ def emit_automatic_point(
     )
     stem = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     function_name = f"automatic_{stem}_point"
+    if equal_spin:
+        function_name += "_equal_spin"
     value_type = "SemilocalPointValue" if backend == "cpu" else "DevicePointValue"
     qualifier = "" if backend == "cpu" else "__device__ inline "
     finite = "std::isfinite" if backend == "cpu" else "isfinite"

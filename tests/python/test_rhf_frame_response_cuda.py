@@ -425,11 +425,14 @@ def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
     unrestricted: bool,
     cache_budget: int,
     allocation_refused: bool = False,
+    bucket_mask: int | None = None,
+    displacement: float = 0.0,
 ) -> None:
     """Cached sources retain the exact signed Hamiltonian and a real capacity fallback."""
     assert os.environ.get("SLURM_JOB_ID")
     metadata, _ = load_fixture("water")
     metadata["inputs"]["basis_representation"] = representation
+    metadata["inputs"]["coordinates"][0][0] += displacement
     if through_f:
         metadata["inputs"]["shells"].append(
             {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
@@ -486,14 +489,18 @@ def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
         )
     assert status == 0, error.value.decode()
     assert counts[0] > 0
-    if cache_budget >= counts[0] and not allocation_refused:
-        assert counts[1] == counts[0] == 8 * counts[2]
+    if counts[1] and not allocation_refused:
+        assert counts[1] == 8 * counts[2] <= counts[0]
+        if bucket_mask is None or bucket_mask == (1 << 28) - 1:
+            assert counts[1] == counts[0]
+        else:
+            assert counts[1] < counts[0]
         assert counts[6] == 0 and counts[7] == 1
-        assert counts[4] == len(densities) * counts[2]
-        assert counts[5] == 0
+        assert counts[4] == len(densities) * (counts[0] // 8)
+        assert counts[5] == len(densities) * (counts[0] // 8 - counts[2])
     else:
         assert counts[1] == counts[2] == 0
-        assert counts[6] == 7
+        assert counts[6] == (0 if bucket_mask == 0 else 7)
     expected = []
     for density in densities:
         channels = [np.einsum("ijkl,kl->ij", eri, density.sum(axis=0))]
@@ -521,13 +528,46 @@ def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
 
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
 @pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("bucket_mask", [0, 1, 1 << 27, 1 | (1 << 9) | (1 << 27)])
+@pytest.mark.parametrize("displacement", [0.0, 0.05])
+def test_partial_resident_signed_oracle_and_work_partition(
+    monkeypatch: pytest.MonkeyPatch,
+    representation: str,
+    unrestricted: bool,
+    bucket_mask: int,
+    displacement: float,
+) -> None:
+    """Every canonical source is cached or evaluated once, including moved f shells."""
+    monkeypatch.setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK", str(bucket_mask))
+    test_resident_exact_jk_signed_oracle_and_bounded_fallback(
+        True,
+        representation,
+        unrestricted,
+        1 << 20,
+        bucket_mask=bucket_mask,
+        displacement=displacement,
+    )
+
+
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("bucket_mask", [(1 << 28) - 1, 1 | (1 << 27)])
 def test_resident_allocation_refusal_keeps_exact_signed_actions(
-    monkeypatch: pytest.MonkeyPatch, representation: str, unrestricted: bool
+    monkeypatch: pytest.MonkeyPatch,
+    representation: str,
+    unrestricted: bool,
+    bucket_mask: int,
 ) -> None:
     """A rejected device lease must not poison later ordinary Direct actions."""
     monkeypatch.setenv("GENERATIVEQC_TEST_RHF_RESIDENT_ALLOCATION_REFUSAL", "1")
+    monkeypatch.setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK", str(bucket_mask))
     test_resident_exact_jk_signed_oracle_and_bounded_fallback(
-        True, representation, unrestricted, 1 << 20, allocation_refused=True
+        True,
+        representation,
+        unrestricted,
+        1 << 20,
+        allocation_refused=True,
+        bucket_mask=bucket_mask,
     )
 
 

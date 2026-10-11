@@ -89,7 +89,8 @@ support depend on their qualified native provider and execution context.
 
 The public native `Calculation::supported_properties()` reports
 **context-qualified** DFT analytic forces for a narrow, all-electron,
-strict-FP64 **CPU Direct or density-fitted PBE/PBE0/B3LYP RKS** execution domain. The
+strict-FP64 **CPU Direct or density-fitted PBE/PBE0 RKS/UKS and B3LYP RKS**
+execution domain. B3LYP UKS remains unqualified. The
 method-global registry remains energy-only: exact source coefficients,
 spin, backend, fitting provider, basis/ECP and correction terms determine
 admission for the prepared calculation. Request
@@ -100,7 +101,7 @@ The same native, token-verified stationary-force consumer is used by
 `generativeqc_batch_execute` when **every member** of the prepared batch
 qualifies and a force output buffer is supplied. Mixed/unsupported native
 DFT force contexts fail before execution; a malformed or nonconverged item
-does not publish partial forces for that item. CUDA, UKS,
+does not publish partial forces for that item. CUDA,
 range-separated, ECP, nonlocal and correction-bearing contexts remain
 unqualified for native DFT forces, even when Python has a separately
 supported DFT-force path.
@@ -119,6 +120,16 @@ million grid points and one hundred million Becke pair visits. Oversized
 contexts do not advertise native forces. Source/weight storage has a separate
 finite capacity gate; its observed numeric capacities exclude recurrence
 scratch, allocator overhead and opaque libraries, not a complete RSS bound.
+
+UKS uses separate occupation-weighted alpha/beta density and energy-weighted
+density blocks, including explicit zero beta matrices when that population is
+empty. The existing spin XC evaluator, grid/Becke response, final-state token
+and force assembler are shared with RKS. Compiler-generated Direct J/K weights
+combine both spins before the shared primitive traversal; neither spin triggers
+an additional recurrence pass. Density-fitted KS retains the existing orbital
+AO-jet boundary through f and auxiliary integral boundary through g, in Cartesian
+or real-spherical representation. Integral through-g support does not admit
+orbital g grids.
 
 For Python `PreparedBatch.execute(properties=("energy", "forces"))`,
 the frontend now first queries each member's private native prepared-property

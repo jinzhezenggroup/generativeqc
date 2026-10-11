@@ -853,12 +853,23 @@ def test_complete_open_shell_uks_analytic_and_reconverged_fd(
 
 
 def independent_global_hybrid_gradient(
-    basis: typing.Any, state: typing.Any, method: typing.Any, xc: typing.Any = "PBE0"
+    basis: typing.Any,
+    state: typing.Any,
+    method: typing.Any,
+    xc: typing.Any = "PBE0",
+    *,
+    density_fitting: bool = False,
+    auxiliary_shells: typing.Any = None,
+    return_mean_field: bool = False,
 ) -> typing.Any:
     """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
 
     Preserve spherical versus Cartesian shells; their variational spaces differ
     from d onward, even when the atom-centered quadrature is identical.
+    DF fixtures default to identical primary and auxiliary shells, but may
+    supply a distinct expanded auxiliary basis. Optional mean-field state
+    supports independent final D/W comparisons after accounting for AO
+    normalization and ordering.
     """
     from pyscf import dft, gto, lib
     from pyscf.data.elements import ELEMENTS
@@ -886,6 +897,16 @@ def independent_global_hybrid_gradient(
         verbose=0,
     )
     mf = dft.UKS(mol) if uks else dft.RKS(mol)
+    if density_fitting:
+        auxiliary = {label: [] for label in labels}
+        for shell in basis.shells if auxiliary_shells is None else auxiliary_shells:
+            auxiliary[labels[shell.atom_index]].append(
+                [
+                    shell.angular_momentum,
+                    *[(p.exponent, p.coefficient) for p in shell.primitives],
+                ]
+            )
+        mf = mf.density_fit(auxbasis=auxiliary)
     mf.xc = xc
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
@@ -905,7 +926,8 @@ def independent_global_hybrid_gradient(
     assert mf.converged
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True
-    return energy, gradient.kernel()
+    derivative = gradient.kernel()
+    return (energy, derivative, mf) if return_mean_field else (energy, derivative)
 
 
 @pytest.mark.parametrize(

@@ -16,6 +16,7 @@ from tools.cuda_schedule_trials import (
     NATIVE_PATH,
     POINT_ANCHOR,
     POINT_PATH,
+    POINT_POLICY_ANCHOR,
     RESOURCE_PATH,
     CudaScheduleTrial,
     candidates,
@@ -210,6 +211,174 @@ def test_ambiguous_point_expression_rejected(sources: dict[str, str]) -> None:
     sources[POINT_PATH] += "# " + POINT_ANCHOR + "\n"
     with pytest.raises(ValueError):
         render_trial(sources, CudaScheduleTrial(pbe_point_threads=64))
+
+
+@pytest.mark.parametrize("width", [32, 64, 128])
+def test_ingredient_point_trial_preserves_other_schedules(
+    sources: dict[str, str], width: int
+) -> None:
+    source = sources[POINT_PATH].replace(
+        "constexpr I threads =\n    " + POINT_ANCHOR, POINT_POLICY_ANCHOR
+    )
+    sources[POINT_PATH] = source
+    changed = render_trial(sources, CudaScheduleTrial(pbe_point_threads=width))[
+        POINT_PATH
+    ]
+    replacement = POINT_POLICY_ANCHOR.replace(
+        "point_threads(feature_terms, response);",
+        "functional == static_cast<I>(SemilocalFamily::Pbe) && !response "
+        f"? {width} : point_threads(feature_terms, response);",
+    )
+    assert changed == source.replace(POINT_POLICY_ANCHOR, replacement)
+    assert ast.parse(changed)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "duplicate", "same-string", "mixed", "feature-policy", "response"],
+)
+def test_ingredient_point_trial_rejects_source_drift(
+    sources: dict[str, str], mutation: str
+) -> None:
+    source = sources[POINT_PATH].replace(
+        "constexpr I threads =\n    " + POINT_ANCHOR, POINT_POLICY_ANCHOR
+    )
+    if mutation == "missing":
+        source = source.replace(POINT_POLICY_ANCHOR, "constexpr I threads = 32;")
+    elif mutation == "duplicate":
+        source += 'SECOND = r"""' + POINT_POLICY_ANCHOR + '"""\n'
+    elif mutation == "same-string":
+        source = source.replace(
+            POINT_POLICY_ANCHOR, POINT_POLICY_ANCHOR + "\n" + POINT_POLICY_ANCHOR
+        )
+    elif mutation == "mixed":
+        source += 'LEGACY = "' + POINT_ANCHOR + '"\n'
+    elif mutation == "feature-policy":
+        source = source.replace(
+            "point_feature_terms(functional)", "unknown(functional)"
+        )
+    else:
+        source = source.replace(
+            "point_threads(feature_terms, response)",
+            "point_threads(feature_terms, false)",
+        )
+    sources[POINT_PATH] = source
+    with pytest.raises(ValueError, match="point launch expression"):
+        render_trial(sources, CudaScheduleTrial(pbe_point_threads=64))
+
+
+def test_actual_ingredient_point_trial_executes_only_pbe_override(
+    tmp_path: Path, native_cxx: object
+) -> None:
+    from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
+    from generativeqc_compiler.dft._generated_split_hybrid_consumers import (
+        SPLIT_HYBRID_POINT_CONSUMERS,
+    )
+    from generativeqc_compiler.dft.ao_cuda import (
+        emit_native_xc_contraction_kernels,
+        emit_native_xc_point_feature_terms,
+    )
+
+    root = Path(__file__).resolve().parents[2]
+    source = (root / POINT_PATH).read_text()
+    changed = render_trial(
+        {POINT_PATH: source}, CudaScheduleTrial(pbe_point_threads=64)
+    )[POINT_PATH]
+
+    def kernel_template(text: str) -> str:
+        values = [
+            ast.literal_eval(node.value)
+            for node in ast.parse(text).body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name)
+                and target.id == "_NATIVE_XC_CONTRACTION_KERNELS"
+                for target in node.targets
+            )
+        ]
+        assert len(values) == 1
+        return values[0]
+
+    original = kernel_template(source)
+    candidate = kernel_template(changed)
+    begin = candidate.index(
+        "constexpr I feature_terms = point_feature_terms(functional);"
+    )
+    end = candidate.index("\n  if constexpr (!response)", begin)
+    declaration = candidate[begin:end]
+    assert candidate.replace(declaration, POINT_POLICY_ANCHOR) == original
+    start = original.index("constexpr I point_threads(")
+    stop = original.index("\n}", start) + 2
+    helper = original[start:stop]
+    split_start = candidate.index("void launch_split_hybrid_points(")
+    split_width = "constexpr I threads = point_threads(feature_terms);"
+    assert candidate.index(split_width, split_start) > split_start
+    generated = emit_native_xc_contraction_kernels()
+    batch_start = generated.index(
+        "CudaXcPointBatchLauncher resolve_point_batch_launcher("
+    )
+    batch_stop = generated.index("\n}", batch_start) + 2
+    batch = generated[batch_start:batch_stop]
+    checks = []
+    batch_checks = []
+    for record in SEMILOCAL_FAMILIES:
+        if not record["cuda_ks"]:
+            continue
+        width = 5 if record["requires_tau"] else 4 if record["requires_gradient"] else 1
+        expected = 64 if record["symbol"] == "Pbe" else 32 if width == 4 else 128
+        checks.append(
+            f"static_assert(observe<{record['code']}, false>() == {expected});"
+        )
+        checks.append(f"static_assert(observe<{record['code']}, true>() == 128);")
+        batch_checks.append(
+            f"assert(resolve_point_batch_launcher({record['code']})() == {32 if width == 4 else 128});"
+        )
+    split_codes = " || ".join(
+        f"functional == {code}" for code, _ in SPLIT_HYBRID_POINT_CONSUMERS
+    )
+    split_mgga = " || ".join(
+        f"functional == {code}"
+        for code, width in SPLIT_HYBRID_POINT_CONSUMERS
+        if width == 5
+    )
+    batch_checks.extend(
+        f"assert(resolve_point_batch_launcher({code})() == {32 if width == 4 else 128});"
+        for code, width in SPLIT_HYBRID_POINT_CONSUMERS
+    )
+    probe = tmp_path / "point_trial.cpp"
+    probe.write_text(
+        '#include <cassert>\n#include <cstdint>\n#include <stdexcept>\n#include "dft/semilocal_family.hpp"\n'
+        "using I = long;\nusing generativeqc::dft::SemilocalFamily;\n"
+        "using generativeqc::dft::semilocal_family_code;\n"
+        + emit_native_xc_point_feature_terms()
+        + "\n"
+        + helper
+        + "\ntemplate<I functional, bool response> constexpr I observe() {\n"
+        + declaration
+        + "\nreturn threads;\n}\n"
+        + "template<I feature_terms> constexpr I split_observe() {\n"
+        + split_width
+        + "\nreturn threads;\n}\n"
+        + "static_assert(split_observe<4>() == 32);\n"
+        + "static_assert(split_observe<5>() == 128);\n"
+        + "\n".join(checks)
+        + "\nusing CudaXcPointBatchLauncher = I(*)();\n"
+        + "template<I width, I threads> I launch_point_batches() { return threads; }\n"
+        + "namespace generated {\n"
+        + f"bool split_hybrid_registered(unsigned functional) {{ return {split_codes}; }}\n"
+        + f"bool split_hybrid_is_mgga(unsigned functional) {{ return {split_mgga}; }}\n"
+        + "}\n"
+        + batch
+        + "\nint main() {\n"
+        + "\n".join(batch_checks)
+        + "\n}\n"
+    )
+    binary = native_cxx.build_executable(
+        [probe],
+        tmp_path / "point_trial",
+        compile_args=("-std=c++17", f"-I{root / 'src'}"),
+    )
+    subprocess.run([str(binary)], check=True, timeout=30)
 
 
 @pytest.mark.parametrize("tile", [8, 16, 32])

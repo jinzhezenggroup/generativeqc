@@ -69,6 +69,27 @@ class NativeCliPackageTests(unittest.TestCase):
             f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n",
         )
 
+    def test_cuda_release_cli_packages_entire_automatic_xc_catalog(self) -> None:
+        """Release artifacts must not silently omit automatic CUDA XC programs."""
+        root = Path(__file__).resolve().parents[2]
+        presets = json.loads((root / "CMakePresets.json").read_text())
+        by_name = {preset["name"]: preset for preset in presets["configurePresets"]}
+        release_cli = by_name["cuda-release-cli-sm120"]
+        self.assertEqual(release_cli["inherits"], "cuda-release-sm120")
+        options = release_cli["cacheVariables"]
+        self.assertEqual(options["GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT"], "ON")
+        self.assertEqual(options["GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS"], "")
+
+    def test_cuda_catalog_verification_respects_docs_only_cli_skip(self) -> None:
+        """Catalog verification must follow the optional CLI build tier."""
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/ci.yml").read_text()
+        step = workflow.split(
+            "      - name: Verify full automatic CUDA XC catalog is compiled for distribution\n",
+            1,
+        )[1].split("\n      - ", 1)[0]
+        self.assertIn("        if: steps.cli_scope.outputs.tier != 'skip'\n", step)
+
     def test_rejects_unexpected_shared_aot_plugin(self) -> None:
         libs = self.prefix / "lib"
         libs.mkdir()

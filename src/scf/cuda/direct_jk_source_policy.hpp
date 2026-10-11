@@ -1,6 +1,8 @@
 #pragma once
 
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 namespace generativeqc::scf::cuda_execution {
@@ -9,6 +11,37 @@ enum class DirectJkSourceSelection { automatic, disabled, forced, invalid };
 
 /** RHF keeps its qualified domain; KS also admits bounded screened SPD sources. */
 enum class DirectJkSourceAutoPolicy { generic_f, screened_cold };
+
+/** Capture an experimental selection once per phase, never in kernel replay.
+ * Callers supply method-specific controls and the incumbent value ceiling.
+ * Unset controls preserve complete residency; invalid syntax never truncates.
+ */
+struct DirectJkResidentBucketPolicy {
+  std::uint32_t mask{(1U << 28) - 1};
+  std::size_t ceiling{8ULL << 30};
+  bool valid{true};
+};
+
+inline DirectJkResidentBucketPolicy direct_jk_resident_bucket_policy(
+    const char* mask, const char* ceiling, std::size_t default_ceiling = 8ULL << 30) noexcept {
+  DirectJkResidentBucketPolicy policy;
+  policy.ceiling = default_ceiling;
+  const auto parse = [](const char* text, auto& output) {
+    if (!text) return true;
+    std::string_view value(text);
+    int base = 10;
+    if (value.starts_with("0x")) {
+      value.remove_prefix(2);
+      base = 16;
+    }
+    if (value.empty()) return false;
+    const auto result = std::from_chars(value.data(), value.data() + value.size(), output, base);
+    return result.ec == std::errc{} && result.ptr == value.data() + value.size();
+  };
+  policy.valid =
+      parse(mask, policy.mask) && policy.mask < (1U << 28) && parse(ceiling, policy.ceiling);
+  return policy;
+}
 
 /** Unset is automatic; forced never means unbounded or scientifically unchecked. */
 constexpr DirectJkSourceSelection direct_jk_source_selection(const char* value) noexcept {

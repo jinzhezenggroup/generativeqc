@@ -194,7 +194,7 @@ void check_measures(bool uks, bool pbe) {
   result.force_count = forces.size();
   const auto force_status = generativeqc_calculation_execute(handles.calculation, &result);
   require(force_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED ||
-              (pbe && !uks && force_status == GENERATIVEQC_STATUS_NOT_CONVERGED),
+              (pbe && force_status == GENERATIVEQC_STATUS_NOT_CONVERGED),
           "force request did not respect prepared admission/convergence");
   if (force_status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
     require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==

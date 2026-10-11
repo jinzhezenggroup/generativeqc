@@ -21,12 +21,19 @@ from generativeqc_compiler.method.stationary_weight_lowering import _weight_expr
 def source() -> str:
     """Specialize existing pointwise AD; emit no independent density equations."""
     lines = ["#pragma once", "#include <cstddef>", "#include <cstdint>"]
-    for method in ("PBE", "PBE0", "B3LYP"):
+    for method, spin in (
+        ("PBE", "unpolarized"),
+        ("PBE0", "unpolarized"),
+        ("B3LYP", "unpolarized"),
+        ("PBE", "polarized"),
+        ("PBE0", "polarized"),
+    ):
         plan = StationaryGradientPlan(
-            resolve_method(method, spin="unpolarized"),
+            resolve_method(method, spin=spin),
             StationaryMeanField(SCF_POINT_MODEL),
         )
-        lines.append(f"namespace generativeqc::scf::generated::{method.lower()} {{")
+        namespace = method.lower() + ("_uks" if spin == "polarized" else "")
+        lines.append(f"namespace generativeqc::scf::generated::{namespace} {{")
         for name in ("one_electron", "overlap_pulay", "coulomb", "exact_exchange"):
             if name not in plan.source_names:
                 continue

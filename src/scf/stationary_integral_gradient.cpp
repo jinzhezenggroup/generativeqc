@@ -49,18 +49,22 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
     std::span<const double> weighted_density, CpuStationaryGga method,
-    std::size_t maximum_numeric_bytes) {
+    std::size_t maximum_numeric_bytes, std::span<const double> beta_density,
+    std::span<const double> beta_weighted_density) {
   if (method != CpuStationaryGga::Pbe && method != CpuStationaryGga::Pbe0 &&
       method != CpuStationaryGga::B3lyp)
     throw std::invalid_argument("unknown stationary Direct GGA method");
   const bool hybrid = method != CpuStationaryGga::Pbe;
-  const double exchange_coefficient = method == CpuStationaryGga::Pbe0 ? -0.125 : -0.1;
   const auto& strategy = target.strategy();
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || (term.approximation == FockApproximation::Exact &&
                              term.op == FockOperator::FullRange && term.omega == 0.0);
   };
-  if (strategy.backend != FockBackend::Cpu || strategy.spec.spin != FockSpin::Restricted ||
+  const bool unrestricted = strategy.spec.spin == FockSpin::Unrestricted;
+  const double exchange_coefficient =
+      method == CpuStationaryGga::B3lyp ? -0.1 : (unrestricted ? -0.25 : -0.125);
+  if ((method == CpuStationaryGga::B3lyp && unrestricted) || strategy.backend != FockBackend::Cpu ||
+      (strategy.spec.spin != FockSpin::Restricted && !unrestricted) ||
       !exact(strategy.spec.coulomb) || !exact(strategy.spec.exchange) ||
       !strategy.spec.coulomb.present || strategy.spec.coulomb.coefficient != 1.0 ||
       strategy.spec.exchange.present != hybrid ||
@@ -75,11 +79,14 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   const auto nbf = target.one_electron().nbf;
   const auto matrix = runtime::size_mul(nbf, nbf);
   const auto ncoord = runtime::size_mul(system.atoms.size(), 3);
-  if (density.size() != matrix || weighted_density.size() != matrix ||
-      !std::all_of(density.begin(), density.end(),
-                   [](double value) { return std::isfinite(value); }) ||
-      !std::all_of(weighted_density.begin(), weighted_density.end(),
-                   [](double value) { return std::isfinite(value); }))
+  const auto valid_matrix = [matrix](std::span<const double> values) {
+    return values.size() == matrix && std::all_of(values.begin(), values.end(), [](double value) {
+             return std::isfinite(value);
+           });
+  };
+  if (!valid_matrix(density) || !valid_matrix(weighted_density) ||
+      (unrestricted ? (!valid_matrix(beta_density) || !valid_matrix(beta_weighted_density))
+                    : (!beta_density.empty() || !beta_weighted_density.empty())))
     throw std::invalid_argument("stationary Direct D/W is inconsistent or nonfinite");
   runtime::host_trace::Region trace("cpu_direct_stationary_integrals", nbf);
   std::vector<std::size_t> offsets;
@@ -95,15 +102,29 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   if (offsets.back() != nbf) throw std::invalid_argument("stationary Direct AO ordering mismatch");
   const auto largest_pair = runtime::size_mul(largest_shell, largest_shell);
   const auto largest_quartet = runtime::size_mul(largest_pair, largest_pair);
-  const auto elements = runtime::size_add(
-      runtime::size_add(runtime::size_mul(matrix, 3), runtime::size_mul(ncoord, 6)),
-      runtime::size_mul(runtime::size_add(largest_quartet, 12), hybrid ? 2 : 1));
+  const auto elements =
+      runtime::size_add(runtime::size_add(runtime::size_mul(matrix, unrestricted ? 7 : 3),
+                                          runtime::size_mul(ncoord, 6)),
+                        runtime::size_mul(runtime::size_add(largest_quartet, 12), hybrid ? 2 : 1));
   const auto capacity = runtime::size_add(runtime::size_mul(elements, sizeof(double)),
                                           runtime::vector_bytes(offsets));
   if (capacity > maximum_numeric_bytes) throw std::bad_alloc();
   CpuStationaryIntegralGradient result;
   result.numeric_capacity = capacity;
   result.sources.assign(runtime::size_mul(4, ncoord), 0.0);
+  std::vector<double> flattened_density, flattened_weighted_density;
+  std::span<const double> source_density = density, source_weighted_density = weighted_density;
+  if (unrestricted) {
+    flattened_density.resize(runtime::size_mul(2, matrix));
+    flattened_weighted_density.resize(flattened_density.size());
+    std::copy(density.begin(), density.end(), flattened_density.begin());
+    std::copy(beta_density.begin(), beta_density.end(), flattened_density.begin() + matrix);
+    std::copy(weighted_density.begin(), weighted_density.end(), flattened_weighted_density.begin());
+    std::copy(beta_weighted_density.begin(), beta_weighted_density.end(),
+              flattened_weighted_density.begin() + matrix);
+    source_density = flattened_density;
+    source_weighted_density = flattened_weighted_density;
+  }
   std::vector<double> hcore_weights(matrix), pulay_weights(matrix);
   for (std::size_t left = 0; left < nbf; ++left)
     for (std::size_t right = 0; right < nbf; ++right) {
@@ -111,9 +132,15 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
                                    static_cast<std::int64_t>(right)};
       const auto slot = left * nbf + right;
       hcore_weights[slot] =
-          generated::pbe::one_electron(density.data(), weighted_density.data(), nbf, indices);
+          unrestricted ? generated::pbe_uks::one_electron(
+                             source_density.data(), source_weighted_density.data(), nbf, indices)
+                       : generated::pbe::one_electron(source_density.data(),
+                                                      source_weighted_density.data(), nbf, indices);
       pulay_weights[slot] =
-          generated::pbe::overlap_pulay(density.data(), weighted_density.data(), nbf, indices);
+          unrestricted ? generated::pbe_uks::overlap_pulay(
+                             source_density.data(), source_weighted_density.data(), nbf, indices)
+                       : generated::pbe::overlap_pulay(
+                             source_density.data(), source_weighted_density.data(), nbf, indices);
     }
   const std::vector<double> zeros(matrix, 0.0);
   const auto hcore =
@@ -125,9 +152,9 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   std::vector<double> coulomb_weights, exchange_weights;
   coulomb_weights.reserve(largest_quartet);
   if (hybrid) exchange_weights.reserve(largest_quartet);
-  const auto retained_capacity =
-      runtime::vector_capacities(offsets, result.sources, hcore_weights, pulay_weights, zeros,
-                                 hcore, pulay, coulomb_weights, exchange_weights);
+  const auto retained_capacity = runtime::vector_capacities(
+      offsets, result.sources, hcore_weights, pulay_weights, zeros, hcore, pulay, coulomb_weights,
+      exchange_weights, flattened_density, flattened_weighted_density);
   result.numeric_capacity =
       runtime::size_add(retained_capacity, runtime::size_mul(hybrid ? 24 : 12, sizeof(double)));
   if (result.numeric_capacity > maximum_numeric_bytes) throw std::bad_alloc();
@@ -147,14 +174,23 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
                   const std::int64_t indices[]{
                       static_cast<std::int64_t>(ao_first), static_cast<std::int64_t>(ao_second),
                       static_cast<std::int64_t>(ao_third), static_cast<std::int64_t>(ao_fourth)};
-                  coulomb_weights.push_back(generated::pbe::coulomb(
-                      density.data(), weighted_density.data(), nbf, indices));
+                  coulomb_weights.push_back(
+                      unrestricted
+                          ? generated::pbe_uks::coulomb(
+                                source_density.data(), source_weighted_density.data(), nbf, indices)
+                          : generated::pbe::coulomb(source_density.data(),
+                                                    source_weighted_density.data(), nbf, indices));
                   if (method == CpuStationaryGga::Pbe0)
-                    exchange_weights.push_back(generated::pbe0::exact_exchange(
-                        density.data(), weighted_density.data(), nbf, indices));
+                    exchange_weights.push_back(
+                        unrestricted ? generated::pbe0_uks::exact_exchange(
+                                           source_density.data(), source_weighted_density.data(),
+                                           nbf, indices)
+                                     : generated::pbe0::exact_exchange(
+                                           source_density.data(), source_weighted_density.data(),
+                                           nbf, indices));
                   else if (method == CpuStationaryGga::B3lyp)
                     exchange_weights.push_back(generated::b3lyp::exact_exchange(
-                        density.data(), weighted_density.data(), nbf, indices));
+                        source_density.data(), source_weighted_density.data(), nbf, indices));
                 }
           const std::array<std::span<const double>, 2> channels{coulomb_weights, exchange_weights};
           std::uint64_t evaluations = 0;

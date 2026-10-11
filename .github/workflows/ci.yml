@@ -1420,6 +1420,40 @@ jobs:
           ccache --zero-stats
           cmake --preset cuda-release-cli-sm120
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
+      - name: Verify full automatic CUDA XC catalog is compiled for distribution
+        if: steps.cli_scope.outputs.tier != 'skip'
+        shell: bash
+        run: |
+          PYTHONPATH=python python3 - <<'PY'
+          import re
+          from pathlib import Path
+          from generativeqc_compiler.xc.automatic_semilocal import automatic_registry_entries
+
+          build = Path("build/cuda-release-cli-sm120")
+          cache = (build / "CMakeCache.txt").read_text()
+          assert re.search(
+              r"^GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT:BOOL=ON$",
+              cache, re.MULTILINE,
+          ), "automatic CUDA XC AOT is disabled in the release CLI"
+          assert re.search(
+              r"^GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS:STRING=$",
+              cache, re.MULTILINE,
+          ), "release CLI must package the entire automatic XC catalog"
+          source_dir = build / "generated/libxc_semilocal_cuda"
+          shards = sorted(source_dir.glob("generated_libxc_semilocal_cuda_*.cu"))
+          assert len(shards) == 32, f"expected 32 CUDA shards, got {len(shards)}"
+          present = [
+              int(code, 16)
+              for shard in shards
+              for code in re.findall(r"case 0x([0-9a-f]+)U:", shard.read_text())
+          ]
+          expected = {entry.code for entry in automatic_registry_entries()}
+          assert len(present) == len(expected) and set(present) == expected, (
+              f"automatic CUDA XC package mismatch: "
+              f"{len(present)} cases, {len(expected)} registrations"
+          )
+          print(f"Verified all {len(expected)} automatic CUDA XC registrations")
+          PY
       - name: Preserve compiler cache
         if: ${{ always() && steps.cli_ccache.outputs.cache-primary-key != '' && steps.cli_ccache.outputs.cache-hit != 'true' }}
         continue-on-error: true

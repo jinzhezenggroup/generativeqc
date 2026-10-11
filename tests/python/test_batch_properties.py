@@ -226,10 +226,13 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
     "method",
     [
         "lda-rks",
-        "pbe-uks",
         "r2scan-rks",
         "wb97m-v-rks",
         "pbe-d4-rks",
+        "lda-uks",
+        "b3lyp-uks",
+        "r2scan-uks",
+        "wb97m-v-uks",
     ],
 )
 def test_native_direct_pbe_force_capability_rejects_other_models(method: str) -> None:

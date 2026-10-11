@@ -29,7 +29,7 @@ def native_weights(tmp_path_factory: pytest.TempPathFactory) -> Path:
 import importlib.abc, runpy, sys
 class NoRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'generativeqc', 'pyscf', 'torch', 'cupy', 'numpy'}:
+        if fullname.split('.')[0] in {'generativeqc', 'numpy', 'pyscf', 'torch', 'cupy'}:
             raise AssertionError('generation imported runtime/provider: ' + fullname)
 sys.meta_path.insert(0, NoRuntime())
 script, output = sys.argv[1:]
@@ -61,16 +61,21 @@ runpy.run_path(script, run_name='__main__')
 #include <vector>
 #include "weights.hpp"
 int main() {
-  std::size_t nbf;
-  std::cin >> nbf;
-  std::vector<double> density(nbf * nbf), weighted_density(nbf * nbf);
+  std::size_t nbf, spins;
+  std::cin >> nbf >> spins;
+  std::vector<double> density(spins * nbf * nbf), weighted_density(spins * nbf * nbf);
   for (auto& value : density) std::cin >> value;
   for (auto& value : weighted_density) std::cin >> value;
   std::array<std::int64_t, 4> indices;
   std::cout << std::setprecision(17);
   while (std::cin >> indices[0] >> indices[1] >> indices[2] >> indices[3]) {
     using namespace generativeqc::scf::generated;
-    std::cout << pbe::one_electron(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
+    if (spins == 2) {
+      std::cout << pbe_uks::one_electron(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
+                << pbe_uks::overlap_pulay(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
+                << pbe_uks::coulomb(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
+                << pbe0_uks::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << '\\n';
+    } else std::cout << pbe::one_electron(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe::overlap_pulay(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe::coulomb(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe0::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
@@ -90,39 +95,39 @@ int main() {
     return binary
 
 
-def test_portable_native_weights_match_shared_ad(native_weights: Path) -> None:
+@pytest.mark.parametrize("spin,spins", [("unpolarized", 1), ("polarized", 2)])
+def test_portable_native_weights_match_shared_ad(
+    native_weights: Path, spin: str, spins: int
+) -> None:
     """Asymmetric state and distinct indices expose exchange pairing mistakes."""
     rng = np.random.default_rng(2227)
     nbf = 5
-    density, weighted_density = rng.normal(size=(2, nbf, nbf))
+    density, weighted_density = rng.normal(size=(2, spins, nbf, nbf))
     indices = rng.integers(0, nbf, size=(41, 4))
-    wire = " ".join(map(str, [nbf, *density.ravel(), *weighted_density.ravel()]))
+    wire = " ".join(map(str, [nbf, spins, *density.ravel(), *weighted_density.ravel()]))
     wire += "\n" + "\n".join(" ".join(map(str, row)) for row in indices) + "\n"
     response = subprocess.run(
         [str(native_weights)], input=wire, capture_output=True, text=True, check=True
     )
     actual = np.loadtxt(response.stdout.splitlines())
-    for column, (method, source) in enumerate(
-        (
-            ("PBE0", "one_electron"),
-            ("PBE0", "overlap_pulay"),
-            ("PBE0", "coulomb"),
-            ("PBE0", "exact_exchange"),
-            ("B3LYP", "exact_exchange"),
-        )
-    ):
+    channels = [
+        ("PBE0", name)
+        for name in ("one_electron", "overlap_pulay", "coulomb", "exact_exchange")
+    ]
+    if spins == 1:
+        channels.append(("B3LYP", "exact_exchange"))
+    for column, (method, source) in enumerate(channels):
         plan = StationaryGradientPlan(
-            resolve_method(method, spin="unpolarized"),
-            StationaryMeanField(SCF_POINT_MODEL),
+            resolve_method(method, spin=spin), StationaryMeanField(SCF_POINT_MODEL)
         )
         feeds = {
-            "density_left": density[indices[:, 0], indices[:, 1]][None, :],
-            "density_right": density[indices[:, 2], indices[:, 3]][None, :],
-            "weighted_density": weighted_density[indices[:, 0], indices[:, 1]][None, :],
+            "density_left": density[:, indices[:, 0], indices[:, 1]],
+            "density_right": density[:, indices[:, 2], indices[:, 3]],
+            "weighted_density": weighted_density[:, indices[:, 0], indices[:, 1]],
         }
         if source == "exact_exchange":
-            feeds["density_left"] = density[indices[:, 0], indices[:, 2]][None, :]
-            feeds["density_right"] = density[indices[:, 1], indices[:, 3]][None, :]
+            feeds["density_left"] = density[:, indices[:, 0], indices[:, 2]]
+            feeds["density_right"] = density[:, indices[:, 1], indices[:, 3]]
         program = plan.integral_block(source, terms=len(indices)).weights
         required = (
             ("weighted_density",)

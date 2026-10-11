@@ -204,6 +204,16 @@ class NativeDftDfCliTests(unittest.TestCase):
             with self.subTest(fitting=fitting):
                 self.assert_pbe0_force_reconverged_finite_difference(fitting)
 
+    def test_cpu_uks_analytic_force_reconverged_finite_difference(self) -> None:
+        for method in ("pbe-uks", "pbe0-uks"):
+            for fitting in ("cpu", "none"):
+                if fitting == "none" and not DIRECT_AOT_ENABLED:
+                    continue
+                with self.subTest(method=method, fitting=fitting):
+                    self.assert_pbe0_force_reconverged_finite_difference(
+                        fitting, method
+                    )
+
     def test_cpu_b3lyp_analytic_force_reconverged_finite_difference(self) -> None:
         for fitting in ("cpu", "none"):
             if fitting == "none" and not DIRECT_AOT_ENABLED:
@@ -230,12 +240,15 @@ class NativeDftDfCliTests(unittest.TestCase):
             "--density-tolerance",
             "1e-10",
         )
+        if method.endswith("-uks"):
+            flags += ("--charge", "1", "--multiplicity", "2")
         result = self.call_named(method, *flags, "--forces")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertTrue(math.isfinite(data["energy_hartree"]))
         self.assertEqual(data["method"], method)
-        self.assertEqual(len(data["method_ir_identity"]), 64)
+        if method != "pbe-uks":
+            self.assertEqual(len(data["method_ir_identity"]), 64)
         force = data["forces_hartree_per_bohr"]
         self.assertEqual(len(force), 2)
         self.assertTrue(

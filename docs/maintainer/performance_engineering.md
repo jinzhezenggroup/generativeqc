@@ -134,6 +134,13 @@ create a parallel scientific implementation. Retain a bounded generic fallback
 for unsupported classes or resource regimes, and record how much production
 work still uses that fallback.
 
+Default to mathematically equivalent generated optimizations after verifying
+exact producer/ingredient proofs, capability and bounded resource admission.
+Keep explicit disable controls and fail-closed fallback. Monitor representative
+ingredient/spin/resource classes in CI rather than per-functional whitelists.
+Absent hardware work counters do not alone veto a correctness-qualified default;
+complete, source-matched endpoint observations remain necessary for speedup claims.
+
 ### Tune GPU resource use after the work is right
 
 Use low-level tuning after semantic work, representation, and dispatch are
@@ -439,6 +446,11 @@ This document intentionally keeps the current policy rather than the migration
 history.
 
 ## Performance qualification checklist
+
+The [equal-spin CUDA XC qualification](xc_equal_spin_qualification.md) describes
+the opt-in RKS scalar-sharing candidate and its separate point, independent
+reference and complete molecular endpoint gates. Point throughput does not
+authorize promotion of a complete functional or composite method.
 
 The [experimental CUDA kernel timing tool](../developer/cuda_time_estimator.md)
 accepts explicit achieved-rate calibration for offline estimates. Its retained
