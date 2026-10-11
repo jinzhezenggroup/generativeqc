@@ -38,9 +38,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
         "ones_like",
         "full_like",
     ),
-    "dtype-conversion": (
-        "astype",
-    ),
+    "dtype-conversion": ("astype",),
     "real-reduction": (
         "sum",
         "mean",
