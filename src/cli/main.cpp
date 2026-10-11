@@ -2,6 +2,7 @@
 #include <array>
 #include <cctype>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -26,7 +27,11 @@
 #endif
 
 #include "cli/native_basis.hpp"
+#include "cli/options.hpp"
+#include "cli/profiles.hpp"
+#include "cli/resources.hpp"
 #include "cli_method_catalog.hpp"
+#include "dft/grid.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
@@ -39,38 +44,9 @@ namespace {
 
 constexpr double kBohrPerAngstrom = 1.8897261254578281;
 
-class UsageError : public std::runtime_error {
- public:
-  using std::runtime_error::runtime_error;
-};
-
-struct RunOptions {
-  std::string input;
-  std::string method_name{"gfn2-xtb"};
-  generativeqc_method method{GENERATIVEQC_METHOD_GFN2_XTB};
-  std::string basis_name{"sto-3g"};
-  std::string auxiliary_basis_name;
-  generativeqc_basis_representation representation{GENERATIVEQC_BASIS_CARTESIAN};
-  generativeqc_density_fitting_mode density_fitting{GENERATIVEQC_DENSITY_FITTING_NONE};
-  generativeqc_backend backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
-  int device_id{0};
-  int charge{0};
-  std::uint32_t multiplicity{1};
-  std::optional<std::uint32_t> max_iterations;
-  std::optional<double> energy_tolerance;
-  std::optional<double> density_tolerance;
-  std::optional<double> screening_tolerance;
-  bool input_angstrom{true};
-  bool basis_explicit{false};
-  bool auxiliary_basis_explicit{false};
-  bool representation_explicit{false};
-  bool density_fitting_explicit{false};
-  const generativeqc::cli::method_generated::Method* composition{nullptr};
-  bool grid_explicit{false};
-  generativeqc::KsGrid grid{};
-  bool forces{false};
-  bool json{false};
-};
+using generativeqc::cli::profile_cache_root;
+using generativeqc::cli::RunOptions;
+using generativeqc::cli::UsageError;
 
 std::string lower(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
@@ -99,6 +75,15 @@ std::uint32_t parse_positive_u32(std::string_view text, std::string_view name) {
   return static_cast<std::uint32_t>(value);
 }
 
+std::uint64_t parse_bytes(std::string_view text, std::string_view name) {
+  std::uint64_t parsed = 0;
+  const auto result = std::from_chars(text.data(), text.data() + text.size(), parsed);
+  if (result.ec != std::errc{} || result.ptr != text.data() + text.size() ||
+      parsed > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+    throw UsageError(std::string(name) + " must be a non-negative int64");
+  return parsed;
+}
+
 double parse_positive_finite_double(std::string_view text, std::string_view name) {
   std::size_t consumed = 0;
   double value = 0.0;
@@ -116,8 +101,8 @@ int atomic_number(std::string token) {
   if (!token.empty() && std::all_of(token.begin(), token.end(),
                                     [](unsigned char c) { return std::isdigit(c) != 0; })) {
     const int value = parse_int(token, "atomic number");
-    if (value < 1 || value > 86)
-      throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
+    if (value < 1 || value > 118)
+      throw UsageError("native XYZ parsing supports atomic numbers 1 through 118");
     return value;
   }
 
@@ -125,13 +110,15 @@ int atomic_number(std::string token) {
   token = lower(std::move(token));
   token.front() = static_cast<char>(std::toupper(static_cast<unsigned char>(token.front())));
 
-  static constexpr std::array<std::string_view, 86> symbols{
+  static constexpr std::array<std::string_view, 118> symbols{
       "H",  "He", "Li", "Be", "B",  "C",  "N",  "O",  "F",  "Ne", "Na", "Mg", "Al", "Si", "P",
       "S",  "Cl", "Ar", "K",  "Ca", "Sc", "Ti", "V",  "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
       "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y",  "Zr", "Nb", "Mo", "Tc", "Ru", "Rh",
       "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I",  "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd",
       "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W",  "Re",
-      "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn"};
+      "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th",
+      "Pa", "U",  "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db",
+      "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og"};
   const auto found = std::find(symbols.begin(), symbols.end(), token);
   if (found == symbols.end())
     throw UsageError("unknown or unsupported native XYZ element symbol: " + token);
@@ -169,7 +156,7 @@ std::vector<generativeqc_atom> read_xyz(const RunOptions& options) {
     double x = 0.0, y = 0.0, z = 0.0;
     if (!(record >> element >> x >> y >> z))
       throw UsageError("invalid XYZ atom record at index " + std::to_string(index));
-    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+    if (!std::isfinite(x * scale) || !std::isfinite(y * scale) || !std::isfinite(z * scale))
       throw UsageError("XYZ coordinates must be finite");
     atoms.push_back({atomic_number(element), x * scale, y * scale, z * scale});
   }
@@ -219,18 +206,22 @@ std::string_view backend_name(generativeqc_backend backend) {
 void print_usage(std::ostream& out) {
   out << "Usage:\n"
          "  generativeqc --version\n"
-         "  generativeqc methods [--json]\n"
+         "  generativeqc methods [--libxc] [--json]\n"
          "  generativeqc methods --compositions [--json]\n"
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc profile show|clear\n"
-         "  generativeqc autotune --show-profile|--clear-profile\n"
-         "  generativeqc resources ...   # reserved; Python frontend currently owns it\n"
-         "  generativeqc profile install|export|diagnose ...  # reserved; Python frontend owns it\n"
-         "  generativeqc autotune ...    # tuning remains in the Python frontend\n\n"
+         "  generativeqc resources INPUT.xyz [run and budget options]\n"
+         "  generativeqc profile install ARCHIVE.zip\n"
+         "  generativeqc profile export DIRECTORY DESTINATION.zip\n"
+         "  generativeqc profile validate DIRECTORY\n"
+         "  generativeqc profile diagnose\n"
+         "Resource budget options (JSON output; no calculation or device probe):\n"
+         "  --batch N --host-bytes N --device-bytes N --pinned-host-bytes N\n"
+         "  --host-reserve-bytes N --device-reserve-bytes N --headroom-fraction F\n\n"
          "Native run options:\n"
-         "  --method NAME            Native name or generated MethodIR RKS/UKS selector\n"
-         "  --basis NAME             Bundled Gaussian basis (default: sto-3g)\n"
+         "  --method NAME            Any registered native method or MethodIR RKS/UKS selector\n"
+         "  --basis NAME|FILE.json   Bundled or checked canonical local basis (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
          "  --density-fitting none|cpu|cuda|auto  HF/DFT fitting policy (default: "
          "none)\n"
@@ -239,6 +230,13 @@ void print_usage(std::ostream& out) {
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
+         "  --diis-history N         SCF history length (default: 8)\n"
+         "  --precision fp64|auto    Native precision admission (default: fp64)\n"
+         "  --density-fitting-threshold F --density-fitting-memory-bytes N\n"
+         "  --correlation-memory-bytes N --mp2-denominator-threshold F\n"
+         "  --ccsd-max-iterations N --ccsd-diis-history N\n"
+         "  --ccsd-energy-tolerance F --ccsd-residual-tolerance F\n"
+         "  --ccsd-denominator-threshold F --ccsd-damping F --ccsd-level-shift F\n"
          "  --max-iterations N       Maximum SCF iterations (default: 100)\n"
          "  --energy-tolerance X     Positive finite SCF energy tolerance (Hartree)\n"
          "  --density-tolerance X    Positive finite SCF density tolerance\n"
@@ -279,7 +277,7 @@ int basis_command(int argc, char** argv) {
 
 std::string json_escape(std::string_view value);
 
-void print_methods(bool json) {
+void print_methods(bool json, bool libxc = false) {
   using generativeqc::methods::generated::kMethodManifest;
   if (json) std::cout << "[\n";
   if (!json) std::cout << "METHOD\tFAMILY\tPROPERTIES\tBATCH\tSTATUS\n";
@@ -309,6 +307,22 @@ void print_methods(bool json) {
                 << (capability.available ? "available" : "unavailable") << '\n';
     }
     first = false;
+  }
+  if (libxc) {
+    for (const auto& entry : generativeqc::cli::method_generated::kMethods) {
+      if (!entry.name.starts_with("libxc:") && !entry.name.starts_with("libxc-uks:")) continue;
+      if (json) {
+        if (!first) std::cout << ",\n";
+        std::cout << "  {\"name\":\"" << entry.name << "\",\"family\":\"density_functional\","
+                  << "\"properties\":[\"energy\"],\"supports_batch\":true,\"available\":true,"
+                  << "\"status\":\"available\",\"cpu\":true,\"cuda\":false,\"aliases\":[";
+        if (entry.spin == 1) std::cout << "\"libxc-rks:" << entry.name.substr(6) << "\"";
+        std::cout << "]}";
+        first = false;
+      } else {
+        std::cout << entry.name << "\tdensity_functional\tenergy\tyes\tCPU only\n";
+      }
+    }
   }
   if (json) std::cout << "\n]\n";
 }
@@ -345,6 +359,12 @@ bool is_dft(const RunOptions& options) {
   return entry != nullptr && entry->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL;
 }
 
+bool is_correlated(const RunOptions& options) {
+  const auto* entry = generativeqc::methods::generated::find_method(options.method);
+  return entry && (entry->family == GENERATIVEQC_METHOD_FAMILY_COUPLED_CLUSTER ||
+                   entry->family == GENERATIVEQC_METHOD_FAMILY_PERTURBATION);
+}
+
 std::string_view representation_name(generativeqc_basis_representation representation) {
   return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
 }
@@ -371,10 +391,11 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
   descriptor.method = options.method;
   descriptor.max_iterations = 100;
-  descriptor.diis_history = 8;
+  descriptor.diis_history = options.diis_history;
   descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
   descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
-  descriptor.screening_tolerance = is_gfn2(options) ? 0.0 : 1.0e-14;
+  // Canonical correlated methods require the unscreened reference operator.
+  descriptor.screening_tolerance = is_gfn2(options) || is_correlated(options) ? 0.0 : 1.0e-14;
   if (options.max_iterations) descriptor.max_iterations = *options.max_iterations;
   if (options.energy_tolerance) descriptor.energy_tolerance = *options.energy_tolerance;
   if (options.density_tolerance) descriptor.density_tolerance = *options.density_tolerance;
@@ -382,20 +403,29 @@ generativeqc_method_descriptor method_descriptor(
   descriptor.density_fitting_mode = options.density_fitting;
   descriptor.density_fitting_auxiliary_basis =
       auxiliary_basis == nullptr ? nullptr : auxiliary_basis->get();
-  descriptor.density_fitting_relative_threshold = 1.0e-10;
-  descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
-  descriptor.mp2_denominator_threshold = 1.0e-10;
-  descriptor.ccsd_max_iterations = 100;
-  descriptor.ccsd_diis_history = 6;
-  descriptor.ccsd_energy_tolerance = 1.0e-11;
-  descriptor.ccsd_residual_tolerance = 1.0e-9;
-  descriptor.ccsd_denominator_threshold = 1.0e-10;
+  descriptor.density_fitting_relative_threshold = options.density_fitting_threshold;
+  descriptor.density_fitting_memory_budget_bytes = options.density_fitting_memory_bytes;
+  descriptor.precision_mode = options.precision;
+  descriptor.correlation_memory_budget_bytes = options.correlation_memory_bytes;
+  descriptor.mp2_denominator_threshold = options.mp2_denominator_threshold;
+  descriptor.ccsd_max_iterations = options.ccsd_max_iterations;
+  descriptor.ccsd_diis_history = options.ccsd_diis_history;
+  descriptor.ccsd_energy_tolerance = options.ccsd_energy_tolerance;
+  descriptor.ccsd_residual_tolerance = options.ccsd_residual_tolerance;
+  descriptor.ccsd_denominator_threshold = options.ccsd_denominator_threshold;
+  descriptor.ccsd_damping = options.ccsd_damping;
+  descriptor.ccsd_level_shift = options.ccsd_level_shift;
   return descriptor;
 }
 
 RunOptions parse_run(int argc, char** argv) {
   if (argc < 3) throw UsageError("run requires an XYZ input path");
   RunOptions options;
+  const bool resources = std::string_view(argv[1]) == "resources";
+  if (resources) {
+    options.method_name = "rhf";
+    options.method = GENERATIVEQC_METHOD_RHF;
+  }
   options.input = argv[2];
 
   for (int index = 3; index < argc; ++index) {
@@ -418,8 +448,7 @@ RunOptions parse_run(int argc, char** argv) {
         options.method_name = "uhf";
         options.method = GENERATIVEQC_METHOD_UHF;
       } else if (const auto* entry = generativeqc::methods::generated::find_method(selected);
-                 entry != nullptr &&
-                 entry->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) {
+                 entry != nullptr) {
         options.method_name = std::string(entry->name);
         options.method = entry->method;
       } else if (const auto* compiled =
@@ -431,8 +460,11 @@ RunOptions parse_run(int argc, char** argv) {
         throw UsageError("unknown native or compiler MethodIR method selector: " + selected);
       }
     } else if (option == "--basis") {
-      options.basis_name = lower(std::string(value()));
-      std::replace(options.basis_name.begin(), options.basis_name.end(), '_', '-');
+      options.basis_name = std::string(value());
+      if (!generativeqc::cli::is_local_basis(options.basis_name)) {
+        options.basis_name = lower(options.basis_name);
+        std::replace(options.basis_name.begin(), options.basis_name.end(), '_', '-');
+      }
       options.basis_explicit = true;
     } else if (option == "--representation") {
       const std::string selected = lower(std::string(value()));
@@ -457,9 +489,12 @@ RunOptions parse_run(int argc, char** argv) {
         throw UsageError("--density-fitting must be none, cpu, cuda, or auto");
       options.density_fitting_explicit = true;
     } else if (option == "--auxiliary-basis") {
-      options.auxiliary_basis_name = lower(std::string(value()));
-      std::replace(options.auxiliary_basis_name.begin(), options.auxiliary_basis_name.end(), '_',
-                   '-');
+      options.auxiliary_basis_name = std::string(value());
+      if (!generativeqc::cli::is_local_basis(options.auxiliary_basis_name)) {
+        options.auxiliary_basis_name = lower(options.auxiliary_basis_name);
+        std::replace(options.auxiliary_basis_name.begin(), options.auxiliary_basis_name.end(), '_',
+                     '-');
+      }
       options.auxiliary_basis_explicit = true;
     } else if (option == "--backend") {
       const std::string selected = lower(std::string(value()));
@@ -478,12 +513,88 @@ RunOptions parse_run(int argc, char** argv) {
       options.multiplicity = parse_positive_u32(value(), "multiplicity");
     } else if (option == "--max-iterations") {
       options.max_iterations = parse_positive_u32(value(), "maximum iterations");
+    } else if (option == "--diis-history") {
+      const int parsed = parse_int(value(), "DIIS history");
+      if (parsed < 0) throw UsageError("DIIS history must be non-negative");
+      // The native descriptor treats zero as its eight-vector default, not disabled DIIS.
+      // Resolve that sentinel before sharing controls with metadata-only planning.
+      options.diis_history = parsed == 0 ? 8u : static_cast<std::uint32_t>(parsed);
+    } else if (resources && option == "--batch") {
+      options.batch = parse_positive_u32(value(), "batch");
+      if (options.batch > 100000) throw UsageError("resource dry-run batch must be in [1, 100000]");
+    } else if (resources && option == "--host-bytes") {
+      options.host_bytes = parse_bytes(value(), "host bytes");
+    } else if (resources && option == "--device-bytes") {
+      options.device_bytes = parse_bytes(value(), "device bytes");
+    } else if (resources && option == "--pinned-host-bytes") {
+      options.pinned_host_bytes = parse_bytes(value(), "pinned host bytes");
+    } else if (resources && option == "--host-reserve-bytes") {
+      options.host_reserve_bytes = parse_bytes(value(), "host reserve bytes");
+    } else if (resources && option == "--device-reserve-bytes") {
+      options.device_reserve_bytes = parse_bytes(value(), "device reserve bytes");
+    } else if (resources && option == "--headroom-fraction") {
+      const auto text = value();
+      const std::string input(text);
+      char* end = nullptr;
+      options.headroom_fraction = std::strtod(input.c_str(), &end);
+      if (input.empty() || end != input.c_str() + input.size() ||
+          !std::isfinite(options.headroom_fraction) || options.headroom_fraction < 0 ||
+          options.headroom_fraction >= 1)
+        throw UsageError("headroom fraction must be finite in [0, 1)");
     } else if (option == "--energy-tolerance") {
       options.energy_tolerance = parse_positive_finite_double(value(), "energy tolerance");
     } else if (option == "--density-tolerance") {
       options.density_tolerance = parse_positive_finite_double(value(), "density tolerance");
     } else if (option == "--screening-tolerance") {
-      options.screening_tolerance = parse_positive_finite_double(value(), "screening tolerance");
+      const auto text = value();
+      options.screening_tolerance = text == "0" || text == "0.0"
+                                        ? 0.0
+                                        : parse_positive_finite_double(text, "screening tolerance");
+    } else if (option == "--precision") {
+      const auto selected = value();
+      if (selected == "fp64")
+        options.precision = GENERATIVEQC_PRECISION_FP64;
+      else if (selected == "auto")
+        options.precision = GENERATIVEQC_PRECISION_AUTO;
+      else
+        throw UsageError("--precision must be fp64 or auto");
+    } else if (option == "--correlation-memory-bytes") {
+      options.correlation_memory_bytes = parse_bytes(value(), "correlation memory bytes");
+    } else if (option == "--density-fitting-memory-bytes") {
+      options.density_fitting_memory_bytes = parse_bytes(value(), "density fitting memory bytes");
+    } else if (option == "--density-fitting-threshold") {
+      options.density_fitting_threshold =
+          parse_positive_finite_double(value(), "DF metric threshold");
+      if (options.density_fitting_threshold >= 1)
+        throw UsageError("DF metric threshold must be below one");
+    } else if (option == "--mp2-denominator-threshold") {
+      options.mp2_denominator_threshold =
+          parse_positive_finite_double(value(), "MP2 denominator threshold");
+    } else if (option == "--ccsd-max-iterations") {
+      options.ccsd_max_iterations = parse_positive_u32(value(), "CCSD maximum iterations");
+    } else if (option == "--ccsd-diis-history") {
+      const auto parsed = parse_bytes(value(), "CCSD DIIS history");
+      if (parsed > std::numeric_limits<std::uint32_t>::max())
+        throw UsageError("CCSD DIIS history must fit uint32");
+      options.ccsd_diis_history = static_cast<std::uint32_t>(parsed);
+    } else if (option == "--ccsd-energy-tolerance") {
+      options.ccsd_energy_tolerance =
+          parse_positive_finite_double(value(), "CCSD energy tolerance");
+    } else if (option == "--ccsd-residual-tolerance") {
+      options.ccsd_residual_tolerance =
+          parse_positive_finite_double(value(), "CCSD residual tolerance");
+    } else if (option == "--ccsd-denominator-threshold") {
+      options.ccsd_denominator_threshold =
+          parse_positive_finite_double(value(), "CCSD denominator threshold");
+    } else if (option == "--ccsd-damping" || option == "--ccsd-level-shift") {
+      const auto text = value();
+      const auto parsed =
+          text == "0" || text == "0.0" ? 0.0 : parse_positive_finite_double(text, option);
+      if (option == "--ccsd-damping") {
+        if (parsed >= 1) throw UsageError("CCSD damping must be in [0, 1)");
+        options.ccsd_damping = parsed;
+      } else
+        options.ccsd_level_shift = parsed;
     } else if (option == "--units") {
       const std::string selected = lower(std::string(value()));
       if (selected == "angstrom")
@@ -515,11 +626,23 @@ RunOptions parse_run(int argc, char** argv) {
         "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags do not apply");
   if (is_gfn2(options) && options.screening_tolerance)
     throw UsageError("--screening-tolerance requires a Gaussian HF/DFT method");
+  if (options.screening_tolerance && *options.screening_tolerance == 0 && !is_correlated(options))
+    throw UsageError("screening tolerance must be positive for Gaussian HF/DFT methods");
+  if (is_correlated(options) && options.screening_tolerance.value_or(0) != 0)
+    throw UsageError("canonical correlated methods require --screening-tolerance 0");
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
   if (options.grid_explicit && !options.composition)
     throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
+  if (is_dft(options) && !options.composition) {
+    // Registered methods leave ks_options null, so native preparation owns
+    // their grid defaults. Keep the metadata-only inventory on that same grid.
+    const generativeqc::dft::GridSpec native_grid;
+    options.grid.radial_points = native_grid.radial_points;
+    options.grid.angular_polar = native_grid.angular_polar;
+    options.grid.angular_azimuth = native_grid.angular_azimuth;
+  }
   if (options.composition) {
     const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA ? options.composition->cuda
                                                                        : options.composition->cpu;
@@ -533,7 +656,9 @@ RunOptions parse_run(int argc, char** argv) {
   return options;
 }
 
-int run(const RunOptions& options) {
+std::string json_escape(std::string_view value);
+
+int run(RunOptions options) {
   const std::vector<generativeqc_atom> atoms = read_xyz(options);
 
   const generativeqc_context_descriptor context_descriptor{sizeof(generativeqc_context_descriptor),
@@ -544,8 +669,10 @@ int run(const RunOptions& options) {
   generativeqc::cli::NativeBasisData basis;
   if (!is_gfn2(options)) {
     try {
-      basis = generativeqc::cli::expand_bundled_basis(options.basis_name, atoms,
-                                                      options.representation);
+      basis = generativeqc::cli::expand_basis_input(
+          options.basis_name, atoms,
+          options.representation_explicit ? std::optional(options.representation) : std::nullopt);
+      options.representation = basis.representation;
     } catch (const std::invalid_argument& error) {
       throw UsageError(error.what());
     }
@@ -568,14 +695,22 @@ int run(const RunOptions& options) {
       options.charge,
       options.multiplicity,
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
-  generativeqc::System system(context, system_descriptor);
+  generativeqc::System system =
+      basis.ecp_terms.empty()
+          ? generativeqc::System(context, system_descriptor)
+          : generativeqc::System(context, system_descriptor, basis.core_electrons, basis.ecp_terms);
 
   generativeqc::cli::NativeBasisData auxiliary_basis_data;
   std::optional<generativeqc::System> auxiliary_basis;
   if (!is_gfn2(options) && options.auxiliary_basis_explicit) {
     try {
-      auxiliary_basis_data = generativeqc::cli::expand_bundled_basis(options.auxiliary_basis_name,
-                                                                     atoms, options.representation);
+      auxiliary_basis_data = generativeqc::cli::expand_basis_input(
+          options.auxiliary_basis_name, atoms,
+          !generativeqc::cli::is_local_basis(options.auxiliary_basis_name)
+              ? std::optional(options.representation)
+              : std::nullopt);
+      if (!auxiliary_basis_data.ecp_terms.empty())
+        throw UsageError("an auxiliary fitting basis cannot contain ECP potentials");
     } catch (const std::invalid_argument& error) {
       throw UsageError(error.what());
     }
@@ -590,7 +725,7 @@ int run(const RunOptions& options) {
         static_cast<std::uint32_t>(auxiliary_basis_data.primitives.size()),
         options.charge,
         options.multiplicity,
-        options.representation};
+        auxiliary_basis_data.representation};
     auxiliary_basis.emplace(context, auxiliary_descriptor);
   }
 
@@ -632,15 +767,16 @@ int run(const RunOptions& options) {
     if (options.composition)
       std::cout << ",\"method_ir_identity\":\"" << options.composition->identity << "\"";
     if (!is_gfn2(options)) {
-      std::cout << ",\"basis\":\"" << options.basis_name << "\","
+      std::cout << ",\"basis\":\"" << json_escape(options.basis_name) << "\","
                 << "\"representation\":\"" << representation_name(options.representation)
                 << "\",\"density_fitting\":\"" << density_fitting_name(options.density_fitting)
                 << "\"";
       if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
         std::cout << ",\"auxiliary_basis\":\""
-                  << (options.auxiliary_basis_explicit ? options.auxiliary_basis_name
+                  << (options.auxiliary_basis_explicit ? json_escape(options.auxiliary_basis_name)
                                                        : "same-as-orbital")
                   << "\"";
+      if (!basis.identity.empty()) std::cout << ",\"basis_identity\":\"" << basis.identity << "\"";
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
@@ -682,36 +818,6 @@ int run(const RunOptions& options) {
     }
   }
   return 0;
-}
-
-std::filesystem::path expand_profile_cache_override(std::string value) {
-  if (value == "~") {
-    const char* home = std::getenv("HOME");
-    if (home == nullptr || *home == '\0')
-      throw UsageError("cannot expand GENERATIVEQC_PROFILE_CACHE without HOME");
-    return std::filesystem::path(home);
-  }
-  if (value.rfind("~/", 0) == 0) {
-    const char* home = std::getenv("HOME");
-    if (home == nullptr || *home == '\0')
-      throw UsageError("cannot expand GENERATIVEQC_PROFILE_CACHE without HOME");
-    return std::filesystem::path(home) / value.substr(2);
-  }
-  return std::filesystem::path(std::move(value));
-}
-
-std::filesystem::path profile_cache_root() {
-  if (const char* configured = std::getenv("GENERATIVEQC_PROFILE_CACHE");
-      configured != nullptr && *configured != '\0')
-    return expand_profile_cache_override(configured);
-
-  if (const char* xdg = std::getenv("XDG_CACHE_HOME"); xdg != nullptr && *xdg != '\0')
-    return std::filesystem::path(xdg) / "generativeqc" / "profiles";
-
-  const char* home = std::getenv("HOME");
-  if (home == nullptr || *home == '\0')
-    throw UsageError("cannot resolve profile cache without HOME or XDG_CACHE_HOME");
-  return std::filesystem::path(home) / ".cache" / "generativeqc" / "profiles";
 }
 
 std::string json_escape(std::string_view value) {
@@ -848,7 +954,7 @@ class ProfileCacheLock {
  public:
   explicit ProfileCacheLock(const std::filesystem::path& path) {
 #if defined(__unix__) || defined(__APPLE__)
-    descriptor_ = ::open(path.c_str(), O_CREAT | O_RDWR, 0666);
+    descriptor_ = ::open(path.c_str(), O_CREAT | O_RDWR | O_NOFOLLOW, 0666);
     if (descriptor_ < 0)
       throw std::runtime_error("cannot open profile cache lock: " + path.string());
     if (::flock(descriptor_, LOCK_EX) != 0) {
@@ -926,26 +1032,19 @@ int profile_clear() {
 }
 
 int profile_command(int argc, char** argv) {
-  if (argc != 3) throw UsageError("profile requires exactly one operation: show or clear");
+  if (argc < 3) throw UsageError("profile requires an operation");
   const std::string_view operation = argv[2];
+  if (operation == "install" || operation == "export" || operation == "diagnose" ||
+      operation == "validate")
+    return generativeqc::cli::profile_bundle_command(argc, argv);
+  if (argc != 3) throw UsageError("profile show/clear requires exactly one operation");
   if (operation == "--help" || operation == "-h" || operation == "help") {
     print_usage(std::cout);
     return 0;
   }
   if (operation == "show") return profile_show();
   if (operation == "clear") return profile_clear();
-  if (operation == "install" || operation == "export" || operation == "diagnose") {
-    std::cerr << "generativeqc: native profile operation '" << operation
-              << "' is reserved but not migrated yet; the Python frontend currently provides it\n";
-    return 2;
-  }
   throw UsageError("unknown profile operation: " + std::string(operation));
-}
-
-int reserved_python_subcommand(std::string_view command) {
-  std::cerr << "generativeqc: native subcommand '" << command
-            << "' is reserved but not migrated yet; the Python frontend currently provides it\n";
-  return 2;
 }
 
 }  // namespace
@@ -968,18 +1067,24 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (command == "methods") {
-      if (argc == 3 && std::string_view(argv[2]) == "--json") {
-        print_methods(true);
-      } else if (argc == 2) {
-        print_methods(false);
-      } else if (argc == 3 && std::string_view(argv[2]) == "--compositions") {
-        print_compositions(false);
-      } else if (argc == 4 && std::string_view(argv[2]) == "--compositions" &&
-                 std::string_view(argv[3]) == "--json") {
-        print_compositions(true);
-      } else {
-        throw UsageError("methods accepts --json or --compositions [--json]");
+      bool json = false, libxc = false, compositions = false;
+      for (int index = 2; index < argc; ++index) {
+        const std::string_view flag = argv[index];
+        if (flag == "--json" && !json)
+          json = true;
+        else if (flag == "--libxc" && !libxc)
+          libxc = true;
+        else if (flag == "--compositions" && !compositions)
+          compositions = true;
+        else
+          throw UsageError("methods accepts --json, --libxc or --compositions");
       }
+      if (libxc && compositions)
+        throw UsageError("--libxc and --compositions are distinct catalogs");
+      if (compositions)
+        print_compositions(json);
+      else
+        print_methods(json, libxc);
       return 0;
     }
     if (command == "basis") return basis_command(argc, argv);
@@ -989,17 +1094,25 @@ int main(int argc, char** argv) {
         print_usage(std::cout);
         return 0;
       }
-      return run(parse_run(argc, argv));
+      const auto options = parse_run(argc, argv);
+      if (options.backend == GENERATIVEQC_BACKEND_CUDA &&
+          options.density_fitting != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE)
+        generativeqc::cli::activate_local_profile(argc, argv, options.device_id);
+      return run(options);
     }
     if (command == "profile") return profile_command(argc, argv);
-    if (command == "autotune") {
-      if (argc == 3 && std::string_view(argv[2]) == "--show-profile") return profile_show();
-      if (argc == 3 && std::string_view(argv[2]) == "--clear-profile") return profile_clear();
-      return reserved_python_subcommand(command);
+    if (command == "resources") {
+      if (argc == 3 &&
+          (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
+        print_usage(std::cout);
+        return 0;
+      }
+      const auto options = parse_run(argc, argv);
+      return generativeqc::cli::resources_command(options, read_xyz(options));
     }
-    if (command == "resources") return reserved_python_subcommand(command);
 
-    throw UsageError("unknown command: " + std::string(command));
+    throw UsageError("unknown command: " + std::string(command) +
+                     "; explicit compiler searches use generativeqc-tune");
   } catch (const UsageError& error) {
     std::cerr << "generativeqc: " << error.what() << "\n\n";
     print_usage(std::cerr);

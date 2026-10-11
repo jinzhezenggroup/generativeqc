@@ -240,7 +240,7 @@ def _support(
     if len(axes) != len(shape) or not all(map(_plain, axes)):
         return None
     terms, seen, restricted = [], set(), False
-    for axis, dimension in zip(axes, shape):
+    for axis, dimension in zip(axes, shape, strict=True):
         expression = _text(axis)
         if isinstance(axis, ast.Slice):
             if _names(axis) & loops.keys():
@@ -311,7 +311,7 @@ def _full_union(
                 continue
             differing = []
             for axis, (left, right, dim) in enumerate(
-                zip(first.elts, second.elts, shape)
+                zip(first.elts, second.elts, shape, strict=True)
             ):
                 if not (_full_slice(left, dim) and _full_slice(right, dim)):
                     differing.append(axis)

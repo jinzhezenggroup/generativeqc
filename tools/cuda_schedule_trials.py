@@ -135,8 +135,7 @@ def _constant_edits(source: str, values: dict[str, int]) -> str:
         allowed = (ast.Constant, ast.BinOp, ast.LShift)
         if any(
             not isinstance(node, allowed)
-            or isinstance(node, ast.Constant)
-            and type(node.value) is not int
+            or (isinstance(node, ast.Constant) and type(node.value) is not int)
             for node in ast.walk(assignment.value)
         ):
             raise ValueError(f"{name} is no longer a constant expression")
@@ -226,7 +225,9 @@ def _ordinary_grid(source: str, trial: CudaScheduleTrial) -> str:
     if not isinstance(budget.value, ast.Tuple) or len(budget.value.elts) != 2:
         raise ValueError("ordinary budget expression changed")
     for node, requested in zip(
-        budget.value.elts, (trial.device_budget_mib, trial.host_budget_mib)
+        budget.value.elts,
+        (trial.device_budget_mib, trial.host_budget_mib),
+        strict=True,
     ):
         if requested is not None:
             edits.append((node, str(requested << 20)))
@@ -406,10 +407,8 @@ def prepare_trial(
     if output.exists() or output.is_symlink():
         raise ValueError("trial output already exists")
     output = output.resolve()
-    if (
-        output == root
-        or root in output.parents
-        and output.relative_to(root).parts[0] != ".artifacts"
+    if output == root or (
+        root in output.parents and output.relative_to(root).parts[0] != ".artifacts"
     ):
         raise ValueError("in-repository trials must live under ignored .artifacts")
     if "benchmarks" in output.parts and "results" in output.parts:

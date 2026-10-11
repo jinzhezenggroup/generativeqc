@@ -18,7 +18,10 @@ from generativeqc.ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
     _scf_domain_for_ir,
     cuda_global_hybrid_force_eligible,
+    cuda_mixed_density_fitted_force_eligible,
+    cuda_nonlocal_force_basis_eligible,
     ks_coefficients,
+    mixed_density_fitted_force_eligible,
 )
 from generativeqc_compiler.method import (
     D4Spec,
@@ -142,6 +145,9 @@ def _promoted(
         "qualified_basis": lambda basis: blocked == "ecp",
         "qualified_direct_semilocal_context": qualified_direct_semilocal_context,
         "cuda_global_hybrid_force_eligible": cuda_global_hybrid_force_eligible,
+        "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
+        "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
+        "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
         "SPLIT_HYBRID_SCF_DOMAIN": SPLIT_HYBRID_SCF_DOMAIN,
         "D4Spec": D4Spec,
         "DispersionCorrectionPrimitive": DispersionCorrectionPrimitive,
@@ -284,7 +290,16 @@ def test_density_fitted_force_uses_own_strict_precision_admission(
         density_fitting=True,
         include_semilocal=True,
         device=device,
-    ) is (precision == _native.PRECISION_FP64 and method != "WB97M-V")
+    ) is (precision == _native.PRECISION_FP64)
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("backend", ("cpu", "cuda"))
+def test_mixed_df_admission_keeps_unqualified_range_graph_closed(
+    spin: str, backend: str
+) -> None:
+    method = resolve_method("CAM-B3LYP", spin=spin)
+    assert not mixed_density_fitted_force_eligible(method, backend=backend)
 
 
 @pytest.mark.parametrize(

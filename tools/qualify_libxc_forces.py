@@ -369,7 +369,10 @@ def qualify_forces(name: str, *, evidence: str) -> dict[str, Any]:
             initial_guess=None,
             max_iterations=200,
             energy_tolerance=1e-12,
-            density_tolerance=1e-10,
+            # A DIIS proposal can pass its density gate while the subsequent
+            # bounded unshifted closure narrowly fails. Converge the native
+            # stencil more tightly; never waive the physical final-state audit.
+            density_tolerance=1e-11,
             screening_tolerance=1e-14,
             ks_options=KsOptions(
                 grid=GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)

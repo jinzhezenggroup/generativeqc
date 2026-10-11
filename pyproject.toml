@@ -1,6 +1,6 @@
 [build-system]
 # GFN2 wheel CMake resolves this reviewed provider inside PEP 517 isolation.
-requires = ["scikit-build-core>=1.0.3", "numpy>=1.24", "scipy-openblas32==0.3.34.0.0"]
+requires = ["scikit-build-core>=1.0.3", "numpy>=1.24", "scipy-openblas32==0.3.34.0.0", "nlohmann_json==3.11.3"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -40,8 +40,10 @@ autotune = ["pyscf>=2.8"]
 # because NVCC registration constructors need cudart while libgenerativeqc.so loads.
 cuda12 = []
 
+# The public `generativeqc` program is installed as a native wheel/SDK binary.
+# Only explicit compiler/autotune tooling uses a Python console entry point.
 [project.scripts]
-generativeqc = "generativeqc.__main__:main"
+generativeqc-tune = "generativeqc.tune_cli:main"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
@@ -100,6 +102,19 @@ wheel.py-api = "py3"
 "src/dft/xc_capabilities.hpp" = "generativeqc_compiler/assets/src/dft/xc_capabilities.hpp"
 "src/dft/xc_runtime.cuh" = "generativeqc_compiler/assets/src/dft/xc_runtime.cuh"
 "src/integrals/range_moments.hpp" = "generativeqc_compiler/assets/src/integrals/range_moments.hpp"
+"src/integrals/execution_qualifiers.hpp" = "generativeqc_compiler/assets/src/integrals/execution_qualifiers.hpp"
+"src/integrals/range_exchange_runtime.hpp" = "generativeqc_compiler/assets/src/integrals/range_exchange_runtime.hpp"
+"src/scf/cuda/packed_basis.hpp" = "generativeqc_compiler/assets/src/scf/cuda/packed_basis.hpp"
+"src/scf/cuda/scalar_math.cuh" = "generativeqc_compiler/assets/src/scf/cuda/scalar_math.cuh"
+"src/scf/cuda/cartesian_angular.cuh" = "generativeqc_compiler/assets/src/scf/cuda/cartesian_angular.cuh"
+"src/scf/cuda/integral_limits.hpp" = "generativeqc_compiler/assets/src/scf/cuda/integral_limits.hpp"
+"src/scf/cuda/gaussian_geometry.cuh" = "generativeqc_compiler/assets/src/scf/cuda/gaussian_geometry.cuh"
+"src/scf/cuda/hermite_recurrence.cuh" = "generativeqc_compiler/assets/src/scf/cuda/hermite_recurrence.cuh"
+"src/scf/cuda/coulomb_auxiliary.cuh" = "generativeqc_compiler/assets/src/scf/cuda/coulomb_auxiliary.cuh"
+"src/scf/cuda/boys_table.cuh" = "generativeqc_compiler/assets/src/scf/cuda/boys_table.cuh"
+"src/scf/generated_shell_task.hpp" = "generativeqc_compiler/assets/src/scf/generated_shell_task.hpp"
+"src/molecule/basis.hpp" = "generativeqc_compiler/assets/src/molecule/basis.hpp"
+"src/core/types.hpp" = "generativeqc_compiler/assets/src/core/types.hpp"
 "src/integrals/eri_geometry.hpp" = "generativeqc_compiler/assets/src/integrals/eri_geometry.hpp"
 "src/integrals/first_component_runtime.hpp" = "generativeqc_compiler/assets/src/integrals/first_component_runtime.hpp"
 "src/integrals/first_directional_runtime.cuh" = "generativeqc_compiler/assets/src/integrals/first_directional_runtime.cuh"
@@ -128,7 +143,7 @@ build = ["cp311-manylinux_x86_64"]
 build-frontend = "build[uv]"
 skip = ["*-manylinux_i686", "*-musllinux*"]
 manylinux-x86_64-image = "quay.io/manylinux_cuda/manylinux_2_28_x86_64_cuda12_9:2026.06.30-1"
-test-command = "python -c 'import ctypes; from generativeqc import _native; from generativeqc.profiles import DeviceDescriptor; descriptor=DeviceDescriptor(); descriptor.struct_size=ctypes.sizeof(descriptor); descriptor.abi_version=_native.ABI_VERSION; probe=_native.load_library().generativeqc_cuda_tuning_device; probe.argtypes=[ctypes.c_int32, ctypes.POINTER(DeviceDescriptor)]; probe.restype=ctypes.c_int; print(probe(0, ctypes.byref(descriptor)))'"
+test-command = "python -c 'import ctypes; from generativeqc import _native; from generativeqc.profiles import DeviceDescriptor; descriptor=DeviceDescriptor(); descriptor.struct_size=ctypes.sizeof(descriptor); descriptor.abi_version=_native.ABI_VERSION; probe=_native.load_library().generativeqc_cuda_tuning_device; probe.argtypes=[ctypes.c_int32, ctypes.POINTER(DeviceDescriptor)]; probe.restype=ctypes.c_int; print(probe(0, ctypes.byref(descriptor)))' && generativeqc --version && generativeqc-tune --help"
 
 [tool.cibuildwheel.linux]
 # manylinux_2_28 ships a ccache too old for nvcc. The CUDA provider shared
@@ -164,7 +179,18 @@ extend-select = [
   "RUF103",
   "RUF104",
   "A005",
+  # Keep exception translation, zip arity and boolean precedence explicit.
+  "B904",
+  "B905",
+  "RUF021",
+  # Require explicit None, boolean, and type comparison semantics.
+  "E711",
+  "E712",
+  "E721",
 ]
+# B905's autofix chooses strict=False, which can hide shape/index mismatches.
+# Comparison rewrites can also alter overloaded numerical equality semantics.
+unfixable = ["B905", "E711", "E712", "E721"]
 # Assertions are pervasive internal/test invariants; subprocess invocation is a core compiler/tooling boundary.
 # Keep the narrower shell-injection checks active while avoiding blanket S603/S607 noise.
 ignore = ["ANN401", "S101", "S603", "S607"]

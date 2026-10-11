@@ -42,7 +42,7 @@ def source_arguments(metadata: typing.Any) -> typing.Any:
     inputs = metadata["inputs"]
     atoms = tuple(
         Atom(z, tuple(x))
-        for z, x in zip(inputs["atomic_numbers"], inputs["coordinates"])
+        for z, x in zip(inputs["atomic_numbers"], inputs["coordinates"], strict=True)
     )
 
     def shells(records: typing.Any) -> typing.Any:

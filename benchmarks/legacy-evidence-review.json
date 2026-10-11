@@ -679,14 +679,6 @@
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
-      "bytes": 177463,
-      "classification": "required-compact-accepted-evidence",
-      "family": "weighted-eri-144",
-      "path": "benchmarks/results/weighted-eri-144/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "ccbf6dd63600d111015879194c1bae05cef12bad5e874cf8570af54dfebacdd7"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

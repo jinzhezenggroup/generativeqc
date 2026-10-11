@@ -123,6 +123,9 @@ struct CudaDirectJkPlan {
    * lease never changes range, screening or derivative fallback semantics. */
   double* resident_values{};
   std::size_t resident_value_count{};
+  /** Published screened bucket extents, frozen before optional ERI allocation.
+   * Empty retains the unscreened RHF layout. No replay downloads row counts. */
+  std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
   ~CudaDirectJkPlan();
 };
 

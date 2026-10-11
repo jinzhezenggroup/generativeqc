@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -23,6 +26,8 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor.cuda_execute import compile_cuda
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 from generativeqc_compiler.tensor.cuda_resident import compile_resident
+
+from tools.tensor_reduction_qualification import qualification_reduction_plan
 
 
 def _program() -> Program:
@@ -141,13 +146,8 @@ def main() -> None:
         compiler.target,
         schedule=TensorSchedule(stream_reductions=True),
     )
-    cub_reduction_plan = plan_cuda(
-        reduction,
-        compiler.target,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
+    cub_reduction_plan = qualification_reduction_plan(
+        generated_reduction_plan, compiler=compiler
     )
     generated_reduction = compile_cuda(
         generated_reduction_plan,

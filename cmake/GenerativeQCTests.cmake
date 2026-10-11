@@ -378,10 +378,12 @@ macro(generativeqc_add_native_tests)
     # CUDA quadrature owner; the host grid objects do not define those symbols.
     add_executable(generativeqc_dft_cuda_tests tests/native/test_dft_cuda.cu
       src/dft/cuda_xc.cpp src/dft/cuda_quadrature.cu "${GENERATIVEQC_GRID_SOURCE}"
+      $<TARGET_OBJECTS:generativeqc_libxc_semilocal_cuda>
       $<TARGET_OBJECTS:generativeqc_dft_grid_test_objects>
       $<TARGET_OBJECTS:generativeqc_dft_xc_test_objects>)
-    add_dependencies(generativeqc_dft_cuda_tests generativeqc_xc_cpu_codegen generativeqc_scf_array_cpu_codegen generativeqc_quadrature_codegen)
+    add_dependencies(generativeqc_dft_cuda_tests generativeqc_xc_cpu_codegen generativeqc_scf_array_cpu_codegen generativeqc_quadrature_codegen generativeqc_libxc_semilocal_cuda_codegen)
     target_include_directories(generativeqc_dft_cuda_tests PRIVATE
+      "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}"
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_link_libraries(generativeqc_dft_cuda_tests PRIVATE CUDA::cudart CUDA::cublas)
@@ -416,13 +418,15 @@ macro(generativeqc_add_native_tests)
       "${GENERATIVEQC_DF_VALUE_CPU_HEADER}"
       "${GENERATIVEQC_DF_DERIVATIVE_CPU_HEADER}"
       "${GENERATIVEQC_GRID_SOURCE}"
+      $<TARGET_OBJECTS:generativeqc_libxc_semilocal_cuda>
       $<TARGET_OBJECTS:generativeqc_dft_grid_test_objects>
       src/dft/cosx_reference.cpp
       src/integrals/s_integrals.cpp
       src/integrals/generated_df_cpu.cpp
       src/integrals/ecp.cpp)
-    add_dependencies(generativeqc_cosx_cuda_tests generativeqc_ecp_codegen)
+    add_dependencies(generativeqc_cosx_cuda_tests generativeqc_ecp_codegen generativeqc_libxc_semilocal_cuda_codegen)
     target_include_directories(generativeqc_cosx_cuda_tests PRIVATE
+      "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}"
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_link_libraries(generativeqc_cosx_cuda_tests PRIVATE CUDA::cudart CUDA::cublas)

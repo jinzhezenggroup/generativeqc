@@ -18,6 +18,26 @@ from tools.generativeqc_validation.record import (
 from tools.generativeqc_validation.retention import digest
 
 
+@pytest.mark.parametrize("reader", [load_json, load_record])
+def test_weighted_eri_gzip_preserves_original_endpoint_bytes(
+    reader: typing.Any,
+) -> None:
+    """Canonical readers retain every byte and value of the historical record."""
+    root = Path(__file__).resolve().parents[2]
+    path = root / "benchmarks/results/weighted-eri-144/endpoints.json.gz"
+    stored = path.read_bytes()
+    assert len(stored) == 16945
+    assert digest(stored) == (
+        "8311ebc1a0dc3fba3d2991a8cf96cbd218725851593c819774e446abec65a882"
+    )
+    raw = gzip.decompress(stored)
+    assert len(raw) == 177463
+    assert digest(raw) == (
+        "ccbf6dd63600d111015879194c1bae05cef12bad5e874cf8570af54dfebacdd7"
+    )
+    assert reader(path) == json.loads(raw)
+
+
 def test_migrated_records_match_original_scientific_values() -> None:
     """Compare all reconstructed values with hashes taken before migration."""
     root = Path(__file__).resolve().parents[2]

@@ -45,6 +45,33 @@ capability is implied by these interfaces.
 
 ## Numerical path
 
+### Experimental automatic AOT plumbing
+
+`GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
+entries from the common structural automatic registry. It is off by default;
+the disabled registry returns no automatic entries. Enabling this internal
+build option **does not admit public automatic CUDA KS or force methods**.
+Unsupported products continue to fail explicitly rather than stage CPU science.
+
+The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
+work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
+coefficient ABI. The static `CudaXcPointProgram` descriptor binds library-owned
+callbacks, semantic/source identities, ingredient mask and feature width.
+`CudaXcPlan::point_program()` exposes that immutable execution identity without
+turning it into an installed artifact/cache key or a resource admission claim.
+Automatic entries reuse the existing AO, density-feature and potential kernels
+with strict FP64 and the bounded one-tile fallback. They do not inherit curated
+mixed precision, response, local-AO selection, batching or graph qualification.
+
+Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
+Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that
+binary and run `tests/python/test_libxc_automatic_cuda_xc.py`. The independent
+PySCF 2.14.0 / Libxc 7.0.0 gate checks both physical spin layouts, partial tiles,
+fixed-density XC energy/potential, replay, density directions and changed
+geometry. This is not an SCF, analytic-force or installed-bundle qualification.
+
+### Curated execution
+
 The native generated grid translation unit reuses the existing through-f AO
 kernel and generated D/C ingredient bilinears. LDA retains one AO/value feature
 per spin; PBE retains value and three ordinary spatial derivatives. Neither

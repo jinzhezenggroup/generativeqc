@@ -9,6 +9,7 @@
 
 #include "dft/ao_grid.hpp"
 #include "dft/ao_selection_work.hpp"
+#include "dft/cuda_xc_point_program.hpp"
 #include "dft/grid.hpp"
 #include "dft/xc_capabilities.hpp"
 #include "runtime/bounded_workspace.hpp"
@@ -40,20 +41,6 @@ struct CudaXcDensityBinding {
   generativeqc::runtime::NativeLoweringPrecision precision;
   bool retained_incumbent{};
 };
-
-/** Compiler-selected point entry. The immutable functional/response key is
- * resolved at preparation; runtime execution only binds validated device data.
- * Spin remains a layout argument and every entry uses the same FP64 contract. */
-using CudaXcPointLauncher = void (*)(cudaStream_t, const double*, const double*, std::size_t,
-                                     std::size_t, double*, double*, int*, std::uint32_t, double,
-                                     double, const double*);
-
-/** Physical point submission over consecutive independent tiles. Feature and
- * coefficient slots keep each tile's compact channel-major layout, including
- * the final partial tile. AO maps and matrix accumulation are not coarsened. */
-using CudaXcPointBatchLauncher = void (*)(cudaStream_t, const double*, const double*, std::size_t,
-                                          std::size_t, double*, double*, int*, std::uint32_t,
-                                          double, double, std::size_t);
 
 /** Compiler-owned bounded panel residency plan. No device descriptors, point
  * gathers, or per-evaluation allocations are needed. A one-tile plan is the
@@ -218,6 +205,9 @@ class CudaXcPlan {
   CudaXcPlan& operator=(const CudaXcPlan&) = delete;
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
+  /** Immutable automatic AOT identity, or null for the legacy curated provider.
+   * This is diagnostic/execution provenance, not public capability admission. */
+  const CudaXcPointProgram* point_program() const noexcept { return point_program_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
   /** Prepare after maps and before evaluation/capture. Rejection/OOM preserves
    * the incumbent. Compact contraction batching is an explicit qualification
@@ -318,6 +308,7 @@ class CudaXcPlan {
                                        const double* total_gradient, const double* vrho,
                                        const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
+  const CudaXcPointProgram* point_program_{};
   CudaXcPointLauncher point_launcher_{};
   CudaXcPointBatchLauncher point_batch_launcher_{};
   CudaXcPointBatchPlan point_batch_plan_;

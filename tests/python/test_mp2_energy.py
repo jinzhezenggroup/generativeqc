@@ -54,7 +54,7 @@ class FixtureSource:
         self.reads += 1
         starts, sizes = request
         return np.ascontiguousarray(
-            self.ao[tuple(slice(b, b + n) for b, n in zip(starts, sizes))]
+            self.ao[tuple(slice(b, b + n) for b, n in zip(starts, sizes, strict=True))]
         )
 
     def global_offsets(self, request: typing.Any) -> typing.Any:

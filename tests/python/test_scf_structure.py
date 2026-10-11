@@ -14,6 +14,31 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize(
+    "unrelated",
+    ("range_exchange_runtime.hpp", "execution_qualifiers.hpp_impl.hpp", "eri.hpp"),
+)
+def test_cuda_integral_numerics_borrows_only_exact_execution_qualifiers(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """Host lowering permits a qualifier leaf, not a broader integral dependency."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "integrals").mkdir()
+    (source / "integrals/execution_qualifiers.hpp").write_text("\n")
+    (source / "integrals" / unrelated).write_text("\n")
+    owner = source / "scf/cuda/scalar_math.cuh"
+    owner.write_text('#include "integrals/execution_qualifiers.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "integrals/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert (
+        f"forbidden cuda_integral_numerics dependency on integrals/{unrelated}"
+        in errors[0]
+    )
+
+
 @pytest.mark.parametrize("unrelated", ("cuda_architecture.hpp", "resource_ledger.hpp"))
 def test_hf_driver_can_borrow_only_qualified_device_facts(
     tmp_path: Path, unrelated: str
@@ -216,6 +241,25 @@ def test_rhf_phase_values_borrow_public_provider_without_private_state(
     errors = audit_scf_structure(tmp_path)["errors"]
     assert len(errors) == 1
     assert "forbidden cuda_rhf_resident_values dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "forbidden_header",
+    ["scf/cuda/rhf_graph.hpp", "scf/cuda/direct_jk_plan.hpp", "dft/cuda_ks.hpp"],
+)
+def test_common_phase_source_cannot_acquire_method_or_provider_state(
+    tmp_path: Path, forbidden_header: str
+) -> None:
+    """Shared source admission/lifetime cannot import method equations or graphs."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / forbidden_header).parent.mkdir(parents=True, exist_ok=True)
+    (source / forbidden_header).write_text("// Private or method-owned state\n")
+    owner = source / "scf/cuda/direct_jk_source_lease.hpp"
+    owner.write_text(f'#include "{forbidden_header}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_direct_jk_source_lease dependency" in errors[0]
 
 
 def test_one_electron_mapping_uses_explicit_cuda_provider_capability() -> None:

@@ -1,22 +1,19 @@
 #pragma once
 
 #include <cstddef>
-#include <string_view>
+
+#include "scf/cuda/direct_jk_source_policy.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
 inline constexpr std::size_t kReferenceEriCacheLimit = 256ULL << 20;
 
-enum class ReferenceResidentValuesSelection { automatic, disabled, forced, invalid };
+using ReferenceResidentValuesSelection = DirectJkSourceSelection;
 
 /** Unset selects bounded automatic routing; explicit 0/1 retain A/B controls. */
 constexpr ReferenceResidentValuesSelection reference_resident_values_selection(
     const char* value) noexcept {
-  if (!value || std::string_view(value) == "auto")
-    return ReferenceResidentValuesSelection::automatic;
-  if (std::string_view(value) == "0") return ReferenceResidentValuesSelection::disabled;
-  if (std::string_view(value) == "1") return ReferenceResidentValuesSelection::forced;
-  return ReferenceResidentValuesSelection::invalid;
+  return direct_jk_source_selection(value);
 }
 
 /** Conservative cold/fallback-domain heuristic, separate from memory legality.
@@ -28,11 +25,8 @@ constexpr ReferenceResidentValuesSelection reference_resident_values_selection(
 constexpr const char* reference_resident_values_auto_refusal(
     std::size_t nbf, std::size_t direct_nbf, unsigned maximum_iterations, unsigned maximum_angular,
     bool cold_reference, bool generic_fock) noexcept {
-  if (!cold_reference) return "auto: reused reference bucket";
-  if (maximum_angular != 3 || !generic_fock) return "auto: retain generated/lower-angular schedule";
-  if (nbf < 64 || direct_nbf < 128) return "auto: source below cold reuse threshold";
-  if (maximum_iterations < 8) return "auto: short iteration limit";
-  return nullptr;
+  return direct_jk_source_auto_refusal(nbf, direct_nbf, maximum_iterations, maximum_angular,
+                                       cold_reference, generic_fock);
 }
 
 /** Phase-local canonical values amortize setup only for repeated exact actions.
@@ -45,10 +39,7 @@ constexpr std::size_t reference_resident_value_allowance(std::size_t nbf,
                                                          std::size_t required, std::size_t overhead,
                                                          std::size_t budget,
                                                          std::size_t ceiling) noexcept {
-  if (nbf < 64 || maximum_iterations < 4 || required > budget || overhead > budget - required)
-    return 0;
-  const auto remaining = budget - required - overhead;
-  return remaining < ceiling ? remaining : ceiling;
+  return direct_jk_source_allowance(nbf, maximum_iterations, required, overhead, budget, ceiling);
 }
 
 /** Use bounded shell-quartet work when the reference cannot use an ERI cache.

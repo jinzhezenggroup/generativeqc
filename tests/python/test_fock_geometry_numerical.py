@@ -2,9 +2,8 @@
 
 import ctypes
 import re
-import shutil
-import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -15,6 +14,9 @@ from generativeqc_compiler.integral import (
     cuda_target_info,
     emit_shell_class_fused_cuda,
 )
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -32,11 +34,8 @@ def _definition(source: str, marker: str, *, structure: bool = False) -> str:
 
 @pytest.mark.parametrize("name", ("ssss", "psss", "dppp", "dddd"))
 def test_value_geometry_retains_all_live_state_and_prunes_only_dead_state(
-    tmp_path: Path, name: str
+    tmp_path: Path, name: str, native_cxx: "NativeCxx"
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     plan = build_fused_shell_plan(
         spec,
@@ -68,6 +67,7 @@ def test_value_geometry_retains_all_live_state_and_prunes_only_dead_state(
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+#include "integrals/execution_qualifiers.hpp"
 #define __device__
 #define __forceinline__ inline
 struct MixedPrecisionFloat { double value; };
@@ -136,22 +136,17 @@ extern "C" unsigned run(const double* input, double* output, unsigned mode) {
         + functions
         + body
     )
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_shared(
+        (cpp,),
+        library,
+        compile_args=(
             "-std=c++20",
             "-O2",
             "-ffp-contract=off",
-            "-shared",
-            "-fPIC",
-            str(cpp),
-            "-o",
-            str(library),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+            f"-I{ROOT / 'src'}",
+        ),
+        compile_timeout=60,
+        link_timeout=60,
     )
     native = ctypes.CDLL(str(library)).run
     pointer = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")

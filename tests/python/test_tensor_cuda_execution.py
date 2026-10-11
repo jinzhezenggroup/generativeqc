@@ -45,6 +45,8 @@ from generativeqc_compiler.tensor.cuda_plan import (
 from generativeqc_compiler.tensor.examples import example_cases
 from generativeqc_compiler.tensor.interpreter import execute
 
+from tools.tensor_reduction_qualification import qualification_reduction_plan
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
@@ -227,11 +229,14 @@ def check(
     compiler: typing.Any,
     cache: typing.Any,
     schedule: typing.Any = None,
+    prepare_lowering: typing.Any = None,
     **options: typing.Any,
 ) -> typing.Any:
     schedule = TensorSchedule() if schedule is None else schedule
     expected = execute(program, feeds).outputs
     plan = plan_cuda(program, compiler.target, schedule=schedule, **options)
+    if prepare_lowering is not None:
+        plan = prepare_lowering(plan, compiler=compiler)
     artifact = compile_cuda(plan, compiler, cache)
     with PreparedCuda(plan, artifact) as prepared:
         for profile in (False, True, False):
@@ -267,10 +272,8 @@ def test_cub_block_reduce_matches_interpreter(
         feeds,
         compiler,
         cache,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
+        prepare_lowering=qualification_reduction_plan,
     )
     assert result.metrics["kernel_ms"] >= 0.0
 

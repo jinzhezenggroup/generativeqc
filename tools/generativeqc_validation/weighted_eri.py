@@ -69,6 +69,7 @@ def primitive_variables(
     for prefix, shift in zip(
         ("pa", "pb", "qc", "qd"),
         (P - centers[0], P - centers[1], Q - centers[2], Q - centers[3]),
+        strict=True,
     ):
         result.update(
             {f"{prefix}_{label}": shift[axis] for axis, label in enumerate("xyz")}
