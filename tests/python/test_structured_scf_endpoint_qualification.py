@@ -2,6 +2,8 @@
 
 import copy
 import typing
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -105,3 +107,56 @@ def test_large_spd_fixture_does_not_silently_change_the_f_fixture() -> None:
     assert spd["basis"] == "def2-svp"
     assert original["basis"] == "def2-tzvp"
     assert spd["coordinates"] == original["coordinates"]
+
+
+def test_transport_is_detached_from_the_prepared_owner_not_batch_item(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import generativeqc
+
+    def hook(mask: int) -> bool:
+        return -1 <= mask <= 127
+
+    def diagnostic() -> bytes:
+        return b"{}"
+
+    item = SimpleNamespace(
+        status=3,
+        status_message="failed solve",
+        converged=False,
+        executed_backend="cuda",
+        energy=-1.0,
+        forces=None,
+        iterations=1,
+        ks_diagnostic=None,
+    )
+    transport = SimpleNamespace(to_payload=lambda: {"iterations": 1})
+
+    class Prepared:
+        resource_diagnostics = None
+        ks_transport_diagnostics = (transport,)
+
+        def __enter__(self) -> typing.Any:
+            return self
+
+        def __exit__(self, *_arguments: object) -> None:
+            pass
+
+        def execute(
+            self, *_arguments: typing.Any, **_keywords: typing.Any
+        ) -> SimpleNamespace:
+            return SimpleNamespace(items=(item,))
+
+    calculator = SimpleNamespace(
+        _library=SimpleNamespace(
+            tensor_structured_scf_qualification_for_test_v1=hook,
+            tensor_structured_scf_preparation_diagnostic_for_test_v1=diagnostic,
+        ),
+        prepare_batch=lambda *_arguments, **_keywords: Prepared(),
+    )
+    monkeypatch.setattr(generativeqc, "Calculator", lambda **_keywords: calculator)
+    rows = qualification.ks_probe(
+        qualification.model("small", "rks"), tmp_path, tmp_path, 127, 1
+    )
+    assert len(rows) == 5
+    assert all(row["transport_diagnostic"] == {"iterations": 1} for row in rows)
