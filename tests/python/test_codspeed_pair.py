@@ -50,7 +50,7 @@ def _profile(folder: Path, uris: tuple[str, ...] = pair.URIS) -> Path:
     path.write_text(
         _part("Metadata: pytest-codspeed 5.0.3", 0)
         + "".join(_part(uri, index + 1) for index, uri in enumerate(uris))
-        + "part: 6\ndesc: Trigger: Program termination\nevents: Ir\ntotals: 99999\n"
+        + f"part: {len(uris) + 1}\ndesc: Trigger: Program termination\nevents: Ir\ntotals: 99999\n"
     )
     return path
 
@@ -440,8 +440,8 @@ def test_complete_stubbed_execution_runs_exact_abba_without_upload(
         report["performance_clearance"] is False
         and report["backend_score_available"] is False
     )
-    assert len(report["comparisons"]) == 5
-    assert all(len(x["measurements"]) == 5 for x in report["arms"].values())
+    assert len(report["comparisons"]) == 4
+    assert all(len(x["measurements"]) == 4 for x in report["arms"].values())
     assert report["provenance"]["actual_base"] == "a" * 40
     assert report["restored_tested_checkout"] is True
     assert (
@@ -459,12 +459,13 @@ def test_failed_checkout_restoration_is_a_diagnostic_failure(
     assert report["performance_clearance"] is False
 
 
-def test_no_benchmark_definition_or_five_case_order_change() -> None:
+def test_retired_geometry_case_and_four_case_order_are_pinned() -> None:
     assert (
         pair.sha256(ROOT / pair.BENCHMARK)
-        == "4b128805eb00b5189479196ddd8ba9a952e3465104e01e98ad94242d968946ea"
+        == "1b8fe0eed25074a2a289cac9b4b5749cf8f74bc52c6be73d33305759c1365bfc"
     )
-    assert len(pair.URIS) == 5
+    assert len(pair.URIS) == 4
+    assert not any("changed_geometry_pair" in uri for uri in pair.URIS)
 
 
 def test_timeout_only_terminates_the_owned_process_group(
@@ -531,8 +532,9 @@ def test_scanned_native_compiler_rule_requires_review(tmp_path: Path) -> None:
 
 
 def test_diagnostic_budget_covers_verified_slow_cpu_suite_and_fixed_abba() -> None:
-    # Exact-master job 114314463425: five tests 566.15s; complete action 590s.
-    # Four fixed arms, one cached baseline configure/build, bounded overhead.
+    # Historical exact-master job 114314463425 included the retired fifth case:
+    # five tests 566.15s and complete action 590s. Keep the four-arm budget
+    # conservative after the retirement; do not relabel historical timings.
     assert pair.ARM_SECONDS == 12 * 60
     assert pair.TOTAL_SECONDS == 56 * 60
     assert pair.ARM_SECONDS > 590
