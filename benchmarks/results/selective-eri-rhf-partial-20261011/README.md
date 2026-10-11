@@ -1,7 +1,7 @@
 # Selective canonical ERI residency: scoped RHF E+F experiment
 
 The measured source is frozen master `637466c624c4c4c4dd4eb7c511a2c88675744325`
-plus `measured-source.patch.gz`. It uses an experimental 14-bucket mask
+plus `measured-endpoint-source.patch.xz`. It uses an experimental 14-bucket mask
 `66058240`, retaining 2,146,754,256 FP64 value bytes under a 2-GiB additional
 ceiling and a **4-GiB complete numeric budget on both sides**. Master's full
 4,328,718,848-byte value inventory cannot fit this complete budget even before
@@ -27,8 +27,18 @@ admission, finite source audits and fallbacks are separately checked.
 
 ## Reproduction
 
+The compact patch preserves every compiled native change, the complete endpoint
+and oracle clients, and the real-GPU response tests. Optional profiler/selector
+and host-test edits remain recoverable from the original full patch at Git
+revision `0d27821557ba77bfd6e1a65316ed88bc20061fbd`, path
+`benchmarks/results/selective-eri-rhf-partial-20261011/measured-source.patch.gz`.
+Its exact checksum and byte size are retained in `publication.json`; it is not
+required for endpoint reproduction. All numerical records remain lossless gzip
+JSON, readable through the shared publication readers. The reproduction script
+restores the exact input bytes from `basis.input.gz` before launching Slurm.
+
 Create two checkouts of the pinned master; keep the baseline immutable and apply
-`gzip -dc measured-source.patch.gz | git apply -` to the candidate. Build both
+`xz -dc measured-endpoint-source.patch.xz | git apply -` to the candidate. Build both
 with identical Release, CUDA 12.9.1/SM120, `portable_cuda` AOT configurations,
 reusing supported CXX/CUDA `ccache` launchers. Use the same CPU-linalg fallback
 configuration when reconstructing this run; CUDA physical work remains on GPU.

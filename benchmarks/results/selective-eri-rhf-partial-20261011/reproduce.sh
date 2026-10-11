@@ -20,9 +20,10 @@ done
 export PYTHONPATH="$CANDIDATE_ROOT/python:$CANDIDATE_ROOT:$DEPENDENCY_ROOT"
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
 export GENERATIVEQC_RHF_RESIDENT_VALUES=auto
-export INPUT="$here/basis.input"
 export OUTPUT_ROOT="$CANDIDATE_ROOT/.artifacts/selective-eri-reproduction"
 mkdir -p "$OUTPUT_ROOT"
+export INPUT="$OUTPUT_ROOT/basis.input"
+gzip -dc "$here/basis.input.gz" > "$INPUT"
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=02:00:00 \
   bash -s <<'GPU'
 set -euo pipefail

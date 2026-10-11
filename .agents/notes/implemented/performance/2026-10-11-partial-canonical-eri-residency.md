@@ -179,6 +179,17 @@ new comparison against the later master or a broader default promotion.
 The compatibility host suite passes 328 tests, including the shared screened
 lease's unchanged automatic admission and explicit partial-screening refusal.
 
+The first integration CI tested a newer synthetic merge with master `5b577dbb`,
+whose additional evidence left less than 48 KiB of the aggregate checkout
+budget. Further compact only this publication: gzip all JSON summaries and the
+exact input, and retain an xz reconstruction containing every compiled native
+change plus the endpoint/oracle clients and real-GPU response tests. All native
+patch sections remain byte-identical. Optional profiler/selector and host-test
+edits remain recoverable from the original complete patch in existing Git
+revision `0d27821557ba77bfd6e1a65316ed88bc20061fbd`; its original checksum and
+size are recorded in the publication. No timing, force, work-count or scientific
+identity is dropped, and no historical bundle or external release is modified.
+
 ## Revisit when
 
 Complete-endpoint evidence justifies a broader admission/profitability model,

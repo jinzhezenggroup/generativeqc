@@ -7,40 +7,40 @@
   },
   "files": [
     {
-      "bytes": 3728,
+      "bytes": 4434,
       "path": "README.md",
       "role": "summary",
-      "sha256": "9c7c798f7bc038fdff55eef148c4522d601ae975010f454d1c01e932e2415506"
+      "sha256": "24c5738bab7a78f9d808fe8ac31dc2959a711c8d8e17607188127dd555efa86f"
     },
     {
-      "bytes": 2824,
+      "bytes": 2874,
       "path": "reproduce.sh",
       "role": "reproduction",
-      "sha256": "20100ffcc2d65ea36a8f98acbb814f1b40084d3f399a1e501cc1dbeae068a24b"
+      "sha256": "591288f232111e767c54ebdbe6a3798d88fccb1c387b297e7cd1078a60c7c1f5"
     },
     {
-      "bytes": 5628,
-      "path": "basis.input",
+      "bytes": 991,
+      "path": "basis.input.gz",
       "role": "input",
-      "sha256": "67345c908e453777df5d5c3add34bfbfa907d3829a05ec9062fd96ab6a2cbc51"
+      "sha256": "45609470b1aa2c58129f02ca6907a288046390fbd413418b914b34cff84e7798"
     },
     {
-      "bytes": 2031,
-      "path": "selection.json",
+      "bytes": 860,
+      "path": "selection.json.gz",
       "role": "summary",
-      "sha256": "55b9b0c3ca307c17b74981932d8335f5b790d49870066475db0f5e8d64cd3f9d"
+      "sha256": "8999730f8fec7bca54077a8bc31ce3feccc80cb84febb2681dfe13029ef19d97"
     },
     {
-      "bytes": 13913,
-      "path": "comparison.json",
+      "bytes": 2192,
+      "path": "comparison.json.gz",
       "role": "summary",
-      "sha256": "c536e952e6a5a247ba39cd41674ebbb0d780ad617a09f57e9509c3244b9ad22e"
+      "sha256": "493287f88887e1658812f2dbac3c2f3d647d35110ace00d36e81e0fa33915ce1"
     },
     {
-      "bytes": 23319,
-      "path": "source-observers.json",
+      "bytes": 798,
+      "path": "source-observers.json.gz",
       "role": "summary",
-      "sha256": "03bf9797837eff0af623ff3a2ef29feebbf6f8898ee0fdf1b1542cf0f517d1f4"
+      "sha256": "6fbf6bc8aa015520c9708b0e988fdbc88b813c76ff72af6b0bdd2ca54ebc0351"
     },
     {
       "bytes": 7948,
@@ -55,16 +55,16 @@
       "sha256": "a8d1a55197002af004319f106b6950fb8c6ef119c79829366b4f083766349880"
     },
     {
-      "bytes": 525,
-      "path": "qualification.json",
+      "bytes": 345,
+      "path": "qualification.json.gz",
       "role": "summary",
-      "sha256": "36705790a3ee3ed6e7cf26afb5d26a559500cf501db2e3b39b5ea4d7382cdd11"
+      "sha256": "cb7940d706ff7a52a7069ba68ea52a158ebeaea2114bde1256de7be9d5282a5a"
     },
     {
-      "bytes": 30702,
-      "path": "measured-source.patch.gz",
+      "bytes": 14108,
+      "path": "measured-endpoint-source.patch.xz",
       "role": "source-patch",
-      "sha256": "bacb8c2bc1cc8802944b28451a54bdd900330d85a07b9ef5f1d1425ba75ce07c"
+      "sha256": "7156bf22ab9216a3390ed76133b5af47dc465e47494887c62cd45b01812cbae4"
     },
     {
       "bytes": 4282,
@@ -83,5 +83,26 @@
   "source": {
     "dirty": true,
     "revision": "637466c624c4c4c4dd4eb7c511a2c88675744325"
+  },
+  "source_reconstruction": {
+    "full_patch_bytes": 30702,
+    "full_patch_git_path": "benchmarks/results/selective-eri-rhf-partial-20261011/measured-source.patch.gz",
+    "full_patch_sha256": "bacb8c2bc1cc8802944b28451a54bdd900330d85a07b9ef5f1d1425ba75ce07c",
+    "full_snapshot_git_revision": "0d27821557ba77bfd6e1a65316ed88bc20061fbd",
+    "included_paths": [
+      "src/hf/rhf_frame_response.cu",
+      "src/scf/cuda/direct_jk.cpp",
+      "src/scf/cuda/direct_jk_plan.hpp",
+      "src/scf/cuda/reference_eri_policy.hpp",
+      "src/scf/cuda/rhf_resident_values.cpp",
+      "src/scf/cuda/rhf_resident_values.hpp",
+      "src/scf/cuda_direct_jk_device.hpp",
+      "tests/native/rhf_frame_response_probe.cpp",
+      "tests/python/test_rhf_frame_response_cuda.py",
+      "benchmarks/selective_eri_rhf_acceptance.py",
+      "benchmarks/selective_eri_rhf_endpoint.cpp",
+      "benchmarks/selective_eri_rhf_endpoint.py"
+    ],
+    "scope": "All compiled native modifications, endpoint/client/oracle and real-GPU response tests; optional offline profiler/selector and host-test edits remain in existing Git history."
   }
 }
