@@ -94,7 +94,9 @@ def main() -> None:
             max_iterations=100,
         )
         record["native_build"] = native_build_metadata(calculator)
-        require_tuned_native_build(record["native_build"])
+        # Intentional portable AOT baseline: both arms share one binary, so the
+        # A/B comparison is unaffected; the build identity is recorded.
+        require_tuned_native_build(record["native_build"], allow_portable=True)
         record["stage"] = "prepare"
         save()
         cp.cuda.Stream.null.synchronize()
