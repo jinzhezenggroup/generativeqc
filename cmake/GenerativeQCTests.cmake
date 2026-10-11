@@ -137,6 +137,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_fock_provider_tests tests/native/test_fock_provider.cpp)
   generativeqc_native_test(generativeqc_fock_api_tests tests/native/test_fock_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_native_tests tests/native/test_rhf.cpp)
+  generativeqc_native_test(generativeqc_mean_field_options_tests
+                       tests/native/test_mean_field_options.cpp)
 
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_final_state_tests tests/native/test_final_state.cpp)

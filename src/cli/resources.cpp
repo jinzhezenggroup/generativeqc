@@ -10,7 +10,7 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
-#include "dft/incremental_direct_jk_control.hpp"
+#include "scf/incremental_direct_jk_control.hpp"
 
 extern "C" int generativeqc_resource_small_hf_cuda_v2(std::size_t, std::size_t, std::size_t,
                                                       std::size_t, const std::uint8_t*,
@@ -453,10 +453,10 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   }
   if (ks) {
     const auto incremental_requested = [](const char* name) {
-      const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
-      if (control == dft::IncrementalDirectJkControl::Invalid)
+      const auto control = scf::classify_incremental_direct_jk_control(std::getenv(name));
+      if (control == scf::IncrementalDirectJkControl::Invalid)
         throw UsageError(std::string(name) + " must be 0/off or 1/on");
-      return control == dft::IncrementalDirectJkControl::Enabled;
+      return control == scf::IncrementalDirectJkControl::Enabled;
     };
     // Validate both eagerly, even when the first selector enables the mode.
     const bool generic = incremental_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
