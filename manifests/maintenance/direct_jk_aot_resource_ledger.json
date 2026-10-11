@@ -7,6 +7,7 @@
       "NDEBUG",
       "GENERATIVEQC_HAS_CUDA=1"
     ],
+    "fast_compile": false,
     "optimization": "-O3",
     "ptxas_verbose": true,
     "split_compile_threads": 1,
@@ -537,7 +538,7 @@
     }
   },
   "manifest_sha256": "4327a87909b22a3af1518948cf9417d3b347289e86c0de8bebfa20dc7a189a64",
-  "preprocessed_sha256": "37433b5c1cc9c9067c5cce82119a2d1c84e8ffe4bb573d679687499d1fc84373",
+  "preprocessed_sha256": "e58a8a275f63a30d7df980be752febae982a61f978c97e8b2fe22e7bd361de1d",
   "schema": "generativeqc.direct-jk-aot-resource-ledger",
   "schema_version": 1,
   "shard_source_sha256": "a9fdacb018e1e1547ab71841e505260000f40cef5269a41ee48e42a9f4111370",

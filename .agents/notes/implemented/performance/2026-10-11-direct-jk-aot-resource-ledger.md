@@ -242,8 +242,13 @@ directory and `CCACHE_BASEDIR` set to the same directory. The bounded inner
 cache records this execution context and will not replay metadata from the old
 cwd/base contract.
 
-This repair changes the qualified preprocessed/compile context, so the existing
-ledger is not relabeled. A canonical CI `--record-output` run must produce the
-candidate ledger and retained compiler-cache/resource receipts; only the
-reviewed candidate may replace the committed ledger before gate mode is
-restored.
+This repair changed the qualified preprocessed/compile context, so the existing
+ledger was not relabeled. Canonical CI record run 38141692779 at `a862d12ed`
+compiled a new object through ccache 4.14 (cache miss, return code 0) with the
+build-directory cwd/base contract and retained the cache statistics, compile
+receipt, NVCC log, cuobjdump output, report, and candidate ledger. The candidate
+kept the complete 86-kernel inventory and every REG/STACK/SHARED/LOCAL row
+byte-for-byte equal to the prior ledger. Only the preprocessed identity changed
+from `37433b5c...` to `e58a8a27...`, and the typed flag schema now records
+`fast_compile=false`. The reviewed candidate is installed and gate mode is
+restored; the subsequent gate run must still pass on the final exact head.
