@@ -207,6 +207,9 @@ def run(
     core_reuse: bool = True,
     audit_matrix: bool = True,
     overflow_audit: bool = False,
+    mixed_precision: bool = False,
+    mixed_limit_two: bool = False,
+    invalid_mixed_controls: bool = False,
     budget: int = 1 << 30,
     device_budget: int = np.iinfo(np.uintp).max,
 ) -> tuple:
@@ -234,7 +237,7 @@ def run(
     result = [np.full(shape, np.nan) for shape in shapes]
     outputs = (dp * len(result))(*(x.ctypes.data_as(dp) for x in result))
     values = np.full(6, np.nan)
-    counts = np.zeros(40, dtype=np.uintp)
+    counts = np.zeros(52, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -253,7 +256,10 @@ def run(
         + 1024 * int(primal_matrix)
         + 2048 * int(native_defaults)
         + 4096 * int(serial_scratch_reuse)
-        + 8192 * int(resident_krylov),
+        + 8192 * int(mixed_precision)
+        + 16384 * int(mixed_limit_two)
+        + 32768 * int(invalid_mixed_controls)
+        + 65536 * int(resident_krylov),
         budget,
         device_budget,
         ptrs,

@@ -1040,7 +1040,8 @@ RccsdNativeState run_rccsd_native_state(
     const std::vector<double>* initial_density, bool* warm_start_fallback,
     std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
     bool retain_df_response, bool df_matrix_gemm, scf::CudaRhfBucketPlan** cuda_reference_plan,
-    std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis) {
+    std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis,
+    bool df_mixed_precision) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -1068,6 +1069,7 @@ RccsdNativeState run_rccsd_native_state(
   solver_options.df_auxiliary_batch_limit = df_auxiliary_batch_limit;
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;
+  solver_options.df_mixed_precision = df_mixed_precision;
   // A changed nonlinear trajectory is qualified for CUDA DF energies only;
   // force/Lambda owners and conventional/CPU callers retain trial-state DIIS.
   solver_options.diis_input_residual =

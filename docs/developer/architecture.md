@@ -56,6 +56,20 @@ calculator while the native carrier manifest remains energy-only. This split is
 intentional and regression-tested; it must not be used to infer forces for an
 unqualified backend/basis/method combination.
 
+The source-level Python/native call-path inventory lives in
+[`manifests/maintenance/python_native_runtime_ownership.json`](../../manifests/maintenance/python_native_runtime_ownership.json).
+It records method selectors, backend, representation, property, spin and
+approximation axes, native source/caller anchors, remaining Python runtime
+work, and the exact baseline source SHA. Wrapper, compiler/AD, compatibility,
+reference-oracle and scientific-runtime sites have separate classifications.
+`python tools/check_native_runtime_ownership.py` checks those source anchors;
+it does not establish native endpoint parity or numerical qualification.
+In particular, native integral/XC/response actions do not make the Python
+stationary force or molecular HVP controller a complete native SDK endpoint.
+Automatic cold-start selection is queried from the native owner; its precise
+domain and older-library behavior are documented in
+[cold-start initial guesses](../user/initial_guesses.md).
+
 Result publication is method-neutral internally; the
 ABI-0 `density_rms` field retains the density-update convergence measure.
 The additive `generativeqc_calculation_get_scf_diagnostic` query publishes separate

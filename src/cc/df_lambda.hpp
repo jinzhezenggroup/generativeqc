@@ -36,6 +36,12 @@ class DFLambdaActions {
   DFLambdaActions& operator=(const DFLambdaActions&) = delete;
   void replay(double& energy, std::vector<double>& r1, std::vector<double>& r2);
   void rhs(bool independent, std::vector<double>& one, std::vector<double>& two);
+  /** One bounded warmup epoch borrows otherwise idle strict-audit scratch.
+   * Begin only after the fresh FP64 primal/RHS checks. Finishing invalidates
+   * every approximate buffer permanently before strict solve/audit/VJP work.
+   */
+  bool begin_mixed_precision();
+  void finish_mixed_precision();
   void transpose(bool independent, std::span<const double> one, std::span<const double> two,
                  std::vector<double>& out_one, std::vector<double>& out_two);
   [[nodiscard]] DFLambdaResidentState resident_state() const noexcept;

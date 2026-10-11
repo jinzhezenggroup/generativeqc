@@ -21,12 +21,12 @@ def check_residency(counts: np.ndarray, o: int, v: int, budget: int) -> None:
     doubles = singles * singles
     pairs = (singles + doubles) // 2
     dimension = singles + pairs
-    assert counts[29] == 1 and counts[30] == 0
-    assert 0 < counts[31] < counts[32] <= budget
-    assert 0 < counts[34] <= counts[33]
-    assert counts[35] > 0 and counts[36] > 0
-    assert counts[37] == 2 * pairs * np.dtype(np.uintp).itemsize + 3 * dimension * 8
-    assert counts[38] > 0 and counts[39] > 0
+    assert counts[41] == 1 and counts[42] == 0
+    assert 0 < counts[43] < counts[44] <= budget
+    assert 0 < counts[46] <= counts[45]
+    assert counts[47] > 0 and counts[48] > 0
+    assert counts[49] == 2 * pairs * np.dtype(np.uintp).itemsize + 3 * dimension * 8
+    assert counts[50] > 0 and counts[51] > 0
     assert counts[2] <= budget
 
 
@@ -153,7 +153,7 @@ def test_resident_df_refusal_and_failure_do_not_poison_next_endpoint(
             probe, arrays, resident_krylov=True, **options
         )
         assert status == 0, error
-        assert counts[29] == 0 and counts[30] == 1
+        assert counts[41] == 0 and counts[42] == 1
         assert np.max(values[1:]) < 1e-9
         for candidate, reference in zip(actual, expected, strict=True):
             np.testing.assert_allclose(candidate, reference, atol=3e-10, rtol=2e-9)

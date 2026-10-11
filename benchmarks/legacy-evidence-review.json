@@ -625,14 +625,6 @@
       "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
     },
     {
-      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
-      "family": "pbe0-restricted-point-default-20261010",
-      "bytes": 214312,
-      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
-    },
-    {
       "bytes": 218108,
       "classification": "required-compact-accepted-evidence",
       "family": "pbe0-spd-spatial-reuse-20261011",

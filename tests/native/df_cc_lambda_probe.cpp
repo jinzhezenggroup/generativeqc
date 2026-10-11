@@ -60,7 +60,13 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.df_matrix_gemm = !(mode & 8);
     response.df_core_reuse = !(mode & 64);
     response.serial_scratch_reuse = mode & 4096;
-    response.cuda_resident_krylov = mode & 8192;
+    response.df_mixed_precision = mode & 8192;
+    if (mode & 16384) response.df_mixed_precision_max_iterations = 2;
+    if (mode & 32768) {
+      response.df_mixed_precision_warmup_tolerance = std::numeric_limits<double>::quiet_NaN();
+      response.df_mixed_precision_max_iterations = 0;
+    }
+    response.cuda_resident_krylov = mode & 65536;
     response.df_audit_matrix_gemm = !(mode & 128);
     if (!(mode & 2048)) {
       response.df_primal_matrix_gemm = mode & 1024;
@@ -70,6 +76,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
       // Large finite seeds overflow intermediate adjoints. The sticky flag
       // must reject the complete action before the adapter publishes outputs.
       generativeqc::cc::detail::DFLambdaActions actions(p, cc, response, 0, false, true);
+      if (response.df_mixed_precision) (void)actions.begin_mixed_precision();
       std::vector<double> one(n1, std::numeric_limits<double>::max()),
           two(n2, std::numeric_limits<double>::max()), out_one, out_two;
       actions.transpose(bool(mode & 256), one, two, out_one, out_two);
@@ -122,6 +129,18 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              std::size_t(d.df_primal_matrix_gemm),
                              d.df_available_device_bytes,
                              d.df_device_limit_bytes,
+                             std::size_t(d.df_mixed_precision),
+                             std::size_t(d.df_mixed_precision_refused),
+                             d.df_mixed_storage_bytes,
+                             d.df_mixed_input_offset_bytes,
+                             d.df_mixed_actions,
+                             d.df_strict_actions,
+                             d.df_precision_switches,
+                             d.df_fp32_gemm_calls,
+                             d.df_fp32_gemm_summands,
+                             d.df_precision_cast_elements,
+                             d.df_mixed_iterations,
+                             d.df_strict_iterations,
                              std::size_t(d.resident_krylov),
                              std::size_t(d.resident_krylov_refused),
                              d.resident_krylov_bytes,

@@ -1,0 +1,217 @@
+{
+  "schema": "generativeqc.array-api-rhf-endpoint/v1",
+  "endpoint": "host Bohr coordinates -> converged total energy + nuclear gradient",
+  "molecule": "h2",
+  "elements": [
+    "H",
+    "H"
+  ],
+  "coordinates_bohr": [
+    [
+      0.0,
+      0.0,
+      -0.7
+    ],
+    [
+      0.0,
+      0.0,
+      0.7
+    ]
+  ],
+  "basis": "sto-3g",
+  "basis_metadata": {
+    "orbital": {
+      "name": "sto-3g",
+      "role": "orbital",
+      "mathematical_identity": "d84bfe3768b400204179d56c208ddf9551dce9129b91be0914ed262fb3e6a855",
+      "basis_identity": "57f840292f55bef56089342640740d019174dff148ba5f00f056744b3eb74c6d",
+      "representation": "cartesian",
+      "provenance": {
+        "source": "generativeqc/data/basis_pack.json; Basis Set Exchange",
+        "version": "Basis Set Exchange 0.11",
+        "license": "BSD-3-Clause",
+        "checksum": "6002092fea25331281cc095dc6dc41a6a3d7a2f0c88f82a1fbceac01225a897c"
+      },
+      "electrons": {
+        "atomic_numbers": [
+          1,
+          1
+        ],
+        "nuclear_charges": [
+          1,
+          1
+        ],
+        "ecp_core_electrons": [
+          0,
+          0
+        ],
+        "ionic_charge": 0,
+        "electron_count": 2,
+        "multiplicity": 1,
+        "nalpha": 1,
+        "nbeta": 1
+      },
+      "shell_count": 2,
+      "primitive_count": 6
+    },
+    "model_identity": "ee40ffb27e7eb172d9a96ff860131d5668541c1c28c7024d657f885d1507aab3"
+  },
+  "backend": "cuda",
+  "tensor_cuda_arch": "sm_120",
+  "controls": {
+    "max_iterations": 100,
+    "diis_history": 8,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "screening_tolerance": 1e-14
+  },
+  "precision": {
+    "policy_version": 1,
+    "requested_mode": "fp64",
+    "effective_bits": 64,
+    "mixed_precision_fock_threshold": 0.0,
+    "strict_refinement_applied": false,
+    "mixed_precision_reserved_error": 0.0,
+    "refinement_iterations": 0,
+    "mixed_stage_fock_builds": 0,
+    "strict_stage_fock_builds": 2,
+    "post_scf_fock_builds": 0,
+    "execution_retries": 0,
+    "mixed_admission_census": 0,
+    "final_residual_audits": 0,
+    "skipped_final_fock_builds": 1,
+    "operator_work_counters_valid": true,
+    "detail_version": 1,
+    "complete": false,
+    "operator_inventory_complete": false,
+    "conversion_count": 0,
+    "fallback_count": 0,
+    "returned_state_identity": null,
+    "scf_fock_timeline": [],
+    "operators": [],
+    "native_provenance": {
+      "policy_version": 1,
+      "requested_mode": "fp64",
+      "effective_bits": 64,
+      "mixed_precision_fock_threshold": 0.0,
+      "strict_refinement_applied": false,
+      "mixed_precision_reserved_error": 0.0,
+      "refinement_iterations": 0,
+      "mixed_stage_fock_builds": 0,
+      "strict_stage_fock_builds": 2,
+      "post_scf_fock_builds": 0,
+      "execution_retries": 0,
+      "mixed_admission_census": 0,
+      "final_residual_audits": 0,
+      "skipped_final_fock_builds": 1,
+      "operator_work_counters_valid": true
+    }
+  },
+  "initial_guess": "fresh hcore, no caller-provided density",
+  "cold_seconds": {
+    "native": 0.5740893030015286,
+    "array_api_including_jit": 6.171360703010578
+  },
+  "warm": {
+    "native": {
+      "median_seconds": 0.004193417509668507,
+      "min_seconds": 0.0041695969994179904,
+      "max_seconds": 0.0042339100036770105,
+      "samples_seconds": [
+        0.0042339100036770105,
+        0.004200507013592869,
+        0.004193643020698801,
+        0.004199435003101826,
+        0.004185206984402612,
+        0.004193191998638213,
+        0.00418485701084137,
+        0.0042311460128985345,
+        0.0041695969994179904,
+        0.0041818910103756934
+      ]
+    },
+    "array_api": {
+      "median_seconds": 0.004948853005771525,
+      "min_seconds": 0.004935392993502319,
+      "max_seconds": 0.0051457360095810145,
+      "samples_seconds": [
+        0.005082354007754475,
+        0.0049734450003597885,
+        0.0051457360095810145,
+        0.00495190400397405,
+        0.004956832999596372,
+        0.004942956991726533,
+        0.004940402024658397,
+        0.004945802007569,
+        0.004935392993502319,
+        0.004936624987749383
+      ]
+    }
+  },
+  "array_api_over_native": 1.1801479328879743,
+  "observed_5pct_timing_target_met": false,
+  "energy_error_hartree": 0.0,
+  "gradient_error_hartree_per_bohr": 0.0,
+  "scf_iterations": {
+    "native": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "array_api": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ]
+  },
+  "matching_iteration_counts": true,
+  "compiled_execution": {
+    "backend": "cuda",
+    "specializations": 1,
+    "native_executables": 1,
+    "program_hashes": [
+      "be1618592d2d05da7672904c561ceb8f2d00f6dd0bf9fd967f12f92b8bdc8114"
+    ],
+    "molecular_calls": [
+      {
+        "source": "__gqc_molecular_37ba43fe53dc06a6e574bcdb618c1739dd85e3871040c4480070c5bd3d17ad33_energy",
+        "calls": 11,
+        "force_calls": 11,
+        "total_iterations": 22,
+        "backend": "cuda",
+        "native_source_identity": "869e302bd2e1dcb0c82d9b005652581c297a28dc1225d6d5b0957562e80815bb",
+        "model_identity": "ee40ffb27e7eb172d9a96ff860131d5668541c1c28c7024d657f885d1507aab3",
+        "iterations": 2,
+        "energy_change": 0.0,
+        "density_rms": 2.0014830212433605e-16,
+        "nuclear_gradient": true,
+        "geometry_hash": "074960eed62e6b1a7a2aed84de57a7e4a4e23f19b66dcb345cdec172c5a13f43"
+      }
+    ]
+  },
+  "peak_memory_bytes": null,
+  "qualification_gaps": [
+    "peak host/device memory not measured",
+    "native ABI does not expose a complete exact-J/K operator-work inventory here"
+  ],
+  "gpu_performance_qualified": false,
+  "scheduler": {
+    "job_id": "767",
+    "node": "node4",
+    "visible_devices": "0"
+  }
+}

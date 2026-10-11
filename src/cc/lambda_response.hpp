@@ -70,6 +70,11 @@ struct LambdaOptions {
    * cuts, solver state, outputs or the optional invariant frontier.
    */
   bool serial_scratch_reuse{false};
+  // Experimental auxiliary-only warm start; publication always requires a
+  // separate original FP64 solve and the unchanged independent physical audit.
+  bool df_mixed_precision{false};
+  double df_mixed_precision_warmup_tolerance{1e-6};
+  std::size_t df_mixed_precision_max_iterations{16};
   // Unpromoted CUDA schedule. Budget/allocation refusal retains
   // the host-vector path with the same diagonal policy and physical audits.
   bool cuda_resident_krylov{false};
@@ -112,7 +117,15 @@ struct LambdaDiagnostic {
   const char* core_reuse_plan_hash{};
   bool df_audit_matrix_gemm{};
   std::size_t df_audit_arena_bytes{};
+  /** Shared allocation capacity and avoided separate scratch; not allocator peaks. */
+  std::size_t df_shared_scratch_bytes{}, df_scratch_avoided_bytes{};
   bool df_primal_matrix_gemm{};
+  bool df_mixed_precision{}, df_mixed_precision_refused{};
+  std::size_t df_mixed_storage_bytes{}, df_mixed_input_offset_bytes{};
+  std::size_t df_mixed_actions{}, df_strict_actions{}, df_precision_switches{};
+  std::size_t df_fp32_gemm_calls{}, df_fp32_gemm_summands{}, df_precision_cast_elements{};
+  std::size_t df_mixed_iterations{}, df_strict_iterations{};
+  const char* mixed_program_hash{};
   const char* audit_schedule_hash{};
   const char* shared_program_hash{};
   const char* independent_program_hash{};

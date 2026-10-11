@@ -100,8 +100,13 @@ _REGISTERED_STATIONARY_CODES = SEMILOCAL_FAMILY_CODES | frozenset(
 
 
 def _stationary_density_jet_count(functional: int) -> int:
+    """Admit first AO derivatives by ingredients, with conservative legacy fallback."""
     record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
-    return 4 if record is None or record["requires_gradient"] else 1
+    return (
+        4
+        if record is None or record["requires_gradient"] or record["requires_tau"]
+        else 1
+    )
 
 
 _DOUBLE = ct.POINTER(ct.c_double)
@@ -172,19 +177,24 @@ def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool | int
 
 
 def _resolve_restricted_point_policy(selection: bool | None = None) -> bool:
-    """Request the qualified PBE0 point schedule unless explicitly disabled.
+    """Request restricted point scheduling without asserting producer equality.
 
     This requests a schedule, not an equal-spin proof. Native mathematical,
     generation and scratch admission gates still select the actual kernel.
+    All registered candidates now default to equal-spin XC sharing when the
+    producer and resource gates pass. The PBE0-named environment variable
+    remains a compatibility spelling for this request.
     Older stationary/grid artifacts retain the general point route.
     """
     if selection is not None:
         if type(selection) is not bool:
             raise TypeError("restricted point selection must be boolean or None")
         return selection
-    mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_RESTRICTED_POINT")
+    if mode is None:
+        mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
     if mode not in {"off", "on"}:
-        raise ValueError("PBE0 restricted point mode must be 'off' or 'on'")
+        raise ValueError("restricted point mode must be 'off' or 'on'")
     return mode == "on"
 
 
@@ -659,7 +669,8 @@ class _CudaSources:
             )
         else:
             self.component_ids = None
-        self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
+        self.kind_tables: dict[tuple[str, int, bool], np.ndarray] = {}
+        self.component_page_arrays: tuple[np.ndarray, ...] | None = None
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
             [ct.c_int] * 3 + [ct.c_size_t] * 10 + [ct.POINTER(ct.c_void_p), *tail]
@@ -1074,21 +1085,117 @@ class _CudaSources:
             kind, source, rank, indices, primitive_work, nucleus, float(charge)
         )
 
-    def _kind_table(self, operator: str, rank: int) -> np.ndarray:
-        key = (operator, rank)
+    def _kind_table(
+        self, operator: str, rank: int, has_nucleus: bool = False
+    ) -> np.ndarray:
+        """Cache artifact-bound kinds, including public center/axis permutations."""
+        key = (operator, rank, has_nucleus)
         cached = self.kind_tables.get(key)
         if cached is not None:
             return cached
         shape = (len(COMPONENT_LABELS),) * rank
         table = np.full(shape, -1, dtype=np.int64)
         component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
-        for request, kind in self.kinds.items():
-            request_operator, components = request
-            if request_operator != operator or len(components) != rank:
-                continue
-            table[tuple(component_index[label] for label in components)] = kind
+        if self.component_mode:
+            for components in product(_component_domain(self.expansions), repeat=rank):
+                binding = derivative_binding(operator, components)
+                kind = self.kinds.get(binding.request)
+                if kind is not None:
+                    table[tuple(component_index[label] for label in components)] = (
+                        encode_stationary_derivative_kind(
+                            kind, binding, rank=rank, has_nucleus=has_nucleus
+                        )
+                    )
+        else:
+            for request, kind in self.kinds.items():
+                request_operator, components = request
+                if request_operator != operator or len(components) != rank:
+                    continue
+                table[tuple(component_index[label] for label in components)] = kind
         self.kind_tables[key] = table
         return table
+
+    def _component_arrays(self) -> tuple[np.ndarray, ...]:
+        """Retain only linear AO topology, never a Cartesian descriptor inventory."""
+        if self.component_page_arrays is None:
+            component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+            counts = np.asarray([len(row) for row in self.expansions], dtype=np.int64)
+            labels = np.full((self.nao, 3), -1, dtype=np.int64)
+            coefficients = np.zeros((self.nao, 3), dtype=np.float64)
+            for ao_index, expansion in enumerate(self.expansions):
+                for term, (component, coefficient) in enumerate(expansion):
+                    labels[ao_index, term] = component_index[component]
+                    coefficients[ao_index, term] = coefficient
+            self.component_page_arrays = counts, labels, coefficients
+        return self.component_page_arrays
+
+    def _component_integral_page(
+        self,
+        source: int,
+        operator: str,
+        coordinates: tuple[tuple[int, ...], ...],
+        nucleus: int | None,
+        charge: float,
+    ) -> None:
+        """Expand ragged spherical components in descriptor-capacity-sized windows.
+
+        Mixed-radix decoding visits exactly the scalar Cartesian products, with
+        the last AO varying fastest. Both logical and expanded scratch are
+        bounded by task capacity, including when one quartet spans many windows.
+        """
+        rank = len(coordinates[0])
+        counts, labels, coefficients = self._component_arrays()
+        table = self._kind_table(operator, rank, nucleus is not None)
+        capacity = len(self.tasks)
+        for logical_begin in range(0, len(coordinates), capacity):
+            indices = np.asarray(
+                coordinates[logical_begin : logical_begin + capacity], dtype=np.int64
+            )
+            if np.any(indices < 0) or np.any(indices >= self.nao):
+                raise ValueError("stationary CUDA page contains invalid AO indices")
+            primitive_work = np.prod(
+                self.aos[indices, 2].astype(np.int64), axis=1, dtype=np.int64
+            )
+            if np.any(primitive_work > self.page_work_budget):
+                raise ValueError(
+                    "stationary CUDA descriptor exceeds primitive page work budget"
+                )
+            radices = counts[indices]
+            fanout = np.prod(radices, axis=1, dtype=np.int64)
+            ends = np.cumsum(fanout, dtype=np.int64)
+            starts = ends - fanout
+            for begin in range(0, int(ends[-1]), capacity):
+                ordinals = np.arange(begin, min(begin + capacity, ends[-1]))
+                rows = np.searchsorted(ends, ordinals, side="right")
+                remainder = ordinals - starts[rows]
+                expanded_indices = indices[rows]
+                term_ids = np.empty_like(expanded_indices)
+                for axis in reversed(range(rank)):
+                    radix = radices[rows, axis]
+                    term_ids[:, axis] = remainder % radix
+                    remainder = remainder // radix
+                selectors = tuple(
+                    labels[expanded_indices[:, axis], term_ids[:, axis]]
+                    for axis in range(rank)
+                )
+                kinds = table[selectors]
+                if np.any(kinds < 0):
+                    raise ValueError(
+                        "stationary CUDA page requests an unavailable derivative kind"
+                    )
+                # Match np.prod in the scalar producer before multiplying charge;
+                # padding or pre-multiplying charge changes signed FP64 products.
+                charges = float(charge) * np.prod(
+                    coefficients[expanded_indices, term_ids], axis=1
+                )
+                self._pack_integral_descriptors(
+                    source,
+                    expanded_indices,
+                    kinds,
+                    primitive_work[rows],
+                    nucleus,
+                    charges,
+                )
 
     def integral_page(
         self,
@@ -1110,6 +1217,18 @@ class _CudaSources:
         if rank not in (2, 4) or any(len(row) != rank for row in coordinates):
             raise ValueError("stationary CUDA page requires uniform rank two or four")
         if self.component_mode:
+            packing = os.environ.get(
+                "GENERATIVEQC_STATIONARY_COMPONENT_PACKING", "bulk"
+            )
+            if packing not in ("scalar", "bulk"):
+                raise ValueError(
+                    "stationary CUDA component packing must be scalar or bulk"
+                )
+            if packing == "bulk":
+                self._component_integral_page(
+                    source, operator, coordinates, nucleus, charge
+                )
+                return
             for indices in coordinates:
                 self.integral(
                     source,
@@ -1139,8 +1258,24 @@ class _CudaSources:
                 "stationary CUDA descriptor exceeds primitive page work budget"
             )
 
+        self._pack_integral_descriptors(
+            source, indices, kinds, primitive_work, nucleus, float(charge)
+        )
+
+    def _pack_integral_descriptors(
+        self,
+        source: int,
+        indices: np.ndarray,
+        kinds: np.ndarray,
+        primitive_work: np.ndarray,
+        nucleus: int | None,
+        charges: float | np.ndarray,
+    ) -> None:
+        """Share scalar-compatible capacity/work flush boundaries across producers."""
+        rank = indices.shape[1]
+        scalar_charge = np.ndim(charges) == 0
         offset = 0
-        while offset < len(coordinates):
+        while offset < len(indices):
             if self.used == len(self.tasks):
                 self.flush()
             descriptor_room = len(self.tasks) - self.used
@@ -1166,7 +1301,9 @@ class _CudaSources:
             tasks[:, 4 : 4 + rank] = indices[source_begin:source_end]
             selected_work = primitive_work[source_begin:source_end]
             tasks[:, 8] = selected_work
-            self.charges[begin:end] = float(charge)
+            self.charges[begin:end] = (
+                charges if scalar_charge else charges[source_begin:source_end]
+            )
             self.used = end
             self.pending_primitive_records += int(np.sum(selected_work, dtype=np.int64))
             self.bulk_pack_chunks += 1
@@ -1785,6 +1922,7 @@ class _CudaSources:
             getattr(self, "restricted_point_requested", False)
         )
         if point_metrics is not None:
+            metrics["restricted_point_capable"] = int(point_values[0])
             metrics.update(
                 zip(
                     (
@@ -2287,7 +2425,7 @@ class PreparedStationaryCudaExecution:
         stack = ExitStack()
         try:
             source_names = stationary_runtime_sources(plan)
-            needs_first = functional != 0
+            needs_first = _stationary_density_jet_count(functional) > 1
             # Register the borrowed grid owner first so ExitStack closes the
             # stationary consumer before destroying the CUDA stream it borrows.
             grid = stack.enter_context(
@@ -2583,13 +2721,17 @@ def _plan_stationary_cuda_tile(
     # Conservative numeric-array bound: compact task pages/sort staging, resident
     # topology mirrors, D/W admission copies, adapter staging, cached Cartesian
     # derivative-kind lookup tables, candidate/publication copies, and tile owners.
+    # The component producer reserves 48 additional task-capacity words of
+    # transient mixed-radix scratch and seven retained words per public AO even
+    # when the scalar fallback is selected. An environment change cannot evade
+    # prepared-owner admission. No page-times-Cartesian-fanout storage is retained.
     # Compiler objects, Python headers and the caller's existing SCF snapshot
     # are explicit exclusions, as in the reused grid/TensorIR resource contracts.
     host_bound = (
         grid_plan.host_bytes
         + 8
         * (
-            34 * primitive_tile
+            82 * primitive_tile
             + 4 * plan.spin_blocks * n * n
             + 120 * na
             + 12 * (len(source_names) - len(_SOURCE_NAMES)) * na
@@ -2598,7 +2740,7 @@ def _plan_stationary_cuda_tile(
             + 3 * len(COMPONENT_LABELS) ** 2
             + 3 * tile_points
             + 2 * basis.nprimitive
-            + 4 * n
+            + 11 * n
             + 80
         )
         + max((tp.host_bytes for tp in tensor_plans.values()), default=0)

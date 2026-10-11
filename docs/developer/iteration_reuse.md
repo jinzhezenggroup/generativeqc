@@ -109,18 +109,20 @@ alignment. Allocation-refusal steps recompute admitted bytes and the shift befor
 binding pointers. Retention, audit, matrix and cut fallbacks retain their order;
 no GPU synchronization or scientific work is added.
 
-The internal `run_df_ccsdt_native` accepts the trailing
-`lambda_serial_scratch_reuse` selector after its reference-experiment pointer.
-`benchmarks/df_ccsdt_force_endpoint.cpp` accepts a trailing `0`/`1` selector and records
+The internal `run_df_ccsdt_native` accepts the
+`lambda_serial_scratch_reuse` selector after its reference-experiment pointer,
+followed by the independent default-off CCSD and Lambda mixed-precision selectors.
+`benchmarks/df_ccsdt_force_endpoint.cpp` accepts that `0`/`1` selector at argument 28 and records
 `lambda_serial_scratch_reuse_requested`. Existing Lambda numeric-capacity and
 owned-device-byte fields describe the selected layout. `df_audit_arena_bytes`
 remains a logical audit/replay capacity requirement, not an additional allocation
 when scratch is shared.
 
-The next benchmark argument selects a three-call lifecycle: cold, same-process
+Benchmark argument 29 selects a three-call lifecycle: cold, same-process
 warm, and moved-warm after atom zero moves by `1e-4` Bohr in z. Both orbital and
 auxiliary bases use the displaced geometry. These calls rebuild native scientific
-owners; they are not prepared force replay. Recycle selection remains separate.
+owners; they are not prepared force replay. Recycle selection remains separate. Arguments 30 and 31 select CCSD and Lambda
+mixed warmup; the scratch and lifecycle positions remain unchanged.
 
 Cross-size arena reuse is qualified independently of serial scratch; serial
 scratch remains experimental because it can change warm cache/provider admission.

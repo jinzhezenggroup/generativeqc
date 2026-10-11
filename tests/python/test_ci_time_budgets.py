@@ -45,9 +45,9 @@ def test_cpu_budget_preserves_required_work_and_early_cache_save() -> None:
         assert "if:" not in block
         assert "continue-on-error:" not in block
     assert (
-        section.index("name: Build")
-        < section.index("name: Save ccache immediately after build")
-        < section.index("name: Test")
+        section.index("      - name: Build\n")
+        < section.index("      - name: Save ccache immediately after build\n")
+        < section.index("      - name: Test\n")
     )
     save = step("Save ccache immediately after build")
     assert "uses: actions/cache/save@" in save

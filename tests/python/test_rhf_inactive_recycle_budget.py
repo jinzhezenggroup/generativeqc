@@ -92,6 +92,7 @@ PREFIX = r"""
 #include "hf/rhf_frame_response.hpp"
 #include "response/low_rank_preconditioner.hpp"
 #include "posthf/capacity.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
 
 namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& system) noexcept {
