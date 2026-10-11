@@ -103,9 +103,9 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     )
     assert "fromJSON(needs.merge_queue_liveness.outputs.python_shards)" in shard_matrix
     workflow = path.read_text(encoding="utf-8")
-    selector = workflow.split(
-        "      - name: Select event-specific Python shards\n", 1
-    )[1].split("\n  master-cpu-cache:\n", 1)[0]
+    selector = workflow.split("      - name: Select event-specific Python shards\n", 1)[
+        1
+    ].split("\n  master-cpu-cache:\n", 1)[0]
     assert '"schedule"' in selector and '"workflow_dispatch"' in selector
     for shard in (
         "core-a",
