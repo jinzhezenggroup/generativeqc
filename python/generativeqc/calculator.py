@@ -1248,11 +1248,16 @@ class Calculator:
             descriptor.ccsd_damping = self._ccsd_damping
             descriptor.ccsd_level_shift = self._ccsd_level_shift
             descriptor.ccsd_frozen_core = self._ccsd_frozen_core
-        from .initial_guess import initial_guess_for_systems
+        from .initial_guess import (
+            _uses_native_automatic_cpu,
+            initial_guess_for_systems,
+        )
 
         policy = initial_guess_for_systems(self, systems)
         if policy is not None:
-            descriptor.initial_guess = ctypes.pointer(policy.native())
+            descriptor.initial_guess = ctypes.pointer(
+                policy.native(automatic_cpu=_uses_native_automatic_cpu(self))
+            )
         return descriptor
 
     def _precision_provenance(

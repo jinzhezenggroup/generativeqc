@@ -12,6 +12,7 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/initial_guess/automatic_policy.hpp"
 #include "scf/initial_guess/minao.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
@@ -23,6 +24,28 @@ namespace {
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
+}
+
+bool preliminary_target_common_eligible(const core::System& system,
+                                        const ResolvedFockBuild& strategy,
+                                        const ScfOptions& options) {
+  const auto exact = [](const FockTermSpec& term) {
+    return !term.present || term.approximation == FockApproximation::Exact;
+  };
+  return strategy.spec.spin == FockSpin::Restricted &&
+         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
+             GENERATIVEQC_PRECISION_FP64 &&
+         exact(strategy.spec.coulomb) && exact(strategy.spec.exchange) &&
+         system.ecp_terms.empty() &&
+         std::none_of(system.atoms.begin(), system.atoms.end(),
+                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
+         automatic_minao_population_eligible(system.electron_count, system.multiplicity);
+}
+
+bool minao_elements_eligible(const core::System& system) {
+  return std::all_of(system.atoms.begin(), system.atoms.end(), [](const auto& atom) {
+    return automatic_minao_element_eligible(atom.atomic_number);
+  });
 }
 
 /** One native numeric-payload formula for both actual preliminary admission
@@ -137,6 +160,8 @@ void validate_preliminary_options(const PreliminaryOptions& options) {
   if (options.kind != PreliminaryKind::HartreeFock && options.kind != PreliminaryKind::Lda &&
       options.kind != PreliminaryKind::Minao)
     throw std::invalid_argument("unknown preliminary initial-density provider");
+  if (options.automatic_cpu && options.kind != PreliminaryKind::Minao)
+    throw std::invalid_argument("automatic CPU policy requires the MINAO provider");
   if (!options.max_iterations || options.max_iterations > 64 || !options.diis_history ||
       options.diis_history > 16 || !(options.energy_tolerance > 0) ||
       !std::isfinite(options.energy_tolerance) || !(options.density_tolerance > 0) ||
@@ -156,7 +181,9 @@ std::optional<PreliminaryOptions> preliminary_options(
       descriptor->abi_version != GENERATIVEQC_ABI_VERSION)
     throw std::invalid_argument("preliminary SCF descriptor ABI mismatch");
   PreliminaryOptions options;
-  options.kind = static_cast<PreliminaryKind>(descriptor->kind);
+  options.automatic_cpu = descriptor->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+  options.kind = options.automatic_cpu ? PreliminaryKind::Minao
+                                       : static_cast<PreliminaryKind>(descriptor->kind);
   if (descriptor->max_iterations) options.max_iterations = descriptor->max_iterations;
   if (descriptor->diis_history) options.diis_history = descriptor->diis_history;
   if (descriptor->energy_tolerance != 0) options.energy_tolerance = descriptor->energy_tolerance;
@@ -246,21 +273,9 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
                                  const ScfOptions& options) {
   if (!options.preliminary_guess) return;
   validate_preliminary_options(*options.preliminary_guess);
-  const auto exact = [](const FockTermSpec& term) {
-    return !term.present || term.approximation == FockApproximation::Exact;
-  };
-  const bool common =
-      strategy.spec.spin == FockSpin::Restricted &&
-      options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64 &&
-      exact(strategy.spec.coulomb) && exact(strategy.spec.exchange) && system.ecp_terms.empty() &&
-      std::none_of(system.atoms.begin(), system.atoms.end(),
-                   [](const auto& atom) { return atom.ecp_core != 0; }) &&
-      system.multiplicity == 1 && system.electron_count > 0 && system.electron_count % 2 == 0;
+  const bool common = preliminary_target_common_eligible(system, strategy, options);
   if (options.preliminary_guess->kind == PreliminaryKind::Minao) {
-    const bool supported_elements = std::all_of(
-        system.atoms.begin(), system.atoms.end(),
-        [](const auto& atom) { return atom.atomic_number >= 1 && atom.atomic_number <= 18; });
-    if (!common || !supported_elements)
+    if (!common || !minao_elements_eligible(system))
       throw std::invalid_argument(
           "MINAO requires an FP64 all-electron restricted H-Ar exact endpoint");
     return;
@@ -268,6 +283,20 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
   if (!common || strategy.backend != FockBackend::Cpu || options.compute_forces)
     throw std::invalid_argument(
         "preliminary SCF requires a CPU FP64 all-electron restricted exact energy endpoint");
+}
+
+void resolve_automatic_preliminary_guess(const core::System& system,
+                                         const ResolvedFockBuild& strategy, ScfOptions& options) {
+  if (!options.preliminary_guess || !options.preliminary_guess->automatic_cpu) return;
+  validate_preliminary_options(*options.preliminary_guess);
+  if (strategy.backend != FockBackend::Cpu)
+    throw std::invalid_argument("automatic per-system initial guess is CPU-only");
+  if (!preliminary_target_common_eligible(system, strategy, options) ||
+      !minao_elements_eligible(system)) {
+    options.preliminary_guess.reset();
+    return;
+  }
+  options.preliminary_guess->automatic_cpu = false;
 }
 
 ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOptions& options,

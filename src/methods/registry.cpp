@@ -154,6 +154,8 @@ void validate_system(const MethodDefinition& definition, const core::System& sys
 void validate_preliminary_system(const generativeqc_method_descriptor& descriptor,
                                  const core::System& system) {
   if (!descriptor.initial_guess) return;
+  // Automatic domain misses belong to each prepared item, not shared batch admission.
+  if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU) return;
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2 ||
       !system.ecp_terms.empty() ||
       std::any_of(system.atoms.begin(), system.atoms.end(),
@@ -173,22 +175,27 @@ void validate_option_family(const MethodDefinition& definition,
                             generativeqc_backend backend) {
   if (descriptor.initial_guess) {
     const auto family = definition.provider.domain.family;
+    const bool automatic = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
     const bool minao = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO;
     const bool admitted =
-        minao ? scf::initial_guess::automatic_minao_model_eligible(
-                    descriptor.method, family, backend, descriptor.precision_mode,
-                    descriptor.density_fitting_mode, true, false)
-              : (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
-                 family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) &&
-                    backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
-                    descriptor.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
-                    descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
-                    (family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
-                     descriptor.method == GENERATIVEQC_METHOD_RHF);
+        automatic ? backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+                        (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                         family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+        : minao   ? scf::initial_guess::automatic_minao_model_eligible(
+                        descriptor.method, family, backend, descriptor.precision_mode,
+                        descriptor.density_fitting_mode, true, false)
+                  : (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                     family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) &&
+                        backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+                        descriptor.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
+                        descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+                        (family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                         descriptor.method == GENERATIVEQC_METHOD_RHF);
     if (!admitted)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        minao ? "MINAO requires FP64 exact restricted CPU HF/KS or CUDA KS"
-                              : "preliminary SCF requires CPU FP64 exact restricted HF/KS");
+                        automatic ? "automatic per-system initial guess requires CPU HF/KS"
+                        : minao   ? "MINAO requires FP64 exact restricted CPU HF/KS or CUDA KS"
+                                  : "preliminary SCF requires CPU FP64 exact restricted HF/KS");
   }
   if (descriptor.ks_options &&
       definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)

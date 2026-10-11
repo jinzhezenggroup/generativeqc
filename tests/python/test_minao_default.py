@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from generativeqc import (
     InitialGuessSpec,
     KsOptions,
     Primitive,
+    ResourceBudget,
     Shell,
     _native,
 )
@@ -80,9 +82,11 @@ def test_cpu_default_and_explicit_hcore(native: None, method: str) -> None:
     assert auto.initial_guess == InitialGuessSpec("minao")
     assert core.initial_guess is None
     assert auto.capabilities == core.capabilities
-    assert auto._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 3
+    assert auto._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 4
     assert not core._method_descriptor(systems=[WATER]).initial_guess
-    assert not auto._method_descriptor(systems=[WATER, HEAVY]).initial_guess
+    assert (
+        auto._method_descriptor(systems=[WATER, HEAVY]).initial_guess.contents.kind == 4
+    )
     automatic_plan = auto._resource_request(
         [WATER], properties=("energy",), ks_options=auto.ks_options
     )
@@ -96,7 +100,10 @@ def test_cpu_default_and_explicit_hcore(native: None, method: str) -> None:
     explicit_plan = explicit._resource_request(
         [WATER], properties=("energy",), ks_options=explicit.ks_options
     )
-    assert automatic_plan == explicit_plan
+    assert automatic_plan.candidates == explicit_plan.candidates
+    schedule = json.loads(automatic_plan.identity.schedule)
+    assert schedule["initial_guess_execution"] == "native-auto-cpu-v1"
+    assert schedule["initial_guess_resolved_kinds"] == [3]
 
 
 @pytest.mark.parametrize(
@@ -111,14 +118,127 @@ def test_unsupported_cpu_domain_preserves_hcore(
     assert auto.capabilities == core.capabilities
 
 
-def test_mixed_native_batch_uses_hcore(native: None) -> None:
+@pytest.mark.parametrize("method", ["rhf", "pbe-rks", "pbe0-rks"])
+def test_mixed_native_batch_resolves_each_item(native: None, method: str) -> None:
     """Both two-electron ions fit the same one-AO owner, but Ca is outside MINAO."""
     basis = (Shell(0, 0, (Primitive(1.0, 1.0),)),)
     systems = [[("He", (0.0, 0.0, 0.0))], HEAVY]
-    calc = Calculator("rhf", basis, device="cpu")
+    options = (
+        {"ks_options": KsOptions(grid=GridSpec(16, 8, 16))}
+        if method.endswith("-rks")
+        else {}
+    )
+    calc = Calculator(method, basis, device="cpu", **options)
+    with Calculator(
+        method, basis, device="cpu", initial_guess=None, **options
+    ).prepare_batch(systems, charges=[0, 18]) as core:
+        reference = core.execute(strict=True, properties=("energy",))
     with calc.prepare_batch(systems, charges=[0, 18]) as batch:
         result = batch.execute(strict=True, properties=("energy",))
-    assert all(item.converged and item.initial_guess is None for item in result.items)
+        warm = batch.execute(strict=True, properties=("energy",))
+        moved = batch.execute(
+            [[(0.1, 0.2, 0.3)], [(0.2, 0.3, 0.4)]],
+            strict=True,
+            properties=("energy",),
+        )
+        failed = batch.execute([[(float("nan"), 0, 0)], None], properties=("energy",))
+        replay = batch.execute(strict=True, properties=("energy",))
+    assert all(item.converged for item in result.items)
+    assert result.items[0].initial_guess["kind"] == "minao"
+    assert result.items[0].initial_guess["outcome"] == "used"
+    assert result.items[1].initial_guess is None
+    if method == "rhf":
+        # Independent normalized exp(-r^2) oracle: two one-electron expectations
+        # plus the closed-shell Gaussian self-Coulomb integral, with no SCF loop.
+        analytical = [
+            3 - 4 * charge * np.sqrt(2 / np.pi) + 2 / np.sqrt(np.pi)
+            for charge in (2, 20)
+        ]
+        assert [item.energy for item in result.items] == pytest.approx(
+            analytical, abs=1e-10
+        )
+    for current in (result, warm, moved, replay):
+        assert [item.energy for item in current.items] == pytest.approx(
+            [item.energy for item in reference.items], abs=1e-9
+        )
+    for current in (warm, moved, replay):
+        assert all(item.warm_start_used for item in current.items)
+        assert current.items[0].initial_guess["outcome"] == "existing_density"
+        assert current.items[1].initial_guess is None
+    assert not failed.items[0].converged and failed.items[1].converged
+
+
+@pytest.mark.parametrize("method", ["rhf", "pbe-rks", "pbe0-rks"])
+def test_mixed_resource_plan_and_exact_budget(native: None, method: str) -> None:
+    """Charge only the admitted seed and retain the complete endpoint byte gate."""
+    basis = (Shell(0, 0, (Primitive(1.0, 1.0),)),)
+    systems = [[("He", (0, 0, 0))], HEAVY]
+    options = (
+        {"ks_options": KsOptions(grid=GridSpec(8, 6, 12))}
+        if method.endswith("-rks")
+        else {}
+    )
+    automatic = Calculator(method, basis, device="cpu", **options)
+    core = Calculator(method, basis, device="cpu", initial_guess=None, **options)
+    request = automatic._resource_request(
+        systems,
+        charges=[0, 18],
+        properties=("energy",),
+        ks_options=automatic.ks_options,
+    )
+    target = core._resource_request(
+        systems, charges=[0, 18], properties=("energy",), ks_options=core.ks_options
+    )
+    assert json.loads(request.identity.schedule)["initial_guess_resolved_kinds"] == [
+        3,
+        0,
+    ]
+    for candidate, baseline in zip(request.candidates, target.candidates, strict=True):
+        assert candidate.estimates[:-2] == baseline.estimates
+        assert candidate.estimates[-2].bytes == 8
+        assert candidate.estimates[-1].bytes > 0
+    peak = automatic.estimate_resources(systems, charges=[0, 18]).peak_bytes["host"]
+    exact = Calculator(
+        method,
+        basis,
+        device="cpu",
+        resource_budget=ResourceBudget(host_bytes=peak),
+        **options,
+    )
+    with exact.prepare_batch(systems, charges=[0, 18]) as batch:
+        result = batch.execute(strict=True, properties=("energy",))
+        observation = batch.resource_diagnostics["observation"]
+        assert 0 < observation["sampled_item_peak_host_bytes"] <= peak
+    assert result.items[0].initial_guess["outcome"] == "used"
+    assert result.items[1].initial_guess is None
+    below = Calculator(
+        method,
+        basis,
+        device="cpu",
+        resource_budget=ResourceBudget(host_bytes=peak - 1),
+        **options,
+    )
+    with pytest.raises(MemoryError):
+        below.prepare_batch(systems, charges=[0, 18])
+
+
+def test_all_ineligible_default_keeps_target_inventory(native: None) -> None:
+    """A native Hcore selection has no hidden or unnecessary seed allowance."""
+    basis = (Shell(0, 0, (Primitive(1.0, 1.0),)),)
+    systems = [HEAVY]
+    automatic = Calculator("rhf", basis, device="cpu")
+    core = Calculator("rhf", basis, device="cpu", initial_guess=None)
+    request = automatic._resource_request(systems, charges=[18], properties=("energy",))
+    target = core._resource_request(systems, charges=[18], properties=("energy",))
+    assert request.candidates == target.candidates
+    assert json.loads(request.identity.schedule)["initial_guess_resolved_kinds"] == [0]
+    reference = core.singlepoint(HEAVY, charge=18, properties=("energy",))
+    with automatic.prepare_batch(systems, charges=[18]) as batch:
+        result = batch.execute(strict=True, properties=("energy",)).items[0]
+    assert result.converged and result.energy == pytest.approx(
+        reference.energy, abs=1e-10
+    )
+    assert result.initial_guess is None
 
 
 def test_default_checkpoint_density_skips_preparation(

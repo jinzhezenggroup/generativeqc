@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-11
 
+The conservative CPU batch-selection decision is superseded by
+[native per-item automatic cold starts](2026-10-11-native-per-item-cold-start-policy.md).
+The context-free discovery, compatibility and qualification boundaries remain.
+
 ## Problem
 
 The #2227 source baseline at `140160231f23d61cea6ce103ec5a46a0da915b31`

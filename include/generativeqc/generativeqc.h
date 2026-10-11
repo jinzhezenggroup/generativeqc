@@ -675,15 +675,20 @@ typedef struct generativeqc_ks_options {
  */
 GENERATIVEQC_API uint32_t generativeqc_ks_options_version(void);
 
-/** Explicit preliminary SCF; never an automatic/default selection. */
+/** Cold-start provider or positively discovered automatic execution policy. */
 typedef int32_t generativeqc_initial_guess_kind;
 enum {
   GENERATIVEQC_INITIAL_GUESS_HF = 1,
   GENERATIVEQC_INITIAL_GUESS_LDA = 2,
-  GENERATIVEQC_INITIAL_GUESS_MINAO = 3
+  GENERATIVEQC_INITIAL_GUESS_MINAO = 3,
+  GENERATIVEQC_INITIAL_GUESS_AUTO_CPU = 4
 };
 
-/** Explicit bounded cold-start policy. HF/LDA retain their CPU FP64,
+/** Bounded cold-start policy. AUTO_CPU resolves MINAO or Hcore independently
+ * for each CPU HF/KS system; discover its capability before requesting it.
+ * Unsupported MINAO systems retain Hcore without weakening target admission.
+ * Explicit HF/LDA/MINAO choices never silently change provider.
+ * HF/LDA retain their CPU FP64,
  * all-electron restricted exact energy-only domain. MINAO is a zero-Fock
  * occupied-ANO projection qualified for all-electron restricted H-Ar targets;
  * it may seed CUDA exact KS and force endpoints. Zero-valued controls select
@@ -742,10 +747,11 @@ GENERATIVEQC_API uint32_t generativeqc_initial_guess_options_version(void);
 enum {
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF = 1U << 0,
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA = 1U << 1,
-  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO = 1U << 2
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO = 1U << 2,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU = 1U << 3
 };
 /** @native-contract generativeqc_initial_guess_capabilities_v1
- * @behavior Return additive HF, LDA, and MINAO provider capability bits.
+ * @behavior Return additive HF, LDA, MINAO, and CPU automatic-policy capability bits.
  * @outputs Ignore unknown bits. A positive bit does not waive the provider-specific backend,
  * spin, basis, derivative, and resource admission checks documented with
  * generativeqc_initial_guess_options.
@@ -789,6 +795,22 @@ typedef struct generativeqc_initial_guess_auto_policy {
  */
 GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v1(
     const generativeqc_initial_guess_auto_policy* request, uint32_t* resolved_kind);
+
+/** @native-contract generativeqc_initial_guess_auto_system_kind_v1
+ * @behavior Resolve automatic MINAO or Hcore for one system, including its population.
+ * @inputs request has the same contract as generativeqc_initial_guess_auto_kind_v1 but
+ * requires a nonempty atomic-number list. electron_count is nonnegative and multiplicity
+ * is positive. Neither coordinates nor a prepared scientific owner are required.
+ * @outputs On SUCCESS, writes MINAO only for an eligible positive even-electron singlet,
+ * otherwise zero (Hcore). This shape query does not waive seed-budget or density gates.
+ * @lifetime Borrows the request and atomic_numbers for this call only; retains nothing.
+ * @errors Uses the model query's status codes; invalid populations return INVALID_ARGUMENT.
+ * Preserves output on failure, including an empty system request.
+ * @execution Synchronous, allocation-free, context-free discovery; no device or science work.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, int64_t electron_count,
+    uint32_t multiplicity, uint32_t* resolved_kind);
 
 /** @native-contract generativeqc_calculation_get_initial_guess_diagnostic
  * @behavior Read the most recently retained preliminary-guess outcome.

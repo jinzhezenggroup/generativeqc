@@ -66,12 +66,14 @@ _Static_assert(_Generic(generativeqc_initial_guess_capabilities_v1(), uint32_t: 
 ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF == 1U, "HF bit drifted");
 ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA == 2U, "LDA bit drifted");
 ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO == 4U, "MINAO bit drifted");
+ASSERT(GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU == 8U, "AUTO_CPU bit drifted");
 int main(void) {
   if (generativeqc_initial_guess_options_version() != 1) return 1;
   const uint32_t capabilities = generativeqc_initial_guess_capabilities_v1();
   if (capabilities != (GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF |
                        GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
-                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO)) return 2;
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO |
+                       GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU)) return 2;
   printf("%u", (unsigned) capabilities);
 }
 """)
@@ -97,6 +99,7 @@ int main(void) {
         _native.INITIAL_GUESS_CAPABILITY_HF
         | _native.INITIAL_GUESS_CAPABILITY_LDA
         | _native.INITIAL_GUESS_CAPABILITY_MINAO
+        | _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU
     )
 
 

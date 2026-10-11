@@ -17,7 +17,8 @@ uint32_t generativeqc_initial_guess_options_version(void) { return 1; }
 
 uint32_t generativeqc_initial_guess_capabilities_v1(void) {
   return GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
-         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO;
+         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO |
+         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU;
 }
 
 generativeqc_status generativeqc_initial_guess_auto_kind_v1(
@@ -49,6 +50,23 @@ generativeqc_status generativeqc_initial_guess_auto_kind_v1(
       request->method, capabilities->family, request->backend, request->precision_mode,
       request->density_fitting_mode, request->restricted != 0, request->has_ecp != 0);
   *resolved_kind = eligible && elements_eligible ? GENERATIVEQC_INITIAL_GUESS_MINAO : 0;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status generativeqc_initial_guess_auto_system_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, int64_t electron_count,
+    uint32_t multiplicity, uint32_t* resolved_kind) {
+  if (!request || !resolved_kind) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(request)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (!request->atom_count || electron_count < 0 || !multiplicity)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  uint32_t kind = 0;
+  const auto status = generativeqc_initial_guess_auto_kind_v1(request, &kind);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  *resolved_kind = generativeqc::scf::initial_guess::automatic_minao_population_eligible(
+                       electron_count, multiplicity)
+                       ? kind
+                       : 0;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 

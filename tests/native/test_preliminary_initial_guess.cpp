@@ -5,6 +5,7 @@
 #include <new>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 #include "dft/xc.hpp"
 #include "molecule/basis.hpp"
@@ -72,7 +73,8 @@ void check() {
   require(
       generativeqc_initial_guess_capabilities_v1() ==
           (GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
-           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO),
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU),
       "native preliminary provider capability mask drifted");
   require(!preliminary_options(nullptr), "default must remain disabled");
   generativeqc_initial_guess_options descriptor{};
@@ -93,6 +95,16 @@ void check() {
   descriptor.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
   parsed = preliminary_options(&descriptor);
   require(parsed && parsed->kind == PreliminaryKind::Minao, "MINAO descriptor was not parsed");
+  descriptor.radial_points = 8;
+  invalid([&] { preliminary_options(&descriptor); });
+  descriptor.radial_points = 0;
+  descriptor.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+  parsed = preliminary_options(&descriptor);
+  require(parsed && parsed->kind == PreliminaryKind::Minao && parsed->automatic_cpu,
+          "automatic CPU descriptor was not parsed");
+  descriptor.max_iterations = 65;
+  invalid([&] { preliminary_options(&descriptor); });
+  descriptor.max_iterations = 0;
   descriptor.radial_points = 8;
   invalid([&] { preliminary_options(&descriptor); });
   descriptor.radial_points = 0;
@@ -339,6 +351,24 @@ void check_automatic_policy() {
   request.atomic_numbers = water_numbers;
   request.atom_count = 3;
   require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "H-Ar system declined");
+  const auto resolve_system = [&](int64_t electrons, uint32_t multiplicity) {
+    require(generativeqc_initial_guess_auto_system_kind_v1(&request, electrons, multiplicity,
+                                                           &kind) == GENERATIVEQC_STATUS_SUCCESS,
+            "automatic system policy query failed");
+    return kind;
+  };
+  require(resolve_system(10, 1) == GENERATIVEQC_INITIAL_GUESS_MINAO, "singlet population declined");
+  require(resolve_system(0, 1) == 0, "zero-electron MINAO admitted");
+  require(resolve_system(9, 2) == 0, "open-shell MINAO admitted");
+  require(resolve_system(10, 3) == 0, "triplet MINAO admitted");
+  for (const auto population : {std::pair<int64_t, uint32_t>{-1, 1}, {10, 0}}) {
+    kind = 99;
+    require(generativeqc_initial_guess_auto_system_kind_v1(&request, population.first,
+                                                           population.second, &kind) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                kind == 99,
+            "invalid system population changed output");
+  }
   const int32_t mixed_numbers[] = {2, 20};
   request.atomic_numbers = mixed_numbers;
   request.atom_count = 2;
@@ -401,6 +431,11 @@ void check_automatic_policy() {
   request.atomic_numbers = nullptr;
   failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   request.atom_count = 0;
+  kind = 99;
+  require(generativeqc_initial_guess_auto_system_kind_v1(&request, 2, 1, &kind) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              kind == 99,
+          "system policy accepted model-only input");
   request.struct_size = 0;
   failure(GENERATIVEQC_STATUS_ABI_MISMATCH);
   request.struct_size = sizeof(request);
@@ -415,6 +450,9 @@ void check_automatic_policy() {
   require(generativeqc_initial_guess_auto_kind_v1(&request, nullptr) ==
               GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "null policy output accepted");
+  require(generativeqc_initial_guess_auto_system_kind_v1(nullptr, 2, 1, &kind) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null system policy request accepted");
 }
 
 int main() {

@@ -17,6 +17,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/preliminary_guess.hpp"
 
 namespace generativeqc::scf {
 namespace {
@@ -240,6 +241,9 @@ std::vector<FleetItemResult> FleetPlan::execute(
       apply_coordinates(execution_system, *coordinates[system_index]);
     }
 
+    auto item_options = execution_options;
+    initial_guess::resolve_automatic_preliminary_guess(
+        execution_system, *item_options.resolved_fock_build, item_options);
     const bool has_warm_density = warm_starts_enabled_ && warm_densities_[system_index].has_value();
     item.warm_start_used = has_warm_density;
     unsigned ordinary_attempts = 0, discarded_iterations = 0;
@@ -247,7 +251,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
     bool discarded_work_complete = true;
     const auto evaluate = [&](const std::vector<double>* initial_density) {
       const core::System auxiliary = auxiliary_for_geometry(auxiliary_template_, execution_system);
-      auto attempt_options = execution_options;
+      auto attempt_options = item_options;
       const bool warm_retry = has_warm_density && initial_density == nullptr;
       if (warm_retry) attempt_options.preliminary_guess.reset();
       ++ordinary_attempts;
@@ -256,10 +260,10 @@ std::vector<FleetItemResult> FleetPlan::execute(
             independent_fock_plans_[system_index], execution_system, &auxiliary, attempt_options,
             device_id_, initial_density,
             cuda_df_orthogonalizers_.empty() ? nullptr : &cuda_df_orthogonalizers_[system_index]);
-        if (warm_retry && execution_options.preliminary_guess) {
+        if (warm_retry && item_options.preliminary_guess) {
           auto& diagnostic = native.preliminary_guess;
           diagnostic.requested_kind =
-              static_cast<std::uint32_t>(execution_options.preliminary_guess->kind);
+              static_cast<std::uint32_t>(item_options.preliminary_guess->kind);
           diagnostic.outcome = initial_guess::PreliminaryOutcome::ExplicitDensity;
           diagnostic.target_attempts = ordinary_attempts;
           diagnostic.discarded_target_iterations = discarded_iterations;
@@ -296,8 +300,8 @@ std::vector<FleetItemResult> FleetPlan::execute(
       // the existing no-policy warm lifecycle unchanged, and do not restart
       // a failed warm/core attempt after allocation exhaustion in this mode.
       const bool allocation_failure =
-          execution_options.preliminary_guess && first_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-      const bool retry_exhausted = execution_options.preliminary_guess && ordinary_attempts >= 2;
+          item_options.preliminary_guess && first_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      const bool retry_exhausted = item_options.preliminary_guess && ordinary_attempts >= 2;
       if (has_warm_density && !allocation_failure && !retry_exhausted) {
         try {
           item.warm_start_fallback = true;
