@@ -29,7 +29,7 @@ def native_weights(tmp_path_factory: pytest.TempPathFactory) -> Path:
 import importlib.abc, runpy, sys
 class NoRuntime(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'generativeqc', 'pyscf', 'torch', 'cupy'}:
+        if fullname.split('.')[0] in {'generativeqc', 'pyscf', 'torch', 'cupy', 'numpy'}:
             raise AssertionError('generation imported runtime/provider: ' + fullname)
 sys.meta_path.insert(0, NoRuntime())
 script, output = sys.argv[1:]
