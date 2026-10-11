@@ -452,28 +452,12 @@
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
     },
     {
-      "bytes": 166345,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-blas.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "502d55783e90f97419d96ab93491873653a74594fa94201a262cc7bbeec474a2"
-    },
-    {
       "bytes": 166398,
       "classification": "required-compact-accepted-evidence",
       "family": "issue206-metric-gemv",
       "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
       "role": "endpoint-or-numerical-samples",
       "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
-    },
-    {
-      "bytes": 267196,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b4-forces-blas.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "4afc40f038cc07ff8fc22a7ef52d73ea948ffb84bc0329a9666b052d33609e37"
     },
     {
       "bytes": 143684,
@@ -666,14 +650,6 @@
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
-      "bytes": 177463,
-      "classification": "required-compact-accepted-evidence",
-      "family": "weighted-eri-144",
-      "path": "benchmarks/results/weighted-eri-144/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "ccbf6dd63600d111015879194c1bae05cef12bad5e874cf8570af54dfebacdd7"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

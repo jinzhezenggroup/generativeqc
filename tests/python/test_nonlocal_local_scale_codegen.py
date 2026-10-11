@@ -208,7 +208,7 @@ extern "C" int actual_underflow_kernel(double* output) {
         for case in cases:
             first, second = values(), values()
             assert lib.actual(mode, *case, first) == lib.original(mode, *case, second)
-            for actual, original in zip(first, second):
+            for actual, original in zip(first, second, strict=True):
                 assert (math.isnan(actual) and math.isnan(original)) or (
                     struct.pack("d", actual) == struct.pack("d", original)
                 ), (mode, case, actual, original)

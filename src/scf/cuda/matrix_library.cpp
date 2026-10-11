@@ -1,9 +1,11 @@
 #include "scf/cuda/matrix_library.hpp"
 
+#include <cmath>
 #include <cstddef>
 #include <initializer_list>
 #include <limits>
 #include <mutex>
+#include <new>
 
 #include "runtime/allocation_measurement.hpp"
 #include "scf/cuda/launch_geometry.hpp"
@@ -14,7 +16,25 @@ namespace generativeqc::scf::cuda_execution {
 
 MatrixLibraryOwner::~MatrixLibraryOwner() { reset(); }
 
-generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf) {
+generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf, int systems,
+                                                int spins, int direct_nbf) {
+  if (systems <= 0 || spins <= 0) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto status = prepare_provider(stream, nbf);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  try {
+    binding_.emplace(stream_, blas_, nbf, systems, spins);
+    structured_binding_.emplace(stream_, blas_, nbf, direct_nbf, systems, spins);
+  } catch (const std::bad_alloc&) {
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const tensor::CudaMatrixProductBinding::PreparationFailure& failure) {
+    return failure.status;
+  } catch (const std::exception&) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status MatrixLibraryOwner::prepare_provider(cudaStream_t stream, int nbf) {
   if (prepared_ || stream == nullptr || nbf <= 0) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 
   cudaStreamCaptureStatus capture{};
@@ -79,6 +99,8 @@ generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf) {
 
 void MatrixLibraryOwner::reset() noexcept {
   if (!prepared_) return;
+  binding_.reset();
+  structured_binding_.reset();
   std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
   int previous = device_;
   (void)cudaGetDevice(&previous);
@@ -149,11 +171,13 @@ generativeqc_status commit_masked_output(MatrixLibraryResources resources, int b
 generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int batch_size, int nbf,
                                           const double* left, bool transpose_left,
                                           const double* right, const std::uint8_t* active,
-                                          double* output, bool use_cublas, double scale) {
+                                          double* output, double scale) {
   std::size_t matrix_size{}, elements{};
-  if (!matrix_shape(batch_size, 1, nbf, matrix_size, elements))
+  if (!matrix_shape(batch_size, 1, nbf, matrix_size, elements) || !resources.binding_ ||
+      !resources.binding_->compatible(resources.stream_, resources.blas_, nbf, batch_size, 1) ||
+      !std::isfinite(scale))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  if (!use_cublas) {
+  if (!resources.binding_->requires_provider_context()) {
     const unsigned blocks = static_cast<unsigned>((elements + kCaptureSafeKernelThreads - 1) /
                                                   kCaptureSafeKernelThreads);
     launch_matrix_product_kernel(blocks, kCaptureSafeKernelThreads, 0, resources.stream_,
@@ -167,18 +191,10 @@ generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int 
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   double* destination = active ? resources.masked_output_ : output;
 
-  const double alpha = scale;
-  const double beta = 0.0;
-  const cublasOperation_t operation = transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N;
   const auto status =
-      batch_size == 1
-          ? cublasDgemm(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha, left, nbf,
-                        right, nbf, &beta, destination, nbf)
-          : cublasDgemmStridedBatched(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf,
-                                      &alpha, left, nbf, static_cast<long long>(matrix_size), right,
-                                      nbf, static_cast<long long>(matrix_size), &beta, destination,
-                                      nbf, static_cast<long long>(matrix_size), batch_size);
-  if (status != CUBLAS_STATUS_SUCCESS) return blas_status(status);
+      tensor::cuda::matrix_product(resources.blas_, batch_size, 1, nbf, left, false, transpose_left,
+                                   right, false, destination, scale);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   return commit_masked_output(resources, batch_size, 1, nbf, elements, active, output);
 }
 
@@ -195,12 +211,13 @@ generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources,
                                                int spin_count, int nbf, const double* left,
                                                bool left_is_spin, bool transpose_left,
                                                const double* right, bool right_is_spin,
-                                               const std::uint8_t* active, double* output,
-                                               bool use_cublas) {
+                                               const std::uint8_t* active, double* output) {
   std::size_t matrix_size{}, elements{};
-  if (!matrix_shape(batch_size, spin_count, nbf, matrix_size, elements))
+  if (!matrix_shape(batch_size, spin_count, nbf, matrix_size, elements) || !resources.binding_ ||
+      !resources.binding_->compatible(resources.stream_, resources.blas_, nbf, batch_size,
+                                      spin_count))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  if (!use_cublas) {
+  if (!resources.binding_->requires_provider_context()) {
     const unsigned blocks = static_cast<unsigned>((elements + kCaptureSafeKernelThreads - 1) /
                                                   kCaptureSafeKernelThreads);
     launch_spin_matrix_product_kernel(blocks, kCaptureSafeKernelThreads, 0, resources.stream_,
@@ -217,27 +234,10 @@ generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources,
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   double* destination = active ? resources.masked_output_ : output;
 
-  const double alpha = 1.0;
-  const double beta = 0.0;
-  const cublasOperation_t operation = transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N;
-  const long long physical_stride = static_cast<long long>(matrix_size);
-  const long long spin_stride =
-      static_cast<long long>(matrix_size * static_cast<std::size_t>(spin_count));
-  for (int spin = 0; spin < spin_count; ++spin) {
-    const std::size_t spin_offset = static_cast<std::size_t>(spin) * matrix_size;
-    const double* spin_left = left + (left_is_spin ? spin_offset : 0);
-    const double* spin_right = right + (right_is_spin ? spin_offset : 0);
-    const cublasStatus_t status =
-        batch_size == 1
-            ? cublasDgemm(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha, spin_left,
-                          nbf, spin_right, nbf, &beta, destination + spin_offset, nbf)
-            : cublasDgemmStridedBatched(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf,
-                                        &alpha, spin_left, nbf,
-                                        left_is_spin ? spin_stride : physical_stride, spin_right,
-                                        nbf, right_is_spin ? spin_stride : physical_stride, &beta,
-                                        destination + spin_offset, nbf, spin_stride, batch_size);
-    if (status != CUBLAS_STATUS_SUCCESS) return blas_status(status);
-  }
+  const auto status =
+      tensor::cuda::matrix_product(resources.blas_, batch_size, spin_count, nbf, left, left_is_spin,
+                                   transpose_left, right, right_is_spin, destination, 1.0);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   return commit_masked_output(resources, batch_size, spin_count, nbf, elements, active, output);
 }
 

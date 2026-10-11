@@ -51,22 +51,6 @@ void build(unsigned spins, int n, const std::int32_t* occupied, double* output) 
     for (int i = 0; i < n * n; ++i)
       output[spin * n * n + i] = occupied[spin] * (10.0 + 3.0 * spin + i);
 }
-void launch_build_weighted_density_kernel(
-    unsigned grid, unsigned block, std::size_t shared, int stream, int batch, int n,
-    const std::int32_t* occupied, const double*, const double*,
-    const std::uint8_t* active, double* output) {
-  assert(grid * block >= unsigned(n * n) && shared == 0 && stream == 7);
-  assert(batch == 1 && *active == 1);
-  build(1, n, occupied, output);
-}
-void launch_build_spin_weighted_density_kernel(
-    unsigned grid, unsigned block, std::size_t shared, int stream, int batch, int n,
-    const std::int32_t* occupied, const double*, const double*,
-    const std::uint8_t* active, double* output) {
-  assert(grid * block >= unsigned(2 * n * n) && shared == 0 && stream == 7);
-  assert(batch == 1 && *active == 1);
-  build(2, n, occupied, output);
-}
 void launch_sum_uhf_spin_matrices_kernel(
     unsigned grid, unsigned block, std::size_t shared, int stream, int batch, int n,
     const double* input, const std::uint8_t* active, double* output) {
@@ -85,7 +69,8 @@ int main(int argc, char** argv) {
   const int stream = 7;
   const std::int32_t occupied[2] = {2, beta};
   const std::uint8_t final_enabled[1] = {1};
-  const double *final_coefficients = nullptr, *final_eigenvalues = nullptr;
+  const double coefficients[1] = {1.0}, eigenvalues[1] = {-0.5};
+  const double *final_coefficients = coefficients, *final_eigenvalues = eigenvalues;
   std::vector<double> density_storage(elements), first(elements, -99), second(elements, -88);
   for (std::size_t i = 0; i < matrix; ++i) {
     density_storage[i] = 2.0 + i;
@@ -96,6 +81,14 @@ int main(int argc, char** argv) {
   auto* tmp2 = second.data();
   bool final_stationary_weights_ready = false;
   const bool compute_weighted_density = true;
+  // Staging now calls the common structured-density owner. Keep this fixture
+  // focused on its per-spin weights and lease, with distinct argument sentinels.
+  const auto build_density = [&](const double* frame, const double* energies,
+                                 const std::uint8_t* active, double* output) {
+    assert(frame == final_coefficients && energies == final_eigenvalues);
+    assert(active == final_enabled && *active == 1 && output == tmp1);
+    build(spins, static_cast<int>(n), occupied, output);
+  };
   for (unsigned attempt = 0; attempt < 2; ++attempt) {
 """
         + _stage_source()

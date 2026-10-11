@@ -1,0 +1,82 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "1cef1189224c6ddcb29d684f9ef7eaa0aa0e34f8",
+    "dirty": false
+  },
+  "reproduction": {
+    "command": [
+      "bash",
+      "build.sh",
+      "<fixture-root>"
+    ]
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "All full-vector numerical, bounded routing and warm-handoff gates pass; descriptive trajectory timings do not constitute universal performance promotion."
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 5569,
+      "sha256": "ccb5653fd20fb19d72f753c50ea7861846a9b79f8d0fcc99cbe02c83f09684c7"
+    },
+    {
+      "path": "build.sh",
+      "role": "reproduction",
+      "bytes": 1885,
+      "sha256": "ff727672d1c134e60468d182e1d3e552842731391c38be9878ca95cdea599157"
+    },
+    {
+      "path": "fixture-setup-failures.json.gz",
+      "role": "samples",
+      "bytes": 2901,
+      "sha256": "e1cf8abf1e933f10d3295ba83edd6f176a8ff3a6dd8724ccadd040751c7c294c"
+    },
+    {
+      "path": "observe-default.py",
+      "role": "reproduction",
+      "bytes": 4750,
+      "sha256": "20f4521c1e75f27a0df807db3eb5ed7a98e411533eac7e7ff167342d1a1b80d1"
+    },
+    {
+      "path": "qualification.json.gz",
+      "role": "samples",
+      "bytes": 1069,
+      "sha256": "f80d660bbffb28633d15d33ce5f75bf7a96338cef6c3fdf98059de530096377a"
+    },
+    {
+      "path": "receipts.json.gz",
+      "role": "samples",
+      "bytes": 2635,
+      "sha256": "9823c06686b5036e2ec0fd27dc2de7065809027397fa1697445d6db3255b1a00"
+    },
+    {
+      "path": "reference.json.gz",
+      "role": "input",
+      "bytes": 11209,
+      "sha256": "8d3665331ea53af60f3f72080ad2436f16f7c047826104b239f1162d19979e21"
+    },
+    {
+      "path": "run-default.sh",
+      "role": "reproduction",
+      "bytes": 4576,
+      "sha256": "cb1882c078154de362dd6ad7c5b548acb24b25a0246451f806d7e0f8b2cad6c0"
+    },
+    {
+      "path": "samples.json.gz",
+      "role": "samples",
+      "bytes": 71805,
+      "sha256": "c43e3d3f0298d0ded28e14815c7490e0419695a45a702d52c7a99f58d258a278"
+    },
+    {
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "bytes": 6093,
+      "sha256": "4648d99ccdab38863a1633650968c8b0cc4967b5025665e47dece788fa981de4"
+    }
+  ]
+}

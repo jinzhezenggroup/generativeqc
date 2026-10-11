@@ -313,7 +313,11 @@ std::size_t hf_cuda_retained_host_numeric_bytes(const CudaRhfBucketPlan& plan) n
   if (plan.last_inactive_eigensolver_profile)
     bytes = runtime::add_capacity(bytes,
                                   runtime::vector_bytes(*plan.last_inactive_eigensolver_profile));
-  return bytes;
+  return plan.resources.matrix_binding_
+             ? runtime::add_capacity(
+                   bytes, tensor::CudaMatrixProductBinding::kPreparationHostBytes +
+                              tensor::CudaStructuredProductBinding::kPreparationHostBytes)
+             : bytes;
 }
 
 std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept {

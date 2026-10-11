@@ -86,22 +86,6 @@
         "df_matrix_gemm": 1
       }
     },
-    "src/scf/cuda/matrix_library.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Reusable SCF matrix adapter still accepts an upstream use_cublas implementation switch; canonical binding must own provider choice.",
-      "selectors": {
-        "use_cublas": 4
-      }
-    },
-    "src/scf/cuda/matrix_library.hpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Reusable SCF matrix adapter interface still exposes an upstream use_cublas implementation switch.",
-      "selectors": {
-        "use_cublas": 2
-      }
-    },
     "src/scf/cuda/rhf_bucket.cpp": {
       "classification": "migration",
       "contract": "#1890",
@@ -131,7 +115,7 @@
       "contract": "#1890",
       "reason": "RHF prepared execution still branches on a named cuBLAS selector; migrate selection below scientific/runtime policy. Two references pass the already-resolved route into charged masked-output arena reservation and borrowing; they do not introduce another provider decision.",
       "selectors": {
-        "use_cublas": 14,
+        "use_cublas": 12,
         "use_cusolver": 4
       }
     }

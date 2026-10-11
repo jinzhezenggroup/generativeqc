@@ -17,6 +17,14 @@ the opt-in policy; none changes measured executable sources. `provenance.json` b
 patch, input, binaries, controls, hardware and retained records by SHA-256.
 No later publishing commit or rebuilt binary is claimed to have been measured.
 
+Post-publication review restored default FP64 option admission by checking
+mixed-only controls only when requested. It also expressed the default switch
+as `100.0 * 1e-9`, one binary64 step above the original decimal `1e-7`, so opt-in
+defaults satisfy the unchanged strict admission inequality. Explicit overrides,
+physical tolerances and generated equations are unchanged. These host-validated
+repairs and subsequent master integration are not a new GPU measurement; the
+retained patch and binary hashes continue to identify the historical runs above.
+
 ## Results and limitations
 
 | Median | Frozen master | Candidate |

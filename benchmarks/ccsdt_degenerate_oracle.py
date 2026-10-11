@@ -29,7 +29,7 @@ def main() -> None:
                 s["angular_momentum"],
                 *[
                     [float(e), float(c)]
-                    for e, c in zip(s["exponents"], s["coefficients"])
+                    for e, c in zip(s["exponents"], s["coefficients"], strict=True)
                 ],
             ]
             for s in elements[z]

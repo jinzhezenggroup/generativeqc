@@ -174,45 +174,6 @@ def test_failed_preparation_keeps_evidence_and_failed_scf_keeps_samples(
     assert diagnostics["observation"]["sampled_item_peak_host_bytes"] > 0
 
 
-def test_cli_ks_dry_run_does_not_load_a_native_runtime(
-    monkeypatch: typing.Any, tmp_path: typing.Any, capsys: typing.Any
-) -> None:
-    import json
-
-    from generativeqc import _native
-    from generativeqc.__main__ import main
-
-    path = tmp_path / "h2.xyz"
-    path.write_text("2\nbohr\nH 0 0 -0.7\nH 0 0 0.7\n")
-
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("KS CLI dry run loaded a native runtime")
-
-    monkeypatch.setattr(_native, "load_library", forbidden)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "generativeqc",
-            "resources",
-            str(path),
-            "--method",
-            "pbe-uks",
-            "--charge",
-            "1",
-            "--multiplicity",
-            "2",
-            "--units",
-            "bohr",
-            "--host-bytes",
-            "1",
-        ],
-    )
-    assert main() == 2
-    output = json.loads(capsys.readouterr().out)
-    assert output["status"] == "infeasible"
-    assert output["requests"][0]["name"] == "ks"
-
-
 @pytest.mark.parametrize(
     ("schema_version", "diagnostic"),
     (

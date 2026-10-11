@@ -377,8 +377,8 @@ def _input_access(name: str, *, cuda: bool = False) -> str:
 
 def _label_dims(node: typing.Any) -> dict[typing.Any, str]:
     result = {}
-    for operand, labels in zip(node.inputs, node.attrs["labels"]):
-        for index, label in zip(operand.spec.indices, labels):
+    for operand, labels in zip(node.inputs, node.attrs["labels"], strict=True):
+        for index, label in zip(operand.spec.indices, labels, strict=True):
             dim = _dim(index)
             previous = result.setdefault(label, dim)
             if previous != dim:
@@ -388,8 +388,8 @@ def _label_dims(node: typing.Any) -> dict[typing.Any, str]:
 
 def _label_kinds(node: typing.Any) -> dict[typing.Any, str]:
     result = {}
-    for operand, labels in zip(node.inputs, node.attrs["labels"]):
-        for index, label in zip(operand.spec.indices, labels):
+    for operand, labels in zip(node.inputs, node.attrs["labels"], strict=True):
+        for index, label in zip(operand.spec.indices, labels, strict=True):
             kind = _kind(index)
             previous = result.setdefault(label, kind)
             if previous != kind:
@@ -401,7 +401,7 @@ def _flat_index(labels: tuple[typing.Any, ...], spec: TensorSpec) -> str:
     if not labels:
         return "0"
     expression = f"l{labels[0]}"
-    for label, index in zip(labels[1:], spec.indices[1:]):
+    for label, index in zip(labels[1:], spec.indices[1:], strict=True):
         expression = f"({expression}*{_dim(index)}+l{label})"
     return expression
 
@@ -410,7 +410,7 @@ def _flat_coords(coords: list[str], spec: TensorSpec) -> str:
     if not coords:
         return "0"
     expression = coords[0]
-    for coord, index in zip(coords[1:], spec.indices[1:]):
+    for coord, index in zip(coords[1:], spec.indices[1:], strict=True):
         expression = f"({expression}*{_dim(index)}+{coord})"
     return expression
 
@@ -555,7 +555,9 @@ def _cpu_node(
     lines = [f"  double* {out}={storage};"]
     if node.op == "add":
         terms = []
-        for source, coefficient in zip(node.inputs, node.attrs["coefficients"]):
+        for source, coefficient in zip(
+            node.inputs, node.attrs["coefficients"], strict=True
+        ):
             terms.append(f"{_fraction(coefficient)}*{names[source._emit_index]}[i]")
         lines += [
             f"  for(std::size_t i=0;i<{size};++i){{",
@@ -623,7 +625,7 @@ def _cpu_node(
             )
             indent += "  "
         factors = []
-        for source, source_labels in zip(node.inputs, labels):
+        for source, source_labels in zip(node.inputs, labels, strict=True):
             factors.append(
                 f"{names[source._emit_index]}[{_flat_index(tuple(source_labels), source.spec)}]"
             )
@@ -815,7 +817,9 @@ def _cpu_node(
         if any(coord is None for coord in source_coords):
             raise ValueError("invalid native RCCSD transpose coordinate map")
         index = typing.cast("list[str]", source_coords)[0] if source_coords else "0"
-        for coord, spec_index in zip(source_coords[1:], source.spec.indices[1:]):
+        for coord, spec_index in zip(
+            source_coords[1:], source.spec.indices[1:], strict=True
+        ):
             index = f"({index}*{_dim(spec_index)}+{coord})"
         lines += [
             f"    const double value={names[source._emit_index]}[{index}];",
@@ -1720,7 +1724,9 @@ def _cuda_kernel(
             )
             indent += "  "
         factors = []
-        for i, (source, source_labels) in enumerate(zip(node.inputs, labels)):
+        for i, (source, source_labels) in enumerate(
+            zip(node.inputs, labels, strict=True)
+        ):
             factors.append(f"a{i}[{_flat_index(tuple(source_labels), source.spec)}]")
         product = factors[0]
         for factor in factors[1:]:
@@ -1805,7 +1811,9 @@ def _cuda_kernel(
         if any(coord is None for coord in source_coords):
             raise ValueError("invalid native RCCSD CUDA transpose coordinate map")
         index = typing.cast("list[str]", source_coords)[0] if source_coords else "0"
-        for coord, spec_index in zip(source_coords[1:], source.spec.indices[1:]):
+        for coord, spec_index in zip(
+            source_coords[1:], source.spec.indices[1:], strict=True
+        ):
             index = f"({index}*{_dim(spec_index)}+{coord})"
         lines += [
             f"    const double value=a0[{index}];",

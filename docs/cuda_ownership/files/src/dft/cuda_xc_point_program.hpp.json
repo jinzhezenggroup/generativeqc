@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_xc_point_program.hpp",
+  "reason": "Library-owned immutable point descriptors and physical single/batched launch ABI; no scientific equations or public capability admission.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "xc"
+}

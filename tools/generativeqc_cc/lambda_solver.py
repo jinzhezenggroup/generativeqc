@@ -387,7 +387,7 @@ class BoundCCSDLambda:
         return np.concatenate(
             [
                 layout.pack(_array(a, layout.spec.shape, "CC amplitude/response"))
-                for layout, a in zip(self.layouts, arrays)
+                for layout, a in zip(self.layouts, arrays, strict=True)
             ]
         )
 

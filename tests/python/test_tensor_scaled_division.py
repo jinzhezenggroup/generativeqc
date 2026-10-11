@@ -214,7 +214,7 @@ def test_seeded_random_exponent_sweep_against_exact_rationals(
         )
         bars = vjp(program, feeds, cotangents).input_cotangents
         generated = execute(reverse.program, {**feeds, "bar_out": w}).outputs
-        for name, value in zip(("x", "y"), expected[2:]):
+        for name, value in zip(("x", "y"), expected[2:], strict=True):
             _close(bars[name], value, dtype)
             _close(generated[f"bar_{name}"], value, dtype)
     assert checked >= 50
@@ -229,7 +229,7 @@ def test_fused_primitive_replay_adjoint_and_higher_derivatives(
     program = Program({"out": scaled_bilinear(*nodes)})
     feeds = {
         name: np.asarray(value, dtype=dtype)
-        for name, value in zip("abcdef", (2, 3, 4, 5, 2, -3))
+        for name, value in zip("abcdef", (2, 3, 4, 5, 2, -3), strict=True)
     }
     tangents = {name: np.asarray(0.125, dtype=dtype) for name in "abcdef"}
     cotangents = {"out": np.asarray(0.75, dtype=dtype)}

@@ -68,7 +68,10 @@ def test_fitted_exact_force_maps_oracle_replay_rebinding_and_fallback(
     charge = int(spin == "uks")
     references = []
     for points in geometries:
-        atoms = [(element, point) for (element, _), point in zip(case.atoms, points)]
+        atoms = [
+            (element, point)
+            for (element, _), point in zip(case.atoms, points, strict=True)
+        ]
         reference = reference_engine(atoms, reference_basis, grid, xc=xc)
         if charge:
             reference.mol.build(charge=charge, spin=1)

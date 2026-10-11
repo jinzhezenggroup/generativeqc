@@ -17,10 +17,10 @@ from generativeqc_compiler.tensor import (
     TensorSpec,
     add,
     broadcast,
+    cast,
     divide,
     einsum,
     execute,
-    exp,
     gather,
     indexed_gather,
     input_tensor,
@@ -298,7 +298,7 @@ def test_preallocation_and_semantic_rejection(tmp_path: typing.Any) -> None:
     for program, message in (
         (Program({"a": tensor("a", (3,), "float32")}), "float64"),
         (
-            Program({"a": exp(a)}),
+            Program({"a": cast(a, "float32")}),
             "unsupported",
         ),
     ):

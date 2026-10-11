@@ -4,7 +4,7 @@ import typing
 
 import numpy as np
 import pytest
-from generativeqc_compiler.cc.doubles import build_ccsd_program
+from generativeqc_compiler.cc.doubles import _expand, build_ccsd_program
 from generativeqc_compiler.tensor import Program, add, execute
 
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds, random_case
@@ -24,7 +24,9 @@ def test_full_residuals_against_determinants_and_expanded_shared(
         p = build_ccsd_program(o, v, form=form)
         value = execute(Program.loads(p.dumps()), dense_feeds(*arrays)).outputs
         for key, ref in zip(
-            ("correlation_energy", "singles_residual", "doubles_residual"), reference
+            ("correlation_energy", "singles_residual", "doubles_residual"),
+            reference,
+            strict=True,
         ):
             np.testing.assert_allclose(value[key], ref, atol=1e-11, rtol=1e-10)
         np.testing.assert_allclose(
@@ -75,3 +77,12 @@ def test_fock_doubles_has_all_diagonal_and_offdiagonal_terms() -> None:
     ]
     np.testing.assert_allclose(result, expected, atol=1e-12, rtol=0)
     assert np.max(np.abs(result)) > 1e-3
+
+
+def test_ccsd_expansion_rejects_mismatched_operand_and_label_arity() -> None:
+    """Never silently drop equation factors or source labels in CCSD codegen."""
+    child = ((1, "i", (("x", "i"),)),)
+    with pytest.raises(ValueError, match=r"zip\(\) argument 2 is shorter"):
+        _expand("i,j->ij", (child,), 1)
+    with pytest.raises(ValueError, match=r"zip\(\) argument 2 is longer"):
+        _expand("ij->ij", (child,), 1)

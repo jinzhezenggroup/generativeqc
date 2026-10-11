@@ -81,6 +81,7 @@
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 #include "scf/cuda/scf_state_kernels.hpp"
+#include "scf/cuda/structured_matrix.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda/weighted_eri_kernels.hpp"
 #include "scf/cuda_density_fitting.hpp"
@@ -902,7 +903,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             requested_transformed_direct, shell_class_profiling, inactive_eigensolver_profiling,
             bounded_fock_class_timing, requested_bounded_direct_streaming,
             requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
-            requested_incremental_diis_gram, use_cublas)) {
+            requested_incremental_diis_gram, use_cublas,
+            tensor::CudaStructuredProductBinding::production_library_qualified)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1157,6 +1159,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     reference_base_bytes = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
                                                            reference_provider_allowance,
                                                            options.reference_memory_budget_bytes);
+    reference_base_bytes = reference_detail::check_capacity(
+        reference_base_bytes,
+        tensor::CudaMatrixProductBinding::kPreparationHostBytes +
+            tensor::CudaStructuredProductBinding::kPreparationHostBytes,
+        options.reference_memory_budget_bytes);
     // The source frame must not inherit unordered Fock roundoff before the
     // correlated response starts. Charge the Cartesian (not public) plane.
     resources.reference_fock_correction_bytes_ =
@@ -1333,6 +1340,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto direct_fock = arena_pointer<double>(resources.arena_, layout.direct_fock);
   auto direct_transform_temporary =
       arena_pointer<double>(resources.arena_, layout.direct_transform_temporary);
+  auto basis_matrix_scratch =
+      resources.blas_ && transformed_direct &&
+              tensor::CudaStructuredProductBinding::production_library_qualified
+          ? arena_pointer<double>(resources.arena_, layout.basis_matrix_scratch)
+          : nullptr;
   auto shell_pair_bounds = arena_pointer<double>(resources.arena_, layout.shell_pair_bounds);
   auto shell_pair_density_bounds =
       arena_pointer<ShellPairDensityBounds>(resources.arena_, layout.shell_pair_density_bounds);
@@ -1966,6 +1978,24 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   } else if (first_setup) {
     plan.lwork = 0;
   }
+  if (first_setup) {
+    try {
+      resources.matrix_binding_.emplace(resources.stream_, resources.blas_, static_cast<int>(nbf),
+                                        static_cast<int>(batch_size), static_cast<int>(spin_count));
+      resources.structured_binding_.emplace(
+          resources.stream_, resources.blas_, static_cast<int>(nbf), static_cast<int>(direct_nbf),
+          static_cast<int>(batch_size), static_cast<int>(spin_count));
+    } catch (const std::bad_alloc&) {
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+      return outputs;
+    } catch (const tensor::CudaMatrixProductBinding::PreparationFailure& failure) {
+      fill_global_failure(outputs, failure.status);
+      return outputs;
+    } catch (const std::exception&) {
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+      return outputs;
+    }
+  }
   if (options.export_physical_reference) {
     // Account for the actual eigensolver workspace before considering optional
     // residency. Cache-eligible references keep their matrix-direct arena so
@@ -2070,7 +2100,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     const generativeqc_status product_status =
         launch_matrix_product(resources.matrix_view(masked_matrix_output, spin_matrix_elements),
                               static_cast<int>(batch_size), static_cast<int>(nbf), left,
-                              transpose_left, right, active, output, use_cublas, scale);
+                              transpose_left, right, active, output, scale);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
@@ -2082,11 +2112,29 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     const generativeqc_status product_status = launch_spin_matrix_product(
         resources.matrix_view(masked_matrix_output, spin_matrix_elements),
         static_cast<int>(batch_size), 2, static_cast<int>(nbf), left, left_is_spin, transpose_left,
-        right, right_is_spin, active, output, use_cublas);
+        right, right_is_spin, active, output);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
     return product_status;
+  };
+  const auto build_density = [&](const double* orbital_frame, double* destination) {
+    // The eigensolve/back-transform has finished using this arena plane.
+    return launch_structured_density(
+        resources.matrix_view(masked_matrix_output, spin_matrix_elements),
+        static_cast<int>(batch_size), static_cast<int>(spin_count), static_cast<int>(nbf), occupied,
+        orbital_frame, nullptr, active, destination, temporary, spin_matrix_elements);
+  };
+  const auto transform_basis = [&](tensor::StructuredOperation operation, const double* input,
+                                   const double* core, double* destination) {
+    const auto result = launch_structured_basis(
+        resources.matrix_view(masked_matrix_output, spin_matrix_elements), operation,
+        static_cast<int>(batch_size), static_cast<int>(spin_count), static_cast<int>(nbf),
+        static_cast<int>(direct_nbf), ao_to_direct_transform, input, core, active, destination,
+        basis_matrix_scratch, std::max(spin_matrix_elements, direct_spin_matrix_elements));
+    return result == GENERATIVEQC_STATUS_SUCCESS         ? cudaSuccess
+           : result == GENERATIVEQC_STATUS_OUT_OF_MEMORY ? cudaErrorMemoryAllocation
+                                                         : cudaErrorUnknown;
   };
   const auto build_commutator_residual = [&]() -> generativeqc_status {
     // [F, P]S is evaluated as four O(N^3) products.  `temporary` and
@@ -2138,16 +2186,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
     const double* quartet_density = density_input;
     if (transformed_direct) {
-      launch_transform_density_to_direct_right_kernel(
-          blocks_for(spin_rectangular_matrix_elements), threads, 0, resources.stream_,
-          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-          static_cast<std::int32_t>(nbf), static_cast<std::int32_t>(direct_nbf),
-          ao_to_direct_transform, density_input, active, direct_transform_temporary);
-      launch_transform_density_to_direct_left_kernel(
-          blocks_for(direct_spin_matrix_elements), threads, 0, resources.stream_,
-          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-          static_cast<std::int32_t>(nbf), static_cast<std::int32_t>(direct_nbf),
-          ao_to_direct_transform, direct_transform_temporary, active, direct_density);
+      auto transform_error = transform_basis(tensor::StructuredOperation::DensityRight,
+                                             density_input, nullptr, direct_transform_temporary);
+      if (transform_error != cudaSuccess) return transform_error;
+      transform_error = transform_basis(tensor::StructuredOperation::DensityLeft,
+                                        direct_transform_temporary, nullptr, direct_density);
+      if (transform_error != cudaSuccess) return transform_error;
       quartet_density = direct_density;
     }
     if (!bounded_direct_streaming) {
@@ -2824,16 +2868,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                   resources.reference_fock_correction_,
                                   direct_spin_matrix_elements);
     if (quartet_direct && transformed_direct) {
-      launch_transform_direct_fock_left_kernel(
-          blocks_for(spin_rectangular_matrix_elements), threads, 0, resources.stream_,
-          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-          static_cast<std::int32_t>(nbf), static_cast<std::int32_t>(direct_nbf),
-          ao_to_direct_transform, direct_fock, active, direct_transform_temporary);
-      launch_transform_direct_fock_right_kernel(
-          blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
-          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-          static_cast<std::int32_t>(nbf), static_cast<std::int32_t>(direct_nbf),
-          ao_to_direct_transform, direct_transform_temporary, hcore, active, fock);
+      auto transform_error = transform_basis(tensor::StructuredOperation::FockLeft, direct_fock,
+                                             nullptr, direct_transform_temporary);
+      if (transform_error != cudaSuccess) return transform_error;
+      transform_error = transform_basis(tensor::StructuredOperation::FockRight,
+                                        direct_transform_temporary, hcore, fock);
+      if (transform_error != cudaSuccess) return transform_error;
     }
     return cudaPeekAtLastError();
   };
@@ -2983,10 +3023,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     launch_inspect_solver_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
                                  static_cast<std::int32_t>(batch_size), solver_info, active, failed,
                                  converged);
-    launch_build_orthogonalizer_kernel(blocks_for(matrix_elements), threads, 0, resources.stream_,
-                                       static_cast<std::int32_t>(batch_size),
-                                       static_cast<std::int32_t>(nbf), eigensystem, eigenvalues,
-                                       active, orthogonalizer, failed);
+    status = launch_structured_orthogonalizer(
+        resources.matrix_view(masked_matrix_output, spin_matrix_elements),
+        static_cast<int>(batch_size), static_cast<int>(nbf), eigensystem, eigenvalues, active,
+        orthogonalizer, failed, temporary, spin_matrix_elements);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      fill_global_failure(outputs, status);
+      return outputs;
+    }
   }
 
   // A valid warm density supersedes the core-Hamiltonian guess. Homogeneous
@@ -3025,20 +3069,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                          resources.stream_, static_cast<std::int32_t>(batch_size),
                                          static_cast<std::int32_t>(nbf), occupied, active,
                                          coefficients);
-      launch_build_spin_density_kernel(blocks_for(spin_matrix_elements), threads, 0,
-                                       resources.stream_, static_cast<std::int32_t>(batch_size), 2,
-                                       static_cast<std::int32_t>(nbf), occupied, coefficients,
-                                       active, density);
+      status = build_density(coefficients, density);
     } else {
       status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
       if (status != GENERATIVEQC_STATUS_SUCCESS) {
         fill_global_failure(outputs, status);
         return outputs;
       }
-      launch_build_density_kernel(blocks_for(matrix_elements), threads, 0, resources.stream_,
-                                  static_cast<std::int32_t>(batch_size),
-                                  static_cast<std::int32_t>(nbf), occupied, coefficients, active,
-                                  density);
+      status = build_density(coefficients, density);
+    }
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      fill_global_failure(outputs, status);
+      return outputs;
     }
   }
   std::vector<std::uint8_t> host_warm_invalid;
@@ -3318,10 +3360,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       iteration_status =
           multiply_spin_matrices(orthogonalizer, false, false, eigensystem, true, coefficients);
       if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
-        launch_build_spin_density_kernel(blocks_for(spin_matrix_elements), threads, 0,
-                                         resources.stream_, static_cast<std::int32_t>(batch_size),
-                                         2, static_cast<std::int32_t>(nbf), occupied, coefficients,
-                                         active, next_density);
+        iteration_status = build_density(coefficients, next_density);
+        if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
         if (reuse_converged_fock) {
           launch_update_uhf_convergence_kernel(
               true, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
@@ -3344,10 +3384,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                    failed, converged);
       iteration_status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
       if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
-        launch_build_density_kernel(blocks_for(matrix_elements), threads, 0, resources.stream_,
-                                    static_cast<std::int32_t>(batch_size),
-                                    static_cast<std::int32_t>(nbf), occupied, coefficients, active,
-                                    next_density);
+        iteration_status = build_density(coefficients, next_density);
+        if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
         if (reuse_converged_fock) {
           launch_update_convergence_kernel(
               true, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
@@ -3936,16 +3974,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   std::uint32_t host_force_validation_count = 0;
   if (force_finalization_fallback) {
     runtime::df_progress::Scope trace("direct_force_canonicalization", "cuda_submission");
-    if (unrestricted) {
-      launch_build_spin_density_kernel(blocks_for(spin_matrix_elements), threads, 0,
-                                       resources.stream_, static_cast<std::int32_t>(batch_size), 2,
-                                       static_cast<std::int32_t>(nbf), occupied, coefficients,
-                                       active, density);
-    } else {
-      launch_build_density_kernel(blocks_for(matrix_elements), threads, 0, resources.stream_,
-                                  static_cast<std::int32_t>(batch_size),
-                                  static_cast<std::int32_t>(nbf), occupied, coefficients, active,
-                                  density);
+    status = build_density(coefficients, density);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      fill_global_failure(outputs, status);
+      return outputs;
     }
     cuda_error = cudaGetLastError();
     if (cuda_error == cudaSuccess) {

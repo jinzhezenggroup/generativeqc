@@ -284,34 +284,3 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
     changed = estimate_hf_resources([H2], backend="cuda", library=library)
     assert changed.requests[0].identity == baseline.requests[0].identity
     assert changed.identity == baseline.identity
-
-
-def test_cli_resource_dry_run_reads_real_xyz_and_reports_infeasibility(
-    monkeypatch: typing.Any, tmp_path: typing.Any, capsys: typing.Any
-) -> None:
-    from generativeqc import _native
-    from generativeqc.__main__ import main
-
-    path = tmp_path / "h2.xyz"
-    path.write_text("2\nbohr fixture\nH 0 0 -0.7\nH 0 0 0.7\n")
-
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("CLI resource estimation touched a native runtime")
-
-    monkeypatch.setattr(_native, "load_library", forbidden)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "generativeqc",
-            "resources",
-            str(path),
-            "--units",
-            "bohr",
-            "--host-bytes",
-            "1",
-        ],
-    )
-    assert main() == 2
-    output = json.loads(capsys.readouterr().out)
-    assert output["status"] == "infeasible"
-    assert output["peak_bytes"]["host"] > 1

@@ -91,7 +91,7 @@ def test_every_public_cartesian_component_against_pyscf(
         exponents = [alpha] * len(components[0]) + [beta] * len(components[1])
         raw_norms = [
             gaussian_self_norm(e, name)
-            for e, name in zip(exponents, components[0] + components[1])
+            for e, name in zip(exponents, components[0] + components[1], strict=True)
         ]
         scales = np.sqrt(overlap.diagonal() / raw_norms)
         raw_reference = reference / np.outer(scales, scales)
@@ -245,6 +245,28 @@ def test_kinetic_raised_states_do_not_widen_public_shells() -> None:
             build_one_electron_value_ir("overlap", invalid)
     with pytest.raises(ValueError):
         build_one_electron_value_ir("four_center_eri", (0, 0))
+
+
+@pytest.mark.parametrize("family", ["overlap", "kinetic", "nuclear_attraction"])
+def test_primitive_center_arity_matches_operator(family: str) -> None:
+    """Keep two-center S/T and three-center V bindings exact under strict zip."""
+    alpha, beta, charge = 0.8, 0.35, 2.3
+    p = alpha + beta
+    program = kernel(family, (0, 0), ("", ""), charge)
+    count = 3 if family == "nuclear_attraction" else 2
+    centers = ((0.0, 0.0, 0.0),) * count
+    overlap = (math.pi / p) ** 1.5
+    expected = {
+        "overlap": overlap,
+        "kinetic": 3 * alpha * beta / p * overlap,
+        "nuclear_attraction": -charge * 2 * math.pi / p,
+    }[family]
+    assert evaluate_one_electron_primitive(
+        program, (alpha, beta), centers
+    ) == pytest.approx(expected, rel=2e-15)
+    for invalid in (centers[:-1], (*centers, centers[0])):
+        with pytest.raises(ValueError, match="dimensions do not match"):
+            evaluate_one_electron_primitive(program, (alpha, beta), invalid)
 
 
 def test_interpreter_rejects_invalid_scientific_inputs() -> None:

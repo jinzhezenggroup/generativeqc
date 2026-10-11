@@ -228,18 +228,24 @@ void validate_problem(const Problem& p, bool allow_df_virtual) {
 
 void validate_options(const SolverOptions& o) {
   if (!o.max_iterations || o.diis_size == 1 || o.diis_size > 20 || !o.max_bytes ||
-      !o.df_auxiliary_batch_limit || !o.df_mixed_precision_max_evaluations)
+      !o.df_auxiliary_batch_limit ||
+      (o.df_mixed_precision && !o.df_mixed_precision_max_evaluations))
     throw std::invalid_argument("invalid RCCSD iteration/history/budget option");
   if (!(o.energy_tolerance > 0.0 && o.energy_tolerance <= 1e-8) ||
       !(o.residual_tolerance > 0.0 && o.residual_tolerance <= 1e-9) ||
       !(o.denominator_threshold > 0.0) || !(o.damping >= 0.0 && o.damping < 1.0) ||
       !(o.level_shift >= 0.0) || !std::isfinite(o.energy_tolerance) ||
       !std::isfinite(o.residual_tolerance) || !std::isfinite(o.denominator_threshold) ||
-      !std::isfinite(o.damping) || !std::isfinite(o.level_shift) ||
-      !std::isfinite(o.df_mixed_precision_switch_residual) ||
-      !(o.df_mixed_precision_switch_residual >= 100.0 * o.residual_tolerance &&
-        o.df_mixed_precision_switch_residual <= 1e-2))
+      !std::isfinite(o.damping) || !std::isfinite(o.level_shift))
     throw std::invalid_argument("invalid RCCSD numeric option");
+  // Unused warmup controls must not restrict the original FP64 contract.
+  // In particular, 100 * 1e-9 rounds above a supplied decimal 1e-7 switch value.
+  // Keep the strict mixed-mode admission inequality unchanged when requested.
+  if (o.df_mixed_precision &&
+      (!std::isfinite(o.df_mixed_precision_switch_residual) ||
+       !(o.df_mixed_precision_switch_residual >= 100.0 * o.residual_tolerance &&
+         o.df_mixed_precision_switch_residual <= 1e-2)))
+    throw std::invalid_argument("invalid RCCSD mixed-precision option");
 }
 
 std::size_t problem_host_bytes(const Problem& p) {

@@ -115,7 +115,7 @@ def _evaluate(
         return getattr(np, op)(operands[0], operands[1])
     if op == "add":
         result = np.zeros(node.spec.shape, dtype=node.spec.dtype)
-        for operand, coefficient in zip(operands, a["coefficients"]):
+        for operand, coefficient in zip(operands, a["coefficients"], strict=True):
             result += _coefficient(coefficient, node.spec.dtype) * operand
         return result
     if op == "multiply":
@@ -139,7 +139,7 @@ def _evaluate(
         if accumulation_dtype != node.spec.dtype:
             return _mixed_einsum(node, operands, accumulation_dtype)
         arguments = []
-        for value, labels in zip(operands, a["labels"]):
+        for value, labels in zip(operands, a["labels"], strict=True):
             arguments.extend((value, list(labels)))
         # optimize=False keeps a deterministic direct reference contraction;
         # contraction-tree selection is a separate lowering concern.
@@ -225,7 +225,10 @@ def _evaluate(
         result = np.zeros(node.spec.shape, dtype=node.spec.dtype)
         source = np.moveaxis(value, a["axis"], 0)
         target = np.moveaxis(result, a["axis"], 0)
-        for segment, (start, stop) in enumerate(zip(a["offsets"], a["offsets"][1:])):
+        # Consecutive offset boundaries define one fewer reduction segments.
+        for segment, (start, stop) in enumerate(
+            zip(a["offsets"], a["offsets"][1:], strict=False)
+        ):
             target[segment] = np.sum(source[start:stop], axis=0, dtype=node.spec.dtype)
         return result
     if op == "reduce":

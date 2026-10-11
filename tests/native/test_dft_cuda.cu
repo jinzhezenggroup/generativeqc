@@ -16,6 +16,7 @@
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
@@ -184,6 +185,163 @@ std::vector<double> density(std::size_t n, unsigned spins) {
         d[(s * n + i) * n + j] =
             (s == 0 ? 0.7 : 0.3) * ((i == j ? 0.2 : 0.0) + 0.1 / ((i + 1.0) * (j + 1.0)));
   return d;
+}
+
+void json_vector(const std::vector<double>& values) {
+  std::cout << '[';
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    if (index) std::cout << ',';
+    std::cout << values[index];
+  }
+  std::cout << ']';
+}
+
+/** Test-only endpoint export for an independent PySCF/Libxc contraction oracle.
+ * Actual AO/density/point/potential work stays on CUDA. Test setup supplies the
+ * same explicit host quadrature to both backends; no CPU science is staged by
+ * enqueue. Repeated, perturbed and changed-geometry inputs are independent gates. */
+void automatic_xc_record(std::uint32_t code, unsigned spins, double displacement) {
+  require(spins == 1 || spins == 2, "invalid automatic test spin layout");
+  require(std::isfinite(displacement), "invalid automatic test displacement");
+  const auto* program = generated::automatic_cuda_point_entry(code);
+  require(program && program->launch && program->launch_batch, "missing automatic AOT entry");
+  require(generated::automatic_cuda_point_entry(code) == program, "unstable AOT lifetime");
+  require(!generated::automatic_cuda_point_entry(code | 0x1000000U), "truncated AOT code");
+  auto molecule = system();
+  molecule.atoms[1].position[2] += displacement;
+  const AoBasis basis(molecule);
+  const MolecularGrid grid(molecule, {1, 7, 5, 7, 3, 1e-12});
+  Fixture fixture(basis, grid, code, spins == 2, 37);
+  require(fixture.plan->point_program() == program, "prepared AOT identity was not retained");
+  require(fixture.layout.feature_terms == program->feature_terms, "AOT feature contract mismatch");
+  require(!cuda_xc_execution_capabilities(fixture.layout).local_ao_selection &&
+              !cuda_xc_execution_capabilities(fixture.layout).mixed_density_contraction,
+          "automatic AOT inherited optional contraction qualification");
+  fixture.plan->prepare_point_batches(4, 1U << 20);
+  require(fixture.plan->point_batch_plan().tiles == 1, "automatic AOT inherited batching");
+  for (unsigned mechanism = 0; mechanism < 3; ++mechanism) {
+    bool rejected = false;
+    try {
+      cuda_xc_layout_shape(
+          basis.natom, basis.nprimitive, basis.nao, grid.point_count(), code, spins == 2, 37,
+          mechanism == 0,
+          mechanism == 1 ? CudaXcAoPrecision::Fp32ComputeFp64Storage : CudaXcAoPrecision::Fp64,
+          mechanism == 2 ? 0.5 : 1.0);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "automatic AOT inherited optional arithmetic/response qualification");
+  }
+  const std::vector<double> input_density =
+      spins == 1 ? std::vector<double>{0.9, 0.13, 0.13, 0.8}
+                 : std::vector<double>{0.5, 0.07, 0.07, 0.42, 0.32, 0.04, 0.04, 0.37};
+  const std::vector<double> direction =
+      spins == 1 ? std::vector<double>{0.03, -0.01, -0.01, -0.02}
+                 : std::vector<double>{0.03, -0.01, -0.01, -0.02, -0.02, 0.01, 0.01, 0.01};
+  fixture.submit(input_density);
+  const auto cold = fixture.scalars();
+  const auto potential = fixture.potential();
+  fixture.submit(input_density);
+  const auto replay = fixture.scalars();
+  const auto replay_potential = fixture.potential();
+  require(!cold.error && !replay.error, "invalid automatic fixed-density XC result");
+  constexpr double step = 1.0e-5;
+  auto shifted = input_density;
+  for (std::size_t index = 0; index < shifted.size(); ++index)
+    shifted[index] = input_density[index] + step * direction[index];
+  fixture.submit(shifted);
+  const auto plus = fixture.scalars();
+  for (std::size_t index = 0; index < shifted.size(); ++index)
+    shifted[index] = input_density[index] - step * direction[index];
+  fixture.submit(shifted);
+  const auto minus = fixture.scalars();
+  require(!plus.error && !minus.error, "invalid automatic perturbed XC result");
+  fixture.canary();
+  const auto transfers = fixture.plan->transfers();
+  require(transfers.evaluations == 4, "automatic XC semantic evaluation count changed");
+  std::cout << std::setprecision(17) << "{\"name\":\"" << program->identifier
+            << "\",\"expression_identity\":\"" << program->expression_identity
+            << "\",\"source_identity\":\"" << program->source_identity << "\",\"spins\":" << spins
+            << ",\"device_bytes\":" << fixture.layout.device_bytes
+            << ",\"point_count\":" << grid.point_count() << ",\"tile_points\":37"
+            << ",\"evaluations\":" << transfers.evaluations
+            << ",\"potential_calls\":" << transfers.potential_calls
+            << ",\"potential_summands\":" << transfers.potential_summands
+            << ",\"energy\":" << cold.energy << ",\"replay_energy\":" << replay.energy
+            << ",\"plus_energy\":" << plus.energy << ",\"minus_energy\":" << minus.energy
+            << ",\"step\":" << step << ",\"density\":";
+  json_vector(input_density);
+  std::cout << ",\"direction\":";
+  json_vector(direction);
+  std::cout << ",\"potential\":";
+  json_vector(potential);
+  std::cout << ",\"replay_potential\":";
+  json_vector(replay_potential);
+  std::cout << ",\"points\":";
+  json_vector(grid.points());
+  std::cout << ",\"weights\":";
+  json_vector(grid.weights());
+  std::cout << "}\n";
+}
+
+/** Test-only direct physical-layout export. Inputs are already compact tiles;
+ * submission uses the same immutable AOT callbacks as the prepared XC plan. */
+void automatic_point_record(std::uint32_t code, unsigned spins, std::size_t tile_points) {
+  const auto* program = generated::automatic_cuda_point_entry(code);
+  require(program && (spins == 1 || spins == 2), "invalid automatic point test binding");
+  std::size_t count{};
+  require(bool(std::cin >> count) && count > 0 && count <= 128, "invalid point test count");
+  std::vector<double> features(count * spins * program->feature_terms), weights(count);
+  for (auto& value : features) require(bool(std::cin >> value), "invalid point test feature");
+  for (auto& value : weights) require(bool(std::cin >> value), "invalid point test weight");
+  std::vector<double> coefficients(features.size()), totals(3 * count);
+  double *device_features{}, *device_weights{}, *device_coefficients{}, *device_totals{};
+  int *device_error{}, error{};
+  cudaStream_t stream{};
+  auto cleanup = [&]() {
+    if (stream) cudaStreamSynchronize(stream);
+    if (device_error) cudaFree(device_error);
+    if (device_totals) cudaFree(device_totals);
+    if (device_coefficients) cudaFree(device_coefficients);
+    if (device_weights) cudaFree(device_weights);
+    if (device_features) cudaFree(device_features);
+    if (stream) cudaStreamDestroy(stream);
+  };
+  try {
+    check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    check(cudaMalloc(&device_features, features.size() * sizeof(double)));
+    check(cudaMalloc(&device_weights, weights.size() * sizeof(double)));
+    check(cudaMalloc(&device_coefficients, coefficients.size() * sizeof(double)));
+    check(cudaMalloc(&device_totals, totals.size() * sizeof(double)));
+    check(cudaMalloc(&device_error, sizeof(int)));
+    check(cudaMemsetAsync(device_error, 0, sizeof(int), stream));
+    check(cudaMemcpyAsync(device_features, features.data(), features.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, stream));
+    check(cudaMemcpyAsync(device_weights, weights.data(), weights.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, stream));
+    if (tile_points)
+      program->launch_batch(stream, device_features, device_weights, count, spins,
+                            device_coefficients, device_totals, device_error, code, 1.0, 1.0,
+                            tile_points);
+    else
+      program->launch(stream, device_features, device_weights, count, spins, device_coefficients,
+                      device_totals, device_error, code, 1.0, 1.0, nullptr);
+    check(cudaMemcpyAsync(coefficients.data(), device_coefficients,
+                          coefficients.size() * sizeof(double), cudaMemcpyDeviceToHost, stream));
+    check(cudaMemcpyAsync(totals.data(), device_totals, totals.size() * sizeof(double),
+                          cudaMemcpyDeviceToHost, stream));
+    check(cudaMemcpyAsync(&error, device_error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+    check(cudaStreamSynchronize(stream));
+  } catch (...) {
+    cleanup();
+    throw;
+  }
+  cleanup();
+  std::cout << std::setprecision(17) << "{\"error\":" << error << ",\"coefficients\":";
+  json_vector(coefficients);
+  std::cout << ",\"totals\":";
+  json_vector(totals);
+  std::cout << "}\n";
 }
 
 void resident_grid_borrow_case(const generativeqc::core::System& molecule, const AoBasis& basis) {
@@ -882,6 +1040,16 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 5 && std::string(argv[1]) == "--automatic-points-json") {
+      automatic_point_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
+                             static_cast<unsigned>(std::stoul(argv[3])), std::stoull(argv[4]));
+      return 0;
+    }
+    if (argc == 5 && std::string(argv[1]) == "--automatic-xc-json") {
+      automatic_xc_record(static_cast<std::uint32_t>(std::stoul(argv[2], nullptr, 0)),
+                          static_cast<unsigned>(std::stoul(argv[3])), std::stod(argv[4]));
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--point-batches") {
       point_batch_cases();
       std::cout

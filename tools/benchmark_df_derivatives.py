@@ -128,7 +128,7 @@ def main() -> None:
     if len(args.profile) != len(args.pair_mode):
         parser.error("each profile requires its explicit pair-mode in the same order")
     profiles = {}
-    for path, mode in zip(args.profile, args.pair_mode):
+    for path, mode in zip(args.profile, args.pair_mode, strict=True):
         payload = json.loads(path.read_text())
         payload["benchmark_pair_mode"] = ("full", "symmetric", "packed").index(mode)
         profiles[str(payload["aos"])] = payload
@@ -172,7 +172,7 @@ def main() -> None:
         kernel_name="shell_packet",
         jobs=args.compile_jobs,
     )
-    runnable = [t for t, row in zip(trials, compiled) if row["eligible"]]
+    runnable = [t for t, row in zip(trials, compiled, strict=True) if row["eligible"]]
     report = {
         "schema": "generativeqc.df_derivative_tuning",
         "version": 1,

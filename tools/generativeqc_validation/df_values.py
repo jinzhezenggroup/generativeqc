@@ -103,7 +103,7 @@ def make_df_value_fixture(
     if len(lengths) != count or any(type(n) is not int or n < 1 for n in lengths):
         raise ValueError("positive contraction lengths are required")
     shells = []
-    for i, (l, length) in enumerate(zip(angular, lengths)):
+    for i, (l, length) in enumerate(zip(angular, lengths, strict=True)):
         shells.append(
             {
                 "atom_index": i,

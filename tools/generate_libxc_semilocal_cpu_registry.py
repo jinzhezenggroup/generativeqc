@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import re
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,42 +12,16 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 from generativeqc_compiler.xc.automatic_point import emit_automatic_point
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
-    automatic_functional_code,
 )
-from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
+from generativeqc_compiler.xc.automatic_semilocal import (
+    AutomaticRegistryEntry as RegistryEntry,
+)
+from generativeqc_compiler.xc.automatic_semilocal import (
+    automatic_registry_entries as registry_entries,
+)
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
-from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 SHARD_COUNT = 8
-
-
-@dataclass(frozen=True)
-class RegistryEntry:
-    name: str
-    libxc_id: int
-    code: int
-
-    @property
-    def stem(self) -> str:
-        return re.sub(r"[^a-z0-9]+", "_", self.name.lower()).strip("_")
-
-
-def registry_entries() -> tuple[RegistryEntry, ...]:
-    """Return every structurally supported automatic component."""
-    result = []
-    codes = set()
-    for name in sorted(AUTO_BULK_COMPONENTS):
-        capability = functional_capability(name)
-        if set(capability.required_ingredients) - {"rho", "sigma", "tau"}:
-            continue
-        code = automatic_functional_code(name)
-        if code in codes:
-            raise ValueError(f"duplicate automatic Libxc functional code: {code:#x}")
-        codes.add(code)
-        result.append(RegistryEntry(name, capability.libxc_id, code))
-    if not result:
-        raise RuntimeError("automatic Libxc CPU registry is empty")
-    return tuple(result)
 
 
 def _point_program_source(entry: RegistryEntry) -> str:

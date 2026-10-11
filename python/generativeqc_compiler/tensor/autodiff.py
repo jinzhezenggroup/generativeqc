@@ -22,7 +22,7 @@ import typing
 from collections.abc import Mapping
 from dataclasses import dataclass
 from fractions import Fraction
-from itertools import product
+from itertools import pairwise, product
 from types import MappingProxyType
 
 import numpy as np
@@ -364,7 +364,7 @@ def _vjp_cast(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndarra
 
 def _jvp_add(node: Node, values: typing.Any, tangents: typing.Any) -> np.ndarray:
     result = _zeros(node.spec)
-    for tangent, coefficient in zip(tangents, node.attrs["coefficients"]):
+    for tangent, coefficient in zip(tangents, node.attrs["coefficients"], strict=True):
         result += _coefficient(coefficient, node.spec.dtype) * tangent
     return result
 
@@ -387,7 +387,7 @@ def _jvp_einsum(node: Node, values: typing.Any, tangents: typing.Any) -> np.ndar
     for differentiated in range(len(node.inputs)):
         arguments = []
         for operand, (value, tangent, label) in enumerate(
-            zip(values, tangents, labels)
+            zip(values, tangents, labels, strict=True)
         ):
             arguments.extend(
                 (tangent if operand == differentiated else value, list(label))
@@ -438,9 +438,8 @@ def _jvp_segment_sum(
     result = _zeros(node.spec)
     source = np.moveaxis(tangents[0], node.attrs["axis"], 0)
     target = np.moveaxis(result, node.attrs["axis"], 0)
-    for segment, (start, stop) in enumerate(
-        zip(node.attrs["offsets"], node.attrs["offsets"][1:])
-    ):
+    # Segment boundaries form one fewer adjacent (start, stop) intervals.
+    for segment, (start, stop) in enumerate(pairwise(node.attrs["offsets"])):
         target[segment] = np.sum(source[start:stop], axis=0, dtype=node.spec.dtype)
     return result
 
@@ -603,7 +602,7 @@ def _einsum_vjp_reference(
     labels = node.attrs["labels"]
     output = node.attrs["output"]
     sizes = {}
-    for operand, operand_labels in zip(values, labels):
+    for operand, operand_labels in zip(values, labels, strict=True):
         for axis, label in enumerate(operand_labels):
             size = operand.shape[axis]
             if label in sizes and sizes[label] != size:
@@ -615,7 +614,7 @@ def _einsum_vjp_reference(
     ]
     one = np.dtype(node.spec.dtype).type(1)
     for coordinates in product(*(range(sizes[label]) for label in order)):
-        environment = dict(zip(order, coordinates))
+        environment = dict(zip(order, coordinates, strict=True))
         weight = bar[tuple(environment[label] for label in output)]
         if weight == 0:
             continue
@@ -655,7 +654,7 @@ def _vjp_einsum(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndar
     ones_storage = np.ones(max_ones, dtype=node.spec.dtype)
     for differentiated, operand_labels in enumerate(labels):
         arguments = [bar, output]
-        for operand, (value, label) in enumerate(zip(values, labels)):
+        for operand, (value, label) in enumerate(zip(values, labels, strict=True)):
             if operand != differentiated:
                 arguments.extend((value, list(label)))
         # A ones operand carries the requested output labels.  It contributes
@@ -899,7 +898,7 @@ def _vjp_arrays(
             ) from exc
         if len(contributions) != len(node.inputs):
             raise ValueError(f"VJP rule for {node.op} returned the wrong arity")
-        for operand, contribution in zip(node.inputs, contributions):
+        for operand, contribution in zip(node.inputs, contributions, strict=True):
             if operand not in relevant:
                 continue
             contribution_array = np.asarray(contribution)
