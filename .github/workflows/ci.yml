@@ -931,12 +931,27 @@ jobs:
           key: ${{ steps.gfn1_reference_sources.outputs.cache-primary-key }}
       - name: Show ccache statistics
         run: ccache --show-stats
-      # Native probes share the already restored local CPU cache; they do not
-      # each download and publish a separate 256 MiB compiler snapshot.
+      # Test-only probe objects are not produced by the master CMake seed.
+      # Retain their small ref-scoped overlay; never import it into shared caches.
+      # Merge-group refs are ephemeral, so they restore but never publish caches.
+      - name: Restore native Python probes
+        id: python_probe_ccache
+        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache-python-probes
+          key: ccache-python-probes-v2-${{ matrix.shard }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
+          restore-keys: |
+            ccache-python-probes-v2-${{ matrix.shard }}-
       - name: Reset native probe ccache statistics
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
       - name: Prepare bounded native diagnostics
         if: matrix.shard == 'core-b'
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
         run: |
           ccache --version
           ccache cc -std=c11 -fPIC -O2 -Wall -Wextra -Werror \
@@ -950,6 +965,8 @@ jobs:
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
         run: |
           export GENERATIVEQC_CI_SHARD="${{ matrix.shard }}"
           # Selection is sourced into this shell so its arrays flow into pytest.
@@ -970,10 +987,21 @@ jobs:
             "${coverage_args[@]}" \
             "${diagnostic_args[@]}" \
             "${extra_args[@]}"
-      # Probe compilations may reuse the local cache; test failures never
-      # publish a partial cache or poison the trusted master snapshot.
+      # Preserve valid probe compilations after test failures without freezing
+      # the immutable complete key or promoting a PR snapshot to master.
+      - name: Save native Python probes
+        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache-python-probes
+          key: ${{ steps.python_tests.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key || format('{0}-partial-{1}-{2}', steps.python_probe_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
       - name: Show post-test ccache statistics
         if: always()
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
         run: ccache --show-stats
       - name: Preserve transient benchmark/debug artifacts on failure
         if: failure()
