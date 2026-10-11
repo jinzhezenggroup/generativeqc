@@ -144,7 +144,12 @@ def test_weighted_gram_reuses_existing_strict_rank_k_portfolio() -> None:
         "generated.cuda",
         "cublas",
     }
-    target = TargetCapabilities(plan.target.target_info)
+    target = TargetCapabilities(
+        plan.target.target_info,
+        features=tuple(
+            (feature, True) for feature in plan.target.required_cuda_features
+        ),
+    )
     # A known qualified incumbent may be retained, but missing phase costs
     # cannot automatically promote a competitor.
     incumbent = next(
