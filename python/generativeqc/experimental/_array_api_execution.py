@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import time
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -110,19 +111,40 @@ class _Executor:
         with self.lock:
             if self.closed:
                 raise RuntimeError("compiled function is closed")
+            profiling = self.molecular.profile_enabled and bool(self.molecular.sources)
+            mark = time.perf_counter_ns() if profiling else 0
             program = self.molecular.bind_snapshots(program)
+            if profiling:
+                self.molecular.record_profile(
+                    "tensor_snapshot_binding", time.perf_counter_ns() - mark
+                )
             if self.backend == "reference":
                 from generativeqc_compiler.tensor.interpreter import execute
 
                 return execute(
                     program, feeds, max_bytes=self.options["max_bytes"]
                 ).outputs
+            mark = time.perf_counter_ns() if profiling else 0
             executable = self.executables.get(program.logical_hash)
             if executable is None:
                 executable = self._build(program)
                 self.executables[program.logical_hash] = executable
+                if profiling:
+                    self.molecular.record_profile(
+                        "tensor_build_cold", time.perf_counter_ns() - mark
+                    )
+            mark = time.perf_counter_ns() if profiling else 0
             self.molecular.materialize(self, program, feeds)
+            if profiling:
+                self.molecular.record_profile(
+                    "molecular_dispatch", time.perf_counter_ns() - mark
+                )
+            mark = time.perf_counter_ns() if profiling else 0
             result = executable.execute(feeds)
+            if profiling:
+                self.molecular.record_profile(
+                    "tensor_execute", time.perf_counter_ns() - mark
+                )
             return result if self.backend == "cpu" else result.outputs
 
     def close(self) -> None:

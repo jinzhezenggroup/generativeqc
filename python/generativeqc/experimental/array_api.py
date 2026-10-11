@@ -44,7 +44,7 @@ from generativeqc_compiler.tensor import (
 from . import _array_api_eager as _eager
 from . import _array_api_symbolic as _symbolic_backend
 from ._array_api_eager import Array
-from ._array_api_molecular import RHF
+from ._array_api_molecular import MolecularModel
 
 API_VERSION = 1
 __array_api_version__ = "2025.12"
@@ -1180,6 +1180,9 @@ class CompiledFunction:
                 dict(record)
                 for record in self._execution.molecular.diagnostics.values()
             ),
+            "molecular_profile_enabled": self._execution.molecular.profile_enabled,
+            "molecular_profile_ns": dict(self._execution.molecular.profile_totals_ns),
+            "molecular_profile_counts": dict(self._execution.molecular.profile_counts),
         }
 
     def close(self) -> None:
@@ -1365,7 +1368,7 @@ def capabilities() -> dict[str, object]:
             "compiled_call": "shape-dtype-specialized-native-tensorir",
             "compiled_backends": ("cpu", "cuda", "reference"),
             "native_cpu_dtypes": ("float64",),
-            "molecular_operators": ("RHF",),
+            "molecular_operators": ("MolecularModel",),
             "molecular_derivatives": "native-analytic-nuclear-first-order",
             "molecular_backend_fallback": False,
             "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
@@ -1388,7 +1391,6 @@ __all__ = [
     "API_VERSION",
     "DLPACK_INTEROP_VERSION",
     "FRONTEND_VERSION",
-    "RHF",
     "SUPPORTED_FUNCTIONS",
     "Array",
     "CompiledFunction",
@@ -1398,6 +1400,7 @@ __all__ = [
     "ExactScalar",
     "Index",
     "IndexSpace",
+    "MolecularModel",
     "Program",
     "TensorSpec",
     "VibeArray",
