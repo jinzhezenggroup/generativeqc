@@ -235,7 +235,9 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
         for fragment in (
             "restricted_global_hybrid_exchange_coefficient(exchange_coefficient)",
             "!fitted_coulomb && !fitted_exchange && !has_range_correction",
-            "!nonlocal_correlation && !incremental_direct_jk",
+            "!nonlocal_correlation &&",
+            "!incremental_direct_jk && provider.system().ecp_terms.empty()",
+            "atom.ecp_core != 0",
             "final_spec.coulomb.approximation == scf::FockApproximation::Exact",
             "final_spec.coulomb.op == scf::FockOperator::FullRange",
             "final_spec.exchange.approximation == scf::FockApproximation::Exact",
