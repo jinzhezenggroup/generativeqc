@@ -85,31 +85,38 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
     typed = [value for value in diagnostics if isinstance(value, dict)]
     if any(not value.get("active") for value in typed):
         raise ValueError("incremental benchmark did not activate Direct-J/K updates")
-    if any(not value.get("quartet_work_counters_valid") for value in typed):
-        raise ValueError("incremental quartet work counters are not complete")
     full_builds = sum(int(value["anchor_full_builds"]) for value in typed)
     delta_builds = sum(int(value["delta_builds"]) for value in typed)
     full_shells = sum(int(value["full_admitted_shell_quartets"]) for value in typed)
     delta_shells = sum(int(value["delta_admitted_shell_quartets"]) for value in typed)
     full_tiles = sum(int(value["full_admitted_quartet_tiles"]) for value in typed)
     delta_tiles = sum(int(value["delta_admitted_quartet_tiles"]) for value in typed)
-    if full_builds == 0 or full_shells == 0 or full_tiles == 0:
-        raise ValueError("incremental benchmark lacks measurable full work")
     if delta_builds == 0:
         # A population that converges before the first delta update has no
-        # incremental opportunity; its timings remain valid matched endpoints.
+        # incremental opportunity; quartet counters may legitimately be
+        # invalid there, and its timings remain valid matched endpoints.
+        if full_builds == 0:
+            raise ValueError("incremental benchmark lacks measurable full work")
         return {
             "sample_count": len(typed),
             "full_builds": full_builds,
             "delta_builds": 0,
-            "full_admitted_shell_quartets_per_build": full_shells / full_builds,
+            "full_admitted_shell_quartets_per_build": (
+                full_shells / full_builds if full_shells else None
+            ),
             "delta_admitted_shell_quartets_per_build": 0.0,
             "shell_quartet_reduction_fraction": 0.0,
-            "full_admitted_quartet_tiles_per_build": full_tiles / full_builds,
+            "full_admitted_quartet_tiles_per_build": (
+                full_tiles / full_builds if full_tiles else None
+            ),
             "delta_admitted_quartet_tiles_per_build": 0.0,
             "quartet_tile_reduction_fraction": 0.0,
             "no_incremental_opportunity": True,
         }
+    if any(not value.get("quartet_work_counters_valid") for value in typed):
+        raise ValueError("incremental quartet work counters are not complete")
+    if full_builds == 0 or full_shells == 0 or full_tiles == 0:
+        raise ValueError("incremental benchmark lacks measurable full work")
     full_shells_per_build = full_shells / full_builds
     delta_shells_per_build = delta_shells / delta_builds
     full_tiles_per_build = full_tiles / full_builds
