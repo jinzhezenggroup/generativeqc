@@ -11,6 +11,10 @@ method or implement energy, residuals, denominators, DIIS, iteration, molecular
 convergence, or UHF reference admission. Layout validation alone is not UCCSD
 solver qualification.
 
+The separate [energy and physical-residual TensorIR](uccsd_equations.md) consumes
+these five logical blocks. Its equation and fixed-amplitude derivative gates do
+not replace reference/provider admission or iterative-solver qualification.
+
 ## Logical and packed axes
 
 `UCCSDLayout(oa, ob, va, vb)` takes independent alpha/beta occupied/virtual

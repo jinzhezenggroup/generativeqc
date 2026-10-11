@@ -19,7 +19,8 @@ void require(bool condition, const char* message) {
  * exact Lambda is S/D in dense coordinates, including off-diagonal pair
  * orbits. No generated derivative or CPU response supplies the expected values.
  */
-void qualify(bool cuda, bool derived) {
+void qualify(bool cuda, bool derived, bool resident = false, std::size_t device_budget = 0,
+             bool df = false) {
   constexpr std::size_t o = 2, v = 3, n1 = o * v, n2 = n1 * n1;
   const double occupied[o]{-20.0, -1.0}, virtuals[v]{0.3, 2.0, 17.0};
   Problem p;
@@ -39,6 +40,13 @@ void qualify(bool cuda, bool derived) {
   p.d2.resize(n2);
   p.initial_t1.resize(n1);
   p.initial_t2.resize(n2);
+  if (df) {
+    p.naux = 5;
+    p.ovvv.clear();
+    p.vvvv.clear();
+    p.df_bov.resize(p.naux * n1);
+    p.df_bvv.resize(p.naux * v * v);
+  }
   for (std::size_t i = 0; i < o; ++i) p.foo[i * o + i] = occupied[i];
   for (std::size_t a = 0; a < v; ++a) p.fvv[a * v + a] = virtuals[a];
   std::vector<double> source1(n1), source2(n2), expected1(n1), expected2(n2);
@@ -75,6 +83,8 @@ void qualify(bool cuda, bool derived) {
   const auto capacity = lambda_cpu_numeric_capacity(p, cc, options, true);
   // Exact admitted host capacity includes the audit/diagonal buffer already.
   options.max_bytes = capacity;
+  if (device_budget) options.max_bytes = std::max(capacity, device_budget);
+  options.cuda_resident_krylov = resident;
   auto solve = [&] {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda) return solve_lambda_cuda_with_energy_source(p, cc, source1, source2, 0, options);
@@ -96,16 +106,65 @@ void qualify(bool cuda, bool derived) {
     require((result.diagnostic.preconditioner_actions > 0) == preconditioned,
             "preconditioner work");
     require(result.diagnostic.independent_residual_norm < 1e-9, "physical residual");
-    require(result.diagnostic.numeric_capacity_bytes == capacity, "unchanged numeric bound");
+    if (df && cuda)
+      require(result.diagnostic.numeric_capacity_bytes <= options.max_bytes,
+              "complete DF host/device numeric bound");
+    else
+      require(result.diagnostic.numeric_capacity_bytes == capacity, "unchanged numeric bound");
+    if (cuda) {
+      require(result.diagnostic.resident_krylov == resident, "resident schedule selection");
+      require(
+          result.diagnostic.resident_krylov_refused == (options.cuda_resident_krylov && !resident),
+          "resident refusal selection");
+      require(result.diagnostic.owned_device_bytes <= options.max_bytes,
+              "simultaneously-live device arenas exceed budget");
+      if (resident) {
+        const auto dimension = n1 + (n2 + n1) / 2;
+        const auto metadata_bytes = (n2 + n1) * sizeof(std::size_t) + dimension * sizeof(double);
+        const auto expected_h2d =
+            metadata_bytes + dimension * sizeof(double) * (preconditioned ? 2 : 1);
+        require(result.diagnostic.krylov_h2d_bytes == expected_h2d,
+                "resident iterations uploaded dimension-sized vectors");
+        require(!result.diagnostic.resident_krylov_refused &&
+                    result.diagnostic.resident_krylov_bytes > 0,
+                "resident admission diagnostics");
+        require(result.diagnostic.resident_provider_observed_bytes <=
+                        result.diagnostic.resident_provider_allowance_bytes &&
+                    result.diagnostic.resident_device_admission_bytes <= options.max_bytes,
+                "resident provider growth exceeds complete device admission");
+        require(result.diagnostic.resident_provider_version > 0 &&
+                    result.diagnostic.resident_runtime_version > 0,
+                "resident execution provenance");
+      }
+    }
     if (preconditioned)
       require(result.diagnostic.iterations == 1, "diagonal solve needs one step");
     else
       require(result.diagnostic.iterations > 1, "nontrivial unpreconditioned comparison");
-    std::cout << (cuda ? "cuda" : "cpu") << " preconditioned=" << preconditioned
+    std::cout << (cuda ? "cuda" : "cpu") << " df=" << df << " resident=" << resident
+              << " budget=" << options.max_bytes << " preconditioned=" << preconditioned
               << " iterations=" << result.diagnostic.iterations
-              << " actions=" << result.diagnostic.operator_actions << " error=" << error << '\n';
+              << " actions=" << result.diagnostic.operator_actions << " error=" << error
+              << " krylov_h2d=" << result.diagnostic.krylov_h2d_bytes
+              << " krylov_d2h=" << result.diagnostic.krylov_d2h_bytes
+              << " fences=" << result.diagnostic.krylov_synchronizations
+              << " device_bytes=" << result.diagnostic.owned_device_bytes << '\n';
   };
-  check(solve(), true);
+  const auto initial = solve();
+  check(initial, true);
+  if (cuda && !resident && df) {
+    const auto device_limit = options.df_max_device_bytes;
+    options.df_max_device_bytes = initial.diagnostic.owned_device_bytes;
+    options.cuda_resident_krylov = true;
+    check(solve(), true);
+    options.cuda_resident_krylov = false;
+    options.df_max_device_bytes = device_limit;
+  }
+  if (cuda && !resident && !df) {
+    options.cuda_resident_krylov = true;
+    check(solve(), true);
+    options.cuda_resident_krylov = false;
+  }
   options.diagonal_preconditioning = false;
   require(lambda_cpu_numeric_capacity(p, cc, options, true) == capacity, "optional capacity");
   check(solve(), false);
@@ -129,6 +188,20 @@ int main(int argc, char** argv) {
     const bool cuda = argc == 2 && std::string_view(argv[1]) == "--cuda";
     qualify(cuda, false);
     qualify(cuda, true);
+    if (cuda)
+      for (const auto budget : {128ULL << 20, 256ULL << 20}) {
+        qualify(true, false, true, budget);
+        qualify(true, true, true, budget);
+      }
+    // Explicit DF factors belong to the existing CUDA factorized action owner;
+    // the conventional CPU owner must keep rejecting that unsupported input.
+    if (cuda)
+      for (const auto budget : {256ULL << 20, 512ULL << 20}) {
+        qualify(true, false, false, budget, true);
+        qualify(true, true, false, budget, true);
+        qualify(true, false, true, budget, true);
+        qualify(true, true, true, budget, true);
+      }
     std::cout << "Lambda preconditioner oracle, fallback and budget gates passed\n";
     return 0;
   } catch (const std::exception& error) {

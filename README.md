@@ -191,49 +191,18 @@ print(first.energies)
 
 ## Benchmarks
 
-| Method | Performance |
-| --- | --- |
-| HF (direct / DF) | <a href="benchmarks/results/df-source-screening-20261004/hf.svg"><img src="benchmarks/results/df-source-screening-20261004/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
-| ωB97M-V / def2-SVP | <a href="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg"><img src="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg" width="900" alt="GenerativeQC versus GPU4PySCF: warm WB97M-V energy-plus-analytic-force latency at 3, 6, 12, 24, 48 and 96 atoms; medians and min–max ranges"></a> |
-| ωB97M-V / full def2-TZVPD | <a href="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg"><img src="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg" width="900" alt="Full OMol25 functional and basis: validated 3-, 6- and 12-atom warm energy-plus-force observations; 24–96 atoms pending"></a> |
+Measured results are retained under
+[benchmarks/results](benchmarks/results/README.md), together with exact source,
+hardware, numerical checks and reproduction protocols. A dated candidate
+benchmark is not a claim about the current default implementation.
 
-<!-- DFT benchmark rows are temporarily withheld from the rendered README.
-Restore these rows to the table above only after approval to publish the results.
-| PBE0 / def2-SVP | <a href="benchmarks/results/pbe0-grid-reuse-20261003/pbe0.svg"><img src="benchmarks/results/pbe0-grid-reuse-20261003/pbe0.svg" width="900" alt="GenerativeQC versus GPU4PySCF: complete warm PBE0 energy-plus-analytic-force latency at all six sizes"></a> |
--->
-
-RTX 5090, spherical def2-SVP: complete warm RHF energy + forces, five repeats.
-[Protocol and results](benchmarks/results/df-source-screening-20261004/README.md).
-
-ωB97M-V / def2-SVP uses an explicitly enabled integration candidate with SCF/force AO
-selection and matched unpruned grids on an RTX 5090. The six-point figure uses
-the same AO sizes and visual style as HF and shows warm medians and min–max
-ranges over three fixed-density replays per engine. At 24–96 atoms, warm takes
-3.9–5.8% less time. Complete cold startup is documented separately and remains
-slower.
-[Source, controls, cold timings and all-sample accuracy
-gates](benchmarks/results/wb97mv-active-ao-20261003/README.md) identify the measured
-path separately from the master default.
-
-The full def2-TZVPD pilot uses OMol25's functional and basis on the same water
-clusters, with five warm repeats and original/displaced energy-and-force gates.
-The explicitly enabled candidate is faster at 3 and 6 atoms (58 and 116 AOs),
-but at 12 atoms (232 AOs) takes 62.96 s warm versus 18.20 s for GPU4PySCF.
-The 24/48/96-atom endpoints are in progress; the goal remains the full HF-size
-series. [Cold graph, initialization costs and exact
-protocol](benchmarks/results/wb97mv-tzvpd-cold-20261004/README.md) accompany the
-warm figure. These are matched-grid RTX 5090 observations, not OMol25 dataset
-or ORCA throughput.
-
-<!-- DFT benchmark discussion is temporarily withheld with the rows above.
-PBE0 uses the same 3–96-atom water clusters, full spherical def2-SVP,
-five fixed engine-local warm replays, and independent energy/force gates at
-both original and changed geometries. Both engines use the same moving
-quadrature; timings include analytic grid response and host-returned forces,
-not energy-only SCF. Native uses the default direct FP64 path.
-[PBE0 protocol and results](benchmarks/results/pbe0-grid-reuse-20261003/README.md).
-
--->
+Representative complete-endpoint reports include
+[direct and density-fitted HF](benchmarks/results/df-source-screening-20261004/README.md)
+and [ωB97M-V / def2-SVP](benchmarks/results/wb97mv-active-ao-20261003/README.md).
+Negative and incomplete trials remain available in their original archives,
+not as promoted README figures. See
+[performance engineering](docs/maintainer/performance_engineering.md)
+for the qualification and publication criteria.
 
 ## Documentation
 

@@ -329,7 +329,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
         ),
         "prepared_aot_selection_sha256": (
-            "be6bb17a3c4dfafbb6da09d8d2df4a1dae65a7c8c7570f37b34ecf46089c2f77"
+            "5c0a8537b0236b67efd678e09338347ddae68f1e89a0150aae0f41a3ca357047"
         ),
     }
 
@@ -438,7 +438,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "exact_ao_map_resources_sha256": "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9",
         "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
         "public_wrapper_sha256": (
-            "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
+            "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
         ),
         "ordinary_tile_layout_sha256": (
             "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -498,7 +498,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "0b59f42d41f6a06cf14df6ff9d3fdfe3a03a37ca69e85bf4d4087c9a8b6b5b23"
+            "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -1662,6 +1662,38 @@ def test_limit_defaults_fail_closed_when_public_forwarding_moves(
         source.replace(old, '"max_grid_points": max_grid_points // 2,', 1),
     )
 
+    with pytest.raises(RuntimeError, match="public wrapper contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("if prepared._lease.closed:", "if False:"),
+        ("if prepared._lease.running:", "if False:"),
+        ("except BaseException:", "except Exception:"),
+    ],
+)
+def test_capacity_contract_rejects_prepared_lifecycle_drift(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    """Capacity qualification also binds the reviewed lease-publication gate."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    wrapper = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "complete_rks_cuda_gradient_diagnostic"
+    )
+    segment = ast.get_source_segment(source, wrapper)
+    assert segment is not None and segment.count(old) == 1
+    stationary_contract_tree(
+        tmp_path, source.replace(segment, segment.replace(old, new, 1), 1)
+    )
     with pytest.raises(RuntimeError, match="public wrapper contract changed"):
         qualify_capacity._source_limits(tmp_path)
 

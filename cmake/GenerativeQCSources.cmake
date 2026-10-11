@@ -6,6 +6,7 @@ function(generativeqc_add_api_sources target)
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
+    src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
@@ -21,7 +22,8 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
     src/api/error.cpp
-    src/methods/registry.cpp)
+    src/methods/registry.cpp
+    src/methods/prepared_execution.cpp)
 endfunction()
 
 function(generativeqc_add_runtime_sources target)

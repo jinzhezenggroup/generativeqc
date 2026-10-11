@@ -1,10 +1,9 @@
 # Reuse raw response panels across Coulomb and exchange
 
-Executed 96/192-AO generated-response traces attribute about 492/2464 ms to
-raw three-center generation out of 634/3828 ms of response time. The AO matrix
-products account for only about 2/9 ms. The response's existing scratch already
-holds raw and weight panels, but it previously regenerated raw values for the
-charge pass, raw panel fill and exchange contraction separately.
+This page describes the current reuse contract. Before/after 96/192-AO
+timings, generated-work counts, numerical gates, resources and source identity
+are retained in the [#283 benchmark record](../../benchmarks/results/issue283-response-panels/README.md)
+rather than copied into a current-state developer guide.
 
 Charge construction now fills the first reserved raw panel. The response
 weight loop consumes that panel without refilling it, and exchange uses the
