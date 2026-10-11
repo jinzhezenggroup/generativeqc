@@ -198,10 +198,6 @@ nuclear gradients. Energy-only calls are allowed for energy-capable methods;
 The initial public method-neutral source remains host-staged FP64 and first
 order; higher-order implicit/response gradients are not inferred.
 
-`xp.RHF` remains a backwards-compatible closed-shell all-electron convenience
-source, including its original preflight. Both objects use the same molecular
-capture, native execution, first-order snapshot and TensorIR chain-rule code.
-
 ### Diagnose small-endpoint overhead
 
 The opt-in environment switch
@@ -230,15 +226,15 @@ sampling changes the measured timing and disables the ordinary 5% parity verdict
 Run again without `--profile-molecular` for fair endpoint comparisons. Neither
 mode by itself certifies GPU peak memory or exact-J/K operator-work parity.
 
-## Compose complete RHF molecular energies
+## Compose native RHF energies with the unified molecular operator
 
-`RHF` is a GenerativeQC extension, not a standard Array API function. It binds
-an immutable all-electron, closed-shell molecular method to the existing native
-integral/J/K/SCF/analytic-force endpoint. It can be used inside ordinary captured
+`MolecularModel` is a GenerativeQC extension, not a standard Array API function.
+Selecting `method="rhf"` binds the native all-electron closed-shell RHF solver
+and its complete analytic force endpoint. It composes inside ordinary captured
 Array API expressions:
 
 ```python
-rhf = xp.RHF(("O", "H", "H"), basis="sto-3g", backend="cpu")
+rhf = xp.MolecularModel(("O", "H", "H"), method="rhf", basis="sto-3g", backend="cpu")
 
 @xp.compile(backend="cpu")
 def energy(coordinates, strength):
@@ -279,20 +275,24 @@ derivatives/response solvers. A molecular `lower()` result requires its public
 compiled owner's source bindings; it is not a standalone TensorIR executable
 with only the user's original inputs.
 
-Configuration requires a nonempty tuple of at most 256 nuclei, a positive even
-all-electron population, a named admitted all-electron basis, float64 coordinates,
-finite positive tolerances and bounded iteration counts. Scientifically annotated
-coordinates must use complete, spin-independent `atom` and `cartesian` index
-spaces; matching AO/orbital extents do not authorize a nuclear-coordinate binding.
-These domains survive source snapshots and AD. ECP, density fitting,
-unrestricted spin and nested molecular dependencies in geometry are not supported
-by this source. Capture admits at most 16 distinct molecular sources. Native
+Configuration requires a nonempty tuple of at most 256 nuclei, a valid
+method-specific electron/spin occupation, an admitted Gaussian basis, float64
+coordinates, finite positive tolerances and bounded iteration counts. Restricted
+RHF specifically requires a positive even electron count and singlet multiplicity.
+Scientifically annotated coordinates must use complete, spin-independent `atom`
+and `cartesian` index spaces; matching AO/orbital extents do not authorize a
+nuclear-coordinate binding. These domains survive native snapshots and AD.
+Density fitting, unrestricted methods and ECPs are admitted *only* when the
+selected native Calculator supports the exact requested basis, backend and
+analytic derivative; the generic interface does not create missing scientific
+capabilities. Nested molecular dependencies in geometry remain unsupported.
+Capture admits at most 16 distinct molecular sources. Native
 nonconvergence, basis/derivative/resource errors propagate without publication
 or fallback. `resource_budget` is the existing `ResourceBudget` for native method
 preflight; the compiler's `max_bytes`/`max_work`/`max_nodes` bound **tensor algebra**,
 not the independent SCF/J/K endpoint's work or resident memory.
 
-`backend="cuda"` must be selected on both `RHF` and `compile`/AD, with the same
+`backend="cuda"` must be selected on both `MolecularModel` and `compile`/AD, with the same
 logical `device`. The interface stages host coordinates/results, not resident
 GPU arrays. CUDA failures do not rerun on CPU. The native CPU ABI calls its
 scientific backend `cpu_reference`; this label means the **native C++ CPU method**,
