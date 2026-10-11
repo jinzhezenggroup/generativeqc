@@ -36,7 +36,6 @@ jobs:
     timeout-minutes: 2
     outputs:
       active: ${{ steps.liveness.outputs.active }}
-      python_shards: ${{ steps.python_shards.outputs.value }}
     steps:
       - name: Check merge-group ref still exists
         id: liveness
@@ -66,19 +65,6 @@ jobs:
           echo "::warning::Unable to verify merge-group ref; running CI fail-open."
           cat "${error_file}" >&2
           echo "active=true" >> "${GITHUB_OUTPUT}"
-
-      - name: Select event-specific Python shards
-        id: python_shards
-        shell: bash
-        run: |
-          # Match the static routine matrix except for full nightly/manual runs.
-          # Outputs are valid JSON arrays consumed by the supported fromJSON
-          # matrix idiom, not interpolated list expressions.
-          if [[ "${GITHUB_EVENT_NAME}" == "schedule" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            echo 'value=["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces","nightly-hessian","nightly-wb97mv"]' >> "${GITHUB_OUTPUT}"
-          else
-            echo 'value=["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces"]' >> "${GITHUB_OUTPUT}"
-          fi
 
   master-cpu-cache:
     name: Seed CPU ccache (${{ matrix.compiler }}, ${{ matrix.mode }})
@@ -821,8 +807,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Select from the verified upstream JSON array; 6 routine or 8 full shards.
-        shard: ${{ fromJSON(needs.merge_queue_liveness.outputs.python_shards) }}
+        shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]
     runs-on: ubuntu-24.04
     # Full nightly/manual qualification includes expensive Hessian and Au replay.
     # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
@@ -830,7 +815,7 @@ jobs:
     # feedback does not leave one ~18-minute serial critical-path shard.
     # Keep the full test-step ceilings and leave setup/cache-save headroom.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || 40 }}
-    env:
+    env: &python_ci_env
       CCACHE_MAXSIZE: 1G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those
       # libraries single-threaded so pytest-xdist owns the job-level parallelism.
@@ -841,7 +826,7 @@ jobs:
       # This job validates the CPU runtime; CUDA provider packaging/runtime has
       # dedicated CI. Keep the editable scikit-build reconfigure CPU-only too.
       GENERATIVEQC_ENABLE_CUDA: "OFF"
-    steps:
+    steps: &python_ci_steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Offline retention tests recover real artifacts from historical commits.
@@ -1509,6 +1494,23 @@ jobs:
           retention-days: 1
 
 
+
+  # Schedule/manual-only workload. Reuse the exact same build/test steps and
+  # environment as the routine Python matrix without paying for extra PR jobs.
+  # Separate matrix result is required by the aggregate CI acceptance gate.
+  python-nightly:
+    name: python (${{ matrix.shard }})
+    needs: merge_queue_liveness
+    if: needs.merge_queue_liveness.outputs.active != 'false' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [nightly-hessian, nightly-wb97mv]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    env: *python_ci_env
+    steps: *python_ci_steps
+
   cpu-benchmark:
     name: CPU performance (CodSpeed)
     # Publish PR-tier baselines on post-merge master pushes to avoid old fallback
@@ -1758,7 +1760,7 @@ jobs:
   pass:
     name: Pass CI checks
     timeout-minutes: 5
-    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
+    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python, python-nightly]
     runs-on: ubuntu-24.04
     if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}
     steps:
@@ -1770,3 +1772,6 @@ jobs:
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
           jobs: ${{ toJSON(needs) }}
+          # A missing nightly job is expected on PR/merge-group CI; once
+          # scheduled, its failures remain required just like the core shards.
+          allowed-skips: python-nightly
