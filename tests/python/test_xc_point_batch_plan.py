@@ -7,6 +7,7 @@ from generativeqc_compiler.dft.ao_cuda import emit_native_xc_contraction_kernels
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
+from generativeqc_compiler.dft.xc_point_cuda import emit_point_traversal
 
 
 def test_emitted_point_batch_resource_admission(
@@ -85,8 +86,13 @@ def test_point_batches_share_canonical_consumer_and_launch_width() -> None:
     assert "evaluate_points<feature_terms, false, true>" in source
     assert "return &launch_point_batches<4, 32>;" in source
     assert "min(tile_points, domain_count - begin)" in source
+    assert source.count(emit_point_traversal()) == 1
     assert (
-        source.count("xc = evaluate_semilocal_point(functional, rho, gradient, tau")
+        "evaluate_point_tiles<feature_terms, response, batched, CuratedPointEvaluator>"
+        in source
+    )
+    assert (
+        source.count("return evaluate_semilocal_point(functional, rho, gradient, tau")
         == 1
     )
     assert "static_assert(!batched || !response)" in source
