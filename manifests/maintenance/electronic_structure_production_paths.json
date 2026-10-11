@@ -665,8 +665,8 @@
       "evidence": [
         "tests/native/test_cc_lambda_preconditioner.cpp",
         "tests/native/test_cc_resident_endpoint.cpp",
-        "benchmarks/results/response-contract/2026-10-11/qualification-resident-lambda.json",
-        "benchmarks/results/response-contract/2026-10-11/qualification-resident-integration.json",
+        "benchmarks/results/response-contract/2026-10-11/qualification-resident-lambda.json.xz",
+        "benchmarks/results/response-contract/2026-10-11/qualification-resident-integration.json.xz",
         "tests/python/test_rccsd_native_lambda_owner.py"
       ],
       "evidence_levels": {

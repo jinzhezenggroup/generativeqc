@@ -566,7 +566,14 @@ class CudaLambdaResidentBackend final : public response::ResidentResponseBackend
       }
       fence();
     } catch (const generativeqc_tensor::DeviceAllocationError&) {
+      // Clear only the recoverable allocation error before the host-vector
+      // retry. A previous execution error or failed drain remains fatal.
+      const auto pending = cudaGetLastError();
+      const auto drained = cudaStreamSynchronize(owner_.stream_);
+      ++owner_.synchronizations_;
       cleanup();
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) cuda_check(pending);
+      cuda_check(drained);
       throw std::bad_alloc();
     } catch (...) {
       cleanup();

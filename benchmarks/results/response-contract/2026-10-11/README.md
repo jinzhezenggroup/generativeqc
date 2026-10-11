@@ -70,7 +70,7 @@ assigns `CUDA_VISIBLE_DEVICES=3`, which is preserved unchanged.
 
 ## Opt-in conventional Lambda residency
 
-The [resident receipt](qualification-resident-lambda.json) qualifies frozen
+The [resident receipt](qualification-resident-lambda.json.xz) qualifies frozen
 source `8e8cf9aab32c22d876aaef09c0c97ff02f66a3c9`. The existing resident controller
 now executes method-owned right preconditioning, and the conventional CUDA
 Lambda adapter keeps vectors and weighted pair projection on its existing
@@ -102,7 +102,7 @@ HF/CPKS/MP2 residency, prepared leases/ragged recovery and the historical finite
 ## Master follow-up replay
 
 PR #2272 was externally merged while the resident slice was being qualified.
-The [follow-up receipt](qualification-resident-integration.json) freezes
+The [follow-up receipt](qualification-resident-integration.json.xz) freezes
 `b9617de02ab3664fc24532b742c88ac647e4fb0b` on master `f90d79fcc`. Integration
 retains the upstream default-off serial-scratch candidate and the separate
 default-off resident-vector candidate; the earlier source receipt is not
@@ -123,3 +123,6 @@ simultaneously-live traced dynamic device allocations and balance to zero.
 Resident transfer, synchronization and kernel counts increase for this tiny
 domain. This is a CUDA allocation-event census, not total physical VRAM,
 module/static storage or host-heap accounting, and does not promote a default.
+
+The two resident receipts use lossless XZ; `xz -dc <receipt.json.xz>` restores
+the exact original JSON, including all records and source identities.
