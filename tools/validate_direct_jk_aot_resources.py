@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -201,6 +202,10 @@ def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> tuple[Path
             "production CMAKE_CUDA_COMPILER must match the measured --nvcc; "
             f"configured {configured_nvcc}, measured {nvcc.resolve()}"
         )
+    if os.environ.get("CUDAHOSTCXX"):
+        raise ValueError(
+            "production qualification does not support a CUDAHOSTCXX override"
+        )
     host_compiler = configured_value("CMAKE_CUDA_HOST_COMPILER", optional=True)
     if host_compiler:
         raise ValueError(
@@ -213,6 +218,109 @@ def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> tuple[Path
             "production GENERATIVEQC_RESOLVED_COMPILER_CACHE must be non-empty"
         )
     return cmake_cache.resolve().parent, Path(cache_executable).resolve()
+
+
+def production_cache_launcher(working_directory: Path, nvcc: Path) -> Path:
+    """Read the actual canonical AOT launcher, including normal CMake variables.
+
+    Only the Release Ninja rule with CMake's ccache/base-directory wrapper is
+    supported here. Unknown wrappers fail closed rather than guessing from the
+    GENERATIVEQC_COMPILER_CACHE cache entry, which explicit launchers override.
+    Reading a rule does not start Ninja, a cache server, or the compiler.
+    """
+    rules = (working_directory / "CMakeFiles" / "rules.ninja").read_text()
+    matching = re.findall(
+        r"^rule (CUDA_COMPILER__generativeqc_aot_sm_120_[^\s]+)\n"
+        r"(.*?)(?=^rule |\Z)",
+        rules,
+        re.MULTILINE | re.DOTALL,
+    )
+    if len(matching) != 1 or not matching[0][0].endswith("_Release"):
+        raise ValueError(
+            "production qualification requires one Release Ninja AOT compiler rule"
+        )
+    commands = re.findall(r"^[ \t]+command = ([^\r\n]+)$", matching[0][1], re.MULTILINE)
+    if len(commands) != 1:
+        raise ValueError(
+            "production AOT compiler rule must contain exactly one command"
+        )
+    # Target compile options live in FLAGS on the shard's build edge, even
+    # when the launcher and CMAKE_CUDA_HOST_COMPILER are literal rule tokens.
+    # Read only this edge; never borrow another target's values or evaluate
+    # arbitrary Ninja/shell variables.
+    build = (working_directory / "build.ninja").read_text()
+    edges = re.findall(
+        r"^build [^\r\n]*generativeqc_generated_shell_sm120_shard_6\.cu\.o: "
+        + re.escape(matching[0][0])
+        + r" [^\r\n]*\n((?:[ \t]+[^\r\n]*\n)*)",
+        build,
+        re.MULTILINE,
+    )
+    if len(edges) != 1:
+        raise ValueError(
+            "production qualification requires exactly one shard-6 Ninja edge"
+        )
+    flags = re.findall(r"^[ \t]+FLAGS = ([^\r\n]*)$", edges[0], re.MULTILINE)
+    if len(flags) != 1 or "$" in flags[0]:
+        raise ValueError(
+            "production shard-6 edge must declare exactly one literal FLAGS value"
+        )
+    flag_tokens = shlex.split(flags[0])
+    if any(
+        token in {"-optf", "--options-file"}
+        or token.startswith(("-optf=", "--options-file="))
+        for token in flag_tokens
+    ):
+        raise ValueError(
+            "production qualification does not support options-file indirection in FLAGS"
+        )
+    command_text = commands[0]
+    if command_text.startswith("${LAUNCHER}"):
+        # Newer CMake versions put launcher variables on each build edge.
+        launchers = re.findall(r"^[ \t]+LAUNCHER = ([^\r\n]+)$", edges[0], re.MULTILINE)
+        if len(launchers) != 1:
+            raise ValueError(
+                "production shard-6 edge must declare exactly one LAUNCHER"
+            )
+        command_text = command_text.removeprefix("${LAUNCHER}")
+        if command_text.startswith("${CODE_CHECK}"):
+            checks = re.findall(
+                r"^[ \t]+CODE_CHECK = ([^\r\n]*)$", edges[0], re.MULTILINE
+            )
+            if len(checks) > 1 or any(value.strip() for value in checks):
+                raise ValueError(
+                    "production qualification does not support a CODE_CHECK wrapper"
+                )
+            command_text = command_text.removeprefix("${CODE_CHECK}")
+        command_text = launchers[0] + command_text
+    command = shlex.split(command_text)
+    # CUDAHOSTCXX/toolchain selections may be normal CMake variables rather
+    # than cache entries. Reject their rule flags and target-option edge flags.
+    if any(
+        token in {"-ccbin", "--compiler-bindir"}
+        or token.startswith(("-ccbin=", "--compiler-bindir="))
+        for token in [*command, *flag_tokens]
+    ):
+        raise ValueError(
+            "production qualification does not support a generated CUDA host compiler override"
+        )
+    if (
+        len(command) < 6
+        or not Path(command[0]).is_absolute()
+        or Path(command[0]).name != "cmake"
+        or command[1:3] != ["-E", "env"]
+        or command[3] != f"CCACHE_BASEDIR={working_directory.resolve()}"
+        or not Path(command[4]).is_absolute()
+        or Path(command[4]).name != "ccache"
+        or not Path(command[5]).is_absolute()
+        or Path(command[5]).resolve() != nvcc.resolve()
+        or any("$" in token for token in command[:6])
+    ):
+        raise ValueError(
+            "production AOT compiler rule requires the canonical cmake -E env "
+            "CCACHE_BASEDIR=<build> <ccache> <nvcc> launcher"
+        )
+    return Path(command[4])
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -440,6 +548,7 @@ def compile_shard(
     }
     working_directory = working_directory.resolve()
     source_argument = _relative_compile_source(shard, working_directory)
+    configured_launcher = production_cache_launcher(working_directory, nvcc)
     compile_context = {
         "working_directory": str(working_directory),
         "ccache_basedir": str(working_directory),
@@ -472,6 +581,14 @@ def compile_shard(
         ):
             metadata = {**candidate, "cache_hit": True}
     if metadata is None:
+        if (
+            launcher.name != "ccache"
+            or launcher.path.resolve() != configured_launcher.resolve()
+        ):
+            raise ValueError(
+                "production compiler-cache launcher mismatch: generated CMake rule uses "
+                f"{configured_launcher}, selected {launcher.path}"
+            )
         with _production_compile_context(working_directory):
             compiler = CudaCompilerAdapter(
                 nvcc,
@@ -734,9 +851,10 @@ def run_measurement(
     """
     # Read CMake's configured values, including -D/preset overrides, before
     # generation or compilation. A constant alone cannot guard production drift.
-    working_directory, cache_executable = validate_production_shard_count(
-        cmake_cache, nvcc
-    )
+    working_directory, _ = validate_production_shard_count(cmake_cache, nvcc)
+    # The recorded project candidate can be superseded by an explicit CUDA
+    # launcher. Verify and forward the effective generated invocation instead.
+    cache_executable = production_cache_launcher(working_directory, nvcc)
     launcher = verify_compiler_cache(cache_executable, min(timeout, 30))
     generated = generated_directory.resolve()
     shards = generate_production_shards(generated)

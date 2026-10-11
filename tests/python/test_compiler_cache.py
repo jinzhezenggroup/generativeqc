@@ -183,22 +183,91 @@ def test_older_sccache_falls_back_before_starting_an_unowned_server(
     assert compiler_cache.resolve_compiler_cache().name == "ccache"
 
 
-def test_discovery_timeout_consumes_compilation_budget(
+def test_discovery_probe_timeout_preserves_fallback_and_compilation_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import time
+    now = [0.0]
+    probes: list[tuple[str, float]] = []
+    launched: list[tuple[list[str], float]] = []
+    monkeypatch.setattr(compiler_cache.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        compiler_cache.shutil, "which", lambda name, *, path: f"/bin/{name}"
+    )
+
+    def probe(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        probes.append((command[0], kwargs["timeout"]))
+        if command[0].endswith("/sccache"):
+            now[0] += kwargs["timeout"]
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        now[0] += 2.0
+        return subprocess.CompletedProcess(command, 0, "ccache version 4.14", "")
+
+    def compile_run(command: list[str], timeout: float, *, label: str) -> CompileResult:
+        assert label == "probe"
+        launched.append((command, timeout))
+        now[0] += 3.0
+        return CompileResult(0, False, 3.0, "", "")
+
+    monkeypatch.setattr(compiler_cache.subprocess, "run", probe)
+    monkeypatch.setattr(compiler_cache, "run_compiler", compile_run)
+    command = ["c++", "-c", "x.cpp"]
+    result = compiler_cache.run_cached_compiler(command, 40.0, label="probe")
+
+    assert probes == [("/bin/sccache", 30.0), ("/bin/ccache", 10.0)]
+    assert launched == [(["/bin/ccache", *command], 8.0)]
+    assert result.returncode == 0 and not result.timed_out
+    assert result.duration_seconds == 35.0
+
+
+@pytest.mark.parametrize("budget", [0.05, 30.0, 40.0, 60.0])
+def test_discovery_timeout_consumes_compilation_budget(
+    monkeypatch: pytest.MonkeyPatch, budget: float
+) -> None:
+    now = [0.0]
+    probes: list[tuple[str, float]] = []
+    monkeypatch.setattr(compiler_cache.time, "monotonic", lambda: now[0])
 
     monkeypatch.setattr(
         compiler_cache.shutil, "which", lambda name, *, path: f"/bin/{name}"
     )
 
     def stalled(command: list[str], **kwargs: Any) -> Any:
-        time.sleep(kwargs["timeout"])
+        probes.append((command[0], kwargs["timeout"]))
+        now[0] += kwargs["timeout"]
         raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
     monkeypatch.setattr(compiler_cache.subprocess, "run", stalled)
+    monkeypatch.setattr(
+        compiler_cache,
+        "run_compiler",
+        lambda *args, **kwargs: pytest.fail("exhausted discovery must not compile"),
+    )
     result = compiler_cache.run_cached_compiler(
-        ["c++", "-c", "x.cpp"], 0.05, label="probe"
+        ["c++", "-c", "x.cpp"], budget, label="probe"
     )
     assert result.timed_out and result.returncode == 124
-    assert result.duration_seconds < 0.5
+    assert result.duration_seconds == budget
+    expected = [("/bin/sccache", min(30.0, budget))]
+    if budget > 30.0:
+        expected.append(("/bin/ccache", budget - 30.0))
+    assert probes == expected
+
+
+def test_exact_compiler_cache_timeout_does_not_select_another_launcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probes: list[list[str]] = []
+
+    def stalled(command: list[str], **kwargs: Any) -> Any:
+        probes.append(command)
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(compiler_cache.subprocess, "run", stalled)
+    monkeypatch.setattr(
+        compiler_cache.shutil,
+        "which",
+        lambda *args, **kwargs: pytest.fail("explicit verification must not discover"),
+    )
+    with pytest.raises(subprocess.TimeoutExpired):
+        compiler_cache.verify_compiler_cache(Path("/cmake/bin/sccache"), 10.0)
+    assert probes == [["/cmake/bin/sccache", "--version"]]

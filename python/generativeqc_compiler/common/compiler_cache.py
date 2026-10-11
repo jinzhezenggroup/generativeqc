@@ -85,9 +85,9 @@ def _resolve_compiler_cache(
             raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
         try:
             return verify_compiler_cache(path, min(30, remaining))
-        except subprocess.TimeoutExpired:
-            raise
-        except OSError as error:
+        except (OSError, subprocess.TimeoutExpired) as error:
+            # A preferred launcher's bounded probe may expire before the overall
+            # discovery budget. Keep the fallback, subject to that same deadline.
             failures.append(f"{name}: {error}")
             continue
         except (RuntimeError, ValueError) as error:

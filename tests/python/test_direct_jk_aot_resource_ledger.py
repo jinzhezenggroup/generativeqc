@@ -44,6 +44,23 @@ def _production_cache(**overrides: str) -> str:
     return "".join(f"{field}:STRING={value}\n" for field, value in fields.items())
 
 
+def _write_production_rule(
+    directory: Path, *, launcher: str = "/verified/ccache", nvcc: Path = FAKE_NVCC
+) -> Path:
+    rules = directory / "CMakeFiles" / "rules.ninja"
+    rules.parent.mkdir(parents=True, exist_ok=True)
+    rules.write_text(
+        "rule CUDA_COMPILER__generativeqc_aot_sm_120_Release\n"
+        f"  command = /usr/bin/cmake -E env CCACHE_BASEDIR={directory.resolve()} "
+        f"{launcher} {nvcc} $DEFINES $INCLUDES $FLAGS -c $in -o $out\n"
+    )
+    (directory / "build.ninja").write_text(
+        "build CMakeFiles/generativeqc_aot_sm_120.dir/generated/generativeqc_generated_shell_sm120_shard_6.cu.o: CUDA_COMPILER__generativeqc_aot_sm_120_Release shard_6.cu\n"
+        "  FLAGS = -O3 -DNDEBUG -std=c++20\n"
+    )
+    return rules
+
+
 def _identity(**overrides: object) -> dict[str, object]:
     payload = {
         "architecture": validator.QUALIFIED_ARCHITECTURE,
@@ -414,6 +431,7 @@ class TestProductionCompile:
         launcher = CompilerCacheLauncher(
             Path("/verified/ccache"), "ccache", "ccache 4.14"
         )
+        _write_production_rule(tmp_path)
         original_directory = Path.cwd()
         original_basedir = os.environ.get("CCACHE_BASEDIR")
         events: list[str] = []
@@ -567,6 +585,7 @@ class TestProductionCompile:
         launcher = CompilerCacheLauncher(
             Path("/verified/ccache"), "ccache", "ccache 4.14"
         )
+        _write_production_rule(tmp_path)
         snapshots: list[int] = []
 
         def stats(selected: CompilerCacheLauncher) -> dict[str, Any]:
@@ -662,6 +681,7 @@ class TestCompileImplementationIdentity:
     def test_adapter_change_misses_without_relabeling_scientific_identity(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _write_production_rule(tmp_path, launcher="/fake/ccache")
         implementation = tmp_path / "cuda_adapter.py"
         implementation.write_text("original command implementation\n")
         monkeypatch.setattr(
@@ -1047,3 +1067,335 @@ class TestProductionContextBinding:
     def test_cmake_records_the_resolved_compiler_cache(self) -> None:
         cmake = (validator.ROOT / "CMakeLists.txt").read_text()
         assert "GENERATIVEQC_RESOLVED_COMPILER_CACHE" in cmake
+
+
+class TestProductionLauncherBinding:
+    @pytest.mark.parametrize("suffix", ["Release", "unscanned_Release"])
+    def test_literal_cmake_launcher_is_bound(self, tmp_path: Path, suffix: str) -> None:
+        rules = _write_production_rule(tmp_path)
+        rules.write_text(
+            rules.read_text().replace("_sm_120_Release", f"_sm_120_{suffix}")
+        )
+        build = tmp_path / "build.ninja"
+        build.write_text(
+            build.read_text().replace("_sm_120_Release", f"_sm_120_{suffix}")
+        )
+        assert validator.production_cache_launcher(tmp_path, FAKE_NVCC) == Path(
+            "/verified/ccache"
+        )
+
+    @pytest.mark.parametrize("code_check", [False, True])
+    def test_edge_launcher_is_bound_to_the_qualified_shard(
+        self, tmp_path: Path, code_check: bool
+    ) -> None:
+        rules = _write_production_rule(tmp_path)
+        prefix = f"/usr/bin/cmake -E env CCACHE_BASEDIR={tmp_path.resolve()} /verified/ccache "
+        variables = "${LAUNCHER}${CODE_CHECK}" if code_check else "${LAUNCHER}"
+        rules.write_text(rules.read_text().replace(prefix, variables))
+        (tmp_path / "build.ninja").write_text(
+            "build CMakeFiles/generativeqc_aot_sm_120.dir/generated/generativeqc_generated_shell_sm120_shard_6.cu.o: CUDA_COMPILER__generativeqc_aot_sm_120_Release shard_6.cu\n"
+            f"  LAUNCHER = {prefix}\n"
+            "  FLAGS = -O3 -DNDEBUG -std=c++20\n"
+            "  CODE_CHECK = \n"
+            "build unrelated.o: unrelated source.cu\n"
+            "  LAUNCHER = /other/wrapper\n"
+        )
+        assert validator.production_cache_launcher(tmp_path, FAKE_NVCC) == Path(
+            "/verified/ccache"
+        )
+
+    @pytest.mark.parametrize(
+        "old,new",
+        [
+            ("/verified/ccache", "/verified/sccache"),
+            ("/verified/ccache", "ccache"),
+            ("/usr/bin/cmake", "/usr/bin/wrapper"),
+            ("/verified/ccache", "/verified/extra /verified/ccache"),
+            (str(FAKE_NVCC), "/other/nvcc"),
+            ("_sm_120_Release", "_sm_120_Debug"),
+            ("/verified/ccache", "/verified/ccache$ "),
+        ],
+    )
+    def test_unknown_or_changed_rule_fails_closed(
+        self, tmp_path: Path, old: str, new: str
+    ) -> None:
+        rules = _write_production_rule(tmp_path)
+        rules.write_text(rules.read_text().replace(old, new))
+        with pytest.raises(ValueError, match="production"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            "-ccbin=/usr/bin/clang++",
+            "-ccbin /usr/bin/clang++",
+            "--compiler-bindir=/usr/bin/clang++",
+            "--compiler-bindir /usr/bin/clang++",
+        ],
+    )
+    @pytest.mark.parametrize("location", ["rule", "edge"])
+    @pytest.mark.parametrize("per_edge_launcher", [False, True])
+    def test_normal_variable_host_compiler_fails_before_generation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        flag: str,
+        location: str,
+        per_edge_launcher: bool,
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(_production_cache())
+        monkeypatch.delenv("CUDAHOSTCXX", raising=False)
+        rules = _write_production_rule(tmp_path)
+        build = tmp_path / "build.ninja"
+        if per_edge_launcher:
+            prefix = f"/usr/bin/cmake -E env CCACHE_BASEDIR={tmp_path.resolve()} /verified/ccache "
+            rules.write_text(rules.read_text().replace(prefix, "${LAUNCHER}"))
+            build.write_text(build.read_text() + f"  LAUNCHER = {prefix}\n")
+        if location == "rule":
+            rules.write_text(rules.read_text().replace("$DEFINES", f"{flag} $DEFINES"))
+        else:
+            build.write_text(build.read_text().replace("FLAGS = ", f"FLAGS = {flag} "))
+
+        def unexpected_generation(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("normal-variable host selection must fail before generation")
+
+        monkeypatch.setattr(
+            validator, "generate_production_shards", unexpected_generation
+        )
+        with pytest.raises(ValueError, match="generated CUDA host compiler override"):
+            validator.run_measurement(
+                nvcc=FAKE_NVCC,
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=tmp_path / "generated",
+                cmake_cache=cache,
+                timeout=23,
+            )
+
+    def test_edge_flags_are_checked_with_a_per_edge_launcher(
+        self, tmp_path: Path
+    ) -> None:
+        rules = _write_production_rule(tmp_path)
+        prefix = f"/usr/bin/cmake -E env CCACHE_BASEDIR={tmp_path.resolve()} /verified/ccache "
+        rules.write_text(rules.read_text().replace(prefix, "${LAUNCHER}"))
+        build = tmp_path / "build.ninja"
+        build.write_text(
+            build.read_text()
+            + f"  LAUNCHER = {prefix}\n"
+            + "  FLAGS = -ccbin=/usr/bin/clang++\n"
+        )
+        # Reject duplicate FLAGS rather than silently choosing a safe-looking one.
+        with pytest.raises(ValueError, match="literal FLAGS"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+        build.write_text(
+            build.read_text().replace("  FLAGS = -O3 -DNDEBUG -std=c++20\n", "")
+        )
+        with pytest.raises(ValueError, match="generated CUDA host compiler override"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    @pytest.mark.parametrize(
+        "flags",
+        [None, "$HOST_FLAGS", "${HOST_FLAGS}", "-O3 $\n    -ccbin=/usr/bin/clang++"],
+    )
+    def test_nonliteral_or_missing_edge_flags_fail_closed(
+        self, tmp_path: Path, flags: str | None
+    ) -> None:
+        _write_production_rule(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(
+            build.read_text().replace(
+                "  FLAGS = -O3 -DNDEBUG -std=c++20\n",
+                "" if flags is None else f"  FLAGS = {flags}\n",
+            )
+        )
+        with pytest.raises(ValueError, match="literal FLAGS"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    def test_normal_edge_flags_do_not_borrow_another_targets_host_override(
+        self, tmp_path: Path
+    ) -> None:
+        _write_production_rule(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(
+            build.read_text().replace(
+                "-O3 -DNDEBUG -std=c++20",
+                "-O3 -DNDEBUG --generate-code=arch=compute_120,code=[compute_120,sm_120] -Xcompiler=-fPIC -std=c++20",
+            )
+            + "build unrelated.o: unrelated source.cu\n"
+            + "  FLAGS = -ccbin=/usr/bin/clang++\n"
+        )
+        assert validator.production_cache_launcher(tmp_path, FAKE_NVCC) == Path(
+            "/verified/ccache"
+        )
+
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            "-optf=/tmp/host-options",
+            "-optf /tmp/host-options",
+            "--options-file=/tmp/host-options",
+            "--options-file /tmp/host-options",
+        ],
+    )
+    def test_edge_flags_cannot_hide_a_host_override_in_an_options_file(
+        self, tmp_path: Path, flag: str
+    ) -> None:
+        _write_production_rule(tmp_path)
+        build = tmp_path / "build.ninja"
+        build.write_text(build.read_text().replace("FLAGS = ", f"FLAGS = {flag} "))
+        with pytest.raises(ValueError, match="options-file indirection"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    def test_different_base_directory_fails_closed(self, tmp_path: Path) -> None:
+        rules = _write_production_rule(tmp_path)
+        rules.write_text(
+            rules.read_text().replace(
+                f"CCACHE_BASEDIR={tmp_path.resolve()}", "CCACHE_BASEDIR=/other"
+            )
+        )
+        with pytest.raises(ValueError, match="canonical"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    @pytest.mark.parametrize("kind", ["rule", "command"])
+    def test_duplicate_rule_or_command_is_rejected(
+        self, tmp_path: Path, kind: str
+    ) -> None:
+        rules = _write_production_rule(tmp_path)
+        text = rules.read_text()
+        rules.write_text(text + (text if kind == "rule" else text.splitlines(True)[1]))
+        with pytest.raises(ValueError, match="one"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    @pytest.mark.parametrize(
+        "edge",
+        [
+            "missing",
+            "duplicate",
+            "no_launcher",
+            "duplicate_launcher",
+            "code_check",
+            "missing_separator",
+        ],
+    )
+    def test_ambiguous_edge_launcher_is_rejected(
+        self, tmp_path: Path, edge: str
+    ) -> None:
+        rules = _write_production_rule(tmp_path)
+        prefix = f"/usr/bin/cmake -E env CCACHE_BASEDIR={tmp_path.resolve()} /verified/ccache "
+        rules.write_text(rules.read_text().replace(prefix, "${LAUNCHER}${CODE_CHECK}"))
+        launcher = f"  LAUNCHER = {prefix}\n"
+        body = (
+            "build CMakeFiles/generativeqc_aot_sm_120.dir/generated/generativeqc_generated_shell_sm120_shard_6.cu.o: CUDA_COMPILER__generativeqc_aot_sm_120_Release shard_6.cu\n"
+            + launcher
+            + "  FLAGS = -O3 -DNDEBUG -std=c++20\n"
+        )
+        if edge == "missing":
+            body = ""
+        elif edge == "duplicate":
+            body *= 2
+        elif edge == "no_launcher":
+            body = body.replace(launcher, "")
+        elif edge == "duplicate_launcher":
+            body += launcher
+        elif edge == "missing_separator":
+            body = body.replace(prefix + "\n", prefix.rstrip() + "\n")
+        else:
+            body += "  CODE_CHECK = /other/wrapper\n"
+        (tmp_path / "build.ninja").write_text(body)
+        with pytest.raises(ValueError, match="production"):
+            validator.production_cache_launcher(tmp_path, FAKE_NVCC)
+
+    @pytest.mark.parametrize(
+        "path,name", [("/verified/sccache", "sccache"), ("/different/ccache", "ccache")]
+    )
+    def test_adapter_launcher_mismatch_fails_before_stats_or_compile(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, path: str, name: str
+    ) -> None:
+        _write_production_rule(tmp_path)
+        original_directory = Path.cwd()
+        original_basedir = os.environ.get("CCACHE_BASEDIR")
+        launcher = CompilerCacheLauncher(Path(path), name, "verified")
+
+        def unexpected_work(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("mismatched launcher must not collect statistics or compile")
+
+        monkeypatch.setattr(validator, "cache_statistics", unexpected_work)
+        monkeypatch.setattr(validator.CudaCompilerAdapter, "compile", unexpected_work)
+        with pytest.raises(ValueError, match="compiler-cache launcher mismatch"):
+            validator.compile_shard(
+                nvcc=FAKE_NVCC,
+                shard=tmp_path / "shard.cu",
+                generated=tmp_path / "generated",
+                cache=tmp_path / "cache",
+                identity=_identity(),
+                timeout=23,
+                working_directory=tmp_path,
+                launcher=launcher,
+            )
+        assert Path.cwd() == original_directory
+        assert os.environ.get("CCACHE_BASEDIR") == original_basedir
+
+    def test_missing_rules_fail_before_generation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        configured = tmp_path / "CMakeCache.txt"
+        configured.write_text(_production_cache())
+
+        def unexpected_generation(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("missing production rules must fail before generation")
+
+        monkeypatch.setattr(
+            validator, "generate_production_shards", unexpected_generation
+        )
+        with pytest.raises(FileNotFoundError, match="rules.ninja"):
+            validator.run_measurement(
+                nvcc=FAKE_NVCC,
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=tmp_path / "generated",
+                cmake_cache=configured,
+                timeout=23,
+            )
+
+    def test_effective_explicit_launcher_supersedes_project_candidate(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        configured = tmp_path / "CMakeCache.txt"
+        configured.write_text(
+            _production_cache(
+                GENERATIVEQC_RESOLVED_COMPILER_CACHE="/project/ccache",
+                CMAKE_CUDA_COMPILER_LAUNCHER="/usr/bin/cmake;-E;env;CCACHE_BASEDIR="
+                + str(tmp_path.resolve())
+                + ";/explicit/ccache",
+            )
+        )
+        _write_production_rule(tmp_path, launcher="/explicit/ccache")
+        selected: list[Path] = []
+
+        def verify(path: Path, timeout: float) -> Any:
+            selected.append(path)
+            raise RuntimeError("stop after effective launcher selection")
+
+        monkeypatch.setattr(validator, "verify_compiler_cache", verify)
+        with pytest.raises(
+            RuntimeError, match="stop after effective launcher selection"
+        ):
+            validator.run_measurement(
+                nvcc=FAKE_NVCC,
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=tmp_path / "generated",
+                cmake_cache=configured,
+                timeout=23,
+            )
+        assert selected == [Path("/explicit/ccache")]
+
+    def test_ambient_host_override_fails_before_generation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        configured = tmp_path / "CMakeCache.txt"
+        configured.write_text(_production_cache())
+        monkeypatch.setenv("CUDAHOSTCXX", "/usr/bin/clang++")
+        with pytest.raises(ValueError, match="CUDAHOSTCXX"):
+            validator.validate_production_shard_count(configured, FAKE_NVCC)
