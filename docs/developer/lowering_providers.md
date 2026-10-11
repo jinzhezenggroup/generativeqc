@@ -310,6 +310,9 @@ resource profiles and complete endpoint evidence remain required.
 or CUDA consumers. It resolves program-wide precision and node hashes once per
 preparation. Tensor CUDA provider diagnostics and generated/CUB reduction offers
 consume this adapter, including the actual planned layouts and donation aliases.
+Eligible reduction implementations bind through the shared selector below
+provider-neutral schedule search; see [Tensor CUDA](tensor_cuda.md) for the
+executable recipe, compatibility and default-provider contract.
 Legacy diagnostic-only requests retain their v1 payload. Typed extended requests
 and candidates use v2 payloads.
 

@@ -141,7 +141,6 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
     if schedule is None:
         raise ValueError("missing audited TensorSchedule")
     result: dict[str, str] = {}
-    reduction_provider_seen = False
     for node in schedule.body:
         if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
             continue
@@ -154,15 +153,6 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
                     f"TensorSchedule.{name} has a non-literal boolean default"
                 )
             result[f"tensor-schedule:{name}"] = relative.as_posix()
-        elif name == "reduction_provider":
-            if _literal_default(node.value) != "generated":
-                raise ValueError(
-                    "TensorSchedule.reduction_provider default drifted from generated"
-                )
-            reduction_provider_seen = True
-            result["tensor-schedule:reduction_provider"] = relative.as_posix()
-    if not reduction_provider_seen:
-        raise ValueError("missing audited TensorSchedule.reduction_provider")
     return result
 
 

@@ -58,8 +58,6 @@ class TensorScheduleSpace:
     # Qualification-only by default: #783 evidence shows a memory win but a
     # runtime/compile regression before cooperative reduction lowering lands.
     stream_reductions: tuple[bool, ...] = field(default=(False,), kw_only=True)
-    # Qualification-only CUB/CCCL pilot; production/default remains generated.
-    reduction_provider: tuple[str, ...] = field(default=("generated",), kw_only=True)
     # Qualification-only until complete-endpoint evidence promotes donation.
     inplace_donation: tuple[bool, ...] = field(default=(False,), kw_only=True)
     direct_gemm: tuple[bool, ...] = (True, False)
@@ -196,14 +194,6 @@ def execution_key(plan: TensorPlan) -> str:
     payload["reduction_unroll"] = (
         plan.schedule.reduction_unroll
         if any(step.node.op in ("reduce", "einsum") for step in generic_steps)
-        else None
-    )
-    payload["reduction_provider"] = (
-        plan.schedule.reduction_provider
-        if any(
-            cooperative_reduction_provider(plan, index) is not None
-            for index in range(len(plan.steps))
-        )
         else None
     )
     payload["staging_width"] = plan.schedule.staging_width if packed_steps else None

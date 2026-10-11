@@ -42,6 +42,8 @@ from generativeqc_compiler.tensor.cuda_search import (
 )
 from generativeqc_compiler.tensor.interpreter import execute
 
+from tools.tensor_reduction_qualification import qualification_reduction_plan
+
 TARGET = cuda_target_info("sm_80")
 
 
@@ -86,12 +88,7 @@ def test_structured_search_is_bounded_reproducible_and_covers_each_axis() -> Non
     assert {s.threads for s in custom.generate()} == {32, 128, 512, 1024}
     streaming = replace(space, stream_reductions=(False, True))
     assert {s.stream_reductions for s in streaming.generate()} == {False, True}
-    cub = replace(
-        space,
-        stream_reductions=(True,),
-        reduction_provider=("generated", "cub"),
-    )
-    assert {s.reduction_provider for s in cub.generate()} == {"generated", "cub"}
+    assert "reduction_provider" not in asdict(space)
 
 
 @pytest.mark.parametrize(
@@ -179,14 +176,7 @@ def test_execution_identity_tracks_only_executable_new_schedule_dimensions() -> 
         TARGET,
         schedule=TensorSchedule(stream_reductions=True),
     )
-    cub_cooperative = plan_cuda(
-        reduction.program,
-        TARGET,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
-    )
+    cub_cooperative = qualification_reduction_plan(generated_cooperative)
     assert execution_key(cub_cooperative) != execution_key(generated_cooperative)
 
     direct = plan_cuda(gemm_program(), TARGET)
@@ -243,14 +233,9 @@ def test_new_schedule_dimensions_change_generated_execution_without_changing_def
     assert "<<<blocks(65LL, 1), 128" in cooperative_source
     assert estimate_schedule(cooperative)["estimated_shared_bytes"] == 32
 
-    cub = plan_cuda(
-        reduction_program(),
-        TARGET,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
-    )
+    cub = qualification_reduction_plan(cooperative)
+    assert cub.schedule == cooperative.schedule
+    assert "reduction_provider" not in cub.to_payload()["schedule"]
     cub_source = emit_cuda(cub)
     assert "#include <cub/block/block_reduce.cuh>" in cub_source
     assert "cub::BlockReduce<" in cub_source
@@ -277,12 +262,10 @@ def test_new_schedule_dimensions_change_generated_execution_without_changing_def
 
 
 def test_cub_reduction_pilot_requires_streaming_cooperative_schedule() -> None:
-    with pytest.raises(ValueError, match="requires stream_reductions"):
-        plan_cuda(
-            reduction_program(),
-            TARGET,
-            schedule=TensorSchedule(reduction_provider="cub"),
-        )
+    with pytest.raises(TypeError, match="reduction_provider"):
+        TensorSchedule(reduction_provider="cub")
+    ordinary = plan_cuda(reduction_program(), TARGET)
+    assert qualification_reduction_plan(ordinary) == ordinary
 
 
 def test_default_search_prunes_equivalent_plans_and_preserves_baseline() -> None:
@@ -1196,10 +1179,10 @@ def test_cooperative_reduction_is_not_rejected_as_scalar(
 ) -> None:
     program = scalar_reduction_program()
     baseline = plan_cuda(program, TARGET)
-    schedule = TensorSchedule(
-        threads=threads, stream_reductions=True, reduction_provider=provider
+    schedule = TensorSchedule(threads=threads, stream_reductions=True)
+    candidate_plan = qualification_reduction_plan(
+        plan_cuda(program, TARGET, schedule=schedule), implementation=provider
     )
-    candidate_plan = plan_cuda(program, TARGET, schedule=schedule)
     assert estimate_schedule(candidate_plan)["static_promotion_rejections"] == []
     (candidate,) = plan_schedule_search(baseline, [schedule])
     assert candidate.status == "ready", candidate.reason

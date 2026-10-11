@@ -179,22 +179,13 @@ def _read_static_data(artifact: CudaArtifact, expected_bytes: int) -> np.ndarray
     return payload
 
 
-def compile_cuda(
-    plan: TensorPlan, compiler: CudaCompilerAdapter, cache: Path
-) -> CudaArtifact:
-    """Compile/cache one whole plan with a finite NVCC process-tree timeout.
-
-    Concurrent compilers publish only complete directories. Every cache hit
-    verifies the native binary hash; mismatches fail closed instead of loading
-    an unverified executable. This is a local trusted-code cache, not a format
-    for downloading arbitrary native libraries from another user.
-    """
+def _tensor_compiler_facts(
+    plan: TensorPlan, compiler: CudaCompilerAdapter
+) -> dict[str, typing.Any]:
+    """Reuse the artifact's actual compiler context before binding or compiling."""
     if compiler.target != plan.target:
         raise ValueError("compiler target does not match tensor plan target")
     options = compile_options(plan)
-    source = emit_cuda(plan, embed_static_data=False)
-    static_data = tensor_static_data(plan)
-    static_sha256 = hashlib.sha256(static_data).hexdigest()
     host_compiler = os.environ.get("NVCC_CCBIN") or shutil.which("gcc")
     if not host_compiler:
         raise ValueError("NVCC host compiler cannot be identified")
@@ -205,13 +196,13 @@ def compile_cuda(
         text=True,
         timeout=30,
     )
-    identity = {
-        "schema": LAYOUT_VERSION,
-        "plan": plan.identity,
+    cub_header = (
+        compiler.nvcc.resolve().parent.parent / "include/cub/block/block_reduce.cuh"
+    )
+    return {
         "source": tensor_source_identity(),
-        "generated": canonical_hash(source),
-        "static_data": {"bytes": len(static_data), "sha256": static_sha256},
         "toolchain": toolchain_identity(compiler.nvcc),
+        "cub_header": file_hash(cub_header) if cub_header.is_file() else None,
         "host_compiler": host_version.stdout + host_version.stderr,
         "compiler_environment": {
             name: os.environ.get(name, "")
@@ -230,6 +221,50 @@ def compile_cuda(
             "libc": platform.libc_ver(),
         },
         "options": [*options, "c++17", "O3", "shared", "fPIC", "cublas"],
+    }
+
+
+def tensor_compiler_identity(plan: TensorPlan, compiler: CudaCompilerAdapter) -> str:
+    """Identify source/toolchain/options for prepare-time recipes without a GPU.
+
+    This excludes the selected recipe and plan identity, avoiding a circular
+    cache key. Callers bind this hash before codegen; compilation rechecks it.
+    """
+    return canonical_hash(_tensor_compiler_facts(plan, compiler))
+
+
+def compile_cuda(
+    plan: TensorPlan, compiler: CudaCompilerAdapter, cache: Path
+) -> CudaArtifact:
+    """Compile/cache one whole plan with a finite NVCC process-tree timeout.
+
+    Concurrent compilers publish only complete directories. Every cache hit
+    verifies the native binary hash; mismatches fail closed instead of loading
+    an unverified executable. This is a local trusted-code cache, not a format
+    for downloading arbitrary native libraries from another user.
+    """
+    facts = _tensor_compiler_facts(plan, compiler)
+    context = canonical_hash(facts)
+    if any(
+        binding.compilation.compiler_hash != context
+        for _, binding in plan.lowering_bindings
+    ):
+        raise ValueError(
+            "prepared reduction compiler context changed; rebind before compilation"
+        )
+    options = compile_options(plan)
+    source = emit_cuda(plan, embed_static_data=False)
+    static_data = tensor_static_data(plan)
+    static_sha256 = hashlib.sha256(static_data).hexdigest()
+    identity = {
+        "schema": LAYOUT_VERSION,
+        "plan": plan.identity,
+        **facts,
+        "generated": canonical_hash(source),
+        "static_data": {
+            "bytes": len(static_data),
+            "sha256": static_sha256,
+        },
     }
     key = canonical_hash(identity)
     cache = Path(cache).resolve()
