@@ -66,14 +66,14 @@ def test_batched_replay_has_only_original_inputs_and_bounded_virtual_axes() -> N
     )
 
 
-def test_automatic_batching_is_physical_cuda_df_energy_only() -> None:
-    """Response and internal callers keep one Q and all old resource fallbacks."""
+def test_automatic_batching_is_physical_cuda_df_energy_and_force() -> None:
+    """Final-amplitude replay is independent of retained response intermediates."""
     header = (ROOT / "src/cc/solver.hpp").read_text()
     owner = (ROOT / "src/cc/cuda_solver.cu").read_text()
     dispatch = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     assert "bool df_replay_auxiliary_batch{false};" in header
     assert (
-        "solver_options.df_replay_auxiliary_batch =\n      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;"
+        "solver_options.df_replay_auxiliary_batch = execution.cuda_requested() && correlation_auxiliary;"
         in dispatch
     )
     assert "void virtual_corrections() { virtual_corrections(false); }" in owner
