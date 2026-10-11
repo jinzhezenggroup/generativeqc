@@ -21,6 +21,11 @@ CLI = Path(sys.argv.pop(1)).resolve()
 PROBE = Path(sys.argv.pop(1)).resolve()
 PROFILE_PROBE = Path(sys.argv.pop(1)).resolve()
 SOURCE = Path(__file__).resolve().parents[2]
+INCREMENTAL_SELECTORS = (
+    "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK",
+    "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
+)
+KS_INVENTORY_METHODS = ("lda-rks", "lda-uks", "pbe-rks", "pbe-uks")
 
 
 def canonical(value: object) -> str:
@@ -37,7 +42,11 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.env = {
-            **os.environ,
+            **{
+                name: value
+                for name, value in os.environ.items()
+                if not name.startswith(INCREMENTAL_SELECTORS)
+            },
             "PATH": str(self.root / "no-interpreters"),
             "GENERATIVEQC_PROFILE_CACHE": str(self.root / "cache"),
             "GENERATIVEQC_PROFILE": "off",
@@ -314,6 +323,152 @@ class RuntimeTests(unittest.TestCase):
         unsupported = self.resources("--method", "pbe-rks", "--forces")
         self.assertEqual(unsupported.returncode, 2)
         self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
+
+    def assert_incremental_inventory_unsupported(
+        self, result: subprocess.CompletedProcess[str]
+    ) -> None:
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.stderr, "")
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["status"], "unsupported")
+        self.assertIn("incremental Direct-J/K resource inventory", plan["diagnostic"])
+        self.assertIn("anchor/delta storage", plan["diagnostic"])
+        self.assertIn("closure history", plan["diagnostic"])
+        for selector in INCREMENTAL_SELECTORS:
+            self.assertIn(selector, plan["diagnostic"])
+        self.assertEqual(plan["peak_bytes"], {})
+        self.assertEqual(plan["resident_bytes"], {})
+        self.assertNotIn("orbital", plan)
+        self.assertNotIn("item_inventory", plan)
+        identity = plan.pop("identity")
+        self.assertEqual(identity, digest(plan))
+
+    def test_ks_incremental_inventory_rejects_either_enabled_selector(self) -> None:
+        for method in KS_INVENTORY_METHODS:
+            for backend in ("cpu", "cuda"):
+                for selector in INCREMENTAL_SELECTORS:
+                    for value in ("1", "on"):
+                        with self.subTest(
+                            method=method,
+                            backend=backend,
+                            selector=selector,
+                            value=value,
+                        ):
+                            for name in INCREMENTAL_SELECTORS:
+                                self.env.pop(name, None)
+                            self.env[selector] = value
+                            result = self.resources(
+                                "--method", method, "--backend", backend
+                            )
+                            self.assert_incremental_inventory_unsupported(result)
+
+    def test_ks_incremental_inventory_combines_valid_selectors_with_or(self) -> None:
+        generic, legacy = INCREMENTAL_SELECTORS
+        for first, second in (("off", "on"), ("on", "off"), ("1", "1")):
+            with self.subTest(generic=first, legacy=second):
+                self.env.update({generic: first, legacy: second})
+                self.assert_incremental_inventory_unsupported(
+                    self.resources("--method", "pbe-uks")
+                )
+
+    def test_ks_incremental_inventory_validates_both_selectors_eagerly(self) -> None:
+        for selector in INCREMENTAL_SELECTORS:
+            other = next(name for name in INCREMENTAL_SELECTORS if name != selector)
+            for value in ("", "false", "true", "ON", "OFF", "1 ", " on", "0.0", "2"):
+                for other_value in (None, "on"):
+                    with self.subTest(
+                        selector=selector, value=value, other_value=other_value
+                    ):
+                        self.env.pop(other, None)
+                        if other_value is not None:
+                            self.env[other] = other_value
+                        self.env[selector] = value
+                        result = self.resources("--method", "pbe-uks")
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        self.assertIn(
+                            f"{selector} must be 0/off or 1/on", result.stderr
+                        )
+
+    def test_ks_disabled_incremental_controls_preserve_plan_bytes(self) -> None:
+        generic, legacy = INCREMENTAL_SELECTORS
+        for method in KS_INVENTORY_METHODS:
+            for backend in ("cpu", "cuda"):
+                for name in INCREMENTAL_SELECTORS:
+                    self.env.pop(name, None)
+                arguments = ("--method", method, "--backend", backend)
+                baseline = self.resources(*arguments)
+                if backend == "cpu":
+                    self.assertEqual(baseline.returncode, 0, baseline.stderr)
+                for first in (None, "0", "off"):
+                    for second in (None, "0", "off"):
+                        with self.subTest(
+                            method=method, backend=backend, generic=first, legacy=second
+                        ):
+                            for name, value in ((generic, first), (legacy, second)):
+                                self.env.pop(name, None)
+                                if value is not None:
+                                    self.env[name] = value
+                            result = self.resources(*arguments)
+                            self.assertEqual(result.returncode, baseline.returncode)
+                            self.assertEqual(result.stdout, baseline.stdout)
+                            self.assertEqual(result.stderr, baseline.stderr)
+
+    def test_ks_incremental_inventory_does_not_parse_tuning_suffixes(self) -> None:
+        arguments = ("--method", "pbe-uks")
+        baseline = self.resources(*arguments)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        for selector in INCREMENTAL_SELECTORS:
+            self.env[f"{selector}_REBUILD_INTERVAL"] = "not-an-unsigned-integer"
+            self.env[f"{selector}_DENSITY_RMS_THRESHOLD"] = "nan"
+            self.env[selector] = "off"
+        inactive = self.resources(*arguments)
+        self.assertEqual(inactive.returncode, baseline.returncode)
+        self.assertEqual(inactive.stdout, baseline.stdout)
+        self.assertEqual(inactive.stderr, baseline.stderr)
+        for selector in INCREMENTAL_SELECTORS:
+            with self.subTest(selector=selector):
+                self.env[selector] = "on"
+                self.assert_incremental_inventory_unsupported(
+                    self.resources(*arguments)
+                )
+                self.env[selector] = "off"
+
+    def test_ks_incremental_inventory_rejects_before_basis_and_other_gates(
+        self,
+    ) -> None:
+        self.env[INCREMENTAL_SELECTORS[0]] = "on"
+        for backend in ("cpu", "cuda"):
+            for extra in (
+                (),
+                ("--host-bytes", "0", "--max-iterations", "1"),
+                ("--precision", "auto"),
+                ("--forces",),
+                ("--density-fitting", "cpu"),
+                ("--basis", str(self.root / "missing-basis.json")),
+            ):
+                with self.subTest(backend=backend, extra=extra):
+                    self.assert_incremental_inventory_unsupported(
+                        self.resources(
+                            "--method", "pbe-uks", "--backend", backend, *extra
+                        )
+                    )
+
+    def test_hf_inventory_ignores_ks_incremental_controls(self) -> None:
+        for method in ("rhf", "uhf"):
+            for selector in INCREMENTAL_SELECTORS:
+                self.env.pop(selector, None)
+            arguments = ("--method", method)
+            baseline = self.resources(*arguments)
+            self.assertEqual(baseline.returncode, 0, baseline.stderr)
+            for value in ("on", "1", "false", ""):
+                with self.subTest(method=method, value=value):
+                    for selector in INCREMENTAL_SELECTORS:
+                        self.env[selector] = value
+                    result = self.resources(*arguments)
+                    self.assertEqual(result.returncode, baseline.returncode)
+                    self.assertEqual(result.stdout, baseline.stdout)
+                    self.assertEqual(result.stderr, baseline.stderr)
 
     def test_registered_ks_inventory_uses_native_execution_grid(self) -> None:
         probe = subprocess.run(

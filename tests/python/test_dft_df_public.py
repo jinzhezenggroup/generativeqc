@@ -70,7 +70,9 @@ def pyscf_energy(
         return result
 
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms)],
+        atom=[
+            (label, atom.position) for label, atom in zip(labels, atoms, strict=True)
+        ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
         cart=True,

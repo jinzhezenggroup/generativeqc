@@ -61,7 +61,7 @@ def run_physical(probe: typing.Any, metadata: dict, budget: int = 1 << 30) -> tu
             budget,
             *[
                 array.ctypes.data_as(pointer)
-                for array, pointer in zip(outputs, probe.argtypes[2:9])
+                for array, pointer in zip(outputs, probe.argtypes[2:9], strict=True)
             ],
             error,
             len(error),

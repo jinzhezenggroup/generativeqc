@@ -176,7 +176,9 @@ class _PrimitiveExecutor:
         self.aos = basis.packed[start + 2 * basis.nprimitive :].reshape(-1, 16)
         self.centers = basis.packed[:start].reshape(-1, 3)
         self.components = tuple(
-            "".join(axis * int(power) for axis, power in zip("xyz", r[4:7]))
+            "".join(
+                axis * int(power) for axis, power in zip("xyz", r[4:7], strict=True)
+            )
             for r in self.aos
         )
         if any(int(r[3]) != 1 for r in self.aos):
@@ -250,6 +252,25 @@ class _PrimitiveExecutor:
         return self._run(self.kinds["nuclear", ()], 1)[:2]
 
 
+class _NuclearExecutor(_PrimitiveExecutor):
+    """Fitted integrals need nuclear repulsion, not a full component dispatcher."""
+
+    def __init__(
+        self,
+        basis: typing.Any,
+        cache: typing.Any,
+        primitive_tile: int,
+        compiler: typing.Any,
+    ) -> None:
+        self.centers = basis.packed[: 3 * basis.natom].reshape(-1, 3)
+        self.kinds = {("nuclear", ()): 0}
+        self.library, self.call = _compile_primitive_library(
+            emit_first_derivative_cpu((("nuclear", ()),)), cache, compiler
+        )
+        self.buffer = np.zeros((primitive_tile, 17))
+        self.records = 0
+
+
 def _admit_work(
     state: typing.Any,
     basis: typing.Any,
@@ -266,9 +287,10 @@ def _admit_work(
     Counts describe semantic loops, not FLOPs or timing. CPU and CUDA now consume
     the same compiler-owned ECP grid policy; count both complete provider grids.
     """
-    if any(shell.angular_momentum > 2 for shell in basis.shells):
+    maximum_angular = 3 if native_fitted_integrals else 2
+    if any(shell.angular_momentum > maximum_angular for shell in basis.shells):
         raise NotImplementedError(
-            "complete CPU gradient diagnostic supports s/p/d bases only"
+            f"complete CPU gradient diagnostic supports angular momentum <= {maximum_angular}"
         )
     natom, n = basis.natom, basis.nao
     aos = basis.packed[3 * natom + 2 * basis.nprimitive :].reshape(-1, 16)
@@ -288,21 +310,30 @@ def _admit_work(
         type(primitive) is RangeSeparatedExchangePrimitive
         for primitive in getattr(method_ir, "primitives", ())
     )
-    if range_exchange and any(shell.angular_momentum > 1 for shell in basis.shells):
-        raise NotImplementedError(
-            "CPU RSH stationary gradients currently support s/p bases only"
-        )
-    # Coulomb always traverses every ordered primitive quartet. Each full- or
-    # range-separated exact-exchange source is an independently weighted ERI
-    # derivative traversal over that same ordered quartet domain.
+    # Direct sources each traverse the ordered primitive quartet domain. DF
+    # elides those primary loops, but mixed DF still executes one exact LR pass.
+    # These counts exclude the native fitted response's independently owned work.
     quartet_passes = (
-        0 if native_fitted_integrals else 1 + int(exact_exchange) + range_exchange
-    )
-    records = (
-        pairs
+        int(bool(range_exchange))
         if native_fitted_integrals
-        else quartet_passes * primitive_sum**4 + (natom + 2) * primitive_sum**2 + pairs
+        else 1 + int(exact_exchange) + range_exchange
     )
+    component_costs = [int(row[2]) * int(row[3]) for row in aos]
+    # Two symmetric pair sums count the canonical primitive domain exactly,
+    # without materializing AO pairs while rejecting oversized diagnostics.
+    squared_costs = sum(cost**2 for cost in component_costs)
+    pair_cost_sum = (primitive_sum**2 + squared_costs) // 2
+    pair_squared_cost_sum = (
+        squared_costs**2 + sum(cost**4 for cost in component_costs)
+    ) // 2
+    canonical_records = (pair_cost_sum**2 + pair_squared_cost_sum) // 2
+    range_passes = (
+        int(bool(range_exchange)) if native_fitted_integrals else range_exchange
+    )
+    records = pairs + range_passes * canonical_records
+    if not native_fitted_integrals:
+        records += (1 + int(exact_exchange)) * primitive_sum**4
+        records += (natom + 2) * primitive_sum**2
     points = len(state.grid.points)
     visits = (2 if execution == "native" else 3 * natom) * pairs * points
     validations = ((points + tile_points - 1) // tile_points) * pairs
@@ -346,7 +377,13 @@ def _admit_work(
             raise ValueError("ECP quadrature pair-sample work budget exceeded")
     return {
         "ordered_pairs": n * n,
-        "ordered_quartets": 0 if native_fitted_integrals else n**4,
+        "ordered_quartets": n**4 if quartet_passes else 0,
+        "integral_quartet_passes": quartet_passes,
+        "range_exchange_canonical_quartets": range_passes
+        * (n * (n + 1) // 2)
+        * (n * (n + 1) // 2 + 1)
+        // 2,
+        "native_fitted_primary_work_excluded": int(native_fitted_integrals),
         "primitive_record_bound": records,
         "primitive_record_budget": max_primitive_records,
         "xc_points": points,
@@ -389,13 +426,18 @@ def complete_rks_gradient_diagnostic(
     validated LDA/PBE/r2SCAN/global-hybrid MethodIR, or an imported pure semilocal
     rho/rho-sigma/rho-sigma-tau MethodIR with the native Libxc work-point provider.
     The consumer also executes
-    range-separated exchange sources for validated stationary plans with s/p AOs;
+    range-separated exchange sources for validated stationary plans through d,
+    and through f when the primary integrals are density fitted.
+    Mixed DF uses the shared native fitted primary and only one compiler-generated
+    exact LR correction traversal, never exact SR/full-range replacements;
     public RSH snapshot/capability admission remains a separate boundary. Uses a
     native unpruned version-one grid, distinct nuclei and no
     point/center collisions. CPU is explicit; CUDA snapshots are rejected.
     Caller chooses an ignored/temporary compilation cache and may supply a
     CppCompilerAdapter; otherwise CXX (or c++) selects the executable. Scientific work is
-    full ordered AO pairs/quartets, without screening or symmetry shortcuts.
+    full ordered AO pairs/quartets for Direct primary sources, and the exact
+    eightfold quartet domain for SR/LR, without numerical screening. TensorIR
+    weights are summed over distinct permutations before differentiation.
     Working arrays scale with a point tile times (AO + atom), one primitive
     record tile, D/W, and bounded per-source atom gradients, never coordinate-grid-AO pairs.
     The native state already retains its full discrete grid and dense SCF data.
@@ -430,9 +472,10 @@ def complete_rks_gradient_diagnostic(
         or native_ao_geometry_identity(basis) != state.identity.geometry_identity
     ):
         raise ValueError("stationary diagnostic basis/geometry mismatch")
+    native_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
     for value, name, cap in (
         (tile_points, "tile_points", 4096),
-        (integral_terms, "integral_terms", 128),
+        (integral_terms, "integral_terms", 512 if native_fitted_integrals else 128),
         (primitive_tile, "primitive_tile", 4096),
         (max_primitive_records, "max_primitive_records", 1 << 40),
         (max_grid_points, "max_grid_points", 1 << 40),
@@ -441,7 +484,6 @@ def complete_rks_gradient_diagnostic(
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"{name} must be an integer in [1,{cap}]")
-    native_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
     if native_fitted_integrals and execution != "native":
         raise NotImplementedError(
             "density-fitted stationary derivatives require execution='native'; "
@@ -476,10 +518,19 @@ def complete_rks_gradient_diagnostic(
             tile_points=tile_points,
             primitive_tile=primitive_tile,
             integral_terms=integral_terms,
-            range_exchange_sources=sum(
-                type(p) is RangeSeparatedExchangePrimitive
-                for p in state._source.method_ir.primitives
+            range_exchange_sources=(
+                1
+                if native_fitted_integrals
+                and any(
+                    type(p) is RangeSeparatedExchangePrimitive
+                    for p in state._source.method_ir.primitives
+                )
+                else sum(
+                    type(p) is RangeSeparatedExchangePrimitive
+                    for p in state._source.method_ir.primitives
+                )
             ),
+            native_fitted_integrals=native_fitted_integrals,
         )
         host_bound = sum(inventory.values())
         if host_bound > max_host_bytes:
@@ -509,7 +560,10 @@ def complete_rks_gradient_diagnostic(
     if not isinstance(compiler, CppCompilerAdapter):
         raise TypeError("the CPU diagnostic requires an explicit C++ compiler adapter")
     has_d_shell = any(shell.angular_momentum == 2 for shell in basis.shells)
-    if has_d_shell or (execution == "native" and component_execution == "native"):
+    if native_fitted_integrals:
+        native = _NuclearExecutor(basis, cache, primitive_tile, compiler)
+        work["component_execution"] = "nuclear-only"
+    elif has_d_shell or (execution == "native" and component_execution == "native"):
         from ._stationary_cpu_components import ComponentPrimitiveExecutor
         from ._stationary_cpu_streaming import CompiledComponentExecutor
 
@@ -532,30 +586,42 @@ def complete_rks_gradient_diagnostic(
     natom, n = basis.natom, basis.nao
     components = {name: np.zeros((natom, 3)) for name in plan.source_names}
     native_integral_components = None
+    native_mixed_integrals = native_fitted_integrals and bool(
+        plan.range_exchange_primitives
+    )
     native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
     if native_fitted_integrals:
         integral_provider = getattr(
-            state._source, "density_fitted_integral_derivatives", None
+            state._source,
+            "mixed_density_fitted_integral_derivatives"
+            if native_mixed_integrals
+            else "density_fitted_integral_derivatives",
+            None,
         )
         if not callable(integral_provider):
             raise NotImplementedError(
                 "density-fitted stationary owner has no derivative provider"
             )
         publication_budget = max_host_bytes if max_host_bytes is not None else 256 << 20
-        native_integral = integral_provider(natom, publication_budget)
-        if native_integral is None:
+        native_integral = (
+            None
+            if native_mixed_integrals
+            else integral_provider(natom, publication_budget)
+        )
+        if native_integral is None and not native_mixed_integrals:
             raise NotImplementedError(
                 "density-fitted stationary derivative provider is unavailable"
             )
-        native_integral_components, native_integral_resources = native_integral
-        native_integral_components = np.asarray(native_integral_components)
-        if (
-            native_integral_components.shape != (4, natom, 3)
-            or not np.isfinite(native_integral_components).all()
-        ):
-            raise RuntimeError(
-                "density-fitted stationary integral source returned invalid output"
-            )
+        if native_integral is not None:
+            native_integral_components, native_integral_resources = native_integral
+            native_integral_components = np.asarray(native_integral_components)
+            if (
+                native_integral_components.shape != (4, natom, 3)
+                or not np.isfinite(native_integral_components).all()
+            ):
+                raise RuntimeError(
+                    "density-fitted stationary integral source returned invalid output"
+                )
     charges = np.asarray([atom.atomic_number for atom in basis.atoms]) - np.asarray(
         state._source.ecp_cores
     )
@@ -570,14 +636,14 @@ def complete_rks_gradient_diagnostic(
     # it never rebuilds method coefficients from a named-functional formula.
     integral_sources = (
         []
-        if native_integral_components is not None
+        if native_fitted_integrals
         else [
             ("one_electron", 2),
             ("overlap_pulay", 2),
             ("coulomb", 4),
         ]
     )
-    if native_integral_components is None and plan.exchange is not None:
+    if not native_fitted_integrals and plan.exchange is not None:
         integral_sources.append(("exact_exchange", 4))
     for source, rank in integral_sources:
         iterator = product(range(n), repeat=rank)
@@ -667,15 +733,26 @@ def complete_rks_gradient_diagnostic(
         try:
             for range_source in plan.range_exchange_sources:
                 primitive = plan.range_exchange_primitive(range_source.name)
-                iterator = product(range(n), repeat=4)
+                if native_mixed_integrals and primitive.operator != "long-range":
+                    continue
+                from ._stationary_range_cpu import (
+                    canonical_eri_quartets,
+                    eri_quartet_orbits,
+                )
+
+                iterator = canonical_eri_quartets(n)
                 while tuples := tuple(islice(iterator, integral_terms)):
-                    ids = np.asarray(tuples)
-                    block = plan.integral_block(range_source.name, terms=len(tuples))
+                    ids, multiplicities = eri_quartet_orbits(tuples)
+                    block = plan.integral_block(
+                        range_source.name,
+                        terms=len(ids),
+                        mixed_density_fitted_correction=native_mixed_integrals,
+                    )
                     feeds = {
                         "density_left": state.density[:, ids[:, 0], ids[:, 2]],
                         "density_right": state.density[:, ids[:, 1], ids[:, 3]],
                     }
-                    key = (range_source.name, len(tuples))
+                    key = (range_source.name, len(ids))
                     if key not in tensor_consumers:
                         tensor_consumers[key] = (
                             NativeTensorProgram(
@@ -690,17 +767,62 @@ def complete_rks_gradient_diagnostic(
                         if execution == "native"
                         else execute(consumer, feeds).outputs["weights"]
                     )
-                    for indices, weight in zip(tuples, weights, strict=True):
-                        owners, values = range_native.integral(
-                            primitive, indices, weight
+                    weights = weights.reshape(-1, 8).sum(axis=1) * multiplicities
+                    if native_fitted_integrals:
+                        components[range_source.name] += range_native.integral_batch(
+                            primitive, tuples, weights
                         )
-                        np.add.at(components[range_source.name], owners, values)
+                    else:
+                        for indices, weight in zip(tuples, weights, strict=True):
+                            owners, values = range_native.integral(
+                                primitive, indices, weight
+                            )
+                            np.add.at(components[range_source.name], owners, values)
         finally:
             work["range_exchange_packaged_aot_plans"] = range_native.packaged_aot_plans
             work["range_exchange_runtime_compilations"] = (
                 range_native.runtime_compilations
             )
             range_native.close()
+    if native_mixed_integrals:
+        # LR currently holds the weighted correction, not the physical LR row.
+        # The same native composer as CUDA recovers SR/LR from fitted full K.
+        native_integral = integral_provider(
+            natom,
+            publication_budget,
+            lr_correction=components["exchange_long_range"],
+        )
+        if native_integral is None:
+            raise NotImplementedError(
+                "mixed density-fitted stationary provider is unavailable"
+            )
+        native_integral_components, native_integral_resources = native_integral
+        native_integral_components = np.asarray(native_integral_components)
+        if (
+            native_integral_components.shape != (5, natom, 3)
+            or not np.isfinite(native_integral_components).all()
+        ):
+            raise RuntimeError(
+                "mixed density-fitted stationary source returned invalid output"
+            )
+        source_names = (
+            "one_electron",
+            "overlap_pulay",
+            "coulomb",
+            "exchange_short_range",
+            "exchange_long_range",
+        )
+        for source, values in zip(
+            source_names, native_integral_components, strict=True
+        ):
+            components[source] = np.ascontiguousarray(values)
+        work.update(
+            stationary_integral_derivative_route="prepared-mixed-density-fitted",
+            stationary_native_integral_sources=source_names,
+            native_integral_resources=dict(native_integral_resources),
+            density_fitted_response_resources_included=False,
+            native_integral_resource_scope="compact-publication-and-host-one-electron-only",
+        )
     for a in range(natom):
         for b in range(a):
             np.add.at(components["nuclear"], [a, b], native.nuclear(a, b, charges))
@@ -893,6 +1015,9 @@ def complete_rks_gradient_diagnostic(
     work["primitive_records"] = primitive_records
     if range_native is not None:
         work["range_exchange_primitive_records"] = range_native.records
+        work["range_exchange_recurrence_evaluations"] = (
+            range_native.recurrence_evaluations
+        )
     return DiagnosticStationaryGradient(
         immutable(gradient),
         MappingProxyType({key: immutable(value) for key, value in components.items()}),

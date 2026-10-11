@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_spd_force_schedule.hpp"
@@ -134,7 +135,8 @@ void launch_canonical_jk_kernel(
     DirectCoulombRange exchange_range, double exchange_omega, double screening,
     const double* bounds, const double* density, double* coulomb, double* exchange,
     std::uint64_t* work_count, double* source_values = nullptr,
-    double* coulomb_correction = nullptr, double* exchange_correction = nullptr);
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
+    std::size_t work_limit = std::numeric_limits<std::size_t>::max());
 
 /** Reuse the canonical orbit scatter with an immutable full-range value source.
  * No integral recurrence is instantiated in this replay kernel. */
@@ -144,7 +146,8 @@ void launch_resident_canonical_jk_kernel(
     std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
     bool unrestricted, const double* source_values, const double* density, double* coulomb,
     double* exchange, std::uint64_t* work_count, double* coulomb_correction = nullptr,
-    double* exchange_correction = nullptr);
+    double* exchange_correction = nullptr, double screening = 0.0, const double* bounds = nullptr,
+    std::size_t work_limit = std::numeric_limits<std::size_t>::max());
 
 /** Fold an admitted correction plane before AO projection and finite audit. */
 void launch_jk_compensation_fold(cudaStream_t stream, double* sum, const double* correction,

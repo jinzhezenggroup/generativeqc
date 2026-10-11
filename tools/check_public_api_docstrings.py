@@ -489,12 +489,13 @@ def _check_class_bindings(declaration: Declaration) -> None:
             known_callable = (
                 bool(names & callable_names)
                 or isinstance(value, ast.Lambda)
-                or isinstance(value, ast.Name)
-                and value.id in callable_names
-                or isinstance(value, ast.Call)
-                and (
-                    isinstance(value.func, ast.Name)
-                    and value.func.id in {"staticmethod", "classmethod", "property"}
+                or (isinstance(value, ast.Name) and value.id in callable_names)
+                or (
+                    isinstance(value, ast.Call)
+                    and (
+                        isinstance(value.func, ast.Name)
+                        and value.func.id in {"staticmethod", "classmethod", "property"}
+                    )
                 )
             )
             if known_callable:
@@ -507,12 +508,12 @@ def _check_class_bindings(declaration: Declaration) -> None:
                 if isinstance(annotation, ast.Subscript):
                     annotation = annotation.value
                 class_variable = (
-                    isinstance(annotation, ast.Name)
-                    and annotation.id == "ClassVar"
-                    or isinstance(annotation, ast.Attribute)
+                    isinstance(annotation, ast.Name) and annotation.id == "ClassVar"
+                ) or (
+                    isinstance(annotation, ast.Attribute)
                     and annotation.attr == "ClassVar"
                 )
-                if value is None or dataclass_record and not class_variable:
+                if value is None or (dataclass_record and not class_variable):
                     continue  # Ordinary dataclass fields/default factories are data.
                 if isinstance(value, ast.Name):
                     module_tree = ast.parse(declaration.path.read_text())

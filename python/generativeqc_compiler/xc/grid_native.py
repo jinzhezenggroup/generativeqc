@@ -551,10 +551,8 @@ def _emit_prepared_ratio(*, device: bool) -> str:
     for identifier in order:
         node = graph.nodes[identifier]
         dependent[identifier] = (
-            node.operation == "variable"
-            and node.payload == "a"
-            or any(dependent[argument] for argument in node.arguments)
-        )
+            node.operation == "variable" and node.payload == "a"
+        ) or any(dependent[argument] for argument in node.arguments)
     boundary = {
         argument
         for identifier in order

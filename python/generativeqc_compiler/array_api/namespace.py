@@ -875,7 +875,7 @@ def _getitem(x: object, key: object) -> VibeArray:
         raise IndexError("too many indices for symbolic VibeArray")
     items = (*items, *(builtins.slice(None) for _ in range(value.ndim - len(items))))
     ranges: list[tuple[int, int]] = []
-    for item, extent in zip(items, value.shape):
+    for item, extent in zip(items, value.shape, strict=True):
         if not isinstance(item, builtins.slice):
             raise TypeError(
                 "scientifically annotated symbolic indexing supports "
