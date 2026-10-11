@@ -13,6 +13,22 @@ from generate_cli_method_catalog import render, rows
 
 
 class NativeMethodirProjectionTests(unittest.TestCase):
+    def test_automatic_bulk_selectors_preserve_the_public_resolver(self) -> None:
+        from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
+
+        table = {row.name: row for row in rows()}
+        for selector, spin in (
+            ("libxc:gga_x_apbe", "unpolarized"),
+            ("libxc-uks:gga_x_apbe", "polarized"),
+        ):
+            row = table[selector]
+            resolved = resolve_bulk_ks("GGA_X_APBE", spin=spin)
+            self.assertEqual(row.identity, resolved.method.identity)
+            self.assertEqual(row.components, (("GGA_X_APBE", 1.0),))
+            self.assertTrue(row.cpu)
+            self.assertFalse(row.cuda)
+            self.assertEqual(row.exchange, ())
+
     def test_semantic_projection_and_backend_gates(self) -> None:
         table = {row.name: row for row in rows()}
         self.assertGreater(len(table), 10)

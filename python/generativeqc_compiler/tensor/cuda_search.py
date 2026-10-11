@@ -9,7 +9,7 @@ resource measurements or grounds for performance promotion.
 from __future__ import annotations
 
 import typing
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from itertools import combinations, islice, product
 from math import prod
 
@@ -58,8 +58,6 @@ class TensorScheduleSpace:
     # Qualification-only by default: #783 evidence shows a memory win but a
     # runtime/compile regression before cooperative reduction lowering lands.
     stream_reductions: tuple[bool, ...] = field(default=(False,), kw_only=True)
-    # Qualification-only CUB/CCCL pilot; production/default remains generated.
-    reduction_provider: tuple[str, ...] = field(default=("generated",), kw_only=True)
     # Qualification-only until complete-endpoint evidence promotes donation.
     inplace_donation: tuple[bool, ...] = field(default=(False,), kw_only=True)
     direct_gemm: tuple[bool, ...] = (True, False)
@@ -196,14 +194,6 @@ def execution_key(plan: TensorPlan) -> str:
     payload["reduction_unroll"] = (
         plan.schedule.reduction_unroll
         if any(step.node.op in ("reduce", "einsum") for step in generic_steps)
-        else None
-    )
-    payload["reduction_provider"] = (
-        plan.schedule.reduction_provider
-        if any(
-            cooperative_reduction_provider(plan, index) is not None
-            for index in range(len(plan.steps))
-        )
         else None
     )
     payload["staging_width"] = plan.schedule.staging_width if packed_steps else None
@@ -576,6 +566,8 @@ class ScheduleCandidate:
         }
         if self.plan is not None:
             row.update(plan=self.plan.to_payload(), plan_identity=self.plan.identity)
+            if self.plan.lowering_bindings:
+                row["lowering"] = tensor_lowering_diagnostics(self.plan)
         if self.reason is not None:
             row["reason"] = self.reason
         if self.estimates is not None:
@@ -603,8 +595,16 @@ def plan_schedule_search(
     limits: typing.Any = DEFAULT_SEARCH_LIMITS,
     *,
     precision_programs: typing.Any = None,
+    prepare_lowering: typing.Callable[[TensorPlan], TensorPlan] | None = None,
 ) -> typing.Any:
-    """Plan, deduplicate and statically prune without compiling or allocating."""
+    """Plan, deduplicate and statically prune without compiling or allocating.
+
+    An optional pure preparation callback may install already-admitted lowering
+    recipes after semantic planning. It must not probe, compile, allocate, or
+    change any plan field other than lowering_bindings. Implementations remain
+    absent from scientific schedules, while concrete recipes precede executable
+    deduplication and resource checks.
+    """
     if not isinstance(limits, TensorSearchLimits):
         raise TypeError("limits must be TensorSearchLimits")
     schedules = tuple(islice(schedules, limits.maximum_candidates + 1))
@@ -653,6 +653,16 @@ def plan_schedule_search(
                     library_bytes=baseline.library_bytes,
                     provider_bytes=baseline.provider_bytes,
                 )
+                if prepare_lowering is not None:
+                    prepared = prepare_lowering(plan)
+                    if (
+                        not isinstance(prepared, TensorPlan)
+                        or replace(prepared, lowering_bindings=()) != plan
+                    ):
+                        raise ValueError(
+                            "lowering preparation may only install plan bindings"
+                        )
+                    plan = prepared
             except ValueError as error:
                 candidates.append(
                     ScheduleCandidate(

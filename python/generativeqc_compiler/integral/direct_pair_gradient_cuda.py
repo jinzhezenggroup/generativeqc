@@ -201,8 +201,63 @@ __device__ inline HighOrderPairGradientTerm make_high_order_pair_gradient_term(
 inline constexpr double kInvalidHighOrderRangeMoment =
     std::numeric_limits<double>::quiet_NaN();
 
+/** Reuse spatial states in the Cartesian box and its three first-response faces.
+ * At total order six the enclosing box has at most 64 entries, and only 54
+ * can be requested. The existing scalar recurrence supplies every value. */
+template <unsigned AngularOrder, bool SpatialReuse>
+struct GradientSpatialCoulombValues {
+  static_assert(AngularOrder >= 4U && AngularOrder <= 6U);
+  static constexpr unsigned balanced = AngularOrder / 3U + 2U;
+  static constexpr unsigned remainder = AngularOrder % 3U;
+  static constexpr unsigned capacity = balanced * (balanced + (remainder > 0U)) *
+                                       (balanced + (remainder > 1U));
+  double values[SpatialReuse ? capacity : 1U];
+  unsigned extent_y, extent_z;
+
+  __device__ inline void prepare(
+      const Angular& first, const Angular& second, const Angular& third, const Angular& fourth,
+      double rho, const HighOrderCoulombWorkspace<AngularOrder + 1U>& workspace,
+      const double* boys) {
+    if constexpr (SpatialReuse) {
+      const unsigned maximum_x = first.x + second.x + third.x + fourth.x;
+      const unsigned maximum_y = first.y + second.y + third.y + fourth.y;
+      const unsigned maximum_z = first.z + second.z + third.z + fourth.z;
+      extent_y = maximum_y + 2U;
+      extent_z = maximum_z + 2U;
+      for (unsigned axis_x = 0; axis_x <= maximum_x + 1U; ++axis_x) {
+        for (unsigned axis_y = 0; axis_y < extent_y; ++axis_y) {
+          for (unsigned axis_z = 0; axis_z < extent_z; ++axis_z) {
+            const unsigned faces = (axis_x > maximum_x) + (axis_y > maximum_y) +
+                                   (axis_z > maximum_z);
+            if (faces > 1U) continue;
+            const unsigned state = axis_x + (axis_y << 3U) + (axis_z << 6U);
+            values[(axis_x * extent_y + axis_y) * extent_z + axis_z] =
+                high_order_coulomb<AngularOrder + 1U>(state, rho, workspace, boys);
+          }
+        }
+      }
+    }
+  }
+
+  /** Pair subsets and their single-axis responses never read multi-face corners. */
+  __device__ inline double value(
+      unsigned state, double rho,
+      const HighOrderCoulombWorkspace<AngularOrder + 1U>& workspace,
+      const double* boys) const {
+    if constexpr (SpatialReuse) {
+      const unsigned axis_x = state & 7U;
+      const unsigned axis_y = (state >> 3U) & 7U;
+      const unsigned axis_z = (state >> 6U) & 7U;
+      return values[(axis_x * extent_y + axis_y) * extent_z + axis_z];
+    } else {
+      return high_order_coulomb<AngularOrder + 1U>(state, rho, workspace, boys);
+    }
+  }
+};
+
 /** Evaluate full/LR all-center derivatives of an order-four to-six primitive. */
-template <unsigned FirstPairOrder, unsigned SecondPairOrder, bool LongRange = false>
+template <unsigned FirstPairOrder, unsigned SecondPairOrder, bool LongRange = false,
+          bool SpatialReuse = false>
 __device__ inline void primitive_eri_order456_gradient(
     double alpha, const Vec3<double>& first, const Angular& angular_first, double beta,
     const Vec3<double>& second, const Angular& angular_second, double gamma,
@@ -247,6 +302,9 @@ __device__ inline void primitive_eri_order456_gradient(
   }
   const HighOrderCoulombWorkspace<CoulombOrder> coulomb_workspace =
       make_high_order_coulomb_workspace<CoulombOrder>(rho, product_difference);
+  GradientSpatialCoulombValues<AngularOrder, SpatialReuse> spatial_values;
+  spatial_values.prepare(angular_first, angular_second, angular_third, angular_fourth,
+                         rho, coulomb_workspace, boys);
   const double first_product_scale = alpha / p;
   const double second_product_scale = beta / p;
   const double third_product_scale = -gamma / q;
@@ -270,8 +328,7 @@ __device__ inline void primitive_eri_order456_gradient(
       const double sign =
           (fourth_order_derivative_total(second_item.derivative_state) & 1U) == 0 ? 1.0 : -1.0;
       const unsigned derivative_state = first_item.derivative_state + second_item.derivative_state;
-      const double coulomb =
-          high_order_coulomb<CoulombOrder>(derivative_state, rho, coulomb_workspace, boys);
+      const double coulomb = spatial_values.value(derivative_state, rho, coulomb_workspace, boys);
       const double coefficient = sign * first_item.coefficient * second_item.coefficient;
       value += coefficient * coulomb;
       for (unsigned coordinate = 0; coordinate < 3; ++coordinate) {
@@ -280,7 +337,7 @@ __device__ inline void primitive_eri_order456_gradient(
         const double second_coefficient_gradient =
             sign * first_item.coefficient * second_item.first_center[coordinate];
         const double scaled_coulomb_derivative =
-            coefficient * high_order_coulomb<CoulombOrder>(
+            coefficient * spatial_values.value(
                               derivative_state + fourth_order_derivative_state(coordinate), rho,
                               coulomb_workspace, boys);
         value_gradient[0][coordinate] +=
@@ -521,7 +578,7 @@ __device__ inline CartesianQuartetGradient contracted_eri_cartesian_source_order
 }
 
 /** Canonicalize and contract full/LR all-center gradients for total order 6. */
-template <bool LongRange = false>
+template <bool LongRange = false, bool SpatialReuse = false>
 __device__ inline CartesianQuartetGradient contracted_eri_cartesian_source_order6_gradient(
     const DeviceBatch& batch, std::int32_t system, std::int32_t i, std::int32_t j, std::int32_t k,
     std::int32_t l, double omega = 0.0) {
@@ -591,25 +648,25 @@ __device__ inline CartesianQuartetGradient contracted_eri_cartesian_source_order
                                 batch.primitive_coefficients[d];
           double primitive_gradient[4][3];
           if (first_pair_order == 6) {
-            primitive_eri_order456_gradient<6, 0, LongRange>(
+            primitive_eri_order456_gradient<6, 0, LongRange, SpatialReuse>(
                 batch.primitive_exponents[a], positions[0], angular[0],
                 batch.primitive_exponents[b], positions[1], angular[1],
                 batch.primitive_exponents[c], positions[2], angular[2],
                 batch.primitive_exponents[d], positions[3], angular[3], primitive_gradient, omega);
           } else if (first_pair_order == 5) {
-            primitive_eri_order456_gradient<5, 1, LongRange>(
+            primitive_eri_order456_gradient<5, 1, LongRange, SpatialReuse>(
                 batch.primitive_exponents[a], positions[0], angular[0],
                 batch.primitive_exponents[b], positions[1], angular[1],
                 batch.primitive_exponents[c], positions[2], angular[2],
                 batch.primitive_exponents[d], positions[3], angular[3], primitive_gradient, omega);
           } else if (first_pair_order == 4) {
-            primitive_eri_order456_gradient<4, 2, LongRange>(
+            primitive_eri_order456_gradient<4, 2, LongRange, SpatialReuse>(
                 batch.primitive_exponents[a], positions[0], angular[0],
                 batch.primitive_exponents[b], positions[1], angular[1],
                 batch.primitive_exponents[c], positions[2], angular[2],
                 batch.primitive_exponents[d], positions[3], angular[3], primitive_gradient, omega);
           } else {
-            primitive_eri_order456_gradient<3, 3, LongRange>(
+            primitive_eri_order456_gradient<3, 3, LongRange, SpatialReuse>(
                 batch.primitive_exponents[a], positions[0], angular[0],
                 batch.primitive_exponents[b], positions[1], angular[1],
                 batch.primitive_exponents[c], positions[2], angular[2],

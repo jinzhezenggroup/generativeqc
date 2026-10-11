@@ -15,14 +15,23 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
 @pytest.mark.parametrize("fallback", (False, True))
+@pytest.mark.parametrize("maximum_shell_angular", (2, 3))
 def test_mixed_spdf_complete_force_matches_independent_fci(
-    representation: str, fallback: bool, monkeypatch: pytest.MonkeyPatch
+    representation: str,
+    fallback: bool,
+    maximum_shell_angular: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Two electrons make CCSD exact; keep all classes and check every coordinate."""
+    """Two electrons make CCSD exact; check pure/mixed domains and every coordinate."""
     pyscf = pytest.importorskip("pyscf")
     fci = pytest.importorskip("pyscf.fci")
     pool = pytest.importorskip("threadpoolctl")
     assert os.environ.get("SLURM_JOB_ID") and os.environ.get("CUDA_VISIBLE_DEVICES")
+    force_schedule = os.environ.get(
+        "GENERATIVEQC_SPD_FORCE_TEST_SCHEDULE", "spatial-reuse"
+    )
+    assert force_schedule == "spatial-reuse"
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS", force_schedule)
     if fallback:
         monkeypatch.setenv("GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES", "0")
     else:
@@ -30,7 +39,10 @@ def test_mixed_spdf_complete_force_matches_independent_fci(
             "GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES", raising=False
         )
     atoms = [("He", (0.0, 0.1, -0.7)), ("H", (0.2, -0.1, 0.7))]
-    basis = tuple(Shell(0, angular, (Primitive(0.8, 1.0),)) for angular in range(4)) + (
+    basis = tuple(
+        Shell(0, angular, (Primitive(0.8, 1.0),))
+        for angular in range(maximum_shell_angular + 1)
+    ) + (
         Shell(1, 0, (Primitive(1.2, 1.0),)),
         Shell(1, 2, (Primitive(0.9, 1.0),)),
     )
@@ -52,7 +64,10 @@ def test_mixed_spdf_complete_force_matches_independent_fci(
         molecule = pyscf.gto.M(
             atom=[(atom, coordinates[index]) for index, (atom, _) in enumerate(atoms)],
             basis={
-                "He": [[angular, [0.8, 1.0]] for angular in range(4)],
+                "He": [
+                    [angular, [0.8, 1.0]]
+                    for angular in range(maximum_shell_angular + 1)
+                ],
                 "H": [[0, [1.2, 1.0]], [2, [0.9, 1.0]]],
             },
             charge=1,

@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -211,33 +211,14 @@
       "owner": "xc-contractions",
       "reason": "Reviewed retained large evidence for Native CPU XC contraction evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/xc-contractions/README.md"
+    },
+    "pbe0-spd-spatial-reuse-20261011": {
+      "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
+      "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
+      "review_document": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/README.md"
     }
   },
   "files": [
-    {
-      "bytes": 197796,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ks-resident-final-validation-default-20261011",
-      "path": "benchmarks/results/ks-resident-final-validation-default-20261011/raw-receipts.json.xz",
-      "role": "decision-or-audit-record",
-      "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
-    },
-    {
-      "bytes": 227600,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ks-resident-final-validation-20261010",
-      "path": "benchmarks/results/ks-resident-final-validation-20261010/raw-receipts.json.xz",
-      "role": "decision-or-audit-record",
-      "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff"
-    },
-    {
-      "bytes": 381579,
-      "classification": "required-compact-accepted-evidence",
-      "family": "ks-resident-final-validation-20261010",
-      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c"
-    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -495,44 +476,12 @@
       "sha256": "4afc40f038cc07ff8fc22a7ef52d73ea948ffb84bc0329a9666b052d33609e37"
     },
     {
-      "bytes": 202268,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-stable-response",
-      "path": "benchmarks/results/issue206-stable-response/warm-summary.json",
-      "role": "decision-or-audit-record",
-      "sha256": "aa10acfff00e4f6f44bce0b569bd6e90b05996f581d0b88657453f15872acfc5"
-    },
-    {
       "bytes": 143684,
       "classification": "required-compact-accepted-evidence",
       "family": "issue283-host-response",
       "path": "benchmarks/results/issue283-host-response/raw-evidence.zip",
       "role": "legacy-evidence-archive",
       "sha256": "d088e049eb6761a5f92bc441f12533ad6b3cf0d90841f3eda0223c7f41c58ca9"
-    },
-    {
-      "bytes": 214024,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue308-768ao-response",
-      "path": "benchmarks/results/issue308-768ao-response/default-768ao.json",
-      "role": "scientific-record",
-      "sha256": "0a7ab932cdf48f3b6e5d6929ac767a2be5950b792cbbe459fa49e223564951af"
-    },
-    {
-      "bytes": 213974,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue308-768ao-response",
-      "path": "benchmarks/results/issue308-768ao-response/preparation-only-768ao.json",
-      "role": "scientific-record",
-      "sha256": "63603bfcfd8c6de348daf290ee578bf4c53ad961fba213f755fed7d7cae0bc73"
-    },
-    {
-      "bytes": 213986,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue308-768ao-response",
-      "path": "benchmarks/results/issue308-768ao-response/previous-768ao.json",
-      "role": "scientific-record",
-      "sha256": "513e1cdcae226283a51d7722f1d672b335e8a2995757bc20a06ca233472f9842"
     },
     {
       "bytes": 139337,
@@ -551,12 +500,12 @@
       "sha256": "9eca543c2e88db47b30f11dd29ca6c20fcd691a836a2593a82da04ade69da8a2"
     },
     {
-      "bytes": 220035,
+      "bytes": 149040,
       "classification": "required-compact-accepted-evidence",
       "family": "issue377-379-df",
       "path": "benchmarks/results/issue377-379-df/source-validation.json",
       "role": "decision-or-audit-record",
-      "sha256": "4d17816ba58e37f9498471a10de40a6a87558e981d2403c1664cadfbf4705483"
+      "sha256": "08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569"
     },
     {
       "bytes": 219056,
@@ -605,6 +554,30 @@
       "path": "benchmarks/results/issue409-packed-values/storage-dataflow.json",
       "role": "scientific-record",
       "sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
+    },
+    {
+      "bytes": 227600,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff"
+    },
+    {
+      "bytes": 381579,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
+      "role": "endpoint-or-numerical-samples",
+      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c"
+    },
+    {
+      "bytes": 197796,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-default-20261011",
+      "path": "benchmarks/results/ks-resident-final-validation-default-20261011/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
     },
     {
       "bytes": 148102,
@@ -663,6 +636,22 @@
       "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
     },
     {
+      "bytes": 218108,
+      "classification": "required-compact-accepted-evidence",
+      "family": "pbe0-spd-spatial-reuse-20261011",
+      "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/prototype-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "15ab5b8c856e6179dcba32cdca99c780e0325b41ce9123d86d8c585a782b4293"
+    },
+    {
+      "bytes": 401876,
+      "classification": "required-compact-accepted-evidence",
+      "family": "pbe0-spd-spatial-reuse-20261011",
+      "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
+    },
+    {
       "bytes": 300235,
       "classification": "required-compact-accepted-evidence",
       "family": "retention-238",
@@ -677,22 +666,6 @@
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
-      "bytes": 212557,
-      "classification": "required-compact-accepted-evidence",
-      "family": "scf-direct-native-rtx5090",
-      "path": "benchmarks/results/scf-direct-native-rtx5090/integration.json",
-      "role": "scientific-record",
-      "sha256": "3785fd439d8422889297b8b4d0d6fd9ab347aa79ace1af4187e120904d0b24a1"
-    },
-    {
-      "bytes": 167238,
-      "classification": "required-compact-accepted-evidence",
-      "family": "scf-direct-native-rtx5090",
-      "path": "benchmarks/results/scf-direct-native-rtx5090/validation.json",
-      "role": "decision-or-audit-record",
-      "sha256": "af85685a1e73345ce5baa046faf84a86f1be88c473eb07cbb4d6b9b4d2fcdffd"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

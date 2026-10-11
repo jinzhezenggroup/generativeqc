@@ -213,6 +213,8 @@ PREFIX = r"""
 #include <tuple>
 #include <vector>
 #include "scf/cuda/direct_eri_symmetry.cuh"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
+using namespace generativeqc::scf::cuda_execution;
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/generated_shell_task.hpp"
 using cudaError_t = int;
@@ -306,6 +308,7 @@ struct GeneratedExchangePlan {
   double* direct_spin=nullptr;
   int bounded_block_domain=0;
   int force_resident_bra=41;
+  DirectSpdForceSchedule spd_force_schedule{DirectSpdForceSchedule::Incumbent};
 };
 // PRODUCTION_DENSITY_COEFFICIENT
 int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const double* alpha,const double*) {
