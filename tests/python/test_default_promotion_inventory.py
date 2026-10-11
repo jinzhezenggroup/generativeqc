@@ -184,6 +184,49 @@ def test_native_ks_final_validation_default_is_audited(
 
 
 @pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/dft/cuda_spd_force_policy.hpp", "aos >= 384", "aos >= 17"),
+        ("src/dft/cuda_spd_force_policy.hpp", "spins == 1", "spins <= 2"),
+        (
+            "src/scf/cuda/direct_spd_force_schedule.hpp",
+            "if (selector.empty()) return DirectSpdForceSchedule::Automatic;",
+            "if (selector.empty()) return DirectSpdForceSchedule::SpatialReuse;",
+        ),
+        (
+            "src/scf/cuda/direct_spd_force_schedule.hpp",
+            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse",
+            "return true ? DirectSpdForceSchedule::SpatialReuse",
+        ),
+        (
+            "src/methods/dft_method.cpp",
+            "!execution_plan_.d4_correction",
+            "true",
+        ),
+        (
+            "src/methods/dft_method.cpp",
+            "options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "options_.precision_mode == GENERATIVEQC_PRECISION_AUTO",
+        ),
+    ],
+)
+def test_spatial_force_default_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Widening automatic method admission requires a new scoped decision."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Spatial force default" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
     "before,after",
     [
         (

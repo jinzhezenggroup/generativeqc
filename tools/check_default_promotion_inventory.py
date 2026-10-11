@@ -278,6 +278,47 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_spatial_force_default(root: Path) -> dict[str, str]:
+    """Audit method-owned scope without conflating explicit cache requests with auto."""
+    relative = Path("src/dft/cuda_spd_force_policy.hpp")
+    policy = _read(root / relative)
+    schedule = re.sub(
+        r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
+    )
+    if not re.search(
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        policy,
+    ) or any(
+        fragment not in schedule
+        for fragment in (
+            "if (selector.empty()) return DirectSpdForceSchedule::Automatic;",
+            'selector == "1" || selector == "spatial-reuse"',
+            "return DirectSpdForceSchedule::Incumbent;",
+            "if (captured == DirectSpdForceSchedule::Automatic)",
+            "return qualified_default ? DirectSpdForceSchedule::SpatialReuse : DirectSpdForceSchedule::Incumbent;",
+        )
+    ):
+        raise ValueError("Spatial force default scope or opt-out drifted")
+    owner = re.sub(r"\s+", " ", _read(root / "src/methods/dft_method.cpp"))
+    if any(
+        fragment not in owner
+        for fragment in (
+            "dft::pbe0_rks_final_validation_composition(",
+            "spec.coulomb.approximation == scf::FockApproximation::Exact",
+            "spec.exchange.approximation == scf::FockApproximation::Exact",
+            "spec.coulomb.op == scf::FockOperator::FullRange",
+            "spec.exchange.op == scf::FockOperator::FullRange",
+            "!execution_plan_.range_exchange && !range_strategy_",
+            "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
+            "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
+            "system_.ecp_terms.empty()",
+            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+        )
+    ):
+        raise ValueError("Spatial force default method authentication drifted")
+    return {"dft-policy:spatial-spd-force-auto": relative.as_posix()}
+
+
 def _discover_rys_task_default(root: Path) -> dict[str, str]:
     """Guard shared capability defaults and exact-tuned profile overrides."""
     preference_relative = Path(
@@ -584,6 +625,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_ks_final_validation_default(root),
+        _discover_spatial_force_default(root),
         _discover_md_j_default(root),
         _discover_rys_task_default(root),
         _discover_direct_k_work_default(root),

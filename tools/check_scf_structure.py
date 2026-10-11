@@ -306,6 +306,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/direct_block_schedule.hpp",
     "scf/cuda/direct_jk.",
     "scf/cuda/direct_jk_plan.",
@@ -357,6 +358,7 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
 )
 CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
     "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
@@ -448,6 +450,14 @@ CUDA_MODULES["cuda_direct_order_seven_pages"] = ("direct_order_seven_pages.cuh",
 CUDA_ALLOWED["cuda_direct_order_seven_pages"] = ()
 CUDA_MODULES["cuda_direct_force_class_pages"] = ("direct_force_class_pages.cuh",)
 CUDA_ALLOWED["cuda_direct_force_class_pages"] = ()
+CUDA_MODULES["cuda_direct_spd_force_schedule"] = ("direct_spd_force_schedule.hpp",)
+CUDA_ALLOWED["cuda_direct_spd_force_schedule"] = ()
+CUDA_MODULES["cuda_direct_bounded_queue_page"] = ("direct_bounded_queue_page.cuh",)
+CUDA_ALLOWED["cuda_direct_bounded_queue_page"] = (
+    "scf/cuda/direct_queue_index.cuh",
+    "scf/direct_block_domain.hpp",
+    "scf/direct_task_layout.hpp",
+)
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -513,7 +523,7 @@ CUDA_ALLOWED["cuda_direct_consumers"] = (
         "scf/cuda/" + Path(name).stem + ".hpp"
         for name in CUDA_MODULES["cuda_direct_consumers"]
     )
-    + ("scf/cuda_weighted_eri.hpp",)
+    + ("scf/cuda_weighted_eri.hpp", "scf/cuda/direct_bounded_queue_page.cuh")
 )
 CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_cached_tensor_kernels.hpp",
@@ -531,6 +541,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
 )
 CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
     "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/direct_force_sources.hpp",
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",

@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "scf/cuda/direct_force_schedule.hpp"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
 
@@ -188,7 +189,8 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
     detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true,
-    const GeneratedShellPairStream* force_topology = nullptr);
+    const GeneratedShellPairStream* force_topology = nullptr,
+    DirectSpdForceSchedule spd_schedule = DirectSpdForceSchedule::Incumbent);
 
 /** Qualification-only angular partition behind the provider launch boundary.
  * Full publishes separate J/K channels; Long publishes one K channel. Short
