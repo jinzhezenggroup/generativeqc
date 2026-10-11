@@ -2152,6 +2152,10 @@ class PreparedStationaryCudaExecution:
         resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
     ) -> None:
+        if self._lease.closed:
+            raise RuntimeError("prepared stationary CUDA execution is closed")
+        if self._lease.running:
+            raise RuntimeError("prepared stationary CUDA execution is running")
         if not integral_derivatives and (
             aot_directory is not None
             or ecp
@@ -2402,12 +2406,12 @@ class PreparedStationaryCudaExecution:
 
     def close(self) -> None:
         with self._lock:
+            self._lease.close()
             self._resident_ao_maps = None
             self._resident_ao_map_key = None
             if self._stack is not None:
                 self._stack.close()
                 self._stack = None
-            self._lease.invalidate()
 
     def __enter__(self) -> typing.Any:
         return self
@@ -3203,6 +3207,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         artifact = prepared.stationary_artifact
         grid_artifact = prepared.grid_artifact
         artifacts = list(prepared.artifacts)
+        prepared._lease.begin(
+            prepared._lease.contract.request,
+            max_host_bytes=max_host_bytes,
+            max_device_bytes=max_device_bytes,
+        )
     tensor_work = {
         "executions": 0,
         "h2d_numeric_bytes": 0,
@@ -4076,9 +4085,13 @@ def complete_rks_cuda_gradient_diagnostic(
     if not isinstance(prepared, PreparedStationaryCudaExecution):
         raise TypeError("prepared CUDA execution has the wrong owner type")
     with prepared._lock:
+        if prepared._lease.closed:
+            raise RuntimeError("prepared stationary CUDA execution is closed")
+        if prepared._lease.running:
+            raise RuntimeError("prepared stationary CUDA execution is running")
         try:
             result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
-        except Exception:
+        except BaseException:
             prepared._lease.mark_failure()
             raise
         prepared._lease.mark_success()
