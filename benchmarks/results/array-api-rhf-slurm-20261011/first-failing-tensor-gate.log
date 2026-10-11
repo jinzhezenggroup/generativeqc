@@ -18,7 +18,7 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7760008a2e70>
         dtype: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from generativeqc_compiler.tensor import autodiff, interpreter
-    
+
         assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
         assert os.environ.get("SLURMD_NODENAME") in {
             "n1",
@@ -30,10 +30,10 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7760008a2e70>
             "node4",
             "node5",
         }
-    
+
         def forbidden(*args: object, **kwargs: object) -> None:
             raise AssertionError("native CUDA delegated to reference execution/AD")
-    
+
         monkeypatch.setattr(interpreter, "execute", forbidden)
         monkeypatch.setattr(autodiff, "jvp", forbidden)
         monkeypatch.setattr(autodiff, "vjp", forbidden)
@@ -50,8 +50,8 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7760008a2e70>
 >           value, gradient = transformed(values)
                               ^^^^^^^^^^^^^^^^^^^
 
-tests/python/test_array_api_native_cuda.py:80: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/python/test_array_api_native_cuda.py:80:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 python/generativeqc/experimental/_array_api_autodiff.py:155: in __call__
     outputs = self.function._execution.execute(program, feeds)
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -61,7 +61,7 @@ python/generativeqc/experimental/_array_api_execution.py:122: in execute
 python/generativeqc/experimental/_array_api_execution.py:92: in _build
     plan = plan_cuda(program, target, max_bytes=self.options["max_bytes"])
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 program = Program(outputs=mappingproxy({'bar_values': Node(op='add', inputs=(Node(op='multiply', inputs=(Node(op='multiply', inp...ion":1,"public_array_transform":"primal-and-derivative","schema":"generativeqc.tensor.ad_program","schema_version":3}')
 target = CudaTargetInfo(architecture='sm_120', compute_capability_major=12, compute_capability_minor=0, warp_size=32, maximum_t...cked_registers=224, tuning_maximum_stack_bytes=128, tuning_maximum_shared_bytes=49152, packed_register_caps=(192, 208))
@@ -78,13 +78,13 @@ target = CudaTargetInfo(architecture='sm_120', compute_capability_major=12, comp
         reassociate_contractions: bool = True,
     ) -> TensorPlan:
         """Plan all allocations before preparation; shrink packing tiles to fit.
-    
+
         Outputs are indivisible resident tensors. An infeasible minimum fails on
         the CPU, before compiling or touching a device. User data is never needed
         for shape/schedule selection. After compiler-owned strict-degree
         preprocessing, the execution schedule shares the resulting SSA nodes and
         never uses an external chemistry program.
-    
+
         Shared production preparation is enabled by default before CUDA
         storage/layout planning. It runs exact optimizer passes and rewrites
         contractions only when the compiler proves a
