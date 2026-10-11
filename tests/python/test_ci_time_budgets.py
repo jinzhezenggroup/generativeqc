@@ -98,6 +98,11 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
+    # The large Bash selector is sourced to keep the CI step below 21K.
+    # Combine both source files for the policy assertions below.
+    section += (
+        path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
+    ).read_text(encoding="utf-8")
     assert (
         "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
         in section
@@ -106,6 +111,7 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     assert "python-nightly:" not in section
     assert "env: &python_ci_env" not in section
     assert "steps: &python_ci_steps" not in section
+    assert "source .github/scripts/ci_select_python_shard.sh" in section
     assert "test_targets+=(tests/python/test_wb97mv_complete.py)" in section
     assert 'test_targets+=("${nightly_hessian_paths[@]}")' in section
     assert "runtime-heavy)" in section
@@ -229,6 +235,9 @@ def test_routine_python_ci_defers_qualification_scale_megatests() -> None:
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
+    section += (
+        path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
+    ).read_text(encoding="utf-8")
     for nodeid in (
         "tests/python/test_ccsd_t_complete_gradient.py::test_complete_ccsdt_gradient_matches_pinned_pyscf[nh3]",
         "tests/python/test_ecp_spd_cartesian_cpu.py::test_spd_force_analytic_and_reconverged_fd[pbe-rks]",
