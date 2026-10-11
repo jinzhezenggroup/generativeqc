@@ -1,4 +1,4 @@
-"""Emit portable native PBE/PBE0 weights from the shared stationary TensorIR AD."""
+"""Emit portable native GGA/Hybrid integral weights from stationary TensorIR AD."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ def source() -> str:
     for method, spin in (
         ("PBE", "unpolarized"),
         ("PBE0", "unpolarized"),
+        ("B3LYP", "unpolarized"),
         ("PBE", "polarized"),
         ("PBE0", "polarized"),
     ):

@@ -53,31 +53,34 @@ void one_atom_capacity() {
   require(
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "one-atom stationary capacity fixture is invalid");
-  for (const bool pbe0 : {false, true}) {
+  using generativeqc::scf::CpuStationaryGga;
+  for (const auto method :
+       {CpuStationaryGga::Pbe, CpuStationaryGga::Pbe0, CpuStationaryGga::B3lyp}) {
+    const bool hybrid = method != CpuStationaryGga::Pbe;
     auto spec = generativeqc::scf::make_hf_fock_spec(generativeqc::scf::FockSpin::Restricted);
     spec.derivative_order = 0;
-    spec.exchange.present = pbe0;
-    spec.exchange.coefficient = -0.125;
+    spec.exchange.present = hybrid;
+    spec.exchange.coefficient = method == CpuStationaryGga::B3lyp ? -0.1 : -0.125;
     const auto strategy =
         generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu);
     const generativeqc::scf::PreparedFockPlan target(system, nullptr, strategy);
     const std::array<double, 1> density{1.8}, weighted{-0.4};
     const auto result = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, density, weighted, pbe0, 1 << 20);
+        target, density, weighted, method, 1 << 20);
     require(result.sources.size() == 12 && result.shell_quartets == 1 &&
                 result.primitive_evaluations == 1,
             "one-atom source fabricated molecular storage or repeated J/K primitive work");
     require(std::all_of(result.sources.begin(), result.sources.end(),
                         [](double value) { return std::abs(value) < 1e-10; }),
             "one-atom source violates translation invariance");
-    require(result.numeric_capacity >= (21 + (pbe0 ? 26 : 13)) * sizeof(double),
+    require(result.numeric_capacity >= (21 + (hybrid ? 26 : 13)) * sizeof(double),
             "one-atom capacity omitted owned matrix/source/channel buffers");
     const auto exact = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, density, weighted, pbe0, result.numeric_capacity);
+        target, density, weighted, method, result.numeric_capacity);
     require(exact.sources == result.sources, "exact capacity changed the stationary source");
     bool rejected = false;
     try {
-      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, density, weighted, pbe0,
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, density, weighted, method,
                                                                 result.numeric_capacity - 1);
     } catch (const std::bad_alloc&) {
       rejected = true;
@@ -102,7 +105,9 @@ void unrestricted_sources() {
   const std::vector<double> alpha{0.7, 0.1, 0.1, 0.2}, beta{0.3, -0.03, -0.03, 0.25};
   const std::vector<double> weighted_alpha{-0.4, 0.02, 0.02, -0.07},
       weighted_beta{-0.1, 0.04, 0.04, 0.12};
+  using generativeqc::scf::CpuStationaryGga;
   for (const bool pbe0 : {false, true}) {
+    const auto method = pbe0 ? CpuStationaryGga::Pbe0 : CpuStationaryGga::Pbe;
     auto spec = generativeqc::scf::make_hf_fock_spec(generativeqc::scf::FockSpin::Unrestricted);
     spec.derivative_order = 0;
     spec.exchange.present = pbe0;
@@ -111,7 +116,7 @@ void unrestricted_sources() {
         system, nullptr,
         generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu));
     const auto actual = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, alpha, weighted_alpha, pbe0, 1 << 20, beta, weighted_beta);
+        target, alpha, weighted_alpha, method, 1 << 20, beta, weighted_beta);
     spec.derivative_order = 1;
     const generativeqc::scf::PreparedFockPlan reference(
         system, nullptr,
@@ -134,20 +139,20 @@ void unrestricted_sources() {
     require(actual.shell_quartets == 16 && actual.primitive_evaluations == 16,
             "UKS duplicated J/K or spin primitive recurrence work");
     const auto exact = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, alpha, weighted_alpha, pbe0, actual.numeric_capacity, beta, weighted_beta);
+        target, alpha, weighted_alpha, method, actual.numeric_capacity, beta, weighted_beta);
     require(exact.sources == actual.sources, "UKS exact capacity changed sources");
     bool rejected = false;
     try {
       (void)generativeqc::scf::cpu_stationary_integral_gradient(
-          target, alpha, weighted_alpha, pbe0, actual.numeric_capacity - 1, beta, weighted_beta);
+          target, alpha, weighted_alpha, method, actual.numeric_capacity - 1, beta, weighted_beta);
     } catch (const std::bad_alloc&) {
       rejected = true;
     }
     require(rejected, "UKS below-limit capacity was admitted");
     rejected = false;
     try {
-      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha, pbe0,
-                                                                1 << 20);
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha,
+                                                                method, 1 << 20);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }
@@ -156,12 +161,28 @@ void unrestricted_sources() {
     nonfinite[0] = std::numeric_limits<double>::quiet_NaN();
     rejected = false;
     try {
-      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha, pbe0,
-                                                                1 << 20, beta, nonfinite);
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha,
+                                                                method, 1 << 20, beta, nonfinite);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }
     require(rejected, "UKS nonfinite beta W reached source execution");
+  }
+  for (const double coefficient : {-0.1, -0.2}) {
+    auto spec = generativeqc::scf::make_hf_fock_spec(generativeqc::scf::FockSpin::Unrestricted);
+    spec.derivative_order = 0;
+    spec.exchange.coefficient = coefficient;
+    const generativeqc::scf::PreparedFockPlan target(
+        system, nullptr,
+        generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu));
+    bool rejected = false;
+    try {
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(
+          target, alpha, weighted_alpha, CpuStationaryGga::B3lyp, 1 << 20, beta, weighted_beta);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "B3LYP UKS reached an unqualified native Direct force source");
   }
 }
 }  // namespace
