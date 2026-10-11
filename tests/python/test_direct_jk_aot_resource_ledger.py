@@ -693,8 +693,48 @@ class TestProductionContextBinding:
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(
             f"// production configuration\nGENERATIVEQC_AOT_SHARDS:{cache_type}=8\n"
+            f"GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:{cache_type}=1\n"
         )
         validator.validate_production_shard_count(cache)
+
+    @pytest.mark.parametrize(
+        "split_entry",
+        [
+            "",
+            "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=\n",
+            "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=2\n",
+            "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=8\n",
+            "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=0\n",
+            "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=1;8\n",
+            (
+                "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=1\n"
+                "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS:STRING=1\n"
+            ),
+        ],
+    )
+    def test_split_override_fails_before_generation_or_compilation(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, split_entry: str
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text("GENERATIVEQC_AOT_SHARDS:STRING=8\n" + split_entry)
+
+        def unexpected_generation(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("split mismatch must fail before generation/compilation")
+
+        monkeypatch.setattr(
+            validator, "generate_production_shards", unexpected_generation
+        )
+        with pytest.raises(
+            ValueError, match="GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS=1"
+        ):
+            validator.run_measurement(
+                nvcc=Path("/fake/nvcc"),
+                cache=tmp_path / "objects",
+                output=tmp_path / "report",
+                generated_directory=tmp_path / "generated",
+                cmake_cache=cache,
+                timeout=23,
+            )
 
     @pytest.mark.parametrize(
         "contents",

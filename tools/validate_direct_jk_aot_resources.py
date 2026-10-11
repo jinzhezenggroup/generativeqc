@@ -115,18 +115,21 @@ def generator_abi() -> int:
 
 
 def validate_production_shard_count(cmake_cache: Path) -> None:
-    """Require the configured production build to use the qualified partition."""
-    counts = re.findall(
-        r"^GENERATIVEQC_AOT_SHARDS:[^=\r\n]+=([^\r\n]*)$",
-        cmake_cache.read_text(encoding="utf-8"),
-        re.MULTILINE,
-    )
-    if counts != [str(QUALIFIED_SHARDS)]:
-        raise ValueError(
-            "production CMake cache must contain exactly one "
-            f"GENERATIVEQC_AOT_SHARDS={QUALIFIED_SHARDS}; found {counts!r}; "
-            "requalify the production shard partition deliberately"
+    """Require the qualified partition and optimizer-sensitive split setting."""
+    configured = cmake_cache.read_text(encoding="utf-8")
+    for field, expected in (
+        ("GENERATIVEQC_AOT_SHARDS", QUALIFIED_SHARDS),
+        ("GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS", QUALIFIED_SPLIT_COMPILE_THREADS),
+    ):
+        values = re.findall(
+            rf"^{field}:[^=\r\n]+=([^\r\n]*)$", configured, re.MULTILINE
         )
+        if values != [str(expected)]:
+            raise ValueError(
+                "production CMake cache must contain exactly one "
+                f"{field}={expected}; found {values!r}; "
+                "requalify the production compile context deliberately"
+            )
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -579,7 +582,7 @@ def run_measurement(
     the qualified identity deliberately pins the preprocessed line markers of
     that exact path.
     """
-    # Read CMake's configured value, including -D/preset overrides, before
+    # Read CMake's configured values, including -D/preset overrides, before
     # generation or compilation. A constant alone cannot guard production drift.
     validate_production_shard_count(cmake_cache)
     generated = generated_directory.resolve()
@@ -628,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
         "--cmake-cache",
         type=Path,
         default=ROOT / "build" / "cuda-release-sm120" / "CMakeCache.txt",
-        help="configured production CMakeCache.txt whose shard count must match",
+        help="production CMakeCache.txt whose shard count and split setting must match",
     )
     parser.add_argument(
         "--generated-dir",
