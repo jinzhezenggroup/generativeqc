@@ -105,6 +105,13 @@ def test_force_q32_historical_production_source_is_reconstructable(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw[f"baseline-source/{name}"]["data"].encode())
     patch = gzip.decompress((BUNDLE / "production-source.patch.gz").read_bytes())
+    # A checkout-local TMPDIR must not let git discover the enclosing worktree
+    # and silently skip these reconstructed paths as outside its current prefix.
+    subprocess.run(
+        ["git", "init", "--quiet", str(tmp_path)],
+        check=True,
+        capture_output=True,
+    )
     subprocess.run(
         ["git", "apply", "-"],
         cwd=tmp_path,
