@@ -6,12 +6,15 @@ Importing source generation must not load NumPy-backed molecular grid execution.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from generativeqc_compiler.tensor.cuda_inline import (
     InlineCudaOutput,
     lower_inline_cuda_output,
 )
 
-from .stationary_gradient import StationaryGradientPlan
+if TYPE_CHECKING:
+    from .stationary_gradient import StationaryGradientPlan
 
 
 def _weight_expression(
@@ -43,5 +46,3 @@ def _weight_expression(
         default=0,
     )
     return lowered, arity
-
-
