@@ -155,5 +155,15 @@ def _verify_pairs(
             )
         assert all(count == force_counts[0] for count in force_counts)
         if point_family:
-            ao_work = [row["diagnostics"]["native_scf_ao_work"] for row in samples]
+            # Each arm independently discovers its AO map during preparation.
+            # Retain that measured duration, but compare only semantic work;
+            # all other (including future) fields must still agree exactly.
+            ao_work = [
+                {
+                    name: value
+                    for name, value in row["diagnostics"]["native_scf_ao_work"].items()
+                    if name != "discovery_seconds"
+                }
+                for row in samples
+            ]
             assert all(work == ao_work[0] for work in ao_work)

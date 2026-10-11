@@ -445,3 +445,28 @@ def test_point_family_improvement_requires_valid_complete_evidence() -> None:
     record["samples"][0]["diagnostics"]["iterations"] = 2
     with pytest.raises(AssertionError):
         verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+@pytest.mark.parametrize("candidate_seconds", [9.0, 11.0])
+def test_point_family_work_ignores_independent_discovery_timing(
+    candidate_seconds: float,
+) -> None:
+    record, reference = synthetic_point_family_evidence(candidate_seconds)
+    for row in record["samples"]:
+        if row["selection"] == "candidate":
+            row["diagnostics"]["native_scf_ao_work"]["discovery_seconds"] += 0.1
+    verify_point_family_pairs(
+        record, reference, require_improvement=candidate_seconds < 10.0
+    )
+
+
+@pytest.mark.parametrize(
+    "counter", ["discovery_ao_jet_values", "point_ao_visits", "future_work_counter"]
+)
+def test_point_family_work_still_compares_every_nontiming_field(counter: str) -> None:
+    record, reference = synthetic_point_family_evidence(9.0)
+    sample = next(row for row in record["samples"] if row["selection"] == "candidate")
+    work = sample["diagnostics"]["native_scf_ao_work"]
+    work[counter] = work.get(counter, 0) + 1
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)
