@@ -790,6 +790,11 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
        static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
   runtime::cuda_trace::trace_counter("prepared_rys_class_mask",
                                      full_range ? p.selection.rys_fock_mask : 0);
+  runtime::cuda_trace::trace_counter("transform_public_dimension", p.shared->batch.nbf);
+  runtime::cuda_trace::trace_counter("transform_direct_dimension", p.shared->batch.direct_nbf);
+  runtime::cuda_trace::trace_counter("transform_span_elements", p.shared->projection_span_elements);
+  runtime::cuda_trace::trace_counter("transform_dense_elements",
+                                     p.shared->projection_dense_elements);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta, matrices);
   return error == cudaSuccess
              ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange, beta_exchange,
@@ -1132,6 +1137,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricte
       {static_cast<std::size_t>(p.shared->batch.batch_size),
        static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
   runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.shared->rys_fock_mask);
+  runtime::cuda_trace::trace_counter("transform_public_dimension", p.shared->batch.nbf);
+  runtime::cuda_trace::trace_counter("transform_direct_dimension", p.shared->batch.direct_nbf);
+  runtime::cuda_trace::trace_counter("transform_span_elements", p.shared->projection_span_elements);
+  runtime::cuda_trace::trace_counter("transform_dense_elements",
+                                     p.shared->projection_dense_elements);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta, matrices);
   return error == cudaSuccess
              ? enqueue_generated_coulomb_prepared(p, unrestricted, alpha, beta, coulomb, matrices)

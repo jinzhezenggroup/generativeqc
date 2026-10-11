@@ -83,6 +83,8 @@ Keep failed attempts as diagnostics, not positive adoption evidence.
 Semilocal KS can use its independent MD-J value schedule, which does not submit
 the four public/direct basis stages. The explicit diagnostic `--disable-md-j`
 ablation exercises the shared Direct value owner without changing its default.
+The shared J/K source reports its actual frozen transform dimensions and span
+census for both J and K submissions, including the exchange-owner-backed J path.
 Record provider controls in timing identities and retain default-schedule and
 MD-disabled evidence separately; never compare their costs as a provider-only
 speedup. Error receipts retain the same frozen provenance as successful rows.
