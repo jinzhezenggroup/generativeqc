@@ -262,7 +262,10 @@ def test_workflow_keeps_diagnostics_in_failure_artifacts() -> None:
     preparation = source.split("      - name: Prepare bounded native diagnostics\n", 1)[
         1
     ].split("      - name:", 1)[0]
-    assert "        if: matrix.shard == 'core-b'\n" in preparation
+    assert (
+        "        if: matrix.shard == 'core-a' || matrix.shard == 'core-b'\n"
+        in preparation
+    )
     assert "ccache --version" in preparation
     assert (
         ".venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q"

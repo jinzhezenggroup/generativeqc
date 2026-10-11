@@ -981,7 +981,7 @@ jobs:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
       - name: Prepare bounded native diagnostics
-        if: matrix.shard == 'core-b'
+        if: matrix.shard == 'core-a' || matrix.shard == 'core-b'
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
@@ -1224,20 +1224,14 @@ jobs:
             tests/python/test_one_electron_cpu_codegen.py
             tests/python/test_cc_solver.py
             tests/python/test_cc_lambda_solver.py
-            # These compiler/code-generation audits dominated core-a on the
-            # 2026-10-04 routine PR run (~347s derivative AOT audit, ~199s
-            # deterministic ERI CPU emission, plus native CC codegen). Keep
-            # them off the broad core parity split and co-locate them with the
-            # existing compiler-heavy shard.
+            # Measured compiler tails (~347s AOT / ~199s ERI plus native CC)
+            # stay with compiler-heavy rather than the broad core split.
             tests/python/test_derivative_aot_audit.py
             tests/python/test_eri_cpu_codegen.py
             tests/python/test_rccsdt_native_codegen_dependencies.py
             tests/python/test_df_cc_native_codegen.py
           )
-          # PR #1934 / run 37238512811 still left the broad core shards with
-          # a large measured long tail. Keep these newly measured files out of
-          # worksteal, but count them in the existing core parity before
-          # excluding them so unrelated core files do not swap owners.
+          # Keep measured tails out of worksteal without changing core parity.
           rebalance_paths=(
             tests/python/test_df_cc_native_solver.py
             tests/python/test_df_lambda_matrix.py
@@ -1262,6 +1256,10 @@ jobs:
             tests/python/test_stationary_aot_generation.py
             tests/python/test_cc_shared_iteration_driver.py
             tests/python/test_rccsd_codegen_no_numpy.py
+            # Run 38114774936 hit 30m; previous JUnit measured 1212 worker-s.
+            # Preserve all cases and core parity, with whole-file scheduling.
+            tests/python/test_dft_mp_v1_capacity.py
+            tests/python/test_df_lambda_frontier.py
           )
           case "${{ matrix.shard }}" in
             core-a|core-b)
@@ -1396,6 +1394,8 @@ jobs:
                 tests/python/test_stationary_aot_generation.py
                 tests/python/test_cc_shared_iteration_driver.py
                 tests/python/test_rccsd_codegen_no_numpy.py
+                tests/python/test_dft_mp_v1_capacity.py
+                tests/python/test_df_lambda_frontier.py
               )
               ;;
             *)
@@ -1404,7 +1404,7 @@ jobs:
               ;;
           esac
           diagnostic_args=()
-          if [[ "${{ matrix.shard }}" == "core-b" ]]; then
+          if [[ "${{ matrix.shard }}" == "core-a" || "${{ matrix.shard }}" == "core-b" ]]; then
             diagnostic_args+=(
               -p tools.pytest_native_diagnostics
               --native-diagnostics-dir="$PWD/.artifacts/native-diagnostics"
