@@ -180,7 +180,7 @@ class RuntimeTaskDomain:
             or any(type(value) is not int for value in coordinate)
             or any(
                 not 0 <= value < extent
-                for value, extent in zip(coordinate, self.extents)
+                for value, extent in zip(coordinate, self.extents, strict=True)
             )
         ):
             return False

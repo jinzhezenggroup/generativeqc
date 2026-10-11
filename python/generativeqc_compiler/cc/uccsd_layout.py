@@ -100,7 +100,7 @@ class UCCSDBlock:
         }[self.name]
         axes = "ia" if self.name.startswith("t1") else "ijab"
         return TensorSpec(
-            tuple(Index(axis, spaces[space]) for axis, space in zip(axes, domains)),
+            tuple(Index(axis, spaces[space]) for axis, space in zip(axes, domains, strict=True)),
             symmetries=(Symmetry((1, 0, 2, 3), -1), Symmetry((0, 1, 3, 2), -1))
             if self.same_spin
             else (),
@@ -142,12 +142,12 @@ class UCCSDBlock:
         indices = tuple(indices)
         shape = self.spec.shape
         if len(indices) != len(shape) or any(
-            type(i) is not int or not 0 <= i < n for i, n in zip(indices, shape)
+            type(i) is not int or not 0 <= i < n for i, n in zip(indices, shape, strict=True)
         ):
             raise ValueError("UCCSD coordinate out of range")
         if not self.same_spin:
             slot = 0
-            for i, n in zip(indices, shape):
+            for i, n in zip(indices, shape, strict=True):
                 slot = slot * n + i
             return slot, 1
         i, j, a, b = indices
