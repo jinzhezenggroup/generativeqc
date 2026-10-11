@@ -7,6 +7,8 @@
 
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
+#include "generated_ecp_ao.cuh"
+#include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
 #include "runtime/residency_observer.hpp"
 #include "runtime/resource_ledger.hpp"
@@ -189,6 +191,45 @@ void generativeqc_resource_journal_destroy_v1(void* handle) {
  * bounds. The current object-capacity allowance is validated on LP64 hosts.
  */
 int generativeqc_cpu_resource_inventory_version_v1() { return sizeof(void*) == 8 ? 1 : 0; }
+
+/** Shape-only two-grid ECP bound from the same generated policy as execution.
+ * Output is transactional; neither grids, AO matrices nor a CUDA context are
+ * constructed. CUDA batching follows the generated radial scheduling gate. */
+int generativeqc_resource_ecp_workspace_v1(std::size_t nao, std::size_t cartesian_nao,
+                                           std::size_t atoms, std::size_t primitives,
+                                           std::size_t terms, int cuda, std::uint64_t* output) {
+  if (!output || (cuda != 0 && cuda != 1)) return 1;
+  if (!terms) {
+    *output = 0;
+    return 0;
+  }
+  if (!nao || !cartesian_nao || !atoms) return 1;
+  try {
+    using generativeqc::runtime::size_add;
+    using generativeqc::runtime::size_mul;
+    const auto polar = generativeqc::generated::ecp_refined_polar_points;
+    const auto radial = generativeqc::generated::ecp_refined_radial_points;
+    const auto points = size_mul(2, size_mul(polar, polar));
+    const auto ordinal = nao > std::numeric_limits<unsigned>::max()
+                             ? std::numeric_limits<unsigned>::max()
+                             : static_cast<unsigned>(nao);
+    const auto tile = cuda ? generativeqc::generated::ecp_cuda_radial_tile(ordinal, polar) : 1;
+    auto bytes = size_mul(
+        32, size_mul(size_mul(cartesian_nao, cartesian_nao), size_add(1, size_mul(3, atoms))));
+    bytes = size_add(bytes,
+                     size_mul(32, size_mul(size_mul(tile, cartesian_nao), size_add(points, 16))));
+    auto metadata = size_add(points, radial);
+    metadata = size_add(metadata, cartesian_nao);
+    metadata = size_add(metadata, primitives);
+    metadata = size_add(metadata, terms);
+    bytes = size_add(bytes, size_add(size_mul(256, metadata), 4096));
+    if (bytes > static_cast<std::uint64_t>(INT64_MAX)) return 1;
+    *output = bytes;
+    return 0;
+  } catch (const std::overflow_error&) {
+    return 1;
+  }
+}
 
 /** KS v1 host bounds use LP64 metadata and a 128-byte iteration-record
  * allowance. Keep this separate from HF's derivative-inclusive inventory. */
