@@ -872,7 +872,6 @@ class NativeKsSnapshot:
         from ._dft_gradient import (
             StationaryKsIdentity,
             native_ao_geometry_identity,
-            scf_regularization_identity,
             xc_geometry_topology_identity,
         )
 
@@ -1205,7 +1204,7 @@ class NativeKsSnapshot:
             functional_identity=spec.identity,
             # The derivative bridge consumes this exact SCF point model;
             # interior-v1 remains a separate diagnostic contract.
-            regularization_identity=scf_regularization_identity(method),
+            regularization_identity=canonical_hash({"scf_domain": options.scf_domain}),
             provider_identity=canonical_hash(provider_payload),
             owner=owner,
             solve_epoch=epoch,

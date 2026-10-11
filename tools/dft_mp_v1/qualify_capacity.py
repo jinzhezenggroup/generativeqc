@@ -427,7 +427,7 @@ NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "5a00bf2f998228e0a6b9bf7069fa909a63b5580a35ba4bdfe438fe04e4a4a098"
+    "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
 )
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (

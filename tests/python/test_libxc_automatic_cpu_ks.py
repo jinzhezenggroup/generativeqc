@@ -6,6 +6,7 @@ not interpreted as zero exchange work or as complete precision provenance.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from time import perf_counter
@@ -180,6 +181,8 @@ def test_automatic_cpu_complete_final_state_lifecycle(name: str, spins: int) -> 
             assert tuple(row.iteration for row in diagnostic.history) == tuple(
                 range(1, result.iterations + 1)
             )
+            # Restarted stages must expose unavailable baselines as null, never inf.
+            json.dumps(diagnostic.to_payload(), allow_nan=False)
             if previous is not None:
                 with pytest.raises(ValueError, match="stale"):
                     previous.check_current()

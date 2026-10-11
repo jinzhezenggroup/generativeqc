@@ -395,8 +395,15 @@ ScfResult run_uks_impl(
           diagnostic.components = evaluation.components;
           diagnostic.electrons = {evaluation.alpha_electrons, evaluation.beta_electrons};
           diagnostic.density_change = progress.state_rms;
+          // A restarted stage has no preceding within-stage energy. Match the
+          // existing RKS unavailable-baseline marker without changing arithmetic.
+          const bool unavailable_stage_baseline = progress.iteration == 1 && used_iterations > 0 &&
+                                                  std::isinf(progress.energy_change) &&
+                                                  progress.energy_change > 0.0;
+          const double history_energy_change =
+              unavailable_stage_baseline ? -1.0 : progress.energy_change;
           diagnostic.history.push_back({used_iterations + progress.iteration, evaluation.components,
-                                        progress.energy_change, progress.state_rms,
+                                        history_energy_change, progress.state_rms,
                                         progress.residual_rms, diagnostic.electrons,
                                         evaluation.stabilized});
         },
