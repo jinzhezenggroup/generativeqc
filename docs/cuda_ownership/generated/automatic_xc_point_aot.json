@@ -1,0 +1,10 @@
+{
+  "name": "automatic_xc_point_aot",
+  "outputs": [
+    "generated/libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp",
+    "generated/libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.cpp",
+    "generated/libxc_semilocal_cuda/generated_libxc_semilocal_cuda_*.cu"
+  ],
+  "owner": "python/generativeqc_compiler/xc/automatic_cuda.py",
+  "scope": "Default-off experimental automatic Libxc physical E/vxc providers, library-owned descriptor/dispatch registry and shared point traversal. Enabled builds emit the structural census; the disabled registry is inert. This inventory grants no public CUDA KS, force, response or optional-schedule admission."
+}

@@ -268,6 +268,8 @@ rebalance_paths=(
   tests/python/test_stationary_aot_generation.py
   tests/python/test_cc_shared_iteration_driver.py
   tests/python/test_rccsd_codegen_no_numpy.py
+  tests/python/test_dft_mp_v1_capacity.py
+  tests/python/test_df_lambda_frontier.py
   # Measured full Libxc force lifecycles took ~108 s each in run
   # 38113859405. Count this file in core parity before transferring
   # it, so no unrelated file changes owners as the long tail moves.
@@ -438,6 +440,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_stationary_aot_generation.py
       tests/python/test_cc_shared_iteration_driver.py
       tests/python/test_rccsd_codegen_no_numpy.py
+      tests/python/test_dft_mp_v1_capacity.py
+      tests/python/test_df_lambda_frontier.py
     )
     if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
       test_targets+=(tests/python/test_wb97mv_complete.py)
