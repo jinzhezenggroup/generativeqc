@@ -448,6 +448,8 @@ if(GENERATIVEQC_BUILD_CLI)
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_VERSION="${PROJECT_VERSION}")
+  target_compile_definitions(generativeqc_cli PRIVATE
+    GENERATIVEQC_MONOLITHIC_CLI=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>)
   target_compile_options(generativeqc_cli PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
   set_target_properties(generativeqc_cli PROPERTIES OUTPUT_NAME generativeqc)

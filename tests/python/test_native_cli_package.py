@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
+import shutil
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ from pathlib import Path
 from tools.package_native_cli import package_native_cli
 
 
+@unittest.skipUnless(sys.platform == "linux", "Native distribution targets Linux ELF")
 class NativeCliPackageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -25,12 +27,8 @@ class NativeCliPackageTests(unittest.TestCase):
         (self.source / "LICENSE").write_text("test license\n")
         (self.source / "THIRD_PARTY_NOTICES.md").write_text("test notices\n")
         (self.source / "LICENSES" / "dependency.txt").write_text("dependency license\n")
-        native = self.root / "native.c"
-        native.write_text("int main(void) { return 0; }\n")
-        subprocess.run(
-            ["cc", "-o", str(self.prefix / "bin" / "generativeqc"), str(native)],
-            check=True,
-        )
+        # Packaging needs real ELF bytes, not another uncached fixture compile.
+        shutil.copy2("/bin/true", self.prefix / "bin" / "generativeqc")
 
     def build(self, destination: str, release: bool = False) -> Path:
         return package_native_cli(

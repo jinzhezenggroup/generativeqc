@@ -1478,6 +1478,7 @@ jobs:
     name: Publish versioned native CLI to GitHub Releases
     needs: native-cli-artifact
     if: >-
+      github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v') &&
       needs.native-cli-artifact.result == 'success'
     runs-on: ubuntu-24.04
@@ -1512,6 +1513,15 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists; leaving it and its assets unchanged."
             exit 0
+          fi
+          # A tag may have moved during the build. --verify-tag checks only
+          # existence; require its current peeled commit to match these assets.
+          git fetch --no-tags origin "$GITHUB_REF"
+          current_tag_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          built_commit="$(git rev-parse "$GITHUB_SHA^{commit}")"
+          if [[ "$current_tag_commit" != "$built_commit" ]]; then
+            echo "::error::Release tag moved after this artifact was built"
+            exit 1
           fi
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \

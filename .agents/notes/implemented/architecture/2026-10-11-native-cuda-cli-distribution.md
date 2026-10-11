@@ -34,6 +34,13 @@ so simply combining the libraries would not preserve method dispatch. Fail
 packaging if any GenerativeQC-owned .so remains in the distribution installation.
 Preserve build provenance, license notices and deterministic archive checksums.
 
+Monolithic builds cannot interpose executable-defined API symbols with a tuned
+shared core. Their automatic profile discovery keeps the official core with an
+explicit diagnostic; explicit binary-profile requests and installs are refused.
+The shared SDK/wheel activation owner is unchanged. Manual CI dispatch produces
+Actions artifacts only. Release publishing requires a tag-push event and
+revalidates the current remote tag against the built commit.
+
 ## Rejected alternatives
 
 - Automatically publishing a release on each master push: version identity is

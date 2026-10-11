@@ -60,6 +60,9 @@ builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
   previously unpublished version to [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
   Ordinary `master` pushes do **not** create releases or tags. Existing
   releases and their assets are never automatically overwritten.
+  Manual CI dispatches build Actions artifacts only, even when run on a tag.
+  Publication rechecks that the current remote tag still identifies the built
+  commit; a moved tag fails instead of receiving mismatched artifacts.
 
 After extracting the archive:
 
@@ -81,6 +84,15 @@ independent `stationary_*` CUDA derivative `.so` modules serve the Python
 force-consumer route, which the native CLI does not invoke, so bundling those
 modules would not add native CLI force capabilities. Their Python package and
 shared-SDK distribution semantics are unchanged.
+
+The monolithic distribution cannot replace its linked core with a local binary
+profile through loader interposition. Automatic discovery of a cached binary
+profile retains the official core and reports the rejection in `profile diagnose`.
+An explicitly requested binary profile (`GENERATIVEQC_PROFILE=/path/to/bundle`)
+is refused with guidance to use the shared-core CLI or set
+`GENERATIVEQC_PROFILE=off`. Installing such a profile is also refused without
+changing the active cache. Shared-core SDK and wheel commands keep their
+existing profile activation behavior. DFT schedule-only diagnostics are unchanged.
 
 The current distributable specifically targets **sm_120 (Blackwell)**. It does
 not support every CUDA architecture (for example, Ada sm_89) without a separate
@@ -395,7 +407,8 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
   --time=00:02:00 generativeqc profile install profile.zip
 ```
 
-On Linux, CUDA `run` honors `GENERATIVEQC_PROFILE=off`, an explicit bundle
+For shared-core SDK and wheel commands on Linux, CUDA `run` honors
+`GENERATIVEQC_PROFILE=off`, an explicit bundle
 directory, or the compatible active index. Complete kernel libraries are
 selected through native re-execution/loader interposition, with no Python or
 compilation. Device visibility is preserved and the binary is revalidated on
