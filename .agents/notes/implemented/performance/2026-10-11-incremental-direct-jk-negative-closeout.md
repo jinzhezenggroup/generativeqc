@@ -26,69 +26,65 @@ matrices below.
 
 ## Evidence
 
-Two independent campaigns on one NVIDIA GeForce RTX 4090
-(UUID `GPU-0639f74d-c42b-3c2b-4a57-3795decc0888`, driver 570.124.06, CUDA 12.9
-toolchain, gcc 13.3, AOT portable_cuda sm_89, `-Xptxas
---disable-optimizer-constants` required by nvlink, sccache 0.16.0) in finite
-inspire allocation `issue-1598-dijk-20261011`. Every point is a fresh process
-running the audited `compare_gpu4pyscf_batch` comparator with an independent
-GPU4PySCF reference engine; per size the order is A-B-B-A (baseline /
-incremental / incremental / baseline), each with one cold execution plus three
-fixed-density warm energy+force replays, and one retry per failed point. All
-rebuild/finalization/audit cost is inside the measured endpoints.
+The historical capsule in
+`benchmarks/results/issue1598-incremental-direct-jk-20261011/` retains successful
+RHF nested-water endpoints on one RTX 4090 and unsuccessful final retry
+outcomes. Its README records the exact measured identities, timings and limits.
 
-Primary campaign, master `637466c624c4c4c4dd4eb7c511a2c88675744325`, library
-`2998014a18547b813149521c51193cd8913602b5d7e4551e326a4d5c91053a77`:
+The measured harness checkouts are `96570fd06243de418e2eec4efb570d5510506d03`
+(dirty, old) and `d83aa86585a2f72ed852872c533723648b2799c3` (clean, new).
+Previously reported `637466c…`/`143df078c…` master lineage is not a substitute
+for those measured identities. Native probe source-content fingerprints and
+library hashes are retained separately; the old dirty-source patch is absent.
+The capsule audits historical receipts, not exact source reconstruction.
 
-| RHF AOs | baseline cold / warm | incremental cold / warm | result |
-| --- | --- | --- | --- |
-| 96 | 2.34 / 0.23 s | 2.22 / 0.38 s | both rounds pass; no delta opportunity (1-iteration replays) |
-| 192 | converges | fails | incremental fails all 4 attempts ("SCF did not converge"); baseline converges |
-| 384 | 71.0 / 7.09 s | 100.5 / 13.77 s | passes; warm +94% slower, cold +42% slower |
-| 768 | converges | round 1 converges (30 it), round 2 fails 2/2 | run-to-run convergence instability; warm replay 52 s vs baseline 1-iteration solve |
+The primary RHF population is 96/192/384/768 AOs; the second is
+192/384/768 AOs. Both 384-AO rounds show cold and warm regressions in both
+campaigns (round 1: old +42% cold/+94% warm, new +41% cold/+103% warm).
+The old 96-AO cold endpoints are 3.1% and 5.8% faster, while their warm
+endpoints are about 67% slower. Therefore the data support no warm win or
+established cold-and-warm promotion domain, not a blanket absence of any
+endpoint improvement.
 
-Post-#2236/#2241 re-verification campaign, rebased master `143df078c…`
-(base `98263e06c…`), library `30734a0fc741da60389fb817b7429acd4a5164c840728308822fe215eae90a63`:
+Both 192-AO incremental points have final exit_code=1, attempt=2,
+retried=true in each campaign. Old 768-AO incremental round 1 succeeds
+(30 cold iterations); round 2 has the same failed-retry disposition. Both new
+768-AO incremental points also have failed-retry dispositions. Baseline points
+succeed. Failure exception logs and failed RHF comparator records were not
+retained. Earlier reports attributed the failures to nonconvergence, but the
+cause and individual first-attempt results cannot be re-established from this
+capsule, so this is evidence of unsuccessful retried points only.
 
-| RHF AOs | baseline cold / warm | incremental cold / warm | result |
-| --- | --- | --- | --- |
-| 192 | converges | fails | incremental fails all 4 attempts; baseline converges |
-| 384 | 71.1 / 6.83 s | 100.2 / 13.86 s | passes; warm +103% slower, cold +41% slower |
-| 768 | converges | fails 4/4 attempts | reproducible convergence failure |
+Every retained successful RHF warm sample passes the independent GPU4PySCF
+reference and all available same-round baseline/incremental comparisons at
+|ΔE| ≤ 1e-8 Eh and |ΔF| ≤ 1e-7 Eh/Bohr. Cold native result arrays are not
+retained, so offline numerical rechecking is limited to warm samples. Cold
+endpoint timings and convergence records are retained. The reported protocol
+was fresh-process A-B-B-A baseline/incremental points, one cold endpoint and
+three fixed-density warm replays, with one retry for a failed point.
 
-The KS/PBE0 control (96 atoms, strict FP64, off/on/on/off) was attempted on the
-new master: cold off-96 endpoints measured (279.0 s, 17 iterations, incremental
-inactive) with the same protocol, but independent acceptance against the
-retained composed-baseline oracle could not be re-established because that
-oracle predates the merged DFT force changes (#2246), so its gates no longer
-bound the current master. The KS/PBE0 domain remains covered by its own
-retained rejected evidence (`.agents/notes/rejected/2026-10-09-pbe0-incremental-endpoint-promotion.md`)
-and the narrower owner issue #2053; the HF decision above does not depend on
-it. The UHF-cation and moved-geometry populations of the primary matrix were
-also not completed: the campaign was superseded mid-run when #2236/#2241
-merged, and the re-verification matrix was scoped to the decisive RHF sizes
-plus the KS control. That is acceptable for a negative decision — refusal does
-not require exhausting every population — and the harness retains those cases
-for any future revisit.
+KS/PBE0 control records were attempted but are not accepted independent
+numerical evidence; the recorded campaign report attributed the oracle
+mismatch to intervening DFT force changes (#2246). This RHF negative decision
+does not depend on that explanation. The UHF-cation and moved-geometry
+populations were not completed. Refusing default promotion does not require
+exhausting every population; any future promotion still needs them. The
+narrower KS/PBE0 owner issue #2053 retains its own qualification burden.
 
-All paired numerical gates that could be compared pass (maximum |ΔE| ≤ 1e-8 Eh,
-|ΔF| ≤ 1e-7 Eh/Bohr, plus the comparator's independent reference gates). The
-incremental diagnostics confirm the mechanism activates and removes real
-fixed-topology quartet work where counters are valid, while complete endpoint
-wall time is never reduced: the measured populations show neutral-to-strongly
-negative cold and warm economics plus reproducible convergence failures at 192
-and 768 AOs. The retained records include the nvidia-smi resource ledger,
-device/library/source identities, per-run progress journals, retry outcomes and
-the reducer summaries.
+The capsule contains compressed comparator records, duplicate selected/successful
+attempt records, final retry outcomes, the old device/library/source receipts,
+and a checksum inventory. It does not retain per-point exception logs, progress
+journals, a resource time-series, reducer summaries, or a dirty-source patch.
+Per-record after-measurement device snapshots do not certify isolation throughout
+the campaign. Incremental diagnostics show activation, but bounded-streaming
+work counters are invalid and cannot certify a resource guard.
 
 ## Why no promotion
 
-Task-count reduction did not translate into complete-endpoint wins in any
-measured population, consistent with the independently re-verified PBE0-domain
-pattern (warm parity after audit reuse; moved-geometry regression), and the
-route reproduces convergence failures at 192 and 768 AOs on two successive
-master revisions. The remaining provider-owned bounded-streaming work
-accounting (`quartet_work_counters_valid` excludes bounded-streaming runs) also
+The RHF evidence shows warm regressions, large 384-AO cold regressions and
+unsuccessful retried incremental points at 192/768 AOs. The small 96-AO cold
+gain does not establish a domain with wins across cold and warm endpoints.
+The remaining provider-owned bounded-streaming work accounting (`quartet_work_counters_valid` excludes bounded-streaming runs) also
 means no fail-closed workload guard can currently be certified across the
 bounded resource domain the promotion contract requires. Keeping the route
 opt-in avoids manufacturing a guard that only covers the unbounded
@@ -97,13 +93,12 @@ fixed-topology domain.
 ## Rejected alternatives
 
 - Guarded promotion restricted to the unbounded fixed-topology domain: no
-  retained endpoint population shows a reproducible win there, so a guard would
-  gate on a domain with measured negative or neutral economics.
+  retained population establishes wins across both cold and warm endpoints.
 - Retiring the option: the shared policy remains in active use by the narrower
   KS/PBE0 owner issue #2053; retirement would churn that work without endpoint
   benefit.
-- Relabelling the older PBE0/KS rejected evidence as this decision: the HF
-  domain was measured independently on current master as required by #1598.
+- Relabelling the older PBE0/KS rejected evidence as this decision: the RHF
+  domain has its own historical measurements and explicitly scoped limitations.
 
 ## Invariants
 
@@ -117,8 +112,8 @@ fixed-topology domain.
 
 No runtime change. The retained benchmark matrix and runner
 (`benchmarks/run_issue1598_incremental_qualification.sh`,
-`tools/reduce_issue1598_incremental_qualification.py`) make the closeout
-reproducible and auditable.
+`tools/reduce_issue1598_incremental_qualification.py`) support future
+qualification; the capsule verifier audits the retained historical subset without claiming missing inputs exist.
 
 ## Revisit when
 

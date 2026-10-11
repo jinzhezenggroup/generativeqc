@@ -68,11 +68,24 @@ def _median(values: list[float]) -> float:
     return float(statistics.median(values))
 
 
+def _count(value: Any) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError("work and iteration counts must be nonnegative integers")
+    return value
+
+
 def _branches(record: dict[str, Any]) -> list[tuple[int, ...]]:
-    return [
-        tuple(int(item["iterations"]) for item in sample["convergence"])
-        for sample in record["generativeqc"]["warm_samples"]
-    ]
+    samples = record["generativeqc"]["warm_samples"]
+    if not samples:
+        raise ValueError("missing warm samples")
+    branches = []
+    for sample in samples:
+        if len(sample["convergence"]) != 1:
+            raise ValueError("qualification requires one convergence record per sample")
+        branches.append(
+            tuple(_count(item["iterations"]) for item in sample["convergence"])
+        )
+    return branches
 
 
 def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
@@ -83,14 +96,16 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
     if not diagnostics or any(type(value) is not dict for value in diagnostics):
         raise ValueError("incremental benchmark is missing Direct-J/K diagnostics")
     typed = [value for value in diagnostics if isinstance(value, dict)]
-    if any(not value.get("active") for value in typed):
+    if any(value.get("active") is not True for value in typed):
         raise ValueError("incremental benchmark did not activate Direct-J/K updates")
-    full_builds = sum(int(value["anchor_full_builds"]) for value in typed)
-    delta_builds = sum(int(value["delta_builds"]) for value in typed)
-    full_shells = sum(int(value["full_admitted_shell_quartets"]) for value in typed)
-    delta_shells = sum(int(value["delta_admitted_shell_quartets"]) for value in typed)
-    full_tiles = sum(int(value["full_admitted_quartet_tiles"]) for value in typed)
-    delta_tiles = sum(int(value["delta_admitted_quartet_tiles"]) for value in typed)
+    full_builds = sum(_count(value["anchor_full_builds"]) for value in typed)
+    delta_builds = sum(_count(value["delta_builds"]) for value in typed)
+    full_shells = sum(_count(value["full_admitted_shell_quartets"]) for value in typed)
+    delta_shells = sum(
+        _count(value["delta_admitted_shell_quartets"]) for value in typed
+    )
+    full_tiles = sum(_count(value["full_admitted_quartet_tiles"]) for value in typed)
+    delta_tiles = sum(_count(value["delta_admitted_quartet_tiles"]) for value in typed)
     if delta_builds == 0:
         # A population that converges before the first delta update has no
         # incremental opportunity; quartet counters may legitimately be
@@ -113,7 +128,7 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
             "quartet_tile_reduction_fraction": 0.0,
             "no_incremental_opportunity": True,
         }
-    if any(not value.get("quartet_work_counters_valid") for value in typed):
+    if any(value.get("quartet_work_counters_valid") is not True for value in typed):
         raise ValueError("incremental quartet work counters are not complete")
     if full_builds == 0 or full_shells == 0 or full_tiles == 0:
         raise ValueError("incremental benchmark lacks measurable full work")
@@ -137,8 +152,96 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _source_identity(record: dict[str, Any]) -> tuple[Any, ...]:
+    source = record["environment"]["git"]
+    native = record["native_build"]["probe"]["source_identity"]
+    commit = source["commit"]
+    if (
+        not isinstance(commit, str)
+        or len(commit) != 40
+        or not isinstance(native, str)
+        or len(native) != 64
+        or any(c not in "0123456789abcdef" for c in commit + native)
+        or type(source["dirty"]) is not bool
+    ):
+        raise ValueError("invalid measured source identity")
+    accelerator = record["environment"]["accelerator"]
+    return (
+        commit,
+        source["dirty"],
+        native,
+        record["environment"]["host"]["node"],
+        accelerator["name"],
+        accelerator["device_id"],
+        accelerator["driver_version"],
+        accelerator["runtime_version"],
+    )
+
+
+def _reference_gate(record: dict[str, Any]) -> None:
+    """Recompute every retained warm independent-reference pair, not its flag."""
+    gates = record["settings"]["gates"]
+    limits = (
+        gates["maximum_energy_error_hartree"],
+        gates["maximum_force_error_hartree_per_bohr"],
+    )
+    for limit, ceiling in zip(limits, (1e-8, 1e-7), strict=True):
+        if _positive_seconds(limit) > ceiling:
+            raise ValueError("independent reference tolerance was weakened")
+    for engine in ("generativeqc", "gpu4pyscf"):
+        result = record[engine]
+        seconds = [
+            _positive_seconds(sample["seconds"]) for sample in result["warm_samples"]
+        ]
+        if (
+            not seconds
+            or result["warm_seconds"] != seconds
+            or result["warm_median_seconds"] != _median(seconds)
+        ):
+            raise ValueError("warm timing summary does not match measured samples")
+        for key in ("energies_hartree", "forces_hartree_per_bohr"):
+            if result[key] != result["warm_samples"][-1][key]:
+                raise ValueError("result summary does not match last measured sample")
+    native = record["generativeqc"]["warm_samples"]
+    reference = record["gpu4pyscf"]["warm_samples"]
+    if len(native) != 3 or len(reference) != 3:
+        raise ValueError("qualification requires three independent-reference pairs")
+    for sample, oracle in zip(native, reference, strict=True):
+        for row in (sample, oracle):
+            if not row["convergence"] or any(
+                item.get("converged") is not True for item in row["convergence"]
+            ):
+                raise ValueError("independent reference pair did not converge")
+        for key, limit in zip(
+            ("energies_hartree", "forces_hartree_per_bohr"), limits, strict=True
+        ):
+            if _maximum_abs_difference(sample[key], oracle[key]) > limit:
+                raise ValueError("independent reference numerical gate failed")
+
+
+def _paired_difference(base: dict[str, Any], inc: dict[str, Any], key: str) -> float:
+    baseline = base["generativeqc"]
+    incremental = inc["generativeqc"]
+    return max(
+        _maximum_abs_difference(a[key], b[key])
+        for a, b in zip(
+            [baseline, *baseline["warm_samples"]],
+            [incremental, *incremental["warm_samples"]],
+            strict=True,
+        )
+    )
+
+
 def _outcome(root: Path, path: Path) -> dict[str, Any]:
-    return json.loads((path.parent / (path.name + ".outcome")).read_text())
+    data = json.loads(path.with_suffix(".outcome").read_text())
+    if (
+        type(data.get("exit_code")) is not int
+        or data["exit_code"] < 0
+        or type(data.get("attempt")) is not int
+        or data["attempt"] not in (1, 2)
+    ):
+        raise ValueError(f"{path} has an invalid outcome")
+    return data
 
 
 def _hf_rows(
@@ -147,16 +250,17 @@ def _hf_rows(
     rows: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     library_sha: str | None = None
+    source_identity: tuple[Any, ...] | None = None
     for population in POPULATIONS:
         size_pairs = MOVED_SIZES if population == "moved" else SIZES
         for atoms, expected_aos in size_pairs:
-            loaded: dict[str, list[dict[str, Any]]] = {}
+            loaded: dict[str, dict[int, dict[str, Any]]] = {}
             failed_points: list[str] = []
             for name, mode in (
                 ("baseline", "baseline"),
                 ("incremental", "incremental"),
             ):
-                records = []
+                records = {}
                 for round in (1, 2):
                     path = root / population / f"direct-{atoms}-{mode}-{round}.json"
                     outcome = _outcome(root, path)
@@ -167,7 +271,7 @@ def _hf_rows(
                             f"attempt {outcome.get('attempt')})"
                         )
                         continue
-                    records.append(_load(path))
+                    records[round] = _load(path)
                 loaded[name] = records
             if failed_points:
                 failures.append(
@@ -178,10 +282,64 @@ def _hf_rows(
                         "failed_points": failed_points,
                     }
                 )
-            baseline_records = loaded["baseline"]
-            incremental_records = loaded["incremental"]
-            if not baseline_records or not incremental_records:
+            # Validate every successful point, even when its partner failed.
+            for name, records in loaded.items():
+                for record in records.values():
+                    workload = record["workload"]
+                    expected_case = (
+                        f"water-{atoms}"
+                        + {"rhf": "", "uhf": "-cation-uhf", "moved": "-moved"}[
+                            population
+                        ]
+                    )
+                    if (
+                        workload.get("case") != expected_case
+                        or workload.get("ao_count") != expected_aos
+                        or workload.get("batch_size") != 1
+                    ):
+                        raise ValueError("qualification workload identity mismatch")
+                    if record["gate"].get("passed") is not True:
+                        raise ValueError(
+                            f"{population} {name} {atoms}-atom record failed its "
+                            "independent reference gates"
+                        )
+                    _reference_gate(record)
+                    identity = _source_identity(record)
+                    if source_identity is None:
+                        source_identity = identity
+                    elif source_identity != identity:
+                        raise ValueError(
+                            "matrix changed measured source or device identity"
+                        )
+                    sha = record["native_build"]["library_sha256"]
+                    if (
+                        not isinstance(sha, str)
+                        or len(sha) != 64
+                        or any(c not in "0123456789abcdef" for c in sha)
+                    ):
+                        raise ValueError("invalid native library identity")
+                    if library_sha is None:
+                        library_sha = sha
+                    elif sha != library_sha:
+                        raise ValueError("matrix did not use one native library")
+                    result = record["generativeqc"]
+                    for key in ("cold_seconds", "warm_median_seconds"):
+                        _positive_seconds(result[key])
+                    for key in ("energies_hartree", "forces_hartree_per_bohr"):
+                        _maximum_abs_difference(result[key], result[key])
+            # A retry failure does not shift a later success into another round.
+            matched_rounds = sorted(
+                loaded["baseline"].keys() & loaded["incremental"].keys()
+            )
+            if not matched_rounds:
                 continue
+            baseline_records = [loaded["baseline"][round] for round in matched_rounds]
+            incremental_records = [
+                loaded["incremental"][round] for round in matched_rounds
+            ]
+            for base, inc in zip(baseline_records, incremental_records, strict=True):
+                if base["workload"] != inc["workload"]:
+                    raise ValueError("paired workload identities differ")
             baseline_cold = [
                 _positive_seconds(r["generativeqc"]["cold_seconds"])
                 for r in baseline_records
@@ -198,52 +356,39 @@ def _hf_rows(
                 _positive_seconds(r["generativeqc"]["warm_median_seconds"])
                 for r in incremental_records
             ]
-            for name, records in (
-                ("baseline", baseline_records),
-                ("incremental", incremental_records),
-            ):
-                for record in records:
-                    aos = int(record["workload"]["ao_count"])
-                    if aos != expected_aos:
-                        raise ValueError(
-                            f"{population} {name} {atoms}-atom record has {aos} AOs"
-                        )
-                    if int(record["workload"]["batch_size"]) != 1:
-                        raise ValueError("qualification requires batch size one")
-                    if not record["gate"].get("passed"):
-                        raise ValueError(
-                            f"{population} {name} {atoms}-atom record failed its "
-                            "independent reference gates"
-                        )
-                    sha = str(record["native_build"]["library_sha256"])
-                    if library_sha is None:
-                        library_sha = sha
-                    elif sha != library_sha:
-                        raise ValueError("matrix did not use one native library")
             warm_speedup = _median(baseline_warm) / _median(incremental_warm)
             cold_speedup = _median(baseline_cold) / _median(incremental_cold)
             energy_difference = max(
-                _maximum_abs_difference(
-                    base["generativeqc"]["energies_hartree"],
-                    inc["generativeqc"]["energies_hartree"],
-                )
+                _paired_difference(base, inc, "energies_hartree")
                 for base, inc in zip(baseline_records, incremental_records, strict=True)
             )
             force_difference = max(
-                _maximum_abs_difference(
-                    base["generativeqc"]["forces_hartree_per_bohr"],
-                    inc["generativeqc"]["forces_hartree_per_bohr"],
-                )
+                _paired_difference(base, inc, "forces_hartree_per_bohr")
                 for base, inc in zip(baseline_records, incremental_records, strict=True)
             )
-            baseline_branches = _branches(baseline_records[0])
-            incremental_branches = _branches(incremental_records[0])
-            work = _incremental_work(incremental_records[0])
+            baseline_branches = [_branches(record) for record in baseline_records]
+            incremental_branches = [_branches(record) for record in incremental_records]
+            work_by_round = [
+                _incremental_work(record) for record in incremental_records
+            ]
+            work = _incremental_work(
+                {
+                    "generativeqc": {
+                        "warm_samples": [
+                            sample
+                            for record in incremental_records
+                            for sample in record["generativeqc"]["warm_samples"]
+                        ]
+                    }
+                }
+            )
             rows.append(
                 {
                     "population": population,
                     "atoms": atoms,
                     "ao_count": expected_aos,
+                    "matched_rounds": matched_rounds,
+                    "incremental_work_by_round": work_by_round,
                     "baseline_cold_median_seconds": _median(baseline_cold),
                     "incremental_cold_median_seconds": _median(incremental_cold),
                     "cold_speedup": cold_speedup,
@@ -292,7 +437,7 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             raise ValueError(f"KS {mode}-{atoms} record is not measured")
         seconds = _positive_seconds(record["complete_seconds"])
         samples.setdefault((mode, atoms), []).append(seconds)
-        if not record["acceptance"].get("passed"):
+        if record["acceptance"].get("gate") is not True:
             raise ValueError(f"KS {mode}-{atoms} independent acceptance failed")
         rows.append(
             {
@@ -326,6 +471,8 @@ def main() -> None:
     parser.add_argument("--maximum-energy-difference", type=float, default=1.0e-8)
     parser.add_argument("--maximum-force-difference", type=float, default=1.0e-7)
     args = parser.parse_args()
+    for threshold in (args.maximum_energy_difference, args.maximum_force_difference):
+        _positive_seconds(threshold)
 
     hf_rows, library_sha, hf_failures = _hf_rows(args, args.input)
     ks_rows, ks_failures = _ks_rows(args.input)
@@ -353,14 +500,22 @@ def main() -> None:
         "any_point_failed": bool(hf_failures or ks_failures),
         "all_numerical_gates_passed": all(
             row["numerical_gate_passed"] for row in hf_rows
-        ),
+        )
+        if hf_rows
+        else False,
         "all_iteration_branches_match": all(
             row["iteration_branches_match"] for row in hf_rows
-        ),
+        )
+        if hf_rows
+        else False,
         "any_warm_endpoint_win": any(row["warm_speedup"] > 1.0 for row in hf_rows),
         "any_cold_endpoint_win": any(row["cold_speedup"] > 1.0 for row in hf_rows),
-        "best_warm_speedup": max(row["warm_speedup"] for row in hf_rows),
-        "best_cold_speedup": max(row["cold_speedup"] for row in hf_rows),
+        "best_warm_speedup": max(
+            (row["warm_speedup"] for row in hf_rows), default=None
+        ),
+        "best_cold_speedup": max(
+            (row["cold_speedup"] for row in hf_rows), default=None
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")

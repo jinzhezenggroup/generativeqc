@@ -69,14 +69,16 @@ run_point() {
       cp "$attempt_prefix.log" "$prefix.log"
       ledger "$case_name-$atoms-$mode-$round"
       return 0
+    else
+      status=$?
     fi
-    status=$?
+    printf '{"exit_code":%s,"attempt":%s}\n' "$status" "$attempt" > "$attempt_prefix.outcome"
     printf 'FAIL mode=%s case=%s attempt=%s exit=%s (see %s-attempt%s.log)\n' \
       "$mode" "$case_name" "$attempt" "$status" "$prefix" "$attempt" >&2
     ledger "fail-$case_name-$atoms-$mode-$round-attempt$attempt"
     if [[ "$attempt" == 1 ]]; then sleep 30; fi
   done
-  printf '{"exit_code":1,"attempt":2,"retried":true}\n' > "$prefix.outcome"
+  printf '{"exit_code":%s,"attempt":2,"retried":true}\n' "$status" > "$prefix.outcome"
   return 0
 }
 
@@ -126,14 +128,16 @@ ks_point() {
       cp "$attempt_prefix.log" "$prefix.log"
       ledger "ks-$atoms-$mode-$round"
       return 0
+    else
+      status=$?
     fi
-    status=$?
+    printf '{"exit_code":%s,"attempt":%s}\n' "$status" "$attempt" > "$attempt_prefix.outcome"
     printf 'FAIL ks mode=%s atoms=%s attempt=%s exit=%s (see %s-attempt%s.log)\n' \
       "$mode" "$atoms" "$attempt" "$status" "$prefix" "$attempt" >&2
     ledger "fail-ks-$atoms-$mode-$round-attempt$attempt"
     if [[ "$attempt" == 1 ]]; then sleep 30; fi
   done
-  printf '{"exit_code":1,"attempt":2,"retried":true}\n' > "$prefix.outcome"
+  printf '{"exit_code":%s,"attempt":2,"retried":true}\n' "$status" > "$prefix.outcome"
   return 0
 }
 

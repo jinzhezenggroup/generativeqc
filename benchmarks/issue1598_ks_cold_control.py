@@ -47,7 +47,8 @@ def main() -> None:
 
     output = Path(sys.argv[1])
     atoms = int(sys.argv[2]) if len(sys.argv) > 2 else 96
-    assert atoms in (48, 96)
+    if atoms not in (48, 96):
+        raise ValueError("KS control requires 48 or 96 atoms")
     case = scaling_cases()[f"water-{atoms}"]
     basis_path = Path("benchmarks/results/pbe0-def2-svp-20261001/def2-svp-ho.json")
     basis, _ = load_comparison_basis(
@@ -56,11 +57,11 @@ def main() -> None:
     grid = GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32)
     scientific = protocol(atoms, basis, grid, 5, benchmark=PBE0)
     reference_path = Path(
-        "benchmarks/results/pbe0-composed-baseline-20261005/reference-96.json.gz"
+        f"benchmarks/results/pbe0-composed-baseline-20261005/reference-{atoms}.json.gz"
     )
     reference = json.loads(gzip.decompress(reference_path.read_bytes()))
-    assert reference["status"] == "measured"
-    assert reference["protocol"] == scientific
+    if reference["status"] != "measured" or reference["protocol"] != scientific:
+        raise ValueError("KS reference does not match the measured protocol")
     oracle = next(row for row in reference["records"] if row["phase"] == "cold")
     record = {
         "schema": "issue1598.ks-cold-control.v1",
@@ -170,7 +171,7 @@ def main() -> None:
             ),
             flush=True,
         )
-        if not acceptance.get("passed", False):
+        if acceptance.get("gate") is not True:
             raise SystemExit(3)
     except BaseException as error:
         record.update(status="failed", error=f"{type(error).__name__}: {error}")

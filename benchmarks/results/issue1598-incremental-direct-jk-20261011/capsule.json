@@ -1,14 +1,9 @@
 {
- "schema": "generativeqc.benchmark-publication.v1",
+ "schema": "generativeqc.historical-benchmark-capsule.v1",
  "decision": {
-  "scope": "performance",
-  "status": "accepted",
-  "reason": "Incremental Direct-J/K stays opt-in: matched complete RHF 96/192/384/768-AO endpoints at two master revisions show no complete-endpoint win (384 AO warm +94%/+103% slower), reproducible convergence failures at 192 and 768 AOs, and all comparable numerical gates pass. Negative closeout for default promotion."
- },
- "source": {
-  "revision": "907c8861269d076dde4beef97456e6012477806c",
-  "dirty": true,
-  "reconstruction_scope": "Rebased on upstream master 98263e06c plus this branch's benchmark harness; runtime sources unmodified."
+  "scope": "default-promotion",
+  "status": "rejected",
+  "reason": "Historical RHF warm regressions, 384-AO cold regressions and unsuccessful retried incremental points do not establish a default-promotion domain; the old 96-AO cold gains are narrower than this qualification requirement."
  },
  "reproduction": {
   "command": [
@@ -17,12 +12,6 @@
   ]
  },
  "files": [
-  {
-   "path": "__pycache__/verify.cpython-313.pyc",
-   "bytes": 7583,
-   "sha256": "f2df26c44417f6efa62ed1698e06dcb7b11ce2df6e832333bf0f508801ca5660",
-   "role": "reproduction"
-  },
   {
    "path": "new/ks/pbe0-96-off-1-attempt1.json.gz",
    "bytes": 5014,
@@ -535,15 +524,35 @@
   },
   {
    "path": "README.md",
-   "bytes": 3479,
-   "sha256": "e31ffdc43e41f03d74996d01ea3b32f9966e7a2c7f024c85c03dce35346be4ca",
+   "bytes": 5618,
+   "sha256": "487a5df07c1a5913e77faec356eac1dd40370f52f969d433e9a9367b69fa6495",
    "role": "reproduction"
   },
   {
    "path": "verify.py",
-   "bytes": 4945,
-   "sha256": "d2e522c65a568272316c76bd3d46c0e3d2e0936f14e32af5742ee9c2a31565f3",
+   "bytes": 14685,
+   "sha256": "7ce8e5106d4f13892c01d0c98ed15a73182c3d793179ffa8aad14e24a30cb644",
    "role": "reproduction"
   }
+ ],
+ "campaigns": {
+  "old": {
+   "revision": "96570fd06243de418e2eec4efb570d5510506d03",
+   "dirty": true,
+   "library_sha256": "2998014a18547b813149521c51193cd8913602b5d7e4551e326a4d5c91053a77",
+   "native_source_identity": "54981b932caa9b88a4bc334634fed21ffc92ee9659b9128552a7462c806530f3"
+  },
+  "new": {
+   "revision": "d83aa86585a2f72ed852872c533723648b2799c3",
+   "dirty": false,
+   "library_sha256": "30734a0fc741da60389fb817b7429acd4a5164c840728308822fe215eae90a63",
+   "native_source_identity": "09847dbbf578bf414e45dfe02d996573662119f86c98cd21287db79bffb496eb"
+  }
+ },
+ "limitations": [
+  "Old measured checkout was dirty; no reconstruction patch retained.",
+  "Failed RHF points retain final retry dispositions only; causes and individual first-attempt results cannot be verified.",
+  "Cold native numerical result arrays, progress journals, resource time-series and reducer summaries are absent.",
+  "UHF/moved populations were incomplete; retained KS controls are unaccepted and excluded from RHF gate claims."
  ]
 }
