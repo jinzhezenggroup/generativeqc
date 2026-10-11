@@ -10,6 +10,7 @@
 
 #include "cli/json.hpp"
 #include "cli/native_basis.hpp"
+#include "dft/incremental_direct_jk_control.hpp"
 
 extern "C" int generativeqc_resource_small_hf_cuda_v2(std::size_t, std::size_t, std::size_t,
                                                       std::size_t, const std::uint8_t*,
@@ -449,6 +450,26 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   if (!hf && !ks) {
     plan["diagnostic"] = "native resource inventory requires RHF/UHF or LDA/PBE RKS/UKS";
     return emit();
+  }
+  if (ks) {
+    const auto incremental_requested = [](const char* name) {
+      const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
+      if (control == dft::IncrementalDirectJkControl::Invalid)
+        throw UsageError(std::string(name) + " must be 0/off or 1/on");
+      return control == dft::IncrementalDirectJkControl::Enabled;
+    };
+    // Validate both eagerly, even when the first selector enables the mode.
+    const bool generic = incremental_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
+    const bool legacy = incremental_requested("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
+    if (generic || legacy) {
+      // The scalar v1 layout has no incremental-mode input. Do not present its
+      // ordinary state bytes as capacity for anchor/delta storage and closure.
+      plan["diagnostic"] =
+          "incremental Direct-J/K resource inventory is unsupported: anchor/delta storage and "
+          "closure history lack a qualified inventory; unset or disable both "
+          "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK and GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK";
+      return emit();
+    }
   }
   if (options.precision != GENERATIVEQC_PRECISION_FP64) {
     plan["diagnostic"] = "this inventory covers FP64 allocation policies";

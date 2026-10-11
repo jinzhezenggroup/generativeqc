@@ -260,7 +260,7 @@ class PreparedCCSD:
 
     def pack(self, t1: typing.Any, t2: typing.Any) -> typing.Any:
         return np.concatenate(
-            [layout.pack(a) for layout, a in zip(self.layouts, (t1, t2))]
+            [layout.pack(a) for layout, a in zip(self.layouts, (t1, t2), strict=True)]
         )
 
     def unpack(self, vector: typing.Any) -> typing.Any:
@@ -532,7 +532,9 @@ def solve(
             with np.errstate(over="raise", invalid="raise", divide="raise"):
                 trial = tuple(
                     t + (1 - options.damping) * r / d
-                    for t, r, d in zip(current, (r1, r2), prepared.denominators)
+                    for t, r, d in zip(
+                        current, (r1, r2), prepared.denominators, strict=True
+                    )
                 )
             # DIIS errors belong to exactly the trial vector being stored.
             trial_out = prepared.evaluate(*trial)

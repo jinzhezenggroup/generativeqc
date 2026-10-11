@@ -71,7 +71,7 @@ def make_one_electron_fixture(
                 for j in range(length)
             ],
         }
-        for i, (l, length) in enumerate(zip(angular, lengths))
+        for i, (l, length) in enumerate(zip(angular, lengths, strict=True))
     ]
     inputs = {
         "name": "one_electron/" + "".join("spdf"[l] for l in angular) + "/" + variant,

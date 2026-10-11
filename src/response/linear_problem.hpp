@@ -52,6 +52,18 @@ class LinearResponseProblem {
     binding_ = std::make_shared<const Binding>();
   }
 
+  LinearResponseProblem(const LinearResponseProblem&) = default;
+  LinearResponseProblem(LinearResponseProblem&&) noexcept = default;
+  LinearResponseProblem& operator=(LinearResponseProblem&&) noexcept = default;
+  LinearResponseProblem& operator=(const LinearResponseProblem& other) {
+    if (this != &other) {
+      // Callback copies can throw. Commit the operator and its token together.
+      LinearResponseProblem replacement(other);
+      *this = std::move(replacement);
+    }
+    return *this;
+  }
+
   [[nodiscard]] std::size_t dimension() const noexcept { return dimension_; }
   [[nodiscard]] const LinearOperator& apply() const noexcept { return apply_; }
   [[nodiscard]] LinearResponseSymmetry symmetry() const noexcept { return symmetry_; }

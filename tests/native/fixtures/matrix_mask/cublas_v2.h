@@ -7,6 +7,7 @@ constexpr int CUBLAS_STATUS_SUCCESS = 0, CUBLAS_STATUS_ALLOC_FAILED = 3;
 constexpr int CUBLAS_OP_N = 0, CUBLAS_OP_T = 1;
 constexpr int CUBLAS_POINTER_MODE_HOST = 0, CUBLAS_PEDANTIC_MATH = 2;
 cublasStatus_t cublasCreate(cublasHandle_t*);
+cublasStatus_t cublasGetVersion(cublasHandle_t, int*);
 cublasStatus_t cublasDestroy(cublasHandle_t);
 cublasStatus_t cublasSetStream(cublasHandle_t, cudaStream_t);
 cublasStatus_t cublasSetPointerMode(cublasHandle_t, int);

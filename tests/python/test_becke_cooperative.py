@@ -319,9 +319,9 @@ def test_cooperative_independent_decimal_fd_translation_and_permutation(
             return [
                 [
                     Decimal(str(x)) + sign * h * Decimal(str(dx))
-                    for x, dx in zip(row, direction)
+                    for x, dx in zip(row, direction, strict=True)
                 ]
-                for row, direction in zip(values, motion)
+                for row, direction in zip(values, motion, strict=True)
             ]
 
         plus, minus = [
@@ -332,7 +332,7 @@ def test_cooperative_independent_decimal_fd_translation_and_permutation(
         ]
         expected = sum(
             Decimal(str(seed)) * (p[owner] - m[owner]) / (2 * h)
-            for seed, p, m, owner in zip(seeds, plus, minus, owners)
+            for seed, p, m, owner in zip(seeds, plus, minus, owners, strict=True)
         )
         assert abs(np.sum(gradient * DC) - float(expected)) < 2e-14
     np.testing.assert_allclose(gradient.sum(axis=0), 0, atol=3e-15)

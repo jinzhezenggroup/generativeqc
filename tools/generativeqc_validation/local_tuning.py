@@ -103,7 +103,7 @@ def validate_schedule(
         raise ValueError("isolated production-wrapper link failed")
     fixtures, _ = class_fixtures(name)
     paths = [directory / f"fixture-{i}.bin" for i in range(len(fixtures))]
-    for fixture, fixture_path in zip(fixtures, paths):
+    for fixture, fixture_path in zip(fixtures, paths, strict=True):
         write_fixture(fixture, fixture_path)
     # The user-facing workflow is itself run in the allocated GPU job. Child
     # processes inherit its device visibility; nested allocations are avoided.
@@ -127,7 +127,7 @@ def validate_schedule(
         for suffix in ("", "_persistent")
     }
     errors = {}
-    for i, (fixture, row) in enumerate(zip(fixtures, records[1:])):
+    for i, (fixture, row) in enumerate(zip(fixtures, records[1:], strict=True)):
         if row.get("ordinal") != i or set(row["outputs"]) != expected:
             raise ValueError("missing or reordered consumer results")
         for key, actual in decoded_outputs(fixture, row).items():

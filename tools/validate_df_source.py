@@ -106,7 +106,9 @@ def write_input(path: typing.Any, systems: typing.Any) -> None:
         )
         rows.extend(
             " ".join(map(str, (z, *xyz)))
-            for z, xyz in zip(orbital["atomic_numbers"], orbital["coordinates"])
+            for z, xyz in zip(
+                orbital["atomic_numbers"], orbital["coordinates"], strict=True
+            )
         )
         for basis in (orbital, auxiliary):
             for shell in basis["shells"]:
@@ -150,6 +152,7 @@ def references(systems: typing.Any, *, derivatives: typing.Any = False) -> typin
         for key, value in zip(
             result,
             (metric, raw, coulomb, exchange, coulomb, 0.6 * exchange, 0.4 * exchange),
+            strict=True,
         ):
             result[key].append(value)
         diagnostics.append(

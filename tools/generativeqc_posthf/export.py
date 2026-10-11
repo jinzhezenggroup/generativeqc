@@ -22,7 +22,7 @@ def conventional_fock(
     ):
         tile = source.tile(request)
         begin = source.global_offsets(request)
-        u, v, w, x = (slice(b, b + n) for b, n in zip(begin, tile.shape))
+        u, v, w, x = (slice(b, b + n) for b, n in zip(begin, tile.shape, strict=True))
         f[u, v] += np.einsum("uvwx,wx->uv", tile, density[w, x], optimize=False)
         f[u, w] -= 0.5 * np.einsum("uvwx,vx->uw", tile, density[v, x], optimize=False)
     return f
@@ -70,7 +70,9 @@ def export_rhf(
         ):
             values = source.tile(request)
             begin = source.global_offsets(request)
-            raw[tuple(slice(b, b + n) for b, n in zip(begin, values.shape))] = values
+            raw[
+                tuple(slice(b, b + n) for b, n in zip(begin, values.shape, strict=True))
+            ] = values
         b = (raw.reshape(-1, source.naux) @ metric.inverse_square_root).reshape(
             raw.shape
         )
@@ -160,7 +162,8 @@ def conventional_uhf_fock(
         tile = source.tile(request)
         begin = source.global_offsets(request)
         u, v, w, x = (
-            slice(offset, offset + size) for offset, size in zip(begin, tile.shape)
+            slice(offset, offset + size)
+            for offset, size in zip(begin, tile.shape, strict=True)
         )
         alpha[u, v] += np.einsum("uvwx,wx->uv", tile, total[w, x], optimize=False)
         beta[u, v] += np.einsum("uvwx,wx->uv", tile, total[w, x], optimize=False)
