@@ -124,7 +124,7 @@ _OPERATION_DTYPES: dict[str, str] = {
     "real-elementwise": "float32|float64",
     "real-comparison": "float32|float64 -> bool",
     "array-creation": "bool|float32|float64 (operation-specific admission)",
-    "dtype-conversion": "bool-identity|float32|float64",
+    "dtype-conversion": "float32|float64",
     "real-reduction": "float32|float64",
     "shape-transform": "bool|float32|float64 (generic-array restrictions)",
     "static-indexing": "bool|float32|float64 (generic-array restrictions)",
@@ -164,7 +164,7 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
         "capture": "gather extent <= 65536",
     },
     "astype": {
-        "dtype": "bool identity or real float32/float64",
+        "dtype": "real float32/float64 only; bool identity unsupported",
         "copy": "eager-copy-policy",
         "device": "None-only",
     },
@@ -184,11 +184,33 @@ _AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
     },
 }
 
+# Retain the existing capability IDs while identifying their callable endpoints.
+_OPERATION_FUNCTIONS: dict[str, str] = {
+    "reshape_explicit_indices": "reshape",
+    "broadcast_to_explicit_indices": "broadcast_to",
+    "slice_static": "slice",
+    "take_static": "take",
+    "einsum_extension": "einsum",
+}
+
+_OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
+    "reshape_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
+    "broadcast_to_explicit_indices": {"eager": "unsupported-symbolic-metadata-only"},
+    "broadcast_shapes": {
+        "dtypes": "not-applicable-static-shape-tuples",
+        "device": "not-applicable-static-shape-tuples",
+        "eager": "python-static-shape",
+        "capture": "python-static-shape",
+        "ad": "not-applicable-static-shape-tuples",
+    },
+}
+
 
 def _operation_matrix() -> dict[str, dict[str, object]]:
     """Describe admitted reference operations without implying backend conformance."""
     return {
         name: {
+            "function": _OPERATION_FUNCTIONS.get(name, name),
             "category": category,
             "dtypes": _OPERATION_DTYPES[category],
             "device": "device-none-cpu-reference",
@@ -198,6 +220,7 @@ def _operation_matrix() -> dict[str, dict[str, object]]:
             "native_cpu": False,
             "native_cuda": False,
             "audited_keywords": dict(_AUDITED_KEYWORDS.get(name, {})),
+            **_OPERATION_OVERRIDES.get(name, {}),
         }
         for category, names in _OPERATION_GROUPS.items()
         for name in names
@@ -212,6 +235,7 @@ def capabilities() -> dict[str, object]:
         "array_api_version": None,
         "target_standard_for_gap_analysis": "2025.12",
         "operation_matrix_schema": "generativeqc.array-api-operation-coverage.v1",
+        "operation_matrix_scope": "compiler-preview-inventory-excludes-public-helpers",
         "operation_matrix": _operation_matrix(),
         "array_namespace_protocol": False,
         "implicit_broadcast": "generic-arrays",
