@@ -11,13 +11,12 @@ import argparse
 import hashlib
 import json
 import os
-from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from generativeqc.elements import atomic_number
@@ -36,6 +35,9 @@ from benchmarks.compare_gpu4pyscf_batch import (
 )
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_wb97mv import reference_engine, reference_vv10_domain
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 SIZES = (3, 6, 12, 24, 48, 96)
 SCHEMA = "generativeqc.readme-omol25.v3"
