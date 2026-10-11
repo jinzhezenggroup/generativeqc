@@ -911,6 +911,27 @@
       ]
     },
     {
+      "id": "cc.df-independent-pair",
+      "classification": "already-default",
+      "controls": ["cc-execution:df-triples-independent-pair"],
+      "owner_issues": [1598],
+      "sources": [
+        "src/cc/df_triples_cuda.cu",
+        "src/tensor/cuda_contraction.cuh",
+        "tools/generate_df_occupied_triples.py"
+      ],
+      "rationale": "Strict FP64 energy with three panels may group adjacent swapped W seeds using their original prepared pedantic descriptors. The shared backend owns pointer publication/vendor dispatch; every semantic product, summand, finite value and canonical energy address remains. A 48-byte stream-exclusive table is admitted after the original panel/provider choices; insufficient budget or typed preparation OOM keeps ordinary dispatch without reducing panel capacity. Generated/mixed providers, CuMetal, nonadjacent outputs and force/response retain the original route. No public option or ABI change.",
+      "revisit_condition": "Broaden provider/precision/output domains only with independent numerical and complete endpoint evidence. Preserve pre-enqueue alias/scratch/counter refusal, sticky finite checks, six-entry fallback groups and no execution-time retry; a driver dispatch is not a semantic product or a vendor-internal kernel count.",
+      "evidence": [
+        "tests/python/test_df_triples_independent_pair.py",
+        "tests/native/test_native_contraction_pair_cuda.cu",
+        "benchmarks/results/df-triples-independent-pair-20261011/publication.json",
+        ".agents/notes/implemented/performance/2026-10-11-df-triples-independent-pair.md",
+        "docs/developer/df_ccsdt.md",
+        "docs/developer/lowering_providers.md"
+      ]
+    },
+    {
       "id": "cc.packed-diis",
       "classification": "guarded-promotion-candidate",
       "controls": [

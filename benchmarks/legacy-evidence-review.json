@@ -607,14 +607,6 @@
       "sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
     },
     {
-      "bytes": 276817,
-      "classification": "required-compact-accepted-evidence",
-      "family": "local-spaces-182",
-      "path": "benchmarks/results/local-spaces-182/report.json",
-      "role": "decision-or-audit-record",
-      "sha256": "3caf68447d26bfa614c9bb43ff123d03f34259285b05955c9025a95d0e16ec7f"
-    },
-    {
       "bytes": 148102,
       "classification": "required-compact-accepted-evidence",
       "family": "one-electron-values-rtx5090",
