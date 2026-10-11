@@ -49,7 +49,18 @@ tau work floors, cross-spin sigma bounds, and meta-GGA FHC handling are shared
 runtime semantics. The explicit exception hook is reserved for a genuinely
 functional-specific defect and is currently empty.
 
+The imported Graph uses its physical spin-density inputs directly for Maple
+density-screening predicates. This avoids a rounded inverse `rs`/spin-polarization
+conversion accidentally activating an empty-spin branch at the density floor.
+Screening remains part of the canonical Graph before symbolic differentiation;
+no backend-specific correction is applied to the resulting potential.
+
 ## Current execution scope
+
+Automatic point mathematics now has one compiler-owned CPU/CUDA source emitter,
+with the same E/vxc roots, physical-spin layout, and work-domain identity. The
+CUDA point-source validation is not public CUDA XC, molecular SCF, or force
+support: those native execution/resource integration gates remain closed.
 
 The automatic path supports CPU FP64 semilocal energy/SCF. Direct all-electron
 s/p/d contexts also support explicitly requested analytic forces through the

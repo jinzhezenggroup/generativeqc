@@ -254,6 +254,22 @@ def build_record(
         )
     module = import_record(record, files, source_root)
     energy = density * module.call(graph, "f", *arguments)
+    # Inverse rs/zeta coordinates are exactly the input spin densities. Their
+    # FP64 round trip can land on either side of screen_dens at its threshold,
+    # activating a nominally empty-spin exchange/kinetic branch. Substitute the
+    # physical coordinates before differentiation, not a post-hoc vxc clamp.
+    reconstructed_density = (
+        graph.approximate_constant((3.0 / (4.0 * math.pi)) ** (1.0 / 3.0)) / rs
+    ).pow(3.0)
+    reconstructed_alpha = (1 + zeta) * reconstructed_density / 2
+    reconstructed_beta = (1 - zeta) * reconstructed_density / 2
+    (energy,) = graph.replace_subexpressions(
+        (energy,),
+        {
+            reconstructed_alpha: rho_a,
+            reconstructed_beta: rho_b,
+        },
+    )
     identity = canonical_hash(
         {
             "bulk_semantics": BULK_SEMANTICS,
