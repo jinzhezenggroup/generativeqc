@@ -17,6 +17,11 @@ from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from .bulk_runtime import build_bulk_runtime_program
 from .equal_spin import equal_spin_roots
 from .libxc_work import automatic_work_policy, polarized_work_setup
+from .physical_kinetic_predicate import (
+    PREDICATE_VARIABLE,
+    bind_physical_kinetic_predicate,
+    emit_physical_kinetic_side,
+)
 
 AUTOMATIC_POINT_LAYOUTS = {
     ("rho_a", "rho_b"): 1,
@@ -80,10 +85,12 @@ def emit_automatic_point(
     original-density weighting, Cartesian gradients apply the sigma chain rule,
     and kinetic coefficients include the native half-vtau convention. CUDA
     reports invalid physical inputs/outputs with ``DevicePointValue.valid``;
-    CPU retains domain exceptions. The optional CUDA slice binds paired work
+    CPU retains domain exceptions. Unchanged work inputs use exact original
+    Cartesian coordinates for kinetic predicates, retaining branch payloads.
+    The optional CUDA slice binds paired work
     inputs after differentiation, retaining every polarized partial. Only a
     producer proving equal physical spins may call that slice. This source
-    grants no runtime admission, and leaves CPU and incumbent emission intact.
+    grants no runtime admission.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
@@ -111,10 +118,15 @@ def emit_automatic_point(
     policy = automatic_work_policy(name)
     work_lines, work_arguments = polarized_work_setup(policy, features)
     variables = dict(zip(features, work_arguments, strict=True))
-    emitter = ScalarCEmitter(program.graph, variables)
-    roots = (
-        equal_spin_roots(program.graph, program.roots) if equal_spin else program.roots
+    roots, physical_kinetic = bind_physical_kinetic_predicate(
+        program.graph, program.roots
     )
+    if equal_spin:
+        roots = equal_spin_roots(program.graph, roots)
+    kinetic_lines = emit_physical_kinetic_side() if physical_kinetic else ()
+    if physical_kinetic:
+        variables[PREDICATE_VARIABLE] = PREDICATE_VARIABLE
+    emitter = ScalarCEmitter(program.graph, variables)
     emitter.emit(roots)
     refs = [emitter.reference(root) for root in roots]
     expression_identity = canonical_hash(
@@ -123,6 +135,11 @@ def emit_automatic_point(
             "interior_expression": program.expression_hash,
             "work_policy": policy.to_payload(),
             "features": features,
+            **(
+                {"physical_kinetic_predicate": kinetic_lines}
+                if physical_kinetic
+                else {}
+            ),
         }
     )
     stem = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
@@ -183,6 +200,7 @@ def emit_automatic_point(
         lines.append("  (void)tau;")
 
     lines.extend(work_lines)
+    lines.extend(kinetic_lines)
 
     lines.extend(emitter.lines)
     lines.extend(
