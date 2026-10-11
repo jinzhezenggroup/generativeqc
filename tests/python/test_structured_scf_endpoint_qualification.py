@@ -11,6 +11,28 @@ import pytest
 from benchmarks import structured_scf_endpoint_qualification as qualification
 
 
+@pytest.mark.parametrize("method", ["rhf", "uhf", "rks", "uks"])
+def test_binary_provenance_includes_driver_or_force_companions(
+    tmp_path: Path, method: str
+) -> None:
+    library, driver = tmp_path / "libgenerativeqc.so", tmp_path / "driver"
+    library.write_bytes(b"main library")
+    driver.write_bytes(b"native HF driver")
+    for suffix in ("", "_spd"):
+        stem = f"generativeqc_stationary_pbe_{method}{suffix}"
+        (tmp_path / f"lib{stem}.so").write_bytes(b"force companion")
+        (tmp_path / f"{stem}.json").write_text("{}")
+    before = qualification.artifact_hashes(library, driver, method)
+    assert len(before) == (2 if method.endswith("hf") else 5)
+    target = (
+        driver
+        if method.endswith("hf")
+        else tmp_path / f"libgenerativeqc_stationary_pbe_{method}_spd.so"
+    )
+    target.write_bytes(b"replaced binary")
+    assert qualification.artifact_hashes(library, driver, method) != before
+
+
 def sample() -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
     reference = {
         "energy": -1.0,

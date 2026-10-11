@@ -12,6 +12,7 @@ def receipt(mask: int, repeat: int, seconds: float = 1.0) -> dict:
         "model": {"method": "rks"},
         "source": "source",
         "library_sha256": "library",
+        "artifact_sha256": {"library": "library"},
         "batch": 3,
         "graph": False,
         "host": "node1",

@@ -42,6 +42,22 @@ def write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
+def artifact_hashes(library: Path, driver: Path | None, method: str) -> dict:
+    """Freeze the main library, HF executable or KS force companions and manifests."""
+    paths = [library.resolve()]
+    if method.endswith("hf"):
+        if driver is None:
+            raise ValueError("HF binary provenance requires the native driver")
+        paths.append(driver.resolve())
+    else:
+        for suffix in ("", "_spd"):
+            stem = f"generativeqc_stationary_pbe_{method}{suffix}"
+            paths.extend(
+                (library.parent / f"lib{stem}.so", library.parent / f"{stem}.json")
+            )
+    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+
+
 def model(case: str, method: str, moved: bool = False) -> dict:
     """Cover admitted spd endpoints and retain explicit unsupported f-force domains."""
     restricted = method in ("rhf", "rks")
@@ -597,6 +613,7 @@ def main() -> int:
         "source": source,
         "source_identity": loaded.generativeqc_get_source_identity().decode(),
         "library_sha256": library_sha256,
+        "artifact_sha256": artifact_hashes(args.library, args.driver, args.method),
         "slurm_job": os.environ["SLURM_JOB_ID"],
         "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
         "provider_controls": {
@@ -653,7 +670,8 @@ def main() -> int:
                 cwd=ROOT,
                 text=True,
             ).strip()
-            or hashlib.sha256(args.library.read_bytes()).hexdigest() != library_sha256
+            or artifact_hashes(args.library, args.driver, args.method)
+            != provenance["artifact_sha256"]
         ):
             raise ValueError("source or selected library changed during qualification")
     except Exception as error:

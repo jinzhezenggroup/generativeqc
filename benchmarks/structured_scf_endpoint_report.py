@@ -13,6 +13,7 @@ IDENTITY_FIELDS = (
     "model",
     "source",
     "library_sha256",
+    "artifact_sha256",
     "batch",
     "graph",
     "host",
