@@ -38,11 +38,14 @@ class LinearResponseProblem {
                         LinearResponseSymmetry symmetry = LinearResponseSymmetry::General,
                         LinearOperator apply_transpose = {})
       : dimension_(dimension),
-        apply_(std::move(apply)),
+        apply_(checked_operator(dimension, std::move(apply))),
         symmetry_(symmetry),
-        apply_transpose_(std::move(apply_transpose)) {
+        apply_transpose_(checked_operator(dimension, std::move(apply_transpose))) {
     if (!dimension_) throw std::invalid_argument("response problem dimension must be positive");
     if (!apply_) throw std::invalid_argument("response problem operator callback is empty");
+    if (symmetry_ != LinearResponseSymmetry::General &&
+        symmetry_ != LinearResponseSymmetry::Symmetric)
+      throw std::invalid_argument("response problem operator symmetry is invalid");
     if (symmetry_ == LinearResponseSymmetry::Symmetric && apply_transpose_)
       throw std::invalid_argument(
           "symmetric response problem cannot provide a distinct transpose operator");
@@ -65,6 +68,17 @@ class LinearResponseProblem {
  private:
   friend class ResponsePlan;
   struct Binding {};
+
+  /** The same FP64 shape gate protects direct JVP/VJP calls and solver actions. */
+  static LinearOperator checked_operator(std::size_t dimension, LinearOperator action) {
+    if (!action) return {};
+    return [dimension, action = std::move(action)](std::span<const double> input,
+                                                   std::span<double> output) {
+      if (input.size() != dimension || output.size() != dimension)
+        throw std::invalid_argument("response operator input/output dimensions do not match");
+      action(input, output);
+    };
+  }
 
   std::size_t dimension_{};
   LinearOperator apply_;

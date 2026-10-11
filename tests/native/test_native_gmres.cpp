@@ -402,6 +402,96 @@ void response_plan_binding_contract() {
   require(rejected, "unprepared response plan reached the solver");
 }
 
+void response_action_shape_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::LinearResponseSymmetry;
+  std::size_t actions = 0;
+  const auto action = [&](std::span<const double> input, std::span<double> output) {
+    ++actions;
+    std::copy(input.begin(), input.end(), output.begin());
+  };
+  LinearResponseProblem general(2, action, LinearResponseSymmetry::General, action);
+  LinearResponseProblem symmetric(2, action, LinearResponseSymmetry::Symmetric);
+  const std::array<double, 2> input{1.0, 2.0};
+  std::array<double, 2> output{};
+  for (const auto* problem : {&general, &symmetric}) {
+    for (const auto* apply : {&problem->apply(), &problem->apply_transpose()}) {
+      for (bool short_input : {false, true}) {
+        bool rejected = false;
+        try {
+          (*apply)(std::span(input).first(short_input ? 1 : 2),
+                   std::span(output).first(short_input ? 2 : 1));
+        } catch (const std::invalid_argument&) {
+          rejected = true;
+        }
+        require(rejected && actions == 0, "malformed response JVP/VJP reached a method action");
+      }
+    }
+  }
+  general.apply()(input, output);
+  require(actions == 1 && output == input, "valid response action changed its physical output");
+  bool rejected = false;
+  try {
+    LinearResponseProblem invalid(2, action, static_cast<LinearResponseSymmetry>(99));
+    (void)invalid;
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "invalid response symmetry metadata was accepted");
+}
+
+void response_callback_preconditioner_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponseSolveRequest;
+  DenseOperator matrix{2, {4.0, 1.0, 2.0, 3.0}};
+  LinearResponseProblem problem(2, [&](auto input, auto output) { matrix(input, output); });
+  const std::array<double, 2> rhs{1.0, 2.0};
+  const std::array<double, 2> diagonal{4.0, 3.0};
+  const generativeqc::response::LinearOperator inverse = [&](auto input, auto output) {
+    for (std::size_t index = 0; index < input.size(); ++index)
+      output[index] = input[index] / diagonal[index];
+  };
+  const auto plan = generativeqc::response::prepare_response(problem, {});
+  const auto bound = generativeqc::response::solve_response(plan, problem, rhs, {}, {}, inverse);
+  const auto legacy =
+      generativeqc::response::solve_gmres(plan, problem.apply(), rhs, {}, {}, inverse);
+  require(bound.converged() && bound.solution == legacy.solution &&
+              bound.residual_norm == legacy.residual_norm &&
+              bound.iterations == legacy.iterations &&
+              bound.operator_actions == legacy.operator_actions &&
+              bound.preconditioner_actions == legacy.preconditioner_actions &&
+              explicit_residual(matrix, bound.solution, rhs) < 1e-12,
+          "shared callback preconditioning changed the physical solve or diagnostics");
+
+  const std::array<ResponseSolveRequest, 3> requests{
+      ResponseSolveRequest{rhs, {}, {}, inverse},
+      ResponseSolveRequest{rhs,
+                           {},
+                           {},
+                           [](auto, auto output) {
+                             std::fill(output.begin(), output.end(),
+                                       std::numeric_limits<double>::quiet_NaN());
+                           }},
+      ResponseSolveRequest{rhs, {}, diagonal},
+  };
+  const auto batch_plan = generativeqc::response::prepare_response_batch(
+      problem, {}, requests.size(), std::numeric_limits<std::size_t>::max());
+  const auto batch = generativeqc::response::solve_response_batch(batch_plan, problem, requests);
+  require(batch.responses[0].converged() &&
+              batch.responses[1].status == GmresStatus::nonfinite_preconditioner &&
+              batch.responses[2].converged(),
+          "one refused method preconditioner contaminated its batch neighbors");
+  bool rejected = false;
+  const auto actions_before = matrix.actions;
+  try {
+    (void)generativeqc::response::solve_response(plan, problem, rhs, {}, diagonal, inverse);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && matrix.actions == actions_before,
+          "conflicting response preconditioners reached the physical action");
+}
+
 void response_batch_binding_contract() {
   using generativeqc::response::LinearResponseProblem;
   using generativeqc::response::ResponseSolveRequest;
@@ -815,6 +905,8 @@ int main() {
     exact_solve_and_true_residual();
     linear_response_problem_contract();
     response_plan_binding_contract();
+    response_action_shape_contract();
+    response_callback_preconditioner_contract();
     response_batch_binding_contract();
     zero_rhs_is_transactional();
     restarted_and_exhausted_paths();

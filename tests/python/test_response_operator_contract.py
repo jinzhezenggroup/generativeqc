@@ -134,3 +134,31 @@ def test_rccsd_lambda_cpu_cuda_use_shared_general_response_problem() -> None:
         assert "response::prepare_response(" in source
         assert "response::solve_response(" in source
         assert "response::solve_gmres(" not in source
+
+
+def test_rhf_frame_response_uses_bound_provisional_and_physical_problems() -> None:
+    """The exact retry cannot reuse a screened operator's prepared binding."""
+    source = (ROOT / "src/hf/rhf_frame_response.cu").read_text()
+    assert "response::solve_gmres(" not in source
+    for name in ("provisional", "physical"):
+        assert f"response::prepare_response({name}_problem, zplan.options)" in source
+        assert f"response::solve_response({name}_plan, {name}_problem" in source
+    assert "inverse->apply(x, y)" in source
+    assert "owner.apply(z.solution, residual, true, 0.0)" in source
+
+
+def test_rccsdt_z_uses_shared_problem_after_symmetry_and_curvature_gates() -> None:
+    """CC retains ownership of the generated action and independent dense oracle."""
+    source = (ROOT / "src/cc/rccsdt_force.cpp").read_text()
+    assert "response::solve_gmres(" not in source
+    certify = source.index("if (asymmetry > 1e-10)")
+    stable = source.index(
+        "if (!(minimum_curvature > kMinimumOrbitalCurvature))", certify
+    )
+    bind = source.index(
+        "const response::LinearResponseProblem response_problem(", stable
+    )
+    solve = source.index("response::solve_response(z_plan, response_problem", bind)
+    assert certify < stable < bind < solve
+    assert "response::LinearResponseSymmetry::Symmetric" in source[bind:solve]
+    assert "independent[row] -= correlation.orbital_rhs[row]" in source[solve:]

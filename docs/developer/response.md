@@ -206,6 +206,15 @@ actions. Plan binding is not a convergence certificate or a substitute for
 those method-owned checks. GMRES equations, residual gates, numeric-payload
 budgets and backend selection are unchanged.
 
+Direct native JVP/VJP calls enforce the same FP64 input/output dimensions as
+solver actions, before invoking method callbacks. Explicit transpose actions
+and certified symmetric fallback actions use this same shape gate. The RHF
+frame adapter binds screened and exact actions to separate plans, while CC Z
+certifies symmetry only after its independent asymmetry/curvature checks.
+Callback right preconditioners pass through the shared solve request to existing
+GMRES; they cannot be combined with a diagonal preconditioner. Their descriptor
+storage is charged by batch admission and method-owned scratch is separate.
+
 ### Installed solver policies
 
 `solve` implements restarted GMRES with a true residual at every configured
@@ -217,6 +226,9 @@ a workspace or stagnation failure.
 The operator, preconditioner and retained-subspace roles are separate.
 `DiagonalPreconditioner` is opt-in and rejects zero/near-zero diagonal entries;
 it is never selected implicitly.
+Its inputs and host operator/preconditioner callback outputs must have the
+declared real numeric vector shape; complex/string outputs are rejected before
+FP64 conversion rather than silently narrowed or broadcast during Krylov work.
 
 `solve_many` provides:
 
@@ -224,6 +236,19 @@ it is never selected implicitly.
 - `blocked`: a shared orthonormal block basis with projected least squares;
 - `recycled`: reference-bound retained vectors used as initial guesses and
   updated after each solve.
+
+All three strategies accept an empty real RHS of shape ``(dimension, 0)`` and
+return that same solution shape, no per-RHS results, zero operator actions and
+zero solver workspace. They still validate the live generation/provider lease,
+recycle identity/owner, options and consumer/preconditioner contracts. No vector
+engine workspace, SVD, transfer or scientific action runs for an empty request.
+Perturbation labels describe the exact column set: partial requests require
+their own matching labels; a labeled nonempty problem cannot silently be used
+for an empty/subset request. Ragged input is rejected before operator execution.
+The shared stationary nuclear adapter follows these same empty-request rules.
+Its real-FP64 metric/RHS algebra rejects complex inputs before conversion,
+including complex arrays with zero imaginary parts; it never discards response
+components to fit the real scientific domain.
 
 Rank-deficient RHS blocks are diagnosed. The workspace accounting includes the
 retained Arnoldi/block basis and solver vectors. A small `max_workspace_bytes`
@@ -239,6 +264,21 @@ before projection or operator application. A successful peak is a conservative
 bound within the requested budget; a workspace rejection reports the required
 bound. Operator/preconditioner storage and Python interpreter bookkeeping are
 outside this solver numeric-buffer budget and require separate accounting.
+
+### Actual-path evidence and residency boundaries
+
+The [production-path inventory](../../manifests/maintenance/electronic_structure_production_paths.json)
+records response/force/HVP owners, bindings and evidence stages separately.
+Its coverage remains a pilot, not completion of #932/#934 or a capability table.
+Native CC Lambda, RHF frame Z and installed native CPKS still have host-vector
+Krylov/orbital seams; generated CUDA actions or resident J/K storage alone do
+not establish a resident solver endpoint. The resident CPHF tooling is a
+qualification binding, not a public molecular-derivative cutover. Complete CUDA
+semilocal RKS HVP remains unsupported until its missing sources and endpoint
+gates are delivered; mixed integral stages and local ``fxc`` are insufficient.
+These exceptions retain their owners and explicit retirement conditions in the
+inventory. No new default algorithm or scientific capability is inferred from
+shared orchestration.
 
 ## CPKS boundary
 

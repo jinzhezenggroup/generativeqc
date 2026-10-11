@@ -68,6 +68,31 @@ def test_problem_rhs_layout_validation_and_label_count() -> None:
         problem.validate_rhs(np.ones((problem.dimension - 1, 1)))
     with pytest.raises(ValueError, match="labels"):
         problem.validate_rhs(np.ones((problem.dimension, 2)))
+
+
+def test_empty_and_partial_rhs_require_exact_labels_and_real_dtype() -> None:
+    meta, arrays = load_fixture("h2")
+    reference = fixture_snapshot(meta, arrays)
+    backend = DenseAOResponseBackend(arrays["ao"])
+    problem = RHFResponseOperator.build_problem(
+        reference, backend, perturbation_labels=("x", "y")
+    )
+    empty = np.empty((problem.dimension, 0))
+    with pytest.raises(ValueError, match="labels"):
+        problem.validate_rhs(empty)
+    with pytest.raises(ValueError, match="labels"):
+        problem.validate_rhs(np.ones((problem.dimension, 1)))
+    selected = replace(problem, perturbation_labels=("y",))
+    assert selected.validate_rhs(np.ones((problem.dimension, 1))).shape[1] == 1
+    unlabeled = replace(problem, perturbation_labels=())
+    result = unlabeled.validate_rhs(empty)
+    assert result.shape == empty.shape
+    assert result.dtype == np.float64
+    assert not result.flags.writeable
+    with pytest.raises(ValueError, match="real"):
+        unlabeled.validate_rhs(empty.astype(complex))
+    with pytest.raises(ValueError):
+        unlabeled.validate_rhs([[1.0], [2.0, 3.0]])
     with pytest.raises(ResponseUnsupported, match="RHS layout"):
         replace(problem, rhs_layout="unsupported")
     with pytest.raises(ResponseUnsupported, match="gauge"):

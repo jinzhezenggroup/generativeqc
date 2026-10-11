@@ -39,10 +39,17 @@ class ResponsePlan : public GmresPlan {
   std::shared_ptr<const LinearResponseProblem::Binding> binding_;
 };
 
+/** Perturbation-specific inputs; preconditioners never change the physical action.
+ *
+ * The callback form is needed by the existing HF optional inverse. Its owned
+ * callable is descriptor storage; its workspace remains method-owned and must
+ * be admitted separately. Diagonal and callback forms are mutually exclusive.
+ */
 struct ResponseSolveRequest {
   std::span<const double> rhs;
   std::span<const double> initial_guess{};
   std::span<const double> diagonal_preconditioner{};
+  LinearOperator right_preconditioner{};
 };
 
 enum class ResponseBatchStatus { complete, workspace_limit };
@@ -100,14 +107,16 @@ inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponse
   if (!plan.is_bound_to(problem))
     throw std::invalid_argument("response plan belongs to a different problem binding");
   return solve_gmres(plan, problem.apply(), request.rhs, request.initial_guess,
-                     request.diagonal_preconditioner);
+                     request.diagonal_preconditioner, request.right_preconditioner);
 }
 
 inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
                                   std::span<const double> rhs,
                                   std::span<const double> initial_guess = {},
-                                  std::span<const double> diagonal_preconditioner = {}) {
-  return solve_response(plan, problem, {rhs, initial_guess, diagonal_preconditioner});
+                                  std::span<const double> diagonal_preconditioner = {},
+                                  const LinearOperator& right_preconditioner = {}) {
+  return solve_response(plan, problem,
+                        {rhs, initial_guess, diagonal_preconditioner, right_preconditioner});
 }
 
 inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& problem,

@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from generativeqc.stationary_nuclear import solve_stationary_nuclear_perturbations
 
 from tools.generativeqc_hessian import (
     build_rhf_nuclear_rhs,
@@ -16,7 +17,9 @@ from tools.generativeqc_posthf.fixtures import fixture_snapshot, load_fixture
 from tools.generativeqc_response import (
     CPKSResponseOperator,
     DenseAOResponseBackend,
+    GMRESOptions,
     RHFResponseOperator,
+    solve_many,
 )
 
 
@@ -54,6 +57,64 @@ def test_nuclear_rhs_rejects_missing_or_malformed_metric_inputs() -> None:
         build_rhf_nuclear_rhs(values, values, np.zeros((2, 2)), np.arange(3.0), nocc=1)
     with pytest.raises(ValueError, match="between"):
         metric_density_response_mo(values, nocc=0)
+
+
+@pytest.mark.parametrize("argument", range(4))
+@pytest.mark.parametrize("imaginary", (0.0, 0.25))
+def test_nuclear_rhs_rejects_complex_before_fp64_conversion(
+    argument: int,
+    imaginary: float,
+) -> None:
+    values = [np.eye(3), np.eye(3), np.eye(3), np.arange(3.0)]
+    values[argument] = values[argument].astype(complex) + imaginary * 1j
+    with pytest.raises(ValueError, match="real"):
+        build_stationary_nuclear_rhs(*values, nocc=1)
+
+
+@pytest.mark.parametrize("imaginary", (0.0, 0.25))
+def test_metric_connection_rejects_complex_overlap(imaginary: float) -> None:
+    with pytest.raises(ValueError, match="real"):
+        metric_density_response_mo(np.eye(3, dtype=complex) + imaginary * 1j, nocc=1)
+
+
+@pytest.mark.parametrize("strategy", ("sequential", "blocked", "recycled"))
+def test_empty_nuclear_batch_validates_but_does_not_execute_physics(
+    strategy: str,
+    monkeypatch: object,
+) -> None:
+    meta, arrays = load_fixture("h2")
+    reference = fixture_snapshot(meta, arrays)
+    backend = DenseAOResponseBackend(arrays["ao"])
+    problem = RHFResponseOperator.build_problem(reference, backend)
+    operator = RHFResponseOperator(problem, backend)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("empty nuclear request executed a scientific action")
+
+    monkeypatch.setattr(operator, "induced_fock", forbidden)
+    empty = np.empty((0, reference.nmo, reference.nmo))
+    result = solve_stationary_nuclear_perturbations(
+        operator,
+        empty,
+        empty,
+        solver=solve_many,
+        strategy=strategy,
+        options=GMRESOptions(max_workspace_bytes=1),
+        metric_response=forbidden,
+    )
+    assert result.responses == ()
+    assert result.solve_result.solution.shape == (problem.dimension, 0)
+    assert result.solve_result.peak_workspace_bytes == 0
+    with pytest.raises(TypeError, match="metric_response"):
+        solve_stationary_nuclear_perturbations(
+            operator,
+            empty,
+            empty,
+            solver=solve_many,
+            strategy=strategy,
+            options=GMRESOptions(),
+            metric_response=None,
+        )
 
 
 def test_rhf_induced_fock_preserves_j_minus_half_k_contract() -> None:
