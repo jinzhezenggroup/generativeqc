@@ -88,7 +88,11 @@ def test_full_qualification_has_a_separate_finite_budget(
     assert routine == routine_minutes
     assert 60 <= full <= 120
     if filename == "ci.yml":
-        assert '!= "schedule"' in section and '!= "workflow_dispatch"' in section
+        assert "source .github/scripts/ci_select_python_shard.sh" in section
+        selector = (
+            path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
+        ).read_text(encoding="utf-8")
+        assert '!= "schedule"' in selector and '!= "workflow_dispatch"' in selector
 
 
 def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> None:
