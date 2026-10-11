@@ -14,9 +14,11 @@ Non-NVIDIA and domestic GPU validation is **not-run**. Device limits and
 optional FP64, subgroup, compiler and library capabilities must be queried
 per device; historical values are not universal defaults.
 
-The source-matched [execution report](../../benchmarks/results/opencl-rtx5090/report.json)
-preserves the exact driver/device/UUID, OpenCL C compiler, generated kernels,
-compile/link logs, queried limits, profiling samples and cache roundtrips.
+The historical [execution report](../../benchmarks/results/opencl-rtx5090/report.json)
+records the exact driver/device/UUID and OpenCL C compiler identity, source-file
+and generated-kernel hashes, compile/link timings, queried limits, profiling
+samples and cache roundtrips. Its provenance records a dirty worktree; the base
+commit alone is not the measured source identity.
 The [validation summary](../../benchmarks/results/opencl-rtx5090/validation-summary.json)
 retains reference errors and test results. The
 [vendor-source provenance](../../benchmarks/results/opencl-rtx5090/vendor-docs.json)
@@ -84,9 +86,10 @@ PYTHONPATH=python:. python tools/validate_opencl_backend.py \
 
 An OpenCL ICD may not respect CUDA device visibility. Multi-GPU runs require
 a scheduler-assigned UUID-to-OpenCL mapping, not a guessed ordinal. The
-source-matched archive gives the exact earlier Slurm procedure, compiler
+[earlier Slurm procedure](https://github.com/jinzhezenggroup/generativeqc/blob/b30fa2da4ede0dabf27645ec93623186451b5fe4/docs/developer/opencl_backend.md#reproduction-and-numerical-boundary)
+is preserved in Git history. The report and validation summary retain compiler
 versions, cases, numerical tolerances, errors, resource measurements and
-separately reported failures/skips. Its reference smoke uses host-generated
+separately reported failures/skips. The reference smoke uses host-generated
 Boys inputs and host contraction of primitive results: the tested scalar
 expression and reduction kernels are **not** a native integral provider or a
 complete HF/DFT energy/force endpoint. Dated timings are not current default
