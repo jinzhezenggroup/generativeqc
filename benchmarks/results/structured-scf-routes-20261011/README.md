@@ -14,19 +14,19 @@ inventory `9aa64b6d646babde52e5420799f377c01850624e5043f382ef4c2b011d2937f3`.
 Receipt-only changes do not change that scientific inventory. This is a follow-up
 to merged #2263, not a replacement of its primitive qualification.
 
-- [Scientific receipts](endpoint-science.json) retain every cold/warm/moved
+- [Scientific receipts](endpoint-science.json.gz) retain every cold/warm/moved
   outcome, independent error gate, failure, source/binary/reference hash and
   accepted-row count. Batch members are not independent process repetitions.
-- [Matched performance](endpoint-performance.json) retains three paired process
+- [Matched performance](endpoint-performance.json.gz) retains three paired process
   costs for each of five phases, SCF iteration/Fock-build observations, actual
   submitted operations, region policy, and negative/unknown profitability.
-- [Validation and execution](endpoint-validation.json) records native-suite
+- [Validation and execution](endpoint-validation.json.gz) records native-suite
   status, primitive replay, memcheck/initcheck, host checks, build provenance and
   transform envelopes. A requested Graph is not an admitted/executed Graph.
 
 The original post-fix endpoint source `607d47b1e2383bdd7618ddc9264f9d7a8205d6b2`
 was based on `bd6f78288`, before rebasing onto merged #2263. Its compact
-[outcome/decision/validation history](endpoint-history-607d47b1e.json) is historical
+[outcome/decision/validation history](endpoint-history-607d47b1e.json.gz) is historical
 evidence, not validation of the new tip. The new source is rebuilt and rerun independently;
 no old measurements are relabelled with its SHA.
 
@@ -59,8 +59,40 @@ identity; `model_key` resolves model, reference and artifact facts from the
 scientific receipt. Observations borrow that identity with a zero-based
 `profile_index`. The final report preserves every paired cost, work count and
 policy decision. The historical publication retains outcomes, decisions and
-raw receipt/report hashes; its original phases, errors and timings/work
-remain in the recorded ignored local directory, not a new archive or Release.
+raw receipt/report hashes. The original historical science, performance-decision
+and validation publications are also retained in full as compressed receipts;
+additional raw timing/work remains in the recorded ignored local directory.
+
+## Lossless storage
+
+The four current publications are individual `.json.gz` files. Science,
+performance and validation retain the decoded bytes at receipt revision
+`dd50437a47c000f1c023e52786956b8f8c8a487f`; the current history summary retains
+those at `bb535d14e7056400dfbc5bbe8ad27754e804324d`. The complete earlier
+[historical science](endpoint-science-607d47b1e.json.gz),
+[performance decisions](endpoint-performance-607d47b1e.json.gz), and
+[validation](endpoint-validation-607d47b1e.json.gz) receipts are restored exactly
+from `e7abb59975bd3c0a9efdd8f82eeb1b74854a4f31`, alongside the current history
+summary. The summary omits original policy/provider fields and per-run phases
+and errors; it is not a reversible replacement for the three full receipts.
+
+[Storage identities](endpoint-storage.json) bind each original revision, path,
+Git blob, size and SHA-256 to its compressed path, size and SHA-256. These are
+storage revisions, not new measured scientific sources. No JSON is reserialized
+during compression, and no samples, errors or acceptance decisions change.
+
+Read a receipt with `gzip -dc`, or the shared
+`tools.generativeqc_validation.record.load_json` reader using its compressed path:
+
+```bash
+gzip -dc benchmarks/results/structured-scf-routes-20261011/endpoint-science.json.gz
+```
+
+Embedded `.json` references remain original logical filenames;
+`endpoint-storage.json` maps them to compressed paths. The current scientific
+tables and performance identities expand to exactly the same JSON values as
+their pre-compaction receipts; retention tests pin the complete expanded values.
+No new measurements or qualification are claimed.
 
 ## Admission boundaries
 

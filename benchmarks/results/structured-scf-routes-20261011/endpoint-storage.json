@@ -1,0 +1,77 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage-set.v1",
+  "compression": "gzip, level 9, mtime 0",
+  "scope": "Exact-byte storage only. Current author publications and the complete earlier historical receipts retain every original record, value, ordering, measurement-source identity and acceptance decision.",
+  "files": [
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-history-607d47b1e.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-history-607d47b1e.json.gz",
+      "original_revision": "bb535d14e7056400dfbc5bbe8ad27754e804324d",
+      "original_bytes": 28173,
+      "stored_bytes": 8340,
+      "original_sha256": "042ddf5c2ac4583aea3c8398099b11e108b3a0adc4d093bcd700ab3e7537359a",
+      "stored_sha256": "e9068708a24208c42c92ed1f19ac43dcc23402fcbef41078ea837ef1f4f1b7c6",
+      "original_git_blob": "0e529f4f7b2b5593cade1a84fabd4d35f7026e4b"
+    },
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-performance-607d47b1e.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-performance-607d47b1e.json.gz",
+      "original_revision": "e7abb59975bd3c0a9efdd8f82eeb1b74854a4f31",
+      "original_bytes": 11862,
+      "stored_bytes": 1339,
+      "original_sha256": "90899eadbc2d0b3971ca310bfd1a2f1ad8427c64800d43a9fc98f4bb63055089",
+      "stored_sha256": "213f109edcae5654258eef30866f5fbf6899406aa3c1c08ed7d66eb15628b1d1",
+      "original_git_blob": "d252589e069058d4ec028774971490187f1ef7a4"
+    },
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-performance.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-performance.json.gz",
+      "original_revision": "dd50437a47c000f1c023e52786956b8f8c8a487f",
+      "original_bytes": 99039,
+      "stored_bytes": 17991,
+      "original_sha256": "ba59c84f457a5e1207d9500fb46cfc96b6693287a687d0b7fe2a57f97644bbc5",
+      "stored_sha256": "0a59807d02751cf1e944d904c1e4937534c76703a31312d0fe840b5f8f52c99b",
+      "original_git_blob": "068b50f31bccf9a8299817e0392e4b0e70a2cb6c"
+    },
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-science-607d47b1e.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-science-607d47b1e.json.gz",
+      "original_revision": "e7abb59975bd3c0a9efdd8f82eeb1b74854a4f31",
+      "original_bytes": 108027,
+      "stored_bytes": 16604,
+      "original_sha256": "1dcf7f4dc351f8993712c30874f5e84139e0adbddfe9cf797651c4874ed97895",
+      "stored_sha256": "97e8b2732f93e2c84affe1e6f79383425c9e3700f596128102b0ae4ce548ee1f",
+      "original_git_blob": "fe175df1149c4d1d422f0c1f9ad5bb26a46d87bc"
+    },
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-science.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-science.json.gz",
+      "original_revision": "dd50437a47c000f1c023e52786956b8f8c8a487f",
+      "original_bytes": 77292,
+      "stored_bytes": 21162,
+      "original_sha256": "be1302b8063616c25e9bdd93beb77bdff556c97395dec9feafeb770f6dc39cc5",
+      "stored_sha256": "2ecc1625f1a5821c7c534536f9f034f851b9e055f813d9c3626a4cbef79f5827",
+      "original_git_blob": "3fe4a37ef72fb21507e6467a8fb0dc30746f6ce4"
+    },
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-validation-607d47b1e.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-validation-607d47b1e.json.gz",
+      "original_revision": "e7abb59975bd3c0a9efdd8f82eeb1b74854a4f31",
+      "original_bytes": 10685,
+      "stored_bytes": 3249,
+      "original_sha256": "ad1d6be21a6ee690c552a712cfa065534242eee281f55ef81d76390bed4a2129",
+      "stored_sha256": "e022c4e44e051ffbb27a122c964f24bff36b1dbfd9d49386abe5213c71ed0b20",
+      "original_git_blob": "b091b92e9cfb304304e0c35e5fbc8541cc2d47bb"
+    },
+    {
+      "original_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-validation.json",
+      "stored_path": "benchmarks/results/structured-scf-routes-20261011/endpoint-validation.json.gz",
+      "original_revision": "dd50437a47c000f1c023e52786956b8f8c8a487f",
+      "original_bytes": 11077,
+      "stored_bytes": 3442,
+      "original_sha256": "8ba9da75b3fb46d9204fce6ee7f44338c93571b2b8764cb87a834d132065c79a",
+      "stored_sha256": "7fadb05f913d9bfc5dcdec0051a74bfeeacf192284c7a538ccafd97f0fc80dc5",
+      "original_git_blob": "b67905abd080a555d40f5fbdc335629bcd572cc5"
+    }
+  ]
+}
