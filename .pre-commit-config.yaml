@@ -115,6 +115,11 @@ repos:
           - python/generativeqc_compiler/mp2/equations.py
           - python/generativeqc_compiler/tensor/cuda_inline.py
           - python/generativeqc_compiler/tensor/lowering.py
+          - python/generativeqc_compiler/integral/df_values.py
+          - python/generativeqc_compiler/integral/one_electron_values.py
+          - python/generativeqc_compiler/integral/blocks.py
+          - python/generativeqc_compiler/tensor/autodiff.py
+          - tools/generate_rccsd_native.py
         pass_filenames: false
         always_run: true
       # This hook discovers all published __all__ modules at runtime, follows

@@ -63,7 +63,7 @@ class TensorLayout:
             checked_index(stride, "tensor stride", minimum=1)
         span = 1
         for stride, extent in sorted(
-            (s, n) for s, n in zip(strides, self.shape) if n > 1
+            (s, n) for s, n in zip(strides, self.shape, strict=True) if n > 1
         ):
             if stride < span:
                 raise ValueError("tensor strides overlap or interleave axes")
@@ -75,7 +75,7 @@ class TensorLayout:
         """Include padding in the required allocation size."""
         strides = self.strides
         assert strides is not None  # normalized by __post_init__
-        return 1 + sum((n - 1) * s for n, s in zip(self.shape, strides))
+        return 1 + sum((n - 1) * s for n, s in zip(self.shape, strides, strict=True))
 
     @property
     def storage_bytes(self) -> int:
@@ -87,7 +87,7 @@ class TensorLayout:
         strides = self.strides
         assert strides is not None  # normalized by __post_init__
         for coordinate in product(*(range(n) for n in self.shape)):
-            yield sum(i * s for i, s in zip(coordinate, strides))
+            yield sum(i * s for i, s in zip(coordinate, strides, strict=True))
 
     def to_payload(self) -> dict[str, object]:
         """Expose ordering, extents, element strides, and fixed scalar type."""
@@ -256,7 +256,7 @@ class ShellTile:
             raise ValueError(
                 "shell tile requires matching two-, three-, or four-slot extents"
             )
-        for offset, extent in zip(self.offsets, self.shape):
+        for offset, extent in zip(self.offsets, self.shape, strict=True):
             checked_index(offset, "tile offset")
             checked_index(extent, "tile extent", minimum=1)
             checked_index(offset + extent, "tile end", minimum=1)
@@ -304,7 +304,8 @@ class BlockRequest:
         if len(full_shape) != len(self.tile.shape) or any(
             offset + extent > full
             for offset, extent, full in zip(
-                self.tile.offsets, self.tile.shape, full_shape
+                self.tile.offsets, self.tile.shape, full_shape,
+                strict=True,
             )
         ):
             raise ValueError("tile exceeds shell bounds")
