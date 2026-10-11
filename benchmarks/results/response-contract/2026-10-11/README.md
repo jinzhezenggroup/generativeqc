@@ -67,3 +67,34 @@ remain distinct from the first merge replay. Rebuilt native tests and sanitizers
 pass; Slurm CPU job 7562 repeats 42 passes with the same skip/deselection, and GPU
 job 7563 repeats all 91 passes plus the native Lambda gates. That GPU allocation
 assigns `CUDA_VISIBLE_DEVICES=3`, which is preserved unchanged.
+
+## Opt-in conventional Lambda residency
+
+The [resident receipt](qualification-resident-lambda.json) qualifies frozen
+source `8e8cf9aab32c22d876aaef09c0c97ff02f66a3c9`. The existing resident controller
+now executes method-owned right preconditioning, and the conventional CUDA
+Lambda adapter keeps vectors and weighted pair projection on its existing
+stream. It preserves terminal replay, unsafe-diagonal fallback and independent
+physical Lambda/orbital acceptance. Full tensor-provider admission is charged;
+the candidate remains opt-in, including in the native complete-force overloads.
+
+The source passes 131 focused tests, three native CPU CTests, resident-controller
+ASan/UBSan/leak detection, Sphinx warnings-as-errors and all applicable hooks.
+Finite Slurm jobs 7582/7587 qualify independent noninteracting Lambda and complete
+native RCCSD E+F pairs for original/changed H2 and two valid budgets. The CUDA
+fixture consumes its native reference interaction source, not host raw ERIs.
+Job 7589 repeats all 91 existing response/frame GPU tests without skips.
+
+The isolated process A/B order is baseline/resident/resident/baseline. Only each
+process's first 256-MiB case is process-cold; later cold labels are the first
+call for that budget in a warm process. None of these calls is prepared-plan
+warm reuse. Two samples and this tiny molecular domain do not prove performance
+non-regression. The 512-MiB process-warm median is about 17% slower, resident
+provider memory/fences increase, and **no default is promoted**. Larger domains
+and a complete transfer/fence/provider/peak-memory census remain required.
+
+Failed exploratory MO-budget admission, a missing executable alias, local
+collection setup and unrelated frozen-gzip header comparisons remain in the
+receipt. No acceptance gate or retained evidence bytes are weakened. DF Lambda,
+HF/CPKS/MP2 residency, prepared leases/ragged recovery and the historical finite
+13-AO cold-JIT gate remain unfinished; this receipt does not close #932.
