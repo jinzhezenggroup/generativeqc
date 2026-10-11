@@ -142,6 +142,42 @@ rejection, before treating FP32 scalar functions as supported.
   Compiler structure remains 521 modules, zero dependency errors; scoped Ruff and
   Sphinx warnings-as-errors pass. Remote builds/JIT use verified ccache 4.5.1.
 
+### Final source-matched remote molecular endpoints
+
+Measurement source `aecab1e3ad9f5ce6bc12de884b87eed35b1628d7` is archived and
+rebuilt on n2 under finite CPU-only jobs 2894/2895. All 405 actual compiler
+commands use verified ccache; the final rebuild adds 404 hits and one miss.
+Native source identity is
+`869e302bd2e1dcb0c82d9b005652581c297a28dc1225d6d5b0957562e80815bb`;
+the same library hash is verified before each execution. Qualification data is
+retained under `benchmarks/results/array-api-rhf-slurm-20261011/`, including full
+source/library hashes, exact commands, JUnit, raw timing samples and cache receipts.
+
+- n1/node1 job **7586**, RTX 5090, assigned visibility `1`: **67 passed**, no
+  skips. Complete H2, HeH+ and water gradients, nonlinear geometry composition,
+  mutation-safe VJP and typed ordinary/resident scalar primal/JVP/VJP all run.
+- n4/node4 job **767**, RTX 5090, assigned visibility `0`: the same **67 passed**,
+  no skips. Each suite contains 26 actual CUDA cases plus 41 host contract cases.
+- Water complete warm endpoint, ten alternating samples: n1 native 101.301279 ms
+  versus Array API 102.508631 ms (**1.1918% overhead**); n4 99.437864 ms versus
+  100.245991 ms (**0.8127% overhead**). All paths take exactly twelve iterations.
+  Reported parity errors are at most 1.4211e-14 energy / 1.7903e-15 gradient.
+- H2 complete warm endpoint: n1 4.164925 ms versus 4.813250 ms (**15.5663%**);
+  n4 4.193418 ms versus 4.948853 ms (**18.0148%**). All paths take two iterations,
+  with zero reported cold parity errors. **H2 misses the 5% timing target**;
+  do not claim universal GPU parity or hide the tiny-endpoint overhead.
+- Each generated benchmark performs eleven real force calls and 22/132 total
+  SCF iterations for H2/water. Native strict-Fock counters are valid, but detailed
+  exact-J/K inventories remain incomplete and peak memory is unmeasured. Keep
+  `gpu_performance_qualified=false` even for water's passing timing observation.
+
+This replaces the initial *local-only absence of GPU evidence*, not the method
+boundary: RHF is still a fixed native primitive with compiled first-order
+composition, host staging and explicit unsupported higher-order/arbitrary-method
+domains. The measured extra 0.65-0.76 ms on H2 warrants endpoint profiling before
+proposing residency, capture or Python/IR caching changes; these timings alone
+do not identify its cause.
+
 ## Revisit when
 
 Add other native method sources only with independently qualified complete
