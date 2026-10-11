@@ -249,8 +249,8 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     // scratch from a failed producer. Peeking neither clears nor synchronizes.
     cuda_check(cudaPeekAtLastError());
     const bool bound_point =
-        restricted_point && stationary_pbe0_restricted_point_capable && !external;
-    if constexpr (stationary_pbe0_restricted_point_capable) {
+        !external && stationary_restricted_point_selected(restricted_point);
+    if constexpr (stationary_restricted_point_capable) {
       if (bound_point)
         geometry_point_kernel<true><<<blocks(view.npoint, 128), 128, 0, stream>>>(
             view, owners, owner_offset, points_per_atom, na, weights, raw, external,
@@ -289,8 +289,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                                 centers, na, weights, raw, external, external_stride,
                                 external_offset, geometry_lanes, partial, scratch, center_pairs,
                                 error);
-  if (!precomputed_point || !restricted_point || !stationary_pbe0_restricted_point_capable ||
-      external) {
+  if (!precomputed_point || external || !stationary_restricted_point_selected(restricted_point)) {
     ++owner.general_point_batches;
     owner.general_point_count += view.npoint;
   }
@@ -1182,8 +1181,9 @@ static int stationary_geometry_molecular_resident_weights_enqueue_impl(
         points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
         view->npoint > p->atoms * points_per_atom - owner_offset)
       throw std::invalid_argument("invalid resident-weight geometry task lease");
-    // Bit zero comes only from the owned grid producer's identical rho/gradient
-    // witness. A functional name is not a proof; v1 never selects this route.
+    // Bit zero witnesses all requested paired features, including tau: the owned
+    // producer copies the contracted panels before identical spin reductions.
+    // A functional name is not a proof; v1 never selects this route.
     if (versioned_binding && (generation != view->generation || (binding_flags & ~uint64_t{1})))
       throw std::invalid_argument("invalid resident-weight density binding proof");
     check(*p);

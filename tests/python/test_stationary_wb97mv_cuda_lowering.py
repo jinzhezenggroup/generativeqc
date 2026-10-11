@@ -11,7 +11,10 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
-from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
+from generativeqc_compiler.xc.geometry_cuda import (
+    _emit_stationary_point,
+    emit_geometry_cuda,
+)
 
 WB97MV_SCF_DOMAIN = "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
 
@@ -47,7 +50,8 @@ def test_wb97mv_geometry_lowering_refuses_numeric_selector_without_semantics() -
     assert first == second
 
 
-def test_rks_spin_projection_preserves_method_owned_parameters() -> None:
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_spin_projection_preserves_method_owned_parameters(spin: str) -> None:
     """A named WB97M-V reconstruction would silently erase these parameters."""
     custom = MethodSpec(
         "custom-b97m",
@@ -56,7 +60,7 @@ def test_rks_spin_projection_preserves_method_owned_parameters() -> None:
         short_range_exchange=Fraction(3, 20),
         long_range_exchange=Fraction(1),
     )
-    method = resolve_method(custom, spin="unpolarized")
+    method = resolve_method(custom, spin=spin)
     spec = next(
         item.functional
         for item in method.primitives
@@ -64,8 +68,13 @@ def test_rks_spin_projection_preserves_method_owned_parameters() -> None:
     )
     plan = StationaryGradientPlan(method, StationaryMeanField(WB97MV_SCF_DOMAIN))
     source = emit_stationary_cuda("", functional=4, plan=plan)
-    expected = emit_geometry_cuda(
-        functional=4, semilocal=replace(spec, spin="polarized")
-    )
+    expected = emit_geometry_cuda(functional=4, semilocal=spec)
     assert expected in source
-    assert spec.spin == "unpolarized"
+    polarized_point = _emit_stationary_point(
+        4, semilocal=replace(spec, spin="polarized")
+    )
+    assert polarized_point in source
+    capable = str(spin == "unpolarized").lower()
+    assert f"stationary_restricted_point_capable = {capable};" in source
+    assert "stationary_legacy_restricted_point_default = false;" in source
+    assert spec.spin == spin

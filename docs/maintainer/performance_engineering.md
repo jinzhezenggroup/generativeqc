@@ -440,6 +440,11 @@ history.
 
 ## Performance qualification checklist
 
+The [equal-spin CUDA XC qualification](xc_equal_spin_qualification.md) describes
+the opt-in RKS scalar-sharing candidate and its separate point, independent
+reference and complete molecular endpoint gates. Point throughput does not
+authorize promotion of a complete functional or composite method.
+
 The [experimental CUDA kernel timing tool](../developer/cuda_time_estimator.md)
 accepts explicit achieved-rate calibration for offline estimates. Its retained
 RTX 5090 arithmetic/copy/streaming calibrations require explicit family selection

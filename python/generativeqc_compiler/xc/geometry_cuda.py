@@ -14,6 +14,7 @@ from ._generated_native_semilocal import (
 )
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .coefficients import jet_pullback_program
+from .equal_spin import equal_spin_roots
 from .grid_native import emit_grid_adjoint, emit_grid_partials
 from .semilocal_codegen import emit_polarized_semilocal
 from .semilocal_family import energy_expression
@@ -92,6 +93,7 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
             "  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};",
             "  bool valid{true};",
             "};",
+            "template <bool equal_spin = false>",
             "__device__ inline StationaryPointValue stationary_evaluate_point(",
             "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
             "  StationaryPointValue out;",
@@ -101,7 +103,8 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
             "    sigma[1] += gradient[0][k] * gradient[1][k];",
             "    sigma[2] += gradient[1][k] * gradient[1][k];",
             "  }",
-            f"  const auto raw = {raw_name}({arguments});",
+            f"  const auto raw = equal_spin ? {raw_name}_equal_spin({arguments})",
+            f"                              : {raw_name}({arguments});",
             "  out.valid = isfinite(raw.energy_density);",
             "  for (double value : raw.feature_derivative) out.valid = out.valid && isfinite(value);",
             "  out.energy = raw.energy_density;",
@@ -129,12 +132,13 @@ def _emit_restricted_point_capability(
 ) -> str:
     """Describe mathematics, not runtime proof of an equal-spin producer.
 
-    Only the independently qualified unpolarized PBE0 semilocal composition
-    admits the bound entry. Identifiers never establish either this capability
-    or the generation-bound density/gradient equality required by its caller.
+    Every registered unpolarized consumer has an equal-spin lowering. Runtime
+    generation/scratch gates must still prove that its producer supplies equal
+    features. The old PBE0 composition check controls only the retained default
+    qualification and subnormal policy, not candidate eligibility.
     """
     record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
-    capable = (
+    legacy_default = (
         record is not None
         and record["stationary_kernel"] == "pbe"
         and semilocal is not None
@@ -142,8 +146,28 @@ def _emit_restricted_point_capability(
         and dict(semilocal.components)
         == {"GGA_X_PBE": Fraction(3, 4), "GGA_C_PBE": Fraction(1)}
     )
+    capable = (
+        semilocal is not None
+        and semilocal.spin == "unpolarized"
+        and (functional in _REGISTERED_STATIONARY_CODES)
+    )
     declaration = [
+        "",
+        "#include <cstdlib>",
+        "#include <cstring>",
+        "#include <stdexcept>",
+        f"constexpr bool stationary_restricted_point_capable = {str(capable).lower()};",
+        "// Retained spelling for the v1 binding-metrics ABI, not a method whitelist.",
         f"constexpr bool stationary_pbe0_restricted_point_capable = {str(capable).lower()};",
+        f"constexpr bool stationary_legacy_restricted_point_default = {str(legacy_default).lower()};",
+        "inline bool stationary_restricted_point_selected(bool requested) {",
+        "  if (!requested || !stationary_restricted_point_capable) return false;",
+        '  const char* selection = std::getenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");',
+        '  if (selection && std::strcmp(selection, "1") == 0) return true;',
+        '  if (selection && std::strcmp(selection, "0") != 0)',
+        "    throw std::invalid_argument(\"GENERATIVEQC_CUDA_XC_EQUAL_SPIN must be '0' or '1'\");",
+        "  return stationary_legacy_restricted_point_default;",
+        "}",
         "__device__ inline StationaryPointValue stationary_evaluate_restricted_point(",
         "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
     ]
@@ -152,6 +176,14 @@ def _emit_restricted_point_capability(
             [
                 *declaration,
                 "  return stationary_evaluate_point(rho, gradient, tau);",
+                "}",
+            ]
+        )
+    if not legacy_default:
+        return "\n".join(
+            [
+                *declaration,
+                "  return stationary_evaluate_point<true>(rho, gradient, tau);",
                 "}",
             ]
         )
@@ -213,9 +245,12 @@ def _emit_stationary_point(
                 "  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};",
                 "  bool valid{true};",
                 "};",
+                "template <bool equal_spin = false>",
                 "__device__ inline StationaryPointValue stationary_evaluate_point(",
                 "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
-                f"  const auto raw = generativeqc::dft::point::evaluate({pbe}, rho, gradient{scales});",
+                "  const auto raw = equal_spin",
+                f"      ? generativeqc::dft::point::evaluate_with_channels<4, true>({pbe}, rho, gradient{scales})",
+                f"      : generativeqc::dft::point::evaluate({pbe}, rho, gradient{scales});",
                 "  StationaryPointValue out;",
                 "  out.energy = raw.energy;",
                 "  out.valid = raw.valid;",
@@ -262,6 +297,7 @@ def _emit_stationary_point(
                 "  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};",
                 "  bool valid{true};",
                 "};",
+                "template <bool equal_spin = false>",
                 "__device__ inline StationaryPointValue stationary_evaluate_point(",
                 "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
                 "  StationaryPointValue out;",
@@ -290,7 +326,9 @@ def _emit_stationary_point(
                 "  const double sigma_average = 0.5 * (work_sigma[0] + work_sigma[2]);",
                 "  work_sigma[1] = fmax(-sigma_average, fmin(sigma_average, work_sigma[1]));",
                 "  double work_tau[2]{fmax(tau_threshold, tau[0]), fmax(tau_threshold, tau[1])};",
-                "  const auto raw = stationary_wb97mv_raw(",
+                "  const auto raw = equal_spin ? stationary_wb97mv_raw_equal_spin(",
+                "      work_rho[0], work_rho[1], work_sigma[0], work_sigma[1], work_sigma[2],",
+                "      work_tau[0], work_tau[1]) : stationary_wb97mv_raw(",
                 "      work_rho[0], work_rho[1], work_sigma[0], work_sigma[1], work_sigma[2],",
                 "      work_tau[0], work_tau[1]);",
                 "  out.valid = isfinite(raw.energy_density);",
@@ -352,12 +390,34 @@ def _emit_stationary_point(
     emitter = ScalarCEmitter(graph, variables)
     emitter.emit(roots)
     refs = [emitter.reference(root) for root in roots]
+    restricted_roots = equal_spin_roots(graph, roots)
+    restricted_emitter = ScalarCEmitter(graph, variables)
+    restricted_emitter.emit(restricted_roots)
+    restricted_refs = [restricted_emitter.reference(root) for root in restricted_roots]
+    scalar_branches = []
+    for branch, selected_emitter, selected_refs in (
+        ("  if constexpr (equal_spin) {", restricted_emitter, restricted_refs),
+        ("  } else {", emitter, refs),
+    ):
+        scalar_branches.extend(
+            (
+                branch,
+                *selected_emitter.lines,
+                f"    energy = {selected_refs[0]};",
+                *(
+                    f"    derivative[{index}] = {reference};"
+                    for index, reference in enumerate(selected_refs[1:])
+                ),
+            )
+        )
+    scalar_branches.append("  }")
     return "\n".join(
         [
             "struct StationaryPointValue {",
             "  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};",
             "  bool valid{true};",
             "};",
+            "template <bool equal_spin = false>",
             "__device__ inline StationaryPointValue stationary_evaluate_point(",
             "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
             "  StationaryPointValue out;",
@@ -370,9 +430,8 @@ def _emit_stationary_point(
             "    sigma[1] += gradient[0][k] * gradient[1][k];",
             "    sigma[2] += gradient[1][k] * gradient[1][k];",
             "  }",
-            *emitter.lines,
-            f"  double energy = {refs[0]};",
-            "  double derivative[7]{" + ", ".join(refs[1:]) + "};",
+            "  double energy, derivative[7];",
+            *scalar_branches,
             "  out.valid = isfinite(energy);",
             "  for (double value : derivative) out.valid = out.valid && isfinite(value);",
             "  if (!out.valid) return out;",

@@ -329,7 +329,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
         ),
         "prepared_aot_selection_sha256": (
-            "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
+            "be6bb17a3c4dfafbb6da09d8d2df4a1dae65a7c8c7570f37b34ecf46089c2f77"
         ),
     }
 
@@ -429,6 +429,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+        "density_jet_policy_sha256": "2a117b6ec5c566b996f75795650288182faa93a83b263689431f62d6c8e3a529",
+        "restricted_point_policy_sha256": "3cca4e9020484742d4f48a55352d9f8cef5deb088017889d1871820f082a7462",
+        "kind_table_sha256": "eeec6bd71f566741e4d0978df5b354095c875be183b0cf3138df3a1e8fd47a6a",
+        "component_arrays_sha256": "08ea283e18c790a26edcdcac01479def6a7188d9c1a96b8831b4f2b71c8d6045",
+        "component_page_sha256": "09be8b78cfee217fef2e37ed5bb26b7a5231f63bd5303dcccacdb6fd1ccb4d9b",
+        "descriptor_packer_sha256": "92af808cc0d0551072b0a00c29631b86f9c4b65e95bacd68701c4cfbdab926e0",
         "exact_ao_map_resources_sha256": "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9",
         "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
         "public_wrapper_sha256": (
@@ -450,19 +456,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
         ),
         "metrics_sha256": (
-            "b6fd50bdaee3f2b7d51884e4672a705ec91726152c150d89bb5c957cbddc1e3d"
+            "135d534e3b9c2205a13dcb21268f1a83c5281eeabc14ec3595cef56cea817a57"
         ),
         "ordinary_tile_resources_sha256": (
-            "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
+            "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
         ),
         "initializer_sha256": (
-            "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
+            "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
         ),
         "bulk_sha256": (
-            "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
+            "e7be8d14b6c75664fd990c9bb279bba8105c3151a472539b9a8795610555dfb3"
         ),
         "scalar_sha256": (
             "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
@@ -546,7 +552,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
+            "ca9b5368a4ab3c06384dd63ec72982486a08639fe433a00a3fb2869261105dd9"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -633,7 +639,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "source_resources.allocation_bytes"
     )
     assert result["admission_limits"]["host_bound_definition"].startswith(
-        "grid_plan.host_bytes + 8 * (34 * primitive_tile"
+        "grid_plan.host_bytes + 8 * (82 * primitive_tile"
     )
     assert result["admission_limits"]["available_device_bytes_definition"] == (
         "max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes"
@@ -857,7 +863,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         "stationary_center_geometry_bytes"
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_187_488 + 4_851_008 + grid_binding_host_bytes
+        192_187_488 + 4_851_008 + grid_binding_host_bytes + 8 * (48 * 4096 + 7 * 768)
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -1337,10 +1343,11 @@ def test_primitive_budget_scope_fails_closed_when_page_contract_moves(
         encoding="utf-8"
     )
     old = "if np.any(primitive_work > self.page_work_budget):"
-    assert old in source
+    position = source.index(old, source.index("    def integral_page("))
+    replacement = "if np.any(primitive_work >= self.page_work_budget):"
     stationary_contract_tree(
         tmp_path,
-        source.replace(old, "if np.any(primitive_work >= self.page_work_budget):", 1),
+        source[:position] + replacement + source[position + len(old) :],
     )
 
     with pytest.raises(RuntimeError, match="bulk page contract changed"):
@@ -2997,7 +3004,9 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
     # Combined publishes three channels and Separate four, but neither may
     # discount the conservative paired-provider reserve or its v1 fallback.
     # Keep that reserve and add the separate grid binding once.
-    assert memory["additional_host_numeric_bound"] == 197_047_712 + (32 << 10)
+    assert memory["additional_host_numeric_bound"] == (
+        197_047_712 + (32 << 10) + 8 * (48 * 4096 + 7 * 768)
+    )
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
         + memory["stationary_native_pair_reserve_bytes"]
@@ -3850,6 +3859,66 @@ def test_restricted_point_metric_deltas_remain_source_bound(
 
 
 @pytest.mark.parametrize(
+    "marker,old,new,gate",
+    [
+        (
+            "def _stationary_density_jet_count(",
+            'record["requires_tau"]',
+            "False",
+            "density_jet_policy_sha256",
+        ),
+        (
+            "def _resolve_restricted_point_policy(",
+            'mode not in {"off", "on"}',
+            "False",
+            "restricted_point_policy_sha256",
+        ),
+        (
+            "    def _kind_table(",
+            "self.kind_tables[key] = table",
+            "self.kind_tables[key] = None",
+            "kind_table page",
+        ),
+        (
+            "    def _component_arrays(",
+            "if self.component_page_arrays is None:",
+            "if True:",
+            "component_arrays page",
+        ),
+        (
+            "    def _component_integral_page(",
+            "capacity = len(self.tasks)",
+            "capacity = len(self.tasks) * 81",
+            "component_page page",
+        ),
+        (
+            "    def _pack_integral_descriptors(",
+            "descriptor_room = len(self.tasks) - self.used",
+            "descriptor_room = len(self.tasks)",
+            "descriptor_packer page",
+        ),
+    ],
+)
+def test_generic_optimization_capacity_helpers_remain_source_bound(
+    tmp_path: Path,
+    marker: str,
+    old: str,
+    new: str,
+    gate: str,
+) -> None:
+    """Every transitive page helper and generic request keeps a fail-closed gate."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    position = source.index(old, source.index(marker))
+    (tmp_path / "python/generativeqc/_stationary_cuda.py").write_text(
+        source[:position] + new + source[position + len(old) :]
+    )
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
     "relative,marker,old,new,gate",
     [
         (
@@ -3869,7 +3938,7 @@ def test_restricted_point_metric_deltas_remain_source_bound(
         (
             "src/dft/stationary_gradient_cuda.cuh",
             "void launch_geometry(",
-            "restricted_point && stationary_pbe0_restricted_point_capable && !external",
+            "!external && stationary_restricted_point_selected(restricted_point)",
             "restricted_point",
             "native_launch_geometry_sha256",
         ),
