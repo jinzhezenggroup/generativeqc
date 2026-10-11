@@ -17,7 +17,7 @@ class PreparedFockPlan;
  * pair visits. The conservative primitive bound retains independent J/K pass
  * charges even though the native owner shares their recurrence. Zero grid
  * points applies only the integral-source admission gate. */
-bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool pbe0,
+bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool hybrid,
                                                std::size_t grid_points,
                                                std::size_t tile_points) noexcept;
 
@@ -32,13 +32,14 @@ struct CpuStationaryIntegralGradient {
   std::uint64_t shell_quartets{}, primitive_evaluations{};
 };
 
-/** Consume occupation-weighted restricted D/W using the prepared exact provider's
- * immutable system and compiler-emitted stationary AD weights. The method owner
- * authenticates the PBE/PBE0 composition and live final-state token. This helper
- * validates the exact full-range source and contracts bounded shell-local weights
- * into derivatives; it neither owns an SCF solver nor publishes a final force.
- */
+/** Each named code selects compiler-emitted method-specific exchange weights.
+ * One-electron, Pulay, Coulomb and primitive differentiation remain shared. */
+enum class CpuStationaryGga : std::uint8_t { Pbe, Pbe0, B3lyp };
+
+/** Consume occupation-weighted RKS D/W, authenticated exact Direct J/K and
+ * canonical stationary TensorIR weights, never finite-difference production. */
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
-    std::span<const double> weighted_density, bool pbe0, std::size_t maximum_numeric_bytes);
+    std::span<const double> weighted_density, CpuStationaryGga method,
+    std::size_t maximum_numeric_bytes);
 }  // namespace generativeqc::scf
