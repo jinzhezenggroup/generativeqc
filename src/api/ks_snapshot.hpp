@@ -40,6 +40,12 @@ void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
 generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);
+/** Query the conservative additional lazy derivative-owner device capacity.
+ * The live snapshot is checked before publication; no derivative owner is
+ * created. DF response resources remain in their separate prepared envelope. */
+generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint64_t* bytes);
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);

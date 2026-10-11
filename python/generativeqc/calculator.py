@@ -896,6 +896,7 @@ class Calculator:
         from .ks import (
             SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
+            cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
         )
 
@@ -925,10 +926,22 @@ class Calculator:
             and self._automatic_libxc_name is None
             and self._dispersion_method_ir is None
             and self._ks_options is not None
-            and self._ks_options.execution_plan.nonlocal_correlation is None
-            and all(
-                term.operator == "full-range"
-                for term in self._ks_options.execution_plan.exchange
+            and (
+                (
+                    self._ks_options.execution_plan.nonlocal_correlation is None
+                    and all(
+                        term.operator == "full-range"
+                        for term in self._ks_options.execution_plan.exchange
+                    )
+                )
+                or (
+                    self._device_name == "cuda"
+                    and self._ks_options.xc_schedule == "device_fused"
+                    and cuda_nonlocal_force_basis_eligible(self._basis)
+                    and cuda_mixed_density_fitted_force_eligible(
+                        self._ks_options.method_ir
+                    )
+                )
             )
             and (self._device_name == "cpu" or self._device_name == "cuda")
         )

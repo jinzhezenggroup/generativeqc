@@ -81,6 +81,16 @@ def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
 
 _NATIVE_EXTERNAL_PROVIDER_SOURCES = frozenset(("ecp_local", "ecp_nonlocal"))
 
+# One authority for the complete resident range/nonlocal consumer inventory.
+# Admission still requires the native semilocal and Fock provider capabilities.
+COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES = (
+    "exchange_short_range",
+    "exchange_long_range",
+    "nonlocal_ao",
+    "nonlocal_grid",
+    "nonlocal_weight",
+)
+
 
 def stationary_external_provider_sources(
     plan: StationaryGradientPlan,

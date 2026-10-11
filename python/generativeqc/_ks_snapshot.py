@@ -623,6 +623,30 @@ class NativeKsSnapshot:
             atoms=atoms, aos=aos, primitives=primitives
         )
 
+    def cuda_integral_gradient_additional_device_bytes(self) -> int:
+        """Dry-query lazy derivative capacity without creating any CUDA owner.
+
+        The native snapshot/token and resolved providers are authoritative.
+        DF response storage remains excluded, as in the execution wire report.
+        """
+        self.check_current()
+        query = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1",
+            None,
+        )
+        if query is None:
+            raise NotImplementedError(
+                "native library lacks lazy CUDA integral derivative capacity query"
+            )
+        query.argtypes = [ct.c_void_p, ct.c_void_p, ct.POINTER(ct.c_uint64)]
+        query.restype = ct.c_int
+        capacity = ct.c_uint64()
+        status = query(self._batch._batch, self._handle, ct.byref(capacity))
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        return int(capacity.value)
+
     def density_fitted_integral_derivatives(
         self,
         atom_count: int,

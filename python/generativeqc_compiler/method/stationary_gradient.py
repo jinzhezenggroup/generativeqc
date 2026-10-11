@@ -37,7 +37,6 @@ from .spec import (
     RangeSeparatedExchangePrimitive,
     SemilocalXCPrimitive,
     UnsupportedMethod,
-    resolve_method,
 )
 from .typecheck import BackendCapability, verify_method_ir
 
@@ -202,7 +201,8 @@ class StationaryGradientPlan:
     Construction represents a complete inventory, not complete executable
     geometric providers. Integral contractions and the final reduction are
     generated here; XC/grid derivatives, atom scatter and native state binding
-    still come from independently qualified consumers. Public forces stay off.
+    still come from independently qualified consumers. Public admission must
+    separately verify the complete executable provider inventory.
     """
 
     method: MethodIR
@@ -239,19 +239,9 @@ class StationaryGradientPlan:
             raise UnsupportedMethod(
                 "required primitive has no stationary-gradient rule"
             )
-        # Preserve independently qualified exchange and nonlocal envelopes
-        # without silently promoting a combined hybrid/nonlocal execution domain.
-        if (
-            (exchange or ranges)
-            and nonlocal_primitives
-            and (
-                self.method.semantic_payload()
-                != resolve_method("WB97M-V", spin=self.method.spin).semantic_payload()
-            )
-        ):
-            raise UnsupportedMethod(
-                "combined hybrid/nonlocal stationary gradients are not qualified"
-            )
+        # A plan describes additive primitive derivatives, not backend admission.
+        # Runtime owners must qualify the complete source inventory separately;
+        # a functional-name check here would erase otherwise valid compositions.
         verify_method_ir(
             self.method,
             capability=_STATIONARY_GRADIENT_CAPABILITY,

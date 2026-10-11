@@ -24,7 +24,9 @@ def mixed_bridge_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> Path:
     source = (ROOT / "src/methods/dft_method.cpp").read_text()
-    begin = source.index("  generativeqc_status cuda_mixed_rsh_df_integral_gradient(")
+    begin = source.index(
+        "  generativeqc_status cuda_integral_gradient_additional_device_bytes("
+    )
     end = source.index("\n  generativeqc_status cuda_integral_gradient(", begin)
     directory = tmp_path_factory.mktemp("mixed-rsh-df-admission")
     unit, binary = directory / "probe.cpp", directory / "probe"
@@ -74,6 +76,12 @@ def _snapshot_functions() -> dict[str, typing.Any]:
         if isinstance(node, ast.FunctionDef)
         and node.name == "cuda_integral_derivatives"
     )
+    capacity_method = next(
+        node
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "cuda_integral_gradient_additional_device_bytes"
+    )
     namespace = {
         "typing": typing,
         "ct": ct,
@@ -86,13 +94,43 @@ def _snapshot_functions() -> dict[str, typing.Any]:
     }
     exec(  # noqa: S102 - Execute only functions parsed from the local repository.
         compile(
-            ast.Module(body=[helper, method], type_ignores=[]),
+            ast.Module(body=[helper, method, capacity_method], type_ignores=[]),
             "snapshot-source",
             "exec",
         ),
         namespace,
     )
     return namespace
+
+
+@pytest.mark.parametrize("expected", (0, 4096, 8 << 20))
+def test_native_capacity_query_uses_checked_snapshot_without_execution(
+    expected: int,
+) -> None:
+    namespace = _snapshot_functions()
+    checks = []
+
+    def query(batch: object, handle: object, output: object) -> int:
+        ct.cast(output, ct.POINTER(ct.c_uint64))[0] = expected
+        return 0
+
+    owner = SimpleNamespace(
+        check_current=lambda: checks.append("current"),
+        _library=SimpleNamespace(
+            generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1=query
+        ),
+        _batch=SimpleNamespace(_batch=None, _context=None),
+        _handle=None,
+    )
+    result = namespace["cuda_integral_gradient_additional_device_bytes"](owner)
+    assert result == expected and checks == ["current", "current"]
+
+
+def test_missing_native_capacity_query_fails_closed() -> None:
+    namespace = _snapshot_functions()
+    owner = SimpleNamespace(check_current=lambda: None, _library=SimpleNamespace())
+    with pytest.raises(NotImplementedError, match="capacity query"):
+        namespace["cuda_integral_gradient_additional_device_bytes"](owner)
 
 
 @pytest.mark.parametrize("mixed", [False, True])
@@ -369,6 +407,36 @@ int main() {
   std::array<std::uint64_t, 9> work{};
   std::string detail;
   std::vector<scf::reference::Matrix> dw{{1, 0, 0, 1}};
+  for (auto fitting_mode : {GENERATIVEQC_DENSITY_FITTING_CUDA,
+                           GENERATIVEQC_DENSITY_FITTING_AUTO}) {
+    Harness owner;
+    owner.options_.density_fitting_mode = fitting_mode;
+    constructed = 0;
+    std::size_t capacity{};
+    auto query = owner.cuda_integral_gradient_additional_device_bytes(token, capacity, detail);
+    require(query == GENERATIVEQC_STATUS_SUCCESS && capacity == 4096 && constructed == 0,
+            "cold capacity query allocated or changed its native bound");
+    auto result = owner.cuda_mixed_rsh_df_integral_gradient(
+        token, out, 5000, work, detail, &dw, &dw);
+    require(result == GENERATIVEQC_STATUS_SUCCESS && out.size() == 15,
+            "resolved CUDA DF mode was rejected");
+    require(constructed == 1, "resolved CUDA DF mode bypassed its lazy LR owner");
+    query = owner.cuda_integral_gradient_additional_device_bytes(token, capacity, detail);
+    require(query == GENERATIVEQC_STATUS_SUCCESS && capacity == 4096 && constructed == 1,
+            "warm capacity query changed its bound or allocated another owner");
+  }
+  for (bool disabled_fitting : {false, true}) {
+    Harness owner;
+    if (disabled_fitting)
+      owner.options_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+    else
+      owner.backend_ = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+    constructed = 0;
+    auto result = owner.cuda_mixed_rsh_df_integral_gradient(
+        token, out, 5000, work, detail, &dw, &dw);
+    require(result == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && out.empty() && constructed == 0,
+            "non-CUDA/non-fitted owner acquired mixed stationary sources");
+  }
   for (auto budget : {240U, 4095U, 4096U}) {
     Harness h;
     constructed = 0;

@@ -424,6 +424,56 @@ def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     return None
 
 
+def cuda_mixed_density_fitted_force_eligible(method_ir: MethodIR) -> bool:
+    """Admit fitted primary plus exact-LR forces by graph/provider capabilities.
+
+    This is not range-separated RI-K: DF owns full-range J/K and a separate
+    Direct owner supplies the LR correction. The compiler's complete resident
+    source inventory and generated native family record must both agree. Basis,
+    Hamiltonian, precision and backend checks remain with the public owner.
+    A zero LR correction cannot publish distinct SR/LR rows and stays rejected.
+    """
+    from generativeqc_compiler.method.stationary_cuda import (
+        COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
+        stationary_external_provider_sources,
+    )
+    from generativeqc_compiler.method.stationary_gradient import (
+        StationaryGradientPlan,
+        StationaryMeanField,
+    )
+
+    try:
+        record = _native_semilocal_record(method_ir)
+        execution = compile_ks_execution_plan(method_ir)
+        parameters = ks_range_exchange_parameters(method_ir)
+        gradient = StationaryGradientPlan(
+            method_ir, StationaryMeanField(record["scf_domain"])
+        )
+    except (TypeError, ValueError, NotImplementedError):
+        return False
+    if parameters is None:
+        return False
+    short, long, omega = parameters
+    return (
+        all(
+            record[capability]
+            for capability in (
+                "cuda_ks",
+                "native_range_exchange",
+                "native_nonlocal_correlation",
+                "cuda_nonlocal_correlation",
+                "molecular_nonlocal_domain",
+            )
+        )
+        and execution.nonlocal_correlation is not None
+        and len(execution.exchange) == 2
+        and omega > 0
+        and short != long
+        and stationary_external_provider_sources(gradient)
+        == COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES
+    )
+
+
 def cuda_nonlocal_force_basis_eligible(basis: typing.Any) -> bool:
     """Match the resident CUDA nonlocal stationary owner's through-f basis domain.
 

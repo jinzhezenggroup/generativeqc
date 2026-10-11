@@ -5,7 +5,6 @@ from fractions import Fraction
 import pytest
 from generativeqc_compiler.method import (
     MethodSpec,
-    UnsupportedMethod,
     original_nonlocal_correlation,
     resolve_method,
 )
@@ -42,7 +41,11 @@ def test_nonlocal_node_is_not_positional_exact_exchange(spin: str) -> None:
         exact_exchange=Fraction(1, 4),
         nonlocal_correlation=spec.nonlocal_correlation,
     )
-    with pytest.raises(UnsupportedMethod, match="combined hybrid/nonlocal"):
-        StationaryGradientPlan(
-            resolve_method(combined, spin=spin), StationaryMeanField(SCF_POINT_MODEL)
-        )
+    combined_plan = StationaryGradientPlan(
+        resolve_method(combined, spin=spin), StationaryMeanField(SCF_POINT_MODEL)
+    )
+    assert combined_plan.exchange.coefficient == Fraction(1, 4)
+    assert "exact_exchange" in combined_plan.source_names
+    assert {"nonlocal_ao", "nonlocal_grid", "nonlocal_weight"} <= set(
+        combined_plan.source_names
+    )

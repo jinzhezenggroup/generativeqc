@@ -18,12 +18,26 @@ does not add a successful-path host fence. WB97M-V energy composes this mixed
 J/K owner with the existing self-consistent VV10 path.
 
 This mixed composition is not range-separated RI-K: there are still no
-omega-dependent DF metric/three-center integrals. Analytic forces for
-range-separated or nonlocal DF compositions therefore remain rejected; so do
-ECP DF and automatic mixed precision. Full-range DF forces continue to
-differentiate the same auxiliary basis and Coulomb metric used by the energy,
-including auxiliary-center and metric response. This interface does not change
+omega-dependent DF metric/three-center integrals. FP64 CUDA analytic forces
+also support the qualified resident range-exchange/nonlocal source inventory:
+the full-range DF J/K response and exact Direct LR response differentiate the
+same mixed Hamiltonian used by SCF, including self-consistent VV10, Pulay and
+moving-grid response. Admission follows the resolved primitive graph and
+generated provider capabilities, not a functional-name whitelist. Other
+range-separated/nonlocal inventories and CPU mixed-composition forces remain
+rejected, as do ECP DF and automatic mixed precision. Full-range DF forces
+continue to differentiate the same auxiliary basis and Coulomb metric used by
+the energy, including auxiliary-center and metric response. This interface does not change
 the selected functional or grid.
+
+The mixed force planner dry-queries the native LR derivative capacity under the
+live final-state token before AO/Becke tile admission. It charges that independent
+owner alongside the complete nonlocal/grid inventory, with the same conservative
+bound on cold creation and warm reuse; a smaller AO tile cannot hide its storage.
+The derivative bridge then enforces that additional allowance. Its reported host/device
+bounds do not include the DF response owner's separate resource envelope and
+must not be interpreted as a whole-force peak-memory bound. Both the final-state
+lease and orbital/auxiliary geometry bindings are checked on replay.
 
 ```python
 from generativeqc import Calculator

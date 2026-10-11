@@ -713,6 +713,30 @@ generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
   }
 }
 
+generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint64_t* bytes) {
+  if (!batch || !snapshot || !bytes) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::size_t candidate{};
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_integral_gradient_additional_device_bytes(
+        *batch->plan, snapshot->index, snapshot->token, candidate, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    *bytes = candidate;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count) {

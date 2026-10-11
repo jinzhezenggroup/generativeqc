@@ -1534,9 +1534,46 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
-  /** Private source-only bridge for a mixed full-range DF primary and an
-   * independent exact LR correction.  Public mixed-DF forces remain excluded
-   * until complete meta-GGA/VV10/moving-grid and independent E/F qualification.
+  generativeqc_status cuda_integral_gradient_additional_device_bytes(
+      const dft::CudaKsFinalStateToken& expected, std::size_t& bytes, std::string& detail) {
+    bytes = 0;
+#if GENERATIVEQC_HAS_CUDA
+    if (!cuda_ || backend_ != GENERATIVEQC_BACKEND_CUDA) {
+      detail = "CUDA integral derivative capacity requires a CUDA KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "CUDA integral derivative capacity token is stale";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    if (execution_plan_.range_exchange &&
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
+      if (!range_strategy_ || !range_correction_ || !range_correction_->matches_system(system_) ||
+          range_correction_->strategy() != *range_strategy_ ||
+          fock_.strategy().backend != scf::FockBackend::Cuda ||
+          fock_.strategy().spec.coulomb.approximation != scf::FockApproximation::DensityFitted) {
+        detail = "mixed RSH-DF derivative capacity lacks its resolved CUDA providers";
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      }
+      // Keep cold and warm admission identical: this is the same conservative
+      // capacity used before constructing the separate first-order LR owner.
+      bytes = ks_provider_bytes(system_, backend_, 1U);
+    }
+    detail.clear();
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    (void)expected;
+    detail = "CUDA integral derivative capacity requires CUDA";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
+  /** Stationary bridge for a mixed full-range DF primary and an independent
+   * exact LR correction. Public admission separately qualifies the complete
+   * semilocal/nonlocal/moving-grid inventory; this source bridge is not a C force API.
    *
    * The first-derivative LR source is prepared on demand: energy-only solves
    * never pay its angular workspace or compilation costs. */
@@ -1548,8 +1585,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #if GENERATIVEQC_HAS_CUDA
     output.clear();
     work = {};
-    if (!cuda_ || !range_strategy_ || !range_correction_ ||
-        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA ||
+    // AUTO retains its descriptor spelling after resolving a CUDA DF primary.
+    // Backend/approximation identities below, not that spelling, own execution.
+    if (!cuda_ || !range_strategy_ || !range_correction_ || backend_ != GENERATIVEQC_BACKEND_CUDA ||
+        options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
         options_.precision_mode != GENERATIVEQC_PRECISION_FP64 || !execution_plan_.range_exchange ||
         !system_.ecp_terms.empty() || !range_correction_->matches_system(system_) ||
         range_correction_->strategy() != *range_strategy_) {
@@ -2668,6 +2707,17 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status cuda_integral_gradient_additional_device_bytes(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, std::size_t& bytes,
+      std::string& detail) {
+    bytes = 0;
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->cuda_integral_gradient_additional_device_bytes(expected, bytes,
+                                                                                detail);
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status density_fitted_integral_gradient(
       std::size_t index, const dft::CudaKsFinalStateToken& expected,
       const std::vector<scf::reference::Matrix>& density,
@@ -2853,6 +2903,16 @@ generativeqc_status dft_cuda_full_range_integral_derivatives(
   if (ks) return ks->cuda_full_range_integral_derivatives(index, expected, output, detail);
   output.clear();
   detail = "CUDA full-range stationary shell derivatives require a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::size_t& bytes, std::string& detail) {
+  bytes = 0;
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->cuda_integral_gradient_additional_device_bytes(index, expected, bytes, detail);
+  detail = "CUDA integral derivative capacity requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
