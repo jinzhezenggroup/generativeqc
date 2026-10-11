@@ -176,3 +176,21 @@ clearest representation.
 Use `xp.capabilities()` for the exact current subset. It continues to report
 `array_api_version=None` and `array_namespace_protocol=False` until a declared
 standard version has a dedicated conformance matrix.
+
+The machine-readable `operation_matrix` reports the preview's currently
+registered operations, dtype families, reviewed keyword limitations, CPU/NumPy
+eager versus TensorIR reference-capture behavior, and differentiability status.
+Its native CPU/CUDA fields are **false for the public `@xp.compile` path**,
+because that path currently executes through the reference interpreter. TensorIR
+having a separate compiler is not equivalent to native `@xp.compile` admission.
+`target_standard_for_gap_analysis="2025.12"` identifies only the comparison
+target, not a conformance version. Empty `audited_keywords` means no keyword
+audit is recorded, **not** that every standard keyword is supported. Missing
+operations such as `where` are unsupported; the matrix is an inventory of
+admitted operations, not an exhaustive catalog of standard requirements.
+
+```python
+report = xp.capabilities()
+assert report["array_api_version"] is None
+print(report["operation_matrix"]["sum"]["audited_keywords"])
+```

@@ -6,22 +6,11 @@ from .interop import DLPACK_INTEROP_VERSION
 
 FRONTEND_VERSION = 1
 
-SUPPORTED_FUNCTIONS = frozenset(
-    {
+## The 2025.12 standard is a comparison target, not an implementation claim.
+# Group definitions own the bounded preview inventory and its matrix together.
+_OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
+    "real-elementwise": (
         "add",
-        "equal",
-        "not_equal",
-        "greater",
-        "greater_equal",
-        "less",
-        "less_equal",
-        "astype",
-        "zeros",
-        "ones",
-        "full",
-        "zeros_like",
-        "ones_like",
-        "full_like",
         "subtract",
         "multiply",
         "divide",
@@ -32,8 +21,31 @@ SUPPORTED_FUNCTIONS = frozenset(
         "sqrt",
         "square",
         "reciprocal",
+    ),
+    "real-comparison": (
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
+    ),
+    "array-creation": (
+        "zeros",
+        "ones",
+        "full",
+        "zeros_like",
+        "ones_like",
+        "full_like",
+    ),
+    "dtype-conversion": (
+        "astype",
+    ),
+    "real-reduction": (
         "sum",
         "mean",
+    ),
+    "shape-transform": (
         "reshape_explicit_indices",
         "permute_dims",
         "reshape",
@@ -44,16 +56,107 @@ SUPPORTED_FUNCTIONS = frozenset(
         "squeeze",
         "moveaxis",
         "flip",
+        "broadcast_to_explicit_indices",
+        "matrix_transpose",
+    ),
+    "static-indexing": (
         "slice",
         "take",
-        "broadcast_to_explicit_indices",
         "slice_static",
         "take_static",
+    ),
+    "tensor-algebra": (
         "matmul",
-        "matrix_transpose",
         "einsum_extension",
-    }
+    ),
+}
+
+SUPPORTED_FUNCTIONS = frozenset(
+    name for operations in _OPERATION_GROUPS.values() for name in operations
 )
+
+_OPERATION_DTYPES: dict[str, str] = {
+    "real-elementwise": "float32|float64",
+    "real-comparison": "float32|float64 -> bool",
+    "array-creation": "bool|float32|float64 (operation-specific admission)",
+    "dtype-conversion": "bool-identity|float32|float64",
+    "real-reduction": "float32|float64",
+    "shape-transform": "bool|float32|float64 (generic-array restrictions)",
+    "static-indexing": "bool|float32|float64 (generic-array restrictions)",
+    "tensor-algebra": "float32|float64",
+}
+
+_AD_STATUS: dict[str, str] = {
+    "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
+    "real-comparison": "non-differentiable",
+    "array-creation": "constant-no-input-adjoint",
+    "dtype-conversion": "TensorIR-rule-if-explicitly-differentiable",
+    "real-reduction": "TensorIR-rule-if-explicitly-differentiable",
+    "shape-transform": "operation-dependent-TensorIR-rule",
+    "static-indexing": "operation-dependent-TensorIR-rule",
+    "tensor-algebra": "TensorIR-rule-if-explicitly-differentiable",
+}
+
+# Only reviewed keyword constraints are enumerated; empty means not audited.
+_AUDITED_KEYWORDS: dict[str, dict[str, str]] = {
+    "sum": {
+        "axis": "static-int|tuple|None",
+        "keepdims": "generic-arrays-only",
+        "dtype": "conversion-unsupported",
+    },
+    "mean": {
+        "axis": "static-int|tuple|None",
+        "keepdims": "generic-arrays-only",
+    },
+    "reshape": {
+        "shape": "static; at most one -1",
+    },
+    "expand_dims": {
+        "axis": "static-int|tuple",
+    },
+    "flip": {
+        "axis": "static-int|tuple|None",
+        "capture": "gather extent <= 65536",
+    },
+    "astype": {
+        "dtype": "bool identity or real float32/float64",
+        "copy": "eager-copy-policy",
+        "device": "None-only",
+    },
+    "full": {
+        "dtype": "bool|float32|float64; unsupported integer default",
+        "device": "None-only",
+    },
+    "take": {
+        "indices": "static nonnegative in-bounds tuple",
+        "axis": "static",
+    },
+    "slice": {
+        "ranges": "static in-bounds half-open",
+    },
+    "einsum_extension": {
+        "equation": "explicit-output; no ellipsis",
+    },
+}
+
+
+def _operation_matrix() -> dict[str, dict[str, object]]:
+    """Describe admitted reference operations without implying backend conformance."""
+    return {
+        name: {
+            "category": category,
+            "dtypes": _OPERATION_DTYPES[category],
+            "device": "device-none-cpu-reference",
+            "eager": "numpy-reference",
+            "capture": "tensorir-reference",
+            "ad": _AD_STATUS[category],
+            "native_cpu": False,
+            "native_cuda": False,
+            "audited_keywords": dict(_AUDITED_KEYWORDS.get(name, {})),
+        }
+        for category, names in _OPERATION_GROUPS.items()
+        for name in names
+    }
 
 
 def capabilities() -> dict[str, object]:
@@ -62,6 +165,9 @@ def capabilities() -> dict[str, object]:
         "frontend_version": FRONTEND_VERSION,
         "surface": "array-api-shaped-internal-preview",
         "array_api_version": None,
+        "target_standard_for_gap_analysis": "2025.12",
+        "operation_matrix_schema": "generativeqc.array-api-operation-coverage.v1",
+        "operation_matrix": _operation_matrix(),
         "array_namespace_protocol": False,
         "implicit_broadcast": "generic-arrays",
         "reshape_requires_explicit_indices": "scientific-arrays-only",
