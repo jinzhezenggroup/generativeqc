@@ -36,6 +36,7 @@
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/stationary_integral_gradient.hpp"
 #include "scf/types.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -851,8 +852,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
   /** Method-global manifest stays energy-only. Force capability is a
    * property of this immutable prepared physical execution context. Only
-   * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
-   * providers is currently admitted; UKS, CUDA, Direct, corrections and
+   * strict-FP64 all-electron CPU fitted PBE/PBE0 with full response
+   * providers is admitted for RKS/UKS; CPU Direct additionally requires the
+   * packaged s/p/d derivative provider. CUDA, corrections and
    * unrepresented XC graphs remain fail-closed until separately qualified. */
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
@@ -861,27 +863,41 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   [[nodiscard]] bool supports_native_pbe_force() const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE ||
+        (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
         execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe ||
-        execution_plan_.spin_channels != 1 || execution_plan_.automatic_program ||
-        execution_plan_.generated_split_hybrid || execution_plan_.range_exchange ||
-        execution_plan_.nonlocal_correlation || execution_plan_.d4_correction ||
-        !system_.ecp_terms.empty() ||
+        execution_plan_.automatic_program || execution_plan_.generated_split_hybrid ||
+        execution_plan_.range_exchange || execution_plan_.nonlocal_correlation ||
+        execution_plan_.d4_correction || !system_.ecp_terms.empty() ||
         std::any_of(system_.atoms.begin(), system_.atoms.end(),
                     [](const auto& atom) { return atom.ecp_core != 0; }))
       return false;
+    if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        (!integrals::has_packaged_cpu_eri_shell_derivatives() ||
+         std::any_of(system_.shells.begin(), system_.shells.end(),
+                     [](const auto& shell) { return shell.angular_momentum > 2; })))
+      return false;
     const auto& spec = fock_.strategy().spec;
-    const auto fitted = [](const scf::FockTermSpec& term) {
-      return !term.present || (term.approximation == scf::FockApproximation::DensityFitted &&
-                               term.op == scf::FockOperator::FullRange);
+    if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
+      return false;
+    const auto approximation = options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
+                                   ? scf::FockApproximation::Exact
+                                   : scf::FockApproximation::DensityFitted;
+    const auto admitted_term = [approximation](const scf::FockTermSpec& term) {
+      return !term.present || (term.approximation == approximation &&
+                               term.op == scf::FockOperator::FullRange && term.omega == 0.0);
     };
-    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !fitted(spec.coulomb) ||
-        !fitted(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
+    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !admitted_term(spec.coulomb) ||
+        !admitted_term(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
       return false;
     const bool pbe = !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 = spec.exchange.present && spec.exchange.coefficient == -0.125 &&
-                      options_.semilocal_exchange_scale == 0.75;
-    return pbe || pbe0;
+    const bool pbe0 =
+        spec.exchange.present &&
+        spec.exchange.coefficient == (execution_plan_.spin_channels == 1 ? -0.125 : -0.25) &&
+        options_.semilocal_exchange_scale == 0.75;
+    return (pbe || pbe0) && (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+                             scf::cpu_stationary_direct_force_work_admitted(
+                                 system_, pbe0, grid_.point_count(), options_.xc_tile_points));
   }
 
   [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept override {
@@ -1471,8 +1487,24 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return cuda_integral_gradient(expected, output, maximum_bytes, work, detail, &density,
                                     &weighted_density);
 #endif
-    detail = "CPU Direct KS stationary integral sources need a retained native derivative owner";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    if (!supports_native_pbe_force()) {
+      detail = "CPU Direct KS stationary integral sources require a qualified PBE/PBE0 owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto spins = expected.identity.model.spins;
+    if (density.size() != spins || weighted_density.size() != spins || (spins != 1 && spins != 2)) {
+      detail = "CPU Direct stationary D/W spin shape mismatch";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    const std::span<const double> empty;
+    auto candidate = scf::cpu_stationary_integral_gradient(
+        fock_, density[0], weighted_density[0], fock_.strategy().spec.exchange.present,
+        maximum_bytes, spins == 2 ? std::span<const double>(density[1]) : empty,
+        spins == 2 ? std::span<const double>(weighted_density[1]) : empty);
+    work[3] = candidate.numeric_capacity;
+    output = std::move(candidate.sources);
+    detail.clear();
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
   /** Authenticate the complete restricted Direct global-hybrid derivative
@@ -1980,15 +2012,28 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw MethodError(status, detail.empty() ? "native DFT final state unavailable" : detail);
 
+    auto retained_bytes = host_numeric_capacity();
+    for (const auto* matrices : {&frame.density, &frame.fock, &frame.weighted_density})
+      for (const auto& matrix : *matrices)
+        retained_bytes = runtime::add_capacity(retained_bytes, runtime::vector_bytes(matrix));
+    for (const auto& orbital : frame.orbitals)
+      retained_bytes = runtime::add_capacity(
+          retained_bytes, runtime::vector_capacities(orbital.values, orbital.vectors));
+    if (result.ks_diagnostic)
+      retained_bytes = runtime::add_capacity(retained_bytes,
+                                             runtime::vector_bytes(result.ks_diagnostic->history));
+    runtime::CpuRetainedCapacity retained(retained_bytes);
+
     std::vector<double> integrals;
     std::array<std::uint64_t, 9> work{};
-    // Bound compact source publication separately from the prepared DF
-    // metric and response providers, which enforce their own budgets.
+    // Bound owned source/weight buffers separately from the retained SCF owner
+    // and DF response providers. This is not an allocator/recurrence census.
     constexpr std::size_t kSourcePublicationBytes = 64ull * 1024ull * 1024ull;
     status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
                                         kSourcePublicationBytes, work, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
+    runtime::CpuRetainedCapacity retained_integrals(runtime::vector_bytes(integrals));
 
     const auto xc = dft::stationary_pbe_xc_derivative(
         basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
@@ -2008,6 +2053,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "native DFT final-state force token changed");
     result.forces.resize(ncoord);
+    runtime::sample_cpu_capacity(runtime::vector_capacities(xc.gradient, gradient, result.forces));
     for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
       if (!std::isfinite(gradient[coordinate]))
         throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,

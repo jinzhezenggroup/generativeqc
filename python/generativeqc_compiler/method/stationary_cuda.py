@@ -37,11 +37,7 @@ from generativeqc_compiler.method.stationary_resources import (
     GEOMETRY_MAX_SCRATCH_BYTES,
     GEOMETRY_THREADS,
 )
-from generativeqc_compiler.tensor.cuda_inline import (
-    InlineCudaOutput,
-    exact_cuda_literal,
-    lower_inline_cuda_output,
-)
+from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 from .spec import SemilocalXCPrimitive, resolve_method
@@ -52,6 +48,7 @@ from .stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from .stationary_weight_lowering import _weight_expression
 
 STATIONARY_RUNTIME_SOURCE_NAMES = (
     "one_electron",
@@ -146,37 +143,6 @@ def _split_compile_options(
     if not 1 <= threads <= 32:
         raise ValueError(f"{_SPLIT_COMPILE_THREADS_ENV} must be in [1,32]")
     return () if threads == 1 else (f"--split-compile={threads}",)
-
-
-def _weight_expression(
-    plan: StationaryGradientPlan, source: str
-) -> tuple[InlineCudaOutput, int]:
-    """Specialize one generated weight through the shared inline-consumer path."""
-    program = plan.integral_block(source, terms=1).weights
-    locations = {
-        "density_left": ("density", 0, 1),
-        "density_right": ("density", 2, 3),
-        "weighted_density": ("weighted_density", 0, 1),
-    }
-    if source == "exact_exchange":
-        # Ordered (ab|cd) derivatives contract D[a,c] D[b,d], independently
-        # in each spin channel. Coulomb instead uses D[a,b] D[c,d].
-        locations["density_left"] = ("density", 0, 2)
-        locations["density_right"] = ("density", 1, 3)
-    bindings = {
-        name: tuple(
-            f"{pointer}[{spin} * n * n + size_t(ao[{left}]) * n + size_t(ao[{right}])]"
-            for spin in range(plan.spin_blocks)
-        )
-        for name, (pointer, left, right) in locations.items()
-    }
-    lowered = lower_inline_cuda_output(program, output="weights", bindings=bindings)
-    required = set(lowered.required_inputs)
-    arity = max(
-        (right + 1 for name, (_, _, right) in locations.items() if name in required),
-        default=0,
-    )
-    return lowered, arity
 
 
 def emit_stationary_weight_cuda(plan: typing.Any) -> str:

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, _native
+from generativeqc import Calculator, GridSpec, KsOptions, _native
 from generativeqc.batch import PreparedBatch
 
 SYSTEMS = [
@@ -170,18 +170,24 @@ def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist()
     assert not PreparedBatch._native_dft_force_eligible(holder)
 
 
-def test_cpu_df_pbe_python_api_consumes_qualified_native_batch_forces(
+@pytest.mark.parametrize("method", ["pbe-rks", "pbe0-rks"])
+@pytest.mark.parametrize("fitting", ["cpu", "none"])
+def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
     monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    fitting: str,
 ) -> None:
     options = {
-        "method": "pbe-rks",
+        "method": method,
         "basis": "sto-3g",
         "device": "cpu",
-        "density_fitting": "cpu",
+        "density_fitting": fitting,
         "energy_tolerance": 1e-12,
         "density_tolerance": 1e-10,
         "screening_tolerance": 1e-14,
     }
+    if method == "pbe0-rks":
+        options["ks_options"] = KsOptions(grid=GridSpec(24, 8, 16))
     with (
         Calculator(**options).prepare_batch(SYSTEMS[:1]) as native_batch,
         Calculator(**options).prepare_batch(SYSTEMS[:1]) as python_batch,
@@ -192,19 +198,52 @@ def test_cpu_df_pbe_python_api_consumes_qualified_native_batch_forces(
             pytest.skip("current native prepared batch force query is not installed")
 
         def forbidden_python_force(*_args: typing.Any, **_kwargs: typing.Any) -> None:
-            pytest.fail("CPU DF-PBE fell back to the Python stationary force driver")
+            pytest.fail("CPU PBE/PBE0 fell back to the Python stationary force driver")
 
         monkeypatch.setattr(
             native_batch, "_public_dft_cpu_force", forbidden_python_force
         )
         monkeypatch.setattr(python_batch, "_native_dft_force_eligible", lambda: False)
-        native = native_batch.execute(
-            strict=True, properties=("energy", "forces")
-        ).items[0]
-        reference = python_batch.execute(
-            strict=True, properties=("energy", "forces")
-        ).items[0]
-        assert native.forces is not None and reference.forces is not None
-        np.testing.assert_allclose(native.energy, reference.energy, atol=1e-8, rtol=0)
-        np.testing.assert_allclose(native.forces, reference.forces, atol=1e-4, rtol=0)
-        assert np.all(np.isfinite(native.forces))
+        moved = [[(0.0, 0.0, -0.71), (0.0, 0.0, 0.72)]]
+        for coordinates in (None, None, moved):
+            native = native_batch.execute(
+                coordinates, strict=True, properties=("energy", "forces")
+            ).items[0]
+            reference = python_batch.execute(
+                coordinates, strict=True, properties=("energy", "forces")
+            ).items[0]
+            assert native.forces is not None and reference.forces is not None
+            np.testing.assert_allclose(
+                native.energy, reference.energy, atol=1e-8, rtol=0
+            )
+            np.testing.assert_allclose(
+                native.forces, reference.forces, atol=1e-4, rtol=0
+            )
+            assert np.all(np.isfinite(native.forces))
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "lda-rks",
+        "b3lyp-rks",
+        "r2scan-rks",
+        "wb97m-v-rks",
+        "pbe-d4-rks",
+        "lda-uks",
+        "b3lyp-uks",
+        "r2scan-uks",
+        "wb97m-v-uks",
+    ],
+)
+def test_native_direct_pbe_force_capability_rejects_other_models(method: str) -> None:
+    """A shared family/underlying kernel never authenticates a different model."""
+    calculator = Calculator(
+        method,
+        "sto-3g",
+        device="cpu",
+        density_fitting="none",
+        ks_options=KsOptions(grid=GridSpec(24, 8, 16)),
+    )
+    with calculator.prepare_batch(SYSTEMS[:1]) as batch:
+        assert not batch._native_dft_force_eligible()

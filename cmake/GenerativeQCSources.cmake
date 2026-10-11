@@ -150,6 +150,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/fock_provider.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
+    src/scf/stationary_integral_gradient.cpp
     src/scf/fock_execution.cpp
     src/scf/rhf.cpp
     src/scf/solver/diis.cpp

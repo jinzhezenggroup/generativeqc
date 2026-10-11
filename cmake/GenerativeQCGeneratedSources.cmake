@@ -105,6 +105,18 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
     COMMENT "Generating shared symmetric eigensolver lowering portfolio")
 
+  generativeqc_register_generated_sources(
+    NAME generativeqc_stationary_integral_weights_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_integral_weights.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_integral_weights.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_gradient.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_inline.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_integral_weights.hpp"
+    COMMENT "Generating shared stationary integral AD weights")
+
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_STATIONARY_CPU_AOT_DIRECTORY
         "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_derivatives")
@@ -134,6 +146,22 @@ macro(generativeqc_register_host_generated_sources target)
       COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
       COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
   endif()
+
+  set(_generativeqc_stationary_dispatch_enabled 0)
+  if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(_generativeqc_stationary_dispatch_enabled 1)
+  endif()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_stationary_cpu_dispatch_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_derivative_dispatch.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_cpu_derivative_dispatch.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/first_derivative_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/eri_weights.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_cpu_derivative_dispatch.hpp"
+         --enabled ${_generativeqc_stationary_dispatch_enabled}
+    COMMENT "Generating native bindings to packaged stationary CPU derivatives")
 
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_DIRECTORY

@@ -37,6 +37,89 @@ from .ks import resolve_ks_options
 from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
+_CPU_HOST_INVENTORY_KEYS = (
+    "metadata",
+    "grid",
+    "basis",
+    "warm_and_matrices",
+    "history",
+    "provider",
+    "solver_host",
+    "solver_binding_host",
+    "matrix_binding_host",
+    "structured_binding_host",
+    "xc_schedule_staging",
+    "nonlocal_provider",
+    "ao_grid_cache",
+    "retained",
+    "setup_workspace",
+    "scf_workspace",
+)
+
+
+def _native_cpu_host_inventory(
+    library: typing.Any,
+    item: typing.Any,
+    *,
+    diis_history: int,
+    max_iterations: int,
+    requires_first_ao_derivatives: bool,
+    model: typing.Any,
+) -> dict[str, int] | None:
+    """Use discovered shape-only authority; never retry a rejected native query.
+
+    No-library dry runs and older libraries retain the portable metadata bound.
+    Calculator requests pass their already loaded library, without implicit
+    provider loading or numerical work in the metadata-only planning API.
+    """
+    query = getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
+    if query is None:
+        return None
+    orbital = item["orbital"]
+    dimensions = (
+        item["atoms"],
+        orbital["nbf"],
+        orbital["cartesian_nbf"],
+        orbital["shells"],
+        orbital["primitives"],
+        item["spins"],
+        orbital["maximum_angular"],
+        orbital.get("ecp_terms", 0),
+        item["grid_points"],
+        model.grid.radial_points,
+        model.grid.angular_polar,
+        model.tile_points,
+        diis_history,
+        max_iterations,
+        int(requires_first_ao_derivatives),
+        int(model.has_nonlocal_correlation),
+        _ecp_workspace(item),
+    )
+    shape = (ctypes.c_uint64 * len(dimensions))(
+        *(checked_bytes(value, "CPU KS host shape") for value in dimensions)
+    )
+    values = (ctypes.c_uint64 * len(_CPU_HOST_INVENTORY_KEYS))()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(shape, len(shape), values, len(values)):
+        raise ValueError("native CPU KS host inventory rejected shape or capacity")
+    inventory = {
+        key: checked_bytes(value, f"KS {key}")
+        for key, value in zip(_CPU_HOST_INVENTORY_KEYS, values, strict=True)
+    }
+    if (
+        model.has_nonlocal_correlation
+        and inventory["nonlocal_provider"] > model.nonlocal_memory_budget_bytes
+    ):
+        raise ValueError(
+            "KS nonlocal provider workspace exceeds nonlocal_memory_budget_bytes"
+        )
+    return inventory
 
 
 def _incremental_direct_jk_controls() -> dict[str, bool]:
@@ -61,6 +144,7 @@ def _item_host_inventory(
     requires_first_ao_derivatives: typing.Any,
     backend: typing.Any,
     model: typing.Any,
+    library: typing.Any = None,
 ) -> typing.Any:
     """Bound numeric and LP64 value metadata by actual execution lifetimes.
 
@@ -69,6 +153,17 @@ def _item_host_inventory(
     histories coexist for all active streams. A geometry rebuild destroys its
     old owner before allocating the new one, retaining only its last-good seed.
     """
+    if backend == "cpu":
+        inventory = _native_cpu_host_inventory(
+            library,
+            item,
+            diis_history=diis_history,
+            max_iterations=max_iterations,
+            requires_first_ao_derivatives=requires_first_ao_derivatives,
+            model=model,
+        )
+        if inventory is not None:
+            return inventory
     orbital = item["orbital"]
     a, n, c = item["atoms"], orbital["nbf"], orbital["cartesian_nbf"]
     s, p, spins = orbital["shells"], orbital["primitives"], item["spins"]
@@ -462,6 +557,12 @@ def ks_resource_request(
     }
     if backend == "cpu":
         controls["ao_grid_cache_cap"] = _CPU_AO_GRID_CACHE_CAP
+        controls["host_inventory"] = (
+            "native-cpu-v1"
+            if getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
+            is not None
+            else "portable-metadata-v1"
+        )
     if backend == "cuda":
         controls.update(
             device_id=device_id,
@@ -519,6 +620,7 @@ def ks_resource_request(
             requires_first_ao_derivatives=requires_first_ao_derivatives,
             backend=backend,
             model=model,
+            library=library,
         )
         for item in items
     ]

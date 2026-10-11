@@ -566,7 +566,8 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_dft_df.py"
                      $<TARGET_FILE:generativeqc_cli>
-                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz")
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     $<BOOL:${GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT}>)
     add_test(NAME generativeqc_cli_profile_safety
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_profile_cache.py"

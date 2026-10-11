@@ -17,6 +17,22 @@ provider selections before an explicit force replay. Failed requests or replays
 do not replace its previously accepted plan. Other contexts, including ECP,
 retain their existing defaults and conservative capacity reservations.
 
+Qualified CPU Direct/DF PBE/PBE0 RKS/UKS requests use the source-complete prepared C++
+owner described in the [native SDK derivative contract](../user/native_cpp.md#density-fitting-and-derivative-boundary),
+not this Python scientific scheduler. `StationaryGradientPlan` still owns the
+integral adjoint weights: `generate_stationary_integral_weights.py` specializes
+that same TensorIR AD into portable scalar bindings for one or two spin blocks.
+UKS combines both spins in generated weights and charges its compact flattened
+D/W buffers; an empty beta population still supplies explicit zero matrices.
+It reuses the existing two-spin XC/DF derivative, moving-grid, token and final
+publication owners rather than copying force equations. The native streamed
+shell contraction consumes compiler-owned center/axis dispatch metadata for
+the existing packaged first-derivative kernels; it shares J/K primitive work
+and retains the independent reference recurrence for oracle/legacy consumers.
+The diagnostic below remains an explicit reference and the compatibility
+production route for separately qualified, not-yet-native contexts. It is
+not retired while those domains still need it.
+
 The separate [CUDA diagnostic](stationary_cuda_diagnostic.md) consumes a live
 native CUDA snapshot and executes all seven sources on device with explicit
 host export/orchestration. The CPU selectors and their boundaries below remain
@@ -136,6 +152,26 @@ and separates fixed from changed geometries. Initial warmup times are retained
 but are **not** fair cold-compile comparisons because the routes share some
 compiled primitives. No general system-size or GPU speedup follows from these
 small CPU diagnostic workloads.
+
+For the public prepared native CPU PBE/PBE0 force owner, compare complete
+Direct/DF UKS lifecycles with the retained Python compatibility route:
+
+```sh
+PYTHONPATH=.:python GENERATIVEQC_LIBRARY="$PWD/build/libgenerativeqc.so" \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+python benchmarks/native_cpu_ks_force_endpoint.py --repeats 5 \
+  --output .artifacts/native-cpu-uks-forces.json
+```
+
+This runner includes construction/preparation, cold/warm/moved E+F and teardown,
+checks matched SCF/Fock work and numerical outputs, and records separate native
+progress/capacity observations with library checksums. Both routes are primed;
+this is not a process-startup or cold-JIT-compile measurement. Use `--spin rks`
+and optionally `--baseline-library` for a prior native RKS binary comparison.
+Named numeric capacity observations do not establish a complete simultaneously
+live allocation/RSS bound. The
+[UKS ownership decision](../../.agents/notes/implemented/architecture/2026-10-12-native-cpu-uks-force-owner.md)
+records the spin binding and retained admission boundaries.
 
 See the [decision record](../../.agents/notes/implemented/architecture/2026-09-19-compiled-stationary-consumers.md)
 for rationale, qualification evidence and the remaining public/native boundary.

@@ -465,6 +465,10 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_dft_integral_sources_tests
                        tests/native/test_dft_integral_sources.cpp)
+  generativeqc_native_test(generativeqc_ks_host_resource_tests
+                       tests/native/test_ks_host_resources.cpp)
+  generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
+                       tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_uks_tests tests/native/test_uks.cpp)

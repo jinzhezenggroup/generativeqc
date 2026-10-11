@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -1002,11 +1003,30 @@ int main() {
                                                             : r2scan_rks_energy);
       require(std::abs(result.energy - expected) < 2.0e-12,
               "equal-spin UKS and RKS energies disagree");
+      generativeqc_property_flags available{};
+      require(generativeqc_calculation_get_supported_properties_v1(calculation, &available) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "UKS prepared force capability query failed");
+      const bool eligible = available & GENERATIVEQC_PROPERTY_FORCES;
+      require(!eligible || spin_method == GENERATIVEQC_METHOD_PBE_UKS,
+              "UKS widened the native force owner beyond canonical PBE");
+      forces.fill(1234.0);
       result.forces = forces.data();
       result.force_count = static_cast<uint32_t>(forces.size());
       require(generativeqc_calculation_execute(calculation, &result) ==
-                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "UKS force request exposed an unsupported buffer");
+                  (eligible ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED),
+              "UKS force execution disagrees with its prepared capability");
+      if (eligible) {
+        require(result.converged && std::abs(result.energy - expected) < 2e-12,
+                "native UKS force execution changed the equal-spin energy");
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          require(std::isfinite(forces[axis]) && std::abs(forces[axis] + forces[3 + axis]) < 2e-5,
+                  "equal-spin UKS forces violate translation invariance");
+      } else {
+        require(
+            std::all_of(forces.begin(), forces.end(), [](double value) { return value == 1234.0; }),
+            "unqualified UKS context published partial forces");
+      }
       generativeqc_calculation_destroy(calculation);
     }
 
@@ -1546,7 +1566,7 @@ int main() {
       generativeqc_context_destroy(cuda_context);
     }
 #endif
-    std::cout << "Registered KS energy-only backend and force-rejection contract passed\n";
+    std::cout << "Context-qualified native KS energy and force contract passed\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << "test failure: " << error.what() << '\n';

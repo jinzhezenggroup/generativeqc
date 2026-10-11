@@ -12,6 +12,7 @@ from pathlib import Path
 
 CLI = Path(sys.argv.pop(1)).resolve()
 MOLECULE = Path(sys.argv.pop(1)).resolve()
+DIRECT_AOT_ENABLED = bool(int(sys.argv.pop(1)))
 
 
 class NativeDftDfCliTests(unittest.TestCase):
@@ -104,7 +105,7 @@ class NativeDftDfCliTests(unittest.TestCase):
 
     def test_generated_methods_reject_unsupported_graphs_and_forces(self) -> None:
         for method, flags, reason in (
-            ("pbe0-rks", ("--forces",), "DFT forces are not exposed"),
+            ("b3lyp-rks", ("--forces",), "DFT forces are not exposed"),
             ("pbe-rks", ("--grid-radial-points", "64"), "require a generated"),
             ("b3lyp-rks", ("--grid-polar-points", "0"), "must be positive"),
             ("m06-2x-rks", (), "no qualified native lowerer"),
@@ -197,14 +198,33 @@ class NativeDftDfCliTests(unittest.TestCase):
                 self.assertEqual(result.stdout, "")
                 self.assertIn(reason, result.stderr)
 
-    def test_cpu_df_pbe0_analytic_force_reconverged_finite_difference(self) -> None:
+    def test_cpu_pbe0_analytic_force_reconverged_finite_difference(self) -> None:
+        for fitting in ("cpu", "none"):
+            if fitting == "none" and not DIRECT_AOT_ENABLED:
+                continue
+            with self.subTest(fitting=fitting):
+                self.assert_pbe0_force_reconverged_finite_difference(fitting)
+
+    def test_cpu_uks_analytic_force_reconverged_finite_difference(self) -> None:
+        for method in ("pbe-uks", "pbe0-uks"):
+            for fitting in ("cpu", "none"):
+                if fitting == "none" and not DIRECT_AOT_ENABLED:
+                    continue
+                with self.subTest(method=method, fitting=fitting):
+                    self.assert_pbe0_force_reconverged_finite_difference(
+                        fitting, method
+                    )
+
+    def assert_pbe0_force_reconverged_finite_difference(
+        self, fitting: str, method: str = "pbe0-rks"
+    ) -> None:
         # This is a complete molecular E+F gate, not the fixed-density XC
         # derivative test. Both displaced geometries must reconverge natively.
         flags = (
             "--backend",
             "cpu",
             "--density-fitting",
-            "cpu",
+            fitting,
             "--max-iterations",
             "200",
             "--energy-tolerance",
@@ -212,12 +232,15 @@ class NativeDftDfCliTests(unittest.TestCase):
             "--density-tolerance",
             "1e-10",
         )
-        result = self.call_named("pbe0-rks", *flags, "--forces")
+        if method.endswith("-uks"):
+            flags += ("--charge", "1", "--multiplicity", "2")
+        result = self.call_named(method, *flags, "--forces")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertTrue(math.isfinite(data["energy_hartree"]))
-        self.assertEqual(data["method"], "pbe0-rks")
-        self.assertEqual(len(data["method_ir_identity"]), 64)
+        self.assertEqual(data["method"], method)
+        if method != "pbe-uks":
+            self.assertEqual(len(data["method_ir_identity"]), 64)
         force = data["forces_hartree_per_bohr"]
         self.assertEqual(len(force), 2)
         self.assertTrue(
@@ -244,7 +267,7 @@ class NativeDftDfCliTests(unittest.TestCase):
                 lines[3] = " ".join(atom)
                 geometry = Path(directory) / f"{label}.xyz"
                 geometry.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                displaced = self.call_xyz(geometry, "pbe0-rks", *flags)
+                displaced = self.call_xyz(geometry, method, *flags)
                 self.assertEqual(displaced.returncode, 0, displaced.stderr)
                 displaced_energies.append(
                     json.loads(displaced.stdout)["energy_hartree"]
@@ -269,11 +292,6 @@ class NativeDftDfCliTests(unittest.TestCase):
                 1,
             ),
             (("--auxiliary-basis", "def2-svp"), "requires density fitting", 2),
-            (
-                ("--density-fitting", "none", "--forces"),
-                "DFT forces are not exposed",
-                2,
-            ),
         ):
             with self.subTest(flags=flags):
                 result = self.call(*flags)

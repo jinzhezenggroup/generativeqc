@@ -516,6 +516,113 @@ void cuda_shell_derivative_budget_failure_is_transactional() {
           "failed CUDA shell derivative modified caller output");
 }
 
+/** Independent dense/value oracles cover normalization, spherical transforms
+ * and repeated physical centers; channel fusion must not change summation. */
+void shared_shell_derivative_channels() {
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+    generativeqc::core::System system;
+    system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {-0.3, 0.15, 0.7}}};
+    system.shells = {{0, 2, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+    system.basis_representation = representation;
+    std::string detail;
+    require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "shared derivative angular fixture is invalid");
+    const auto shell_size = generativeqc::molecule::ao_expansions(2, representation).size();
+    const auto nbf = shell_size + 1;
+    const auto quartet_size = shell_size * shell_size;
+    std::vector<double> first(quartet_size), second(quartet_size), zeros(quartet_size);
+    for (std::size_t index = 0; index < quartet_size; ++index) {
+      first[index] = 0.03 * static_cast<double>(index + 1);
+      second[index] = -0.02 * static_cast<double>(quartet_size - index);
+    }
+    const std::array<std::size_t, 4> shells{0, 1, 0, 1};
+    const std::array<std::span<const double>, 3> channels{first, second, zeros};
+    std::uint64_t shared_evaluations = 0;
+    const auto shared = generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+        system, shells, channels, &shared_evaluations);
+    if (generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) {
+      std::uint64_t packaged_evaluations = 0;
+      const auto packaged = generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+          system, shells, channels, &packaged_evaluations,
+          generativeqc::integrals::WeightedEriDerivativeExecution::PackagedCpu);
+      require(packaged_evaluations == shared_evaluations,
+              "packaged channel fusion changed primitive work");
+      for (std::size_t channel = 0; channel < channels.size(); ++channel)
+        for (std::size_t coordinate = 0; coordinate < 12; ++coordinate)
+          require(std::abs(packaged[channel][coordinate] - shared[channel][coordinate]) < 2e-11,
+                  "packaged derivative differs from independent reference recurrence");
+    }
+    std::uint64_t single_evaluations = 0;
+    const std::array<std::span<const double>, 1> single{first};
+    (void)generativeqc::integrals::contract_weighted_eri_shell_derivatives(system, shells, single,
+                                                                           &single_evaluations);
+    require(shared_evaluations > 0 && shared_evaluations == single_evaluations,
+            "channel fusion repeated the primitive recurrence");
+    const auto oracle = generativeqc::integrals::build_integrals(system);
+    const auto molecular_quartets = nbf * nbf * nbf * nbf;
+    for (std::size_t channel = 0; channel < channels.size(); ++channel) {
+      const auto separate = generativeqc::integrals::contract_weighted_eri_shell_derivative(
+          system, shells, channels[channel]);
+      require(shared[channel] == separate, "channel fusion changed the accumulation order");
+      std::array<double, 6> scattered{};
+      for (std::size_t slot = 0; slot < shells.size(); ++slot)
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          scattered[3 * system.shells[shells[slot]].atom_index + axis] +=
+              shared[channel][3 * slot + axis];
+      for (std::size_t coordinate = 0; coordinate < scattered.size(); ++coordinate) {
+        double expected = 0.0;
+        for (std::size_t first_ao = 0; first_ao < shell_size; ++first_ao)
+          for (std::size_t third_ao = 0; third_ao < shell_size; ++third_ao) {
+            const auto index = ((first_ao * nbf + shell_size) * nbf + third_ao) * nbf + shell_size;
+            expected += channels[channel][first_ao * shell_size + third_ao] *
+                        oracle.eri_derivative[coordinate * molecular_quartets + index];
+          }
+        require(std::abs(scattered[coordinate] - expected) < 2e-11,
+                "shared angular derivative differs from dense oracle");
+      }
+      auto positive = system, negative = system;
+      constexpr double step = 1e-5;
+      positive.atoms[0].position[0] += step;
+      negative.atoms[0].position[0] -= step;
+      const auto plus = generativeqc::integrals::build_integrals(positive, false);
+      const auto minus = generativeqc::integrals::build_integrals(negative, false);
+      double finite_difference = 0.0;
+      for (std::size_t first_ao = 0; first_ao < shell_size; ++first_ao)
+        for (std::size_t third_ao = 0; third_ao < shell_size; ++third_ao) {
+          const auto index = ((first_ao * nbf + shell_size) * nbf + third_ao) * nbf + shell_size;
+          finite_difference += channels[channel][first_ao * shell_size + third_ao] *
+                               (plus.eri[index] - minus.eri[index]) / (2 * step);
+        }
+      require(std::abs(scattered[0] - finite_difference) < 2e-8,
+              "shared angular derivative differs from displaced value oracle");
+    }
+    const std::array<std::span<const double>, 1> zero_channel{zeros};
+    require(generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+                system, shells, zero_channel, &single_evaluations)[0] == std::array<double, 12>{} &&
+                single_evaluations == 0,
+            "zero channel submitted primitive work");
+    const auto reject = [&](std::span<const std::span<const double>> invalid) {
+      single_evaluations = 123;
+      bool rejected = false;
+      try {
+        (void)generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+            system, shells, invalid, &single_evaluations);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      require(rejected && single_evaluations == 123,
+              "invalid channel published a partial work count");
+    };
+    reject({});
+    const std::array<std::span<const double>, 1> malformed{
+        std::span(first).first(quartet_size - 1)};
+    reject(malformed);
+    first[0] = std::numeric_limits<double>::quiet_NaN();
+    reject(single);
+  }
+}
+
 void streamed_one_electron_derivative() {
   const auto system = h2();
   const auto oracle = generativeqc::integrals::build_integrals(system, true, false);
@@ -699,6 +806,7 @@ int main() {
     conventional_energy_reuses_ao_scans();
     conventional_energy_batch_fallback_matches();
     shell_local_weighted_eri_derivative();
+    shared_shell_derivative_channels();
     cuda_shell_derivative_budget_failure_is_transactional();
     streamed_one_electron_derivative();
     conventional_derivative_from_mo_weights(false);

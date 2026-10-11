@@ -1153,6 +1153,10 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
   result.gradient.assign(ncoord, 0.0);
   std::vector<double> weight_sensitivity(grid.point_count());
   std::vector<double> ao, density_phi(n), density_jet(3 * n);
+  const auto sample_owned = [&] {
+    runtime::sample_cpu_capacity(runtime::vector_capacities(result.gradient, weight_sensitivity, ao,
+                                                            density_phi, density_jet));
+  };
   static constexpr unsigned hessian[3][3]{{4, 5, 6}, {5, 7, 8}, {6, 8, 9}};
   const auto& points = grid.points();
   const auto& weights = grid.weights();
@@ -1160,6 +1164,7 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
   for (std::size_t begin = 0; begin < grid.point_count(); begin += tile_points) {
     const std::size_t count = std::min(tile_points, grid.point_count() - begin);
     ao.resize(10 * count * n);
+    sample_owned();
     basis.evaluate(points.data() + 3 * begin, count, 2, 0, n, ao.data(), ao.size());
     for (std::size_t local = 0; local < count; ++local) {
       const std::size_t point = begin + local;
@@ -1227,6 +1232,10 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
     }
   }
   const auto partition = grid.contract_weight_derivative(weight_sensitivity);
+  runtime::sample_cpu_capacity(
+      runtime::add_capacity(runtime::vector_bytes(partition),
+                            runtime::vector_capacities(result.gradient, weight_sensitivity, ao,
+                                                       density_phi, density_jet)));
   if (partition.size() != ncoord)
     throw std::runtime_error("stationary PBE Becke derivative shape mismatch");
   for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
