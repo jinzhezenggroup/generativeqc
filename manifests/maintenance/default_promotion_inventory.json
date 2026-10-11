@@ -55,7 +55,9 @@
         "ks-runtime:GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
         "ks-runtime:GENERATIVEQC_KS_RESIDENT_MAX_BYTES"
       ],
-      "owner_issues": [1598],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/scf/cuda/direct_jk_source_policy.hpp",
         "src/scf/cuda/reference_eri_policy.hpp",
@@ -75,8 +77,12 @@
     {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
-      "controls": ["ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES"],
-      "owner_issues": [1598],
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES"
+      ],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/dft/cuda_ks.cpp",
         "src/methods/dft_method.cpp",
@@ -103,7 +109,9 @@
       "controls": [
         "hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES"
       ],
-      "owner_issues": [1598],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/scf/cuda/reference_eri_policy.hpp",
         "src/scf/cuda/direct_jk_source_policy.hpp",
@@ -128,7 +136,9 @@
       "controls": [
         "initial-guess:df-rhf-preconvergence-auto"
       ],
-      "owner_issues": [1598],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/methods/df_hf_guess.cpp",
         "src/methods/df_hf_guess_basis.hpp",
@@ -646,13 +656,16 @@
       "controls": [
         "dft-policy:ks-device-final-validation-auto"
       ],
-      "owner_issues": [1598, 2220],
+      "owner_issues": [
+        1598,
+        2220
+      ],
       "sources": [
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_ks_final_validation_policy.hpp"
       ],
-      "rationale": "Unset selects resident final-state products only for full-precision exact-direct PBE0/RKS with at least 384 AOs. Four clean-source, genuinely unset-vs-zero warm/moved complete E/F comparisons at 384/768 AOs pass robust timing gates and independent numerical gates. The adapter removes two redundant full-AO products per canonical nonempty spin, keeps bounded charged packets and existing dense exports, and retains handle/published-lease admission. Explicit zero is an opt-out; explicit one does not expand the qualified automatic scope. Original numerical-only publication, historical below-gate samples, failed admission and incomplete timeout attempts are retained unchanged; scoped timing observations do not assert a formal broad-performance envelope.",
-      "revisit_condition": "Extend automatic admission only with independent complete endpoints for small owners, UKS, fitted providers or other functional compositions. Revisit the algorithm-informed size boundary if larger owners reveal a genuine resource/schedule cliff. Do not relabel the original frozen publication or infer measured gains on other architectures.",
+      "rationale": "Unset selects resident final-state matrix products for strict-FP64 exact-direct full-range restricted global hybrids with at least 384 AOs, using signed exchange and authenticated source/operator capabilities instead of a PBE0-only identity. The retained 384/768-AO complete E+F timing and accuracy evidence is PBE0-specific; gains on B3LYP, Minnesota and other hybrids are not inferred. Bounded packets, matrix handle, existing accepted generation, published scratch-lease gates and explicit 0 rollback remain unchanged.",
+      "revisit_condition": "Collect same-source independent E+F, GPU-sanitizer and cold/warm/moved timing evidence for newly eligible B3LYP and other global hybrids. Keep the 384-AO cutoff until shape-dependent profitability is measured; separately qualify UKS/DF/RSH and never relabel PBE0 timing evidence.",
       "evidence": [
         "pr:#2220",
         "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
@@ -668,7 +681,9 @@
         "hf-runtime:GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
         "dft-policy:spatial-spd-force-auto"
       ],
-      "owner_issues": [1598],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "python/generativeqc/resources_hf.py",
         "python/generativeqc_compiler/integral/direct_pair_gradient_cuda.py",
@@ -678,8 +693,8 @@
         "src/scf/cuda/direct_coulomb.cpp",
         "src/scf/cuda/direct_force_class_domains.cu"
       ],
-      "rationale": "Unset/empty automatically requests primitive-local order-six spatial Coulomb reuse only for method-authenticated exact-direct full-range PBE0/RKS, explicit FP64 and at least 384 public AOs. Existing scalar recurrence and gradient accumulation order are preserved while evaluations fall from 256 to 22-54 within at most 64 doubles. Four five-pair complete warm/moved E/F comparisons at 384/768 AOs pass the unchanged robust timing and independent numerical/work/checkpoint gates. Explicit zero and unknown values retain the incumbent; explicit one/spatial-reuse do not bypass resident token, primitive-pair, prefix, topology or derivative-capability checks. Generic/HF/RSH consumers supply no automatic hint. Both timing arms enable #2220 independently; its benefit is not attributed to this cache.",
-      "revisit_condition": "Extend automatic scope only with independent complete endpoints and unchanged scientific gates. Preserve bounded fallback, method authentication and opt-out. Earlier rejected schedules, the unexplained density failure, below-promotion two-pair pilots, full racecheck timeout and separate-output coverage-assertion failure remain historical evidence. Scoped gains do not imply cold-SCF, larger-system, other-method/device or broad formal performance/production qualification.",
+      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range global hybrids with at least 384 AOs, based on method/operator/precision capability rather than a PBE0 label or hard-coded exact-exchange fraction. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal/D4 exclusions and optional resources remain guarded. The 256-to-22–54 recurrence evaluation reduction and complete 384/768-AO warm/moved speedups were demonstrated on PBE0 only. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
+      "revisit_condition": "Qualify new global hybrid variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
         "docs:docs/user/ks_options.md",
@@ -694,7 +709,10 @@
       "controls": [
         "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH"
       ],
-      "owner_issues": [2073, 1598],
+      "owner_issues": [
+        2073,
+        1598
+      ],
       "sources": [
         "src/dft/cuda_ks.cpp",
         "src/dft/cuda_xc.cpp",
@@ -724,7 +742,7 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
+      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
       "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
@@ -928,7 +946,9 @@
       "controls": [
         "cc-option:df_mixed_precision"
       ],
-      "owner_issues": [1598],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/cc/solver.hpp",
         "src/cc/cuda_solver.cu",
@@ -949,8 +969,12 @@
     {
       "id": "cc.lambda-serial-scratch-reuse",
       "classification": "needs-qualification",
-      "controls": ["cc-option:lambda.serial_scratch_reuse"],
-      "owner_issues": [1598],
+      "controls": [
+        "cc-option:lambda.serial_scratch_reuse"
+      ],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/cc/lambda_response.hpp",
         "src/cc/lambda_response_cuda.cu",
@@ -969,8 +993,12 @@
     {
       "id": "cc.lambda-df-mixed-precision-warmup",
       "classification": "guarded-promotion-candidate",
-      "controls": ["cc-option:lambda.df_mixed_precision"],
-      "owner_issues": [1598],
+      "controls": [
+        "cc-option:lambda.df_mixed_precision"
+      ],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/cc/lambda_response.hpp",
         "src/cc/lambda_response_cuda.cu",
@@ -1018,7 +1046,9 @@
       "controls": [
         "cc-execution:df-triples-distinct-moments"
       ],
-      "owner_issues": [1598],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/cc/df_triples_cuda.cu",
         "tools/generate_df_occupied_triples.py"
@@ -1036,9 +1066,16 @@
     {
       "id": "cc.df-bounded-panel-traversal",
       "classification": "already-default",
-      "controls": ["cc-execution:df-triples-panel-traversal"],
-      "owner_issues": [1598],
-      "sources": ["src/cc/df_triples_cuda.cu", "src/cc/df_triples_traversal.hpp"],
+      "controls": [
+        "cc-execution:df-triples-panel-traversal"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/cc/df_triples_cuda.cu",
+        "src/cc/df_triples_traversal.hpp"
+      ],
       "rationale": "Only actual FP64 energy execution with exactly three panel slots uses a bounded serpentine triangular visit order. Original canonical tile addresses preserve the final energy reduction order. The three-panel LRU, every occupied tile, original generated W/energy algebra, finite checks and budgets remain; one/two-panel and non-FP64 execution retain the original traversal. Force/response do not use this helper. No tile list, new numeric storage, public option, provider or ABI change.",
       "revisit_condition": "Broaden precision/cache domains only with independent gates and exact complete endpoint work. Preserve canonical reduction addresses and bounded traversal; reject algorithms that sort or materialize O(o^3) host tile lists.",
       "evidence": [
@@ -1051,8 +1088,12 @@
     {
       "id": "cc.df-independent-pair",
       "classification": "already-default",
-      "controls": ["cc-execution:df-triples-independent-pair"],
-      "owner_issues": [1598],
+      "controls": [
+        "cc-execution:df-triples-independent-pair"
+      ],
+      "owner_issues": [
+        1598
+      ],
       "sources": [
         "src/cc/df_triples_cuda.cu",
         "src/tensor/cuda_contraction.cuh",
