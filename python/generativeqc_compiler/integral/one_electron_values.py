@@ -269,7 +269,8 @@ def evaluate_one_electron_primitive(
     if not math.isfinite(sum(exponents)):
         raise ValueError("primitive exponent sum overflows")
     variables = dict(zip(("alpha", "beta"), exponents, strict=True))
-    for name, position in zip("abc", centers, strict=True):
+    # S/T have A/B only; V additionally binds C. Never truncate positions implicitly.
+    for name, position in zip("abc"[:expected], centers, strict=True):
         variables.update(
             {f"{name}_{axis}": x for axis, x in zip(AXES, position, strict=True)}
         )
