@@ -125,7 +125,7 @@ def test_unsupported_capture_never_executes_an_eager_backend(operation: object) 
         return operation(array)
 
     with pytest.raises(NotImplementedError, match="TensorIR capture"):
-        xp.compile(expression).lower(np.ones((2, 2)))
+        xp.compile(expression, backend="reference").lower(np.ones((2, 2)))
 
 
 def test_nested_shared_containers_are_not_mistaken_for_cycles() -> None:

@@ -59,7 +59,7 @@ def test_eager_and_captured_comparisons_match_numpy(
     expected = oracle(left, right)
     operation = getattr(xp, name)
     eager = operation(left, right)
-    compiled = xp.compile(lambda x, y: operation(x, y))
+    compiled = xp.compile(lambda x, y: operation(x, y), backend="reference")
     program = compiled.lower(left, right)
     actual = compiled(left, right)
     assert eager.dtype == actual.dtype == expected.dtype == np.dtype("bool")
@@ -83,7 +83,7 @@ def test_operator_comparisons_remain_symbolic_and_immutable() -> None:
         (lambda x: x <= 2, np.less_equal(values, 2)),
     )
     for expression, oracle in operations:
-        program = xp.compile(expression).lower(values)
+        program = xp.compile(expression, backend="reference").lower(values)
         result = execute(program, {"x": values}).outputs["output"]
         np.testing.assert_array_equal(result, oracle)
         assert result.dtype == np.dtype("bool")
@@ -141,7 +141,7 @@ def test_public_bool_admission_and_bounded_creation() -> None:
     np.testing.assert_array_equal(xp.full((2,), True, dtype=xp.bool), [True, True])
     np.testing.assert_array_equal(xp.zeros((2,), dtype=xp.bool), [False, False])
     np.testing.assert_array_equal(xp.ones_like(mask), [True, True])
-    compiled = xp.compile(lambda x: xp.full_like(x, True))
+    compiled = xp.compile(lambda x: xp.full_like(x, True), backend="reference")
     program = compiled.lower(mask)
     assert program.outputs["output"].spec.dtype == "bool"
     np.testing.assert_array_equal(compiled(mask), [True, True])
@@ -165,7 +165,7 @@ def test_mixed_host_containers_convert_eagerly_but_fail_compiler_admission() -> 
             xp.asarray(value, dtype=xp.float64), np.asarray(value, dtype=np.float64)
         )
         with pytest.raises(TypeError, match="mixed bool/real"):
-            xp.compile(lambda x: x)(value)
+            xp.compile(lambda x: x, backend="reference")(value)
     np.testing.assert_array_equal(xp.add([True, 0.5], np.ones(2)), [2.0, 1.5])
 
     np.testing.assert_array_equal(
@@ -336,7 +336,7 @@ def test_eager_and_captured_boolean_views_match_numpy(
     original = mask.copy()
     expected = oracle(mask)
     eager = operation(mask)
-    captured = xp.compile(operation)(mask)
+    captured = xp.compile(operation, backend="reference")(mask)
     assert eager.dtype == captured.dtype == np.dtype("bool")
     np.testing.assert_array_equal(eager, expected)
     np.testing.assert_array_equal(captured, expected)
@@ -371,7 +371,7 @@ def test_boolean_views_do_not_admit_floating_arithmetic(
     with pytest.raises(TypeError, match="floating arithmetic"):
         operation(mask)
     with pytest.raises((TypeError, ValueError), match="bool|floating arithmetic"):
-        xp.compile(lambda x: operation(x))(mask)
+        xp.compile(lambda x: operation(x), backend="reference")(mask)
 
 
 def test_compiler_namespace_bool_creation_uses_boolean_literals() -> None:
@@ -509,7 +509,7 @@ def test_scientific_domain_and_boolean_algebra_fail_closed() -> None:
 
 def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
     array = np.array([1.0, 2.0], dtype=np.float64)
-    program = xp.compile(lambda x: x > 0).lower(array)
+    program = xp.compile(lambda x: x > 0, backend="reference").lower(array)
     for operation in (
         lambda: jvp(program, {"x": array}, {"x": np.ones_like(array)}),
         lambda: vjp(program, {"x": array}, {"output": np.ones(2, dtype=np.bool_)}),
@@ -527,7 +527,7 @@ def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
     bad = np.asarray([np.nan, 1.0], dtype=np.float64)
     np.testing.assert_array_equal(xp.greater(bad, array), [False, False])
     with pytest.raises(ValueError, match="non-finite"):
-        xp.compile(lambda x, y: x > y)(bad, array)
+        xp.compile(lambda x, y: x > y, backend="reference")(bad, array)
 
 
 @pytest.mark.parametrize("name", tuple(name for name, _ in COMPARISONS))
@@ -535,6 +535,6 @@ def test_array_api_strict_finite_reference(name: str) -> None:
     left = np.asarray([[1.0], [-2.0]], dtype=np.float32)
     right = np.asarray([[0.0, 1.0]], dtype=np.float64)
     operation = getattr(xp, name)
-    actual = xp.compile(lambda x, y: operation(x, y))(left, right)
+    actual = xp.compile(lambda x, y: operation(x, y), backend="reference")(left, right)
     oracle = getattr(strict, name)(strict.asarray(left), strict.asarray(right))
     np.testing.assert_array_equal(actual, np.asarray(oracle))

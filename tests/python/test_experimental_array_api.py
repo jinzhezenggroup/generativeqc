@@ -78,7 +78,7 @@ def test_public_namespace_runs_eagerly_and_compiles_the_same_expression() -> Non
     expected = np.sum(np.sqrt((x + 0.5) * y))
     np.testing.assert_allclose(eager, expected)
 
-    compiled = xp.compile(expression)
+    compiled = xp.compile(expression, backend="reference")
     np.testing.assert_allclose(compiled(x, y), eager)
 
 
@@ -97,7 +97,7 @@ def test_eager_namespace_array_manipulation_matches_numpy() -> None:
 
 
 def test_compiled_observable_uses_array_syntax_without_tensor_specs() -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def observable(C: object, occupation: object, O: object) -> object:
         density = (C * occupation) @ C.T
         return xp.sum(density * O)
@@ -121,7 +121,7 @@ def test_compiled_observable_uses_array_syntax_without_tensor_specs() -> None:
 
 
 def test_generic_indexing_reshape_and_batched_matmul_match_numpy() -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def transform(x: object, y: object) -> object:
         column = x[::-1, None]
         flat = xp.reshape(column, (1, -1))
@@ -133,7 +133,7 @@ def test_generic_indexing_reshape_and_batched_matmul_match_numpy() -> None:
     expected = x[::-1, None].reshape(1, -1) @ y
     np.testing.assert_allclose(actual, expected)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def batched(left: object, right: object) -> object:
         return left @ right
 
@@ -143,14 +143,14 @@ def test_generic_indexing_reshape_and_batched_matmul_match_numpy() -> None:
 
 
 def test_generic_empty_slices_match_numpy() -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def empty_slice(x: object) -> object:
         return x[2:1]
 
     values = np.arange(3.0, dtype=np.float64)
     np.testing.assert_array_equal(empty_slice(values), values[2:1])
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def empty_multiaxis(x: object) -> object:
         return x[1:1, ::-1]
 
@@ -159,7 +159,7 @@ def test_generic_empty_slices_match_numpy() -> None:
 
 
 def test_compiled_lower_supports_explicit_differentiable_inputs() -> None:
-    @xp.compile(differentiable=("x",))
+    @xp.compile(differentiable=("x",), backend="reference")
     def norm2(x: object) -> object:
         return xp.sum(x * x)
 
@@ -178,7 +178,7 @@ def test_compiled_lower_supports_explicit_differentiable_inputs() -> None:
     )
     assert result.output_tangents["output"] == 12.0
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def fixed(x: object) -> object:
         return xp.sum(x * x)
 
@@ -192,7 +192,7 @@ def test_compiled_lower_supports_explicit_differentiable_inputs() -> None:
 
 
 def test_generic_broadcasting_and_exact_scalar_operators_match_numpy() -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(matrix: object, vector: object) -> object:
         return (matrix + 1) * vector - Fraction(1, 2)
 
@@ -216,7 +216,7 @@ def test_public_namespace_declares_eager_standard_and_bounded_capture() -> None:
     assert report["implicit_broadcast"] is True
     assert report["reshape_requires_explicit_indices"] is False
     assert report["scientific_metadata_requires_explicit_indices"] is True
-    assert report["compiled_call"] == "shape-dtype-specialized-tensorir-reference"
+    assert report["compiled_call"] == "shape-dtype-specialized-native-tensorir"
     assert report["compiled_differentiability"] == "explicit-parameter-names"
     assert report["namespace_dispatch"] == "array-api-cpu-eager-or-symbolic-tensorir"
 
@@ -268,7 +268,7 @@ def test_mean_and_sum_keepdims_eager_compiled_numpy_parity(
         return operation(x, axis=axis, keepdims=keepdims)
 
     eager = expression(values)
-    compiled = xp.compile(expression)(values)
+    compiled = xp.compile(expression, backend="reference")(values)
     expected = oracle(values, axis=axis, keepdims=keepdims)
     assert eager.dtype == compiled.dtype == expected.dtype
     assert eager.shape == compiled.shape == expected.shape
@@ -285,7 +285,7 @@ def test_square_and_reciprocal_eager_compiled_negative_values(dtype: object) -> 
     ):
         expected = oracle(values)
         eager = operation(values)
-        compiled = xp.compile(operation)(values)
+        compiled = xp.compile(operation, backend="reference")(values)
         assert eager.dtype == compiled.dtype == values.dtype
         np.testing.assert_allclose(eager, expected)
         np.testing.assert_allclose(compiled, expected)
@@ -299,17 +299,19 @@ def test_mean_empty_reduction_is_eager_nan_but_capture_is_unsupported() -> None:
     ):
         assert np.all(np.isnan(operation(values)))
         with pytest.raises(ValueError, match="empty reduction"):
-            xp.compile(operation).lower(values)
+            xp.compile(operation, backend="reference").lower(values)
 
     # The empty sum is well-defined and its singleton dimension is preserved.
     np.testing.assert_array_equal(
-        xp.compile(lambda x: xp.sum(x, axis=0, keepdims=True))(values),
+        xp.compile(lambda x: xp.sum(x, axis=0, keepdims=True), backend="reference")(
+            values
+        ),
         np.zeros((1, 2), dtype=np.float64),
     )
 
 
 def test_mean_keeps_tensorir_autodiff_and_scientific_guards() -> None:
-    @xp.compile(differentiable=("x",))
+    @xp.compile(differentiable=("x",), backend="reference")
     def expression(x: object) -> object:
         return xp.mean(xp.square(x), axis=-1, keepdims=True)
 
@@ -412,7 +414,7 @@ def test_eager_exact_scalar_arithmetic_matches_compiled_dtype_and_values(
 
     values = np.asarray([2.0, 8.0], dtype=dtype)
     eager = expression(values)
-    compiled = xp.compile(expression)(values)
+    compiled = xp.compile(expression, backend="reference")(values)
     numeric = dtype(float(Fraction(scalar)))
     numpy_operation = getattr(np, operation.__name__)
     expected = (
@@ -435,7 +437,7 @@ def test_eager_exact_scalar_power_matches_compiled(
 
     values = np.asarray([2.0, 8.0], dtype=dtype)
     eager = expression(values)
-    compiled = xp.compile(expression)(values)
+    compiled = xp.compile(expression, backend="reference")(values)
     expected = np.power(values, dtype(float(Fraction(exponent))))
     assert eager.dtype == compiled.dtype == values.dtype
     np.testing.assert_array_equal(eager, expected)
@@ -450,7 +452,9 @@ def test_eager_exact_scalar_composes_with_array_functions(dtype: object) -> None
     values = np.asarray([2.0, 8.0], dtype=dtype)
     expected = np.asarray([1.0, 2.0], dtype=dtype)
     np.testing.assert_array_equal(expression(values), expected)
-    np.testing.assert_array_equal(xp.compile(expression)(values), expected)
+    np.testing.assert_array_equal(
+        xp.compile(expression, backend="reference")(values), expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -470,7 +474,9 @@ def test_eager_namespace_promotes_generic_real_array_dtypes(
     left = np.ones((2, 2), dtype=np.float32)
     right = np.ones((2, 2), dtype=np.float64)
     eager = operation(left, right)
-    captured = xp.compile(lambda x, y: operation(x, y))(left, right)
+    captured = xp.compile(lambda x, y: operation(x, y), backend="reference")(
+        left, right
+    )
     assert eager.dtype == captured.dtype == np.dtype("float64")
     np.testing.assert_array_equal(captured, eager)
 
@@ -486,7 +492,7 @@ def test_eager_ieee_literals_remain_outside_compiled_exact_constants(
     match = "negative-zero" if scalar == 0 else "finite"
     assert isinstance(operation(values, scalar), xp.Array)
     with pytest.raises(ValueError, match=match):
-        xp.compile(lambda x: operation(x, scalar)).lower(values)
+        xp.compile(lambda x: operation(x, scalar), backend="reference").lower(values)
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
@@ -496,7 +502,9 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
 
     values = np.asarray([0.2, 0.7, 2.1], dtype=dtype)
     tangent = np.asarray([0.3, -0.4, 0.6], dtype=dtype)
-    program = xp.compile(expression, differentiable=("x",)).lower(values)
+    program = xp.compile(expression, differentiable=("x",), backend="reference").lower(
+        values
+    )
     forward = tensor.jvp(program, {"x": values}, {"x": tangent})
     reverse = tensor.vjp(
         program,
@@ -509,7 +517,7 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
     np.testing.assert_allclose(
         reverse.input_cotangents["x"], np.full_like(values, 0.5 / 0.7), rtol=2e-6
     )
-    fixed = xp.compile(expression).lower(values)
+    fixed = xp.compile(expression, backend="reference").lower(values)
     assert all(
         not node.spec.differentiable for node in fixed.nodes if node.op == "input"
     )
@@ -546,7 +554,7 @@ def test_compiled_rejects_controls_outside_its_static_subset(
 ) -> None:
     values = np.ones((2, 2), dtype=np.float64)
     with pytest.raises((TypeError, ValueError)):
-        xp.compile(lambda x: operation(x)).lower(values)
+        xp.compile(lambda x: operation(x), backend="reference").lower(values)
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
@@ -565,7 +573,7 @@ def test_eager_and_compiled_preserve_supported_static_controls(
 ) -> None:
     values = np.arange(4.0, dtype=dtype).reshape(2, 2)
     eager = operation(values)
-    compiled = xp.compile(lambda x: operation(x))(values)
+    compiled = xp.compile(lambda x: operation(x), backend="reference")(values)
     assert eager.dtype == compiled.dtype == values.dtype
     np.testing.assert_array_equal(eager, compiled)
 
@@ -594,7 +602,7 @@ def test_eager_ieee_domains_do_not_widen_compiled_scientific_domains(
         array = np.asarray(values, dtype=dtype)
         assert isinstance(operation(array), xp.Array)
         with pytest.raises(ValueError):
-            xp.compile(lambda x: operation(x))(array)
+            xp.compile(lambda x: operation(x), backend="reference")(array)
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
@@ -604,14 +612,16 @@ def test_eager_einsum_exact_coefficient_matches_compiled(dtype: object) -> None:
 
     values = np.asarray([1.0, 2.0], dtype=dtype)
     eager = expression(values)
-    compiled = xp.compile(expression)(values)
+    compiled = xp.compile(expression, backend="reference")(values)
     assert eager.dtype == compiled.dtype == values.dtype
     np.testing.assert_array_equal(eager, dtype(2.5))
     np.testing.assert_array_equal(compiled, dtype(2.5))
     with pytest.raises(TypeError, match="exact"):
         xp.einsum("i->", values, coefficient=0.5)
     with pytest.raises(TypeError, match="exact"):
-        xp.compile(lambda x: xp.einsum("i->", x, coefficient=0.5)).lower(values)
+        xp.compile(
+            lambda x: xp.einsum("i->", x, coefficient=0.5), backend="reference"
+        ).lower(values)
 
 
 @pytest.mark.parametrize("exponent", (1.0e-100, -1.0e-100, 1.0e100))
@@ -621,7 +631,7 @@ def test_compiled_rejects_unrepresentable_float32_power_exponents(
     values = np.asarray([2.0], dtype=np.float32)
     assert xp.pow(values, exponent).dtype == xp.float32
     with pytest.raises(ValueError):
-        xp.compile(lambda x: xp.pow(x, exponent)).lower(values)
+        xp.compile(lambda x: xp.pow(x, exponent), backend="reference").lower(values)
 
 
 @pytest.mark.parametrize("protocol", ("dlpack", "cuda_array_interface"))
@@ -654,7 +664,7 @@ def test_nested_foreign_arrays_are_rejected_before_conversion(
         elif mode == "eager":
             xp.negative(values)
         else:
-            xp.compile(lambda x: -x)(values)
+            xp.compile(lambda x: -x, backend="reference")(values)
 
 
 @pytest.mark.parametrize("operation", _EAGER_ARRAY_OPERATIONS)
@@ -689,7 +699,7 @@ def test_eager_einsum_rejects_notation_and_broadcasting_outside_tensorir(
     with pytest.raises(ValueError):
         operation(x, y)
     with pytest.raises(ValueError):
-        xp.compile(lambda x, y: operation(x, y)).lower(x, y)
+        xp.compile(lambda x, y: operation(x, y), backend="reference").lower(x, y)
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
@@ -699,7 +709,7 @@ def test_eager_einsum_preserves_explicit_diagonals_and_axis_labels(
 ) -> None:
     values = np.arange(4.0, dtype=dtype).reshape(2, 2)
     eager = xp.einsum(equation, values)
-    compiled = xp.compile(lambda x: xp.einsum(equation, x))(values)
+    compiled = xp.compile(lambda x: xp.einsum(equation, x), backend="reference")(values)
     expected = np.einsum(equation, values, optimize=False)
     assert eager.dtype == compiled.dtype == values.dtype
     np.testing.assert_array_equal(eager, expected)

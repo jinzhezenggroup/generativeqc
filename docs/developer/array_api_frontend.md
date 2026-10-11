@@ -152,9 +152,14 @@ broadcasts of one exact scalar, not size-proportional constant payloads.
 frontend-only runtime node or second mathematical IR. Inferred inputs are
 non-differentiable by default; `@xp.compile(differentiable=("x", ...))` promotes
 only the named inputs to differentiable TensorIR parameters for JVP/VJP use. The
-first compiled-call backend is the independent NumPy TensorIR reference
-interpreter. Native CPU/CUDA execution remains a separate explicit
-lowering/qualification step.
+default compiled-call backend is the native float64 CPU TensorIR compiler.
+Reference interpretation is opt-in. CUDA uses the existing planner and prepared
+executor with explicit host staging. Public grad/value_and_grad/JVP/VJP generate
+canonical derivative Programs using linearize/transpose_program, never the
+reference AD evaluator on native paths. Combined primal/derivative endpoints
+share SSA nodes before ordinary backend preparation. Runtime adapters bind
+arguments, validate seeds, cache owners and package outputs; they own no
+derivative rules. Explicit input TensorSpecs preserve scientific domains.
 
 ## Native SCF adoption
 
@@ -215,6 +220,7 @@ The design rationale, rejected alternatives and invariants are retained in the
 The public-preview boundary is recorded in the
 [experimental Array API note](../../.agents/notes/implemented/architecture/2026-10-07-experimental-array-api-public-preview.md).
 
-The native cutover is a checked specialization, not a general C++ graph emitter.
+The build-time SCF cutover is a checked specialization, separate from the
+primitive-based native TensorIR compiler used by public array functions.
 Its topology, FP64 order and source-identity contract are recorded in the
 [native specialization note](../../.agents/notes/implemented/architecture/2026-09-20-native-array-scf-specialization.md).

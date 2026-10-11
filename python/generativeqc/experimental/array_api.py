@@ -12,6 +12,7 @@ import builtins
 import functools
 import inspect
 import typing
+from dataclasses import replace
 
 import numpy as np
 from generativeqc_compiler.array_api import (
@@ -38,9 +39,6 @@ from generativeqc_compiler.tensor import (
     IndexSpace,
     Program,
     TensorSpec,
-)
-from generativeqc_compiler.tensor import (
-    execute as _execute,
 )
 
 from . import _array_api_eager as _eager
@@ -1002,11 +1000,13 @@ def _generic_spec(array: np.ndarray, *, differentiable: builtins.bool) -> Tensor
 
 
 class CompiledFunction:
-    """Shape/dtype-specialized TensorIR capture with reference execution.
+    """Shape/dtype-specialized quantum-chemistry TensorIR compiler.
 
-    ``compile`` currently means compile Python array expressions to canonical
-    TensorIR. Native CPU/CUDA execution remains an explicit follow-on capability;
-    this first public path uses the independent NumPy TensorIR interpreter.
+    CPU execution is compiled C++ with float64 semantics. CUDA uses the existing
+    TensorIR planner and native executor with explicit host staging. Reference
+    interpretation is opt-in; unsupported lowering never selects it implicitly.
+    Optional TensorSpecs retain AO/orbital/spin domains instead of inferring
+    scientific compatibility from equal axis extents.
     """
 
     def __init__(
@@ -1015,14 +1015,14 @@ class CompiledFunction:
         *,
         backend: str,
         differentiable: tuple[str, ...],
+        specs: typing.Mapping[str, TensorSpec] | None = None,
+        **options: typing.Any,
     ) -> None:
-        """Bind a callable and validate its reference backend and differentiable inputs."""
+        """Bind a function, semantic input types, backend and finite resource limits."""
         if not callable(function):
             raise TypeError("compile requires a callable")
-        if backend != "reference":
-            raise ValueError(
-                "experimental compile currently supports backend='reference'"
-            )
+        if backend not in ("cpu", "cuda", "reference"):
+            raise ValueError("backend must be 'cpu', 'cuda' or 'reference'")
         symbolic = _symbolic_functions.get(getattr(function, "__name__", ""))
         signature = inspect.signature(
             symbolic
@@ -1058,6 +1058,17 @@ class CompiledFunction:
         self._signature = signature
         self._backend = backend
         self._differentiable = frozenset(differentiable)
+        self._specs = dict(specs or {})
+        if set(self._specs) - set(signature.parameters):
+            raise ValueError("input specs must name function parameters")
+        if builtins.any(
+            not isinstance(spec, TensorSpec) for spec in self._specs.values()
+        ):
+            raise TypeError("input specs must be TensorSpecs")
+        from ._array_api_execution import _Executor
+
+        self._execution = _Executor(backend, options)
+        self._options = self._execution.options
         self._programs: dict[tuple[tuple[str, tuple[int, ...], str], ...], Program] = {}
         functools.update_wrapper(self, function)
 
@@ -1079,9 +1090,17 @@ class CompiledFunction:
                     "TensorIR compilation supports bool, float32 or float64 inputs"
                 )
             feeds[name] = array
-            specs[name] = _generic_spec(
-                array, differentiable=name in self._differentiable
-            )
+            spec = self._specs.get(name)
+            if spec is not None:
+                if spec.shape != array.shape or spec.dtype != array.dtype.name:
+                    raise ValueError(
+                        f"input {name} does not match its scientific TensorSpec"
+                    )
+                specs[name] = replace(spec, differentiable=name in self._differentiable)
+            else:
+                specs[name] = _generic_spec(
+                    array, differentiable=name in self._differentiable
+                )
             key_rows.append(
                 (name, tuple(int(x) for x in array.shape), array.dtype.name)
             )
@@ -1105,20 +1124,45 @@ class CompiledFunction:
         return program
 
     def __call__(self, *args: object, **kwargs: object) -> typing.Any:
-        """Execute the shape/dtype-specialized TensorIR reference program."""
+        """Compile/cache and execute the whole program on the selected backend."""
         program, feeds = self._prepare(*args, **kwargs)
-        execution = _execute(program, feeds)
+        outputs = self._execution.execute(program, feeds)
         if tuple(program.outputs) == ("output",):
-            return _eager.wrap(execution.outputs["output"])
-        return {name: _eager.wrap(value) for name, value in execution.outputs.items()}
+            return _eager.wrap(outputs["output"])
+        return {name: _eager.wrap(value) for name, value in outputs.items()}
+
+    def _variant(
+        self, names: tuple[str, ...], backend: str | None = None
+    ) -> CompiledFunction:
+        return CompiledFunction(
+            self._function,
+            backend=backend or self._backend,
+            differentiable=names,
+            specs=self._specs,
+            **self._options,
+        )
+
+    def compilation_info(self) -> dict[str, object]:
+        """Inspect backend, cached specializations and actual native executable count."""
+        return {
+            "backend": self._backend,
+            "specializations": len(self._programs),
+            "native_executables": len(self._execution.executables),
+            "program_hashes": tuple(self._execution.executables),
+        }
+
+    def close(self) -> None:
+        """Release native execution owners; subsequent calls fail rather than rebuild."""
+        self._execution.close()
 
 
 @typing.overload
 def compile(
     function: typing.Callable[..., object],
     *,
-    backend: str = "reference",
+    backend: str = "cpu",
     differentiable: tuple[str, ...] = (),
+    **options: typing.Any,
 ) -> CompiledFunction: ...
 
 
@@ -1126,25 +1170,127 @@ def compile(
 def compile(
     function: None = None,
     *,
-    backend: str = "reference",
+    backend: str = "cpu",
     differentiable: tuple[str, ...] = (),
+    **options: typing.Any,
 ) -> typing.Callable[[typing.Callable[..., object]], CompiledFunction]: ...
 
 
 def compile(
     function: typing.Callable[..., object] | None = None,
     *,
-    backend: str = "reference",
+    backend: str = "cpu",
     differentiable: tuple[str, ...] = (),
+    specs: typing.Mapping[str, TensorSpec] | None = None,
+    cache: typing.Any = None,
+    max_bytes: int = 64 * 1024 * 1024,
+    max_work: int = 100_000_000,
+    max_nodes: int = 4096,
+    compile_timeout: float = 300.0,
+    cuda_arch: str = "sm_120",
+    device: int = 0,
 ) -> (
     CompiledFunction | typing.Callable[[typing.Callable[..., object]], CompiledFunction]
 ):
-    """Capture a normal array function lazily from its first concrete signature."""
+    """Compile Array API expressions to native CPU/CUDA code through TensorIR.
+
+    Native CPU currently requires float64; reference and CUDA have their own
+    explicitly bounded primitive/dtype admission. Shapes specialize on first
+    call. Specs optionally declare scientific domains. Cache, byte/work/node
+    budgets and finite compiler timeouts apply to native execution. CUDA stages
+    host inputs and returns detached CPU arrays; it is not a GPU eager namespace.
+    """
+    options = {
+        "cache": cache,
+        "max_bytes": max_bytes,
+        "max_work": max_work,
+        "max_nodes": max_nodes,
+        "compile_timeout": compile_timeout,
+        "cuda_arch": cuda_arch,
+        "device": device,
+    }
     if function is None:
         return lambda target: CompiledFunction(
-            target, backend=backend, differentiable=differentiable
+            target,
+            backend=backend,
+            differentiable=differentiable,
+            specs=specs,
+            **options,
         )
-    return CompiledFunction(function, backend=backend, differentiable=differentiable)
+    return CompiledFunction(
+        function, backend=backend, differentiable=differentiable, specs=specs, **options
+    )
+
+
+def grad(
+    function: typing.Callable[..., object],
+    *,
+    argnums: int | tuple[int, ...] = 0,
+    backend: str | None = None,
+    **options: typing.Any,
+) -> typing.Any:
+    """Compile a scalar function's reverse derivative for the selected arguments.
+
+    An integer argnums returns one Array; a tuple returns a tuple in that order.
+    Existing compiled functions retain their backend, budgets and scientific
+    specs. Plain functions use native CPU unless a backend is explicitly chosen.
+    """
+    from ._array_api_autodiff import _GradientFunction
+
+    return _GradientFunction(function, argnums, backend, options, with_value=False)
+
+
+def value_and_grad(
+    function: typing.Callable[..., object],
+    *,
+    argnums: int | tuple[int, ...] = 0,
+    backend: str | None = None,
+    **options: typing.Any,
+) -> typing.Any:
+    """Compile scalar energy and selected gradients as one shared TensorIR program.
+
+    Primal and derivative nodes share the same native endpoint, specialization
+    cache and resource gates. This is not numerical differentiation or a call to
+    the reference autodiff evaluator.
+    """
+    from ._array_api_autodiff import _GradientFunction
+
+    return _GradientFunction(function, argnums, backend, options, with_value=True)
+
+
+def jvp(
+    function: typing.Callable[..., object],
+    primals: tuple[object, ...],
+    tangents: tuple[object, ...],
+    *,
+    backend: str | None = None,
+    **options: typing.Any,
+) -> tuple[typing.Any, typing.Any]:
+    """Compile a function and forward directional derivative on one backend.
+
+    Primals/tangents are matching tuples of positional array arguments. Returned
+    primal and tangent outputs preserve the function's array/dictionary structure.
+    """
+    from ._array_api_autodiff import _jvp
+
+    return _jvp(function, primals, tangents, backend, options)
+
+
+def vjp(
+    function: typing.Callable[..., object],
+    *primals: object,
+    backend: str | None = None,
+    **options: typing.Any,
+) -> typing.Any:
+    """Return native primal outputs and a reusable compiled cotangent pullback.
+
+    The pullback snapshots its primal inputs, validates cotangent shapes/dtypes,
+    and returns gradients in positional argument order. Close it to release its
+    execution owner, especially for CUDA.
+    """
+    from ._array_api_autodiff import _vjp
+
+    return _vjp(function, primals, backend, options)
 
 
 def capabilities() -> dict[str, object]:
@@ -1152,7 +1298,8 @@ def capabilities() -> dict[str, object]:
 
     Compiler metadata and operation_matrix describe only the bounded symbolic
     subset. Eager dtypes/functions/devices and namespace discovery describe CPU
-    execution; no GPU transfer, native lowering or scientific AD is implied.
+    execution. Native/AD metadata names explicit compiler paths, not full
+    standard coverage or GPU eager-array conformance.
     """
     report = _compiler_capabilities()
     report.update(
@@ -1167,14 +1314,27 @@ def capabilities() -> dict[str, object]:
             "array_namespace_protocol": True,
             "functions": tuple(
                 sorted(
-                    set(_eager.FUNCTION_NAMES) | {"compile", "trace", "einsum", "slice"}
+                    set(_eager.FUNCTION_NAMES)
+                    | {
+                        "compile",
+                        "trace",
+                        "einsum",
+                        "slice",
+                        "grad",
+                        "value_and_grad",
+                        "jvp",
+                        "vjp",
+                    }
                 )
             ),
             "implicit_broadcast": True,
             "reshape_requires_explicit_indices": False,
             "broadcast_requires_explicit_indices_and_axes": False,
             "scientific_metadata_requires_explicit_indices": True,
-            "compiled_call": "shape-dtype-specialized-tensorir-reference",
+            "compiled_call": "shape-dtype-specialized-native-tensorir",
+            "compiled_backends": ("cpu", "cuda", "reference"),
+            "native_cpu_dtypes": ("float64",),
+            "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
             "compiled_differentiability": "explicit-parameter-names",
             "namespace_dispatch": "array-api-cpu-eager-or-symbolic-tensorir",
             "runtime_array": "numpy-backed-array-api-cpu",
@@ -1272,6 +1432,7 @@ __all__ = [
     "from_dlpack",
     "full",
     "full_like",
+    "grad",
     "greater",
     "greater_equal",
     "hypot",
@@ -1289,6 +1450,7 @@ __all__ = [
     "isin",
     "isinf",
     "isnan",
+    "jvp",
     "less",
     "less_equal",
     "linalg",
@@ -1366,8 +1528,10 @@ __all__ = [
     "unique_inverse",
     "unique_values",
     "unstack",
+    "value_and_grad",
     "var",
     "vecdot",
+    "vjp",
     "where",
     "zeros",
     "zeros_like",

@@ -25,7 +25,9 @@ PYTHONPATH=python python -m pytest -q tests/python/test_array_api*.py \
 For an uninstalled source checkout, install NumPy >=2.1.3, array-api-compat >=1.15.0,
 typing-extensions >=4.0
 and the dependencies in the `test`/`array-api-test` extras without building the
-native library. The runner supplies the source `PYTHONPATH`. No GPU is used.
+chemistry library. Native compiler tests additionally require a C++ compiler
+and sccache/ccache. The runner supplies the source `PYTHONPATH`. No GPU is used
+by the eager gate or default local tests.
 
 The runner verifies both source revisions and clean tracked files, selects
 2025.12, runs 100 deterministic Hypothesis examples per property, removes
@@ -47,3 +49,16 @@ checks, TensorSpec identities, autodiff admission, and no implicit foreign-devic
 transfers. Eager support for integers, complex values, dynamic shapes or new
 functions cannot authorize unsupported TensorIR/native lowering. Unsupported
 capture raises instead of executing eager work during tracing.
+
+## Compiler and autodiff gate
+
+`tests/python/test_array_api_native_autodiff.py` qualifies native CPU forward,
+combined energy/gradient, JVP and snapshot VJP. It disables reference execution
+and AD entry points and checks analytic nonlinear derivatives, independently
+contracted RHF Fock matrices, finite differences, cache reuse, domain separation
+and fail-before-toolchain resource gates. This is separate from eager conformance.
+
+CUDA planner/source and missing-toolchain tests need no GPU. Real-device tests
+require `GENERATIVEQC_ARRAY_API_CUDA_TEST=1` inside a finite Slurm job on an
+allowed node, preserving assigned device visibility. They are separate from
+the CPU qualification claim.

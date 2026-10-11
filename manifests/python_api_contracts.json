@@ -198,6 +198,7 @@
     "generativeqc.experimental.array_api.from_dlpack": "generativeqc/experimental/array_api.py:from_dlpack",
     "generativeqc.experimental.array_api.full": "generativeqc/experimental/array_api.py:full",
     "generativeqc.experimental.array_api.full_like": "generativeqc/experimental/array_api.py:full_like",
+    "generativeqc.experimental.array_api.grad": "generativeqc/experimental/array_api.py:grad",
     "generativeqc.experimental.array_api.greater": "generativeqc/experimental/array_api.py:greater",
     "generativeqc.experimental.array_api.greater_equal": "generativeqc/experimental/array_api.py:greater_equal",
     "generativeqc.experimental.array_api.hypot": "generativeqc/experimental/array_api.py:hypot",
@@ -215,6 +216,7 @@
     "generativeqc.experimental.array_api.isin": "generativeqc/experimental/array_api.py:isin",
     "generativeqc.experimental.array_api.isinf": "generativeqc/experimental/array_api.py:isinf",
     "generativeqc.experimental.array_api.isnan": "generativeqc/experimental/array_api.py:isnan",
+    "generativeqc.experimental.array_api.jvp": "generativeqc/experimental/array_api.py:jvp",
     "generativeqc.experimental.array_api.less": "generativeqc/experimental/array_api.py:less",
     "generativeqc.experimental.array_api.less_equal": "generativeqc/experimental/array_api.py:less_equal",
     "generativeqc.experimental.array_api.linalg": "generativeqc/experimental/_array_api_linalg.py:<module>",
@@ -292,8 +294,10 @@
     "generativeqc.experimental.array_api.unique_inverse": "generativeqc/experimental/array_api.py:unique_inverse",
     "generativeqc.experimental.array_api.unique_values": "generativeqc/experimental/array_api.py:unique_values",
     "generativeqc.experimental.array_api.unstack": "generativeqc/experimental/array_api.py:unstack",
+    "generativeqc.experimental.array_api.value_and_grad": "generativeqc/experimental/array_api.py:value_and_grad",
     "generativeqc.experimental.array_api.var": "generativeqc/experimental/array_api.py:var",
     "generativeqc.experimental.array_api.vecdot": "generativeqc/experimental/array_api.py:vecdot",
+    "generativeqc.experimental.array_api.vjp": "generativeqc/experimental/array_api.py:vjp",
     "generativeqc.experimental.array_api.where": "generativeqc/experimental/array_api.py:where",
     "generativeqc.experimental.array_api.zeros": "generativeqc/experimental/array_api.py:zeros",
     "generativeqc.experimental.array_api.zeros_like": "generativeqc/experimental/array_api.py:zeros_like",
@@ -2537,6 +2541,28 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
+    "generativeqc/experimental/array_api.py:CompiledFunction.close": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/array_api.py:CompiledFunction.compilation_info": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
     "generativeqc/experimental/array_api.py:CompiledFunction.lower": {
       "kind": "function",
       "profile": "transformation",
@@ -3205,6 +3231,17 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
+    "generativeqc/experimental/array_api.py:grad": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
     "generativeqc/experimental/array_api.py:greater": {
       "kind": "function",
       "profile": "transformation",
@@ -3345,6 +3382,17 @@
         "ownership": "docs/reference/python_contracts.md#python-array-ownership",
         "backends": "docs/reference/python_contracts.md#python-array-backends",
         "behavior": "docstring"
+      }
+    },
+    "generativeqc/experimental/array_api.py:jvp": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
     "generativeqc/experimental/array_api.py:less": {
@@ -4120,6 +4168,17 @@
         "behavior": "docstring"
       }
     },
+    "generativeqc/experimental/array_api.py:value_and_grad": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
     "generativeqc/experimental/array_api.py:var": {
       "kind": "function",
       "profile": "execution",
@@ -4140,6 +4199,17 @@
         "ownership": "docs/reference/python_contracts.md#python-array-ownership",
         "backends": "docs/reference/python_contracts.md#python-array-backends",
         "behavior": "docstring"
+      }
+    },
+    "generativeqc/experimental/array_api.py:vjp": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-array-backends",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
     "generativeqc/experimental/array_api.py:where": {

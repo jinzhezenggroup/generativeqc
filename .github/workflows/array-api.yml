@@ -7,6 +7,7 @@ on:
     paths:
       - python/generativeqc/experimental/**
       - python/generativeqc_compiler/array_api/**
+      - python/generativeqc_compiler/tensor/**
       - tests/python/test_array_api*.py
       - tests/python/test_experimental_array_api.py
       - tools/check_array_api_conformance.py
@@ -46,6 +47,9 @@ jobs:
           "pytest>=8" "hypothesis>=6.151.0" "ndindex>=1.8"
           "pytest-json-report>=1.5" "tomli>=2" "typing-extensions>=4.0"
           "array-api-strict==2.6.1"
+          "sccache>=0.16.0"
+      - name: Compiler cache provenance
+        run: sccache --version && sccache --show-stats
       - name: Complete upstream conformance gate
         run: python tools/check_array_api_conformance.py .array-api-tests
       - name: Scientific boundary regressions
@@ -54,3 +58,6 @@ jobs:
         run: >-
           python -m pytest -q tests/python/test_array_api*.py
           tests/python/test_experimental_array_api.py
+      - name: Compiler cache statistics
+        if: always()
+        run: sccache --show-stats

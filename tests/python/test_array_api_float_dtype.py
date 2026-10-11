@@ -41,7 +41,7 @@ def test_eager_and_compiled_binary_promote_like_array_api(
     y = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=second)
     expected = oracle(x, y)
     eager = expression(x, y)
-    compiled = xp.compile(expression)(x, y)
+    compiled = xp.compile(expression, backend="reference")(x, y)
     expected_dtype = np.result_type(x.dtype, y.dtype)
     assert eager.dtype == compiled.dtype == expected_dtype
     np.testing.assert_allclose(eager, expected, rtol=2e-6, atol=2e-6)
@@ -49,7 +49,7 @@ def test_eager_and_compiled_binary_promote_like_array_api(
 
 
 def test_mixed_dtype_broadcasting_inserts_explicit_cast_nodes() -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object, y: object) -> object:
         return x + y
 
@@ -66,7 +66,7 @@ def test_mixed_dtype_scalar_arrays_follow_promotion_rules() -> None:
     f32 = np.asarray(2.0, dtype=np.float32)
     f64 = np.asarray([1.0, 3.0], dtype=np.float64)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object, y: object) -> object:
         return x * y + 0.5
 
@@ -87,7 +87,7 @@ def test_astype_copy_contract_and_explicit_tensorir_cast(dtype: object) -> None:
     assert converted.dtype == other
     np.testing.assert_array_equal(converted, values.astype(other))
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object) -> object:
         return xp.astype(x, other)
 
@@ -117,7 +117,7 @@ def test_scientific_float_precision_remains_explicit() -> None:
 
 
 def test_mixed_precision_capture_reuses_tensorir_ad() -> None:
-    @xp.compile(differentiable=("x",))
+    @xp.compile(differentiable=("x",), backend="reference")
     def expression(x: object, y: object) -> object:
         return xp.sum(x * y)
 
@@ -166,7 +166,7 @@ def test_dtype_admission_fails_closed() -> None:
     values = np.ones(2, dtype=np.float64)
     assert xp.astype(values, np.int32).dtype == xp.int32
     with pytest.raises(TypeError, match="float32/float64"):
-        xp.compile(lambda x: xp.astype(x, np.int32)).lower(values)
+        xp.compile(lambda x: xp.astype(x, np.int32), backend="reference").lower(values)
     with pytest.raises(TypeError, match="bool"):
         xp.astype(values, xp.float32, copy=0)
     with pytest.raises(ValueError, match="device"):

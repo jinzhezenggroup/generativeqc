@@ -28,7 +28,7 @@ def test_uniform_creators_match_numpy(dtype: object, shape: object) -> None:
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
 def test_uniform_and_like_creation_are_captured_as_tensorir(dtype: object) -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object) -> object:
         zero = xp.zeros(x.shape, dtype=x.dtype)
         ones = xp.ones_like(x)
@@ -59,7 +59,7 @@ def test_uniform_and_like_creation_are_captured_as_tensorir(dtype: object) -> No
 
 def test_uniform_constant_is_one_scalar_payload_without_n_squared_expansion() -> None:
     # Symbolic payload remains one scalar even for large shapes.
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object) -> object:
         return x + xp.ones((1024, 1024), dtype=x.dtype)
 
@@ -72,7 +72,7 @@ def test_uniform_constant_is_one_scalar_payload_without_n_squared_expansion() ->
 
 
 def test_like_creation_is_dtype_stable_and_differentiation_safe() -> None:
-    @xp.compile(differentiable=("x",))
+    @xp.compile(differentiable=("x",), backend="reference")
     def expression(x: object) -> object:
         return xp.sum(x * xp.ones_like(x) + xp.zeros_like(x))
 
@@ -135,4 +135,6 @@ def test_standard_eager_creation_supports_integers_and_nonfinite_values() -> Non
         xp.zeros((True,))
     assert bool(xp.all(xp.isinf(xp.full((2,), float("inf"), dtype=xp.float64))))
     with pytest.raises(TypeError, match="not supported"):
-        xp.compile(lambda x: x + xp.full((2,), 3)).lower(np.ones(2))
+        xp.compile(lambda x: x + xp.full((2,), 3), backend="reference").lower(
+            np.ones(2)
+        )

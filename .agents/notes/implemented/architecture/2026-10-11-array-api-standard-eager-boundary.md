@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-11
 
+The reference-only public execution boundary is superseded by
+[native Array API and AD](2026-10-11-array-api-native-autodiff.md).
+The eager conformance and no-implicit-device-transfer decisions remain intact.
+
 Supersedes the eager discovery boundary in the
 [public-preview decision](2026-10-07-experimental-array-api-public-preview.md),
 while retaining its bounded symbolic/compiler invariants.

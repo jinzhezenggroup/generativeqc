@@ -52,10 +52,62 @@ The namespace also works eagerly on its NumPy-backed CPU arrays. The same
 function body can therefore be evaluated directly and then compiled without
 rewriting its array expressions. The first compiled call captures a
 specialization from the concrete argument shapes and dtypes, lowers the
-expression to canonical TensorIR, caches that program, and executes it through
-the independent reference interpreter. Use
+expression to canonical TensorIR, and compiles/caches a native CPU executable. Use
 `observable.lower(C, occupation, O)` when the TensorIR `Program` itself is
-needed for inspection, optimization, or a separate native compilation step.
+needed for inspection or optimization. Native CPU currently requires float64.
+`backend="reference"` explicitly selects the independent interpreter; unsupported
+native lowering never falls back to it implicitly.
+
+## Compile energies and derivatives
+
+Users do not need to construct derivative IR or call compiler-internal AD:
+
+```python
+@xp.compile(backend="cpu")
+def energy(density, hcore):
+    return xp.sum(density * hcore)
+
+density = xp.eye(2)
+hcore = xp.asarray([[-1.0, -0.2], [-0.2, -0.8]])
+energy_and_gradient = xp.value_and_grad(energy, argnums=0)
+value, density_gradient = energy_and_gradient(density, hcore)
+```
+
+`grad` returns only gradients. Integer `argnums` selects one positional parameter;
+a tuple returns gradients in that order, including with keyword-bound arguments.
+Negative positions are accepted. Both transforms require one scalar array
+output; use `vjp` for vector/dictionary outputs. Differentiability is inferred
+from `argnums`. `value_and_grad` compiles primal and reverse nodes as **one shared
+native endpoint**, not interpreter calls or finite differences.
+
+`xp.jvp(function, (x,), (direction,))` returns primal and directional derivative.
+`value, pullback = xp.vjp(function, x)` returns a reusable compiled pullback;
+`pullback(cotangent)` returns a tuple of input cotangents. Pullbacks snapshot
+their primal inputs, so later mutation cannot change the derivative. Call
+`pullback.close()` to release native owners. Compiled and gradient functions
+also provide `close()` and `compilation_info()`.
+
+For quantum-chemistry equations, pass `specs={parameter: TensorSpec(...)}` to
+`compile` to retain AO, occupied, virtual, auxiliary and spin domains. Equal
+extents never authorize mixing scientific spaces. `einsum` accepts exact
+`Fraction` coefficients. The native RHF density derivative is checked against
+independent Fock contractions and finite differences in
+`tests/python/test_array_api_native_autodiff.py`.
+
+`backend="cuda"` uses the existing native TensorIR compiler/planner. `cuda_arch`
+and the Slurm-visible `device` are explicit. This interface stages host inputs
+to the GPU and returns detached CPU arrays; it does not create a GPU eager
+namespace or accept implicit foreign GPU conversions. CUDA failures never
+switch to CPU/reference. Real-device qualification requires scheduled execution;
+planner/source tests alone do not qualify a GPU endpoint.
+
+Native compilation requires a C++/CUDA toolchain and a verified compiler-cache
+launcher. `cache`, `max_bytes`, `max_work`, `max_nodes` and `compile_timeout`
+control artifacts, resources and finite compiler lifetime. Forward and
+derivative programs pass the same backend admission. Native CPU supports float64
+contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
+`sqrt` and exact `pow`. Other operations fail closed; full eager conformance does
+not imply full compiler coverage. Higher-order public transforms are unsupported.
 
 Inputs are non-differentiable by default. When the lowered program will be used
 with TensorIR AD, declare that contract explicitly:
@@ -159,8 +211,9 @@ rejected before implicit conversion, including through operators or nested host
 containers. CPU `from_dlpack` is explicit; `import_dlpack` retains the existing
 same-device consumer handoff extension.
 
-`compile` still accepts CPU bool/float32/float64 inputs and only the compiler's
-bounded operation set. Shape/axis values must be static. Captured `flip` retains
+Capture accepts CPU bool/float32/float64 inputs and the compiler's bounded
+operation set; backend execution has narrower dtype/primitive admission.
+Shape/axis values must be static. Captured `flip` retains
 its 65,536-index budget per reversed axis. Scientific domains retain explicit
 metadata requirements. Compiled reductions do not introduce implicit dtype
 conversions, compiled empty means remain unsupported, and reference execution

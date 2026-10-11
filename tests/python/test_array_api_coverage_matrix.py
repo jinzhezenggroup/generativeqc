@@ -66,16 +66,18 @@ def test_astype_coverage_matches_eager_and_captured_admission() -> None:
     assert xp.astype(values, xp.float32, copy=False) is values
     assert not np.shares_memory(xp.astype(values, xp.float32), values)
     np.testing.assert_array_equal(
-        xp.compile(lambda x: xp.astype(x, xp.float64))(values),
+        xp.compile(lambda x: xp.astype(x, xp.float64), backend="reference")(values),
         values.astype(np.float64),
     )
     mask = np.asarray([True, False])
     np.testing.assert_array_equal(xp.astype(mask, xp.bool), mask)
     with pytest.raises(TypeError, match="float32/float64"):
-        xp.compile(lambda x: xp.astype(x, xp.bool))(mask)
+        xp.compile(lambda x: xp.astype(x, xp.bool), backend="reference")(mask)
     np.testing.assert_array_equal(xp.astype(values, xp.float32, device="cpu"), values)
     with pytest.raises(ValueError, match="device=None"):
-        xp.compile(lambda x: xp.astype(x, xp.float32, device="cpu"))(values)
+        xp.compile(
+            lambda x: xp.astype(x, xp.float32, device="cpu"), backend="reference"
+        )(values)
 
 
 @pytest.mark.parametrize("name", ("reshape", "broadcast_to"))
@@ -110,7 +112,7 @@ def test_broadcast_shapes_coverage_is_static_in_both_modes() -> None:
     )
     assert xp.broadcast_shapes((2,), (1, 2)) == (1, 2)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object) -> object:
         return xp.reshape(x, xp.broadcast_shapes(x.shape, (1, 2)))
 

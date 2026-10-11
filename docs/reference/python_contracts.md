@@ -369,7 +369,9 @@ conversions require rank zero. Boolean data is distinct from numeric arithmetic.
 Scientific
 `VibeArray` values retain full TensorSpec index identities and require explicit
 compatible operations. `trace`/`input_array` build symbolic graphs; `compile`
-captures a callable for `backend="reference"` execution. Static creation supports
+captures a callable for native CPU by default or explicit CUDA/reference
+execution. grad/value_and_grad select arguments with argnums; JVP/VJP generate
+canonical derivative graphs. Static creation supports
 finite real or Boolean uniform values; `_like` creation does not erase scientific
 metadata. Static reshape permits its single inferred dimension where documented;
 indexing/gather maps are bounded. `T`
@@ -395,7 +397,7 @@ backend error. Symbolic Boolean values, including comparison results, cannot be
 used as a dynamic Python branch. Compiled comparison operands must be finite
 real values; eager comparisons instead use standard IEEE semantics. Unsupported
 capture operations raise `NotImplementedError` without executing eager work.
-Capture/interpreter execution
+Capture/native/reference execution
 enforces the bounded finite/domain checks. A failed capture or execution does not
 publish a successful compiled result. Foreign device arrays
 are rejected before hidden host conversion, including nested host containers.
@@ -407,8 +409,9 @@ is never retried with weaker copy requirements.
 
 NumPy eager conversion/reshape/broadcast operations can return views under their
 normal `copy`/layout rules. Do not assume eager outputs are detached.
-Symbolic values are graph nodes; compiled reference execution publishes its
-checked snapshots. Compiled-call state/cache may change, so serialize use of a
+Symbolic values are graph nodes; compiled execution publishes detached checked
+snapshots. Pullbacks copy forward inputs. `close()` releases native owners and
+prevents subsequent execution. Compiled-call state/cache may change, so serialize use of a
 shared callable and do not mutate feeds during a call.
 `import_dlpack` requests a same-device zero-copy handoff through the destination
 namespace's `from_dlpack`, including its stream/capsule lifetime protocol. It
@@ -425,9 +428,11 @@ standard dtypes and the linalg/fft extensions. `xp.asarray` does not silently st
 a foreign CUDA/DLPack array to host; CPU `from_dlpack` is an explicit handoff.
 Reference compiled calls admit only CPU bool/float32/float64 arrays; comparisons
 consume finite real operands and return checked bool outputs.
-The experimental `compile` accepts only `backend="reference"`; native TensorIR
-backends reject live Boolean data and comparisons instead of reinterpreting their
-storage. Unsupported backends fail rather than falling back. Capability
+The experimental `compile` supports native CPU (default, float64), CUDA
+(explicit host staging) and reference execution. Native backends reject live
+Boolean data/comparisons rather than reinterpreting storage. Derivative and
+forward programs share resource/primitive admission. Unsupported backends
+fail rather than falling back. Capability
 reports separate frontend representation, execution and production qualification.
 DLPack interop verifies same-device transfer, but accepting a DLPack producer
 does not add that device to the eager namespace or native chemistry support.
