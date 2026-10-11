@@ -29,6 +29,12 @@ inline bool automatic_minao_element_eligible(int32_t atomic_number) noexcept {
   return atomic_number >= 1 && atomic_number <= 18;
 }
 
+/** Population admission is independent of coordinates and basis expansion. */
+inline bool automatic_minao_population_eligible(int64_t electron_count,
+                                                uint32_t multiplicity) noexcept {
+  return multiplicity == 1 && electron_count > 0 && electron_count % 2 == 0;
+}
+
 }  // namespace generativeqc::scf::initial_guess
 
 #endif

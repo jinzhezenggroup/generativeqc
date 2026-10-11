@@ -1065,13 +1065,25 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
+        native_per_item_guess = False
         if self._automatic_initial_guess:
-            from .initial_guess import _automatic_minao_model_eligible
+            from .initial_guess import (
+                _automatic_minao_model_eligible,
+                _uses_native_automatic_cpu,
+            )
 
             if _automatic_minao_model_eligible(
-                self, restricted=restricted, has_ecp=basis_has_ecp
+                self,
+                restricted=restricted,
+                has_ecp=False,
             ):
-                self._initial_guess = InitialGuessSpec("minao")
+                # A basis package can contain unused ECP records. Only the qualified
+                # native per-item path may defer those facts to actual target admission.
+                native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
+                    self
+                )
+                if not basis_has_ecp or native_per_item_guess:
+                    self._initial_guess = InitialGuessSpec("minao")
 
         if self._initial_guess is not None:
             from .initial_guess import require_initial_guess_library
@@ -1087,7 +1099,10 @@ class Calculator:
                 or self._precision_mode != _native.PRECISION_FP64
                 or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                 or not restricted
-                or basis_has_ecp
+                or (
+                    basis_has_ecp
+                    and not (self._automatic_initial_guess and native_per_item_guess)
+                )
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):
@@ -1248,11 +1263,16 @@ class Calculator:
             descriptor.ccsd_damping = self._ccsd_damping
             descriptor.ccsd_level_shift = self._ccsd_level_shift
             descriptor.ccsd_frozen_core = self._ccsd_frozen_core
-        from .initial_guess import initial_guess_for_systems
+        from .initial_guess import (
+            _uses_native_automatic_cpu,
+            initial_guess_for_systems,
+        )
 
         policy = initial_guess_for_systems(self, systems)
         if policy is not None:
-            descriptor.initial_guess = ctypes.pointer(policy.native())
+            descriptor.initial_guess = ctypes.pointer(
+                policy.native(automatic_cpu=_uses_native_automatic_cpu(self))
+            )
         return descriptor
 
     def _precision_provenance(

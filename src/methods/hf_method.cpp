@@ -307,7 +307,10 @@ class HfPreparedCalculation final : public PreparedCalculation {
         execution_(std::move(execution)),
         system_(std::move(system)),
         options_(options),
-        auxiliary_template_(std::move(auxiliary_template)) {}
+        auxiliary_template_(std::move(auxiliary_template)) {
+    scf::initial_guess::resolve_automatic_preliminary_guess(system_, *options_.resolved_fock_build,
+                                                            options_);
+  }
 
   [[nodiscard]] std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
 

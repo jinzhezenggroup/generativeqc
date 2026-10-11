@@ -5,7 +5,7 @@ FP64, all-electron H-Ar, restricted exact **CPU HF/KS and CUDA KS** cold starts.
 Other domains keep the ordinary Hcore guess. An already available explicit,
 imported or warm density always takes precedence. Use `initial_guess=None` to
 restore Hcore explicitly, or an `InitialGuessSpec` to request a provider and its
-preparation limits. The low-level C API remains explicit-policy driven.
+preparation limits. The low-level C API defaults to Hcore unless a policy is requested.
 Automatic model and element selection uses the allocation-free native
 `generativeqc_initial_guess_auto_kind_v1()` query. Python supplies the requested
 model/backend/precision/DF/spin and element/ECP facts; it does not independently
@@ -22,11 +22,20 @@ unknown schemas and HF/LDA-only libraries retain Hcore. Schema 1 alone does not
 identify MINAO support. Explicit `InitialGuessSpec` requests bypass automatic
 selection and retain their existing schema and native provider/domain checks.
 
-Automatic admission is conservative at batch scope: if any item contains an
-unsupported element or ECP, the whole batch keeps Hcore, and resource planning
-does not charge an unused MINAO phase. Where the target has a qualified resource
-plan, eligible batches include the same MINAO numeric inventory as an explicit
-request. Automatic selection does not qualify additional resource-planner
+With positive `GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU` discovery, CPU
+defaults pass `GENERATIVEQC_INITIAL_GUESS_AUTO_CPU` to the prepared native owner.
+Each item independently resolves MINAO or Hcore, including element/ECP and
+positive even-electron singlet admission. A heavy-element neighbor does not
+disable another item's seed. Explicit provider requests remain fail-closed.
+`generativeqc_initial_guess_auto_system_kind_v1()` exposes the same shape and
+population policy to resource planners; only eligible items retain seed matrices,
+and the largest serialized eligible workspace is charged. The schedule identity
+records the native policy version and input-ordered resolved provider IDs.
+
+CUDA and older CPU libraries without that execution capability retain conservative
+batch admission: one unsupported element/ECP keeps the whole batch on Hcore.
+Neither the options schema nor MINAO's provider bit alone authorizes per-item
+automatic execution. Automatic selection does not qualify additional resource-planner
 domains (in particular, CUDA global-hybrid plans remain unsupported).
 `calc.initial_guess` exposes the
 calculator-level candidate; each result reports whether preparation actually ran.

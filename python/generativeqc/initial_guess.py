@@ -82,13 +82,21 @@ class InitialGuessSpec:
         """Return a versioned dictionary of the initial-guess controls."""
         return {"schema_version": 1, **asdict(self)}
 
-    def native(self) -> _native.InitialGuessOptionsDescriptor:
-        """Build the native ABI descriptor, using zero grid sizes for HF and MINAO."""
+    def native(
+        self, *, automatic_cpu: bool = False
+    ) -> _native.InitialGuessOptionsDescriptor:
+        """Marshal controls; an admitted CPU default delegates per-item selection.
+
+        Explicit policies keep their provider ID. Automatic execution requires
+        positive native capability discovery and the MINAO candidate policy.
+        """
+        if automatic_cpu and self.kind != "minao":
+            raise ValueError("automatic CPU execution requires a MINAO candidate")
         grid = self.grid
         return _native.InitialGuessOptionsDescriptor(
             ctypes.sizeof(_native.InitialGuessOptionsDescriptor),
             _native.ABI_VERSION,
-            {"hf": 1, "lda": 2, "minao": 3}[self.kind],
+            4 if automatic_cpu else {"hf": 1, "lda": 2, "minao": 3}[self.kind],
             self.max_iterations,
             self.diis_history,
             self.energy_tolerance,
@@ -135,6 +143,8 @@ def _native_automatic_minao_eligible(
     restricted: bool,
     has_ecp: bool,
     atomic_numbers: typing.Sequence[int] = (),
+    electron_count: int | None = None,
+    multiplicity: int | None = None,
 ) -> bool | None:
     """Marshal policy facts, leaving selection to the shared native owner.
 
@@ -142,7 +152,16 @@ def _native_automatic_minao_eligible(
     Query failures stay visible; only old libraries use the compatibility policy.
     """
     library = getattr(calculator, "_library", None)
-    query = getattr(library, "generativeqc_initial_guess_auto_kind_v1", None)
+    system_query = electron_count is not None or multiplicity is not None
+    if system_query and (electron_count is None or multiplicity is None):
+        raise ValueError("automatic system policy requires the complete population")
+    query = getattr(
+        library,
+        "generativeqc_initial_guess_auto_system_kind_v1"
+        if system_query
+        else "generativeqc_initial_guess_auto_kind_v1",
+        None,
+    )
     if query is None:
         return None
     storage = (
@@ -164,16 +183,38 @@ def _native_automatic_minao_eligible(
         storage,
         len(atomic_numbers),
     )
-    query.argtypes = [
-        ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor),
-        ctypes.POINTER(ctypes.c_uint32),
-    ]
+    query.argtypes = [ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor)]
+    if system_query:
+        query.argtypes += [ctypes.c_int64, ctypes.c_uint32]
+    query.argtypes += [ctypes.POINTER(ctypes.c_uint32)]
     query.restype = ctypes.c_int
     resolved = ctypes.c_uint32()
-    _native.check(library, query(ctypes.byref(request), ctypes.byref(resolved)))
+    arguments = [ctypes.byref(request)]
+    if system_query:
+        arguments += [electron_count, multiplicity]
+    arguments += [ctypes.byref(resolved)]
+    _native.check(library, query(*arguments))
     if resolved.value not in (0, 3):
         raise RuntimeError("unsupported native automatic initial-guess policy")
     return resolved.value == 3
+
+
+def _uses_native_automatic_cpu(calculator: typing.Any) -> bool:
+    """Discover the qualified per-item execution path, never infer it from schema 1."""
+    if (
+        not getattr(calculator, "_automatic_initial_guess", False)
+        or getattr(calculator, "_device_name", None) != "cpu"
+    ):
+        return False
+    library = getattr(calculator, "_library", None)
+    if not supports_automatic_minao(library):
+        return False
+    query = library.generativeqc_initial_guess_capabilities_v1
+    if not query() & _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU:
+        return False
+    if not hasattr(library, "generativeqc_initial_guess_auto_system_kind_v1"):
+        raise RuntimeError("native automatic CPU capability lacks its system query")
+    return True
 
 
 def _automatic_minao_model_eligible(
@@ -342,16 +383,19 @@ def _minao_numeric_capacity(
 def initial_guess_for_systems(
     calculator: typing.Any, systems: typing.Any
 ) -> InitialGuessSpec | None:
-    """Resolve automatic element/ECP admission identically for planning and execution.
+    """Delegate qualified CPU defaults; retain conservative old-library/CUDA behavior.
 
-    A native batch shares one descriptor, so an unsupported item keeps the whole
-    batch on Hcore. Explicit policies retain their existing fail-closed admission.
+    AUTO_CPU lets each native prepared item resolve its own MINAO/Hcore policy.
+    Compatibility batches share an explicit descriptor, so an unsupported item
+    keeps that whole batch on Hcore. Explicit choices remain fail-closed.
     """
     policy = calculator._initial_guess
     if policy is None or not getattr(calculator, "_automatic_initial_guess", False):
         return policy
     if systems is None:
         raise ValueError("automatic initial guess requires the target systems")
+    if _uses_native_automatic_cpu(calculator):
+        return policy
     from ._api_types import Atom
     from .ecp import resolve_ecp
 
@@ -403,8 +447,24 @@ def with_initial_guess_resources(
             raise ValueError("MINAO topology does not match the batch")
         retained = 0
         largest_workspace = 0
+        automatic_cpu = _uses_native_automatic_cpu(calculator)
+        resolved_kinds = []
         for item in items:
             numbers = item["electrons"]["atomic_numbers"]
+            if automatic_cpu:
+                electrons = item["electrons"]
+                admitted = _native_automatic_minao_eligible(
+                    calculator,
+                    restricted=True,
+                    has_ecp=any(electrons["ecp_core_electrons"])
+                    or bool(item["orbital"].get("ecp_terms", 0)),
+                    atomic_numbers=numbers,
+                    electron_count=electrons["electron_count"],
+                    multiplicity=electrons["multiplicity"],
+                )
+                resolved_kinds.append(3 if admitted else 0)
+                if not admitted:
+                    continue
             if any(type(z) is not int or z < 1 or z > 18 for z in numbers):
                 return replace(
                     request,
@@ -427,6 +487,14 @@ def with_initial_guess_resources(
             workspace = _minao_numeric_capacity(n, numbers, calculator._library) - seed
             retained = checked_bytes(retained + seed)
             largest_workspace = max(largest_workspace, workspace)
+        if automatic_cpu:
+            schedule["initial_guess_execution"] = "native-auto-cpu-v1"
+            schedule["initial_guess_resolved_kinds"] = resolved_kinds
+            identity = replace(
+                request.identity, schedule=json.dumps(schedule, sort_keys=True)
+            )
+            if not retained:
+                return replace(request, identity=identity)
         extra = (
             ResourceEstimate(
                 "all retained MINAO cold seeds", retained, "pageable", 0, 0
