@@ -3,7 +3,6 @@
 from types import SimpleNamespace
 
 import pytest
-
 from generativeqc_compiler.integral.blocks import ShellTile, TensorLayout
 from generativeqc_compiler.integral.df_values import build_df_value_ir
 from generativeqc_compiler.integral.ir import OperatorFamily

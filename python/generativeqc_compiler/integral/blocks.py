@@ -304,7 +304,9 @@ class BlockRequest:
         if len(full_shape) != len(self.tile.shape) or any(
             offset + extent > full
             for offset, extent, full in zip(
-                self.tile.offsets, self.tile.shape, full_shape,
+                self.tile.offsets,
+                self.tile.shape,
+                full_shape,
                 strict=True,
             )
         ):
