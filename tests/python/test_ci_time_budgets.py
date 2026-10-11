@@ -98,27 +98,23 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
-    shard_matrix = next(
-        line for line in section.splitlines() if line.strip().startswith("shard:")
+    assert (
+        "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
+        in section
     )
-    assert "fromJSON(needs.merge_queue_liveness.outputs.python_shards)" in shard_matrix
-    workflow = path.read_text(encoding="utf-8")
-    selector = workflow.split("      - name: Select event-specific Python shards\n", 1)[
-        1
-    ].split("\n  master-cpu-cache:\n", 1)[0]
-    assert '"schedule"' in selector and '"workflow_dispatch"' in selector
-    for shard in (
-        "core-a",
-        "core-b",
-        "runtime-heavy",
-        "posthf",
-        "compiler-heavy",
-        "ecp-forces",
-    ):
-        # Each routine shard is present in the routine and full JSON outputs.
-        assert selector.count(f'"{shard}"') == 2
-    for shard in ("nightly-hessian", "nightly-wb97mv"):
-        assert selector.count(f'"{shard}"') == 1
+    assert "env: &python_ci_env" in section
+    assert "steps: &python_ci_steps" in section
+    nightly = section.split("\n  python-nightly:\n", 1)[1].split(
+        "\n  cpu-benchmark:\n", 1
+    )[0]
+    assert "shard: [nightly-hessian, nightly-wb97mv]" in nightly
+    assert "github.event_name == 'schedule'" in nightly
+    assert "github.event_name == 'workflow_dispatch'" in nightly
+    assert "env: *python_ci_env" in nightly
+    assert "steps: *python_ci_steps" in nightly
+    gate = path.read_text(encoding="utf-8").split("\n  pass:\n", 1)[1]
+    assert "python, python-nightly]" in gate
+    assert "allowed-skips: python-nightly" in gate
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
     assert "rebalance_paths=(" in section
