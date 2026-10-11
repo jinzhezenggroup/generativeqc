@@ -155,7 +155,24 @@ def reference_state(spec: dict) -> dict:
     mean_field.conv_tol_grad = 1e-10
     mean_field.max_cycle = 200
     mean_field.direct_scf_tol = 1e-14
-    energy = float(mean_field.kernel())
+    algorithm = "pyscf-diis"
+    initial_failure = None
+    try:
+        energy = float(mean_field.kernel())
+    except np.linalg.LinAlgError as error:
+        initial_failure = str(error)
+        mean_field = mean_field.newton()
+        mean_field.conv_tol = 1e-12
+        mean_field.conv_tol_grad = 1e-10
+        energy = float(mean_field.kernel())
+        algorithm = "pyscf-newton-after-diis-failure"
+    if not mean_field.converged:
+        seed = mean_field.make_rdm1()
+        mean_field = mean_field.newton()
+        mean_field.conv_tol = 1e-12
+        mean_field.conv_tol_grad = 1e-10
+        energy = float(mean_field.kernel(dm0=seed))
+        algorithm = "pyscf-newton-after-nonconvergence"
     dimension = molecule.nao_nr()
     density = np.asarray(mean_field.make_rdm1()).reshape(-1, dimension, dimension)
     raw_density = density[0] if len(density) == 1 else density
@@ -176,6 +193,11 @@ def reference_state(spec: dict) -> dict:
         "forces": None if is_ks else (-mean_field.nuc_grad_method().kernel()).tolist(),
         "pyscf": pyscf.__version__,
         "libxc": dft.libxc.__version__,
+        "convergence_algorithm": algorithm,
+        "initial_diis_failure": initial_failure,
+        "input_sha256": hashlib.sha256(
+            json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
     }
 
 
@@ -222,6 +244,7 @@ def assess(actual: dict, reference: dict) -> dict:
     accepted = bool(
         actual.get("converged")
         and actual.get("status") == 0
+        and actual.get("backend") == "cuda"
         and actual.get("final_state_gates", {}).get("accepted", False)
         and reference["oracle_accepted"]
         and all(
@@ -337,6 +360,7 @@ def hf_probe(spec: dict, folder: Path, driver: Path, mask: int, batch: int) -> l
                     **row,
                     **item,
                     "item": index,
+                    "backend": "cuda",
                     "density": density.tolist(),
                     "fock": fock[index].tolist(),
                     "final_state_gates": final_gates,
@@ -471,12 +495,15 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=False)
     spec = model(args.case, args.method)
     if args.mode == "oracle":
+        accepted = True
         for moved in (False, True):
+            reference = oracle(model(args.case, args.method, moved))
+            accepted &= reference["oracle_accepted"]
             write_json(
                 args.output / f"{int(moved)}.json",
-                oracle(model(args.case, args.method, moved)),
+                reference,
             )
-        return 0
+        return int(not accepted)
     if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
         raise ValueError("device qualification requires scheduler-assigned visibility")
     if (
@@ -501,15 +528,39 @@ def main() -> int:
         ["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, text=True
     ).strip():
         raise ValueError("qualification requires clean committed source")
-    rows = (
-        hf_probe(spec, args.output, args.driver.resolve(), args.mask, args.batch)
-        if args.method.endswith("hf")
-        else ks_probe(spec, args.output, args.library, args.mask, args.batch)
-    )
+    try:
+        rows = (
+            hf_probe(spec, args.output, args.driver.resolve(), args.mask, args.batch)
+            if args.method.endswith("hf")
+            else ks_probe(spec, args.output, args.library, args.mask, args.batch)
+        )
+    except Exception as error:
+        write_json(
+            args.output / "receipt.json",
+            {
+                "status": "ERROR",
+                "failure": str(error),
+                "failure_type": type(error).__name__,
+                "model": spec,
+                "mask": args.mask,
+                "batch": args.batch,
+                "profitable": None,
+                "default_promoted": False,
+            },
+        )
+        raise
     for row in rows:
         reference = json.loads(
             (args.reference / f"{int(row['phase'] >= 3)}.json").read_text()
         )
+        _, _, inputs, _ = basis_and_inputs(
+            model(args.case, args.method, row["phase"] >= 3)
+        )
+        expected_input = hashlib.sha256(
+            json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        if reference.get("input_sha256") != expected_input:
+            raise ValueError("reference scientific inputs do not match the endpoint")
         row["assessment"] = assess(row, reference)
     receipt = {
         "status": "PASS"

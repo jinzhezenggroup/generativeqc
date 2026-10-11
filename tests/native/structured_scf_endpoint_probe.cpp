@@ -126,7 +126,10 @@ int main(int argc, char** argv) try {
     std::cout << "{\"phase\":" << phase << ",\"complete_seconds\":" << seconds << ",\"nbf\":" << nbf
               << ",\"direct_nbf\":" << plan->direct_nbf << ",\"arena_bytes\":" << plan->layout.bytes
               << ",\"provider_retained_bytes\":" << plan->resources.provider_retained_bytes_
-              << ",\"graph_generation\":" << plan->graphs.iteration_generation() << ",\"fock\":";
+              << ",\"graph_generation\":" << plan->graphs.iteration_generation()
+              << ",\"graph_iteration_launches\":" << plan->graphs.iteration_launches()
+              << ",\"graph_post_launches\":" << plan->graphs.post_eigensolver_launches()
+              << ",\"fock\":";
     array(fock);
     std::cout << ",\"overlap\":";
     array(overlap);

@@ -20,6 +20,7 @@ def sample() -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         **copy.deepcopy(reference),
         "converged": True,
         "status": 0,
+        "backend": "cuda",
         "final_state_gates": {"accepted": True},
     }
     return actual, reference
@@ -62,4 +63,10 @@ def test_solver_failure_cannot_supply_performance_evidence(
 def test_failed_reference_is_not_an_oracle() -> None:
     actual, reference = sample()
     reference["oracle_accepted"] = False
+    assert not qualification.assess(actual, reference)["accepted"]
+
+
+def test_final_state_proof_is_mandatory() -> None:
+    actual, reference = sample()
+    actual.pop("final_state_gates")
     assert not qualification.assess(actual, reference)["accepted"]

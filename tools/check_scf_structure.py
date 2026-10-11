@@ -230,6 +230,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "tensor/cuda_history.cuh",
     "tensor/cuda_ring_gram.cuh",
     "tensor/ring_gram.hpp",
+    "runtime/cuda_component_trace.hpp",
     "scf/cuda/matrix_library.hpp",
     "scf/cuda/runtime_support.hpp",
 )
