@@ -147,7 +147,9 @@ def test_g_contracted_raw_blocks_and_spherical_order(
             ((0, n - 1, 0, n - 1), (2, 1, 2, 1)),
             ((0, 0, 0, 0), (2, 2, 2, 2)),
         ]:
-            expected = eri[tuple(slice(b, b + s) for b, s in zip(begin, shape, strict=True))]
+            expected = eri[
+                tuple(slice(b, b + s) for b, s in zip(begin, shape, strict=True))
+            ]
             np.testing.assert_allclose(
                 source._read("four_center_eri", begin, shape), expected, atol=3e-11
             )

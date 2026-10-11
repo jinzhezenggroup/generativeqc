@@ -106,7 +106,9 @@ def write_input(path: typing.Any, systems: typing.Any) -> None:
         )
         rows.extend(
             " ".join(map(str, (z, *xyz)))
-            for z, xyz in zip(orbital["atomic_numbers"], orbital["coordinates"], strict=True)
+            for z, xyz in zip(
+                orbital["atomic_numbers"], orbital["coordinates"], strict=True
+            )
         )
         for basis in (orbital, auxiliary):
             for shell in basis["shells"]:

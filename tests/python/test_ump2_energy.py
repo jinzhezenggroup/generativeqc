@@ -53,7 +53,10 @@ class DenseSource:
         starts, sizes = request
         return np.ascontiguousarray(
             self.ao[
-                tuple(slice(begin, begin + size) for begin, size in zip(starts, sizes, strict=True))
+                tuple(
+                    slice(begin, begin + size)
+                    for begin, size in zip(starts, sizes, strict=True)
+                )
             ]
         )
 

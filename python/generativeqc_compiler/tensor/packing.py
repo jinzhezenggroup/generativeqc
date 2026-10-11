@@ -97,7 +97,9 @@ class PackedLayout:
         """Expand independent amplitudes without imposing extra antisymmetries."""
         values = self._packed(values)
         result = np.zeros(self.spec.size, dtype=self.spec.dtype)
-        for i, (packed, sign) in enumerate(zip(self.dense_to_packed, self.signs, strict=True)):
+        for i, (packed, sign) in enumerate(
+            zip(self.dense_to_packed, self.signs, strict=True)
+        ):
             if sign:
                 result[i] = sign * values[packed]
         return result.reshape(self.spec.shape)

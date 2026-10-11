@@ -61,7 +61,11 @@ def test_all_cartesian_derivatives_match_independent_libcint(
         verbose=0,
     )
     overlap = mol.intor("int1e_ovlp_cart")
-    norms = [gaussian_norm(e, c) for e, cs in zip(exponents, components, strict=True) for c in cs]
+    norms = [
+        gaussian_norm(e, c)
+        for e, cs in zip(exponents, components, strict=True)
+        for c in cs
+    ]
     scales = np.sqrt(overlap.diagonal() / norms)
     n = len(components[0])
     operator, factor = {

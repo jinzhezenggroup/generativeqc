@@ -38,7 +38,10 @@ def test_independent_decimal_fd_translation_permutation_and_tiles(
             values: typing.Any, motion: typing.Any, sign: typing.Any
         ) -> typing.Any:
             return [
-                [Decimal(str(x)) + sign * h * Decimal(str(dx)) for x, dx in zip(row, d, strict=True)]
+                [
+                    Decimal(str(x)) + sign * h * Decimal(str(dx))
+                    for x, dx in zip(row, d, strict=True)
+                ]
                 for row, d in zip(values, motion, strict=True)
             ]
 
@@ -198,7 +201,10 @@ def test_one_rounded_zero_factor_keeps_nonzero_product_derivative(
             values: typing.Any, directions: typing.Any, sign: typing.Any
         ) -> typing.Any:
             return [
-                [Decimal(str(x)) + sign * h * Decimal(str(dx)) for x, dx in zip(row, d, strict=True)]
+                [
+                    Decimal(str(x)) + sign * h * Decimal(str(dx))
+                    for x, dx in zip(row, d, strict=True)
+                ]
                 for row, d in zip(values, directions, strict=True)
             ]
 

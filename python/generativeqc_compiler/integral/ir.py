@@ -741,7 +741,8 @@ class IntegralIR:
         if any(
             n > full
             for n, full in zip(
-                layout.shape[-len(signature.shells) :], signature.component_shape,
+                layout.shape[-len(signature.shells) :],
+                signature.component_shape,
                 strict=True,
             )
         ):

@@ -165,9 +165,12 @@ def prepare_weighted_eri_stream(
     if projections is not None and len(projections) != 4:
         raise ValueError("four public projection matrices are required")
     cart_shape = tuple(len(cartesian_components(l)) for l in angular)
-    matrix_shapes = tuple((ncart, npublic) for ncart, npublic in zip(cart_shape, shape, strict=True))
+    matrix_shapes = tuple(
+        (ncart, npublic) for ncart, npublic in zip(cart_shape, shape, strict=True)
+    )
     if projections is not None and any(
-        np.shape(p) != expected for p, expected in zip(projections, matrix_shapes, strict=True)
+        np.shape(p) != expected
+        for p, expected in zip(projections, matrix_shapes, strict=True)
     ):
         raise ValueError("public projection shape or values are invalid")
     # Preflight every owned numeric allocation before copying primitives,
@@ -221,7 +224,8 @@ def prepare_weighted_eri_stream(
         strict=True,
     ):
         logical = tuple(
-            begin + index for begin, index in zip(request.tile.offsets, coordinate, strict=True)
+            begin + index
+            for begin, index in zip(request.tile.offsets, coordinate, strict=True)
         )
         value = float(tile.values[offset])
         if not math.isfinite(value):

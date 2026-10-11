@@ -1300,7 +1300,9 @@ def _block_solve(
                 for value, candidate in zip(b, solution, strict=True)
             ]
         )
-        history = [float(max(old, new)) for old, new in zip(history, norms, strict=True)]
+        history = [
+            float(max(old, new)) for old, new in zip(history, norms, strict=True)
+        ]
         targets = np.maximum(
             options.atol,
             options.rtol * rhs_norms,

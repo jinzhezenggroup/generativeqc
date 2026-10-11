@@ -24,7 +24,8 @@ def test_full_residuals_against_determinants_and_expanded_shared(
         p = build_ccsd_program(o, v, form=form)
         value = execute(Program.loads(p.dumps()), dense_feeds(*arrays)).outputs
         for key, ref in zip(
-            ("correlation_energy", "singles_residual", "doubles_residual"), reference,
+            ("correlation_energy", "singles_residual", "doubles_residual"),
+            reference,
             strict=True,
         ):
             np.testing.assert_allclose(value[key], ref, atol=1e-11, rtol=1e-10)

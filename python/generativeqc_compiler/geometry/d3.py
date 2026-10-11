@@ -322,7 +322,9 @@ def _validate_reference_weight_domain(
 ) -> None:
     tables = _d3_tables()
     coordination = np.zeros(geometry.atom_count, dtype=np.float64)
-    for active, (first, second) in zip(state.cn_active, state.topology.pairs, strict=True):
+    for active, (first, second) in zip(
+        state.cn_active, state.topology.pairs, strict=True
+    ):
         if not active:
             continue
         displacement = coordinates[first] - coordinates[second]

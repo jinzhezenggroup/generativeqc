@@ -149,7 +149,9 @@ def independent_gradient(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
+        atom=[
+            (label, a.position) for label, a in zip(labels, basis.atoms, strict=True)
+        ],
         basis=shells,
         unit="Bohr",
         cart=True,
@@ -227,7 +229,9 @@ def independent_converged_grid_reference(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
+        atom=[
+            (label, a.position) for label, a in zip(labels, basis.atoms, strict=True)
+        ],
         basis=shells,
         unit="Bohr",
         cart=True,
@@ -439,7 +443,9 @@ def independent_uks_gradient(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
+        atom=[
+            (label, a.position) for label, a in zip(labels, basis.atoms, strict=True)
+        ],
         basis=shells,
         unit="Bohr",
         cart=True,
@@ -499,7 +505,9 @@ def independent_semilocal_total_gradient(
             ]
         )
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
+        atom=[
+            (label, a.position) for label, a in zip(labels, basis.atoms, strict=True)
+        ],
         basis=shells,
         unit="Bohr",
         cart=cart,
@@ -709,7 +717,8 @@ def test_complete_asymmetric_water_analytic_and_reconverged_fd(
                         [
                             (label, pos)
                             for (label, _), pos in zip(
-                                ATOMS, coordinates + sign * direction,
+                                ATOMS,
+                                coordinates + sign * direction,
                                 strict=True,
                             )
                         ]
@@ -866,7 +875,9 @@ def independent_global_hybrid_gradient(
         )
     uks = method.endswith("-uks")
     mol = gto.M(
-        atom=[(label, a.position) for label, a in zip(labels, basis.atoms, strict=True)],
+        atom=[
+            (label, a.position) for label, a in zip(labels, basis.atoms, strict=True)
+        ],
         basis=shells,
         unit="Bohr",
         cart=basis.representation == "cartesian",

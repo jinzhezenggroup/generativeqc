@@ -384,7 +384,9 @@ def main() -> None:
                 fd.append({**difference, "absolute_error": abs(finite - derivative)})
             # Response metadata/center ordering is also checked against the
             # independently contracted native oracle for every public tile.
-            for fixture, values, reference in zip(fixtures, actual, expected, strict=True):
+            for fixture, values, reference in zip(
+                fixtures, actual, expected, strict=True
+            ):
                 np.testing.assert_allclose(
                     weighted_eri_response(fixture["request"], values).values,
                     weighted_eri_response(fixture["request"], reference).values,

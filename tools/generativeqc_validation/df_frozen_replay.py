@@ -170,7 +170,9 @@ def worker(
         )
         result = {"Boo": boo, "Bov": bov, "Bvv": bvv}
         for name, left, right in zip(
-            names[3:], (bov, bov, boo, bov, boo), (bov, bvo, bvv, boo, boo),
+            names[3:],
+            (bov, bov, boo, bov, boo),
+            (bov, bvo, bvv, boo, boo),
             strict=True,
         ):
             result[name] = np.einsum("Qpq,Qrs->pqrs", left, right, optimize=True)

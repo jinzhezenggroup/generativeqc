@@ -57,7 +57,9 @@ def test_physical_components_and_history_match_independent_state(
             ]
         )
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms, strict=True)],
+        atom=[
+            (label, atom.position) for label, atom in zip(labels, atoms, strict=True)
+        ],
         basis=basis,
         charge=charge,
         spin=multiplicity - 1,
@@ -128,7 +130,9 @@ def test_physical_components_and_history_match_independent_state(
     expected_rebuilds = 0 if device == "cuda" else 2
     assert diagnostic.fock_builds == native.iterations + expected_rebuilds
     # Only successive SCF iterates have an energy change to compare.
-    for previous, current in zip(diagnostic.history, diagnostic.history[1:], strict=False):
+    for previous, current in zip(
+        diagnostic.history, diagnostic.history[1:], strict=False
+    ):
         assert current.energy_change == pytest.approx(
             abs(current.components.total - previous.components.total), abs=1e-14
         )

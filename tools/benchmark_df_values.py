@@ -118,7 +118,8 @@ def write_workloads(
                     )
                 for primitives in product(*lengths):
                     populations = [
-                        signatures[(l, p)] for l, p in zip(angular, primitives, strict=True)
+                        signatures[(l, p)]
+                        for l, p in zip(angular, primitives, strict=True)
                     ]
                     frequency = math.prod(map(len, populations))
                     chosen = np.unique(

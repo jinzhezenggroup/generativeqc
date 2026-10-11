@@ -209,7 +209,8 @@ def test_primitive_parts_against_independent_libcint(
     mol = pyscf.gto.M(
         atom=list(zip(labels, centers, strict=True)),
         basis={
-            label: [[0, [exponent, 1.0]]] for label, exponent in zip(labels, exponents, strict=True)
+            label: [[0, [exponent, 1.0]]]
+            for label, exponent in zip(labels, exponents, strict=True)
         },
         unit="Bohr",
         cart=True,

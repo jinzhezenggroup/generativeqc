@@ -67,7 +67,8 @@ def build_df_value_ir(
     centers = tuple(range(len(roles)))
     signature = ShellSignature(
         tuple(
-            BasisShell(i, i, l, role) for i, (l, role) in enumerate(zip(angular, roles, strict=True))
+            BasisShell(i, i, l, role)
+            for i, (l, role) in enumerate(zip(angular, roles, strict=True))
         ),
         tuple(CenterBinding(i) for i in centers),
     )
@@ -131,7 +132,8 @@ def build_df_component_kernel(
         raise ValueError("DF component lowering requires Cartesian s/p/d/f/g shells")
     components = tuple(components)
     if len(components) != len(signature.shells) or any(
-        c not in cartesian_components(l) for c, l in zip(components, signature.angular, strict=True)
+        c not in cartesian_components(l)
+        for c, l in zip(components, signature.angular, strict=True)
     ):
         raise ValueError("DF component does not match its shell signature")
     graph = Graph()
@@ -228,22 +230,32 @@ def evaluate_df_primitive(
     else:
         alpha, beta, q = exponents
         p = alpha + beta
-        P = tuple((alpha * a + beta * b) / p for a, b in zip(centers[0], centers[1], strict=True))
+        P = tuple(
+            (alpha * a + beta * b) / p
+            for a, b in zip(centers[0], centers[1], strict=True)
+        )
         Q = centers[2]
         pair_decay = math.exp(
             -alpha
             * beta
             / p
-            * math.fsum((a - b) ** 2 for a, b in zip(centers[0], centers[1], strict=True))
+            * math.fsum(
+                (a - b) ** 2 for a, b in zip(centers[0], centers[1], strict=True)
+            )
         )
     rho = p * q / (p + q)
     difference = tuple(a - b for a, b in zip(P, Q, strict=True))
     variables = {"inverse_two_p": 0.5 / p, "inverse_two_q": 0.5 / q, "rho": rho}
-    variables.update({f"difference_{axis}": x for axis, x in zip(AXES, difference, strict=True)})
+    variables.update(
+        {f"difference_{axis}": x for axis, x in zip(AXES, difference, strict=True)}
+    )
     if count == 3:
         for slot in range(2):
             variables.update(
-                {f"p{slot}_{axis}": x - a for axis, x, a in zip(AXES, P, centers[slot], strict=True)}
+                {
+                    f"p{slot}_{axis}": x - a
+                    for axis, x, a in zip(AXES, P, centers[slot], strict=True)
+                }
             )
     variables.update(
         {

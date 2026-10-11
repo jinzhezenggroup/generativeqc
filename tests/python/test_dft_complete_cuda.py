@@ -517,7 +517,8 @@ def test_cuda_reconverged_finite_differences_and_replay(
             energies = []
             for sign in (1, -1):
                 moved = [
-                    (a[0], r) for a, r in zip(ATOMS, xyz + sign * step * direction, strict=True)
+                    (a[0], r)
+                    for a, r in zip(ATOMS, xyz + sign * step * direction, strict=True)
                 ]
                 energies.append(calc.singlepoint(moved).energy)
             estimates.append((energies[0] - energies[1]) / (2 * step))
@@ -539,7 +540,9 @@ def test_cuda_reconverged_finite_differences_and_replay(
                         calc.singlepoint(
                             [
                                 (atom[0], r)
-                                for atom, r in zip(ATOMS, xyz + sign * displacement, strict=True)
+                                for atom, r in zip(
+                                    ATOMS, xyz + sign * displacement, strict=True
+                                )
                             ]
                         ).energy
                         for sign in (1, -1)
@@ -933,7 +936,10 @@ def test_public_cuda_force_active_ao_profile_replay(
     xyz = np.asarray([position for _, position in ATOMS])
     moved = xyz.copy()
     moved[1, 0] += 2e-3
-    geometries = [ATOMS, [(symbol, point) for (symbol, _), point in zip(ATOMS, moved, strict=True)]]
+    geometries = [
+        ATOMS,
+        [(symbol, point) for (symbol, _), point in zip(ATOMS, moved, strict=True)],
+    ]
     calc = _calculator(method)
     dense_results = []
     references = []

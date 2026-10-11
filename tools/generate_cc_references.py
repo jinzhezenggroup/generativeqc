@@ -39,7 +39,9 @@ def generate(*, full: typing.Any = False) -> typing.Any:
         "license": manifest["license"],
         "version": manifest["version"],
     }
-    for module, record in zip((rccsd, rintermediates), rccsd_manifest["files"], strict=True):
+    for module, record in zip(
+        (rccsd, rintermediates), rccsd_manifest["files"], strict=True
+    ):
         if file_hash(module.__file__) != record["sha256"]:
             raise ValueError(f"upstream source hash mismatch: {record['path']}")
     cases = []

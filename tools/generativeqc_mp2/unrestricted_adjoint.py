@@ -243,7 +243,10 @@ def canonical_energy_adjoint(
         if not all(shape):
             continue
         # Account for tails as well as full tiles before *any* VJP execution.
-        extents = [{min(n, t), n % t or min(n, t)} for n, t in zip(shape, tile_shape, strict=True)]
+        extents = [
+            {min(n, t), n % t or min(n, t)}
+            for n, t in zip(shape, tile_shape, strict=True)
+        ]
         for tile in product(*extents):
             program = unrestricted_energy_program(
                 tile, channel=channel, differentiable=True
@@ -276,7 +279,9 @@ def canonical_energy_adjoint(
         for channel, (left, right) in CHANNEL_SPINS.items():
             shape = shapes[channel]
             nl, nr = occupied[left], occupied[right]
-            for starts in product(*(range(0, n, t) for n, t in zip(shape, tile_shape, strict=True))):
+            for starts in product(
+                *(range(0, n, t) for n, t in zip(shape, tile_shape, strict=True))
+            ):
                 i, j, a, b = slices = tuple(
                     slice(s, min(s + t, n))
                     for s, t, n in zip(starts, tile_shape, shape, strict=True)

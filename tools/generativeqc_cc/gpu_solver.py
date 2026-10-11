@@ -321,7 +321,9 @@ def solve_gpu(
                 with np.errstate(over="raise", invalid="raise", divide="raise"):
                     trial = tuple(
                         t + (1 - options.damping) * r / d
-                        for t, r, d in zip(current, (r1, r2), prepared.denominators, strict=True)
+                        for t, r, d in zip(
+                            current, (r1, r2), prepared.denominators, strict=True
+                        )
                     )
                 trial_out = prepared.evaluate(*trial)
                 error = (

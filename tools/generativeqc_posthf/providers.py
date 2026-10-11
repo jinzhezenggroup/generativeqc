@@ -206,7 +206,9 @@ class ConventionalProvider:
                         if engine is None:
                             panels = [
                                 c[b : b + n]
-                                for c, b, n in zip(coefficients, offsets, tile.shape, strict=True)
+                                for c, b, n in zip(
+                                    coefficients, offsets, tile.shape, strict=True
+                                )
                             ]
                             values += transform_tile(tile, panels)
                         else:

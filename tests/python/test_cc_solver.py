@@ -252,7 +252,9 @@ def test_scalar_region_failure_isolated_from_accepted_warm_state(
     assert failed.status == "nonfinite" and not failed.converged
     assert len(failed.history) == 1
     for published, last_finite, initial in zip(
-        (accepted.t1, accepted.t2), (failed.t1, failed.t2), warm,
+        (accepted.t1, accepted.t2),
+        (failed.t1, failed.t2),
+        warm,
         strict=True,
     ):
         np.testing.assert_array_equal(published, initial)

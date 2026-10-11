@@ -532,7 +532,9 @@ def solve(
             with np.errstate(over="raise", invalid="raise", divide="raise"):
                 trial = tuple(
                     t + (1 - options.damping) * r / d
-                    for t, r, d in zip(current, (r1, r2), prepared.denominators, strict=True)
+                    for t, r, d in zip(
+                        current, (r1, r2), prepared.denominators, strict=True
+                    )
                 )
             # DIIS errors belong to exactly the trial vector being stored.
             trial_out = prepared.evaluate(*trial)

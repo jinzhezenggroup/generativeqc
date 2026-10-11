@@ -225,7 +225,8 @@ def _ordinary_grid(source: str, trial: CudaScheduleTrial) -> str:
     if not isinstance(budget.value, ast.Tuple) or len(budget.value.elts) != 2:
         raise ValueError("ordinary budget expression changed")
     for node, requested in zip(
-        budget.value.elts, (trial.device_budget_mib, trial.host_budget_mib),
+        budget.value.elts,
+        (trial.device_budget_mib, trial.host_budget_mib),
         strict=True,
     ):
         if requested is not None:

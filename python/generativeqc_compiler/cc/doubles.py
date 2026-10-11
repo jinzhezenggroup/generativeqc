@@ -129,7 +129,8 @@ def _expand(
         operands = []
         factor = Fraction(coefficient)
         for assigned, (scale, child_output, child_operands) in zip(
-            left.split(","), terms,
+            left.split(","),
+            terms,
             strict=True,
         ):
             mapping = dict(zip(child_output, assigned, strict=True))

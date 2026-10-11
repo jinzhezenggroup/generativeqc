@@ -262,7 +262,8 @@ def _jvp_graph(node: Node, operand_tangents: typing.Any) -> Node | None:
         return _combine(
             _scale(tangent, coefficient)
             for tangent, coefficient in zip(
-                operand_tangents, node.attrs["coefficients"],
+                operand_tangents,
+                node.attrs["coefficients"],
                 strict=True,
             )
             if tangent is not None
@@ -495,7 +496,9 @@ def _vjp_graph(
     if node.op == "add":
         return [
             _scale(bar, coefficient) if needed else None
-            for coefficient, needed in zip(node.attrs["coefficients"], active, strict=True)
+            for coefficient, needed in zip(
+                node.attrs["coefficients"], active, strict=True
+            )
         ]
     if node.op == "multiply":
         return [

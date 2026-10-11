@@ -147,6 +147,8 @@ def test_cuda_independent_decimal_directional_derivative(probe: Probe) -> None:
         ]
         expected = sum(
             Decimal(str(seed)) * (upper[owner] - lower[owner]) / (2 * step)
-            for seed, upper, lower, owner in zip(seeds, plus, minus, owners, strict=True)
+            for seed, upper, lower, owner in zip(
+                seeds, plus, minus, owners, strict=True
+            )
         )
     assert abs(float(expected) - np.sum(gradient.sum(axis=0) * DC)) < 2e-14

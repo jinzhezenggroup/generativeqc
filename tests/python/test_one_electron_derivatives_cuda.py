@@ -55,7 +55,9 @@ def test_arbitrary_nonsymmetric_weights_raw_fused_and_bounded_schedules(
             for s in inputs["shells"]
         ],
     )
-    atoms = [(z, tuple(r)) for z, r in zip(("He", "H"), inputs["coordinates"], strict=True)]
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H"), inputs["coordinates"], strict=True)
+    ]
     values, derivative = reference_matrices(inputs)
     weights = np.random.default_rng(141).normal(size=values.shape)
     expected = np.einsum(

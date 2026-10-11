@@ -179,7 +179,8 @@ def build_one_electron_component_kernel(
 
     def overlap(first: typing.Any, second: typing.Any) -> typing.Any:
         return prefactor * graph.multiply_many(
-            hermite(k, i, j, 0) for k, (i, j) in enumerate(zip(first, second, strict=True))
+            hermite(k, i, j, 0)
+            for k, (i, j) in enumerate(zip(first, second, strict=True))
         )
 
     boys_argument = None
@@ -211,7 +212,9 @@ def build_one_electron_component_kernel(
         boys_count = sum(first) + sum(second) + 1
         boys = tuple(graph.variable(f"boys_{n}") for n in range(boys_count))
         terms = []
-        for orders in product(*(range(i + j + 1) for i, j in zip(first, second, strict=True))):
+        for orders in product(
+            *(range(i + j + 1) for i, j in zip(first, second, strict=True))
+        ):
             coefficient = graph.multiply_many(
                 hermite(k, first[k], second[k], t) for k, t in enumerate(orders)
             )
@@ -267,7 +270,9 @@ def evaluate_one_electron_primitive(
         raise ValueError("primitive exponent sum overflows")
     variables = dict(zip(("alpha", "beta"), exponents, strict=True))
     for name, position in zip("abc", centers, strict=True):
-        variables.update({f"{name}_{axis}": x for axis, x in zip(AXES, position, strict=True)})
+        variables.update(
+            {f"{name}_{axis}": x for axis, x in zip(AXES, position, strict=True)}
+        )
     if kernel.boys_argument is not None:
         argument = kernel.graph.evaluate(kernel.boys_argument, variables)
         variables.update(

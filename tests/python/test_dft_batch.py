@@ -125,7 +125,10 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
         prepared.set_warm_start_updates(False)
         before = [warm_snapshot(prepared, i) for i in range(3)]
         changed = np.array([[0, 0, -0.85], [0, 0, 0.85]])
-        target = [(atom[0], position) for atom, position in zip(systems[0], changed, strict=True)]
+        target = [
+            (atom[0], position)
+            for atom, position in zip(systems[0], changed, strict=True)
+        ]
         moved = prepared.execute(
             [changed, None, None], strict=True, properties=("energy",)
         )

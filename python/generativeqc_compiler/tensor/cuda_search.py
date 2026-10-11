@@ -99,7 +99,9 @@ class TensorScheduleSpace:
             for radius in range(1, len(names) + 1):
                 for changed in combinations(names, radius):
                     for values in product(*(axes[name][1:] for name in changed)):
-                        yield TensorSchedule(**(anchor | dict(zip(changed, values, strict=True))))
+                        yield TensorSchedule(
+                            **(anchor | dict(zip(changed, values, strict=True)))
+                        )
 
         return tuple(islice(walk(), maximum))
 

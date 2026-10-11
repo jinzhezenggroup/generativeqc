@@ -130,14 +130,16 @@ def test_generated_weights_and_all_coordinate_components_have_independent_oracle
             plus = sum(
                 float(v) * float(x)
                 for v, x in zip(
-                    weights, integrals + step * feeds["integral_derivatives"][:, q],
+                    weights,
+                    integrals + step * feeds["integral_derivatives"][:, q],
                     strict=True,
                 )
             )
             minus = sum(
                 float(v) * float(x)
                 for v, x in zip(
-                    weights, integrals - step * feeds["integral_derivatives"][:, q],
+                    weights,
+                    integrals - step * feeds["integral_derivatives"][:, q],
                     strict=True,
                 )
             )

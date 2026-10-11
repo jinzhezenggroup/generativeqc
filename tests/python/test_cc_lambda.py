@@ -20,7 +20,9 @@ def _programs(o: typing.Any, v: typing.Any, form: typing.Any = "shared") -> typi
 
 
 def _pack(layouts: typing.Any, arrays: typing.Any) -> typing.Any:
-    return np.concatenate([layout.pack(a) for layout, a in zip(layouts, arrays, strict=True)])
+    return np.concatenate(
+        [layout.pack(a) for layout, a in zip(layouts, arrays, strict=True)]
+    )
 
 
 def _unpack(layouts: typing.Any, vector: typing.Any) -> typing.Any:

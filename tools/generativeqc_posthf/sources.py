@@ -780,7 +780,9 @@ class NativeSource:
             )
             full = signature.component_shape
             for begin in product(*(range(0, n, axis_tile) for n in full)):
-                shape = tuple(min(axis_tile, n - b) for n, b in zip(full, begin, strict=True))
+                shape = tuple(
+                    min(axis_tile, n - b) for n, b in zip(full, begin, strict=True)
+                )
                 consumer = RawBlock(
                     TensorLayout(signature.tensor_indices, shape), budget_bytes
                 )
