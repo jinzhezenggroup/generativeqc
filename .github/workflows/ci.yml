@@ -104,6 +104,8 @@ jobs:
           key: ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.mode }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.mode }}-
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
       - name: Build CPU cache seed
         env:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
@@ -186,6 +188,8 @@ jobs:
           PY_INNER
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
       - name: Build Python native cache seed
         run: |
           ccache --zero-stats
@@ -248,6 +252,8 @@ jobs:
             ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 'coverage' || 'plain' }}-
       - name: Reset ccache statistics
         run: ccache --zero-stats
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
       - name: Configure
         env:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
@@ -477,6 +483,8 @@ jobs:
             ccache-cuda-12.9-sm120-
       - name: Reset ccache statistics
         run: ccache --zero-stats
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
       - name: Configure production CUDA compile check
         run: >-
           cmake --preset cuda-release-sm120
@@ -667,6 +675,8 @@ jobs:
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
           ccache --version
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
       - name: Configure native grid source generation
         run: >-
           cmake --preset cuda-release-sm120
@@ -912,6 +922,8 @@ jobs:
               tests/python/test_compiler_cache.py \
               tests/python/test_compiler_cache_lifecycle.py \
               tests/python/test_sccache_lifecycle_integration.py
+      - name: Install native CLI dependencies
+        uses: ./.github/actions/install-native-cli-deps
       - name: Build the CPU native library
         run: |
           cmake -S . -B build -G Ninja \
@@ -1536,6 +1548,8 @@ jobs:
       - name: Build CPU benchmark library
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev
           cmake -S . -B build-benchmark -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
             -DGENERATIVEQC_BUILD_TESTS=OFF \

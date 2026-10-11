@@ -110,6 +110,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Context::get](#native-cpp-generativeqc-context-get)
 - [generativeqc::System](#native-cpp-generativeqc-system)
 - [generativeqc::System::System](#native-cpp-generativeqc-system-system)
+- [generativeqc::System::System-ecp](#native-cpp-generativeqc-system-system-ecp)
 - [generativeqc::System::~System](#native-cpp-generativeqc-system-destructor-system)
 - [generativeqc::System::System-copy](#native-cpp-generativeqc-system-system-copy)
 - [generativeqc::System::operator=-copy](#native-cpp-generativeqc-system-copy-assignment-copy)
@@ -3012,6 +3013,27 @@ Allocation failures may throw standard exceptions.
 
 **Units.** Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
 forces; memory limits are bytes.
+
+(native-cpp-generativeqc-system-system-ecp)=
+## generativeqc::System::System-ecp
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+System ( Context & context , const generativeqc_system_descriptor & descriptor , std :: span < const std :: int32_t > core_electrons , std :: span < const generativeqc_ecp_term > terms )
+```
+
+**Behavior.** Create an owned scalar-ECP system through the native ECP constructor.
+
+**Inputs.** Core counts must match atom_count; scalar term admission follows the C API.
+
+**Lifetime.** Copies all basis/core/term arrays; the Context must outlive this owner.
+
+**Errors.** Throws Error on invalid dimensions or native preparation/admission failure.
+
+**Execution.** Synchronous; serialize operations involving this owner and its Context.
+
+**Units.** Coordinates and Gaussian residual terms use atomic units.
 
 (native-cpp-generativeqc-system-destructor-system)=
 ## generativeqc::System::~System

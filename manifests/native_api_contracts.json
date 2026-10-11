@@ -1431,6 +1431,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::System::System-ecp": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "e6f7a48d2034b7f46bf27cce002cce2c0677384b127e536d865384e316ebdf05",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::System::~System": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
