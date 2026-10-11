@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-08
 
+The subset-selection policy below is superseded by
+[identical PR/master selection](2026-10-10-codspeed-identical-pr-selection.md).
+The version 2 receipt fields and source/environment checks remain in use.
+
 ## Problem
 
 PR #2123 initially published only default PR-tier energy cases on master, while

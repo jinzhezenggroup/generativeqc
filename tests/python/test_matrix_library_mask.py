@@ -356,8 +356,10 @@ def layouts(
 #include <vector>
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/matrix_library.hpp"
+#include "scf/cuda/resident_final_validation.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 using namespace generativeqc::scf::cuda_execution;
+namespace scf = generativeqc::scf;
 namespace cuda_ks_detail = generativeqc::dft::cuda_ks_detail;
 constexpr unsigned kCudaKsChunkCapacity = 2;
 """

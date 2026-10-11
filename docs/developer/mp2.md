@@ -9,6 +9,8 @@ RI-MP2 currently provides energy only; a CUDA force request fails explicitly
 instead of falling back to the host. The separate `ump2` method provides
 conventional CPU FP64 energy on validated UHF references, using the same
 compiler-owned spin-labelled equation inventory as the bounded UMP2 core.
+Internal [fixed-orbital UMP2 cotangents](ump2_adjoints.md) provide unrelaxed MO
+integral/orbital-energy weights; they do not enable public UMP2 forces.
 Neither method includes ROHF-MP2, frozen core, ECP, complex orbitals, screened or approximate
 correlation, Hessians, or mixed precision. No performance replacement is implied
 by the numerical qualification.

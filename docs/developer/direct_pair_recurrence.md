@@ -33,6 +33,13 @@ The persistent launch is capped by the dense shell-pair product and 4096 CTAs.
 Each product factor is clamped before multiplication, avoiding overflow and
 guaranteed-idle CTAs without reading a device count back to the host.
 
+The order-three owner prepares its three Cartesian Hermite axes in disjoint
+lanes. Each lane borrows immutable primitive-pair geometry directly; it does
+not read the leader's still-unpublished shared metadata. The original complete
+Hermite initialization, coefficient multiplication order, and Coulomb owner
+remain unchanged. Existing CTA barriers publish all axes and retire their
+readers. Other orders and legacy packet consumers keep serial axis preparation.
+
 Admission borrows an existing immutable geometry cache and charges the complete
 index, five row-prefix planes, sort/scan workspace and bounds view to the provider budget, including the
 preparation peak. Missing storage, allocation failure, or index capacity keeps
@@ -49,6 +56,19 @@ The [order-eight/nine decision](../../.agents/notes/implemented/performance/2026
 records the complete six/nine-slot bounds and their resource/endpoint gates.
 The [low-order scheduling decision](../../.agents/notes/implemented/performance/2026-10-11-canonical-small-cta-scheduling.md)
 records the 32-thread ownership bounds and the retained full initialization.
+
+## Bounded long-range force scheduling
+
+Ordinary long-range exchange force launches use the established 128-thread
+bounded force width instead of the default 256-thread value width. Selection
+depends on the radial source and ordinary one-dimensional launch shape, not
+the functional, basis, molecule, omega, or a runtime opt-in. Short-range sources
+and custom launch shapes retain their existing scheduling.
+
+Queue storage and shell-block ownership do not change. Candidate admission
+advances by the actual force CTA width, so narrowing a CTA does not omit the
+second half of a queue page. The existing component screening, density gates,
+radial recurrence, spin coefficients, and force scatter remain authoritative.
 
 ## Legacy HF and dddd qualification
 

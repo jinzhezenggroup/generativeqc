@@ -1,0 +1,13 @@
+{
+  "schema": "generativeqc.lossless-evidence-compaction.v1",
+  "scope": "Storage-only compaction of the historical TensorIR scheduler qualification; all selected timing samples, resource records, candidate ledgers and negative gates are unchanged.",
+  "archive": "qualification.json.gz",
+  "archive_bytes": 12211,
+  "archive_sha256": "42b36d57e2f4f650e577897d7909c8f0fb49b217b678ec3beaa40e98ad8cb94e",
+  "original": "qualification.json",
+  "original_bytes": 169698,
+  "original_sha256": "39414917b758b0c50da615b231fb4736c2b95fd5d43b2c05e95ce69a40dc71aa",
+  "original_git_commit": "82bdc5c1863ac98e2a18f14568c0e649c3b99079",
+  "original_git_blob": "85b951be85e69b68029bd9cf068de99b8c210da4",
+  "restore_verified_byte_identical_before_removal": true
+}

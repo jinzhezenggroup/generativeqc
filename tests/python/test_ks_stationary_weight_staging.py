@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -19,10 +22,9 @@ def _stage_source() -> str:
 
 
 @pytest.fixture(scope="module")
-def staging_program(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
-    if compiler is None:
-        pytest.skip("a host C++ compiler is required for the native staging probe")
+def staging_program(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     directory = tmp_path_factory.mktemp("stationary-weights")
     source = directory / "probe.cpp"
     binary = directory / "probe"
@@ -74,9 +76,10 @@ void launch_sum_uhf_spin_matrices_kernel(
   for (int i = 0; i < n * n; ++i) output[i] = input[i] + input[n * n + i];
 }
 int main(int argc, char** argv) {
-  assert(argc == 3);
+  assert(argc == 4);
   const unsigned spins = static_cast<unsigned>(std::atoi(argv[1]));
   const int beta = std::atoi(argv[2]);
+  const bool device_validation = std::atoi(argv[3]) != 0;
   expected_spins = spins;
   const std::size_t n = 3, matrix = n * n, elements = spins * matrix;
   const int stream = 7;
@@ -97,6 +100,10 @@ int main(int argc, char** argv) {
 """
         + _stage_source()
         + r"""
+    if (device_validation && compute_weighted_density && !final_stationary_weights_ready) {
+      stage_stationary_weights();
+      staged_stationary_weights = true;
+    }
     assert(staged_stationary_weights == (attempt == 0));
     final_stationary_weights_ready = true;
     for (std::size_t i = 0; i < matrix; ++i) {
@@ -112,23 +119,18 @@ int main(int argc, char** argv) {
 """,
         encoding="utf-8",
     )
-    completed = subprocess.run(
-        [compiler, "-std=c++17", "-O0", str(source), "-o", str(binary)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
+    return native_cxx.build_executable(
+        [source], binary, compile_args=["-std=c++17", "-O0"], compile_timeout=60
     )
-    assert completed.returncode == 0, completed.stdout + completed.stderr
-    return binary
 
 
 @pytest.mark.parametrize("spins,beta", [(1, 0), (2, 0), (2, 1), (2, 2)])
+@pytest.mark.parametrize("device_validation", [False, True])
 def test_stationary_staging_keeps_both_spin_weights_and_reuses_them(
-    staging_program: Path, spins: int, beta: int
+    staging_program: Path, spins: int, beta: int, device_validation: bool
 ) -> None:
     completed = subprocess.run(
-        [str(staging_program), str(spins), str(beta)],
+        [str(staging_program), str(spins), str(beta), str(int(device_validation))],
         capture_output=True,
         text=True,
         check=False,

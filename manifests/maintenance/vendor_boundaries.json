@@ -466,8 +466,9 @@
     "src/tensor/cuda_square_linalg.hpp": {
       "classification": "provider",
       "contract": "src/solver/generalized_eigen.hpp",
-      "reason": "Borrowed square FP64 column-major GEMM and lower-triangular solve lowering for shared generalized-eigen phases; stream, handle modes, workspace and numerical admission remain with the owner.",
+      "reason": "Borrowed square-padded FP64 column-major products and lower-triangular solves for shared generalized-eigen and final-state phases; rank, transposes and leading dimensions remain explicit, while stream, handle modes, workspace and numerical admission remain with the owner.",
       "references": {
+        "cublasDgemm": 1,
         "cublasDgemmStridedBatched": 1,
         "cublasDtrsmBatched": 1
       }

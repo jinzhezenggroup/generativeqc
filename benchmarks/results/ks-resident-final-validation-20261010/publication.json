@@ -1,0 +1,57 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "c820ad08de1ceb33bc19c79115e0af2d52b01784",
+    "dirty": true
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Scoped independent products, complete PBE0 E+F and bounded lease/safety gates pass. Both frozen performance cohorts remain separate; no broad default or all-green KS claim."
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "5c055d455e222bcd928b0323e8bf7d4cb098200fec5374d7de7ffa60c1844a9c",
+      "bytes": 7796,
+      "role": "summary"
+    },
+    {
+      "path": "prototype-source.patch.gz",
+      "sha256": "e34079816f7d5c687beecc0bb1dfb56dbb93626b32f1b5c84ed98e8e27fcedbb",
+      "bytes": 11080,
+      "role": "source-patch"
+    },
+    {
+      "path": "raw-receipts.json.xz",
+      "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff",
+      "bytes": 227600,
+      "role": "reproduction"
+    },
+    {
+      "path": "submission-source.patch.gz",
+      "sha256": "2173c4e94c89d8c71f45c1412a227b753742727d126577219beadcb43746c027",
+      "bytes": 12462,
+      "role": "source-patch"
+    },
+    {
+      "path": "validation.json.gz",
+      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c",
+      "bytes": 381579,
+      "role": "evidence"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:30:00",
+      "bash",
+      "run-submission-pr-v1.sh"
+    ]
+  }
+}

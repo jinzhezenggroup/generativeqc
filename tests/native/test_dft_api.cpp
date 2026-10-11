@@ -25,6 +25,9 @@ extern "C" void xc_cuda_fail_next_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_allocation_for_test_v1();
 #endif
 
+extern "C" generativeqc_status generativeqc_ks_batch_supported_properties_v1(
+    const generativeqc_batch* batch, std::uint32_t index, generativeqc_property_flags* output);
+
 namespace {
 // Fail exactly one grid-coordinate allocation after warm-state import. This
 // executable-only interposition exercises real constructor unwinding without
@@ -454,6 +457,11 @@ void force_preparation_failure_recovery() {
           "force geometry preparation failure was not isolated");
   for (double force : forces[1])
     require(force == 1234.0, "failed force geometry published a partial result");
+  generativeqc_property_flags properties{};
+  require(generativeqc_ks_batch_supported_properties_v1(batch, 1, &properties) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              (properties & GENERATIVEQC_PROPERTY_FORCES),
+          "transient geometry failure revoked the Python native force capability");
   require(execute() == GENERATIVEQC_STATUS_SUCCESS &&
               results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
               results[1].status == GENERATIVEQC_STATUS_SUCCESS,

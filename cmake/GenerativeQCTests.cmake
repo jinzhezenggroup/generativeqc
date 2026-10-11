@@ -107,6 +107,9 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_df_final_validation_tests tests/native/test_final_state.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     target_compile_definitions(generativeqc_df_final_validation_tests PRIVATE GENERATIVEQC_TEST_DEVICE_FINAL_STATE=1)
+    generativeqc_native_test(generativeqc_resident_final_validation_tests
+                       tests/native/test_resident_final_validation.cpp
+                       LIBRARIES CUDA::cudart CUDA::cublas SKIP_77)
     generativeqc_native_test(generativeqc_df_density_seed_tests tests/native/test_df_density_seed.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver SKIP_77)
     set_property(SOURCE "${GENERATIVEQC_GRID_SOURCE}" src/dft/cuda_ks.cpp src/dft/cuda_xc.cpp
@@ -138,6 +141,9 @@ macro(generativeqc_add_native_tests)
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_final_state_tests tests/native/test_final_state.cpp)
     generativeqc_native_test(generativeqc_ks_final_state_tests tests/native/test_ks_final_state.cpp)
+    if(GENERATIVEQC_ENABLE_CUDA)
+      target_link_libraries(generativeqc_ks_final_state_tests PRIVATE CUDA::cudart)
+    endif()
     generativeqc_native_test(generativeqc_eigen_frame_tests tests/native/test_eigen_frame.cpp)
     generativeqc_native_test(generativeqc_cpu_target_eigen_tests tests/native/test_cpu_target_eigen.cpp)
     generativeqc_native_test(generativeqc_cpu_oracle_bridge_tests tests/native/test_cpu_oracle_bridge.cpp)

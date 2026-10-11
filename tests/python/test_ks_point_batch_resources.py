@@ -105,6 +105,7 @@ def native_probe(
 #include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/cuda/resident_final_validation.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/direct_task_layout.hpp"
 #include "scf/eigensolver_workspace.hpp"
@@ -135,8 +136,9 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
     source += _LAYOUT.split("#if defined(__CUDACC__)")[0].replace("#pragma once", "")
     source += r"""
 namespace generativeqc::dft {
-namespace q = generativeqc::generated::quadrature;
 using scf::cuda_execution::MatrixLibraryOwner;
+using scf::cuda_execution::resident_final_validation_partial_count;
+namespace q = generativeqc::generated::quadrature;
 using runtime::size_add;
 using runtime::size_mul;
 constexpr unsigned kCudaKsChunkCapacity=2, kSmallEigensolverLimit=16;

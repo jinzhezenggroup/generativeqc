@@ -15,6 +15,21 @@
 
 extern "C" {
 
+/** Private v1 bridge: expose the *prepared item* capability rather than
+ * copying method/backend/DF/spin qualification logic into Python. No mutation,
+ * SCF, compiler or DFT source evaluation. Unqualified items return ENERGY
+ * without a FORCES bit; non-KS methods reject this private query. */
+generativeqc_status generativeqc_ks_batch_supported_properties_v1(
+    const generativeqc_batch* batch, std::uint32_t index, generativeqc_property_flags* output) {
+  if (!batch || !output || index >= batch->plan->size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto value = batch->plan->supported_properties(index);
+  if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  *output = *value;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_initial_guess_diagnostic* out) {
   if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

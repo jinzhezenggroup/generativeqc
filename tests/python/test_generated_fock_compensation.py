@@ -157,7 +157,18 @@ def test_native_streaming_dispatch_preserves_fock_planes(
         "  return cudaSuccess;\n}\n"
     )
     selection = next(item for item in profile.selections if item.spec.name == "dsss")
-    reduced = replace(profile, selections=(selection,))
+    # Retain dsss qualification without claiming classes omitted by this fixture.
+    assert profile.preferred_rys_task_fock_shell_classes is not None
+    reduced = replace(
+        profile,
+        selections=(selection,),
+        preferred_rys_task_fock_shell_classes=tuple(
+            name
+            for name in profile.preferred_rys_task_fock_shell_classes
+            if name == selection.spec.name
+        ),
+    )
+    assert reduced.preferred_rys_task_fock_shell_classes == ("dsss",)
     sources = [ROOT / "src/scf/aot_shell_registry_stub.cpp"]
     if generated:
         (tmp_path / "generativeqc_generated_shell_registry.hpp").write_text(
@@ -221,6 +232,7 @@ cudaError_t observe_fock(CompensatedOutput fock, const char* symbol, bool unrest
 int main() {{
   constexpr unsigned cls = {shell_class_index(selection.spec)};
   constexpr auto bit = std::uint64_t{{1}} << cls;
+  assert(preferred_rys_task_fock_shell_class_mask() == {"bit" if generated else "0"});
   const DirectExchangeSelection selections[]{{
       {{}}, {{0, 0, 0, Queue::Work}}, {{bit}}, {{0, bit}},
       {{0, 0, bit}}, {{0, 0, bit, Queue::Work}}}};

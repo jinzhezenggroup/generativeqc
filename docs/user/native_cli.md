@@ -246,10 +246,12 @@ r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
 requests reject before execution and do not return a partial derivative.
 Native **prepared batches** also reuse that CPU density-fitted PBE/PBE0
 RKS force consumer only when every member has a qualified prepared
-context; unsupported members remain fail-closed. The Python frontend still
-uses its separately qualified force orchestration until the public Python
-batch routing is safely switched to the native owner. General native
-CUDA/UKS/Direct DFT batch forces remain work under #2151.
+context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
+native force capabilities and reuses this exact batch consumer when every
+context qualifies. Legacy libraries or unqualified native domains retain
+the previously qualified Python force path, with no duplicated PBE method
+whitelist in Python. General native CUDA/UKS/Direct DFT batch forces
+remain work under #2151.
 This slice requires complete independent numeric/CI acceptance before being
 considered production-qualified. See [C++ SDK usage](native_cpp.md).
 

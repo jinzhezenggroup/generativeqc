@@ -20,6 +20,7 @@
       "python/generativeqc_compiler/tensor/cuda_execute.py",
       "python/generativeqc_compiler/tensor/cuda_plan.py",
       "src/cc/solver.hpp",
+      "src/cc/df_triples_cuda.cu",
       "src/dft/cuda_ks.cpp",
       "src/hf/rhf_frame_response.hpp",
       "src/methods/df_hf_guess.cpp",
@@ -29,6 +30,8 @@
       "src/scf/cuda/reference_eri_policy.hpp",
       "src/scf/cuda/rhf_resident_values.cpp",
       "python/generativeqc_compiler/integral/production_rys_tasks.py",
+      "python/generativeqc_compiler/integral/production_profile.py",
+      "python/generativeqc_compiler/integral/production_shell_classes.json",
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp"
@@ -593,6 +596,27 @@
       ]
     },
     {
+      "id": "dft.resident-final-validation",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:ks-device-final-validation-auto"
+      ],
+      "owner_issues": [1598, 2220],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_final_validation_policy.hpp"
+      ],
+      "rationale": "Unset selects resident final-state products only for full-precision exact-direct PBE0/RKS with at least 384 AOs. Four clean-source, genuinely unset-vs-zero warm/moved complete E/F comparisons at 384/768 AOs pass robust timing gates and independent numerical gates. The adapter removes two redundant full-AO products per canonical nonempty spin, keeps bounded charged packets and existing dense exports, and retains handle/published-lease admission. Explicit zero is an opt-out; explicit one does not expand the qualified automatic scope. Original numerical-only publication, historical below-gate samples, failed admission and incomplete timeout attempts are retained unchanged; scoped timing observations do not assert a formal broad-performance envelope.",
+      "revisit_condition": "Extend automatic admission only with independent complete endpoints for small owners, UKS, fitted providers or other functional compositions. Revisit the algorithm-informed size boundary if larger owners reveal a genuine resource/schedule cliff. Do not relabel the original frozen publication or infer measured gains on other architectures.",
+      "evidence": [
+        "pr:#2220",
+        "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
+        "docs:docs/user/ks_options.md",
+        "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
+        "benchmarks:benchmarks/results/ks-resident-final-validation-default-20261011/validation.json.gz"
+      ]
+    },
+    {
       "id": "dft.xc-compact-batches",
       "classification": "already-default",
       "controls": [
@@ -851,6 +875,42 @@
       ]
     },
     {
+      "id": "cc.df-distinct-occupied-moments",
+      "classification": "already-default",
+      "controls": [
+        "cc-execution:df-triples-distinct-moments"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/cc/df_triples_cuda.cu",
+        "tools/generate_df_occupied_triples.py"
+      ],
+      "rationale": "Native DF triples energy-only tiles alias equal physical occupied W seeds only when actual storage, compute and accumulation are all FP64. Every original projected contribution, virtual permutation, occupied tile, denominator degeneracy and finite check remains. All-distinct tiles and FP32 retain the original complete materialization/kernel; forces and response retain independent full cotangents. No option, precision, arena or public ABI changes. Single-panel and generated-provider budget fallbacks remain bounded.",
+      "revisit_condition": "Broaden to mixed precision or response only with separate independent numerical/derivative gates and complete endpoint evidence. Preserve all-equal nonfinite failures; do not collapse projected terms or alias cotangents merely because primal W seeds agree.",
+      "evidence": [
+        "tests/python/test_df_triples_distinct_moments.py",
+        "docs/developer/df_ccsdt.md",
+        "benchmarks/results/df-triples-distinct-moments-20261011/publication.json",
+        ".agents/notes/implemented/performance/2026-10-11-df-triples-distinct-moments.md",
+        "docs/developer/rccsd_gpu.md"
+      ]
+    },
+    {
+      "id": "cc.df-bounded-panel-traversal",
+      "classification": "already-default",
+      "controls": ["cc-execution:df-triples-panel-traversal"],
+      "owner_issues": [1598],
+      "sources": ["src/cc/df_triples_cuda.cu", "src/cc/df_triples_traversal.hpp"],
+      "rationale": "Only actual FP64 energy execution with exactly three panel slots uses a bounded serpentine triangular visit order. Original canonical tile addresses preserve the final energy reduction order. The three-panel LRU, every occupied tile, original generated W/energy algebra, finite checks and budgets remain; one/two-panel and non-FP64 execution retain the original traversal. Force/response do not use this helper. No tile list, new numeric storage, public option, provider or ABI change.",
+      "revisit_condition": "Broaden precision/cache domains only with independent gates and exact complete endpoint work. Preserve canonical reduction addresses and bounded traversal; reject algorithms that sort or materialize O(o^3) host tile lists.",
+      "evidence": [
+        "tests/python/test_df_triples_traversal.py",
+        "benchmarks/results/df-triples-panel-traversal-20261011/publication.json",
+        ".agents/notes/implemented/performance/2026-10-11-df-triples-panel-traversal.md",
+        "docs/developer/df_ccsdt.md"
+      ]
+    },
+    {
       "id": "cc.packed-diis",
       "classification": "guarded-promotion-candidate",
       "controls": [
@@ -990,9 +1050,11 @@
       "sources": [
         "src/scf/cuda/direct_fock_lowering.hpp",
         "python/generativeqc_compiler/integral/production_rys_tasks.py",
+        "python/generativeqc_compiler/integral/production_profile.py",
+        "python/generativeqc_compiler/integral/production_shell_classes.json",
         "python/generativeqc_compiler/integral/production_registry.py"
       ],
-      "rationale": "Compiled non-portable profiles prefer psps, ppps, dsss, dpss, dsps, ddss, dsds, dpps and dspp quartet-parallel Rys-K when their target resources support the schedule; portable and unsupported profiles retain incumbent recurrence with the independently selected work/fill schedule. Historical performance evidence was collected on sm_120 and does not imply equal gains elsewhere. Three-root classes use one-word 64-bit component masks and bounded local contraction, with generic scatter beyond its private footprint. Construction freezes selection and coverage filters cannot broaden preference. Lowering incumbent disables task preference; also select task fill to roll back both promotions. A separately identified joint campaign qualifies task Work companions with independent matrices/sanitizers, complete cold E+F mean/median gains against both standalone policies and retained actual Fock counts. Historical separate promotions and rejected cohorts remain independently labeled rather than relabeled as joint qualification.",
+      "rationale": "Compiled non-portable profiles prefer psps, ppps, dsss, dpss, dsps, ddss, dsds, dpps and dspp quartet-parallel Rys-K when their target resources support the schedule; portable and unsupported profiles retain incumbent recurrence with the independently selected work/fill schedule. An explicit exact-tuned manifest override replaces the shared class set, including an empty opt-out; absent overrides and compatible/non-tuned profiles use the shared default. Overrides never transfer across compatibility and unsupported explicit classes are rejected. Historical performance evidence was collected on sm_120 and does not imply equal gains elsewhere. Three-root classes use one-word 64-bit component masks and bounded local contraction, with generic scatter beyond its private footprint. Construction freezes selection and coverage filters cannot broaden preference. Lowering incumbent disables task preference; also select task fill to roll back both promotions. A separately identified joint campaign qualifies task Work companions with independent matrices/sanitizers, complete cold E+F mean/median gains against both standalone policies and retained actual Fock counts. Historical separate promotions and rejected cohorts remain independently labeled rather than relabeled as joint qualification.",
       "revisit_condition": "Changes to mathematical coverage, queue ownership or parallel granularity require renewed source-identified numerical, sanitizer and work-count qualification. A new compiled architecture requires a target-specific compile/resource smoke test and representative endpoint timing before performance claims, not wholesale duplication of scientific reference tests. Keep historical measurements and valid negative cohorts distinct.",
       "evidence": [
         "benchmarks/results/rys-task-default-20261008/README.md",

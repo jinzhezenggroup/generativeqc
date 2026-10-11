@@ -200,6 +200,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/df_scf_diis.cpp
       src/scf/cuda/df_eigensystem.cpp
       src/scf/cuda/df_final_validation.cpp
+      src/scf/cuda/resident_final_validation.cpp
       src/scf/cuda/final_validation_kernels.cu
       src/scf/cuda/df_uhf_scf.cpp
       src/scf/cuda_eigensolver_probe.cu

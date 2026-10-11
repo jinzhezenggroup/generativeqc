@@ -12,6 +12,7 @@ MP2, RCCSD, triples, Lambda and correlated nuclear gradients. Read the shared po
 
 ../posthf
 ../mp2
+../ump2_adjoints
 ../rccsd
 ../rccsd_bc
 ../rccsd_gpu

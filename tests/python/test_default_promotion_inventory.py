@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import shutil
 from typing import TYPE_CHECKING
 
@@ -144,6 +145,99 @@ def test_native_xc_batch_defaults_are_audited(
     )
 
 
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/dft/cuda_ks_final_validation_policy.hpp", "aos >= 384", "aos >= 17"),
+        ("src/dft/cuda_ks_final_validation_policy.hpp", "spins == 1", "spins <= 2"),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "if (!setting) return default_eligible;",
+            "if (!setting) return true;",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "fock_exchange_coefficient == -0.125",
+            "fock_exchange_coefficient == -0.25",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "!final_stationary_weights_ready;",
+            "true;",
+        ),
+    ],
+)
+def test_native_ks_final_validation_default_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Default promotion must not silently expand the measured scope or leases."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "KS final-validation default" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            "result.w_contraction_storage_bits == 64",
+            "result.w_contraction_storage_bits == 32",
+        ),
+        ("result.w_contraction_compute_bits == 64", "true"),
+        ("result.w_contraction_accumulation_bits == 64", "true"),
+        ("distinct_moments && (i == j || j == k)", "i == j || j == k"),
+        ("sources.index[permutation] != permutation", "false"),
+        (
+            "generated_df::energy_distinct_tile(o, v, i, j, k",
+            "generated_df::energy_tile(o, v, i, j, k",
+        ),
+    ],
+)
+def test_distinct_triples_default_refuses_precision_or_routing_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "distinct-moment FP64 energy admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("distinct_moments && p.panel_capacity == 3", "p.panel_capacity == 3"),
+        ("distinct_moments && p.panel_capacity == 3", "distinct_moments"),
+        ("energies + canonical_tile", "energies + tile"),
+    ],
+)
+def test_panel_traversal_refuses_domain_or_reduction_order_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "bounded panel traversal admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_fixture_copies_registered_sources_outside_the_audited_scope(
     tmp_path: Path,
 ) -> None:
@@ -156,34 +250,102 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
 
 
 @pytest.mark.parametrize(
-    "before,after",
+    "relative,before,after",
     [
-        ("if profile.portable:", "if False:"),
         (
+            "production_rys_tasks.py",
+            "if profile.portable:",
+            "if False:",
+        ),
+        (
+            "production_rys_tasks.py",
             "schedule_candidates(integral, profile.target)",
             "schedule_candidates(integral, fallback_target)",
         ),
-        ("if schedule is None:", "if False:"),
+        ("production_rys_tasks.py", "if schedule is None:", "if False:"),
         (
+            "production_rys_tasks.py",
             "if profile.portable:",
             'if profile.target.architecture != "sm_120" or profile.portable:',
         ),
+        ("production_rys_tasks.py", '"psps", "ppps",', '"ssss", "psps", "ppps",'),
+        ("production_rys_tasks.py", "if profile.tuned else None", "if True else None"),
+        ("production_rys_tasks.py", "if override is not None:", "if override:"),
         (
-            '"dpps", "dspp"}',
-            '"dpps", "dspp", "ssss"}',
+            "production_rys_tasks.py",
+            "preferred = set(override)",
+            "preferred |= set(override)",
+        ),
+        (
+            "production_rys_tasks.py",
+            "missing = preferred - available",
+            "missing = set()",
+        ),
+        (
+            "production_profile.py",
+            "match == ProfileMatch.EXACT",
+            "match != ProfileMatch.PORTABLE",
+        ),
+        (
+            "production_profile.py",
+            'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return None',
+            'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return ()',
+        ),
+        (
+            "production_profile.py",
+            "return tuple(raw) if tuned else None",
+            "return tuple(raw)",
         ),
     ],
 )
-def test_rys_task_default_capability_admission_is_audited(
-    tmp_path: Path, before: str, after: str
+def test_rys_task_defaults_and_override_admission_are_audited(
+    tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
-    """Retain shared classes, actual-target scheduling and portable fallback."""
+    """Retain shared capability gates and exact-tuned replacement semantics."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
-    source = tmp_path / "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    source = tmp_path / "python/generativeqc_compiler/integral" / relative
     original = source.read_text()
     assert before in original
     source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default target/class admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("class", "target", "duplicate", "invalid", "empty", "absent", "empty_target"),
+)
+def test_rys_task_manifest_preferences_require_renewed_qualification(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Moving admission to manifest data preserves the measured-domain ratchet."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = (
+        tmp_path / "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
+    manifest = json.loads(source.read_text())
+    profiles = manifest["architectures"]
+    classes = profiles["sm_120"]["preferred_rys_task_fock_shell_classes"]
+    if mutation == "class":
+        classes.append("ssss")
+    elif mutation == "target":
+        profiles["sm_90"] = copy.deepcopy(profiles["sm_120"])
+    elif mutation == "duplicate":
+        classes.append(classes[0])
+    elif mutation == "empty":
+        classes.clear()
+    elif mutation == "absent":
+        del profiles["sm_120"]["preferred_rys_task_fock_shell_classes"]
+    elif mutation == "empty_target":
+        profiles["sm_90"] = copy.deepcopy(profiles["sm_120"])
+        profiles["sm_90"]["preferred_rys_task_fock_shell_classes"] = []
+    else:
+        classes.append(None)
+    source.write_text(json.dumps(manifest))
     assert any(
         "Rys-task default target/class admission drifted" in error
         for error in validate_inventory(payload, root=tmp_path)

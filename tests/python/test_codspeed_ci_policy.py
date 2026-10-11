@@ -1,11 +1,16 @@
-"""Guard bounded, change-aware PR CodSpeed coverage and the full tier."""
+"""Guard identical bounded PR/master CodSpeed selection and the full tier."""
 
+import runpy
+import sys
 from pathlib import Path
+from types import ModuleType
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_codspeed_pr_tier_stays_bounded_and_change_aware() -> None:
+def test_codspeed_pr_tier_matches_master_and_stays_change_aware() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     job = workflow.split("\n  cpu-benchmark:\n", 1)[1].split(
         "\n  upload-coverage:\n", 1
@@ -18,18 +23,19 @@ def test_codspeed_pr_tier_stays_bounded_and_change_aware() -> None:
     ) in job
     assert (
         "GENERATIVEQC_CODSPEED_EXTRA_CASES: "
-        "${{ github.event_name == 'push' && 'wb97mv' || '' }}"
+        "${{ (github.event_name == 'pull_request' || "
+        "github.event_name == 'push') && 'wb97mv' || '' }}"
     ) in job
     assert "Select change-aware PR CodSpeed coverage" in job
-    assert "GENERATIVEQC_CODSPEED_EXTRA_CASES=" in job
+    # A PR path selector must not mutate the fixed job-level selection.
+    assert "GENERATIVEQC_CODSPEED_EXTRA_CASES=" not in job
     assert "GENERATIVEQC_CODSPEED_RUN=0" in job
     assert "Qualify PR CodSpeed comparison" in job
     assert "steps.baseline.outputs.qualified == 'true'" in job
     assert "Record successful master CodSpeed baseline" in job
     assert "codspeed-cpu-baseline-${{ github.sha }}" in job
     assert "github.event_name == 'push'" in job
-    assert "src/dft/" in job
-    assert "python/generativeqc_compiler/(dft|xc)/" in job
+    assert "manifests/maintenance/" in job
     assert "cpu-benchmark" not in workflow.split("\n  pass:\n", 1)[1]
 
     benchmark = (ROOT / "benchmarks/test_cpu_codspeed.py").read_text(encoding="utf-8")
@@ -45,3 +51,87 @@ def test_codspeed_pr_tier_stays_bounded_and_change_aware() -> None:
     assert 'properties=("energy", "forces")' in benchmark
     assert "test_cpu_rhf_changed_geometry_pair_walltime" in benchmark
     assert "prepare_batch([_WATER], warm_start=True)" in benchmark
+
+
+def test_shared_pr_tier_preserves_master_collection_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Collect the real benchmark definitions without loading a native library
+    # or executing any endpoint. Only these three imported names are needed.
+    package = ModuleType("generativeqc")
+    for name in ("Calculator", "GridSpec", "KsOptions"):
+        setattr(package, name, object)
+    monkeypatch.setitem(sys.modules, "generativeqc", package)
+    monkeypatch.setenv("GENERATIVEQC_CODSPEED_TIER", "pr")
+    monkeypatch.setenv("GENERATIVEQC_CODSPEED_EXTRA_CASES", "wb97mv")
+    namespace = runpy.run_path(str(ROOT / "benchmarks/test_cpu_codspeed.py"))
+    cases = namespace["_active_cases"]()
+    assert [case.name for case in cases] == [
+        "water-rhf-sto3g",
+        "water-pbe-sto3g",
+        "water-wb97mv-smallgrid-sto3g",
+    ]
+    assert [name for name in namespace if name.startswith("test_")] == [
+        "test_cpu_warm_endpoint_walltime",
+        "test_cpu_pbe_force_walltime",
+        "test_cpu_rhf_changed_geometry_pair_walltime",
+    ]
+    # The two unparameterized endpoints make five PR-tier benchmarks. Full
+    # scheduled/manual coverage additionally retains the larger RHF case.
+    monkeypatch.setenv("GENERATIVEQC_CODSPEED_TIER", "full")
+    monkeypatch.setenv("GENERATIVEQC_CODSPEED_EXTRA_CASES", "")
+    assert [case.name for case in namespace["_active_cases"]()] == [
+        *[case.name for case in cases],
+        "formaldehyde-rhf-def2-svp",
+    ]
+
+
+def test_qualifier_authenticates_tested_merge_not_stale_payload_base() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    step = workflow.split("      - name: Qualify PR CodSpeed comparison\n", 1)[1]
+    step = step.split("      - name:", 1)[0]
+    assert "CODSPEED_MERGE_SHA: ${{ github.sha }}" in step
+    assert "CODSPEED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}" in step
+    assert "CODSPEED_BASE_REF: ${{ github.event.pull_request.base.ref }}" in step
+    assert '--merge-sha "$CODSPEED_MERGE_SHA"' in step
+    assert '--head-sha "$CODSPEED_HEAD_SHA"' in step
+    assert '--base-ref "$CODSPEED_BASE_REF"' in step
+    assert "github.event.pull_request.base.sha" not in step
+    assert "--base-sha" not in step
+
+
+def test_paired_diagnostic_is_bounded_and_separate_from_qualified_upload() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    job = workflow.split("\n  cpu-benchmark:\n", 1)[1].split(
+        "\n  upload-coverage:\n", 1
+    )[0]
+    assert (
+        "timeout-minutes: ${{ github.event_name == 'pull_request' && 65 || 15 }}" in job
+    )
+
+    def step(name: str) -> str:
+        return job.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
+
+    normal = step("Run CPU CodSpeed endpoint suite")
+    assert "steps.baseline.outputs.qualified == 'true'" in normal
+    assert "CODSPEED_SKIP_UPLOAD" not in normal
+    setup = step("Set up pinned artifact-only CodSpeed diagnostic")
+    assert 'CODSPEED_SKIP_UPLOAD: "true"' in setup
+    assert 'runner-version: "5.0.1"' in setup
+    assert 'run: "true"' in setup and 'allow-empty: "true"' in setup
+    for name in (
+        "Set up pinned artifact-only CodSpeed diagnostic",
+        "Compare exact baseline and head on this runner",
+        "Preserve bounded same-runner diagnostic",
+    ):
+        assert "github.event_name == 'pull_request'" in step(name)
+        assert "steps.baseline.outputs.paired_diagnostic == 'true'" in step(name)
+    run = step("Compare exact baseline and head on this runner")
+    assert 'CODSPEED_SKIP_UPLOAD: "true"' in run
+    assert "tools/codspeed_pair.py" in run
+    upload = step("Preserve bounded same-runner diagnostic")
+    assert "if: always()" in upload and "retention-days: 7" in upload
+    assert "${{ runner.temp }}/codspeed-paired/artifact/" in upload
+    assert "codspeed-cpu-baseline-" not in upload
+    assert "contents: read" in job and "actions: read" in job
+    assert "id-token:" not in job and "contents: write" not in job

@@ -148,18 +148,20 @@ def test_codspeed_non_pr_events_initialize_all_setup_guards(event: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("changed", "expected_run", "expected_extra"),
+    ("changed", "expected_run"),
     [
-        ("docs/index.md\n", "0", ""),
-        ("tests/python/test_foo.py\n", "0", ""),
-        ("manifests/maintenance/record.json\n", "0", ""),
-        ("src/scf/rhf.cpp\n", "1", "wb97mv"),
-        ("CMakeLists.txt\n", "1", ""),
-        (".github/workflows/ci.yml\n", "1", "wb97mv"),
+        ("docs/index.md\n", "0"),
+        ("tests/python/test_foo.py\n", "0"),
+        ("manifests/maintenance/record.json\n", "0"),
+        ("src/scf/rhf.cpp\n", "1"),
+        ("src/cc/df_triples_cuda.cu\n", "1"),
+        ("tools/generate_df_occupied_triples.py\n", "1"),
+        ("CMakeLists.txt\n", "1"),
+        (".github/workflows/ci.yml\n", "1"),
     ],
 )
-def test_pr_codspeed_selector_still_overrides_the_default(
-    tmp_path: Path, changed: str, expected_run: str, expected_extra: str
+def test_pr_codspeed_selector_only_overrides_the_run_guard(
+    tmp_path: Path, changed: str, expected_run: str
 ) -> None:
     selector = _step("cpu-benchmark", "Select change-aware PR CodSpeed coverage")
     script = selector.split("        run: |\n", 1)[1]
@@ -180,6 +182,7 @@ def test_pr_codspeed_selector_still_overrides_the_default(
             "GITHUB_ENV": str(output),
             "CHANGED_FILES": changed,
             "GENERATIVEQC_CODSPEED_RUN": "1",
+            "GENERATIVEQC_CODSPEED_EXTRA_CASES": "wb97mv",
         },
         check=True,
         capture_output=True,
@@ -187,5 +190,6 @@ def test_pr_codspeed_selector_still_overrides_the_default(
         timeout=10,
     )
     updates = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert updates["GENERATIVEQC_CODSPEED_RUN"] == expected_run
-    assert updates["GENERATIVEQC_CODSPEED_EXTRA_CASES"] == expected_extra
+    assert updates == {"GENERATIVEQC_CODSPEED_RUN": expected_run}
+    effective = {"GENERATIVEQC_CODSPEED_EXTRA_CASES": "wb97mv", **updates}
+    assert effective["GENERATIVEQC_CODSPEED_EXTRA_CASES"] == "wb97mv"

@@ -1,0 +1,45 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "5a9b107ca8b9a654d45d3dc15fac45e962323f3b",
+    "dirty": false
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Actual unset-selector route and all independent numerical/work/checkpoint/lease gates pass. Four scoped timing observations pass; bounded default promotion does not invent a formal broad performance/production envelope."
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "f759fd443ee8e30c19e0051f34568015ac80304e31e370ebe2b0de7a6a2ba311",
+      "bytes": 6853,
+      "role": "summary"
+    },
+    {
+      "path": "raw-receipts.json.xz",
+      "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd",
+      "bytes": 197796,
+      "role": "reproduction"
+    },
+    {
+      "path": "validation.json.gz",
+      "sha256": "796234ea6d2111ec90b07dfb7621eb65e80de9a6d384e0053dba4a058bfdda40",
+      "bytes": 6014,
+      "role": "evidence"
+    }
+  ],
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:20:00",
+      "bash",
+      "default-promotion-v3/run-endpoint.sh"
+    ]
+  }
+}
