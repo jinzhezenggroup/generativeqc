@@ -62,14 +62,18 @@ class NativeCliPackageTests(unittest.TestCase):
             self.assertIn(f"{root}/lib/generativeqc_stationary_sm_120_spd.json", names)
             self.assertIn(f"{root}/lib/libgenerativeqc_stationary_sm_120.so", names)
             self.assertNotIn(f"{root}/lib/libgenerativeqc.a", names)
-            self.assertTrue(bundle.getmember(f"{root}/lib/libgenerativeqc_stationary_sm_120.so").issym())
+            self.assertTrue(
+                bundle.getmember(f"{root}/lib/libgenerativeqc_stationary_sm_120.so").issym()
+            )
             metadata = json.load(bundle.extractfile(f"{root}/build-metadata.json"))
             self.assertEqual(metadata["core_linkage"], "static")
             self.assertFalse(metadata["generativeqc_shared_core_required"])
 
         name = archive.name
         checksum = (archive.parent / "SHA256SUMS").read_text()
-        self.assertEqual(checksum, f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {name}\n")
+        self.assertEqual(
+            checksum, f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {name}\n"
+        )
 
     def test_same_inputs_generate_identical_archive(self) -> None:
         first = self.build("dist1")
