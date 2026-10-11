@@ -73,7 +73,7 @@ int main() {
     std::cout << pbe::one_electron(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe::overlap_pulay(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe::coulomb(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
-              << pbe0::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << '\\n';
+              << pbe0::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << ' '\n              << b3lyp::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << '\\n';
   }
   return std::cin.eof() ? 0 : 1;
 }
@@ -101,12 +101,19 @@ def test_portable_native_weights_match_shared_ad(native_weights: Path) -> None:
         [str(native_weights)], input=wire, capture_output=True, text=True, check=True
     )
     actual = np.loadtxt(response.stdout.splitlines())
-    plan = StationaryGradientPlan(
-        resolve_method("PBE0", spin="unpolarized"), StationaryMeanField(SCF_POINT_MODEL)
-    )
-    for column, source in enumerate(
-        ("one_electron", "overlap_pulay", "coulomb", "exact_exchange")
+    for column, (method, source) in enumerate(
+        (
+            ("PBE0", "one_electron"),
+            ("PBE0", "overlap_pulay"),
+            ("PBE0", "coulomb"),
+            ("PBE0", "exact_exchange"),
+            ("B3LYP", "exact_exchange"),
+        )
     ):
+        plan = StationaryGradientPlan(
+            resolve_method(method, spin="unpolarized"),
+            StationaryMeanField(SCF_POINT_MODEL),
+        )
         feeds = {
             "density_left": density[indices[:, 0], indices[:, 1]][None, :],
             "density_right": density[indices[:, 2], indices[:, 3]][None, :],
