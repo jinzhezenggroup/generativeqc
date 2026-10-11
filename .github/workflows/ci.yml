@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       active: ${{ steps.liveness.outputs.active }}
+      python_shards: ${{ steps.python_shards.outputs.value }}
     steps:
       - name: Check merge-group ref still exists
         id: liveness
@@ -65,6 +66,19 @@ jobs:
           echo "::warning::Unable to verify merge-group ref; running CI fail-open."
           cat "${error_file}" >&2
           echo "active=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Select event-specific Python shards
+        id: python_shards
+        shell: bash
+        run: |
+          # Match the static routine matrix except for full nightly/manual runs.
+          # Outputs are valid JSON arrays consumed by the supported fromJSON
+          # matrix idiom, not interpolated list expressions.
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" || "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo 'value=["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces","nightly-hessian","nightly-wb97mv"]' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'value=["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces"]' >> "${GITHUB_OUTPUT}"
+          fi
 
   master-cpu-cache:
     name: Seed CPU ccache (${{ matrix.compiler }}, ${{ matrix.mode }})
@@ -807,8 +821,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Only scheduled/manual runs pay for the two exhaustive qualification shards.
-        shard: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces","nightly-hessian","nightly-wb97mv"]' || '["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces"]') }}
+        # Select from the verified upstream JSON array; 6 routine or 8 full shards.
+        shard: ${{ fromJSON(needs.merge_queue_liveness.outputs.python_shards) }}
     runs-on: ubuntu-24.04
     # Full nightly/manual qualification includes expensive Hessian and Au replay.
     # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
