@@ -153,7 +153,7 @@ class NativeJKBackend:
             tile = self.source.tile(request)
             begin = self.source.global_offsets(request)
             source_seconds += time.perf_counter() - source_started
-            u, v, w, x = (slice(b, b + n) for b, n in zip(begin, tile.shape))
+            u, v, w, x = (slice(b, b + n) for b, n in zip(begin, tile.shape, strict=True))
             coulomb[u, v] += np.einsum("uvwx,wx->uv", tile, d[w, x], optimize=False)
             exchange[u, w] += np.einsum("uvwx,vx->uw", tile, d[v, x], optimize=False)
             tiles += 1

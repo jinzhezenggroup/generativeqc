@@ -342,7 +342,7 @@ def libcint_primitive_gradient(
 
     names = ("H", "He", "Li", "Be")[: len(angular)]
     mol = gto.M(
-        atom=[(f"ghost-{name}", position) for name, position in zip(names, centers)],
+        atom=[(f"ghost-{name}", position) for name, position in zip(names, centers, strict=True)],
         basis={
             name: [[angular_momentum, [e, 1]]]
             for name, angular_momentum, e in zip(names, angular, exponents, strict=True)

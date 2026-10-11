@@ -137,7 +137,7 @@ def worker(
             raise RuntimeError(error.value.decode())
     native = {}
     offset = 0
-    for name, shape, size in zip(names, shapes, sizes):
+    for name, shape, size in zip(names, shapes, sizes, strict=True):
         native[name] = out[offset : offset + size].reshape(shape)
         offset += size
     capture = ct.CDLL(str(output / "capture.so")).copy_frozen_capture
@@ -170,7 +170,8 @@ def worker(
         )
         result = {"Boo": boo, "Bov": bov, "Bvv": bvv}
         for name, left, right in zip(
-            names[3:], (bov, bov, boo, bov, boo), (bov, bvo, bvv, boo, boo)
+            names[3:], (bov, bov, boo, bov, boo), (bov, bvo, bvv, boo, boo),
+            strict=True,
         ):
             result[name] = np.einsum("Qpq,Qrs->pqrs", left, right, optimize=True)
         return result

@@ -135,7 +135,7 @@ def contract_reference(
     alpha, beta = spin_density
     total = alpha + beta
     for component in np.ndindex(eri.shape):
-        indices = tuple(offset + i for offset, i in zip(offsets, component))
+        indices = tuple(offset + i for offset, i in zip(offsets, component, strict=True))
         value = eri[component]
         rhf_weight, uhf_weight = 0.0, 0.0
         for a, b, c, d in eri_orbit(indices):
@@ -557,7 +557,7 @@ def numerical_matrix(
         evidence["stages"]["source"] = outcome("pass")
         evidence["stages"]["compilation"] = outcome("pass")
         values = []
-        for ordinal, (fixture, record) in enumerate(zip(fixtures, records[1:])):
+        for ordinal, (fixture, record) in enumerate(zip(fixtures, records[1:], strict=True)):
             decoded = decoded_outputs(fixture, record)
             expected_keys = {
                 f"{spin}_{consumer}{suffix}"
