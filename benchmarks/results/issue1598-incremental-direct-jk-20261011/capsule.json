@@ -1,14 +1,9 @@
 {
- "schema": "generativeqc.benchmark-publication.v1",
+ "schema": "generativeqc.historical-benchmark-capsule.v1",
  "decision": {
-  "scope": "performance",
-  "status": "accepted",
-  "reason": "Incremental Direct-J/K stays opt-in: matched complete RHF 96/192/384/768-AO endpoints at two master revisions show no complete-endpoint win at 192 AOs or larger (384 AO warm +94%/+103% slower), reproducible convergence failures at 192 and 768 AOs, and all comparable numerical gates pass. Negative closeout for default promotion."
- },
- "source": {
-  "revision": "907c8861269d076dde4beef97456e6012477806c",
-  "dirty": true,
-  "reconstruction_scope": "Rebased on upstream master 98263e06c plus this branch's benchmark harness; runtime sources unmodified."
+  "scope": "default-promotion",
+  "status": "rejected",
+  "reason": "The retained new-campaign 384-AO RHF round-1 pair regresses in cold and warm endpoint timing, and seven final unsuccessful retry dispositions do not establish a default-promotion domain. The reduced capsule does not verify failure causes or the complete historical matrix."
  },
  "reproduction": {
   "command": [
@@ -19,8 +14,8 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 2862,
-   "sha256": "e9eeaf7cbb325a311510533de38349dbab89d49760656c39fece73dfb30f1955",
+   "bytes": 3284,
+   "sha256": "ff04691a994988212044f7ef5fdf6aa50f5de8fb79e558f85b55eae25da833fc",
    "role": "reproduction"
   },
   {
@@ -103,9 +98,38 @@
   },
   {
    "path": "verify.py",
-   "bytes": 7004,
-   "sha256": "581ac050ca0fe10180045dd5a276831f1a45a49531a708db3ac78ea827b47579",
+   "bytes": 15949,
+   "sha256": "12934e398e62e6f167bba96f0214d33577c1a196d38b2fc906b0ca7208ef56cb",
    "role": "reproduction"
   }
+ ],
+ "campaigns": {
+  "old": {
+   "revision": "96570fd06243de418e2eec4efb570d5510506d03",
+   "library_sha256": "2998014a18547b813149521c51193cd8913602b5d7e4551e326a4d5c91053a77"
+  },
+  "new": {
+   "revision": "d83aa86585a2f72ed852872c533723648b2799c3",
+   "dirty": false,
+   "library_sha256": "30734a0fc741da60389fb817b7429acd4a5164c840728308822fe215eae90a63",
+   "native_source_identity": "09847dbbf578bf414e45dfe02d996573662119f86c98cd21287db79bffb496eb"
+  }
+ },
+ "evidence_scope": {
+  "selected_records": 2,
+  "selected_on_off_pairs": 1,
+  "final_unsuccessful_retry_outcomes": 7,
+  "old_source_reconstruction_available": false,
+  "failure_causes_verified": false,
+  "individual_attempt_records_retained": false,
+  "cold_native_numerical_arrays_retained": false,
+  "fresh_qualification": false
+ },
+ "limitations": [
+  "Only the new-campaign 384-AO RHF round-1 baseline/incremental selected records are retained; no old successful records, selected-attempt copies, second pair, KS records, or old device receipt are retained.",
+  "Old source and library receipts identify a base revision and binary digest only; the old measured checkout and dirty-source changes cannot be reconstructed or verified.",
+  "Seven unsuccessful RHF outcomes retain only final retry dispositions. Failure causes, nonconvergence, and individual first-attempt results cannot be verified.",
+  "Cold native numerical arrays, progress journals, resource time-series, and reducer summaries are absent. Numerical gates apply to retained warm samples only.",
+  "This is a partial historical negative-promotion audit, not a fresh qualification, an accepted standardized benchmark publication, or a complete attempted-matrix archive."
  ]
 }

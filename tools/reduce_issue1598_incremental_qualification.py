@@ -5,7 +5,9 @@ Consumes the audited comparator records produced by
 re-verification controls, and emits one machine-readable summary with all
 numerical gates, iteration-branch matching, work censuses, identities and the
 resource-ledger receipt counts. It never substitutes a gate; a missing or
-invalid record fails the reduction.
+invalid record fails the reduction. Cold timings remain descriptive unless native
+cold arrays pass independent and paired gates; missing arrays never inherit
+warm acceptance. Work accounting is separated by phase.
 """
 
 from __future__ import annotations
@@ -68,29 +70,61 @@ def _median(values: list[float]) -> float:
     return float(statistics.median(values))
 
 
+def _count(value: Any) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError("work and iteration counts must be nonnegative integers")
+    return value
+
+
 def _branches(record: dict[str, Any]) -> list[tuple[int, ...]]:
-    return [
-        tuple(int(item["iterations"]) for item in sample["convergence"])
-        for sample in record["generativeqc"]["warm_samples"]
-    ]
+    samples = record["generativeqc"]["warm_samples"]
+    if not samples:
+        raise ValueError("missing warm samples")
+    branches = []
+    for sample in samples:
+        if len(sample["convergence"]) != 1:
+            raise ValueError("qualification requires one convergence record per sample")
+        branches.append(
+            tuple(_count(item["iterations"]) for item in sample["convergence"])
+        )
+    return branches
 
 
-def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
+def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[str, Any]:
+    samples = (
+        [{"convergence": record["generativeqc"]["cold_convergence"]}]
+        if phase == "cold"
+        else record["generativeqc"]["warm_samples"]
+    )
     diagnostics = [
-        sample["convergence"][0].get("incremental_direct_jk")
-        for sample in record["generativeqc"]["warm_samples"]
+        sample["convergence"][0].get("incremental_direct_jk") for sample in samples
     ]
     if not diagnostics or any(type(value) is not dict for value in diagnostics):
         raise ValueError("incremental benchmark is missing Direct-J/K diagnostics")
     typed = [value for value in diagnostics if isinstance(value, dict)]
-    if any(not value.get("active") for value in typed):
+    if any(value.get("active") is not True for value in typed):
         raise ValueError("incremental benchmark did not activate Direct-J/K updates")
-    full_builds = sum(int(value["anchor_full_builds"]) for value in typed)
-    delta_builds = sum(int(value["delta_builds"]) for value in typed)
-    full_shells = sum(int(value["full_admitted_shell_quartets"]) for value in typed)
-    delta_shells = sum(int(value["delta_admitted_shell_quartets"]) for value in typed)
-    full_tiles = sum(int(value["full_admitted_quartet_tiles"]) for value in typed)
-    delta_tiles = sum(int(value["delta_admitted_quartet_tiles"]) for value in typed)
+    full_builds = sum(_count(value["anchor_full_builds"]) for value in typed)
+    delta_builds = sum(_count(value["delta_builds"]) for value in typed)
+    full_shells = sum(_count(value["full_admitted_shell_quartets"]) for value in typed)
+    delta_shells = sum(
+        _count(value["delta_admitted_shell_quartets"]) for value in typed
+    )
+    full_tiles = sum(_count(value["full_admitted_quartet_tiles"]) for value in typed)
+    delta_tiles = sum(_count(value["delta_admitted_quartet_tiles"]) for value in typed)
+    if phase == "cold" and any(
+        value.get("quartet_work_counters_valid") is not True for value in typed
+    ):
+        return {
+            "phase": "cold",
+            "sample_count": len(typed),
+            "full_builds": full_builds,
+            "delta_builds": delta_builds,
+            "no_incremental_opportunity": delta_builds == 0,
+            "quartet_work_counters_valid": False,
+            "shell_quartet_reduction_fraction": None,
+            "quartet_tile_reduction_fraction": None,
+        }
     if delta_builds == 0:
         # A population that converges before the first delta update has no
         # incremental opportunity; quartet counters may legitimately be
@@ -113,7 +147,7 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
             "quartet_tile_reduction_fraction": 0.0,
             "no_incremental_opportunity": True,
         }
-    if any(not value.get("quartet_work_counters_valid") for value in typed):
+    if any(value.get("quartet_work_counters_valid") is not True for value in typed):
         raise ValueError("incremental quartet work counters are not complete")
     if full_builds == 0 or full_shells == 0 or full_tiles == 0:
         raise ValueError("incremental benchmark lacks measurable full work")
@@ -137,9 +171,117 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _source_identity(record: dict[str, Any]) -> tuple[Any, ...]:
+    source = record["environment"]["git"]
+    native = record["native_build"]["probe"]["source_identity"]
+    commit = source["commit"]
+    if (
+        not isinstance(commit, str)
+        or len(commit) != 40
+        or not isinstance(native, str)
+        or len(native) != 64
+        or any(c not in "0123456789abcdef" for c in commit + native)
+        or type(source["dirty"]) is not bool
+    ):
+        raise ValueError("invalid measured source identity")
+    accelerator = record["environment"]["accelerator"]
+    return (
+        commit,
+        source["dirty"],
+        native,
+        record["environment"]["host"]["node"],
+        accelerator["name"],
+        accelerator["device_id"],
+        accelerator["driver_version"],
+        accelerator["runtime_version"],
+    )
+
+
+def _reference_gate(record: dict[str, Any]) -> None:
+    """Recompute every retained warm independent-reference pair, not its flag."""
+    gates = record["settings"]["gates"]
+    limits = (
+        gates["maximum_energy_error_hartree"],
+        gates["maximum_force_error_hartree_per_bohr"],
+    )
+    for limit, ceiling in zip(limits, (1e-8, 1e-7), strict=True):
+        if _positive_seconds(limit) > ceiling:
+            raise ValueError("independent reference tolerance was weakened")
+    for engine in ("generativeqc", "gpu4pyscf"):
+        result = record[engine]
+        seconds = [
+            _positive_seconds(sample["seconds"]) for sample in result["warm_samples"]
+        ]
+        if (
+            not seconds
+            or result["warm_seconds"] != seconds
+            or result["warm_median_seconds"] != _median(seconds)
+        ):
+            raise ValueError("warm timing summary does not match measured samples")
+        for key in ("energies_hartree", "forces_hartree_per_bohr"):
+            if result[key] != result["warm_samples"][-1][key]:
+                raise ValueError("result summary does not match last measured sample")
+    native = record["generativeqc"]["warm_samples"]
+    reference = record["gpu4pyscf"]["warm_samples"]
+    if len(native) != 3 or len(reference) != 3:
+        raise ValueError("qualification requires three independent-reference pairs")
+    for sample, oracle in zip(native, reference, strict=True):
+        for row in (sample, oracle):
+            if not row["convergence"] or any(
+                item.get("converged") is not True for item in row["convergence"]
+            ):
+                raise ValueError("independent reference pair did not converge")
+        for key, limit in zip(
+            ("energies_hartree", "forces_hartree_per_bohr"), limits, strict=True
+        ):
+            if _maximum_abs_difference(sample[key], oracle[key]) > limit:
+                raise ValueError("independent reference numerical gate failed")
+
+
+def _cold_gate(record: dict[str, Any]) -> bool:
+    """Missing native cold arrays are unqualified, never replaced by warm results."""
+    native = record["generativeqc"]
+    reference = record["gpu4pyscf"]
+    for engine in (native, reference):
+        if len(engine["cold_convergence"]) != 1 or any(
+            item.get("converged") is not True for item in engine["cold_convergence"]
+        ):
+            raise ValueError("cold endpoint did not converge")
+    keys = ("cold_energies_hartree", "cold_forces_hartree_per_bohr")
+    present = [key in native for key in keys]
+    if not any(present):
+        return False
+    if not all(present):
+        raise ValueError("partial native cold numerical record")
+    for key, limit in zip(keys, (1e-8, 1e-7), strict=True):
+        if _maximum_abs_difference(native[key], reference[key]) > limit:
+            raise ValueError("cold independent reference numerical gate failed")
+    return True
+
+
+def _paired_difference(base: dict[str, Any], inc: dict[str, Any], key: str) -> float:
+    baseline = base["generativeqc"]
+    incremental = inc["generativeqc"]
+    return max(
+        _maximum_abs_difference(a[key], b[key])
+        for a, b in zip(
+            [baseline, *baseline["warm_samples"]],
+            [incremental, *incremental["warm_samples"]],
+            strict=True,
+        )
+    )
+
+
 def _outcome(root: Path, path: Path) -> dict[str, Any]:
-    stem = path.name[: -len(".json")]
-    return json.loads((path.parent / f"{stem}.outcome").read_text())
+    data = json.loads(path.with_suffix(".outcome").read_text())
+    if (
+        type(data.get("exit_code")) is not int
+        or data["exit_code"] < 0
+        or type(data.get("attempt")) is not int
+        or data["attempt"] not in (1, 2)
+    ):
+        raise ValueError(f"{path} has an invalid outcome")
+    return data
 
 
 def _hf_rows(
@@ -148,6 +290,7 @@ def _hf_rows(
     rows: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     library_sha: str | None = None
+    source_identity: tuple[Any, ...] | None = None
     for population in POPULATIONS:
         size_pairs = MOVED_SIZES if population == "moved" else SIZES
         for atoms, expected_aos in size_pairs:
@@ -171,6 +314,46 @@ def _hf_rows(
                         )
                         continue
                     record = _load(path)
+                    workload = record["workload"]
+                    expected_case = (
+                        f"water-{atoms}"
+                        + {"rhf": "", "uhf": "-cation-uhf", "moved": "-moved"}[
+                            population
+                        ]
+                    )
+                    if workload.get("case") != expected_case:
+                        raise ValueError("qualification workload identity mismatch")
+                    for convergence in [
+                        record["generativeqc"]["cold_convergence"],
+                        *[
+                            sample["convergence"]
+                            for sample in record["generativeqc"]["warm_samples"]
+                        ],
+                    ]:
+                        if len(convergence) != 1:
+                            raise ValueError(
+                                "qualification requires one convergence result"
+                            )
+                        diagnostics = convergence[0].get("incremental_direct_jk")
+                        if not isinstance(diagnostics, dict) or any(
+                            diagnostics.get(key) is not (mode == "incremental")
+                            for key in ("active", "requested")
+                        ):
+                            raise ValueError("HF route does not match requested mode")
+                    _reference_gate(record)
+                    _cold_gate(record)
+                    identity = _source_identity(record)
+                    if source_identity is None:
+                        source_identity = identity
+                    elif source_identity != identity:
+                        raise ValueError(
+                            "matrix changed measured source or device identity"
+                        )
+                    result = record["generativeqc"]
+                    for key in ("cold_seconds", "warm_median_seconds"):
+                        _positive_seconds(result[key])
+                    for key in ("energies_hartree", "forces_hartree_per_bohr"):
+                        _maximum_abs_difference(result[key], result[key])
                     aos = int(record["workload"]["ao_count"])
                     if aos != expected_aos:
                         raise ValueError(
@@ -178,12 +361,18 @@ def _hf_rows(
                         )
                     if int(record["workload"]["batch_size"]) != 1:
                         raise ValueError("qualification requires batch size one")
-                    if not record["gate"].get("passed"):
+                    if record["gate"].get("passed") is not True:
                         raise ValueError(
                             f"{population} {name} {atoms}-atom record failed its "
                             "independent reference gates"
                         )
-                    sha = str(record["native_build"]["library_sha256"])
+                    sha = record["native_build"]["library_sha256"]
+                    if (
+                        not isinstance(sha, str)
+                        or len(sha) != 64
+                        or any(c not in "0123456789abcdef" for c in sha)
+                    ):
+                        raise ValueError("invalid native library identity")
                     if library_sha is None:
                         library_sha = sha
                     elif sha != library_sha:
@@ -200,11 +389,15 @@ def _hf_rows(
                 )
             matched_cold: dict[str, list[float]] = {"baseline": [], "incremental": []}
             matched_warm: dict[str, list[float]] = {"baseline": [], "incremental": []}
+            cold_gates: list[bool] = []
+            warm_gates: list[bool] = []
             for round in (1, 2):
                 baseline_record = loaded["baseline"].get(round)
                 incremental_record = loaded["incremental"].get(round)
                 if baseline_record is None or incremental_record is None:
                     continue
+                if baseline_record["workload"] != incremental_record["workload"]:
+                    raise ValueError("paired workload identities differ")
                 baseline_cold = _positive_seconds(
                     baseline_record["generativeqc"]["cold_seconds"]
                 )
@@ -221,17 +414,40 @@ def _hf_rows(
                 matched_cold["incremental"].append(incremental_cold)
                 matched_warm["baseline"].append(baseline_warm)
                 matched_warm["incremental"].append(incremental_warm)
-                energy_difference = _maximum_abs_difference(
-                    baseline_record["generativeqc"]["energies_hartree"],
-                    incremental_record["generativeqc"]["energies_hartree"],
+                energy_difference = _paired_difference(
+                    baseline_record, incremental_record, "energies_hartree"
                 )
-                force_difference = _maximum_abs_difference(
-                    baseline_record["generativeqc"]["forces_hartree_per_bohr"],
-                    incremental_record["generativeqc"]["forces_hartree_per_bohr"],
+                force_difference = _paired_difference(
+                    baseline_record, incremental_record, "forces_hartree_per_bohr"
                 )
                 baseline_branches = _branches(baseline_record)
                 incremental_branches = _branches(incremental_record)
                 work = _incremental_work(incremental_record)
+                cold_work = _incremental_work(incremental_record, phase="cold")
+                cold_numerical_gate_passed = _cold_gate(baseline_record) and _cold_gate(
+                    incremental_record
+                )
+                if cold_numerical_gate_passed:
+                    cold_numerical_gate_passed = all(
+                        _maximum_abs_difference(
+                            baseline_record["generativeqc"][key],
+                            incremental_record["generativeqc"][key],
+                        )
+                        <= limit
+                        for key, limit in (
+                            ("cold_energies_hartree", args.maximum_energy_difference),
+                            (
+                                "cold_forces_hartree_per_bohr",
+                                args.maximum_force_difference,
+                            ),
+                        )
+                    )
+                warm_numerical_gate_passed = (
+                    energy_difference <= args.maximum_energy_difference
+                    and force_difference <= args.maximum_force_difference
+                )
+                cold_gates.append(cold_numerical_gate_passed)
+                warm_gates.append(warm_numerical_gate_passed)
                 rows.append(
                     {
                         "population": population,
@@ -251,11 +467,16 @@ def _hf_rows(
                         ),
                         "maximum_energy_difference_hartree": energy_difference,
                         "maximum_force_difference_hartree_per_bohr": force_difference,
-                        "numerical_gate_passed": (
-                            energy_difference <= args.maximum_energy_difference
-                            and force_difference <= args.maximum_force_difference
-                        ),
-                        "incremental_work": work,
+                        "warm_numerical_gate_passed": warm_numerical_gate_passed,
+                        "cold_numerical_gate_passed": cold_numerical_gate_passed,
+                        "cold_speedup_qualified": cold_numerical_gate_passed,
+                        "numerical_gate_passed": warm_numerical_gate_passed
+                        and cold_numerical_gate_passed,
+                        "cold_numerical_scope": "retained cold arrays"
+                        if cold_numerical_gate_passed
+                        else "unqualified: native cold arrays missing or paired gate failed",
+                        "incremental_warm_work": work,
+                        "incremental_cold_work": cold_work,
                     }
                 )
             if matched_warm["baseline"] and matched_warm["incremental"]:
@@ -265,6 +486,10 @@ def _hf_rows(
                         "atoms": atoms,
                         "ao_count": expected_aos,
                         "round": "all-matched",
+                        "cold_numerical_gate_passed": all(cold_gates),
+                        "warm_numerical_gate_passed": all(warm_gates),
+                        "cold_speedup_qualified": all(cold_gates),
+                        "numerical_gate_passed": all(cold_gates) and all(warm_gates),
                         "baseline_cold_median_seconds": _median(
                             matched_cold["baseline"]
                         ),
@@ -309,9 +534,14 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             raise ValueError("KS control record has an unexpected schema")
         if record.get("status") != "measured":
             raise ValueError(f"KS {mode}-{atoms} record is not measured")
+        diagnostics = record.get("incremental_direct_jk")
+        if not isinstance(diagnostics, dict) or diagnostics.get("active") is not (
+            mode == "on"
+        ):
+            raise ValueError("KS control route does not match requested mode")
         seconds = _positive_seconds(record["complete_seconds"])
         samples.setdefault((mode, atoms), []).append(seconds)
-        if not record["acceptance"].get("passed"):
+        if record["acceptance"].get("gate") is not True:
             raise ValueError(f"KS {mode}-{atoms} independent acceptance failed")
         rows.append(
             {
@@ -345,6 +575,8 @@ def main() -> None:
     parser.add_argument("--maximum-energy-difference", type=float, default=1.0e-8)
     parser.add_argument("--maximum-force-difference", type=float, default=1.0e-7)
     args = parser.parse_args()
+    for threshold in (args.maximum_energy_difference, args.maximum_force_difference):
+        _positive_seconds(threshold)
 
     hf_rows, library_sha, hf_failures = _hf_rows(args, args.input)
     ks_rows, ks_failures = _ks_rows(args.input)
@@ -372,13 +604,23 @@ def main() -> None:
         "ks_failures": ks_failures,
         "ledger_receipt_lines": ledger_lines,
         "any_point_failed": bool(hf_failures or ks_failures),
+        "all_warm_numerical_gates_passed": bool(per_round_rows)
+        and all(row["warm_numerical_gate_passed"] for row in per_round_rows),
+        "all_cold_numerical_gates_passed": bool(per_round_rows)
+        and all(row["cold_numerical_gate_passed"] for row in per_round_rows),
         "all_numerical_gates_passed": bool(per_round_rows)
         and all(row["numerical_gate_passed"] for row in per_round_rows),
-        "all_iteration_branches_match": all(
-            row["iteration_branches_match"] for row in per_round_rows
-        ),
+        "all_iteration_branches_match": bool(per_round_rows)
+        and all(row["iteration_branches_match"] for row in per_round_rows),
         "any_warm_endpoint_win": any(row["warm_speedup"] > 1.0 for row in matched_rows),
-        "any_cold_endpoint_win": any(row["cold_speedup"] > 1.0 for row in matched_rows),
+        "any_cold_endpoint_win": any(
+            row["cold_speedup_qualified"] and row["cold_speedup"] > 1.0
+            for row in matched_rows
+        ),
+        "any_unqualified_cold_timing_win": any(
+            not row["cold_speedup_qualified"] and row["cold_speedup"] > 1.0
+            for row in matched_rows
+        ),
         "best_warm_speedup": (
             max(row["warm_speedup"] for row in matched_rows) if matched_rows else None
         ),
@@ -408,8 +650,8 @@ def main() -> None:
             f"{row['incremental_warm_median_seconds'] * 1e3:>11.3f}  "
             f"{row['warm_speedup']:>7.3f}  "
             f"{row['cold_speedup']:>12.3f}  "
-            f"{row['incremental_work']['quartet_tile_reduction_fraction']:>11.3%}  "
-            f"{row['incremental_work']['shell_quartet_reduction_fraction']:>12.3%}  "
+            f"{row['incremental_warm_work']['quartet_tile_reduction_fraction']:>11.3%}  "
+            f"{row['incremental_warm_work']['shell_quartet_reduction_fraction']:>12.3%}  "
             f"{row['iteration_branches_match']!s:>8}  "
             f"{row['numerical_gate_passed']!s:>9}"
         )
