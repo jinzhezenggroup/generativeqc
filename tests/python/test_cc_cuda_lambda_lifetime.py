@@ -5,11 +5,14 @@ its host borrow until a fence, so failures expose premature output destruction
 without relying on pageable-memory staging behavior in a particular driver.
 """
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = r"""
@@ -126,10 +129,12 @@ struct CudaFixedOrbitalResponseResult { TrackingVector df_bov,df_bvv; };
 // accidentally enter its synthetic backend; the real DF owner has CUDA tests.
 namespace detail {
 struct DFLambdaActions {
+  struct ResidentState { void* stream; double* seed_one; double* seed_two; int* error; };
   DFLambdaActions(const Problem&,const SolverResult&,const LambdaOptions&,int,bool,bool) {
     throw std::logic_error("DF owner outside conventional lifetime harness");
   }
   const LambdaDiagnostic& diagnostic() const { static LambdaDiagnostic d;return d; }
+  ResidentState resident_state() const { throw std::logic_error("DF action"); }
   void replay(double&,TrackingVector&,TrackingVector&) { throw std::logic_error("DF action"); }
   void rhs(bool,TrackingVector&,TrackingVector&) { throw std::logic_error("DF action"); }
   void transpose(bool,std::span<const double>,std::span<const double>,TrackingVector&,TrackingVector&) { throw std::logic_error("DF action"); }
@@ -185,14 +190,22 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def lambda_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++20 compiler")
+def lambda_lifetime_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
+) -> Path:
     source = (ROOT / "src/cc/lambda_response_cuda.cu").read_text()
-    owner = source[
-        source.index("std::size_t checked_add(") : source.index("double max_abs(")
-    ].replace("std::vector<double>", "TrackingVector")
+    # Keep the actual host helpers and complete action owner, excluding adjacent
+    # resident CUDA kernels/backend that this conventional host probe cannot run.
+    helpers = source[
+        source.index("std::size_t checked_add(") : source.index(
+            "\n}", source.index("int checked_device(")
+        )
+        + 2
+    ]
+    owner_start = source.index("class CudaLambdaActions {")
+    owner = (
+        helpers + source[owner_start : source.index("\n};", owner_start) + 3]
+    ).replace("std::vector<double>", "TrackingVector")
     header = (ROOT / "src/cc/cuda_solver_support.cuh").read_text()
     state = header[
         header.index("struct CudaState {") : header.index(
@@ -250,24 +263,19 @@ DeviceParameterOutput parameter_stub(CudaState& s) {
     folder = tmp_path_factory.mktemp("cc-lambda-lifetime")
     unit, binary = folder / "probe.cpp", folder / "probe"
     unit.write_text(PREFIX + generated + owner + DRIVER)
-    result = subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [unit],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-O2",
             "-Wall",
             "-Wextra",
             "-Werror",
-            str(unit),
-            "-o",
-            str(binary),
         ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
+        compile_timeout=30,
+        link_timeout=30,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
     return binary
 
 
