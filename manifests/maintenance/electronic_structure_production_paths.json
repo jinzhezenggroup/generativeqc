@@ -669,6 +669,7 @@
         "tests/python/test_df_resident_force_cuda.py",
         "benchmarks/results/response-contract/2026-10-11/qualification-resident-lambda.json.xz",
         "benchmarks/results/response-contract/2026-10-11/qualification-resident-integration.json.xz",
+        "benchmarks/results/response-contract/2026-10-11/qualification-resident-df.json.xz",
         "tests/python/test_rccsd_native_lambda_owner.py"
       ],
       "evidence_levels": {

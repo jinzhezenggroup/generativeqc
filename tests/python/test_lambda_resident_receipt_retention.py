@@ -49,3 +49,37 @@ def test_resident_receipt_preserves_original_bytes_and_source(
         ROOT / "manifests/maintenance/electronic_structure_production_paths.json"
     ).read_text()
     assert str(path.relative_to(ROOT)) in ledger
+
+
+def test_response_readme_history_preserves_every_original_byte() -> None:
+    """Compaction must retain narrative provenance, not discard it for capacity."""
+    original = lzma.decompress((RECEIPTS / "README-history.md.xz").read_bytes())
+    assert len(original) == 7861
+    assert hashlib.sha256(original).hexdigest() == (
+        "c8ae3ed93eb0b9ce0e41c5087fe9793af5f4a244fa6a948019c24d554171366f"
+    )
+    assert "README-history.md.xz" in (RECEIPTS / "README.md").read_text()
+
+
+def test_df_resident_receipt_keeps_scoped_frozen_source_and_no_promotion() -> None:
+    """Later evidence commits must not relabel the measured production tree."""
+    original = lzma.decompress(
+        (RECEIPTS / "qualification-resident-df.json.xz").read_bytes()
+    )
+    assert len(original) == 6645
+    assert hashlib.sha256(original).hexdigest() == (
+        "5953710db9a0f408172232c168dfdf28a73e5aadf3fea711c4f7821b26238069"
+    )
+    payload = json.loads(original)
+    assert payload["source"]["commit"] == "de67ead96da0c319cb5ea57ce9bd8fbb5fc18836"
+    assert payload["source"]["tree"] == "2c9dc04eaaf0aa91419fc3f66664aff72e2780ca"
+    assert payload["validation"]["gpu_skipped_or_failed"] == 0
+    assert payload["validation"]["prepared_reuse"] is False
+    assert payload["promotion"]["default_promoted"] is False
+    assert payload["instrumentation"]["compute_sanitizer"]["errors"] == 0
+    assert payload["instrumentation"]["compute_sanitizer"]["leaked_bytes"] == 0
+    assert (
+        payload["instrumentation"]["resident"][9]
+        > payload["instrumentation"]["baseline"][9]
+    )
+    assert "qualification-resident-df.json.xz" in (RECEIPTS / "README.md").read_text()
