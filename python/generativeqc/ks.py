@@ -424,24 +424,24 @@ def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     return None
 
 
-def cuda_mixed_density_fitted_force_eligible(method_ir: MethodIR) -> bool:
+def mixed_density_fitted_force_eligible(method_ir: MethodIR, *, backend: str) -> bool:
     """Admit fitted primary plus exact-LR forces by graph/provider capabilities.
 
+    CPU and CUDA share graph admission, but qualify their own execution owners.
     This is not range-separated RI-K: DF owns full-range J/K and a separate
-    Direct owner supplies the LR correction. The compiler's complete resident
-    source inventory and generated native family record must both agree. Basis,
+    Direct owner supplies the LR correction. The compiler's external source
+    inventory and generated native family record must both agree. Basis,
     Hamiltonian, precision and backend checks remain with the public owner.
     A zero LR correction cannot publish distinct SR/LR rows and stays rejected.
     """
-    from generativeqc_compiler.method.stationary_cuda import (
-        COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES,
-        stationary_external_provider_sources,
-    )
     from generativeqc_compiler.method.stationary_gradient import (
+        COMPOSITE_STATIONARY_EXTERNAL_SOURCES,
         StationaryGradientPlan,
         StationaryMeanField,
     )
 
+    if backend not in ("cpu", "cuda"):
+        return False
     try:
         record = _native_semilocal_record(method_ir)
         execution = compile_ks_execution_plan(method_ir)
@@ -458,20 +458,27 @@ def cuda_mixed_density_fitted_force_eligible(method_ir: MethodIR) -> bool:
         all(
             record[capability]
             for capability in (
-                "cuda_ks",
                 "native_range_exchange",
                 "native_nonlocal_correlation",
-                "cuda_nonlocal_correlation",
                 "molecular_nonlocal_domain",
+                *(
+                    ("cuda_ks", "cuda_nonlocal_correlation")
+                    if backend == "cuda"
+                    else ("stationary_ecp_gradient",)
+                ),
             )
         )
         and execution.nonlocal_correlation is not None
         and len(execution.exchange) == 2
         and omega > 0
         and short != long
-        and stationary_external_provider_sources(gradient)
-        == COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES
+        and gradient.external_source_names == COMPOSITE_STATIONARY_EXTERNAL_SOURCES
     )
+
+
+def cuda_mixed_density_fitted_force_eligible(method_ir: MethodIR) -> bool:
+    """Compatibility spelling for the shared graph gate with CUDA providers."""
+    return mixed_density_fitted_force_eligible(method_ir, backend="cuda")
 
 
 def cuda_nonlocal_force_basis_eligible(basis: typing.Any) -> bool:

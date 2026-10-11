@@ -18,7 +18,10 @@ from typing import Any
 import numpy as np
 import pytest
 from generativeqc import Atom, Calculator, KsOptions
-from generativeqc.ks import cuda_mixed_density_fitted_force_eligible
+from generativeqc.ks import (
+    cuda_mixed_density_fitted_force_eligible,
+    mixed_density_fitted_force_eligible,
+)
 from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.method import (
     MethodSpec,
@@ -35,6 +38,7 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from generativeqc_compiler.tensor import execute
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
@@ -43,6 +47,8 @@ def test_mixed_df_admission_uses_semantics_not_method_name(spin: str) -> None:
     assert cuda_mixed_density_fitted_force_eligible(method)
     renamed = replace(method, identifier="unrelated-functional-label")
     assert cuda_mixed_density_fitted_force_eligible(renamed)
+    assert mixed_density_fitted_force_eligible(renamed, backend="cpu")
+    assert not mixed_density_fitted_force_eligible(renamed, backend="unsupported")
     for identifier in ("PBE", "PBE0", "CAM-B3LYP", "R2SCAN"):
         assert not cuda_mixed_density_fitted_force_eligible(
             resolve_method(identifier, spin=spin)
@@ -76,7 +82,7 @@ def test_mixed_df_requires_every_generated_provider_capability(
     "override,expected",
     (
         ({}, True),
-        ({"_device_name": "cpu"}, False),
+        ({"_device_name": "cpu"}, True),
         ({"_precision_mode": "auto"}, False),
         ({"_basis": "def2-qzvp"}, False),
         ({"_automatic_libxc_name": "unqualified"}, False),
@@ -132,6 +138,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
         ),
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
+        "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
     }
     exec(  # noqa: S102 - Only the local repository's public predicate is executed.
         compile(ast.Module(body=[assignment], type_ignores=[]), str(__file__), "exec"),
@@ -171,6 +178,38 @@ def test_other_functional_graphs_share_the_composite_inventory(
     assert cuda_mixed_density_fitted_force_eligible(method) == (
         long_coefficient != Fraction(19, 100)
     )
+    assert mixed_density_fitted_force_eligible(method, backend="cpu") == (
+        long_coefficient != Fraction(19, 100)
+    )
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_mixed_df_lr_weights_use_the_shared_exchange_algebra(spin: str) -> None:
+    """The CPU correction is delta K_LR, not a second exact SR/LR Hamiltonian."""
+    method = resolve_method("WB97M-V", spin=spin)
+    plan = StationaryGradientPlan(method, StationaryMeanField(SCF_POINT_MODEL))
+    short, long = (
+        plan.range_exchange_primitive("exchange_" + region + "_range")
+        for region in ("short", "long")
+    )
+    density = np.array([[0.7, 0.2], [0.1, 0.4]])[: plan.spin_blocks]
+    feeds = {"density_left": density, "density_right": density[:, ::-1].copy()}
+    correction = execute(
+        plan.integral_block(
+            "exchange_long_range", terms=2, mixed_density_fitted_correction=True
+        ).weights,
+        feeds,
+    ).outputs["weights"]
+    factor = -float(long.coefficient - short.coefficient) * (
+        0.5 if spin == "polarized" else 0.25
+    )
+    np.testing.assert_allclose(
+        correction, factor * np.sum(density * density[:, ::-1], axis=0), atol=1e-15
+    )
+    with pytest.raises(ValueError, match="matched SR/LR"):
+        plan.integral_block(
+            "exchange_short_range", terms=2, mixed_density_fitted_correction=True
+        )
 
 
 def _mixed_pyscf_energy(
@@ -239,6 +278,66 @@ def _mixed_pyscf_energy(
     return float(energy)
 
 
+def test_cpu_mixed_snapshot_is_revoked_by_warm_replay() -> None:
+    from generativeqc._ks_snapshot import NativeKsSnapshot
+
+    atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
+    calc = Calculator(
+        method="wb97m-v",
+        basis="sto-3g",
+        device="cpu",
+        density_fitting="auto",
+        auxiliary_basis="def2-svp",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+    )
+    with calc.prepare_batch([atoms], warm_start=True) as batch:
+        batch.execute(strict=True, properties=("energy",))
+        snapshot = NativeKsSnapshot(batch, 0)
+        try:
+            snapshot.check_current()
+            batch.execute(strict=True, properties=("energy",))
+            with pytest.raises(ValueError, match="stale"):
+                snapshot.mixed_density_fitted_integral_derivatives(
+                    2, 256 << 20, lr_correction=np.zeros((2, 3))
+                )
+        finally:
+            snapshot.close()
+
+
+def test_cpu_mixed_d_shell_rejects_before_snapshot_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc._dft_gradient import StationaryKsState
+
+    def unexpected_export(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError(
+            "unsupported orbital domain must reject before snapshot export"
+        )
+
+    monkeypatch.setattr(StationaryKsState, "from_native", unexpected_export)
+    atoms = [
+        ("O", (0.0, 0.0, 0.0)),
+        ("H", (0.1, 1.43, 1.1)),
+        ("H", (-0.15, -1.45, 1.12)),
+    ]
+    calc = Calculator(
+        method="wb97m-v",
+        basis="def2-svp",
+        device="cpu",
+        density_fitting="auto",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+    )
+    with (
+        calc.prepare_batch([atoms]) as batch,
+        pytest.raises(NotImplementedError, match="s/p"),
+    ):
+        batch._public_dft_cpu_force(0, atoms)
+
+
 @pytest.mark.parametrize(
     "spin,representation,basis_name",
     (
@@ -246,16 +345,21 @@ def _mixed_pyscf_energy(
         (0, "spherical", "sto-3g"),
         (1, "cartesian", "sto-3g"),
         (1, "spherical", "sto-3g"),
+        (0, "spherical", "sto-3g-water"),
         (0, "spherical", "def2-svp"),
         (0, "spherical", "def2-tzvp"),
     ),
 )
-def test_complete_mixed_df_cuda_forces_against_independent_energies(
-    spin: int, representation: str, basis_name: str
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+def test_complete_mixed_df_forces_against_independent_energies(
+    spin: int, representation: str, basis_name: str, device: str
 ) -> None:
-    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+    if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an allocated native CUDA library/device")
-    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    if device == "cuda":
+        assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    if device == "cpu" and basis_name not in ("sto-3g", "sto-3g-water"):
+        pytest.skip("CPU range derivative consumer is bounded to s/p AOs")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
         atoms.append(("H", (1.8, -0.1, -0.3)))
@@ -267,9 +371,9 @@ def test_complete_mixed_df_cuda_forces_against_independent_energies(
         ]
     calc = Calculator(
         method="wb97m-v-uks" if spin else "wb97m-v-rks",
-        basis=basis_name,
+        basis=basis_name.removesuffix("-water"),
         basis_representation=representation,
-        device="cuda",
+        device=device,
         density_fitting="auto",
         auxiliary_basis="def2-svp",
         ks_options=KsOptions(
@@ -284,25 +388,59 @@ def test_complete_mixed_df_cuda_forces_against_independent_energies(
     with calc.prepare_batch(
         [atoms], multiplicities=[spin + 1], warm_start=True
     ) as batch:
+        cpu_work = []
+        if device == "cpu":
+            original_consumer = batch._public_dft_cpu_force
+
+            def consume_cpu(index: int, current_atoms: Any) -> Any:
+                result = original_consumer(index, current_atoms)
+                cpu_work.append(result[1])
+                return result
+
+            batch._public_dft_cpu_force = consume_cpu
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
-        cold_reserve = batch._stationary_cuda_execution.last_work[
-            "native_integral_additional_device_reserve_bytes"
-        ]
+        cold_reserve = (
+            batch._stationary_cuda_execution.last_work[
+                "native_integral_additional_device_reserve_bytes"
+            ]
+            if device == "cuda"
+            else None
+        )
         warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
-        work = batch._stationary_cuda_execution.last_work
+        work = (
+            batch._stationary_cuda_execution.last_work
+            if device == "cuda"
+            else cpu_work[-1]
+        )
         assert cold.converged and warm.converged
-        assert cold.executed_backend == warm.executed_backend == "cuda"
+        assert (
+            cold.executed_backend
+            == warm.executed_backend
+            == ("cpu_reference" if device == "cpu" else device)
+        )
         assert warm.energy == pytest.approx(cold.energy, abs=2e-10)
         np.testing.assert_allclose(warm.forces, cold.forces, atol=2e-8, rtol=0)
-        assert work["prepared_execution_reused"]
-        assert cold_reserve > 0
-        assert work["native_integral_additional_device_reserve_bytes"] == cold_reserve
-        assert work["additional_bounds_exclude_df_response"]
-        assert work["native_integral_resources"][
-            "additional_device_peak_includes_lazy_lr"
-        ]
-        assert work["nonlocal_feature_d2h_bytes"] == 0
-        assert work["nonlocal_seed_h2d_bytes"] == 0
+        if device == "cuda":
+            assert work["prepared_execution_reused"]
+            assert cold_reserve > 0
+            assert (
+                work["native_integral_additional_device_reserve_bytes"] == cold_reserve
+            )
+            assert work["additional_bounds_exclude_df_response"]
+            assert work["native_integral_resources"][
+                "additional_device_peak_includes_lazy_lr"
+            ]
+            assert work["nonlocal_feature_d2h_bytes"] == 0
+            assert work["nonlocal_seed_h2d_bytes"] == 0
+        else:
+            assert (
+                work["stationary_integral_derivative_route"]
+                == "prepared-mixed-density-fitted"
+            )
+            assert work["integral_quartet_passes"] == 1
+            assert work["range_exchange_primitive_records"] > 0
+            assert work["primitive_records"] == work["primitive_record_bound"]
+            assert not work["density_fitted_response_resources_included"]
         assert cold.energy == pytest.approx(
             _mixed_pyscf_energy(calc, atoms, spin), abs=2e-8
         )

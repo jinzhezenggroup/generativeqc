@@ -46,7 +46,10 @@ _META_GGA_CODES = frozenset(
 
 
 def _integral_source_resources(
-    usage: typing.Iterable[int], *, mixed_rsh_df: bool = False
+    usage: typing.Iterable[int],
+    *,
+    mixed_rsh_df: bool = False,
+    lazy_lr_device_owner: bool = True,
 ) -> typing.Mapping[str, int]:
     """Decode the private wire without treating lazy LR storage as SCF-owned.
 
@@ -73,7 +76,7 @@ def _integral_source_resources(
     if mixed_rsh_df:
         work["mixed_rsh_df_provider"] = 1
         work["density_fitted_response_resources_included"] = 0
-        work["additional_device_peak_includes_lazy_lr"] = 1
+        work["additional_device_peak_includes_lazy_lr"] = int(lazy_lr_device_owner)
     return MappingProxyType(work)
 
 
@@ -712,6 +715,79 @@ class NativeKsSnapshot:
         )
         work["density_fitted_response_resources_included"] = 0
         return immutable(output), MappingProxyType(work)
+
+    def mixed_density_fitted_integral_derivatives(
+        self,
+        atom_count: int,
+        maximum_bytes: int,
+        *,
+        lr_correction: typing.Any = None,
+    ) -> typing.Any:
+        """Publish common mixed sources from one live, token-checked DF owner.
+
+        CPU binds the compiler-generated (a_long-a_short) weighted LR gradient.
+        CUDA leaves it absent and executes the native resident derivative owner.
+        Neither backend substitutes exact full-range exchange for fitted K.
+        """
+        if not self.density_fitted:
+            return None
+        if type(atom_count) is not int or atom_count < 1:
+            raise ValueError("stationary derivative atom count must be positive")
+        if type(maximum_bytes) is not int or maximum_bytes < 1:
+            raise ValueError("stationary derivative budget must be positive")
+        correction = np.empty(0, dtype=np.float64)
+        if self.backend == "cpu":
+            correction = np.ascontiguousarray(lr_correction, dtype=np.float64)
+            if correction.shape != (atom_count, 3) or not np.isfinite(correction).all():
+                raise ValueError(
+                    "mixed CPU source requires a finite compact LR correction"
+                )
+        elif lr_correction is not None:
+            raise ValueError("CUDA mixed source owns its resident LR correction")
+        self.check_current()
+        evaluate = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_mixed_density_fitted_integral_gradient_v1",
+            None,
+        )
+        if evaluate is None:
+            raise NotImplementedError(
+                "native mixed density-fitted source bridge is unavailable"
+            )
+        evaluate.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_double),
+            ct.c_size_t,
+            ct.POINTER(ct.c_double),
+            ct.c_size_t,
+            ct.c_size_t,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        evaluate.restype = ct.c_int
+        output = np.empty((5, atom_count, 3), dtype=np.float64)
+        usage = np.zeros(9, dtype=np.uint64)
+        status = evaluate(
+            self._batch._batch,
+            self._handle,
+            correction.ctypes.data_as(ct.POINTER(ct.c_double))
+            if correction.size
+            else None,
+            correction.size,
+            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            output.size,
+            maximum_bytes,
+            usage.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            usage.size,
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        return immutable(output), _integral_source_resources(
+            usage, mixed_rsh_df=True, lazy_lr_device_owner=self.backend == "cuda"
+        )
 
     def cuda_integral_derivatives(
         self,

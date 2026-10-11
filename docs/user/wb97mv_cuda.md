@@ -55,7 +55,10 @@ bundled and must be supplied as a local basis record. ECPs remain outside this
 the omega-dependent long-range
 exchange correction remains exact Direct, and VV10 remains the existing
 grid/nonlocal consumer. This is a mixed provider composition, not
-range-separated RI-K. Component-wise `precision="auto"` is an SCF policy only;
+range-separated RI-K. CPU also supports mixed FP64 energy/forces in the bounded
+s/p domain documented by the [DF interface](dft_density_fitting.md); it shares
+provider validation and source composition, not CUDA resident storage.
+Component-wise `precision="auto"` is an SCF policy only;
 it does not lower stationary force arithmetic or expand the basis, ECP or
 resource domain.
 

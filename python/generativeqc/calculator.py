@@ -898,6 +898,7 @@ class Calculator:
             cuda_global_hybrid_force_eligible,
             cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
+            mixed_density_fitted_force_eligible,
         )
 
         cuda_hybrid_force = (
@@ -940,6 +941,12 @@ class Calculator:
                     and cuda_nonlocal_force_basis_eligible(self._basis)
                     and cuda_mixed_density_fitted_force_eligible(
                         self._ks_options.method_ir
+                    )
+                )
+                or (
+                    self._device_name == "cpu"
+                    and mixed_density_fitted_force_eligible(
+                        self._ks_options.method_ir, backend="cpu"
                     )
                 )
             )

@@ -109,6 +109,24 @@ def test_all_electron_has_no_ecp_work_or_dense_provider_limit() -> None:
     )
 
 
+def test_mixed_df_admission_counts_exact_lr_work_without_direct_primary() -> None:
+    state, basis, counts = inputs(ecp=False)
+    state._source.method_ir = resolve_method("WB97M-V", spin="unpolarized")
+    expected = 3 + sum(counts) ** 4
+    work = admit(state, basis, native_fitted_integrals=True)
+    assert work["primitive_record_bound"] == expected
+    assert work["integral_quartet_passes"] == 1
+    assert work["ordered_quartets"] == basis.nao**4
+    assert work["nonlocal_pair_evaluations"] == 11**2
+    with pytest.raises(ValueError, match="primitive work budget"):
+        admit(
+            state,
+            basis,
+            native_fitted_integrals=True,
+            max_primitive_records=expected - 1,
+        )
+
+
 def test_multicomponent_work_counts_and_exact_budget() -> None:
     state, basis, counts = inputs()
     rows = basis.packed[-48:].reshape(3, 16)

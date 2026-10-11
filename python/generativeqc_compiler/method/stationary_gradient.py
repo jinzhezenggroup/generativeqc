@@ -43,6 +43,14 @@ from .typecheck import BackendCapability, verify_method_ir
 VERSION = "stationary-gradient-plan-v3"
 SCF_POINT_MODEL = "semilocal-scaled-v1/pbe-spin-c2-1e-18"
 
+COMPOSITE_STATIONARY_EXTERNAL_SOURCES = (
+    "exchange_short_range",
+    "exchange_long_range",
+    "nonlocal_ao",
+    "nonlocal_grid",
+    "nonlocal_weight",
+)
+
 _STATIONARY_GRADIENT_CAPABILITY = BackendCapability(
     "stationary-gradient-plan",
     ("float64",),
@@ -343,6 +351,12 @@ class StationaryGradientPlan:
         return tuple(source.name for source in self.sources)
 
     @property
+    def external_source_names(self) -> tuple[str, ...]:
+        """Separate range/nonlocal/ECP providers from primary stationary sources."""
+        primary = {source.name for source in _SOURCES} | {"exact_exchange"}
+        return tuple(source for source in self.source_names if source not in primary)
+
+    @property
     def spin_blocks(self) -> typing.Any:
         return 2 if self.method.spin == "polarized" else 1
 
@@ -394,6 +408,7 @@ class StationaryGradientPlan:
         coordinates: typing.Any = 3,
         max_elements: typing.Any = 65536,
         differentiate_densities: bool = False,
+        mixed_density_fitted_correction: bool = False,
     ) -> typing.Any:
         """Generate dL/dI and its contraction with a bounded derivative tile.
 
@@ -408,6 +423,9 @@ class StationaryGradientPlan:
         ``differentiate_densities`` preserves D/W as differentiable inputs for
         a later weight JVP; it never differentiates an SCF iteration. D/W must
         come from a validated stationary owner at native endpoint binding.
+        ``mixed_density_fitted_correction`` changes only the LR weight to
+        (a_long-a_short): full-range fitted exchange is supplied by a separate
+        native owner. It does not evaluate exact SR in place of fitted exchange.
         """
         range_primitive = None
         if source in tuple(s.name for s in self.range_exchange_sources):
@@ -427,6 +445,26 @@ class StationaryGradientPlan:
         _positive(max_elements, "max_elements")
         if type(differentiate_densities) is not bool:
             raise TypeError("differentiate_densities must be bool")
+        if type(mixed_density_fitted_correction) is not bool:
+            raise TypeError("mixed_density_fitted_correction must be bool")
+        range_coefficient = range_primitive.coefficient if range_primitive else None
+        if mixed_density_fitted_correction:
+            primitives = {
+                primitive.operator: primitive
+                for primitive in self.range_exchange_primitives
+            }
+            if (
+                range_primitive is None
+                or range_primitive.operator != "long-range"
+                or set(primitives) != {"short-range", "long-range"}
+                or primitives["short-range"].omega != range_primitive.omega
+            ):
+                raise ValueError(
+                    "mixed fitted correction requires a matched SR/LR graph"
+                )
+            range_coefficient -= primitives["short-range"].coefficient
+            if range_coefficient == 0:
+                raise ValueError("mixed fitted correction must be nonzero")
         # Gate before generating any shape-sized AD constants or executing data.
         if terms * (coordinates + 2 * self.spin_blocks + 4) > max_elements:
             raise ValueError("integral-gradient block exceeds the element budget")
@@ -455,7 +493,7 @@ class StationaryGradientPlan:
             right = _input(
                 "density_right", (s, t), differentiable=differentiate_densities
             )
-            factor = -range_primitive.coefficient * (
+            factor = -range_coefficient * (
                 Fraction(1, 2) if self.spin_blocks == 2 else Fraction(1, 4)
             )
             energy = einsum(

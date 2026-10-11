@@ -47,6 +47,7 @@ from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 from .spec import SemilocalXCPrimitive, resolve_method
 from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
+    COMPOSITE_STATIONARY_EXTERNAL_SOURCES,
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
@@ -83,13 +84,7 @@ _NATIVE_EXTERNAL_PROVIDER_SOURCES = frozenset(("ecp_local", "ecp_nonlocal"))
 
 # One authority for the complete resident range/nonlocal consumer inventory.
 # Admission still requires the native semilocal and Fock provider capabilities.
-COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES = (
-    "exchange_short_range",
-    "exchange_long_range",
-    "nonlocal_ao",
-    "nonlocal_grid",
-    "nonlocal_weight",
-)
+COMPOSITE_STATIONARY_CUDA_EXTERNAL_SOURCES = COMPOSITE_STATIONARY_EXTERNAL_SOURCES
 
 
 def stationary_external_provider_sources(
@@ -98,11 +93,10 @@ def stationary_external_provider_sources(
     """Return plan sources intentionally owned outside the shared CUDA arena."""
     if not isinstance(plan, StationaryGradientPlan):
         raise TypeError("stationary source inventory requires StationaryGradientPlan")
-    runtime = set(stationary_runtime_sources(plan))
     return tuple(
         source
-        for source in plan.source_names
-        if source not in runtime and source not in _NATIVE_EXTERNAL_PROVIDER_SOURCES
+        for source in plan.external_source_names
+        if source not in _NATIVE_EXTERNAL_PROVIDER_SOURCES
     )
 
 

@@ -61,6 +61,13 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v2(
 generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+/** Private mixed bridge. CPU supplies the compact weighted LR correction;
+ * CUDA passes an empty correction and executes its resident LR provider. */
+generativeqc_status generativeqc_ks_snapshot_mixed_density_fitted_integral_gradient_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    const double* lr_correction, std::size_t correction_count, double* values, std::size_t count,
+    std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+
 generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
