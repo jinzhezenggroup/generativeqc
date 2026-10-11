@@ -104,12 +104,17 @@ def test_explicit_cpu_jit_wraps_native_artifact_without_leaking_owner(
             setattr(compiled, field, "tampered")
 
 
-def test_explicit_cpu_jit_compiles_and_executes_real_program(tmp_path: Path) -> None:
+@pytest.mark.parametrize("primitive", ["identity", "exp"])
+def test_explicit_cpu_jit_compiles_and_executes_real_program(
+    tmp_path: Path, primitive: str
+) -> None:
     compiler = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
     if compiler is None:
         pytest.skip("no C++ compiler available for explicit JIT integration test")
 
     program = _program()
+    if primitive == "exp":
+        program = tensor.Program({"value": tensor.exp(program.outputs["value"])})
     capability = tensor.compile_capabilities(
         program,
         max_bytes=4096,
@@ -127,7 +132,11 @@ def test_explicit_cpu_jit_compiles_and_executes_real_program(tmp_path: Path) -> 
     feed = np.array([1.25, -2.5], dtype=np.float64)
     result = compiled.execute({"x": feed})
 
-    np.testing.assert_array_equal(result["value"], feed)
+    expected = np.exp(feed) if primitive == "exp" else feed
+    if primitive == "identity":
+        np.testing.assert_array_equal(result["value"], expected)
+    else:
+        np.testing.assert_allclose(result["value"], expected, rtol=1e-14, atol=0.0)
     assert capability["identity"] == compiled.identity
     artifact = compiled.artifact
     assert Path(artifact["library"]).is_file()
@@ -147,7 +156,11 @@ def test_explicit_cpu_jit_compiles_and_executes_real_program(tmp_path: Path) -> 
     assert reused.logical_hash == compiled.logical_hash
     assert reused.identity == compiled.identity
     assert reused.artifact["library"] == artifact["library"]
-    np.testing.assert_array_equal(reused.execute({"x": feed})["value"], feed)
+    reused_value = reused.execute({"x": feed})["value"]
+    if primitive == "identity":
+        np.testing.assert_array_equal(reused_value, expected)
+    else:
+        np.testing.assert_allclose(reused_value, expected, rtol=1e-14, atol=0.0)
     with pytest.raises(ValueError, match="invalid float64 tensor input"):
         compiled.execute({"x": feed.astype(np.float32)})
 
@@ -242,10 +255,12 @@ def test_unsupported_ir_and_budgets_do_not_discover_toolchain(
         program = tensor.Program({"value": node})
         expected = "float64"
     elif case == "primitive":
-        from generativeqc_compiler.tensor import exp
+        from generativeqc_compiler.tensor import cast
 
-        program = tensor.Program({"value": exp(program.outputs["value"])})
-        expected = "unsupported CPU primitive"
+        # exp is now supported; dtype-changing cast remains an unsupported
+        # canonical primitive and must still reject before toolchain discovery.
+        program = tensor.Program({"value": cast(program.outputs["value"], "float32")})
+        expected = "unsupported CPU primitive: cast"
     else:
         budgets["max_" + case] = 0
     cache = tmp_path / "uncreated"
