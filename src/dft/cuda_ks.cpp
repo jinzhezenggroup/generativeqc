@@ -1294,65 +1294,66 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.precision_work.owner_id = owner;
     output.precision_work.operators.reserve(14);
     pending_iterations = 0;
-    // Native cold guesses arrive as a density too. Preserve their provenance
-    // instead of treating every non-null pointer as a warm or external seed.
-    prepare_phase_source((!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm);
-    // The bounded device-control prototype is qualified only for strict-FP64
-    // direct all-electron RKS. AUTO must stay on the legacy host-controlled
-    // path so its FP32 mixed-J stage and independent FP64 refinement cannot be
-    // bypassed by an opt-in two-iteration device chunk. In addition to the
-    // original pure semilocal envelope, admit the manifest-qualified direct
-    // global-hybrid composition so exact K can remain inside the same bounded
-    // SolverRegion. Graph replay
-    // stays disabled for global hybrids until the exchange provider is
-    // independently capture-qualified.
-    const bool pure_semilocal_chunk = !has_exchange && !has_range_correction &&
-                                      options.semilocal_exchange_scale == 1.0 &&
-                                      options.semilocal_correlation_scale == 1.0;
-    const auto* chunk_family = semilocal_family_metadata_from_code(functional);
-    const double chunk_exact_exchange =
-        chunk_family ? chunk_family->cuda_global_hybrid_exact_exchange : -1.0;
-    const double chunk_semilocal_exchange =
-        chunk_family && chunk_family->component_coefficients_are_native_scales &&
-                chunk_exact_exchange > 0.0
-            ? 1.0 - chunk_exact_exchange
-            : 1.0;
-    const bool curated_global_hybrid_chunk =
-        has_exchange && !has_range_correction && chunk_exact_exchange > 0.0 &&
-        options.semilocal_exchange_scale == chunk_semilocal_exchange &&
-        options.semilocal_correlation_scale == 1.0 &&
-        exchange_coefficient == -chunk_exact_exchange / (spins == 1 ? 2.0 : 1.0);
-    // Range-separated exact exchange already stays device-resident on the
-    // prepared Direct owner. Admit its ordinary two-call primary/correction
-    // composition to the same bounded region; graph replay remains disabled
-    // below because the range provider has not been capture-qualified.
-    const bool rsh_chunk =
-        has_exchange && has_range_correction && range_correction.has_value() &&
-        range_correction->backend == scf::FockBackend::Cuda &&
-        range_correction->spec.derivative_order == 0 && !range_correction->spec.coulomb.present &&
-        range_correction->spec.exchange.present &&
-        range_correction->spec.exchange.approximation == scf::FockApproximation::Exact &&
-        (range_correction->spec.exchange.op == scf::FockOperator::ShortRange ||
-         range_correction->spec.exchange.op == scf::FockOperator::LongRange) &&
-        range_correction->spec.exchange.omega > 0.0;
-    const bool resident_nonlocal_chunk =
-        rsh_chunk && device_nonlocal && nonlocal_correlation != nullptr;
-    device_chunk_mode =
-        options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-        !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
-        !precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1 &&
-        (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
-        provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
-    if (device_chunk_mode) {
-      const auto binding = device_chunk_binding();
-      if (!device_chunk_region.matches(binding))
-        device_chunk_region.bind(binding);
-      else if (device_chunk_region.failed())
-        device_chunk_region.recover();
-    } else if (device_chunk_region.bound()) {
-      device_chunk_region.invalidate();
-    }
     try {
+      // Native cold guesses arrive as a density too. Preserve their provenance
+      // instead of treating every non-null pointer as a warm or external seed.
+      prepare_phase_source((!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) &&
+                           !use_warm);
+      // The bounded device-control prototype is qualified only for strict-FP64
+      // direct all-electron RKS. AUTO must stay on the legacy host-controlled
+      // path so its FP32 mixed-J stage and independent FP64 refinement cannot be
+      // bypassed by an opt-in two-iteration device chunk. In addition to the
+      // original pure semilocal envelope, admit the manifest-qualified direct
+      // global-hybrid composition so exact K can remain inside the same bounded
+      // SolverRegion. Graph replay
+      // stays disabled for global hybrids until the exchange provider is
+      // independently capture-qualified.
+      const bool pure_semilocal_chunk = !has_exchange && !has_range_correction &&
+                                        options.semilocal_exchange_scale == 1.0 &&
+                                        options.semilocal_correlation_scale == 1.0;
+      const auto* chunk_family = semilocal_family_metadata_from_code(functional);
+      const double chunk_exact_exchange =
+          chunk_family ? chunk_family->cuda_global_hybrid_exact_exchange : -1.0;
+      const double chunk_semilocal_exchange =
+          chunk_family && chunk_family->component_coefficients_are_native_scales &&
+                  chunk_exact_exchange > 0.0
+              ? 1.0 - chunk_exact_exchange
+              : 1.0;
+      const bool curated_global_hybrid_chunk =
+          has_exchange && !has_range_correction && chunk_exact_exchange > 0.0 &&
+          options.semilocal_exchange_scale == chunk_semilocal_exchange &&
+          options.semilocal_correlation_scale == 1.0 &&
+          exchange_coefficient == -chunk_exact_exchange / (spins == 1 ? 2.0 : 1.0);
+      // Range-separated exact exchange already stays device-resident on the
+      // prepared Direct owner. Admit its ordinary two-call primary/correction
+      // composition to the same bounded region; graph replay remains disabled
+      // below because the range provider has not been capture-qualified.
+      const bool rsh_chunk =
+          has_exchange && has_range_correction && range_correction.has_value() &&
+          range_correction->backend == scf::FockBackend::Cuda &&
+          range_correction->spec.derivative_order == 0 && !range_correction->spec.coulomb.present &&
+          range_correction->spec.exchange.present &&
+          range_correction->spec.exchange.approximation == scf::FockApproximation::Exact &&
+          (range_correction->spec.exchange.op == scf::FockOperator::ShortRange ||
+           range_correction->spec.exchange.op == scf::FockOperator::LongRange) &&
+          range_correction->spec.exchange.omega > 0.0;
+      const bool resident_nonlocal_chunk =
+          rsh_chunk && device_nonlocal && nonlocal_correlation != nullptr;
+      device_chunk_mode =
+          options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
+          !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
+          !precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1 &&
+          (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
+          provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
+      if (device_chunk_mode) {
+        const auto binding = device_chunk_binding();
+        if (!device_chunk_region.matches(binding))
+          device_chunk_region.bind(binding);
+        else if (device_chunk_region.failed())
+          device_chunk_region.recover();
+      } else if (device_chunk_region.bound()) {
+        device_chunk_region.invalidate();
+      }
       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
       if (incremental_direct_jk)
@@ -1378,9 +1379,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } catch (...) {
       cudaStreamSynchronize(stream);
       is_failed = true;
+      retire_phase_source(false);
       if (device_chunk_mode && device_chunk_region.bound())
         device_chunk_region.mark_failure("CUDA KS device region preparation failed");
-      retire_phase_source(false);
       throw;
     }
     // Cache energies are anchored to the incumbent. A forced resident warm
