@@ -89,8 +89,11 @@ visibility. NVCC 12.9 targets sm_120, FP64 with contraction disabled; verified
 sccache 0.16.0 wraps each object compilation. Retained test receipts bind exact
 source/object/binary hashes, compiler/options/cache launcher, physical device,
 driver, Slurm job, output layout, and PTXAS resources. Observed kernels use
-56--254 registers with zero stack and zero spills. These are static point-probe
-resources, not profitability claims or production schedule admission.
+56--254 registers. The retained TPSS receipt has 120 stack bytes and 184 bytes
+each of spill stores and loads; the other probes have zero stack/spills. These
+are static point-probe resources, not profitability claims or production
+schedule admission. The earlier zero-spill summary was a reporting error, not
+what the retained TPSS measurement showed.
 
 The broader compiler/independent-fixture campaign passes all 558 non-catalog
 checks, including the 442 polarized/unpolarized imported E/vxc/fxc fixtures.
@@ -162,6 +165,36 @@ receipts must therefore be regenerated, not relabeled or silently promoted from
 those earlier measurements. The independent split-hybrid boundary oracle remains
 the authenticated Libxc 7.0.0 source archive, including the existing 113-bit PW
 cancellation check; successful code generation alone is not numerical evidence.
+
+The follow-up at source commit `5b54d660bd9114fcf0177ce8b7eca3e948716daa`
+passes 508 compiler/independent-oracle tests (including all 442 both-spin
+E/vxc/fxc fixtures and the split-hybrid boundary oracle), 33 CPU point tests,
+and 33 real CUDA point tests through Slurm job 1468. The complete CPU force/
+evidence suite passes all 43 tests in one immutable-checkout run; eleven receipts
+revalidate all 66 lifecycle rows, with maximum independent force error
+8.307147636443801e-9 Hartree/Bohr and energy error 4.187928448473599e-9 Hartree.
+These are measurements of that compiler closure, not future rebases or an
+ordinary CUDA XC/KS/force endpoint.
+
+An additional native release-resource compilation exposed cu++filt's typed
+template literals: CUDA 12.9 prints `(long)4` and `(bool)0` where GNU prints `4l`
+and `false`. The resource decoder now normalizes only those known integer casts
+before passing names to the unchanged active-region classifier. Unknown casts/
+values remain unsupported. In particular, mixed-precision kernels must not
+substitute for a missing strict-FP64 kernel. Compiler logs keep the original
+mangled names and resource measurements; no register/spill gate is relaxed.
+
+The existing `census_libxc_aot.py` owner also completes a full both-spin E/vxc
+CPU census: 442 registration variants form 433 exact-source groups, all 433
+object probes compile, and alias grouping saves nine build tasks without merging
+scientific provenance. Unique emitted CPU source is 9,461,460 bytes and aggregate
+object size is 6,719,496 bytes. The corresponding CUDA source-only census has
+442 variants, 433 groups, and 9,470,986 unique source bytes; its explicit 64-task
+budget selects 928,647 source bytes. This latter census does not compile or run
+those CUDA groups. Neither census measures installed AOT bundles, full supported
+toolchain/header/library cache closure, cold compile cost, or public admission.
+The existing cached object probes and their diagnostic recipe hashes are not
+new persistent-cache keys. Raw reports are retained under `.cache/1118-ci/`.
 
 ## References
 
