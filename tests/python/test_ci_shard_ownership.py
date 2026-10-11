@@ -117,6 +117,17 @@ def test_routine_shards_keep_expensive_files_and_no_extra_jobs(event: str) -> No
         assert path not in selections["runtime-heavy"]
 
 
+@pytest.mark.parametrize("shard", ("core-a", "core-b"))
+@pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))
+def test_nightly_rebalance_preserves_unrelated_core_file_parity(
+    shard: str, event: str
+) -> None:
+    _, routine, _ = _selection("pull_request", shard)
+    _, complete, _ = _selection(event, shard)
+    wb97mv = "tests/python/test_wb97mv_complete.py"
+    assert complete == [path for path in routine if path != wb97mv]
+
+
 def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert '--junitxml=".artifacts/pytest-${{ matrix.shard }}.xml"' in source
