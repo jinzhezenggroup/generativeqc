@@ -304,7 +304,6 @@ def measure_resources(
         timeout=60,
     )
     dump_path = directory / "cuobjdump.txt"
-    previous_dump = dump_path.read_text() if dump_path.exists() else None
     dump_path.write_text(dumped.stdout)
     with TemporaryDirectory(dir=directory) as extracted:
         subprocess.run(
