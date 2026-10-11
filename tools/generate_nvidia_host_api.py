@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Regenerate provider-free CUDA host API declarations from NVIDIA SDK headers.
+
+Only checked-in declarations are consumed by manylinux wheels: CUDA provider
+development packages and Clang are never runtime or wheel-build dependencies.
+SDK refreshes fail closed on missing symbols or unsupported C declarators.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+GENERATED = ROOT / "src/runtime/nvidia_host_api/generativeqc_nvidia_host_functions.h"
+API = re.compile(r"\b(cublas(?!Lt)[A-Z]\w*|cusolver(?:Dn|Get)[A-Z]\w*)\s*\(")
+DECL = re.compile(
+    r"\b(cublasStatus_t|cusolverStatus_t)\s+(cublas\w+|cusolver\w+)\s*\((.*?)\);",
+    re.S,
+)
+ALIAS = re.compile(
+    r"^#define\s+(cublas\w+|cusolver\w+)\s+(cublas\w+|cusolver\w+)\s*$",
+    re.M,
+)
+SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cu", ".cuh", ".h", ".hpp", ".py"}
+
+
+def project_uses(root: Path) -> set[str]:
+    """Discover called APIs, excluding separate xTB and SDK-header owners."""
+    used: set[str] = set()
+    for folder in (root / "src", root / "include", root / "python/generativeqc_compiler"):
+        if not folder.exists():
+            continue
+        for path in folder.rglob("*"):
+            if path.suffix not in SOURCE_SUFFIXES:
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel.startswith(("src/xtb/", "src/runtime/nvidia_host_api/")):
+                continue
+            used.update(API.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return used
+
+
+def declarations(source: str) -> set[str]:
+    return {match.group(2) for match in DECL.finditer(source)}
+
+
+def aliases(source: str) -> dict[str, str]:
+    return dict(ALIAS.findall(source))
+
+
+def check_usage(root: Path, target: Path) -> None:
+    """Cheap SDK-free check; run before spending time compiling CUDA wheels."""
+    source = target.read_text(encoding="utf-8")
+    declared = declarations(source)
+    declared.update(name for name, actual in aliases(source).items() if actual in declared)
+    missing = sorted(project_uses(root) - declared)
+    if missing:
+        raise ValueError(
+            "NVIDIA wheel header lacks called APIs: " + ", ".join(missing)
+            + "; run tools/generate_nvidia_host_api.py --sdk-include PATH --write"
+        )
+
+
+def run_clang(clang: str, includes: list[Path], header: str, *, ast: bool) -> str:
+    flags = [f"-I{path}" for path in includes]
+    if ast:
+        prefix = "cublas" if header == "cublas_v2.h" else "cusolver"
+        command = [
+            clang, "-x", "c++", "-std=c++17", "-fsyntax-only", *flags,
+            "-Xclang", "-ast-dump=json", "-Xclang", f"-ast-dump-filter={prefix}",
+        ]
+    else:
+        command = [clang, "-x", "c++", "-std=c++17", "-E", "-dM", *flags]
+    result = subprocess.run(
+        [*command, "-"], input=f"#include <{header}>\n", text=True,
+        capture_output=True, check=False, timeout=180,
+    )
+    if result.returncode:
+        raise ValueError(
+            f"Clang could not parse NVIDIA {header}; install matching SDK headers:\n"
+            + result.stderr[-6000:]
+        )
+    return result.stdout
+
+
+def ast_objects(output: str) -> list[dict[str, Any]]:
+    """Clang's ast-dump-filter emits separate adjacent JSON objects."""
+    decoder = json.JSONDecoder()
+    objects: list[dict[str, Any]] = []
+    position = 0
+    while position < len(output):
+        while position < len(output) and output[position].isspace():
+            position += 1
+        if position == len(output):
+            break
+        parsed, position = decoder.raw_decode(output, position)
+        if not isinstance(parsed, dict):
+            raise ValueError("expected Clang declaration object")
+        objects.append(parsed)
+    return objects
+
+
+def sdk_functions(
+    clang: str, includes: list[Path], header: str
+) -> dict[str, tuple[str, ...]]:
+    prefix = "cublas" if header == "cublas_v2.h" else "cusolver"
+    found: dict[str, tuple[str, ...]] = {}
+
+    def visit(node: Any) -> None:
+        if isinstance(node, list):
+            for entry in node:
+                visit(entry)
+            return
+        if not isinstance(node, dict):
+            return
+        name = node.get("name", "")
+        if node.get("kind") == "FunctionDecl" and name.startswith(prefix):
+            signature = node.get("type", {}).get("qualType", "")
+            result = signature.split(" (", 1)[0]
+            if result not in ("cublasStatus_t", "cusolverStatus_t"):
+                return
+            arguments = tuple(
+                child["type"]["qualType"]
+                for child in node.get("inner", [])
+                if child.get("kind") == "ParmVarDecl"
+            )
+            if any("(" in arg or "[" in arg for arg in arguments):
+                raise ValueError(f"unsupported function-pointer/array parameter: {name}")
+            previous = found.setdefault(name, (result, *arguments))
+            if previous != (result, *arguments):
+                raise ValueError(f"conflicting NVIDIA SDK prototypes: {name}")
+        visit(node.get("inner", []))
+
+    for obj in ast_objects(run_clang(clang, includes, header, ast=True)):
+        visit(obj)
+    if not found:
+        raise ValueError(f"NVIDIA SDK yielded no functions from {header}")
+    return found
+
+
+def canonical_type(source: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"\s*([*&])\s*", r"\1", source.strip()))
+
+
+def render(decls: dict[str, tuple[str, ...]], maps: dict[str, str]) -> str:
+    output = [
+        "#pragma once", "",
+        "// Generated by tools/generate_nvidia_host_api.py from NVIDIA CUDA headers.",
+        "// Do not hand-edit function signatures; regenerate using the pinned SDK.",
+        "// CUDA provider libraries remain lazy runtime dependencies, not wheel link inputs.",
+        "", "// clang-format off",
+    ]
+    for name in sorted(decls):
+        signature = decls[name]
+        params = ", ".join(
+            f"{canonical_type(kind)} arg{i}" for i, kind in enumerate(signature[1:])
+        )
+        output.append(f"{signature[0]} {name}({params or 'void'});")
+    output.append("")
+    for name, target in sorted(maps.items()):
+        output.append(f"#define {name} {target}")
+    output.extend(["// clang-format on", ""])
+    return "\n".join(output)
+
+
+def generate(root: Path, target: Path, clang: str, includes: list[Path]) -> str:
+    current = target.read_text(encoding="utf-8")
+    needed = project_uses(root) | declarations(current) | set(aliases(current))
+    sdk_aliases: dict[str, str] = {}
+    functions: dict[str, tuple[str, ...]] = {}
+    for header in ("cublas_v2.h", "cusolverDn.h"):
+        functions.update(sdk_functions(clang, includes, header))
+        sdk_aliases.update(aliases(run_clang(clang, includes, header, ast=False)))
+    wanted: dict[str, tuple[str, ...]] = {}
+    chosen_aliases: dict[str, str] = {}
+    for name in sorted(needed):
+        resolved = sdk_aliases.get(name, name)
+        if resolved not in functions:
+            raise ValueError(f"{name}: missing official CUDA declaration ({resolved})")
+        wanted[resolved] = functions[resolved]
+        if resolved != name:
+            chosen_aliases[name] = resolved
+    return render(wanted, chosen_aliases)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--sdk-include", action="append", type=Path, default=[],
+        help="NVIDIA toolkit, cuBLAS or cuSOLVER include path (repeatable)",
+    )
+    parser.add_argument("--clang", default="clang++")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--check-usage", action="store_true", help="fast SDK-free CI check")
+    mode.add_argument("--write", action="store_true", help="regenerate from NVIDIA SDK")
+    mode.add_argument("--check-sdk", action="store_true", help="verify checked-in SDK snapshot")
+    args = parser.parse_args()
+    try:
+        if args.check_usage:
+            check_usage(ROOT, GENERATED)
+        else:
+            if not args.sdk_include:
+                raise ValueError("SDK refresh requires --sdk-include (repeat all header paths)")
+            generated = generate(ROOT, GENERATED, args.clang, args.sdk_include)
+            if args.write:
+                GENERATED.write_text(generated, encoding="utf-8")
+            elif generated != GENERATED.read_text(encoding="utf-8"):
+                raise ValueError("generated NVIDIA ABI is stale; run with --write")
+            check_usage(ROOT, GENERATED)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        print(f"NVIDIA host ABI: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
