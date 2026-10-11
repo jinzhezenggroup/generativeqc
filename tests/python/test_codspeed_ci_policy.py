@@ -49,8 +49,8 @@ def test_codspeed_pr_tier_matches_master_and_stays_change_aware() -> None:
     assert "grid_shape=(12, 4, 8)" in benchmark
     assert "test_cpu_pbe_force_walltime" in benchmark
     assert 'properties=("energy", "forces")' in benchmark
-    assert "test_cpu_rhf_changed_geometry_pair_walltime" in benchmark
-    assert "prepare_batch([_WATER], warm_start=True)" in benchmark
+    assert "test_cpu_rhf_changed_geometry_pair_walltime" not in benchmark
+    assert "prepare_batch([_WATER], warm_start=True)" not in benchmark
 
 
 def test_shared_pr_tier_preserves_master_collection_order(
@@ -74,10 +74,9 @@ def test_shared_pr_tier_preserves_master_collection_order(
     assert [name for name in namespace if name.startswith("test_")] == [
         "test_cpu_warm_endpoint_walltime",
         "test_cpu_pbe_force_walltime",
-        "test_cpu_rhf_changed_geometry_pair_walltime",
     ]
-    # The two unparameterized endpoints make five PR-tier benchmarks. Full
-    # scheduled/manual coverage additionally retains the larger RHF case.
+    # The force endpoint plus three warm cases make four PR/master benchmarks.
+    # Scheduled/manual runs additionally retain the larger RHF case.
     monkeypatch.setenv("GENERATIVEQC_CODSPEED_TIER", "full")
     monkeypatch.setenv("GENERATIVEQC_CODSPEED_EXTRA_CASES", "")
     assert [case.name for case in namespace["_active_cases"]()] == [
