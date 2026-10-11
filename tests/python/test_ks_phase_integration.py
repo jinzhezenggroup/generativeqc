@@ -40,19 +40,23 @@ def _environment() -> dict[str, typing.Any]:
 
 def _load(name: str) -> typing.Any:
     namespace = _environment()
-    # Keep the real cache cap with the extracted function; do not replace it
-    # with an independent test value or skip the CPU inventory branch.
+    # Keep the real cache cap and native-query helper with the extracted
+    # function; do not stub out discovery or skip the CPU inventory branch.
     constants = [
         node
         for node in _tree().body
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name) and target.id == "_CPU_AO_GRID_CACHE_CAP"
+            isinstance(target, ast.Name)
+            and target.id in {"_CPU_AO_GRID_CACHE_CAP", "_CPU_HOST_INVENTORY_KEYS"}
             for target in node.targets
         )
     ]
-    assert len(constants) == 1
-    module = ast.Module(body=[*constants, _function(name)], type_ignores=[])
+    assert len(constants) == 2
+    module = ast.Module(
+        body=[*constants, _function("_native_cpu_host_inventory"), _function(name)],
+        type_ignores=[],
+    )
     exec(compile(module, "inventory", "exec"), namespace)  # noqa: S102
     return namespace[name]
 

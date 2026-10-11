@@ -24,6 +24,11 @@ from generativeqc import Calculator, GridSpec, KsOptions, _native
 from generativeqc.batch import PreparedBatch
 from generativeqc_compiler.common.resources import CpuResourceObservation
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 ATOMS = [("O", (0.1, -0.1, 0.0)), ("H", (0.1, 0.2, 1.7)), ("H", (1.6, -0.2, -0.5))]
 MOVED = [[(0.11, -0.1, 0.02), (0.1, 0.22, 1.71), (1.61, -0.21, -0.5)]]
 
@@ -105,7 +110,7 @@ def endpoint(
 def main() -> None:
     """Emit raw paired samples, semantic counts, provenance and separate traces."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--spin", choices=("rks", "uks"), default="uks")
     parser.add_argument("--fitting", choices=("none", "cpu", "both"), default="both")
     parser.add_argument("--repeats", type=int, default=5)
