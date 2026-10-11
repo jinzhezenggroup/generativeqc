@@ -693,14 +693,6 @@
       "path": "benchmarks/results/scf-direct-native-rtx5090/validation.json",
       "role": "decision-or-audit-record",
       "sha256": "af85685a1e73345ce5baa046faf84a86f1be88c473eb07cbb4d6b9b4d2fcdffd"
-    },
-    {
-      "bytes": 177463,
-      "classification": "required-compact-accepted-evidence",
-      "family": "weighted-eri-144",
-      "path": "benchmarks/results/weighted-eri-144/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "ccbf6dd63600d111015879194c1bae05cef12bad5e874cf8570af54dfebacdd7"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
