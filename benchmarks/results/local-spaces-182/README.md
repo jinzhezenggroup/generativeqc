@@ -2,7 +2,7 @@
 
 # Restricted local-space evidence (#182)
 
-The [report](report.json) and [array archive](states.npz) retain native RHF
+The [losslessly gzip-compressed report](report.json.gz) and [array archive](states.npz) retain native RHF
 reference exports, localized occupied rotations/Fock couplings, projected
 virtual spaces, pair spectra/ranks, amplitudes, integrals, actual MP2 differences,
 timings and numeric-storage reservations. This is a CPU prototype of restricted
