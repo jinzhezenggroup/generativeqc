@@ -106,7 +106,8 @@ launcher. `cache`, `max_bytes`, `max_work`, `max_nodes` and `compile_timeout`
 control artifacts, resources and finite compiler lifetime. Forward and
 derivative programs pass the same backend admission. Native CPU supports float64
 contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
-`sqrt` and exact `pow`. Other operations fail closed; full eager conformance does
+`sqrt` and exact `pow`; CUDA admits float32 and float64 for these scalar functions.
+Other operations fail closed; full eager conformance does
 not imply full compiler coverage. Higher-order public transforms are unsupported.
 
 Inputs are non-differentiable by default. When the lowered program will be used
@@ -263,6 +264,34 @@ request and the unchanged scheduler-assigned `CUDA_VISIBLE_DEVICES`. Select
 `--backend cuda` for the benchmark; source/planner checks are not device evidence.
 Pass `--cuda-arch` matching the selected GPU when it differs from the default
 `sm_120`; this selects the tensor compiler target without changing Slurm visibility.
+SSH host aliases and Slurm node names are distinct: these machines report
+`node1`, `node2`, `node4`, and `node5` to the scheduler. Both verified naming
+forms are admitted; `n3`/`node3` remains excluded during maintenance.
+
+On an allowed remote machine with a source-matched CUDA library and the verified
+compiler-cache launcher/toolkit on `PATH`, run the real-device acceptance and
+complete endpoint benchmark in the same allocation. For example, after connecting
+to `n4` and changing to that machine's checkout:
+
+```bash
+srun --partition=main --nodelist=node4 --gres=gpu:5090:1 \
+  --nodes=1 --ntasks=1 --cpus-per-task=8 --mem=24G --time=00:20:00 \
+  bash -lc '
+    set -e
+    export PYTHONPATH=python:.
+    export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+    export GENERATIVEQC_ARRAY_API_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_120
+    python -m pytest -q tests/python/test_array_api_native_cuda.py \
+      tests/python/test_array_api_molecular.py
+    python benchmarks/array_api_rhf_endpoint.py --backend cuda --cuda-arch sm_120 \
+      --molecule water --repeats 10 --output /tmp/array-api-rhf-gpu.json
+  '
+```
+
+The scheduled molecular gate checks H2/STO-3G, HeH+/def2-SVP and water/STO-3G
+gradients against independent central energy differences, plus compiled nonlinear
+geometry composition and a mutation-safe reusable VJP. A CUDA library build or
+planner test alone does not satisfy this gate.
 
 ## Scientific metadata remains explicit
 

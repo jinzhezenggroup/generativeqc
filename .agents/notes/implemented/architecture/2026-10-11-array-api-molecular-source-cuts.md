@@ -77,8 +77,8 @@ execution; failed native calls publish no source diagnostics or successful resul
   energy/gradient difference, exactly twelve SCF iterations on every path.
   `/tmp/gqc-array-api-rhf-cpu-endpoint.json` retains cold time and raw samples.
   This is a bounded CPU observation, not a GPU or universal 5% guarantee.
-- No allowed GPU was available: Slurm exposed only drained node3; no actual
-  GPU test/benchmark ran. Opt-in tests and a scheduler-guarded complete endpoint
+- At the initial local-only check, Slurm exposed only drained node3; no actual
+  GPU test/benchmark ran at that gate. Opt-in tests and a scheduler-guarded endpoint
   benchmark are provided. Peak memory and complete exact-J/K work counters remain
   unmeasured; the script explicitly reports these qualification gaps.
 
@@ -112,7 +112,35 @@ tensor routes. No remote history was force-pushed.
   precision diagnostics and qualification gaps are retained in
   `/tmp/gqc-array-api-rhf-synced-cpu-endpoint.json`.
 - Final test/standard/doc logs use the `/tmp/gqc-array-api-rhf-qualified-*`
-  prefix. No GPU ran; only drained node3 remains visible through Slurm.
+  prefix. No GPU ran at this local gate; its scheduler exposed only drained node3.
+
+## Remote CUDA qualification and the FP32 admission fix
+
+SSH discovery confirms independent Slurm clusters on n1/n2/n4/n5. Their scheduler
+names are node1/node2/node4/node5, not the SSH aliases. Admit both verified forms
+in tests/benchmarks, while rejecting n3/node3 and unscheduled execution. Keep
+logical device zero and the scheduler's unchanged visibility. n2 device-discovery
+job 2893 reports an NVML driver/library mismatch; do not confuse that infrastructure
+failure with source qualification. n1 and n4 have working RTX 5090 allocations.
+
+The first real CUDA Array API gate, n4 job 764, exposes a previously dormant
+failure: FP32 `exp` is rejected by the planner although the existing typed emitter
+already owns expf/logf/sqrtf/powf and typed AD. Removing only the FP64 admission
+restriction reuses that owner and the existing finite-domain/overflow diagnostics;
+no new formulas, relaxed fast-math policy or host/reference fallback are added.
+Molecular sources remain FP64-only. Test both ordinary and resident primal/JVP/VJP
+under unfused, fused and recomputed schedules, plus error recovery and stale-output
+rejection, before treating FP32 scalar functions as supported.
+
+- n4 job 765: **24 passed** in 375.07 s; actual RTX 5090 execution for float32 and
+  float64, including the original failing frontend test and the full typed
+  transcendental suite. Raw log: `/tmp/gqc-array-api-rhf-n4-typed-tensor-gate.txt`.
+  The source is `d15383b493b7c77032aefb7a5eefd43985b2116e` plus the retained
+  CUDA-plan/test patch file hashes; final source-matched endpoint evidence follows.
+- Host scalar/CUDA-plan/FP32/frontend gate: **178 passed, 21 scheduled GPU skips**.
+  Molecular/native-AD/boundary/scheduler host gate: **59 passed, four GPU skips**.
+  Compiler structure remains 521 modules, zero dependency errors; scoped Ruff and
+  Sphinx warnings-as-errors pass. Remote builds/JIT use verified ccache 4.5.1.
 
 ## Revisit when
 

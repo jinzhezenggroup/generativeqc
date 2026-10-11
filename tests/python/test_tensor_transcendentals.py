@@ -297,15 +297,16 @@ def test_nonlinear_symmetry_metadata_and_packed_ad(
 
 
 @pytest.mark.parametrize("op,exponent", CASES)
-def test_cuda_emission_and_dtype_gate_without_a_device(
-    op: typing.Any, exponent: typing.Any
+@pytest.mark.parametrize("dtype", ("float32", "float64"))
+def test_cuda_emission_and_typed_transcendentals_without_a_device(
+    op: typing.Any, exponent: typing.Any, dtype: str
 ) -> None:
     from generativeqc_compiler.common.cuda_target import cuda_target_info
     from generativeqc_compiler.tensor.cuda_emit import emit_cuda
     from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
     from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
 
-    x = _input((3,))
+    x = _input((3,), dtype=dtype)
     graph = Program({"out": add(_operation(op, x, exponent), x)})
     target = cuda_target_info("sm_80")
     for schedule in (
@@ -319,12 +320,10 @@ def test_cuda_emission_and_dtype_gate_without_a_device(
         ):
             plan = plan_cuda(program, target, schedule=schedule)
             source = emit_cuda(plan)
-            assert ("::pow(" if op == "power" else f"::{op}(") in source
+            suffix = "f" if dtype == "float32" else ""
+            function = "pow" if op == "power" else op
+            assert f"::{function}{suffix}(" in source
             assert "transcendental domain error" in resident_source(plan)
-    with pytest.raises(ValueError, match="float64"):
-        plan_cuda(
-            Program({"out": _operation(op, _input(dtype="float32"), exponent)}), target
-        )
 
 
 @pytest.mark.parametrize(
