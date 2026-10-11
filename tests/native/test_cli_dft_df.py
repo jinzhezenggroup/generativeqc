@@ -209,7 +209,9 @@ class NativeDftDfCliTests(unittest.TestCase):
             if fitting == "none" and not DIRECT_AOT_ENABLED:
                 continue
             with self.subTest(fitting=fitting):
-                self.assert_pbe0_force_reconverged_finite_difference(fitting, "b3lyp-rks")
+                self.assert_pbe0_force_reconverged_finite_difference(
+                    fitting, "b3lyp-rks"
+                )
 
     def assert_pbe0_force_reconverged_finite_difference(
         self, fitting: str, method: str = "pbe0-rks"
