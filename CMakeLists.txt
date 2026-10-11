@@ -19,6 +19,12 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCTests.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSourceIdentity.cmake")
 
 option(GENERATIVEQC_ENABLE_CUDA "Build the CUDA runtime backend" ON)
+option(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA
+       "Coalesce disjoint native FP64 scratch slots across symbolic capacities" ON)
+set(_generativeqc_native_arena_args)
+if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
+  list(APPEND _generativeqc_native_arena_args --cross-size-arena)
+endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
 option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE

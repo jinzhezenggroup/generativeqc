@@ -49,7 +49,14 @@ from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
-from tools.generate_rccsd_native import _cuda_program, _dim, _required_function, _size
+from tools.generate_rccsd_native import (
+    _cuda_program,
+    _dim,
+    _required_function,
+    _size,
+    add_cross_size_arena_argument,
+    cross_size_arena_candidate,
+)
 
 if typing.TYPE_CHECKING:
     from collections.abc import Mapping
@@ -1395,16 +1402,18 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for suffix, emitter in (
-        (".hpp", header),
-        ("_cuda.cuh", cuda_header),
-        ("_cuda.cu", cuda_source),
-    ):
-        (args.output_dir / ("generated_df_occupied_triples" + suffix)).write_text(
-            emitter()
-        )
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for suffix, emitter in (
+            (".hpp", header),
+            ("_cuda.cuh", cuda_header),
+            ("_cuda.cu", cuda_source),
+        ):
+            (args.output_dir / ("generated_df_occupied_triples" + suffix)).write_text(
+                emitter()
+            )
 
 
 if __name__ == "__main__":

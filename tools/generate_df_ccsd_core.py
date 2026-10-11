@@ -24,6 +24,8 @@ from tools.generate_rccsd_native import (
     _cpu_function,
     _cuda_program,
     _required_function,
+    add_cross_size_arena_argument,
+    cross_size_arena_candidate,
     iteration_program,
 )
 
@@ -155,14 +157,16 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for name, producer in (
-        ("generated_df_ccsd_core_cpu.hpp", cpu_header),
-        ("generated_df_ccsd_core_cuda.cuh", cuda_header),
-        ("generated_df_ccsd_core_cuda.cu", cuda_source),
-    ):
-        (args.output_dir / name).write_text(producer())
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for name, producer in (
+            ("generated_df_ccsd_core_cpu.hpp", cpu_header),
+            ("generated_df_ccsd_core_cuda.cuh", cuda_header),
+            ("generated_df_ccsd_core_cuda.cu", cuda_source),
+        ):
+            (args.output_dir / name).write_text(producer())
 
 
 if __name__ == "__main__":

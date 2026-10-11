@@ -155,13 +155,14 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         r"""
 void allocation_fallback(Storage& storage, bool core = false, bool audit = false) {
   struct { bool df_matrix_gemm = true, df_auxiliary_reduction = true, df_core_reuse = false, df_audit_matrix_gemm = false; } metrics;
-  std::size_t cursor = 16, fallback_cursor = 4;
-  auto capacity = [] {};
-  auto scalar_plan = [&] { metrics.df_matrix_gemm = false; cursor = 8; };
+  std::size_t cursor = 16, fallback_cursor = 4, allocation_bytes = 16;
+  std::size_t scratch_elements = 2, scratch = 2;
+  auto capacity = [&] { allocation_bytes = cursor; };
+  auto scalar_plan = [&] { metrics.df_matrix_gemm = false; cursor = 8; capacity(); };
   metrics.df_core_reuse = core;
   metrics.df_audit_matrix_gemm = audit;
-  auto drop_core_reuse = [&] { metrics.df_core_reuse = false; cursor = 12; };
-  auto drop_audit = [&] { metrics.df_audit_matrix_gemm = false; cursor = 10; };
+  auto drop_core_reuse = [&] { metrics.df_core_reuse = false; cursor = 12; capacity(); };
+  auto drop_audit = [&] { metrics.df_audit_matrix_gemm = false; cursor = 10; capacity(); };
   fail_first_allocation = true;
 """
         + source[start:end]

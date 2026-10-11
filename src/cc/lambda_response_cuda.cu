@@ -184,8 +184,9 @@ class CudaLambdaActions {
     std::size_t cursor = 0;
     for (std::size_t index = 0; index < host.size(); ++index)
       device_layout_.inputs[index] = reserve(cursor, bytes(host[index]->size()));
-    device_layout_.replay_arena =
-        reserve(cursor, bytes(generated::replay_arena_elements(p.nocc, p.nvir)));
+    const auto replay_elements = generated::replay_arena_elements(p.nocc, p.nvir);
+    if (!options.serial_scratch_reuse)
+      device_layout_.replay_arena = reserve(cursor, bytes(replay_elements));
     auto response_elements =
         std::max({generated::lambda_rhs_arena_elements(p.nocc, p.nvir),
                   generated::lambda_transpose_arena_elements(p.nocc, p.nvir),
@@ -203,7 +204,12 @@ class CudaLambdaActions {
                     generated::parameter_ovoo_arena_elements(p.nocc, p.nvir),
                     generated::parameter_oooo_arena_elements(p.nocc, p.nvir),
                     generated::parameter_vvvv_arena_elements(p.nocc, p.nvir)});
-    device_layout_.response_arena = reserve(cursor, bytes(response_elements));
+    // Fresh replay publishes its borrowed outputs before any Lambda action;
+    // all later actions and copies use this same stream without a new fence.
+    device_layout_.response_arena = reserve(
+        cursor, bytes(options.serial_scratch_reuse ? std::max(replay_elements, response_elements)
+                                                   : response_elements));
+    if (options.serial_scratch_reuse) device_layout_.replay_arena = device_layout_.response_arena;
     device_layout_.energy_seed = reserve(cursor, sizeof(double));
     device_layout_.residual_one = reserve(cursor, bytes(layout_.n1));
     device_layout_.residual_two = reserve(cursor, bytes(layout_.n2));

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
-from tools.generativeqc_validation.record import load_publication_record
+from tools.generativeqc_validation.record import load_json, load_publication_record
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = ROOT / "benchmarks/results/df-triples-independent-pair-20261011"
@@ -46,7 +46,7 @@ def retained() -> tuple[dict, dict[str, bytes]]:
 def repaired_source_hashes(
     retained: tuple, tmp_path_factory: pytest.TempPathFactory
 ) -> dict[str, str]:
-    """Bind only the exact host-validated allocation repair to measured bytes."""
+    """Reconstruct reviewed later deltas without changing measured GPU identities."""
     executable = shutil.which("git")
     if not executable:
         pytest.skip("Git patch application is required for source reconstruction")
@@ -100,10 +100,50 @@ def repaired_source_hashes(
         assert hashlib.sha256(repaired).hexdigest() == row["repaired_sha256"]
         assert repaired == (ROOT / relative).read_bytes()
         result[relative] = row["repaired_sha256"]
+
+    # The independent-pair receipt predates #2269's cross-size CLI plumbing.
+    # Reconstruct that exact later delta from its separately retained source
+    # patch. This binds current bytes; it does not requalify them using the old
+    # independent-pair GPU/library hashes or transfer its prototype timing.
+    generator = "tools/generate_df_occupied_triples.py"
+    measured = restored["remote/source/" + generator]
+    assert (
+        hashlib.sha256(measured).hexdigest()
+        == evidence["qualification"]["build"]["source_sha256"]["source/" + generator]
+    )
+    arena = load_json(
+        ROOT / "benchmarks/results/native-memory-arena-20261011/evidence.json.xz"
+    )
+    assert arena["base_commit"] == "a70ebfc61644910a35916790febd51aaaffc293e"
+    generator_patches = [
+        "diff --git " + part
+        for part in arena["source_patch"].split("diff --git ")[1:]
+        if part.startswith(f"a/{generator} b/{generator}\n")
+    ]
+    assert len(generator_patches) == 1
+    generator_patch = generator_patches[0].encode()
+    assert len(generator_patch) == 1760
+    assert hashlib.sha256(generator_patch).hexdigest() == (
+        "f13cbd5d11cfe97e925aa0dbfeaaf45968b1238e3ae99e097013c013ba0f49fe"
+    )
+    destination = source / generator
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(measured)
+    for options in (["--check"], []):
+        subprocess.run(
+            [executable, "apply", *options, "--whitespace=error-all"],
+            input=generator_patch,
+            cwd=source,
+            check=True,
+            capture_output=True,
+        )
+    current = destination.read_bytes()
+    assert current == (ROOT / generator).read_bytes()
+    result[generator] = hashlib.sha256(current).hexdigest()
     return result
 
 
-def test_canonical_publication_binds_current_sources_not_prototype_timing(
+def test_publication_binds_measured_sources_and_reviewed_deltas_not_prototype_timing(
     retained: tuple,
     repaired_source_hashes: dict[str, str],
 ) -> None:
