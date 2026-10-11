@@ -31,6 +31,10 @@ POINT_PATH = "python/generativeqc_compiler/dft/ao_cuda.py"
 POINT_ANCHOR = (
     "functional == static_cast<I>(SemilocalFamily::Pbe) && !response ? 32 : 128;"
 )
+POINT_POLICY_ANCHOR = (
+    "constexpr I feature_terms = point_feature_terms(functional);\n"
+    "  constexpr I threads = point_threads(feature_terms, response);"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,20 +342,32 @@ def render_trial(sources: dict[str, str], trial: CudaScheduleTrial) -> dict[str,
         )
     if trial.pbe_point_threads is not None:
         source = sources[POINT_PATH]
-        strings = [
-            node
+        anchors = (POINT_ANCHOR, POINT_POLICY_ANCHOR)
+        expressions = [
+            anchor
             for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and POINT_ANCHOR in node.value
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            for anchor in anchors
+            if anchor in node.value
         ]
-        _only(strings, "physical-PBE point launch expression")
-        if source.count(POINT_ANCHOR) != 1:
+        anchor = _only(expressions, "physical-PBE point launch expression")
+        if sum(source.count(item) for item in anchors) != 1:
             raise ValueError("ambiguous physical-PBE point launch expression")
-        candidate = source.replace(
-            POINT_ANCHOR,
-            POINT_ANCHOR.replace("? 32 : 128;", f"? {trial.pbe_point_threads} : 128;"),
-        )
+        if anchor == POINT_ANCHOR:
+            replacement = anchor.replace(
+                "? 32 : 128;", f"? {trial.pbe_point_threads} : 128;"
+            )
+        else:
+            # Keep this historical trial axis PBE-only. Rewriting the shared
+            # ingredient policy would also change other GGAs and split consumers.
+            # Both ordinary and equal-spin PBE launches consume this same width;
+            # response, other functionals and separate batch launchers stay intact.
+            replacement = anchor.replace(
+                "point_threads(feature_terms, response);",
+                "functional == static_cast<I>(SemilocalFamily::Pbe) && !response "
+                f"? {trial.pbe_point_threads} : point_threads(feature_terms, response);",
+            )
+        candidate = source.replace(anchor, replacement)
         ast.parse(candidate)
         changed[POINT_PATH] = candidate
     return {path: text for path, text in changed.items() if text != sources[path]}
