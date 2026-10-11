@@ -75,6 +75,56 @@ This is historical intermediate-snapshot evidence, not final source binding.
 The final source adds totals-stride overflow protection, explicit disabled
 packaging, retained prepared identity and direct single/batched point probes.
 
+### Final source-matched qualification
+
+Scientific/native source: `fad1b85fa2aafda4162e4e758d92f3f98cc38453`.
+Both remote source trees were checked against the complete tracked-file SHA256
+manifest before execution. The n5 build uses NVCC 12.9.86, sm_120, release `-O3`,
+`--fmad=false` and verified sccache 0.16.0; the full AOT option is explicitly on.
+The native executable SHA256 is
+`e0b2aae8874c5b75d000259ad6fdce277195fcf0bfef2549dd60b036b75a78d7`.
+
+- **209 host/compiler tests pass**; the 100 real-device cases are intentionally
+  skipped in that host run. Public API docstrings and the compiler ownership
+  checker pass (516 modules, zero dependency errors).
+- **Slurm job 7423**, n1 RTX 5090, passes all **100 real-device tests**: 44 direct
+  AOT E/vxc single/batched layout gates (including 37-point / 16-point partial
+  tiles, vacuum, empty spin, floors and FHC), 12 negative-density rejection
+  gates, and 44 independent fixed-density molecular XC receipts. All eleven
+  registrations cover both spins and original/changed geometry. The fixed-XC
+  error maxima equal the intermediate values above. Repeated submissions mean
+  ordinary-stream physical recalculation, not CUDA Graph/KS replay admission.
+- The native curated LDA/PBE/r2SCAN/WB97M-V E/V and state suite also passes in
+  job 7423 after the traversal refactor.
+- **Slurm job 7427** runs Compute Sanitizer memcheck on automatic MGGA_C_TPSS
+  UKS at changed geometry and on the curated native suite: **zero errors**.
+  Device identity: RTX 5090, driver 580.95.05; scheduler visibility is preserved.
+- All **197 registrations / 394 ordinary single/batched kernels** compile in
+  the 32 shared AOT objects. Generated CUDA source is **6,774,685 bytes**;
+  aggregate CUDA objects are **90,876,592 bytes**; the complete test executable
+  is **100,127,440 bytes**. These are size measurements, not an installed
+  bundle, executable alias-reuse proof or cold-compile/endpoint speed claim.
+- Register range is **48–255**, maximum stack **256 bytes**, maximum spill store
+  **176 bytes**, maximum spill load **224 bytes**. **Eight variants spill**:
+  both entries of MGGA_C_R2SCAN01, MGGA_C_REVTM, MGGA_C_REVTPSS and GGA_C_OPTC.
+  This broad compile-only census is not full-catalog numerical or schedule
+  admission; resource/evidence owners must decide future packaged variants.
+- The exact current CMake grid/XC source compiles separately with release flags.
+  Its five active PBE scope pressure sets (`ao_jets`, `density_product`,
+  `density_features`, `xc_points`, `vxc_contraction`) are identical to the
+  source-82c34b929 retained receipt; no mixed scope supplies a missing FP64 one.
+  New object size **9,327,640 bytes**, binding
+  `0049108cd44ffbcfaec15f02e3ed97caea0f19c99ebf8884f71f878aa2e521dc`.
+- A fresh default-off CMake configuration compiles only the inert CXX registry,
+  with no automatic CUDA scientific shard in that target.
+
+Ignored artifacts live under `.cache/1118-runtime/` in the runtime worktree:
+`qualified-source-manifest.txt`, `compiler-final.log`, `final-gpu/`,
+`final-native/automatic-aot-resource-summary.json` and
+`final-native/native-resources-final/report.json`. Remote frozen inputs/results
+are n5 `qc-1118-native-v1-20261011` (compiled final bytes) and n1
+`qc-1118-native-v3-20261011` (qualification). No release/tag/asset is published.
+
 Source/host tests protect one ABI/traversal owner, deterministic identities,
 continued public rejection and curated capability behavior. Preserve curated
 scientific/response paths with numerical/resource checks after the traversal
