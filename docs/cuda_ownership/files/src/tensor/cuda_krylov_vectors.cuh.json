@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_krylov_vectors.cuh",
+  "reason": "Shared FP64 resident Krylov vector primitives reuse the bounded contraction context for provider lifetime, explicit workspace, stream modes and execution provenance; method equations remain with response adapters.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

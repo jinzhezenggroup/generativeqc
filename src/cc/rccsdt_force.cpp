@@ -603,7 +603,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     const hf::PhysicalReference& reference, const Problem& problem, const SolverResult& cc_result,
     std::span<const double> eps_o, std::span<const double> eps_v, std::size_t max_bytes,
     bool include_triples, bool cuda_derivative, int device_id, std::size_t derivative_stage_budget,
-    double denominator_threshold) {
+    double denominator_threshold, bool resident_lambda_krylov = false) {
   validate_problem(problem);
 #if !GENERATIVEQC_HAS_CUDA
   if (cuda_derivative) throw std::runtime_error("RCCSD(T) CUDA force is unavailable in this build");
@@ -680,6 +680,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   lambda_options.gmres.absolute_tolerance = 1e-12;
   lambda_options.gmres.relative_tolerance = 0.0;
   lambda_options.gmres.max_workspace_bytes = max_bytes;
+  lambda_options.cuda_resident_krylov = cuda_derivative && resident_lambda_krylov;
   LambdaResult corrected;
   ParameterWeights parameters;
 #if GENERATIVEQC_HAS_CUDA
@@ -1052,20 +1053,22 @@ RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget) {
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov) {
   return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
-                                  max_bytes, false, true, device_id, derivative_stage_budget,
-                                  1e-10);
+                                  max_bytes, false, true, device_id, derivative_stage_budget, 1e-10,
+                                  resident_lambda_krylov);
 }
 
 RccsdtForceResult rccsd_force_cuda(const core::System& system,
                                    const hf::PhysicalReference& reference, const Problem& problem,
                                    const SolverResult& cc_result, std::span<const double> eps_o,
                                    std::span<const double> eps_v, std::size_t max_bytes,
-                                   int device_id, std::size_t derivative_stage_budget) {
+                                   int device_id, std::size_t derivative_stage_budget,
+                                   bool resident_lambda_krylov) {
   posthf::RawSource source(system);
   return rccsd_force_cuda(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                          device_id, derivative_stage_budget);
+                          device_id, derivative_stage_budget, resident_lambda_krylov);
 }
 
 RccsdtForceResult rccsdt_force_cpu(const core::System& system,
@@ -1094,10 +1097,10 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold) {
+                                    double denominator_threshold, bool resident_lambda_krylov) {
   return relaxed_rccsd_force_impl(system, source, reference, problem, cc_result, eps_o, eps_v,
                                   max_bytes, true, true, device_id, derivative_stage_budget,
-                                  denominator_threshold);
+                                  denominator_threshold, resident_lambda_krylov);
 }
 
 RccsdtForceResult rccsdt_force_cuda(const core::System& system,
@@ -1105,10 +1108,11 @@ RccsdtForceResult rccsdt_force_cuda(const core::System& system,
                                     const SolverResult& cc_result, std::span<const double> eps_o,
                                     std::span<const double> eps_v, std::size_t max_bytes,
                                     int device_id, std::size_t derivative_stage_budget,
-                                    double denominator_threshold) {
+                                    double denominator_threshold, bool resident_lambda_krylov) {
   posthf::RawSource source(system);
   return rccsdt_force_cuda(system, source, reference, problem, cc_result, eps_o, eps_v, max_bytes,
-                           device_id, derivative_stage_budget, denominator_threshold);
+                           device_id, derivative_stage_budget, denominator_threshold,
+                           resident_lambda_krylov);
 }
 
 }  // namespace generativeqc::cc
