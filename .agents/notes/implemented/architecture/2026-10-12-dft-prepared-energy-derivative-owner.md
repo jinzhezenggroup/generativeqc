@@ -140,6 +140,77 @@ compositions, RKS/UKS, FP64/qualified AUTO and both derivative reductions. Both
 GPU qualifications execute the same core binary SHA-256
 `beb66c1ee001913afb9b124457387c561bb254d87ae110a100b18cea03fb4056`.
 
+### Current-master integration on 2026-10-12
+
+The qualification above is historical evidence for the original `b7ebbfb7f`
+base. The PR is subsequently rebased onto master `b30fa2da4`, which includes
+partial canonical ERI residency, functional-independent XC optimization
+eligibility, bounded automatic stationary AOT bundles and per-item automatic
+CPU guesses. The shared owner preserves these master behaviors rather than
+replacing them with the older full-cache implementation.
+
+Partial value sources retain the full canonical visit census and evaluate every
+uncached bucket through the original exact provider. Their immutable Schwarz
+layout and replay-screening audit remain authoritative. The lease API keeps
+`bucket_mask` before the new `spins` parameter so existing RHF callers retain
+their argument interpretation; KS explicitly passes both. A compiled composed
+ownership test checks a nontrivial mask with RKS/UKS, borrowed/owned outputs,
+Coulomb-only/exchange actions, beta forwarding, compensation extents and full
+resource cleanup. The native independent J/K probe additionally exercises UKS
+with complete and partial masks at zero and nonzero screening.
+
+The expanded host integration suite passes 1,594 tests with 17 explicit device
+gates skipped. After the composed ownership test is added, that compiled test
+passes again; the complete changed-file host regression passes 128 tests with
+20 explicit device gates skipped. Native API, compiler/runtime/SCF/module/vendor/
+provider boundaries,
+CUDA ownership and the default-promotion inventory pass on the integrated tree;
+the inventory registers 54 entries and 102 audited controls. Ruff, public Python
+docstring contracts, changed-line clang-format and `git diff --check` pass.
+
+The integrated production-code head is `d343024e1`. The focused Release CUDA
+targets and all 20 stationary AOT manifests build using verified ccache 4.5.1.
+Slurm job 7641 on healthy node1 uses `main`, `gpu:5090:1`, finite `00:40:00`
+and its unchanged `CUDA_VISIBLE_DEVICES=2`. It passes all four focused native
+binaries, 16 complete-owner cases, 16 native-response cases, 42 hybrid-force
+cases and eight independent CPU-gradient cases. PySCF 2.14.0 / Libxc 7.0.0 remain
+the independent oracles, with the same acceptance gates. The source-matched core
+SHA-256 is
+`4d713b4178c8896e9ab36b7d0371041809b3b6ea3e70f02c2f85107ae8a84337`.
+
+The fresh complete-owner maximum independent energy error is `1.59e-12` Eh;
+maximum force component error is `1.41e-10` Eh/Bohr. D/W upload, one-electron
+H2D and repeated native integral frame-export counts remain zero. Each forced
+resident solve constructs 9,471,311 strict-FP64 values with the same E/E+F
+operator/precision selection and construction census. Fresh single endpoint
+samples, under the same 12-atom/grid/tolerance conditions as the original
+qualification, are:
+
+| Method | E, values off | E, values on | E+F, values off | E+F, values on |
+| --- | ---: | ---: | ---: | ---: |
+| PBE RKS | 2.311 | 0.545 | 3.860 | 1.948 |
+| PBE0 RKS | 3.101 | 0.565 | 4.441 | 1.946 |
+| PBE UKS | 2.234 | 0.751 | 3.885 | 2.152 |
+| PBE0 UKS | 3.797 | 0.772 | 5.281 | 2.154 |
+
+These remain single qualification samples, not a generalized speedup claim.
+Raw receipts and independent endpoint/work JSON are retained under
+`.artifacts/dft-shared-prepared/qualification/job-7641/`. The initial rebuilt
+standalone value probe exits before device execution because its runtime search
+path omits `libcudart.so.12`. Relinking that same probe source with the actual
+CUDA toolkit RUNPATH corrects the validation environment; neither production
+code nor any scientific acceptance gate is changed.
+
+Slurm job 7644 on the same healthy node, with finite `00:30:00` and unchanged
+`CUDA_VISIBLE_DEVICES=1`, reruns the complete independent resident-value suite:
+all six cases pass. This covers both chunk widths, full/partial RKS/UKS sources,
+signed beta density, Coulomb-only contractions, screening, final-value reuse,
+warm handoff, restart and capacity refusal. It uses the same source-matched core
+as job 7641. The corrected probe SHA-256 is
+`77af4c5b61acfb4efffee51b1030bb3927d3340120a37f9dfdf0d76981bc95a5`;
+raw receipts are under
+`.artifacts/dft-shared-prepared/qualification/values-7644/`.
+
 ## Revisit when
 
 A complete planner admits optional persistent values/derivative scratch together,
