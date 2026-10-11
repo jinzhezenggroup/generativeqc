@@ -35,9 +35,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "python"), str(ROOT)]
 
-from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter  # noqa: E402
-from generativeqc_compiler.common.cuda_target import cuda_target_info  # noqa: E402
-from generativeqc_compiler.common.evidence import canonical_hash, file_hash  # noqa: E402
+from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.evidence import (
+    canonical_hash,
+    file_hash,
+)
 
 MANIFEST = (
     ROOT
@@ -88,7 +91,8 @@ def _tool_version(tool: Path) -> str:
 def toolchain_versions(nvcc: Path) -> dict[str, str]:
     nvcc = nvcc.resolve()
     return {
-        name: _tool_version(nvcc.with_name(name)) for name in ("nvcc", "ptxas", "cuobjdump")
+        name: _tool_version(nvcc.with_name(name))
+        for name in ("nvcc", "ptxas", "cuobjdump")
     }
 
 
@@ -120,7 +124,8 @@ def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
     )
     if result.returncode:
         raise RuntimeError(
-            "production AOT generation failed: " + (result.stderr or result.stdout).strip()
+            "production AOT generation failed: "
+            + (result.stderr or result.stdout).strip()
         )
     profile = output_directory / QUALIFIED_ARCHITECTURE
     shards = tuple(
@@ -339,11 +344,15 @@ def validate_ledger(payload: Any) -> None:
         if not isinstance(payload.get(field), str) or not payload[field].strip():
             raise LedgerError(f"ledger field {field!r} must be a non-empty string")
     if payload.get("architecture") != QUALIFIED_ARCHITECTURE:
-        raise LedgerError("ledger architecture does not match the qualified architecture")
+        raise LedgerError(
+            "ledger architecture does not match the qualified architecture"
+        )
     if payload.get("unit_mode") != QUALIFIED_UNIT_MODE:
         raise LedgerError("ledger unit_mode does not match the qualified unit mode")
     if payload.get("generator_abi") != generator_abi():
-        raise LedgerError("ledger generator_abi does not match the qualified manifest ABI")
+        raise LedgerError(
+            "ledger generator_abi does not match the qualified manifest ABI"
+        )
     headers = payload.get("header_sha256")
     if not isinstance(headers, dict) or set(headers) != set(PRELUDE_HEADERS):
         raise LedgerError("ledger header_sha256 must cover exactly the prelude headers")
@@ -352,11 +361,20 @@ def validate_ledger(payload: Any) -> None:
     ):
         raise LedgerError("ledger header_sha256 values must be 64-character hashes")
     toolchain = payload.get("toolchain")
-    if not isinstance(toolchain, dict) or set(toolchain) != {"nvcc", "ptxas", "cuobjdump"}:
+    if not isinstance(toolchain, dict) or set(toolchain) != {
+        "nvcc",
+        "ptxas",
+        "cuobjdump",
+    }:
         raise LedgerError("ledger toolchain must record nvcc, ptxas, and cuobjdump")
     flags = payload.get("flags")
-    if not isinstance(flags, dict) or flags.get("architecture") != QUALIFIED_ARCHITECTURE:
-        raise LedgerError("ledger flags must be an object for the qualified architecture")
+    if (
+        not isinstance(flags, dict)
+        or flags.get("architecture") != QUALIFIED_ARCHITECTURE
+    ):
+        raise LedgerError(
+            "ledger flags must be an object for the qualified architecture"
+        )
     kernels = payload.get("kernels")
     if not isinstance(kernels, dict) or not kernels:
         raise LedgerError("ledger kernels must be a non-empty object")
@@ -401,7 +419,9 @@ def compare(ledger: dict[str, Any], measurement: dict[str, Any]) -> list[str]:
             )
     if ledger["header_sha256"] != identity["header_sha256"]:
         for header in PRELUDE_HEADERS:
-            if ledger["header_sha256"].get(header) != identity["header_sha256"].get(header):
+            if ledger["header_sha256"].get(header) != identity["header_sha256"].get(
+                header
+            ):
                 failures.append(
                     f"identity drift (header {header}): measured "
                     f"{identity['header_sha256'].get(header)!r} != qualified "
@@ -471,7 +491,9 @@ def run_measurement(
         identity=identity,
         timeout=timeout,
     )
-    kernels = dict(sorted(measure_resources(nvcc, object_path, cache_directory).items()))
+    kernels = dict(
+        sorted(measure_resources(nvcc, object_path, cache_directory).items())
+    )
     return {
         "identity": identity,
         "toolchain": toolchain,
@@ -528,7 +550,8 @@ def main(argv: list[str] | None = None) -> int:
         record = args.record_output.resolve()
         if record == LEDGER.resolve():
             print(
-                "--record-output must not overwrite the committed ledger", file=sys.stderr
+                "--record-output must not overwrite the committed ledger",
+                file=sys.stderr,
             )
             return 2
         record.parent.mkdir(parents=True, exist_ok=True)
