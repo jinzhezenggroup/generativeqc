@@ -53,9 +53,15 @@ def _summary(samples: list[float]) -> dict[str, Any]:
 
 
 def main() -> None:
-    """Run identical FP64 exact-J/K endpoints and retain honest qualification gaps."""
+    """Compare identical native FP64 endpoints; RHF uses exact J/K by default."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend", choices=("cpu", "cuda"), default="cpu")
+    parser.add_argument("--method", default="rhf", help="native Calculator selector")
+    parser.add_argument(
+        "--profile-molecular",
+        action="store_true",
+        help="measure opt-in source/tensor phases; timing is instrumented",
+    )
     parser.add_argument("--molecule", choices=("h2", "water"), default="water")
     parser.add_argument("--basis", default="sto-3g")
     parser.add_argument("--cuda-arch", default="sm_120")
@@ -65,6 +71,8 @@ def main() -> None:
     if not 3 <= arguments.repeats <= 100:
         parser.error("--repeats must lie in [3, 100]")
     _scheduler_guard(arguments.backend)
+    if arguments.profile_molecular:
+        os.environ["GENERATIVEQC_ARRAY_API_PROFILE"] = "1"
     if arguments.molecule == "h2":
         elements = ("H", "H")
         coordinates = np.asarray([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]])
@@ -73,9 +81,14 @@ def main() -> None:
         coordinates = np.asarray(
             [[0.0, 0.0, 0.0], [0.0, -1.43, 1.11], [0.0, 1.43, 1.11]]
         )
-    operator = xp.RHF(elements, basis=arguments.basis, backend=arguments.backend)
+    operator = xp.MolecularModel(
+        elements,
+        method=arguments.method,
+        basis=arguments.basis,
+        backend=arguments.backend,
+    )
     native = Calculator(
-        method="rhf",
+        method=arguments.method,
         basis=arguments.basis,
         device=arguments.backend,
         initial_guess=None,
@@ -107,7 +120,11 @@ def main() -> None:
             np.max(np.abs(np.asarray(transformed[1]) + reference.forces))
         )
         if energy_error > 1e-10 or gradient_error > 1e-8:
-            raise RuntimeError("complete RHF endpoint failed numerical acceptance")
+            raise RuntimeError(
+                "complete molecular endpoint failed numerical acceptance"
+            )
+        cold_profile = dict(compiled.compilation_info()["molecular_profile_ns"])
+        cold_counts = dict(compiled.compilation_info()["molecular_profile_counts"])
         samples: dict[str, list[float]] = {"native": [], "array_api": []}
         iterations: dict[str, list[int]] = {"native": [], "array_api": []}
         # Alternate order to avoid making the second path systematically warmer.
@@ -132,16 +149,35 @@ def main() -> None:
                     or float(np.max(np.abs(np.asarray(gradient) + reference.forces)))
                     > 1e-8
                 ):
-                    raise RuntimeError("warm RHF replay failed numerical acceptance")
+                    raise RuntimeError(
+                        "warm molecular replay failed numerical acceptance"
+                    )
         ratio = statistics.median(samples["array_api"]) / statistics.median(
             samples["native"]
         )
         info = compiled.compilation_info()
+        profile_instrumented = bool(info["molecular_profile_enabled"])
+        warm_profile = {
+            name: {
+                "warm_total_ns": total - cold_profile.get(name, 0),
+                "warm_calls": info["molecular_profile_counts"].get(name, 0)
+                - cold_counts.get(name, 0),
+                "warm_mean_ms_per_endpoint": (
+                    (total - cold_profile.get(name, 0)) / arguments.repeats / 1e6
+                ),
+            }
+            for name, total in info["molecular_profile_ns"].items()
+        }
         matching_work = iterations["array_api"] == iterations["native"]
         record = {
-            "schema": "generativeqc.array-api-rhf-endpoint/v1",
+            "schema": (
+                "generativeqc.array-api-rhf-endpoint/v1"
+                if arguments.method.lower() == "rhf"
+                else "generativeqc.array-api-molecular-endpoint/v1"
+            ),
             "endpoint": "host Bohr coordinates -> converged total energy + nuclear gradient",
             "molecule": arguments.molecule,
+            "method": arguments.method,
             "elements": elements,
             "coordinates_bohr": coordinates.tolist(),
             "basis": arguments.basis,
@@ -159,7 +195,17 @@ def main() -> None:
             },
             "warm": {name: _summary(values) for name, values in samples.items()},
             "array_api_over_native": ratio,
-            "observed_5pct_timing_target_met": matching_work and ratio <= 1.05,
+            "observed_5pct_timing_target_met": (
+                matching_work and ratio <= 1.05 if not profile_instrumented else None
+            ),
+            "profile_instrumented": profile_instrumented,
+            "warm_phase_profile": warm_profile,
+            "profile_note": (
+                "CPU wall-clock phase timers include Python/native dispatch and "
+                "are not CUDA kernel timings; instrumented runs are not parity gates."
+                if arguments.profile_molecular
+                else None
+            ),
             "energy_error_hartree": energy_error,
             "gradient_error_hartree_per_bohr": gradient_error,
             "scf_iterations": iterations,
