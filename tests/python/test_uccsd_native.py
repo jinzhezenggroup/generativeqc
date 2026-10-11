@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.generativeqc_cc import PreparedUCCSD, SolverOptions
+from tools.generativeqc_cc import PreparedUCCSD, PreparedUCCSDT, SolverOptions
 from tools.generativeqc_posthf.export import export_uhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.sources import NativeSource
@@ -60,6 +60,7 @@ def test_native_producer_complete_uccsd_energy(atoms: list, spin: int) -> None:
         oracle.conv_tol, oracle.conv_tol_normt, oracle.max_cycle = 1e-13, 1e-10, 400
         correction, _, _ = oracle.kernel()
         assert oracle.converged
+        triples = oracle.ccsd_t()
 
         snapshot, diagnostics = export_uhf(source, max_iterations=300, tolerance=1e-11)
         with (
@@ -69,7 +70,23 @@ def test_native_producer_complete_uccsd_energy(atoms: list, spin: int) -> None:
             ) as prepared,
         ):
             result = prepared.solve()
+            assert result.converged, result.history[-1]
+            with PreparedUCCSDT(prepared, result) as triples_owner:
+                correlated = triples_owner.energy()
+            assert correlated.converged, correlated.reason
+            assert correlated.triples_energy is not None
+            assert correlated.total_energy is not None
+            np.testing.assert_allclose(
+                correlated.triples_energy, triples, atol=5e-10, rtol=0
+            )
+            np.testing.assert_allclose(
+                correlated.total_energy,
+                reference.e_tot + correction + triples,
+                atol=3e-9,
+                rtol=0,
+            )
         assert result.converged, result.history[-1]
+        assert result.correlation_energy is not None and result.total_energy is not None
         assert snapshot.hf_backend == "native-cpu"
         assert result.provenance["source_backend"] == "cpu-reference-native-shell-tiles"
         assert result.provenance["provider_statistics"]["source_tiles"] > 0
