@@ -9,6 +9,8 @@ or a numerical surrogate for the method's energy away from that geometry.
 from __future__ import annotations
 
 import math
+import os
+import time
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
 from typing import Any
@@ -29,26 +31,28 @@ _CAPTURE: ContextVar[_MolecularCapture | None] = ContextVar(
 
 
 @dataclass(frozen=True, init=False)
-class RHF:
-    """Immutable, all-electron closed-shell RHF energy operator.
+class MolecularModel:
+    """Immutable, method-neutral native molecular energy source.
 
-    Call with float64 coordinates shaped ``(len(elements), 3)`` in Bohr. The
-    result is a scalar Hartree Array API array. Inside ``compile``/first-order
-    AD, the existing native RHF endpoint supplies the converged total energy
-    and, when needed, its complete analytic nuclear gradient (including Pulay
-    and nuclear repulsion terms), not a density derivative or finite difference.
+    Native Calculator owns method resolution, electronic structure and its
+    available analytic forces; TensorIR compiles only the surrounding algebra
+    and first-order chain rule. No new electronic method, numerical-gradient
+    fallback, differentiated SCF history or implicit higher derivative is
+    invented. Coordinates are FP64 (natoms, 3) in Bohr; energy is in Hartree
+    and complete native analytic gradients are in Hartree/Bohr.
 
-    CPU and CUDA are explicit selections. Compiled surrounding algebra must
-    select the same backend and logical device. CUDA currently stages host
-    coordinates/results; no resident GPU tensor or performance parity is
-    implied. Native admission, nonconvergence, and resource failures propagate
-    without fallback. ``resource_budget`` bounds the native endpoint separately
-    from the TensorIR compiler's algebra/workspace limits.
+    CPU/CUDA selection is explicit and consistent with the compiled algebra.
+    CUDA currently stages coordinates/results via the host. Native method and
+    TensorIR compilation resource limits are independently enforced.
     """
 
     _numbers: tuple[int, ...]
+    _method: str
     _basis: str
     _charge: int
+    _multiplicity: int
+    _density_fitting: str
+    _auxiliary_basis: str | None
     _backend: str
     _device: int
     _controls: tuple[tuple[str, Any], ...]
@@ -58,10 +62,14 @@ class RHF:
         self,
         elements: tuple[str | int, ...],
         *,
+        method: str,
         basis: str = "sto-3g",
         charge: int = 0,
+        multiplicity: int = 1,
         backend: str = "cpu",
         device: int = 0,
+        density_fitting: str = "none",
+        auxiliary_basis: str | None = None,
         max_iterations: int = 100,
         diis_history: int = 8,
         energy_tolerance: float = 1e-12,
@@ -69,37 +77,54 @@ class RHF:
         screening_tolerance: float = 1e-14,
         resource_budget: Any = None,
     ) -> None:
-        """Bind immutable nuclei/basis/solver policy without loading native code.
+        """Bind a method selector and immutable first-order source contract.
 
-        ``elements`` is a nonempty tuple of symbols or atomic numbers, at most
-        256 atoms. Only positive even all-electron populations are admitted;
-        multiplicity is fixed to one. Named all-electron basis admission is
-        delegated to the native calculator. ECP and fitted approximations are
-        not represented by this first molecular source contract.
+        Admission validates static nuclei, spin, resource and solver settings
+        without loading native code. Unsupported method/basis/device or missing
+        analytic-gradient capabilities fail through the existing Calculator
+        at execution, with no reference/CPU or finite-difference fallback.
+        Compiled owners must be closed to release native workspaces.
         """
         from generativeqc_compiler.common.resources import ResourceBudget
 
         from generativeqc.elements import atomic_number
 
         if not isinstance(elements, tuple) or not 1 <= len(elements) <= 256:
-            raise ValueError("RHF elements must be a tuple of 1 to 256 nuclei")
+            raise ValueError("molecular elements must be a tuple of 1 to 256 nuclei")
         numbers = tuple(atomic_number(element) for element in elements)
         if type(charge) is not int or not -(2**31) <= charge < 2**31:
-            raise ValueError("RHF charge must be an int32")
+            raise ValueError("molecular charge must be an int32")
+        if not isinstance(method, str) or not method.strip():
+            raise ValueError("molecular method must be a nonempty native selector")
+        method = method.strip().lower()
         electrons = sum(numbers) - charge
-        if electrons <= 0 or electrons % 2:
+        if method == "rhf" and (electrons <= 0 or electrons % 2):
             raise ValueError("RHF requires a positive even electron count")
+        if (
+            type(multiplicity) is not int
+            or multiplicity < 1
+            or electrons <= 0
+            or multiplicity > electrons + 1
+            or (electrons - multiplicity + 1) % 2
+        ):
+            raise ValueError(
+                "molecular spin multiplicity is incompatible with electrons"
+            )
+        if method == "rhf" and multiplicity != 1:
+            raise ValueError("RHF requires singlet multiplicity")
         if not isinstance(basis, str) or not basis.strip():
-            raise ValueError("RHF basis must be a nonempty all-electron basis name")
+            raise ValueError("molecular basis must be a nonempty Gaussian basis name")
         if backend not in ("cpu", "cuda"):
-            raise ValueError("RHF backend must be 'cpu' or 'cuda'")
+            raise ValueError("molecular backend must be 'cpu' or 'cuda'")
         if type(device) is not int or not 0 <= device < 2**31:
-            raise ValueError("RHF device must be a nonnegative int32")
+            raise ValueError("molecular device must be a nonnegative int32")
         if any(
             type(value) is not int or not 0 < value < 2**32 - 1
             for value in (max_iterations, diis_history)
         ):
-            raise ValueError("RHF iteration counts must be positive uint32 values")
+            raise ValueError(
+                "molecular iteration counts must be positive uint32 values"
+            )
         for name, value in (
             ("energy_tolerance", energy_tolerance),
             ("density_tolerance", density_tolerance),
@@ -110,14 +135,34 @@ class RHF:
                 or not math.isfinite(value)
                 or value <= 0
             ):
-                raise ValueError(f"RHF {name} must be finite and positive")
+                raise ValueError(f"molecular {name} must be finite and positive")
         if resource_budget is not None and not isinstance(
             resource_budget, ResourceBudget
         ):
-            raise TypeError("RHF resource_budget must be a ResourceBudget")
+            raise TypeError("molecular resource_budget must be a ResourceBudget")
+        if not isinstance(density_fitting, str) or density_fitting.lower() not in (
+            "none",
+            "auto",
+            "cpu",
+            "cpu_reference",
+            "cuda",
+        ):
+            raise ValueError("unsupported molecular density_fitting mode")
+        density_fitting = density_fitting.lower()
+        if auxiliary_basis is not None and (
+            not isinstance(auxiliary_basis, str)
+            or not auxiliary_basis.strip()
+            or density_fitting == "none"
+        ):
+            raise ValueError("auxiliary_basis requires enabled density fitting")
+
         object.__setattr__(self, "_numbers", numbers)
+        object.__setattr__(self, "_method", method)
         object.__setattr__(self, "_basis", basis)
         object.__setattr__(self, "_charge", charge)
+        object.__setattr__(self, "_multiplicity", multiplicity)
+        object.__setattr__(self, "_density_fitting", density_fitting)
+        object.__setattr__(self, "_auxiliary_basis", auxiliary_basis)
         object.__setattr__(self, "_backend", backend)
         object.__setattr__(self, "_device", device)
         object.__setattr__(
@@ -135,16 +180,19 @@ class RHF:
 
     def _payload(self) -> dict[str, Any]:
         return {
-            "schema": "generativeqc.array-api.rhf-source/v1",
-            "native_method": "rhf",
+            "schema": "generativeqc.array-api.molecular-source/v1",
+            "native_method": self._method,
             "atomic_numbers": self._numbers,
             "basis": self._basis,
             "charge": self._charge,
+            "multiplicity": self._multiplicity,
+            "density_fitting": self._density_fitting,
+            "auxiliary_basis": self._auxiliary_basis,
             "backend": self._backend,
             "device": self._device,
             "controls": dict(self._controls),
             "precision": "fp64",
-            "approximation": "all-electron-exact-jk",
+            "approximation": "native-calculator-selected",
             "derivative": "native-analytic-nuclear-first-order",
             "resource_budget": (
                 None if self._resource_budget is None else asdict(self._resource_budget)
@@ -154,38 +202,41 @@ class RHF:
     def _calculator(self) -> Any:
         from generativeqc import Calculator
 
-        calculator = Calculator(
-            method="rhf",
+        # Native Calculator retains the only scientific method registry and
+        # exact-geometry basis/ECP/KS capability gate; do not preflight at a
+        # fictitious all-zero geometry.
+        return Calculator(
+            method=self._method,
             basis=self._basis,
             device=self._backend,
             device_id=self._device,
             precision="fp64",
-            density_fitting="none",
+            density_fitting=self._density_fitting,
+            auxiliary_basis=self._auxiliary_basis,
             initial_guess=None,
             resource_budget=self._resource_budget,
             **dict(self._controls),
         )
-        # Reject ECP metadata before executing the all-electron source contract.
-        try:
-            calculator.resolved_model(
-                self._atoms(np.zeros((len(self._numbers), 3))), charge=self._charge
-            )
-        except BaseException:
-            calculator.clear_cache()
-            raise
-        return calculator
 
     def _atoms(self, coordinates: np.ndarray) -> tuple[Any, ...]:
         return tuple(zip(self._numbers, coordinates, strict=True))
 
     def _coordinates(self, value: Any) -> np.ndarray:
-        coordinates = np.asarray(eager.call("asarray", value))
+        # Compiled TensorIR already returns NumPy arrays on this host-staged
+        # boundary. Avoid a redundant eager Array API conversion on that path.
+        coordinates = (
+            value
+            if isinstance(value, np.ndarray)
+            else np.asarray(eager.call("asarray", value))
+        )
         if coordinates.dtype != np.float64:
-            raise TypeError("RHF coordinates must be float64")
+            raise TypeError("molecular coordinates must be float64")
         if coordinates.shape != (len(self._numbers), 3):
-            raise ValueError("RHF coordinates must have shape (number of nuclei, 3)")
+            raise ValueError(
+                "molecular coordinates must have shape (number of nuclei, 3)"
+            )
         if not np.isfinite(coordinates).all():
-            raise ValueError("RHF coordinates must be finite")
+            raise ValueError("molecular coordinates must be finite")
         return np.array(coordinates, copy=True, order="C")
 
     def _result_values(
@@ -193,13 +244,15 @@ class RHF:
     ) -> tuple[np.ndarray, np.ndarray | None]:
         expected_backend = "cpu_reference" if self._backend == "cpu" else "cuda"
         if not result.converged or result.executed_backend != expected_backend:
-            raise RuntimeError("RHF source did not converge on the selected backend")
+            raise RuntimeError(
+                "molecular source did not converge on the selected backend"
+            )
         energy = np.asarray(result.energy, dtype=np.float64)
         gradient = None
         if derivative:
             if result.forces is None:
                 raise ArithmeticError(
-                    "RHF source returned no analytic nuclear gradient"
+                    "molecular source returned no analytic nuclear gradient"
                 )
             gradient = -np.asarray(result.forces, dtype=np.float64)
         if (
@@ -212,7 +265,9 @@ class RHF:
                 )
             )
         ):
-            raise ArithmeticError("RHF source returned invalid energy/nuclear gradient")
+            raise ArithmeticError(
+                "molecular source returned invalid energy/nuclear gradient"
+            )
         return energy, gradient
 
     def __call__(self, coordinates: Any) -> Any:
@@ -226,18 +281,21 @@ class RHF:
             capture = _CAPTURE.get()
             if capture is None:
                 raise NotImplementedError(
-                    "RHF sources require public compile/AD capture"
+                    "molecular sources require public compile/AD capture"
                 )
             return capture.bind(self, coordinates)
         from generativeqc_compiler.array_api.trace import active_capture
 
         if active_capture():
-            raise TypeError("RHF capture requires symbolic coordinates")
+            raise TypeError("molecular capture requires symbolic coordinates")
         coordinates = self._coordinates(coordinates)
         calculator = self._calculator()
         try:
             result = calculator.singlepoint(
-                self._atoms(coordinates), charge=self._charge, properties=("energy",)
+                self._atoms(coordinates),
+                charge=self._charge,
+                multiplicity=self._multiplicity,
+                properties=("energy",),
             )
             return eager.wrap(self._result_values(result, coordinates, False)[0])
         finally:
@@ -246,7 +304,7 @@ class RHF:
 
 @dataclass(frozen=True)
 class _MolecularSource:
-    operator: RHF
+    operator: MolecularModel
     geometry: Program
     energy: str
     gradient: str
@@ -274,15 +332,17 @@ class _MolecularCapture:
     def __exit__(self, *unused: object) -> None:
         _CAPTURE.reset(self.token)
 
-    def bind(self, operator: RHF, coordinates: VibeArray) -> VibeArray:
+    def bind(self, operator: MolecularModel, coordinates: VibeArray) -> VibeArray:
         if operator._backend != self.backend or operator._device != self.device:
             raise ValueError(
-                "RHF source and compiled algebra must use the same backend/device"
+                "molecular source and compiled algebra must use the same backend/device"
             )
         if coordinates.dtype != "float64":
-            raise TypeError("RHF coordinates must be float64")
+            raise TypeError("molecular coordinates must be float64")
         if coordinates.shape != (len(operator._numbers), 3):
-            raise ValueError("RHF coordinates must have shape (number of nuclei, 3)")
+            raise ValueError(
+                "molecular coordinates must have shape (number of nuclei, 3)"
+            )
         if not symbolic._is_generic_array(coordinates):
             indices = coordinates.node.spec.indices
             if tuple(index.space.kind for index in indices) != (
@@ -296,7 +356,7 @@ class _MolecularCapture:
                 for index in indices
             ):
                 raise ValueError(
-                    "RHF scientific coordinates require complete atom/cartesian domains"
+                    "molecular scientific coordinates require complete atom/cartesian domains"
                 )
         geometry = Program({"coordinates": coordinates.node})
         if any(
@@ -351,6 +411,18 @@ class _MolecularRuntime:
         self.calculators: dict[str, Any] = {}
         self.diagnostics: dict[str, dict[str, Any]] = {}
         self.bound_programs: dict[str, Program] = {}
+        self.profile_enabled = os.environ.get("GENERATIVEQC_ARRAY_API_PROFILE") == "1"
+        self.profile_totals_ns: dict[str, int] = {}
+        self.profile_counts: dict[str, int] = {}
+
+    def record_profile(self, stage: str, elapsed_ns: int) -> None:
+        """Collect opt-in inclusive CPU wall times; never claim GPU kernel timing."""
+        if not self.profile_enabled:
+            return
+        self.profile_totals_ns[stage] = (
+            self.profile_totals_ns.get(stage, 0) + elapsed_ns
+        )
+        self.profile_counts[stage] = self.profile_counts.get(stage, 0) + 1
 
     def register(self, sources: list[_MolecularSource]) -> None:
         for source in sources:
@@ -397,13 +469,18 @@ class _MolecularRuntime:
     def materialize(
         self, executor: Any, program: Program, feeds: dict[str, Any]
     ) -> None:
+        profiling = self.profile_enabled
+        mark = time.perf_counter_ns() if profiling else 0
         required = {
             node.attrs["name"] for node in program.live_nodes if node.op == "input"
         }
+        if profiling:
+            self.record_profile("source_input_scan", time.perf_counter_ns() - mark)
         for source in self.sources.values():
             needed = required.intersection(source.names)
             if not needed or needed <= feeds.keys():
                 continue
+            mark = time.perf_counter_ns() if profiling else 0
             coordinate_node = source.geometry.outputs["coordinates"]
             geometry = (
                 feeds[coordinate_node.attrs["name"]]
@@ -411,16 +488,30 @@ class _MolecularRuntime:
                 else executor.execute(source.geometry, feeds)["coordinates"]
             )
             geometry = source.operator._coordinates(geometry)
+            if profiling:
+                self.record_profile("source_geometry", time.perf_counter_ns() - mark)
+            mark = time.perf_counter_ns() if profiling else 0
             calculator = self.calculators.get(source.energy)
             if calculator is None:
                 calculator = source.operator._calculator()
                 self.calculators[source.energy] = calculator
+            if profiling:
+                self.record_profile(
+                    "source_calculator_lookup", time.perf_counter_ns() - mark
+                )
             derivative = bool({source.gradient, source.snapshot} & needed)
+            mark = time.perf_counter_ns() if profiling else 0
             result = calculator.singlepoint(
                 source.operator._atoms(geometry),
                 charge=source.operator._charge,
+                multiplicity=source.operator._multiplicity,
                 properties=("energy", "forces") if derivative else ("energy",),
             )
+            if profiling:
+                self.record_profile(
+                    "source_native_singlepoint", time.perf_counter_ns() - mark
+                )
+            mark = time.perf_counter_ns() if profiling else 0
             energy, gradient = source.operator._result_values(
                 result, geometry, derivative
             )
@@ -429,9 +520,15 @@ class _MolecularRuntime:
             feeds[source.snapshot] = geometry
             if gradient is not None:
                 feeds[source.gradient] = np.array(gradient, copy=True)
+            if profiling:
+                self.record_profile(
+                    "source_result_publication", time.perf_counter_ns() - mark
+                )
+            mark = time.perf_counter_ns() if profiling else 0
             previous = self.diagnostics.get(source.energy, {})
             self.diagnostics[source.energy] = {
                 "source": source.energy,
+                "method": getattr(source.operator, "_method", "rhf"),
                 "calls": previous.get("calls", 0) + 1,
                 "force_calls": previous.get("force_calls", 0) + int(derivative),
                 "total_iterations": previous.get("total_iterations", 0)
@@ -451,6 +548,8 @@ class _MolecularRuntime:
                 "nuclear_gradient": derivative,
                 "geometry_hash": canonical_hash(geometry.tolist()),
             }
+            if profiling:
+                self.record_profile("source_diagnostics", time.perf_counter_ns() - mark)
 
     def close(self) -> None:
         for calculator in self.calculators.values():
