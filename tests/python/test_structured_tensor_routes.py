@@ -101,9 +101,7 @@ def test_shared_coefficient_gram_is_recognized_without_rewriting_science() -> No
             role="input",
         ),
     )
-    program = Program(
-        {"gram": einsum("pi,qi->pq", coefficients, coefficients)}
-    )
+    program = Program({"gram": einsum("pi,qi->pq", coefficients, coefficients)})
     _, routes = _routes(program)
     assert any(route.family == "gram" for route in routes)
 
@@ -189,9 +187,7 @@ def test_target_mismatch_and_missing_source_identity_fail_closed() -> None:
         structured_cuda_routes(plan, source_identity="")
     wrong = TargetCapabilities(cuda_target_info("sm_90").target_info)
     with pytest.raises(ValueError, match="plan target"):
-        structured_cuda_routes(
-            plan, source_identity=SOURCE, target_capabilities=wrong
-        )
+        structured_cuda_routes(plan, source_identity=SOURCE, target_capabilities=wrong)
 
 
 def test_invalid_ternary_structure_is_not_misrecognized_as_rank_k() -> None:

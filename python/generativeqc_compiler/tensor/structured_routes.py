@@ -155,9 +155,7 @@ def structured_cuda_routes(
         if node.inputs[0] is not node.inputs[2]:
             continue
         try:
-            request = symmetric_rank_k_request(
-                plan.program, name, update="overwrite"
-            )
+            request = symmetric_rank_k_request(plan.program, name, update="overwrite")
         except ValueError:
             # The rank-k provider must prove exact domains, aliasing, FP64,
             # arithmetic and transactional publication before admission.
