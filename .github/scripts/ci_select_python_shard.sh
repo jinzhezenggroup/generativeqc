@@ -285,12 +285,31 @@ nightly_hessian_paths=(
   tests/python/test_hessian_reference.py
   tests/python/test_hessian_hvp.py
 )
+# The 2026-10-11 PR runs 38123715559, 38122305131, 38122713965,
+# and 38121450095 identify a repeatable expensive core-file tail.
+# Spread the nine costliest modules into distinct owner groups. These
+# total about 0.7k observed worker-seconds each in the slow-test reports.
+# Keep all scientific tests and all existing nightly-only qualifications.
+core_hotspots_a=(
+  tests/python/test_mixed_rsh_df_forces.py
+)
+core_hotspots_b=(
+  tests/python/test_df_lambda_core_reuse.py
+  tests/python/test_df_lambda_frontier.py
+  tests/python/test_df_triples_distinct_moments.py
+  tests/python/test_df_lambda_matrix_audit.py
+)
+core_hotspots_c=(
+  tests/python/test_cc_native_tensor_cpu.py
+  tests/python/test_cpu_hf_high_l.py
+  tests/python/test_cc_canonical_denominators.py
+  tests/python/test_direct_order5_sources.py
+)
 case "${GENERATIVEQC_CI_SHARD}" in
-  core-a|core-b)
-    # Split the broad remainder by file, not by collected test node:
-    # this keeps module fixtures local while removing the former
-    # ~18-minute single-shard critical path. slow_paths remain owned
-    # by their dedicated shards below and are excluded here.
+  core-a|core-b|core-c)
+    # Whole-file three-way routing keeps module setup ownership intact.
+    # Count transferred/nightly-only files before excluding them, so an
+    # unrelated test never changes its owner between routine and nightly.
     dist_mode=worksteal
     declare -A slow_lookup=()
     for path in "${slow_paths[@]}"; do
@@ -300,12 +319,23 @@ case "${GENERATIVEQC_CI_SHARD}" in
     for path in "${rebalance_paths[@]}"; do
       rebalance_lookup["${path}"]=1
     done
+    declare -A pinned_core_owner=()
+    for path in "${core_hotspots_a[@]}"; do
+      pinned_core_owner["${path}"]=0
+    done
+    for path in "${core_hotspots_b[@]}"; do
+      pinned_core_owner["${path}"]=1
+    done
+    for path in "${core_hotspots_c[@]}"; do
+      pinned_core_owner["${path}"]=2
+    done
+    case "${GENERATIVEQC_CI_SHARD}" in
+      core-a) target_bucket=0 ;;
+      core-b) target_bucket=1 ;;
+      core-c) target_bucket=2 ;;
+    esac
     test_targets=()
     core_index=0
-    target_parity=0
-    if [[ "${GENERATIVEQC_CI_SHARD}" == "core-b" ]]; then
-      target_parity=1
-    fi
     while IFS= read -r path; do
       if [[ -n "${slow_lookup[${path}]:-}" ]]; then
         continue
@@ -315,7 +345,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
       if [[ -n "${rebalance_lookup[${path}]:-}" ]]; then
         continue
       fi
-      if (( current_index % 2 == target_parity )); then
+      owner=$(( current_index % 3 ))
+      if [[ -n "${pinned_core_owner[${path}]:-}" ]]; then
+        owner="${pinned_core_owner[${path}]}"
+      fi
+      if (( owner == target_bucket )); then
         test_targets+=("${path}")
       fi
     done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)
