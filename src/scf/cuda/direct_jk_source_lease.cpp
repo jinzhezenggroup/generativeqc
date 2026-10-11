@@ -96,10 +96,6 @@ generativeqc_status DirectJkSourceLease::prepare(
     reason_ = "no resident bucket selected";
     return finish(GENERATIVEQC_STATUS_SUCCESS);
   }
-  if (bucket_mask != (1U << 28) - 1 && screening != 0.0) {
-    reason_ = "partial residency requires an unscreened canonical source";
-    return finish(GENERATIVEQC_STATUS_SUCCESS);
-  }
   if (systems.size() != 1) return finish(GENERATIVEQC_STATUS_SUCCESS);
   const auto& system = systems.front();
   const auto nbf = molecule::ao_count(system);
@@ -191,6 +187,7 @@ generativeqc_status DirectJkSourceLease::prepare(
   allowance = std::min(numeric_allowance,
                        available > remaining_reserve ? available - remaining_reserve : 0);
   source_value_count_ = cuda_direct_jk_resident_value_bytes(direct_.get()) / sizeof(double);
+  source_screening_ = screening;
   const auto required_values =
       bucket_mask == (1U << 28) - 1
           ? source_value_count_ * sizeof(double)
@@ -253,9 +250,11 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
   if (!active()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   auto* correction = scratch_ + output_elements_;
   last_error_ = numerical_error ? numerical_error : error_;
-  return enqueue_cuda_direct_jk_compensated_device(
+  const auto status = enqueue_cuda_direct_jk_compensated_device(
       direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
       correction_elements_, last_error_, screening, census_, detail);
+  if (status == GENERATIVEQC_STATUS_SUCCESS) last_screening_ = screening;
+  return status;
 }
 
 generativeqc_status DirectJkSourceLease::audit() {
@@ -269,8 +268,13 @@ generativeqc_status DirectJkSourceLease::audit() {
   const auto drain = cudaStreamSynchronize(stream_);
   if (error != cudaSuccess) return cuda_status(error);
   if (drain != cudaSuccess) return cuda_status(drain);
-  if (failure || census[0] != source_value_count_ ||
-      census[1] != source_value_count_ - value_count_)
+  const auto uncached = source_value_count_ - value_count_;
+  // Compact rows freeze the preparation predicate, not a stricter consumer
+  // predicate. Every row is still visited; only Direct evaluations can shrink.
+  const bool valid_evaluations = last_screening_ == source_screening_
+                                     ? census[1] == uncached
+                                     : last_screening_ > source_screening_ && census[1] <= uncached;
+  if (failure || census[0] != source_value_count_ || !valid_evaluations)
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   return GENERATIVEQC_STATUS_SUCCESS;
 }

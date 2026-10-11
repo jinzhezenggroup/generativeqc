@@ -46,6 +46,32 @@
   },
   "entries": [
     {
+      "id": "scf.partial-phase-local-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK",
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_MAX_BYTES",
+        "ks-runtime:GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
+        "ks-runtime:GENERATIVEQC_KS_RESIDENT_MAX_BYTES"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/scf/cuda/direct_jk_source_policy.hpp",
+        "src/scf/cuda/reference_eri_policy.hpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Explicit experimental masks pack selected FP64 canonical buckets and retain the same exact compensated Direct consumer for every remaining bucket. Screened sources share the incumbent frozen Schwarz rows and compact counts. Unset controls preserve complete residency, method-specific ceilings and existing cold eligibility. Resource, scientific capability and lifetime refusals remain bounded; the public KS planner still reserves no optional quartic storage. The existing resource-constrained RHF evidence is not PBE0 or global-default evidence.",
+      "revisit_condition": "Qualify a resource- and reuse-conditioned selector against natural master defaults with independent complete Cold/Warm/Moved E+F gates, repeated endpoint/work counts, full-cache crossovers and allocation cliffs. Do not hard-code a molecule or replace profitable full residency with a partial mask merely because a constrained RHF subset improved.",
+      "evidence": [
+        "docs/developer/scf_module_boundaries.md",
+        "tests/python/test_rhf_resident_retry.py",
+        "tests/python/test_ks_phase_source_auto_policy.py",
+        "tests/native/ks_phase_values_probe.cpp",
+        "benchmarks/selective_eri_pbe0.py"
+      ]
+    },
+    {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
       "controls": ["ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES"],

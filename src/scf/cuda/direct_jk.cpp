@@ -1966,16 +1966,15 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
 std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan* plan,
                                                          std::uint32_t bucket_mask) {
   direct_jk_require(bucket_mask < (1U << 28), "invalid resident Direct bucket mask");
-  if (!plan || !plan->canonical_pairs || plan->screening_tolerance != 0.0) return 0;
+  if (!plan || !plan->canonical_pairs ||
+      (plan->screening_tolerance > 0.0 && plan->resident_bucket_counts.empty()))
+    return 0;
   std::size_t count = 0;
-  for (const auto& offsets : plan->canonical_pair_offsets)
+  for (std::size_t item = 0; item < plan->diagnostic.batch_size; ++item)
     for (unsigned first = 0; first < 7U; ++first)
       for (unsigned second = 0; second <= first; ++second)
         if (bucket_mask & (1U << (first * (first + 1U) / 2U + second)))
-          count =
-              direct_jk_sum(count, canonical_bucket_values(offsets[first + 1U] - offsets[first],
-                                                           offsets[second + 1U] - offsets[second],
-                                                           first == second));
+          count = direct_jk_sum(count, direct_jk_resident_bucket_count(plan, item, first, second));
   return direct_jk_product(count, sizeof(double));
 }
 
@@ -1989,10 +1988,8 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
   }
   if (bucket_mask == (1U << 28) - 1)
     return prepare_cuda_direct_jk_resident_values(plan, maximum_bytes, detail);
-  if (!plan || !plan->canonical_pairs || plan->screening_tolerance != 0.0) {
-    detail = "resident Direct values require an unscreened canonical source";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
+  const auto preparation = prepare_cuda_direct_jk_resident_layout(plan, detail);
+  if (preparation != GENERATIVEQC_STATUS_SUCCESS) return preparation;
   return direct_jk_guard(plan, detail, [&] {
     int current = -1;
     direct_jk_check(cudaGetDevice(&current));
@@ -2037,9 +2034,9 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
         for (unsigned second = 0; second <= first; ++second) {
           const auto bucket = first * (first + 1U) / 2U + second;
           if (!(bucket_mask & (1U << bucket))) continue;
-          const auto count =
-              canonical_bucket_values(offsets[first + 1U] - offsets[first],
-                                      offsets[second + 1U] - offsets[second], first == second);
+          // Both retained and Direct buckets use the incumbent immutable
+          // Schwarz rows. Dense counts would leave holes in a screened lease.
+          const auto count = direct_jk_resident_bucket_count(plan, item, first, second);
           if (!count) continue;
           layout[item][bucket] = value_offset;
           launch_canonical_jk_kernel(
@@ -2048,8 +2045,9 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
               direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
               offsets[first + 1U] - offsets[first], offsets[second],
               offsets[second + 1U] - offsets[second], first == second, false, true, false,
-              DirectCoulombRange::Full, 0.0, 0.0, plan->canonical_bounds, nullptr, nullptr, nullptr,
-              nullptr, lease.values + value_offset);
+              DirectCoulombRange::Full, 0.0, plan->screening_tolerance, plan->canonical_bounds,
+              nullptr, nullptr, nullptr, nullptr, lease.values + value_offset, nullptr, nullptr,
+              count);
           direct_jk_check(cudaGetLastError());
           value_offset += count;
           plan->diagnostic.resident_values_submitted = value_offset;

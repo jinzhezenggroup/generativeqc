@@ -48,6 +48,8 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
         "generativeqc_status prepare_cuda_direct_jk_resident_layout(",
         "std::size_t cuda_direct_jk_resident_value_bytes(",
         "generativeqc_status prepare_cuda_direct_jk_resident_values(",
+        "std::size_t cuda_direct_jk_selected_resident_value_bytes(",
+        "generativeqc_status prepare_cuda_direct_jk_selected_resident_values(",
         "bool cuda_direct_jk_linear_available(",
         "std::size_t cuda_direct_jk_compensation_elements(",
     ]
@@ -149,6 +151,10 @@ template <class Value>
 size_t vector_bytes(const std::vector<Value>& values) {
   return values.capacity() * sizeof(Value);
 }
+template <class Value>
+size_t vector_capacities(const std::vector<Value>& values) {
+  return vector_bytes(values);
+}
 bool checked_multiply(size_t a, size_t b, size_t& o) {
   if (b && a > SIZE_MAX / b) return false;
   o = a * b;
@@ -196,6 +202,7 @@ struct CudaDirectJkPlan {
   double screening_tolerance{};
   const std::uint64_t* canonical_row_prefix{};
   std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
+  std::vector<std::array<std::size_t, 28>> resident_bucket_offsets;
   std::vector<std::array<size_t, 8>> canonical_pair_offsets{{{0, 2, 2, 2, 2, 2, 2, 2}}};
   int device_id{};
   double* resident_values{};
@@ -263,10 +270,7 @@ size_t bytes(size_t n) { return checked_mul(n, sizeof(double)); }
 namespace scf {
 using ::prepare_cuda_direct_jk_resident_values;
 namespace cuda_execution = generativeqc::scf::cuda_execution;
-generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
-    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t, std::string& detail) {
-  return ::prepare_cuda_direct_jk_resident_values(plan, budget, detail);
-}
+using ::prepare_cuda_direct_jk_selected_resident_values;
 Diagnostic cuda_direct_jk_plan_diagnostic(CudaDirectJkPlan* p) { return p->diagnostic; }
 using ::cuda_direct_jk_linear_available;
 using ::cuda_direct_jk_compensation_elements;
@@ -407,6 +411,8 @@ int main() {
     compact.canonical_row_prefix = prefix.data();
     check(cuda_direct_jk_resident_value_bytes(&compact) == 0,
           "unfrozen screened layout exposed a value extent");
+    check(cuda_direct_jk_selected_resident_value_bytes(&compact, 1) == 0,
+          "unfrozen partial layout exposed a dense value extent");
     check(prepare_cuda_direct_jk_resident_layout(&compact, detail) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
               cuda_direct_jk_resident_value_bytes(&compact) == 2 * sizeof(double),
@@ -416,6 +422,21 @@ int main() {
               GENERATIVEQC_STATUS_SUCCESS,
           "frozen layout downloaded rows again");
     state.copy = cudaSuccess;
+    {
+      CudaDirectJkPlan partial;
+      partial.screening_tolerance = 1e-12;
+      partial.canonical_row_prefix = prefix.data();
+      check(prepare_cuda_direct_jk_selected_resident_values(&partial, 2 * sizeof(double), 1,
+                                                           detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                partial.diagnostic.resident_value_count == 2 &&
+                partial.resident_bucket_offsets[0][0] == 0 &&
+                partial.resident_bucket_offsets[0][1] ==
+                    std::numeric_limits<std::size_t>::max(),
+            "screened partial builder did not pack only compact selected rows");
+      check(prepare_cuda_direct_jk_selected_resident_values(&partial, 2 * sizeof(double), 2,
+                                                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "screened partial source accepted a replacement selection");
+    }
     check(prepare_cuda_direct_jk_resident_values(&compact, 2 * sizeof(double), detail) ==
                   GENERATIVEQC_STATUS_SUCCESS &&
               compact.diagnostic.resident_values_completed == 2 &&

@@ -207,6 +207,11 @@ identity is dropped, and no historical bundle or external release is modified.
 
 ## Revisit when
 
+The screened-source boundary is extended by the separate
+[screened partial experiment](2026-10-11-screened-partial-eri-experiment.md).
+That extension does not relabel this note's frozen RHF timings as PBE0 or
+default-promotion evidence.
+
 Complete-endpoint evidence justifies a broader admission/profitability model,
 screened-source owners become available on master, or profiling identifies
 source-build amortization and layout interactions that invalidate the additive

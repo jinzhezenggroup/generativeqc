@@ -211,10 +211,13 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     double*, double*, double*, std::size_t correction, int* error, double threshold,
     std::uint64_t* census, std::string&, bool resident) {
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
-          correction==2*64*64 && threshold==((mode==20 || mode==21) ? 1e-12 : 0.0));
+          correction==2*64*64 && threshold==((mode==30 || mode==31) ? 1e12 :
+                                           (mode==20 || mode==21) ? 1e-12 : 0.0));
   if(mode==20) require(spec.exchange.coefficient==-0.125);
   *error=mode==9; census[0]=mode==10 ? 99 : 100;
   census[1]=plan->mask==(1U<<28)-1 ? mode==11 : mode==11 ? 49 : 50;
+  if(mode==30) census[1]=0;
+  if(mode==31) census[1]=51;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 }
@@ -332,13 +335,22 @@ int main(int argc, char** argv) {
   mode=0;
   direct_dimension=64;
   {
-    const auto before=creates;
+    mode=21;
     scf::cuda_execution::DirectJkSourceLease screened_partial(stream);
     require(screened_partial.prepare(0,systems,100,64,1000,16ULL<<30,"1","partial-refusal",
                                      false,false,1e-12,16ULL<<30,true,
                                      scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,1)
             ==GENERATIVEQC_STATUS_SUCCESS);
-    require(!screened_partial.active() && creates==before);
+    require(screened_partial.active() && screened_partial.value_bytes()==400);
+    auto spec=scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+    spec.derivative_order=0;
+    double matrix[64*64]{}; std::string detail;
+    for(mode=30;mode<=31;++mode) {
+      require(screened_partial.enqueue(spec,matrix,screened_partial.coulomb(),
+                                      screened_partial.exchange(),nullptr,1e12,detail)
+              ==GENERATIVEQC_STATUS_SUCCESS);
+      require((screened_partial.audit()==GENERATIVEQC_STATUS_SUCCESS)==(mode==30));
+    }
   }
   mode=20;
   direct_dimension=64;

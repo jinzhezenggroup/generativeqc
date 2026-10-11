@@ -75,7 +75,8 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
 /** Select whole immutable angular buckets, numbered first*(first+1)/2+second.
  * The mask is shared across batch items. Unselected buckets retain the native
  * canonical evaluator, not a second whole-source action. Selection affects
- * storage/scheduling only; the full-range unscreened FP64 equation is unchanged.
+ * storage/scheduling only; the full-range FP64 equation and Schwarz predicate
+ * are unchanged. Screened inventories require the frozen resident layout.
  * A zero mask retains Direct without allocation. Published leases cannot be
  * replaced in place, since captured consumers may borrow their pointers. */
 std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan* plan,

@@ -104,7 +104,9 @@ propagate instead of masquerading as pressure. Preparation finite-audits values
 before publication. A completed action must report a canonical census matching
 the entire source inventory before reference export. Complete residency reports
 zero recurrence evaluations; partial residency reports exactly the uncached
-inventory, never a second whole-source Direct pass.
+inventory at the frozen predicate, never a second whole-source Direct pass.
+A stricter consumer predicate can reduce uncached evaluations, but cannot omit
+canonical row visits or exceed that inventory.
 
 Two experimental controls can apply an externally measured partial plan without
 changing the automatic eligibility or default full-cache behavior:
@@ -125,11 +127,16 @@ change, and moved geometry rebuilds values rather than borrowing stale integrals
 Packed layout metadata is included in complete numeric admission. Allocation or
 capacity refusal preserves whole-source exact Direct fallback.
 
-These are experimental unscreened full-range RHF controls, not a screened PBE0,
-UKS or range-separated source contract. RHF forwards its frozen policy to the
-common `DirectJkSourceLease`; other consumers retain complete residency and
-their existing screened admission. Partial masks with screening are refused
-before source preparation. The native RHF frame-response owner uses
+The analogous `GENERATIVEQC_KS_RESIDENT_BUCKET_MASK` and
+`GENERATIVEQC_KS_RESIDENT_MAX_BYTES` controls apply to eligible restricted,
+full-range FP64 global hybrids, including PBE0. Their unset mask retains complete
+residency; the unset ceiling retains KS's existing method/domain policy. These
+do not bypass the complete resource planner, enable UKS/RSH/DF, or widen cold
+automatic eligibility. Screened partial sources freeze and share the incumbent
+Schwarz row layout and compact bucket extents before choosing storage. They do
+not cache density-dependent masks or regenerate a full source per action.
+RHF and KS forward their separate controls to the common `DirectJkSourceLease`.
+The native RHF frame-response owner uses
 the same partial policy; its independently recomputed scalar audits remain
 uncached. The profiler and bounded additive selector in
 `benchmarks/selective_eri_cache.py` supply candidate masks, not universal
@@ -182,7 +189,12 @@ geometry-only Schwarz row tails and stores only their compact canonical values.
 Construction and replay use identical bucket offsets and bounded work extents;
 a replay threshold below the frozen preparation mask is rejected. This does
 not introduce a different screening approximation or density-dependent cache.
-No ERI recurrence is evaluated during replay, and no derivative ERIs are cached.
+Retained buckets evaluate no new ERI recurrence during replay. With an explicit
+partial mask, every other bucket uses the same compensated Direct traversal once;
+the frozen-predicate census requires exactly its uncached inventory. No derivative
+ERIs are cached. `benchmarks/selective_eri_pbe0.py` observes the unchanged official
+PBE0 Cold/Warm/Moved E+F protocol, independent gates and emitted source receipts;
+it does not supply an oracle density or replace the force consumer.
 The source-only Direct factory skips unrelated generated/MD/range leases and
 releases sort staging after the row-construction fence. KS supplies its existing
 raw J/K outputs; only compensation and audits need additional source scratch.

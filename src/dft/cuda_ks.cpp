@@ -366,6 +366,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
     constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;
+    const auto buckets = direct_jk_resident_bucket_policy(
+        std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
+        std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),
+        direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
+    if (!buckets.valid)
+      throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
     const auto generic_fock =
         maximum_angular == 3 &&
         scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec);
@@ -398,9 +404,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
               options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
                                                     : std::numeric_limits<std::size_t>::max(),
               selection, "cuda_ks_resident_values_prepare", cold, generic_fock,
-              strategy.screening_tolerance,
-              direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,
-              auto_policy),
+              strategy.screening_tolerance, buckets.ceiling, false, auto_policy, buckets.mask),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
