@@ -807,7 +807,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]
+        # Only scheduled/manual runs pay for the two exhaustive qualification shards.
+        shard: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces","nightly-hessian","nightly-wb97mv"]' || '["core-a","core-b","runtime-heavy","posthf","compiler-heavy","ecp-forces"]') }}
     runs-on: ubuntu-24.04
     # Full nightly/manual qualification includes expensive Hessian and Au replay.
     # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
@@ -924,7 +925,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
-      # The six Python shards build the same native library. Stable refs may
+      # Python shards build the same native library. Stable refs may
       # publish it, while ephemeral merge-group refs remain read-only consumers.
       - name: Save Python-build ccache immediately
         if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.python_ccache.outputs.cache-hit != 'true'
@@ -1234,6 +1235,11 @@ jobs:
             tests/python/test_rccsdt_native_codegen_dependencies.py
             tests/python/test_df_cc_native_codegen.py
           )
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Full WB97M-V reconverged finite differences dominate the core
+            # long tail. Move the whole file only in nightly/manual CI.
+            slow_paths+=(tests/python/test_wb97mv_complete.py)
+          fi
           # PR #1934 / run 37238512811 still left the broad core shards with
           # a large measured long tail. Keep these newly measured files out of
           # worksteal, but count them in the existing core parity before
@@ -1262,6 +1268,14 @@ jobs:
             tests/python/test_stationary_aot_generation.py
             tests/python/test_cc_shared_iteration_driver.py
             tests/python/test_rccsd_codegen_no_numpy.py
+          )
+          # Keep module-scoped Hessian state on one worker and move the full
+          # nightly oracle suite off the correlated-gradient critical path.
+          nightly_hessian_paths=(
+            tests/python/test_hessian_analytic.py
+            tests/python/test_hessian_directional.py
+            tests/python/test_hessian_reference.py
+            tests/python/test_hessian_hvp.py
           )
           case "${{ matrix.shard }}" in
             core-a|core-b)
@@ -1352,6 +1366,30 @@ jobs:
                 tests/python/test_hessian_reference.py
                 tests/python/test_hessian_hvp.py
               )
+              if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                # Transfer full modules rather than splitting their expensive
+                # fixtures across xdist workers.
+                declare -A nightly_hessian_lookup=()
+                for path in "${nightly_hessian_paths[@]}"; do
+                  nightly_hessian_lookup["${path}"]=1
+                done
+                remaining_targets=()
+                for path in "${test_targets[@]}"; do
+                  if [[ -z "${nightly_hessian_lookup[${path}]:-}" ]]; then
+                    remaining_targets+=("${path}")
+                  fi
+                done
+                test_targets=("${remaining_targets[@]}")
+              fi
+              ;;
+            nightly-hessian)
+              test_targets=("${nightly_hessian_paths[@]}")
+              ;;
+            nightly-wb97mv)
+              # No module-scoped state: run independent reconverged FD
+              # parameter sets on separate workers.
+              dist_mode=worksteal
+              test_targets=(tests/python/test_wb97mv_complete.py)
               ;;
             ecp-forces)
               # Full d-force qualification exceeded the 20-minute job cap when
@@ -1411,7 +1449,10 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          .venv/bin/python -m pytest "${test_targets[@]}" -q \
+          # Emit completed node IDs and bounded worker stacks for a stalled
+          # test, instead of only dot percentages before the 90-minute limit.
+          .venv/bin/python -m pytest "${test_targets[@]}" -v \
+            -o faulthandler_timeout=900 \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
