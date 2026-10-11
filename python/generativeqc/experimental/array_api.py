@@ -44,7 +44,7 @@ from generativeqc_compiler.tensor import (
 from . import _array_api_eager as _eager
 from . import _array_api_symbolic as _symbolic_backend
 from ._array_api_eager import Array
-from ._array_api_molecular import RHF
+from ._array_api_molecular import MolecularModel, RHF
 
 API_VERSION = 1
 __array_api_version__ = "2025.12"
@@ -1365,7 +1365,7 @@ def capabilities() -> dict[str, object]:
             "compiled_call": "shape-dtype-specialized-native-tensorir",
             "compiled_backends": ("cpu", "cuda", "reference"),
             "native_cpu_dtypes": ("float64",),
-            "molecular_operators": ("RHF",),
+            "molecular_operators": ("RHF", "MolecularModel"),
             "molecular_derivatives": "native-analytic-nuclear-first-order",
             "molecular_backend_fallback": False,
             "autodiff": ("grad", "value_and_grad", "jvp", "vjp"),
@@ -1389,6 +1389,7 @@ __all__ = [
     "DLPACK_INTEROP_VERSION",
     "FRONTEND_VERSION",
     "RHF",
+    "MolecularModel",
     "SUPPORTED_FUNCTIONS",
     "Array",
     "CompiledFunction",
