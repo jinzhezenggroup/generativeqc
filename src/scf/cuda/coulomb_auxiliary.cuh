@@ -11,7 +11,7 @@ namespace generativeqc::scf::cuda_execution {
 
 /** Clip response bounds without host-only standard-library calls in CUDA. */
 GENERATIVEQC_ERI_SHARED_HD inline unsigned coulomb_domain_bound(unsigned requested,
-                                                               unsigned capacity) {
+                                                                unsigned capacity) {
   return requested < capacity ? requested : capacity;
 }
 
@@ -119,9 +119,9 @@ GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
     const unsigned maximum_u =
         reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 1; u <= maximum_u; ++u) {
-      const unsigned maximum_n = reachable
-          ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
-          : MaximumAngular - u - v;
+      const unsigned maximum_n =
+          reachable ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
+                    : MaximumAngular - u - v;
       for (unsigned n = 0; n <= maximum_n; ++n) {
         Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
         if (u > 1) {
@@ -136,12 +136,12 @@ GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
         reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 0; u <= maximum_u; ++u) {
       const unsigned maximum_t = reachable
-          ? coulomb_domain_bound(domain.x + halo, MaximumAngular - u - v)
-          : MaximumAngular - u - v;
+                                     ? coulomb_domain_bound(domain.x + halo, MaximumAngular - u - v)
+                                     : MaximumAngular - u - v;
       for (unsigned t = 1; t <= maximum_t; ++t) {
-        const unsigned maximum_n = reachable
-            ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
-            : MaximumAngular - t - u - v;
+        const unsigned maximum_n =
+            reachable ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
+                      : MaximumAngular - t - u - v;
         for (unsigned n = 0; n <= maximum_n; ++n) {
           Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
           if (t > 1) {
@@ -210,9 +210,9 @@ GENERATIVEQC_ERI_DEVICE inline bool fill_range_coulomb(
     const unsigned maximum_u =
         reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 1; u <= maximum_u; ++u) {
-      const unsigned maximum_n = reachable
-          ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
-          : MaximumAngular - u - v;
+      const unsigned maximum_n =
+          reachable ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
+                    : MaximumAngular - u - v;
       for (unsigned n = 0; n <= maximum_n; ++n) {
         Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
         if (u > 1) value = value + static_cast<double>(u - 1) * auxiliary.at(n + 1, 0, u - 2, v);
@@ -225,12 +225,12 @@ GENERATIVEQC_ERI_DEVICE inline bool fill_range_coulomb(
         reachable ? coulomb_domain_bound(domain.y + halo, MaximumAngular - v) : MaximumAngular - v;
     for (unsigned u = 0; u <= maximum_u; ++u) {
       const unsigned maximum_t = reachable
-          ? coulomb_domain_bound(domain.x + halo, MaximumAngular - u - v)
-          : MaximumAngular - u - v;
+                                     ? coulomb_domain_bound(domain.x + halo, MaximumAngular - u - v)
+                                     : MaximumAngular - u - v;
       for (unsigned t = 1; t <= maximum_t; ++t) {
-        const unsigned maximum_n = reachable
-            ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
-            : MaximumAngular - t - u - v;
+        const unsigned maximum_n =
+            reachable ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
+                      : MaximumAngular - t - u - v;
         for (unsigned n = 0; n <= maximum_n; ++n) {
           Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
           if (t > 1) value = value + static_cast<double>(t - 1) * auxiliary.at(n + 1, t - 2, u, v);
