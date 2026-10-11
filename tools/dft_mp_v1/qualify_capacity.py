@@ -418,14 +418,16 @@ BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256 = (
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
+# Bind the existing capacity audit to semantic MethodIR/KSOptions identity.
+# Token, metadata-domain, coefficient/spin and exact-grid gates are unchanged.
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
+    "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
 )
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "c6f25b0a324bd9532d22a6ce4120bcab758a97ba3ff42db016a5bbfc617746d4"
+    "5a00bf2f998228e0a6b9bf7069fa909a63b5580a35ba4bdfe438fe04e4a4a098"
 )
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
