@@ -198,9 +198,7 @@ def main() -> None:
             "warm": {name: _summary(values) for name, values in samples.items()},
             "array_api_over_native": ratio,
             "observed_5pct_timing_target_met": (
-                matching_work and ratio <= 1.05
-                if not profile_instrumented
-                else None
+                matching_work and ratio <= 1.05 if not profile_instrumented else None
             ),
             "profile_instrumented": profile_instrumented,
             "warm_phase_profile": warm_profile,
