@@ -114,7 +114,7 @@ cudaError_t prepare_md_j(cudaStream_t, int, MdJView&, double*, double) { return 
 """
 
 MD_DRIVER = r"""
-void exercise(bool ledger,int stage,int kind,const char* disabled) {
+void exercise(bool resident_source_only,bool ledger,int stage,int kind,const char* disabled) {
   assert(live.empty());
   runtime::active_device_resource_ledger=ledger;
   if(disabled) setenv("GENERATIVEQC_DISABLE_MD_J",disabled,1);
@@ -141,7 +141,8 @@ void exercise(bool ledger,int stage,int kind,const char* disabled) {
     } catch(const DirectJkFailure& f) {
       propagated=true; assert(f.status!=GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
-    const bool eligible=!ledger && !(disabled && std::strcmp(disabled,"1")==0);
+    const bool eligible=!resident_source_only && !ledger &&
+                        !(disabled && std::strcmp(disabled,"1")==0);
     const bool faulted=stage>=0 && allocation_index>stage;
     assert(eligible || allocation_index==0);
     if(!eligible || (faulted && kind<=2)) {
@@ -159,12 +160,15 @@ void exercise(bool ledger,int stage,int kind,const char* disabled) {
   assert(live.empty());
 }
 int main() {
-  for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
-    // The same construction path is revisited after ledger binding/unbinding.
-    for(bool ledger:{false,true,true,false}) {
-      exercise(ledger,-1,1,disabled);
-      for(int stage=0;stage<20;++stage)
-        for(int kind:{0,1,3,6}) exercise(ledger,stage,kind,disabled);
+  // Resident-only sources must not allocate optional MD storage either.
+  for(bool resident_source_only:{false,true}) {
+    for(const char* disabled:{static_cast<const char*>(nullptr),"1","0"}) {
+      // The same construction path is revisited after ledger binding/unbinding.
+      for(bool ledger:{false,true,true,false}) {
+        exercise(resident_source_only,ledger,-1,1,disabled);
+        for(int stage=0;stage<20;++stage)
+          for(int kind:{0,1,3,6}) exercise(resident_source_only,ledger,stage,kind,disabled);
+      }
     }
   }
 }

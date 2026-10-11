@@ -2099,7 +2099,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const auto* seed = initial_density ? initial_density : (prepared ? &*prepared : nullptr);
       scf::ScfResult native;
       try {
-        native = cuda_->run(seed, reuse_warm && !prepared, false);
+        native = cuda_->run(
+            seed, reuse_warm && !prepared, false,
+            prepared ? dft::CudaKsSeedOrigin::NativeColdGuess : dft::CudaKsSeedOrigin::External);
       } catch (const generativeqc::Error& error) {
         // CUDA helpers may also throw untyped runtime errors for device faults.
         // Only an explicitly numerical failure may consume the seed retry.
@@ -2547,7 +2549,10 @@ class KsPreparedBatch final : public PreparedBatch {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i]);
+            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
+                        !attempt && !reuse && preliminary_seeds[i]
+                            ? dft::CudaKsSeedOrigin::NativeColdGuess
+                            : dft::CudaKsSeedOrigin::External);
             running[i] = true;
             continue;
           }

@@ -29,7 +29,34 @@ generativeqc_status create_cuda_direct_jk_plan_on_stream(
     double screening_tolerance, std::size_t device_budget_bytes, cudaStream_t stream,
     CudaDirectJkPlan** output, CudaDirectJkDiagnostic& diagnostic, std::string& detail);
 
-/** Inventory for an optional unscreened full-range canonical source lease.
+/** Prepare a zero-order phase source with the same borrowed-stream contract.
+ * Reserve canonical storage before any optional operator leases: generated
+ * J/K caches, MD and range sources are not used by resident replay. Ordinary
+ * providers retain their existing preparation priority and bounded fallback.
+ */
+generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
+    int device_id, const std::vector<core::System>& systems, double screening_tolerance,
+    std::size_t device_budget_bytes, cudaStream_t stream, CudaDirectJkPlan** output,
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail);
+
+/** Bound optional Schwarz row/sort storage for a Cartesian source shape.
+ * Queries CUB workspace on the current CUDA device without allocating or
+ * evaluating ERIs. Include this in admission before constructing the source.
+ */
+generativeqc_status cuda_direct_jk_resident_layout_device_bytes(std::size_t batch,
+                                                                std::size_t direct_nbf,
+                                                                std::size_t& bytes,
+                                                                std::string& detail);
+
+/** Freeze compact extents of the already prepared geometry-only Schwarz rows.
+ * Positive masks require admitted screened-row metadata; no ERI is evaluated.
+ * Download all bucket tails once on the provider stream, never during replay.
+ */
+generativeqc_status prepare_cuda_direct_jk_resident_layout(CudaDirectJkPlan* plan,
+                                                           std::string& detail);
+
+/** Inventory for an optional full-range canonical source lease.
+ * A positive preparation threshold needs a previously frozen compact layout.
  * Zero denotes an unavailable domain. This query neither evaluates integrals
  * nor initializes CUDA; the immutable Direct plan remains its scientific owner.
  */
@@ -114,7 +141,7 @@ std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan);
  * lifetime, census and finite-error contract as the linear action above.
  * correction must have exactly cuda_direct_jk_compensation_elements(plan)
  * doubles, disjoint from all inputs, outputs and diagnostic slots. It is reset
- * per action and folded before canonical-to-public projection. A zero mask
+ * per action and folded before canonical-to-public projection. A compatible mask
  * may reuse admitted resident values unless allow_resident is false (the
  * independent exact-audit contract); no allocation or success-path fence.
  * Unavailable canonical storage returns NOT_IMPLEMENTED without enqueueing.
