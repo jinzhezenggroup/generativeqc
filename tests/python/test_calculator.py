@@ -272,18 +272,24 @@ def test_ks_separate_physical_residual_is_published(method: typing.Any) -> None:
 
 
 @pytest.mark.parametrize("method", ("lda-uks", "pbe-uks"))
+@pytest.mark.parametrize("properties", [("energy",), ("energy", "forces")])
 @pytest.mark.parametrize(
     ("charge", "multiplicity"),
     ((0, 2), (0, 4)),
     ids=("parity", "spin-excess"),
 )
 def test_uks_rejects_invalid_spin_occupations(
-    method: typing.Any, charge: typing.Any, multiplicity: typing.Any
+    method: typing.Any,
+    charge: typing.Any,
+    multiplicity: typing.Any,
+    properties: tuple[str, ...],
 ) -> None:
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     calculator = Calculator(method=method, basis="sto-3g", device="cpu")
     with pytest.raises(RuntimeError, match="integer nonnegative spin occupations"):
-        calculator.singlepoint(atoms, charge=charge, multiplicity=multiplicity)
+        calculator.singlepoint(
+            atoms, charge=charge, multiplicity=multiplicity, properties=properties
+        )
 
 
 @pytest.mark.parametrize(

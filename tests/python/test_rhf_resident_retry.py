@@ -108,6 +108,9 @@ enum generativeqc_status {
 };
 constexpr int cudaMemcpyDeviceToHost = 0;
 enum class DirectCoulombRange { Full };
+struct CudaDirectJkPlan;
+// The extracted definition does not include the header's restricted-spin default.
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins = 1);
 struct State {
   cudaError_t allocation{}, pending{}, sync{}, copy{};
   int current{};

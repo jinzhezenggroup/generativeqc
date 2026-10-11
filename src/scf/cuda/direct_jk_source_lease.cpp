@@ -40,10 +40,11 @@ generativeqc_status DirectJkSourceLease::prepare(
     std::size_t direct_nbf, std::size_t required, std::size_t budget, const char* selection_value,
     const char* trace_name, bool cold_phase, bool generic_fock, double screening,
     std::size_t value_ceiling, bool own_outputs, DirectJkSourceAutoPolicy auto_policy,
-    std::uint32_t bucket_mask) {
+    std::uint32_t bucket_mask, unsigned spins) {
   using namespace posthf;
   if (prepared_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   prepared_ = true;
+  if (spins != 1 && spins != 2) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   runtime::df_progress::Scope trace(trace_name, "cuda_completed");
   const auto finish = [&](generativeqc_status status, bool admitted = false) {
     const auto diagnostic = cuda_direct_jk_plan_diagnostic(direct_.get());
@@ -126,8 +127,8 @@ generativeqc_status DirectJkSourceLease::prepare(
     direct_bound = checked_add(direct_bound, layout_bytes);
   }
   matrix_elements_ = checked_mul(nbf, nbf);
-  output_elements_ = own_outputs ? checked_mul(2, matrix_elements_) : 0;
-  correction_elements_ = checked_mul(2, checked_mul(direct_nbf, direct_nbf));
+  output_elements_ = own_outputs ? checked_mul(1U + spins, matrix_elements_) : 0;
+  correction_elements_ = checked_mul(2U * spins, checked_mul(direct_nbf, direct_nbf));
   const auto scratch_bytes =
       checked_mul(checked_add(output_elements_, correction_elements_), sizeof(double));
   // Match the common response owner's conservative host-preparation inventory;
@@ -192,7 +193,7 @@ generativeqc_status DirectJkSourceLease::prepare(
       bucket_mask == (1U << 28) - 1
           ? source_value_count_ * sizeof(double)
           : cuda_direct_jk_selected_resident_value_bytes(direct_.get(), bucket_mask);
-  const auto compensation_elements = cuda_direct_jk_compensation_elements(direct_.get());
+  const auto compensation_elements = cuda_direct_jk_compensation_elements(direct_.get(), spins);
   runtime::df_progress::Scope::number("required_source_value_bytes", required_values);
   runtime::df_progress::Scope::number("source_value_allowance_bytes", allowance);
   runtime::df_progress::Scope::number("free_device_bytes_after_preparation", available);
@@ -246,13 +247,14 @@ generativeqc_status DirectJkSourceLease::prepare(
 generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const double* density,
                                                  double* coulomb, double* exchange,
                                                  int* numerical_error, double screening,
-                                                 std::string& detail) {
+                                                 std::string& detail, const double* beta,
+                                                 double* beta_exchange) {
   if (!active()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   auto* correction = scratch_ + output_elements_;
   last_error_ = numerical_error ? numerical_error : error_;
   const auto status = enqueue_cuda_direct_jk_compensated_device(
       direct_.get(), spec, density, matrix_elements_, coulomb, exchange, correction,
-      correction_elements_, last_error_, screening, census_, detail);
+      correction_elements_, last_error_, screening, census_, detail, true, beta, beta_exchange);
   if (status == GENERATIVEQC_STATUS_SUCCESS) last_screening_ = screening;
   return status;
 }

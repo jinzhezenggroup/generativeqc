@@ -2376,11 +2376,13 @@ class Calculator:
                 properties=requested_properties,
             ).require_feasible()
         if self._dispersion_method_ir is not None or (
-            compute_forces and self._capabilities.family == "density_functional"
+            self._capabilities.family == "density_functional"
         ):
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
-            # scientific implementation in the single-system path.
+            # scientific implementation in the single-system path. Energy-only
+            # must use the same SCF owner, final-state gates and optimization
+            # selection; requesting derivatives changes only the consumer.
             with self.prepare_batch(
                 [native_atoms],
                 charges=[charge],
