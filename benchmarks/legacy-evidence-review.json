@@ -216,9 +216,22 @@
       "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
       "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
       "review_document": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/README.md"
+    },
+    "native-memory-arena-20261011": {
+      "owner": "native FP64 cross-size arena complete-endpoint qualification",
+      "reason": "Lossless XZ recompression retains the exact original 6,352,916 decoded JSON bytes, including all cold/warm/moved-warm measurements, independent references, source and script receipts, full logs and unfavorable serial-scratch evidence. No observations, policy caps or acceptance decisions change; original and decoded identities are pinned in storage.json.",
+      "review_document": "benchmarks/results/native-memory-arena-20261011/README.md"
     }
   },
   "files": [
+    {
+      "bytes": 145996,
+      "classification": "required-compact-accepted-evidence",
+      "family": "native-memory-arena-20261011",
+      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
+      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
+      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",

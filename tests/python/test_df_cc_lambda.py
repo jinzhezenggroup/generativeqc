@@ -201,6 +201,7 @@ def run(
     batch_large: bool = False,
     primal_matrix: bool = False,
     native_defaults: bool = False,
+    serial_scratch_reuse: bool = False,
     overflow: bool = False,
     core_reuse: bool = True,
     audit_matrix: bool = True,
@@ -253,9 +254,10 @@ def run(
         + 512 * int(batch_large)
         + 1024 * int(primal_matrix)
         + 2048 * int(native_defaults)
-        + 4096 * int(mixed_precision)
-        + 8192 * int(mixed_limit_two)
-        + 16384 * int(invalid_mixed_controls),
+        + 4096 * int(serial_scratch_reuse)
+        + 8192 * int(mixed_precision)
+        + 16384 * int(mixed_limit_two)
+        + 32768 * int(invalid_mixed_controls),
         budget,
         device_budget,
         ptrs,

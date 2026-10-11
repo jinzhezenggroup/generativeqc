@@ -12,6 +12,8 @@ import re
 import sys
 import typing
 from collections import Counter
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 
@@ -530,6 +532,39 @@ def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
     )
 
 
+_cross_size_arena = ContextVar("native_cross_size_arena", default=False)
+
+
+def cross_size_arena_selected() -> bool:
+    """Expose the emission selection to consumers protecting retained siblings."""
+    return _cross_size_arena.get()
+
+
+def add_cross_size_arena_argument(parser: argparse.ArgumentParser) -> None:
+    """Expose one explicit selection for paired capacity and pointer emissions."""
+    parser.add_argument(
+        "--cross-size-arena",
+        action="store_true",
+        help="coalesce disjoint FP64 scratch slots in all selected CPU/CUDA outputs",
+    )
+
+
+@contextmanager
+def cross_size_arena_candidate(enabled: bool = True) -> typing.Iterator[None]:
+    """Select a default-off storage candidate for a paired CPU/CUDA emission.
+
+    Thread-local scope keeps imported DF emitters consistent with admission
+    headers without changing equations, cache policy or subsequent emissions.
+    """
+    if type(enabled) is not bool:
+        raise TypeError("cross-size arena selection must be bool")
+    token = _cross_size_arena.set(enabled)
+    try:
+        yield
+    finally:
+        _cross_size_arena.reset(token)
+
+
 def _arena_plan(
     program: Program, *, retained_nodes: tuple[typing.Any, ...] = ()
 ) -> SymbolicArenaPlan:
@@ -544,6 +579,7 @@ def _arena_plan(
             if all(node.spec.dtype == "float32" for node in program.live_nodes)
             else {}
         ),
+        cross_size_reuse=cross_size_arena_selected(),
     )
 
 
@@ -2649,7 +2685,24 @@ def main() -> None:
     parser.add_argument("--triples-cuda-source", type=Path)
     parser.add_argument("--triples-fock-cpu-header", type=Path)
     parser.add_argument("--triples-fock-cuda-source", type=Path)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
+    if not any(
+        (
+            args.cpu_header,
+            args.cuda_source,
+            args.triples_cuda_source,
+            args.triples_fock_cpu_header,
+            args.triples_fock_cuda_source,
+        )
+    ):
+        parser.error("select a CPU header or CUDA source output")
+    with cross_size_arena_candidate(args.cross_size_arena):
+        _emit_requested(args)
+
+
+def _emit_requested(args: argparse.Namespace) -> None:
+    """Keep all outputs in the same storage-selection scope."""
     for path, emit in (
         (args.triples_fock_cpu_header, triples_fock_cpu_header),
         (args.triples_fock_cuda_source, triples_fock_cuda_source),
@@ -2668,16 +2721,6 @@ def main() -> None:
         args.triples_cuda_source.write_text(
             triples_response_cuda_source(), encoding="utf-8"
         )
-    if not any(
-        (
-            args.cpu_header,
-            args.cuda_source,
-            args.triples_cuda_source,
-            args.triples_fock_cpu_header,
-            args.triples_fock_cuda_source,
-        )
-    ):
-        parser.error("select a CPU header or CUDA source output")
 
 
 if __name__ == "__main__":

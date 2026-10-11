@@ -6,11 +6,21 @@ Other domains keep the ordinary Hcore guess. An already available explicit,
 imported or warm density always takes precedence. Use `initial_guess=None` to
 restore Hcore explicitly, or an `InitialGuessSpec` to request a provider and its
 preparation limits. The low-level C API remains explicit-policy driven.
-Automatic selection also requires the supported preliminary-guess schema and a
-positive MINAO bit from `generativeqc_initial_guess_capabilities_v1()`. Missing
-queries, unknown schemas and HF/LDA-only libraries retain Hcore. Schema 1 alone
-does not identify MINAO support. Explicit `InitialGuessSpec` requests retain
-their existing schema and native provider/domain checks.
+Automatic model and element selection uses the allocation-free native
+`generativeqc_initial_guess_auto_kind_v1()` query. Python supplies the requested
+model/backend/precision/DF/spin and element/ECP facts; it does not independently
+choose the qualified domain when this query is present. The same native policy
+is available to C/C++ callers and shares the MINAO admission rules used by
+prepared calculations. A model-only query is not full system, basis, density,
+or memory admission. Failed queries remain visible rather than silently
+selecting a different policy.
+
+Older libraries without that additive query retain the compatibility policy:
+selection requires the supported preliminary-guess schema and a positive MINAO
+bit from `generativeqc_initial_guess_capabilities_v1()`. Missing queries,
+unknown schemas and HF/LDA-only libraries retain Hcore. Schema 1 alone does not
+identify MINAO support. Explicit `InitialGuessSpec` requests bypass automatic
+selection and retain their existing schema and native provider/domain checks.
 
 Automatic admission is conservative at batch scope: if any item contains an
 unsupported element or ECP, the whole batch keeps Hcore, and resource planning

@@ -48,7 +48,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
         "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
-        "reference_experiment,ccsd_mixed_precision,lambda_mixed_precision}; }\n"
+        "reference_experiment,lambda_serial_scratch_reuse,ccsd_mixed_precision,lambda_mixed_precision}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -57,7 +57,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     )
     argument_bounds = re.search(r"if \(argc < (\d+) \|\| argc > (\d+)\)", selectors)
     assert argument_bounds is not None
-    assert tuple(map(int, argument_bounds.groups())) == (4, 30)
+    assert tuple(map(int, argument_bounds.groups())) == (4, 32)
     maximum_argc = int(argument_bounds.group(2))
     descriptor_controls = "\n".join(
         line
@@ -74,9 +74,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
         "const auto result ="
-        + endpoint.split("const auto result =", 1)[1].split(
-            "    std::ofstream output", 1
-        )[0]
+        + endpoint.split("const auto result =", 1)[1].split(");", 1)[0]
+        + ");"
     )
     reference_benchmark = (ROOT / "benchmarks/df_hf_preconvergence.cpp").read_text()
     # The reference probe moves its guess out of the result. Extract the actual
@@ -118,6 +117,7 @@ struct DFCCSDTResult {
   bool audit_matrix;
   bool replay_matrix;
   DFCCSDTReferenceExperiment* reference_experiment;
+  bool serial_scratch_reuse;
   bool ccsd_mixed, lambda_mixed;
 };
 """
@@ -126,6 +126,7 @@ struct DFCCSDTResult {
         + f"constexpr int maximum_endpoint_argc={maximum_argc};\n"
         + r"""
 }}
+bool selected_lifecycle = false;
 generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) {
   generativeqc::runtime::ExecutionContext execution;
   generativeqc::core::System orbital, auxiliary;
@@ -136,6 +137,7 @@ generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) 
         + "\n"
         + endpoint_call
         + r"""
+  selected_lifecycle = lifecycle;
   return result;
 }
 void check_reference_benchmark() {
@@ -160,6 +162,7 @@ int main() {
   generativeqc::cc::LambdaOptions options;
   if(!options.df_matrix_gemm || !options.df_auxiliary_reduction ||
      options.gmres.true_residual_every != 1 || options.df_mixed_precision ||
+     options.serial_scratch_reuse ||
      options.df_auxiliary_batch_limit != 32 || !options.df_primal_matrix_gemm) return 1;
   options.df_matrix_gemm=false;
   if(options.df_matrix_gemm) return 2;
@@ -450,24 +453,53 @@ int main() {
     if(select(28,selected).replay_matrix != (replay[0]=='1') ||
        !select(27,selected).replay_matrix || !ordinary.replay_matrix) return 47;
   }
+  for(const char* sharing : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1",sharing};
+    if(select(29,selected).serial_scratch_reuse != (sharing[0]=='1') ||
+       select(28,selected).serial_scratch_reuse || ordinary.serial_scratch_reuse) return 48;
+  }
+  for(const char* sharing : {"", "2", "true", "1x"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1",sharing};
+    try { (void)select(29,selected);return 49; } catch(const std::invalid_argument&) {}
+  }
+  for(const char* lifecycle : {"0", "1", "x"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1","1",lifecycle};
+    try {
+      if(!select(30,selected).serial_scratch_reuse || lifecycle[0]=='x') return 50;
+    } catch(const std::invalid_argument&) {
+      if(lifecycle[0]!='x') return 51;
+    }
+  }
+  for(const char* sharing : {"0", "1"}) for(const char* lifecycle : {"0", "1"})
   for(const char* ccsd : {"0", "1"}) for(const char* lambda : {"0", "1"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
                            "6","8","0","0","2","1","7","0","0","1","auto",
-                           "1","0","auto","0","0","30","1","1","1",ccsd,lambda};
-    const auto result = select(30,selected);
-    const auto ccsd_only = select(29,selected);
-    const auto strict = select(28,selected);
+                           "1","0","auto","0","0","30","1","1","1",sharing,lifecycle,ccsd,lambda};
+    const auto result = select(32,selected);
+    if(selected_lifecycle != (lifecycle[0]=='1')) return 52;
+    const auto ccsd_only = select(31,selected);
+    const auto strict = select(30,selected);
+    if(result.serial_scratch_reuse != (sharing[0]=='1') ||
+       ccsd_only.serial_scratch_reuse != result.serial_scratch_reuse ||
+       strict.serial_scratch_reuse != result.serial_scratch_reuse ||
+       selected_lifecycle != (lifecycle[0]=='1')) return 53;
     if(result.ccsd_mixed != (ccsd[0]=='1') || result.lambda_mixed != (lambda[0]=='1') ||
        ccsd_only.ccsd_mixed != (ccsd[0]=='1') || ccsd_only.lambda_mixed ||
        strict.ccsd_mixed || strict.lambda_mixed || !result.triples_w.is_strict_fp64() ||
        !result.replay_matrix || !result.audit_matrix || result.lambda_interval != 30) return 48;
   }
-  for(int index : {28,29}) for(const char* token : {"", "-1", "+1", "2", "true", "1x", "1.0"}) {
+  for(int index : {28,29,30,31}) for(const char* token : {"", "-1", "+1", "2", "true", "1x", "1.0"}) {
     const char* bad[]{"endpoint","input","output","1","1","1","1","8",
                       "6","8","0","0","2","1","7","0","0","1","auto",
-                      "1","0","auto","0","0","30","1","1","1","0","0"};
+                      "1","0","auto","0","0","30","1","1","1","0","0","0","0"};
     bad[index]=token;
-    try { (void)select(30,bad);return 49; } catch(const std::invalid_argument&) {}
+    try { (void)select(32,bad);return 49; } catch(const std::invalid_argument&) {}
   }
   for(int argc : {0,1,2,3,generativeqc::methods::detail::maximum_endpoint_argc+1}) {
     try { (void)select(argc,nullptr);return 16; }

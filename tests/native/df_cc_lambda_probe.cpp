@@ -59,9 +59,10 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.df_auxiliary_reduction = !(mode & 4);
     response.df_matrix_gemm = !(mode & 8);
     response.df_core_reuse = !(mode & 64);
-    response.df_mixed_precision = mode & 4096;
-    if (mode & 8192) response.df_mixed_precision_max_iterations = 2;
-    if (mode & 16384) {
+    response.serial_scratch_reuse = mode & 4096;
+    response.df_mixed_precision = mode & 8192;
+    if (mode & 16384) response.df_mixed_precision_max_iterations = 2;
+    if (mode & 32768) {
       response.df_mixed_precision_warmup_tolerance = std::numeric_limits<double>::quiet_NaN();
       response.df_mixed_precision_max_iterations = 0;
     }

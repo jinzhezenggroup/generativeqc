@@ -95,7 +95,9 @@ def run_endpoint(
     if ccsd_mixed or lambda_mixed:
         if lambda_interval is None:
             command.append("30")
-        command.extend(("1", "1", "1", str(int(ccsd_mixed))))
+        # Preserve the landed serial-scratch and lifecycle slots before the
+        # independently selected CCSD and Lambda mixed warmup controls.
+        command.extend(("1", "1", "1", "0", "0", str(int(ccsd_mixed))))
         if lambda_mixed:
             command.append("1")
     completed = subprocess.run(

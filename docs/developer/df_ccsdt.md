@@ -39,7 +39,11 @@ failure is reported, not hidden by a retry. This is an internal candidate, not
 a new public method precision policy or a default performance claim.
 
 The developer `df_ccsdt_force_endpoint` benchmark accepts a
-`CCSD_MIXED_PRECISION_0_OR_1` argument after `LAMBDA_PRIMAL_MATRIX_0_OR_1`.
+`CCSD_MIXED_PRECISION_0_OR_1` argument at position 30, after the existing
+`LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1` (28) and `LIFECYCLE_0_OR_1` (29) controls.
+The separate `LAMBDA_MIXED_PRECISION_0_OR_1` flag is position 31. Positions count
+from `argv[0]`; all four controls default to off. Historical benchmark runners
+are tied to their recorded source and retain their original argument layout.
 Its diagnostics distinguish FP32 GEMMs, casts, warmup evaluations and the
 precision switch from FP64 work. Use complete cold E+F timing and independent
 energy/force gates rather than treating a GEMM throughput gain as endpoint
@@ -51,7 +55,11 @@ inputs/cuts/seeds remain separate; only sequential temporary storage aliases.
 `df_shared_scratch_bytes` reports that lease's capacity and
 `df_scratch_avoided_bytes` the eliminated second reservation, not measured peak
 VRAM. Optional audit or allocation refusal still restores the smaller operator
-or scalar layout.
+or scalar layout. This matrix/audit sharing is independent of the separate
+default-off `serial_scratch_reuse` option, which additionally shares expanded
+and scalar scratch through an aligned prefix. In either layout, the mixed
+input tail is admitted against the conservative matrix/audit capacity and every
+live warmup high-water mark, never merely the total device allocation.
 
 ### Internal Lambda mixed-precision preconvergence
 

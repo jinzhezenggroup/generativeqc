@@ -78,7 +78,15 @@ def test_probe_cache_is_separate_per_shard_and_preserved_after_tests() -> None:
 
 @pytest.mark.parametrize(
     "shard",
-    ["core-a", "core-b", "compiler-heavy", "runtime-heavy", "posthf", "ecp-forces"],
+    [
+        "core-a",
+        "core-b",
+        "core-c",
+        "compiler-heavy",
+        "runtime-heavy",
+        "posthf",
+        "ecp-forces",
+    ],
 )
 @pytest.mark.parametrize(
     "event", ["pull_request", "merge_group", "schedule", "workflow_dispatch"]
@@ -92,7 +100,13 @@ def test_probe_cache_guards_preserve_queue_read_only_consumption(
     shard: str, event: str, cache_hit: str, restore_succeeds: bool, test_outcome: str
 ) -> None:
     steps = _steps()
-    consumes = shard in {"core-a", "core-b", "compiler-heavy", "runtime-heavy"}
+    consumes = shard in {
+        "core-a",
+        "core-b",
+        "core-c",
+        "compiler-heavy",
+        "runtime-heavy",
+    }
     outcome = ("success" if restore_succeeds else "failure") if consumes else "skipped"
     for name, expected in (
         ("Restore native Python probes", consumes),

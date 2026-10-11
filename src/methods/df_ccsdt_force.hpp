@@ -110,7 +110,8 @@ DFCCSDTResult run_df_ccsdt_native(
     runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
-    DFCCSDTReferenceExperiment* reference_experiment = nullptr, bool ccsd_mixed_precision = false,
+    DFCCSDTReferenceExperiment* reference_experiment = nullptr,
+    bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
     bool lambda_mixed_precision = false);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.

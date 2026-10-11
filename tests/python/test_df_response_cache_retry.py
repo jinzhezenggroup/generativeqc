@@ -40,7 +40,7 @@ struct MethodError : std::runtime_error {
 };
 int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
-bool expected_packed = false;
+bool expected_packed = false, expected_serial_scratch = false;
 bool expected_ccsd_mixed = false, expected_lambda_mixed = false;
 bool expected_parallel_gap = false, expected_gap_cotangents = true;
 generativeqc::runtime::PrecisionDirective expected_w;
@@ -173,6 +173,7 @@ assert(admitted_triples_w.qualification == expected_w.qualification);
 assert(admitted_triples_w.math_mode == expected_w.math_mode);
 assert(lambda_true_residual_interval == expected_lambda_interval);
 assert(lambda_mixed_precision == expected_lambda_mixed);
+assert(lambda_serial_scratch_reuse == expected_serial_scratch);
 assert(lambda_primal_matrix == (physical_replay == nullptr));
 later_phase(state.budget);
 DFCCSDTResult result;
@@ -195,10 +196,11 @@ int main() {
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
-                               expected_ccsd_mixed, expected_lambda_mixed);
+                               expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed);
   };
   for (bool mixed_lambda : {false, true})
   for (bool mixed_ccsd : {false, true})
+  for (bool serial_scratch : {false, true})
   for (bool mixed_w : {false, true})
   for (std::size_t interval : {1, 30})
   for (bool selected_packed : {false, true})
@@ -213,6 +215,7 @@ int main() {
   expected_lambda_interval = interval;
   expected_ccsd_mixed = mixed_ccsd;
   expected_lambda_mixed = mixed_lambda;
+  expected_serial_scratch = serial_scratch;
   expected_packed = selected_packed;
   expected_parallel_gap = parallel_gap;
   expected_gap_cotangents = gap_cotangents;
@@ -298,7 +301,7 @@ int main() {
       execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
-      expected_ccsd_mixed, expected_lambda_mixed);
+      expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed);
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -309,7 +312,7 @@ int main() {
         execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
-        true, true, false, nullptr, expected_ccsd_mixed, expected_lambda_mixed);
+        true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed);
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();
@@ -435,6 +438,7 @@ struct Result {
   struct {bool resident_jk_discarded_attempt;double resident_jk_retry_seconds;} orbital;
 };
 int main() {
+for (int repetition=0;repetition<3;++repetition)
 for (unsigned mask=0;mask<4;++mask) {
   Result result{bool(mask&1),{bool(mask&2),1.25}};
   std::ostringstream output;
@@ -446,10 +450,12 @@ work_field("orbital_seconds",2.0);field("native_seconds",3.0);
 """
         + retry_receipt
         + r"""
+const char* stage = repetition==2 ? "moved-warm" : repetition ? "warm" : "cold";
+const auto prefix = std::string("  \"lifecycle_stage\": \"")+stage+"\",\n";
 if (mask) {
-  assert(output.str()=="  \"triples_work\": null,\n  \"lambda_actions\": null,\n  \"jk_actions\": null,\n  \"orbital_seconds\": null,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
+  assert(output.str()==prefix+"  \"triples_work\": null,\n  \"lambda_actions\": null,\n  \"jk_actions\": null,\n  \"orbital_seconds\": null,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
 } else {
-  assert(output.str()=="  \"triples_work\": 17,\n  \"lambda_actions\": 19,\n  \"jk_actions\": 23,\n  \"orbital_seconds\": 2,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
+  assert(output.str()==prefix+"  \"triples_work\": 17,\n  \"lambda_actions\": 19,\n  \"jk_actions\": 23,\n  \"orbital_seconds\": 2,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
 }
 }}
 

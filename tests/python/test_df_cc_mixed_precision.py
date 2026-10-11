@@ -23,7 +23,11 @@ from tools.generate_df_ccsd_hoisted import (
     batched_auxiliary_program,
     mixed_auxiliary_program,
 )
-from tools.generate_rccsd_native import _arena_plan, _cuda_program
+from tools.generate_rccsd_native import (
+    _arena_plan,
+    _cuda_program,
+    cross_size_arena_candidate,
+)
 
 solver_probe = _solver_probe
 
@@ -57,9 +61,13 @@ def test_auxiliary_warmup_preserves_equations_and_bounded_rounding(
     }
 
 
-def test_mixed_arena_halves_bytes_without_changing_slot_lifetimes() -> None:
-    strict = _arena_plan(batched_auxiliary_program())
-    mixed = _arena_plan(mixed_auxiliary_program())
+@pytest.mark.parametrize("cross_size", [False, True])
+def test_mixed_arena_halves_bytes_without_changing_slot_lifetimes(
+    cross_size: bool,
+) -> None:
+    with cross_size_arena_candidate(cross_size):
+        strict = _arena_plan(batched_auxiliary_program())
+        mixed = _arena_plan(mixed_auxiliary_program())
     assert strict.slots == mixed.slots
     assert dict(strict.node_slots) == dict(mixed.node_slots)
     assert strict.identity != mixed.identity

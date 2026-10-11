@@ -432,6 +432,964 @@
       "selector": "src/methods/xtb_method.cpp",
       "state_owner": "src/xtb/native/src/runtime/gfn2_cuda_execution.hpp",
       "status": "production"
+    },
+    {
+      "artifact": "Installed shared true-residual GMRES and native CPU J/K actions",
+      "backend": "cpu",
+      "blocker": null,
+      "domain": "canonical-rhf-occupied-virtual",
+      "evidence": [
+        "tests/python/test_response_operator.py",
+        "tests/python/test_response_krylov.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [
+            "tests/python/test_response_direct.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "compiled-cuda": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "derivative": {
+          "evidence": [
+            "tests/python/test_hessian_response.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "domain-qualified": {
+          "evidence": [
+            "tests/python/test_response_operator.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "molecular": {
+          "evidence": [
+            "tests/python/test_response_operator.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "public": {
+          "evidence": [
+            "tests/python/test_response_production_owner.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc/response_operator.py",
+            "python/generativeqc/response_problem.py"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "execution_owner": "python/generativeqc/response_solver.py",
+      "id": "hf-response-cpu-cphf",
+      "method_family": "hf",
+      "product": "response",
+      "provider_owner": "python/generativeqc/fock.py",
+      "public_entry": "python/generativeqc/response_operator.py",
+      "resource_owner": "python/generativeqc/response_solver.py",
+      "scientific_owner": "python/generativeqc/response_operator.py",
+      "selector": "python/generativeqc/response_operator.py",
+      "state_owner": "python/generativeqc/response_problem.py",
+      "status": "production"
+    },
+    {
+      "artifact": "Native CUDA resident vector/J/K ABI with installed shared solver controller",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "canonical-rhf-resident-occupied-virtual",
+      "evidence": [
+        "tests/python/test_response_block_resident_cuda.py",
+        "benchmarks/results/response-contract/2026-10-11/qualification.json"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA execution binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/python/test_response_block_resident_cuda.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [
+            "benchmarks/results/response-contract/2026-10-11/qualification.json"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc/response_operator.py",
+            "python/generativeqc/response_solver.py"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "Installed production binding and complete-endpoint default cutover; a qualification tool is not public molecular derivative support.",
+        "owner": "tools/generativeqc_response/resident_cuda.py",
+        "retirement_condition": "Move only execution/lease ownership into the installed runtime and qualify the same logical plan at complete endpoints with matched A/B/resource gates."
+      },
+      "execution_owner": "tools/generativeqc_response/resident_cuda.py",
+      "id": "hf-response-cuda-resident-cphf",
+      "method_family": "hf",
+      "product": "response",
+      "provider_owner": "tools/generativeqc_response/direct_cuda.py",
+      "public_entry": "tools/generativeqc_response/resident_cuda.py",
+      "resource_owner": "tools/generativeqc_response/resident_cuda.py",
+      "scientific_owner": "python/generativeqc/response_operator.py",
+      "selector": "python/generativeqc/response_solver.py",
+      "state_owner": "python/generativeqc/response_problem.py",
+      "status": "qualification-only"
+    },
+    {
+      "artifact": "Generated shared and independent CC Lambda actions with bound native response plan",
+      "backend": "cpu",
+      "blocker": null,
+      "domain": "canonical-rccsd-packed-lambda",
+      "evidence": [
+        "tests/native/test_cc_lambda_preconditioner.cpp",
+        "tests/python/test_rccsd_native_lambda_owner.py",
+        "benchmarks/results/response-contract/2026-10-11/qualification.json"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [
+            "tests/native/test_cc_lambda_preconditioner.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "compiled-cuda": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "derivative": {
+          "evidence": [
+            "tests/native/test_cc_lambda_preconditioner.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "domain-qualified": {
+          "evidence": [
+            "tests/python/test_rccsd_native_lambda_owner.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc_compiler/cc/doubles.py",
+            "src/cc/lambda_response.hpp"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "execution_owner": "src/cc/lambda_response.cpp",
+      "id": "cc-response-cpu-rccsd-lambda",
+      "method_family": "cc",
+      "product": "response",
+      "provider_owner": "src/posthf/native_provider.cpp",
+      "public_entry": "src/cc/lambda_response.hpp",
+      "resource_owner": "src/cc/lambda_response.cpp",
+      "scientific_owner": "python/generativeqc_compiler/cc/doubles.py",
+      "selector": "src/cc/lambda_response.cpp",
+      "state_owner": "src/cc/solver.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Generated shared and independent CC Lambda actions with bound native response plan",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "canonical-rccsd-packed-lambda",
+      "evidence": [
+        "tests/native/test_cc_lambda_preconditioner.cpp",
+        "tests/python/test_rccsd_native_lambda_owner.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA execution binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/native/test_cc_lambda_preconditioner.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [
+            "benchmarks/results/response-contract/2026-10-11/qualification.json"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc_compiler/cc/doubles.py",
+            "src/cc/lambda_response.hpp"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "Device-resident dimension-sized Krylov state for conventional and DF Lambda; transpose currently uploads seeds and downloads outputs per action.",
+        "owner": "src/cc/lambda_response_cuda.cu",
+        "retirement_condition": "Use the existing resident controller with admitted resident right preconditioning, stream/lifetime/accounting and independent residual gates; qualify matched complete endpoint A/B before promotion."
+      },
+      "execution_owner": "src/cc/lambda_response_cuda.cu",
+      "id": "cc-response-cuda-rccsd-lambda",
+      "method_family": "cc",
+      "product": "response",
+      "provider_owner": "src/posthf/native_provider.cpp",
+      "public_entry": "src/cc/lambda_response.hpp",
+      "resource_owner": "src/cc/lambda_response_cuda.cu",
+      "scientific_owner": "python/generativeqc_compiler/cc/doubles.py",
+      "selector": "src/cc/lambda_response_cuda.cu",
+      "state_owner": "src/cc/solver.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Generated RHF frame action with separately bound screened/exact response plans",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "canonical-rhf-frame-z-screened-exact",
+      "evidence": [
+        "tests/python/test_rhf_frame_response_cuda.py",
+        "benchmarks/results/response-contract/2026-10-11/qualification.json"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA execution binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/native/rhf_frame_response_probe.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [
+            "benchmarks/results/response-contract/2026-10-11/qualification.json"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "src/hf/rhf_frame_response.cu"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "Device-resident Z Krylov state; exact resident J/K source admission does not remove host-vector response actions.",
+        "owner": "src/hf/rhf_frame_response.cu",
+        "retirement_condition": "Bind resident vector execution while preserving optional inverse refusal, screening/exact retries, scalar audit, complete resource caps and matched E+F A/B."
+      },
+      "execution_owner": "src/hf/rhf_frame_response.cu",
+      "id": "hf-response-cuda-frame-z",
+      "method_family": "hf",
+      "product": "response",
+      "provider_owner": "src/posthf/native_provider.cpp",
+      "public_entry": "src/hf/rhf_frame_response.hpp",
+      "resource_owner": "src/hf/rhf_frame_response.cu",
+      "scientific_owner": "python/generativeqc_compiler/method/rhf_orbital_response.py",
+      "selector": "src/hf/rhf_frame_response.cu",
+      "state_owner": "src/core/electronic_reference.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Native CUDA J/XC actions with installed CPKS contract and host orbital/Krylov vectors",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "lda-pbe-rks-fixed-grid",
+      "evidence": [
+        "tests/python/test_response_native_cuda.py",
+        "benchmarks/results/response-contract/2026-10-11/qualification.json"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA execution binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/python/test_response_native_cuda.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [
+            "benchmarks/results/response-contract/2026-10-11/qualification.json"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc/response_operator.py",
+            "python/generativeqc/rks_response.py"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "Resident orbital transforms/Krylov/reconstruction for production native CPKS; native GPU AO/XC alone is not a resident molecular HVP.",
+        "owner": "python/generativeqc/rks_response.py",
+        "retirement_condition": "Bind the existing stationary/response logical request to fully resident native execution without per-action vector transfers and qualify endpoint sources/resources."
+      },
+      "execution_owner": "python/generativeqc/rks_response.py",
+      "id": "dft-response-cuda-semilocal-cpks",
+      "method_family": "dft",
+      "product": "response",
+      "provider_owner": "python/generativeqc/rks_response.py",
+      "public_entry": "python/generativeqc/rks_response.py",
+      "resource_owner": "python/generativeqc/rks_response.py",
+      "scientific_owner": "python/generativeqc/response_operator.py",
+      "selector": "python/generativeqc/rks_response.py",
+      "state_owner": "python/generativeqc/rks_response.py",
+      "status": "production"
+    },
+    {
+      "artifact": "MethodIR seven-source stationary HVP plan and transactional shared executor",
+      "backend": "cpu",
+      "blocker": null,
+      "domain": "lda-pbe-rks-all-electron-direct",
+      "evidence": [
+        "tests/python/test_hessian_rks_directional.py",
+        "tests/python/test_hessian_public_rks.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [
+            "tests/python/test_hessian_rks_directional.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "compiled-cuda": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "derivative": {
+          "evidence": [
+            "tests/python/test_stationary_second_order_executor.py",
+            "tests/python/test_hessian_rks_directional.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "domain-qualified": {
+          "evidence": [
+            "tests/python/test_hessian_rks_directional.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "molecular": {
+          "evidence": [
+            "tests/python/test_hessian_rks_directional.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "public": {
+          "evidence": [
+            "tests/python/test_hessian_public_rks.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc_compiler/method/stationary_hvp.py"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "execution_owner": "python/generativeqc/second_order.py",
+      "id": "dft-hvp-cpu-semilocal-rks",
+      "method_family": "dft",
+      "product": "hvp",
+      "provider_owner": "python/generativeqc/rks_hessian.py",
+      "public_entry": "python/generativeqc/calculator.py",
+      "qualification_exception": {
+        "domain": "13-AO cold second-integral runtime JIT",
+        "evidence": "benchmarks/results/response-contract/2026-10-11/qualification.json",
+        "reason": "300-second C++ compilation timeout; independent numerical acceptance not reached. Smaller recorded fixtures do not establish this cold domain.",
+        "state": "failed"
+      },
+      "resource_owner": "python/generativeqc/rks_hessian.py",
+      "scientific_owner": "python/generativeqc_compiler/method/stationary_hvp.py",
+      "selector": "python/generativeqc/rks_hessian.py",
+      "state_owner": "python/generativeqc/rks_response.py",
+      "status": "production"
+    },
+    {
+      "artifact": "Logical stationary HVP plan only; no complete CUDA binding",
+      "backend": "cuda",
+      "blocker": "#1905: CUDA XC AO/grid/Becke mixed geometry, resident CPKS/reconstruction, first-integral relaxation and complete accumulation are not qualified. The CPU-only admission gate remains explicit; fxc and mixed integral stages do not establish full HVP/public support.",
+      "domain": "lda-pbe-rks-all-electron-direct",
+      "evidence": [
+        "tests/python/test_hessian_rks_import_contract.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA execution binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "python/generativeqc_compiler/method/stationary_hvp.py",
+            "python/generativeqc/rks_hessian.py"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "execution_owner": "python/generativeqc/second_order.py",
+      "id": "dft-hvp-cuda-semilocal-rks",
+      "method_family": "dft",
+      "product": "hvp",
+      "provider_owner": "python/generativeqc/rks_hessian.py",
+      "public_entry": "python/generativeqc/calculator.py",
+      "resource_owner": "python/generativeqc/rks_hessian.py",
+      "scientific_owner": "python/generativeqc_compiler/method/stationary_hvp.py",
+      "selector": "python/generativeqc/rks_hessian.py",
+      "state_owner": "python/generativeqc/rks_response.py",
+      "status": "unsupported"
+    },
+    {
+      "artifact": "Method-owned stationary integral/classical/D4 response composition",
+      "backend": "cpu",
+      "blocker": null,
+      "domain": "gfn2-restricted-scc-self-consistent-d4",
+      "evidence": [
+        "tests/python/test_gfn2_xtb.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [
+            "tests/python/test_gfn2_xtb.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "compiled-cuda": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "This row inventories the CPU execution binding.",
+          "state": "not-applicable"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "src/xtb/native/src/model/gfn2/force.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "No molecular HVP is established by this first-derivative stationary force row; self-consistent GFN2 D4 is not external DFT D4.",
+        "owner": "src/xtb/native/src/model/gfn2/force.cpp",
+        "retirement_condition": "Retain the native scientific owner; qualify any new derivative order with its own complete source inventory and terminal-state oracle before adding support."
+      },
+      "execution_owner": "src/xtb/native/src/model/gfn2/force.cpp",
+      "id": "gfn2-force-cpu-stationary-d4",
+      "method_family": "gfn",
+      "product": "force",
+      "provider_owner": "src/xtb/native/src/model/gfn2/scc_driver.cpp",
+      "public_entry": "python/generativeqc/calculator.py",
+      "resource_owner": "src/xtb/native/src/model/gfn2/force.cpp",
+      "scientific_owner": "src/xtb/native/src/model/gfn2/force.cpp",
+      "selector": "src/methods/xtb_method.cpp",
+      "state_owner": "src/xtb/native/src/model/gfn2/force.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Method-owned stationary integral/classical/D4 response composition",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "gfn2-restricted-scc-self-consistent-d4",
+      "evidence": [
+        "tests/python/test_gfn2_xtb.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA execution binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/python/test_gfn2_xtb.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "Not established by the retained evidence for this response/product/domain row; do not infer it from another binding or primitive capability.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "src/xtb/native/src/model/gfn2/force.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "No molecular HVP is established by this first-derivative stationary force row; self-consistent GFN2 D4 is not external DFT D4.",
+        "owner": "src/xtb/native/src/model/gfn2/force.cpp",
+        "retirement_condition": "Retain the native scientific owner; qualify any new derivative order with its own complete source inventory and terminal-state oracle before adding support."
+      },
+      "execution_owner": "src/xtb/native/src/backends/cuda/gfn2_energy_force_execution.cu",
+      "id": "gfn2-force-cuda-stationary-d4",
+      "method_family": "gfn",
+      "product": "force",
+      "provider_owner": "src/xtb/native/src/model/gfn2/scc_driver.cpp",
+      "public_entry": "python/generativeqc/calculator.py",
+      "resource_owner": "src/xtb/native/src/backends/cuda/gfn2_energy_force_execution.cu",
+      "scientific_owner": "src/xtb/native/src/model/gfn2/force.cpp",
+      "selector": "src/methods/xtb_method.cpp",
+      "state_owner": "src/xtb/native/src/model/gfn2/force.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Bound shared native response plan, streamed Lagrangian weights and conventional derivative binding",
+      "backend": "cpu",
+      "blocker": null,
+      "domain": "canonical-rhf-conventional-mp2",
+      "evidence": [
+        "tests/python/test_mp2_gradient.py",
+        "tests/python/test_mp2_streamed_force_workspace.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [
+            "tests/python/test_mp2_gradient.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "compiled-cuda": {
+          "evidence": [],
+          "reason": "This row inventories the CPU conventional MP2 force binding.",
+          "state": "not-applicable"
+        },
+        "derivative": {
+          "evidence": [
+            "tests/python/test_mp2_gradient.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "This row inventories the CPU conventional MP2 force binding.",
+          "state": "not-applicable"
+        },
+        "domain-qualified": {
+          "evidence": [
+            "tests/python/test_mp2_gradient.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "molecular": {
+          "evidence": [
+            "tests/python/test_mp2_gradient.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "No retained evidence for this exact complete force binding/domain stage; do not infer it from MP2 energy or primitive integrals.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "src/posthf/mp2_force.cpp",
+            "src/posthf/mp2_gradient.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "execution_owner": "src/posthf/mp2_force.cpp",
+      "id": "mp2-force-cpu-conventional-response",
+      "method_family": "mp2",
+      "product": "force",
+      "provider_owner": "src/posthf/native_provider.cpp",
+      "public_entry": "src/posthf/mp2_force.hpp",
+      "resource_owner": "src/posthf/mp2_force_workspace.hpp",
+      "scientific_owner": "src/posthf/mp2_gradient.cpp",
+      "selector": "src/posthf/mp2_force.cpp",
+      "state_owner": "src/hf/reference.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Bound shared native response plan, streamed Lagrangian weights and conventional derivative binding",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "canonical-rhf-conventional-mp2",
+      "evidence": [
+        "tests/python/test_mp2_gradient.py",
+        "tests/python/test_mp2_streamed_force_workspace.py"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA conventional MP2 force binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/python/test_mp2_gradient.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "No retained evidence for this exact complete force binding/domain stage; do not infer it from MP2 energy or primitive integrals.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [],
+          "reason": "No retained evidence for this exact complete force binding/domain stage; do not infer it from MP2 energy or primitive integrals.",
+          "state": "missing"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "No retained evidence for this exact complete force binding/domain stage; do not infer it from MP2 energy or primitive integrals.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "No retained evidence for this exact complete force binding/domain stage; do not infer it from MP2 energy or primitive integrals.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "No retained evidence for this exact complete force binding/domain stage; do not infer it from MP2 energy or primitive integrals.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "src/posthf/mp2_force.cpp",
+            "src/posthf/mp2_gradient.cpp"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "Native CUDA integral providers still return host MO blocks to dimension-sized host orbital/Krylov/weight algebra; the shared equations do not prove device residency.",
+        "owner": "src/posthf/mp2_force.cpp",
+        "retirement_condition": "Bind the existing scientific plan to resident vector/provider/weight execution and retain strict complete-force stationarity, transfer/resource counts and matched A/B gates."
+      },
+      "execution_owner": "src/posthf/mp2_force.cpp",
+      "id": "mp2-force-cuda-conventional-response",
+      "method_family": "mp2",
+      "product": "force",
+      "provider_owner": "src/posthf/native_provider.cpp",
+      "public_entry": "src/posthf/mp2_force.hpp",
+      "resource_owner": "src/posthf/mp2_force_workspace.hpp",
+      "scientific_owner": "src/posthf/mp2_gradient.cpp",
+      "selector": "src/posthf/mp2_force.cpp",
+      "state_owner": "src/hf/reference.hpp",
+      "status": "production"
+    },
+    {
+      "artifact": "Native CUDA spin J/XC with tool-owned UKS response adapter and installed shared Krylov controller",
+      "backend": "cuda",
+      "blocker": null,
+      "domain": "lda-pbe-uks-fixed-grid",
+      "evidence": [
+        "tests/python/test_response_native_cuda.py",
+        "benchmarks/results/response-contract/2026-10-11/qualification.json"
+      ],
+      "evidence_levels": {
+        "compiled-cpu": {
+          "evidence": [],
+          "reason": "This row inventories the CUDA UKS binding.",
+          "state": "not-applicable"
+        },
+        "compiled-cuda": {
+          "evidence": [
+            "tests/python/test_response_native_cuda.py"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "derivative": {
+          "evidence": [],
+          "reason": "The retained stage is not established by this UKS tooling row; RKS evidence is not interchangeable.",
+          "state": "missing"
+        },
+        "device-executed": {
+          "evidence": [
+            "benchmarks/results/response-contract/2026-10-11/qualification.json"
+          ],
+          "reason": null,
+          "state": "present"
+        },
+        "domain-qualified": {
+          "evidence": [],
+          "reason": "The retained stage is not established by this UKS tooling row; RKS evidence is not interchangeable.",
+          "state": "missing"
+        },
+        "molecular": {
+          "evidence": [],
+          "reason": "The retained stage is not established by this UKS tooling row; RKS evidence is not interchangeable.",
+          "state": "missing"
+        },
+        "public": {
+          "evidence": [],
+          "reason": "The retained stage is not established by this UKS tooling row; RKS evidence is not interchangeable.",
+          "state": "missing"
+        },
+        "represented": {
+          "evidence": [
+            "tools/generativeqc_response/uhf.py"
+          ],
+          "reason": null,
+          "state": "present"
+        }
+      },
+      "exception": {
+        "missing_capability": "UKS response binding remains qualification tooling with host orbital/Krylov algebra, unlike the installed RKS response owner.",
+        "owner": "tools/generativeqc_response/native_ks.py",
+        "retirement_condition": "Extract only the existing UKS ownership/contract into the installed runtime and qualify resident complete endpoint execution without a second spin scientific implementation."
+      },
+      "execution_owner": "tools/generativeqc_response/native_ks.py",
+      "id": "dft-response-cuda-semilocal-uks-cpks",
+      "method_family": "dft",
+      "product": "response",
+      "provider_owner": "tools/generativeqc_response/native_ks.py",
+      "public_entry": "tools/generativeqc_response/native_ks.py",
+      "resource_owner": "tools/generativeqc_response/native_ks.py",
+      "scientific_owner": "tools/generativeqc_response/uhf.py",
+      "selector": "tools/generativeqc_response/native_ks.py",
+      "state_owner": "python/generativeqc/_dft_gradient.py",
+      "status": "qualification-only"
     }
   ],
   "schema": "generativeqc.electronic-production-paths.v2"

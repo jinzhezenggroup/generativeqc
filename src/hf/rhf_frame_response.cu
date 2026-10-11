@@ -11,6 +11,7 @@
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "response/low_rank_preconditioner.hpp"
+#include "response/solve.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
@@ -705,21 +706,27 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     auto rhs = result.orbital_rhs;
     auto physical = [&](auto x, auto y) { owner.apply(x, y); };
     auto provisional = [&](auto x, auto y) { owner.apply(x, y, false, result.applied_screening); };
+    // Screening is an execution approximation, not a symmetry certificate.
+    const response::LinearResponseProblem provisional_problem(o * v, provisional);
+    const response::LinearResponseProblem physical_problem(o * v, physical);
+    const auto provisional_plan = response::prepare_response(provisional_problem, zplan.options);
+    const auto physical_plan = response::prepare_response(physical_problem, zplan.options);
     const auto initial = recycling ? recycling->initial_guess(rhs) : std::span<const double>{};
     result.recycled_guess = !initial.empty();
     phase = Clock::now();
     response::GmresResult z;
     if (inverse) {
-      z = response::solve_gmres(zplan, provisional, rhs, initial, {}, [&](auto x, auto y) {
-        try {
-          inverse->apply(x, y);
-        } catch (const std::runtime_error&) {
-          // Refuse only this optional numerical callback. Physical actions propagate.
-          std::fill(y.begin(), y.end(), std::numeric_limits<double>::quiet_NaN());
-        }
-      });
+      z = response::solve_response(
+          provisional_plan, provisional_problem, rhs, initial, {}, [&](auto x, auto y) {
+            try {
+              inverse->apply(x, y);
+            } catch (const std::runtime_error&) {
+              // Refuse only this optional numerical callback. Physical actions propagate.
+              std::fill(y.begin(), y.end(), std::numeric_limits<double>::quiet_NaN());
+            }
+          });
     } else {
-      z = response::solve_gmres(zplan, provisional, rhs, initial, diagonal);
+      z = response::solve_response(provisional_plan, provisional_problem, rhs, initial, diagonal);
     }
     result.solve_seconds += seconds(phase);
     const auto audit_solution = [&]() {
@@ -752,11 +759,11 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       if (result.applied_screening > 0 && z.converged()) {
         // Its warm-start vector is separately admitted. The replacement Krylov
         // workspace is the only live workspace because GMRES owns none on return.
-        z = response::solve_gmres(zplan, physical, rhs, z.solution, diagonal);
+        z = response::solve_response(physical_plan, physical_problem, rhs, z.solution, diagonal);
       } else {
         // Release a refused accelerator's result before the exact diagonal retry.
         z = {};
-        z = response::solve_gmres(zplan, physical, rhs, {}, diagonal);
+        z = response::solve_response(physical_plan, physical_problem, rhs, {}, diagonal);
       }
       result.solve_seconds += seconds(phase);
       z.operator_actions += actions;

@@ -35,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 30)
+    if (argc < 4 || argc > 32)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
@@ -48,7 +48,9 @@ int main(int argc, char** argv) {
           "[FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 "
           "[LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 "
           "[LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1 "
-          "[CCSD_MIXED_PRECISION_0_OR_1 [LAMBDA_MIXED_PRECISION_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]");
+          "[LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1 [LIFECYCLE_0_OR_1 "
+          "[CCSD_MIXED_PRECISION_0_OR_1 "
+          "[LAMBDA_MIXED_PRECISION_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -92,6 +94,7 @@ int main(int argc, char** argv) {
     if (argc > 15) frame_options.df_preconditioning = selector(15);
     generativeqc::hf::RHFFrameResponseRecycle recycling;
     const bool recycle_repeat = argc > 16 && selector(16);
+    const bool lifecycle = argc > 29 && selector(29);
     if (recycle_repeat) frame_options.recycling = &recycling;
     const bool packed_diis = argc > 17 && selector(17);
     if (argc > 18 && std::string(argv[18]) != "auto")
@@ -102,9 +105,10 @@ int main(int argc, char** argv) {
     const bool lambda_core_reuse = selector(25);
     const bool lambda_audit_matrix = selector(26);
     const bool lambda_primal_matrix = argc <= 27 || selector(27);
+    const bool lambda_serial_scratch_reuse = argc > 28 && selector(28);
     const bool triples_w_fp32 = argc > 23 && selector(23);
-    const bool ccsd_mixed_precision = argc > 28 && selector(28);
-    const bool lambda_mixed_precision = argc > 29 && selector(29);
+    const bool ccsd_mixed_precision = argc > 30 && selector(30);
+    const bool lambda_mixed_precision = argc > 31 && selector(31);
     // The complete DF force owner defaults to amortized FP64 Lambda checks.
     // Explicit interval 1 retains the historical per-iteration control.
     const auto lambda_true_residual_interval = unsigned_argument(24, 30);
@@ -162,19 +166,30 @@ int main(int argc, char** argv) {
               << generativeqc::molecule::ao_count(orbital)
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     double previous_endpoint_seconds = 0;
-    for (int repetition = 0; repetition < (recycle_repeat ? 2 : 1); ++repetition) {
+    for (int repetition = 0; repetition < (lifecycle ? 3 : recycle_repeat ? 2 : 1); ++repetition) {
+      // Warm calls reuse this process/context, not imported scientific state.
+      // The moved call rebuilds both bases at one explicit displaced geometry.
+      if (lifecycle && repetition == 2) {
+        orbital.atoms.front().position[2] += 1e-4;
+        auxiliary.atoms = orbital.atoms;
+      }
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
           admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix,
-          lambda_primal_matrix, nullptr, ccsd_mixed_precision, lambda_mixed_precision);
-      std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
+          lambda_primal_matrix, nullptr, lambda_serial_scratch_reuse, ccsd_mixed_precision,
+          lambda_mixed_precision);
+      const char* suffix = repetition == 2 ? ".moved-warm.json" : repetition ? ".warm.json" : "";
+      std::ofstream output(std::string(argv[2]) + suffix);
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
       const auto field = [&](const char* name, auto value) {
         output << "  " << std::quoted(name) << ": " << value << ",\n";
       };
+      field("lifecycle_stage", std::quoted(repetition == 2 ? "moved-warm"
+                                           : repetition    ? "warm"
+                                                           : "cold"));
       // A discarded attempt can include any completed phase. Final-attempt
       // counters, phase times and peaks cannot reconstruct total attempted work.
       const auto work_field = [&](const char* name, auto value) {
@@ -415,6 +430,7 @@ int main(int argc, char** argv) {
       field("lambda_audit_matrix_requested", lambda_audit_matrix);
       field("lambda_audit_matrix", result.lambda.df_audit_matrix_gemm);
       field("lambda_primal_matrix_requested", lambda_primal_matrix);
+      field("lambda_serial_scratch_reuse_requested", lambda_serial_scratch_reuse);
       field("lambda_primal_matrix", result.lambda.df_primal_matrix_gemm);
       field("lambda_mixed_precision_requested", lambda_mixed_precision);
       field("lambda_mixed_precision", result.lambda.df_mixed_precision);

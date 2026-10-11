@@ -1065,23 +1065,12 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
-        if (
-            self._automatic_initial_guess
-            and (
-                self._device_name == "cpu"
-                or self._capabilities.family == "density_functional"
-            )
-            and self._precision_mode == _native.PRECISION_FP64
-            and self._density_fitting_mode == _native.DENSITY_FITTING_NONE
-            and restricted
-            and not basis_has_ecp
-            and self._capabilities.family in ("hartree_fock", "density_functional")
-        ):
-            from .initial_guess import supports_automatic_minao
+        if self._automatic_initial_guess:
+            from .initial_guess import _automatic_minao_model_eligible
 
-            # Automatic preparation must not make an optional native feature
-            # mandatory for an otherwise supported default calculation.
-            if supports_automatic_minao(self._library):
+            if _automatic_minao_model_eligible(
+                self, restricted=restricted, has_ecp=basis_has_ecp
+            ):
                 self._initial_guess = InitialGuessSpec("minao")
 
         if self._initial_guess is not None:
