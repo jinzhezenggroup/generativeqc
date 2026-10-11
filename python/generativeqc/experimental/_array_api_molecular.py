@@ -291,6 +291,14 @@ class MolecularModel(RHF):
         screening_tolerance: float = 1e-14,
         resource_budget: Any = None,
     ) -> None:
+        """Bind one native Calculator selector and first-order source contract.
+
+        Inputs are Bohr coordinates shaped (natoms, 3), return energy in Hartree,
+        and support an analytic-gradient pullback only where native forces exist.
+        Invalid spin, density fitting and method configuration fails before
+        execution; backend/method capabilities remain native-owned. No native
+        resources are allocated until execution; close the compiled owner.
+        """
         if not isinstance(method, str) or not method.strip():
             raise ValueError("molecular method must be a nonempty native selector")
         if not isinstance(density_fitting, str) or density_fitting.lower() not in (
