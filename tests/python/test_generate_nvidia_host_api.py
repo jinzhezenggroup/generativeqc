@@ -35,8 +35,10 @@ def test_missing_api_fails_before_wheel_build(tmp_path: Path) -> None:
 
 
 def test_ast_stream_parser_and_pointer_signature() -> None:
-    objects = codegen.ast_objects('{"kind":"FunctionDecl","name":"cublasOne"}\n'
-                                   '{"kind":"FunctionDecl","name":"cublasTwo"}\n')
+    objects = codegen.ast_objects(
+        '{"kind":"FunctionDecl","name":"cublasOne"}\n'
+        '{"kind":"FunctionDecl","name":"cublasTwo"}\n'
+    )
     assert [node["name"] for node in objects] == ["cublasOne", "cublasTwo"]
     assert codegen.canonical_type("const double * const *") == "const double*const*"
     output = codegen.render(
