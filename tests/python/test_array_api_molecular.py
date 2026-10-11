@@ -17,6 +17,21 @@ if TYPE_CHECKING:
 COORDINATES = np.asarray([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]])
 
 
+def _require_scheduled_cuda() -> None:
+    """Remote Slurm names differ from SSH aliases; node3 stays excluded."""
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
+    assert os.environ.get("SLURMD_NODENAME") in {
+        "n1",
+        "n2",
+        "n4",
+        "n5",
+        "node1",
+        "node2",
+        "node4",
+        "node5",
+    }
+
+
 @pytest.fixture
 def polynomial_source(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """Test orchestration with an explicit fake, not a QC numerical oracle."""
@@ -384,12 +399,27 @@ def test_native_rhf_nonconvergence_publishes_no_source_snapshot(
     compiled.close()
 
 
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                os.environ.get("GENERATIVEQC_ARRAY_API_CUDA_TEST") != "1",
+                reason="real composition/VJP requires an explicit Slurm GPU allocation",
+            ),
+        ),
+    ],
+)
 def test_native_geometry_composition_and_snapshot_pullback(
-    tmp_path: Path, native_library: None
+    tmp_path: Path, native_library: None, backend: str
 ) -> None:
     from generativeqc import Calculator
 
-    rhf = xp.RHF(("H", "H"))
+    if backend == "cuda":
+        _require_scheduled_cuda()
+    rhf = xp.RHF(("H", "H"), backend=backend)
 
     def expression(coordinates: Any, scale: Any) -> Any:
         energy = rhf(coordinates * scale)
@@ -397,8 +427,15 @@ def test_native_geometry_composition_and_snapshot_pullback(
 
     coordinates = COORDINATES.copy()
     scale = np.asarray(1.1)
-    compiled = xp.value_and_grad(expression, argnums=(0, 1), cache=tmp_path)
-    calculator = Calculator(method="rhf", initial_guess=None, **dict(rhf._controls))
+    options = {
+        "backend": backend,
+        "cache": tmp_path,
+        "cuda_arch": os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"),
+    }
+    compiled = xp.value_and_grad(expression, argnums=(0, 1), **options)
+    calculator = Calculator(
+        method="rhf", device=backend, initial_guess=None, **dict(rhf._controls)
+    )
     try:
         reference = calculator.singlepoint(rhf._atoms(coordinates * scale))
         gradient = -reference.forces
@@ -423,7 +460,7 @@ def test_native_geometry_composition_and_snapshot_pullback(
             2 * step
         )
         np.testing.assert_allclose(scale_gradient, difference, rtol=0, atol=5e-7)
-        _, pullback = xp.vjp(expression, coordinates, scale, cache=tmp_path)
+        _, pullback = xp.vjp(expression, coordinates, scale, **options)
         try:
             coordinates[:] = 100
             scale[...] = 10
@@ -473,22 +510,68 @@ def test_molecular_cuda_lowering_does_not_probe_native_or_device(
     os.environ.get("GENERATIVEQC_ARRAY_API_CUDA_TEST") != "1",
     reason="real molecular CUDA acceptance requires explicit scheduled opt-in",
 )
-def test_real_cuda_molecular_endpoint(tmp_path: Path) -> None:
-    assert os.environ.get("SLURM_JOB_ID")
-    assert os.environ.get("SLURMD_NODENAME") in {"n1", "n2", "n4", "n5"}
-    rhf = xp.RHF(("H", "H"), backend="cuda")
+@pytest.mark.parametrize(
+    "elements, coordinates, charge, basis",
+    [
+        (("H", "H"), COORDINATES, 0, "sto-3g"),
+        (("He", "H"), COORDINATES, 1, "def2-svp"),
+        (
+            ("O", "H", "H"),
+            np.asarray([[0.0, 0.0, 0.0], [0.0, -1.43, 1.11], [0.0, 1.43, 1.11]]),
+            0,
+            "sto-3g",
+        ),
+    ],
+)
+def test_real_cuda_molecular_endpoint(
+    tmp_path: Path, elements: Any, coordinates: Any, charge: int, basis: str
+) -> None:
+    """Check complete CUDA gradients against independent energy differences."""
+    from generativeqc import Calculator
+
+    _require_scheduled_cuda()
+    rhf = xp.RHF(elements, basis=basis, charge=charge, backend="cuda")
     compiled = xp.value_and_grad(
-        lambda coordinates: rhf(coordinates), backend="cuda", cache=tmp_path
+        lambda coordinates: rhf(coordinates),
+        backend="cuda",
+        cache=tmp_path,
+        cuda_arch=os.environ.get("GENERATIVEQC_TENSOR_ARCH", "sm_120"),
+    )
+    calculator = Calculator(
+        method="rhf",
+        basis=basis,
+        device="cuda",
+        initial_guess=None,
+        density_fitting="none",
+        precision="fp64",
+        **dict(rhf._controls),
     )
     try:
-        value, gradient = compiled(COORDINATES)
-        np.testing.assert_allclose(value, -1.11671432506255, rtol=0, atol=2e-9)
+        value, gradient = compiled(coordinates)
+        reference = calculator.singlepoint(rhf._atoms(coordinates), charge=charge)
+        assert reference.executed_backend == "cuda"
+        np.testing.assert_allclose(value, reference.energy, rtol=0, atol=1e-11)
+        np.testing.assert_allclose(gradient, -reference.forces, rtol=0, atol=1e-10)
+        np.testing.assert_allclose(np.sum(gradient, axis=0), 0, rtol=0, atol=2e-9)
+        if elements == ("H", "H"):
+            np.testing.assert_allclose(value, -1.11671432506255, rtol=0, atol=2e-9)
+        direction = np.random.default_rng(2268).normal(size=coordinates.shape)
+        direction /= np.linalg.norm(direction)
         step = 1e-4
-        plus, minus = COORDINATES.copy(), COORDINATES.copy()
-        plus[1, 2] += step
-        minus[1, 2] -= step
-        difference = (rhf(plus) - rhf(minus)) / (2 * step)
-        np.testing.assert_allclose(gradient[1, 2], difference, rtol=0, atol=5e-7)
+        energies = [
+            calculator.singlepoint(
+                rhf._atoms(coordinates + sign * step * direction),
+                charge=charge,
+                properties=("energy",),
+            ).energy
+            for sign in (-1, 1)
+        ]
+        difference = (energies[1] - energies[0]) / (2 * step)
+        np.testing.assert_allclose(
+            np.sum(gradient * direction), difference, rtol=0, atol=5e-7
+        )
         assert compiled.compilation_info()["molecular_calls"][0]["backend"] == "cuda"
+        assert compiled.compilation_info()["molecular_calls"][0]["calls"] == 1
     finally:
         compiled.close()
+        calculator.clear_cache()

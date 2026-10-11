@@ -50,7 +50,16 @@ def test_slurm_native_cuda_primal_and_derivative(
     from generativeqc_compiler.tensor import autodiff, interpreter
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
-    assert os.environ.get("SLURMD_NODENAME") in {"n1", "n2", "n4", "n5"}
+    assert os.environ.get("SLURMD_NODENAME") in {
+        "n1",
+        "n2",
+        "n4",
+        "n5",
+        "node1",
+        "node2",
+        "node4",
+        "node5",
+    }
 
     def forbidden(*args: object, **kwargs: object) -> None:
         raise AssertionError("native CUDA delegated to reference execution/AD")

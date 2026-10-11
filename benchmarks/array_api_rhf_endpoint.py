@@ -22,9 +22,11 @@ from generativeqc.experimental import array_api as xp
 
 
 def _scheduler_guard(backend: str) -> None:
+    """Admit both SSH aliases and Slurm's verified node names, never node3."""
     if backend == "cuda" and (
         not os.environ.get("SLURM_JOB_ID")
-        or os.environ.get("SLURMD_NODENAME") not in {"n1", "n2", "n4", "n5"}
+        or os.environ.get("SLURMD_NODENAME")
+        not in {"n1", "n2", "n4", "n5", "node1", "node2", "node4", "node5"}
     ):
         raise RuntimeError(
             "CUDA benchmarks require srun on n1/n2/n4/n5, with finite --time"
