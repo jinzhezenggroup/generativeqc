@@ -13,6 +13,32 @@ The shared compiler boundary has three separate identities:
   precision, resources, and admitted fallbacks. Changing those execution facts
 invalidates reuse without changing the original scientific equation.
 
+## Independent prepared pairs
+
+`PreparedContractions::execute_independent_pair` applies one already-prepared
+ordinary unbatched strict-FP64 descriptor to two independent sets of views.
+`independent_pair_supported` checks the existing binding, context generation,
+device, capture boundary and provider compatibility without selecting a new
+provider. Checked/scaled/batched/mixed requests and CuMetal do not offer this
+recipe; joint checked forward/transpose publication remains a separate API.
+
+The caller reserves aligned stream-exclusive device pointer scratch before
+execution and keeps it alive until the stream drains. Read-only inputs may be
+shared. Outputs must be mutually disjoint and disjoint from all four input
+views, scratch and arithmetic state; scratch and arithmetic state must also be
+disjoint from the inputs and each other. Invalid views, insufficient/misaligned
+scratch and diagnostic overflow reject before enqueue. Execution never
+allocates, prepares a provider or retries partially completed work.
+
+The backend publishes addresses on the consumer stream, submits one batched
+driver call with the original descriptor and audits every original output value.
+Dense adjacent outputs may share a scan; padded/nonadjacent views retain their
+two affine scans, excluding padding. Diagnostics charge one driver submission
+and both semantic products/summands. `tests/native/test_native_contraction_pair_cuda.cu`
+qualifies only this API, independently of the ordinary provider matrix tests.
+
+## Prepared Scientific Sites
+
 COSX value assembly requests `AO * D`, `seed + AO^T * potential` and the
 point-batched `weight[p] * ESP[p] * projected[p]` through
 `dft.cosx_contraction`. The update includes an explicit donated seed in the

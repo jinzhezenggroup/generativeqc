@@ -54,6 +54,22 @@ def test_full_range_force_promotes_qualified_static_128_thread_schedule() -> Non
     assert "GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_CTA_THREADS" not in source
 
 
+def test_long_range_force_preserves_custom_shapes_and_short_range_control() -> None:
+    """Only the ordinary LR force launch adopts the established force width."""
+    source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
+    begin = source.index("void launch_bounded_direct_range_exchange_force_kernel(")
+    end = source.index("void launch_bounded_direct_range_exchange_fock_kernel(", begin)
+    dispatch = source[begin:end]
+    assert "radial_operator == DirectRangeOperator::Long" in dispatch
+    assert "block.x == kBoundedDirectThreads" in dispatch
+    assert "block.y == 1U && block.z == 1U" in dispatch
+    assert "block.x = kBoundedDirectForceThreads;" in dispatch
+    assert dispatch.index("block.x = kBoundedDirectForceThreads;") < dispatch.index(
+        "if (unrestricted)"
+    )
+    assert "Force ? blockDim.x : detail::kBoundedDirectQueueCapacity" in source
+
+
 def test_force_launch_width_preserves_materialized_component_coverage(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:

@@ -24,6 +24,7 @@ from generativeqc_compiler.method import (
     D4Spec,
     DispersionCorrectionPrimitive,
     compile_ks_execution_plan,
+    resolve_bulk_ks,
     resolve_method,
 )
 
@@ -80,11 +81,16 @@ def _promoted(
     density_fitting: bool = False,
     include_semilocal: bool = False,
     device: str = "cuda",
+    automatic_name: str | None = None,
 ) -> bool:
     _, assignments, promotion = _nodes()
     options = SimpleNamespace(
         xc_schedule="device_fused",
-        method_ir=resolve_method(method, spin=spin),
+        method_ir=(
+            resolve_bulk_ks(automatic_name, spin=spin).method
+            if automatic_name is not None
+            else resolve_method(method, spin=spin)
+        ),
     )
     if renamed:
         options.method_ir = replace(options.method_ir, identifier="opaque-hybrid-alias")
@@ -108,14 +114,18 @@ def _promoted(
             _native.METHOD_PBE_UKS if spin == "polarized" else _native.METHOD_PBE_RKS
         ),
         _basis=snapshot_basis("sto-3g"),
-        _method_name=("lda" if method == "LDA_XC_PW" else method.lower())
-        + ("-uks" if spin == "polarized" else "-rks"),
+        _method_name=(
+            f"libxc-{'uks' if spin == 'polarized' else 'rks'}:{automatic_name}"
+            if automatic_name is not None
+            else ("lda" if method == "LDA_XC_PW" else method.lower())
+            + ("-uks" if spin == "polarized" else "-rks")
+        ),
         _density_fitting_mode=(
             _native.DENSITY_FITTING_AUTO
             if density_fitting
             else _native.DENSITY_FITTING_NONE
         ),
-        _automatic_libxc_name=None,
+        _automatic_libxc_name=automatic_name,
         _dispersion_method_ir=None,
     )
     scope = {
@@ -359,3 +369,19 @@ def test_expanded_cpu_branch_uses_its_shared_qualified_context(
         device="cpu",
         blocked=blocked,
     ) is (blocked is None)
+
+
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+@pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("name", ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"))
+def test_automatic_semilocal_promotion_remains_cpu_fp64_only(
+    device: str, precision: int, spin: str, name: str
+) -> None:
+    assert _promoted(
+        precision=precision,
+        spin=spin,
+        include_semilocal=True,
+        device=device,
+        automatic_name=name,
+    ) is (device == "cpu" and precision == _native.PRECISION_FP64)
