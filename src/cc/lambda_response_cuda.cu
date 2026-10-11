@@ -20,9 +20,11 @@
 #include "cc/cuda_solver_support.cuh"
 #include "cc/df_lambda.hpp"
 #include "generated_rccsd_cpu.hpp"
+#include "response/resident_krylov.hpp"
 #include "response/solve.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "tensor/cuda_error.hpp"
+#include "tensor/cuda_krylov_vectors.cuh"
 
 namespace generativeqc::cc {
 namespace {
@@ -164,7 +166,55 @@ int checked_device(int device) {
   return device;
 }
 
+/** The method's existing weighted pair coordinates, evaluated on its stream.
+ * The representative/partner/weight tables are copied from AmplitudeLayout;
+ * this binding does not introduce another Lambda equation or ordering.
+ */
+__global__ void unpack_lambda_coordinates(const double* packed, double* one, double* two,
+                                          std::size_t singles, std::size_t dimension,
+                                          const std::size_t* representatives,
+                                          const std::size_t* partners, const double* weights) {
+  const auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= dimension) return;
+  if (index < singles) {
+    one[index] = packed[index];
+  } else {
+    const auto pair = index - singles;
+    const double value = packed[index] / weights[index];
+    two[representatives[pair]] = value;
+    two[partners[pair]] = value;
+  }
+}
+
+__global__ void pack_lambda_coordinates(const double* one, const double* two, double* packed,
+                                        std::size_t singles, std::size_t dimension,
+                                        const std::size_t* representatives,
+                                        const std::size_t* partners, const double* weights,
+                                        int* error) {
+  const auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= dimension) return;
+  if (index < singles) {
+    packed[index] = one[index];
+    if (!isfinite(one[index])) atomicExch(error, -1);
+  } else {
+    const auto pair = index - singles;
+    const double first = two[representatives[pair]], second = two[partners[pair]];
+    if (!isfinite(first) || !isfinite(second) ||
+        fabs(first - second) > 1e-10 * (1.0 + fmax(fabs(first), fabs(second))))
+      atomicExch(error, -1);
+    packed[index] = weights[index] * first;
+  }
+}
+
+__global__ void precondition_lambda_coordinates(double* output, const double* input,
+                                                const double* diagonal, std::size_t dimension) {
+  const auto index = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < dimension) output[index] = input[index] / diagonal[index];
+}
+
 class CudaLambdaActions {
+  friend class CudaLambdaResidentBackend;
+
  public:
   CudaLambdaActions(const Problem& p, const SolverResult& cc, const LambdaOptions& options,
                     int device, bool with_source, bool with_parameters)
@@ -462,6 +512,190 @@ class CudaLambdaActions {
   std::size_t synchronizations_{};
 };
 
+/** Optional vector owner borrowing the immutable terminal action and stream.
+ * All queued borrows are drained before storage/BLAS teardown, including on
+ * failure. Its complete arena is admitted beside the generated action arena.
+ */
+class CudaLambdaResidentBackend final : public response::ResidentResponseBackend {
+ public:
+  static std::size_t required_bytes(const response::ResponsePlan& plan,
+                                    const AmplitudeLayout& layout, bool preconditioned) {
+    std::size_t cursor = 0;
+    reserve(cursor, bytes(checked_mul(response::resident_gmres_workspace(plan).vector_slots,
+                                      layout.dimension())));
+    reserve(cursor, checked_mul(layout.pair_count(), sizeof(std::size_t)));
+    reserve(cursor, checked_mul(layout.pair_count(), sizeof(std::size_t)));
+    reserve(cursor, bytes(layout.dimension()));
+    if (preconditioned) reserve(cursor, bytes(layout.dimension()));
+    return align256(cursor);
+  }
+
+  CudaLambdaResidentBackend(CudaLambdaActions& owner, const response::ResponsePlan& plan,
+                            std::span<const double> diagonal)
+      : ResidentResponseBackend(plan),
+        owner_(owner),
+        dimension_(plan.dimension),
+        slots_(response::resident_gmres_workspace(plan).vector_slots),
+        allocation_bytes_(required_bytes(plan, owner.layout_, !diagonal.empty())),
+        preconditioned_(!diagonal.empty()) {
+    if (owner.df_ || dimension_ != owner.layout_.dimension() ||
+        dimension_ > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+        (!diagonal.empty() && diagonal.size() != dimension_))
+      throw std::invalid_argument("invalid conventional resident Lambda binding");
+    try {
+      if (!vectors_ops_.prepare(owner_.stream_)) throw std::bad_alloc();
+      cuda_check(cudaMalloc(reinterpret_cast<void**>(&allocation_), allocation_bytes_));
+      std::size_t cursor = 0;
+      vectors_ = reinterpret_cast<double*>(allocation_ +
+                                           reserve(cursor, bytes(checked_mul(slots_, dimension_))));
+      representatives_ = reinterpret_cast<std::size_t*>(
+          allocation_ +
+          reserve(cursor, checked_mul(owner_.layout_.pair_count(), sizeof(std::size_t))));
+      partners_ = reinterpret_cast<std::size_t*>(
+          allocation_ +
+          reserve(cursor, checked_mul(owner_.layout_.pair_count(), sizeof(std::size_t))));
+      weights_ = reinterpret_cast<double*>(allocation_ + reserve(cursor, bytes(dimension_)));
+      stage(representatives_, owner_.layout_.representatives.data(),
+            checked_mul(owner_.layout_.pair_count(), sizeof(std::size_t)));
+      stage(partners_, owner_.layout_.partners.data(),
+            checked_mul(owner_.layout_.pair_count(), sizeof(std::size_t)));
+      stage(weights_, owner_.layout_.sqrt_weights.data(), bytes(dimension_));
+      if (preconditioned_) {
+        diagonal_ = reinterpret_cast<double*>(allocation_ + reserve(cursor, bytes(dimension_)));
+        stage(diagonal_, diagonal.data(), bytes(dimension_));
+      }
+      fence();
+    } catch (const generativeqc_tensor::DeviceAllocationError&) {
+      cleanup();
+      throw std::bad_alloc();
+    } catch (...) {
+      cleanup();
+      throw;
+    }
+  }
+
+  ~CudaLambdaResidentBackend() override { cleanup(); }
+  CudaLambdaResidentBackend(const CudaLambdaResidentBackend&) = delete;
+  CudaLambdaResidentBackend& operator=(const CudaLambdaResidentBackend&) = delete;
+  std::size_t dimension() const noexcept override { return dimension_; }
+  std::size_t vector_slots() const noexcept override { return slots_; }
+  std::size_t owned_resident_bytes() const noexcept override {
+    return allocation_bytes_ + vectors_ops_.workspace_bytes();
+  }
+  std::size_t provider_observed_bytes() const noexcept { return vectors_ops_.retained_bytes(); }
+  int provider_version() const noexcept { return vectors_ops_.provider_version(); }
+  int runtime_version() const noexcept { return vectors_ops_.runtime_version(); }
+  bool has_right_preconditioner() const noexcept override { return preconditioned_; }
+
+  void upload(std::size_t slot, std::span<const double> values) override {
+    if (values.size() != dimension_) throw std::invalid_argument("Lambda resident upload shape");
+    HostTransferFence transfers(owner_.stream_);
+    stage(vector(slot), values.data(), bytes(dimension_));
+    fence();
+    transfers.complete();
+  }
+  void download(std::size_t slot, std::span<double> values) override {
+    if (values.size() != dimension_) throw std::invalid_argument("Lambda resident download shape");
+    HostTransferFence transfers(owner_.stream_);
+    cuda_check(cudaMemcpyAsync(values.data(), vector(slot), bytes(dimension_),
+                               cudaMemcpyDeviceToHost, owner_.stream_));
+    owner_.d2h_bytes_ = checked_add(owner_.d2h_bytes_, bytes(dimension_));
+    fence();
+    transfers.complete();
+  }
+  void zero(std::size_t slot) override {
+    cuda_check(cudaMemsetAsync(vector(slot), 0, bytes(dimension_), owner_.stream_));
+  }
+  void copy(std::size_t destination, std::size_t source) override {
+    cuda_check(cudaMemcpyAsync(vector(destination), vector(source), bytes(dimension_),
+                               cudaMemcpyDeviceToDevice, owner_.stream_));
+  }
+  void scale(std::size_t slot, double alpha) override {
+    vectors_ops_.scale(static_cast<int>(dimension_), alpha, vector(slot));
+  }
+  void axpy(std::size_t destination, double alpha, std::size_t source) override {
+    vectors_ops_.axpy(static_cast<int>(dimension_), alpha, vector(source), vector(destination));
+  }
+  double dot(std::size_t left, std::size_t right) override {
+    const double value =
+        vectors_ops_.dot(static_cast<int>(dimension_), vector(left), vector(right));
+    scalar_read();
+    return value;
+  }
+  double norm(std::size_t slot) override {
+    const double value = vectors_ops_.norm(static_cast<int>(dimension_), vector(slot));
+    scalar_read();
+    return value;
+  }
+  void precondition(std::size_t destination, std::size_t source) override {
+    if (!preconditioned_) {
+      copy(destination, source);
+      return;
+    }
+    precondition_lambda_coordinates<<<blocks(), 256, 0, owner_.stream_>>>(
+        vector(destination), vector(source), diagonal_, dimension_);
+    cuda_check(cudaGetLastError());
+  }
+  void apply(std::size_t destination, std::size_t source) override {
+    unpack_lambda_coordinates<<<blocks(), 256, 0, owner_.stream_>>>(
+        vector(source), owner_.state_.bar_singles_residual, owner_.state_.bar_doubles_residual,
+        owner_.layout_.n1, dimension_, representatives_, partners_, weights_);
+    cuda_check(cudaGetLastError());
+    const auto output = generated::run_lambda_transpose_cuda(owner_.state_);
+    pack_lambda_coordinates<<<blocks(), 256, 0, owner_.stream_>>>(
+        output.t1, output.t2, vector(destination), owner_.layout_.n1, dimension_, representatives_,
+        partners_, weights_, owner_.state_.error);
+    cuda_check(cudaGetLastError());
+    int error = 0;
+    HostTransferFence transfers(owner_.stream_);
+    cuda_check(cudaMemcpyAsync(&error, owner_.state_.error, sizeof(int), cudaMemcpyDeviceToHost,
+                               owner_.stream_));
+    owner_.d2h_bytes_ = checked_add(owner_.d2h_bytes_, sizeof(int));
+    fence();
+    transfers.complete();
+    CudaLambdaActions::check_error(error);
+  }
+
+ private:
+  double* vector(std::size_t slot) {
+    if (slot >= slots_) throw std::out_of_range("Lambda resident vector slot");
+    return vectors_ + slot * dimension_;
+  }
+  unsigned blocks() const { return static_cast<unsigned>((dimension_ + 255) / 256); }
+  void stage(void* destination, const void* source, std::size_t amount) {
+    cuda_check(
+        cudaMemcpyAsync(destination, source, amount, cudaMemcpyHostToDevice, owner_.stream_));
+    owner_.h2d_bytes_ = checked_add(owner_.h2d_bytes_, amount);
+  }
+  void fence() {
+    cuda_check(cudaStreamSynchronize(owner_.stream_));
+    ++owner_.synchronizations_;
+  }
+  void scalar_read() {
+    owner_.d2h_bytes_ = checked_add(owner_.d2h_bytes_, sizeof(double));
+    fence();
+  }
+  void cleanup() noexcept {
+    if (vectors_ops_.prepared()) {
+      vectors_ops_.reset();
+      ++owner_.synchronizations_;
+    } else if (allocation_) {
+      (void)cudaStreamSynchronize(owner_.stream_);
+      ++owner_.synchronizations_;
+    }
+    if (allocation_) (void)cudaFree(allocation_);
+    allocation_ = nullptr;
+  }
+
+  CudaLambdaActions& owner_;
+  std::size_t dimension_{}, slots_{}, allocation_bytes_{};
+  bool preconditioned_{};
+  unsigned char* allocation_{};
+  double *vectors_{}, *weights_{}, *diagonal_{};
+  std::size_t *representatives_{}, *partners_{};
+  tensor::CudaKrylovVectors vectors_ops_;
+};
+
 double max_abs(std::span<const double> values) {
   double result = 0.0;
   for (double value : values) {
@@ -580,9 +814,48 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   trace_work(phase_work);
   rhs_trace.finish();
   Trace gmres_trace("cc_lambda_gmres");
-  auto solved = response::solve_response(
-      response_plan, response_problem, rhs, {},
-      preconditioned ? std::span<const double>(independent) : std::span<const double>{});
+  const auto krylov_h2d_before = owner.h2d_bytes();
+  const auto krylov_d2h_before = owner.d2h_bytes();
+  const auto krylov_fences_before = owner.synchronizations();
+  phase_work = work_snapshot();
+  const auto diagonal =
+      preconditioned ? std::span<const double>(independent) : std::span<const double>{};
+  std::unique_ptr<CudaLambdaResidentBackend> resident;
+  std::size_t resident_bytes = 0;
+  std::size_t resident_provider_bytes = 0;
+  std::size_t resident_device_admission = 0;
+  int resident_provider_version = 0, resident_runtime_version = 0;
+  if (options.cuda_resident_krylov && !p.naux &&
+      layout.dimension() <= static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    const auto required =
+        CudaLambdaResidentBackend::required_bytes(response_plan, layout, preconditioned);
+    const auto complete_device_admission =
+        checked_add(checked_add(owner.owned_device_bytes(), p.reference_retained_bytes),
+                    checked_add(required, tensor::CudaKrylovVectors::kProviderAllowance));
+    if (complete_device_admission <= options.max_bytes) {
+      try {
+        resident = std::make_unique<CudaLambdaResidentBackend>(owner, response_plan, diagonal);
+        resident_bytes = resident->owned_resident_bytes();
+        resident_device_admission = complete_device_admission;
+        resident_provider_bytes = resident->provider_observed_bytes();
+        resident_provider_version = resident->provider_version();
+        resident_runtime_version = resident->runtime_version();
+      } catch (const std::bad_alloc&) {
+        // Only optional storage/provider allocation refusal is recoverable;
+        // kernel, numerical and stream errors must not be hidden by fallback.
+      }
+    }
+  }
+  const bool resident_selected = resident != nullptr;
+  auto solved =
+      resident ? response::solve_response_resident(response_plan, response_problem, *resident, rhs)
+                     .result
+               : response::solve_response(response_plan, response_problem, rhs, {}, diagonal);
+  resident.reset();
+  const auto krylov_h2d = owner.h2d_bytes() - krylov_h2d_before;
+  const auto krylov_d2h = owner.d2h_bytes() - krylov_d2h_before;
+  const auto krylov_fences = owner.synchronizations() - krylov_fences_before;
+  if (resident_selected) trace_work(phase_work);
   if (!solved.converged()) throw std::runtime_error("RCCSD CUDA Lambda GMRES did not converge");
 
   gmres_trace.finish();
@@ -618,7 +891,10 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   result.lambda1.resize(layout.n1);
   result.lambda2.resize(layout.n2);
   layout.unpack_weighted(solved.solution, result.lambda1, result.lambda2);
-  result.reason = "host GMRES with generated CUDA Lambda actions and physical residual passed";
+  result.reason =
+      resident_selected
+          ? "resident GMRES with generated CUDA Lambda actions and physical residual passed"
+          : "host GMRES with generated CUDA Lambda actions and physical residual passed";
   result.diagnostic.cc_r1_max = replay_r1;
   result.diagnostic.cc_r2_max = replay_r2;
   result.diagnostic.lambda_residual_norm = solved.residual_norm;
@@ -628,6 +904,18 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   result.diagnostic.operator_actions = solved.operator_actions;
   result.diagnostic.diagonal_preconditioned = preconditioned;
   result.diagnostic.preconditioner_actions = solved.preconditioner_actions;
+  result.diagnostic.resident_krylov = resident_selected;
+  result.diagnostic.resident_krylov_refused = options.cuda_resident_krylov && !resident_selected;
+  result.diagnostic.resident_krylov_bytes = resident_bytes;
+  result.diagnostic.resident_provider_allowance_bytes =
+      resident_selected ? tensor::CudaKrylovVectors::kProviderAllowance : 0;
+  result.diagnostic.resident_provider_observed_bytes = resident_provider_bytes;
+  result.diagnostic.resident_device_admission_bytes = resident_device_admission;
+  result.diagnostic.resident_provider_version = resident_provider_version;
+  result.diagnostic.resident_runtime_version = resident_runtime_version;
+  result.diagnostic.krylov_h2d_bytes = krylov_h2d;
+  result.diagnostic.krylov_d2h_bytes = krylov_d2h;
+  result.diagnostic.krylov_synchronizations = krylov_fences;
   if (fixed_orbital) {
     owner.set_parameter_seeds(result.lambda1, result.lambda2);
     fixed_orbital->foo =
@@ -657,7 +945,7 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
     owner.df_factors(*fixed_orbital);
   }
   result.diagnostic.numeric_capacity_bytes = owner.numeric_capacity_bytes();
-  result.diagnostic.owned_device_bytes = owner.owned_device_bytes();
+  result.diagnostic.owned_device_bytes = checked_add(owner.owned_device_bytes(), resident_bytes);
   result.diagnostic.h2d_bytes = owner.h2d_bytes();
   result.diagnostic.d2h_bytes = owner.d2h_bytes();
   result.diagnostic.synchronizations = owner.synchronizations();

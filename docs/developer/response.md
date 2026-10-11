@@ -270,7 +270,7 @@ outside this solver numeric-buffer budget and require separate accounting.
 The [production-path inventory](../../manifests/maintenance/electronic_structure_production_paths.json)
 records response/force/HVP owners, bindings and evidence stages separately.
 Its coverage remains a pilot, not completion of #932/#934 or a capability table.
-Native CC Lambda, RHF frame Z and installed native CPKS still have host-vector
+Default CC Lambda, RHF frame Z and installed native CPKS still have host-vector
 Krylov/orbital seams; generated CUDA actions or resident J/K storage alone do
 not establish a resident solver endpoint. The resident CPHF tooling is a
 qualification binding, not a public molecular-derivative cutover. Complete CUDA
@@ -279,6 +279,37 @@ gates are delivered; mixed integral stages and local ``fxc`` are insufficient.
 These exceptions retain their owners and explicit retirement conditions in the
 inventory. No new default algorithm or scientific capability is inferred from
 shared orchestration.
+
+### Native conventional CUDA Lambda residency
+
+`LambdaOptions::cuda_resident_krylov` enables an internal, non-default binding
+of the existing conventional RCCSD Lambda action to `solve_response_resident`.
+The corresponding native RCCSD/CCSD(T) force overloads accept the trailing
+`resident_lambda_krylov` execution option. Installed public calculators retain
+their existing schedule; this option does not add a scientific capability.
+
+The same nonsymmetric logical response plan serves host and resident schedules.
+The method adapter owns weighted pair projection, denominators and both physical
+residual gates. Vectors, pair projection and optional right preconditioning stay
+on the action owner's existing stream; only Arnoldi/Givens scalars, error flags
+and the final solution return to the host. Unsafe denominators still select the
+unpreconditioned physical solve, not a different equation.
+
+Admission includes the generated action arena, resident vector/table arena,
+borrowed reference allowance and the existing tensor context's bounded provider
+allowance. That allowance includes its explicit BLAS workspace; do not add it
+again to the complete `resident_device_admission_bytes` diagnostic. Numeric owned
+bytes, observed provider preparation growth, versions and Krylov-phase transfer
+and fence counters are reported separately. Optional budget/provider-allocation
+refusal retains host-vector execution; stream, kernel and numerical failures do
+not trigger a scientific retry. All queued work drains before owner teardown.
+
+`tests/native/test_cc_resident_endpoint.cpp` exercises same-backend complete
+RCCSD E+F pairs against pinned independent molecular references, process-cold,
+process-warm and changed geometry cases, and two valid endpoint budgets. These
+fresh-state calls do not claim prepared-plan or borrowed-lease warm reuse.
+Conventional residency remains opt-in pending broader performance/resource and
+prepared-lifetime acceptance. DF Lambda residency is not implemented by it.
 
 ## CPKS boundary
 

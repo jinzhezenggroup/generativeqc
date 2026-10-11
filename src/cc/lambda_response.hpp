@@ -70,6 +70,9 @@ struct LambdaOptions {
    * cuts, solver state, outputs or the optional invariant frontier.
    */
   bool serial_scratch_reuse{false};
+  // Unpromoted conventional-CUDA schedule. Budget/allocation refusal retains
+  // the host-vector path with the same diagonal policy and physical audits.
+  bool cuda_resident_krylov{false};
 };
 
 struct LambdaDiagnostic {
@@ -88,6 +91,12 @@ struct LambdaDiagnostic {
   bool cuda_actions{};
   bool diagonal_preconditioned{};
   std::size_t preconditioner_actions{};
+  bool resident_krylov{}, resident_krylov_refused{};
+  std::size_t resident_krylov_bytes{};
+  std::size_t resident_provider_allowance_bytes{}, resident_provider_observed_bytes{};
+  std::size_t resident_device_admission_bytes{};
+  int resident_provider_version{}, resident_runtime_version{};
+  std::size_t krylov_h2d_bytes{}, krylov_d2h_bytes{}, krylov_synchronizations{};
   // Complete native DF actions, including primal and independent Lambda replay.
   std::size_t df_auxiliary_slices{}, df_contraction_terms{}, df_generated_kernels{};
   bool df_auxiliary_reduction{};
@@ -137,9 +146,10 @@ LambdaResult solve_lambda_cpu_with_energy_source(const Problem& problem,
 #if GENERATIVEQC_HAS_CUDA
 /** Solve RCCSD Lambda with generated RHS/J^T actions executed on CUDA.
  *
- * GMRES control and packed symmetry projection remain host-owned in this first
- * native residency slice. The generated scientific actions execute on the
- * selected CUDA device without a CPU response fallback.
+ * Scalar GMRES control remains host-owned. The opt-in conventional resident
+ * schedule keeps vectors, weighted pair projection and right preconditioning
+ * on the existing action stream; budget/allocation refusal retains host vectors.
+ * Generated scientific actions never use a CPU response fallback.
  * Explicit DF problems use retained-core plus complete auxiliary actions, with
  * fresh physical replay and the same independent Lambda residual gates.
  */

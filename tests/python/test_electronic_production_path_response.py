@@ -18,8 +18,14 @@ def test_cpu_and_cuda_lambda_keep_one_scientific_owner() -> None:
     assert cpu["provider_owner"] == cuda["provider_owner"]
     assert cpu["domain"] == cuda["domain"]
     assert cuda["exception"]["owner"] == "src/cc/lambda_response_cuda.cu"
-    assert "per action" in cuda["exception"]["missing_capability"]
-    assert "right preconditioning" in cuda["exception"]["retirement_condition"]
+    assert (
+        "Default conventional and DF Lambda retain host vectors"
+        in cuda["exception"]["missing_capability"]
+    )
+    assert "opt-in" in cuda["exception"]["missing_capability"]
+    assert "DF residency" in cuda["exception"]["missing_capability"]
+    assert "before default promotion" in cuda["exception"]["retirement_condition"]
+    assert "diagonal policy" in cuda["exception"]["retirement_condition"]
     assert cuda["evidence_levels"]["public"]["state"] == "missing"
 
 
