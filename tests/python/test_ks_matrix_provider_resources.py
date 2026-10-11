@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from generativeqc import ResourceBudget, resources_ks
 from generativeqc_compiler.common.resources import plan_resources
+from generativeqc_compiler.tensor.matrix_product import emit_matrix_product_cuda
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -30,25 +31,23 @@ PREFIX = r"""
 #include <cstddef>
 #include <cstdlib>
 #include <limits>
-#include <mutex>
 #include <string>
-using cudaStream_t=void*;
-using cublasHandle_t=void*;
-using generativeqc_status=int;
-constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_INVALID_ARGUMENT=1;
-constexpr int GENERATIVEQC_STATUS_CUDA_ERROR=2, GENERATIVEQC_STATUS_OUT_OF_MEMORY=3;
-constexpr int cudaSuccess=0, CUBLAS_STATUS_SUCCESS=0, CUBLAS_STATUS_ALLOC_FAILED=3;
+#include "runtime/allocation_measurement.hpp"
+#include "scf/cuda/matrix_library.hpp"
+#include "scf/cuda/scf_matrix_kernels.hpp"
 constexpr int CUBLAS_STATUS_INTERNAL_ERROR=7;
-constexpr int cudaStreamCaptureStatusNone=0, CUBLAS_POINTER_MODE_HOST=0, CUBLAS_PEDANTIC_MATH=0;
-using cudaStreamCaptureStatus=int;
 int device=1, memcalls=0, destroys=0, creates=0, live=0, syncs=0;
 int destroy_failures=0, create_status=0, setup_status=0, capture=0;
+int runtime_status=0, provider_version_status=0;
 std::size_t retained=1ULL<<20;
 int cudaStreamIsCapturing(cudaStream_t,int* s) {*s=capture; return 0;}
 int cudaGetDevice(int* d) {*d=device; return 0;}
+int cudaRuntimeGetVersion(int* version) {*version=12900; return runtime_status;}
+int cublasGetVersion(cublasHandle_t,int* version) {*version=12901; return provider_version_status;}
 int cudaSetDevice(int d) {device=d; return 0;}
 int cudaStreamSynchronize(cudaStream_t) {assert(device==1); ++syncs; return 0;}
 int cudaGetLastError() {return 0;}
+int cudaPeekAtLastError() {assert(false); return 0;}
 int cudaMemGetInfo(std::size_t* free,std::size_t* total) {
   *total=1024ULL<<20; *free=(512ULL<<20)-(memcalls++%2 ? retained : 0); return 0;
 }
@@ -66,10 +65,33 @@ int cublasSetStream(void*,void*) {return setup_status;}
 int cublasSetPointerMode(void*,int) {return 0;}
 int cublasSetMathMode(void*,int) {return 0;}
 int cublasSetWorkspace(void*,void* p,std::size_t n) {assert(!p&&!n); return 0;}
-namespace generativeqc::runtime { inline std::mutex allocation_measurement_mutex; }
+// Resource preparation must never submit arithmetic or publication kernels.
+int cublasDgemm(cublasHandle_t,cublasOperation_t,cublasOperation_t,int,int,int,
+               const double*,const double*,int,const double*,int,const double*,double*,int) {
+  assert(false); return 0;
+}
+int cublasDgemmStridedBatched(cublasHandle_t,cublasOperation_t,cublasOperation_t,int,int,int,
+                            const double*,const double*,int,long long,const double*,int,long long,
+                            const double*,double*,int,long long,int) {
+  assert(false); return 0;
+}
 namespace generativeqc::scf::cuda_execution {
 int cuda_status(int s) {return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;}
 int blas_status(int s) {return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;}
+void launch_matrix_product_kernel(dim3,dim3,std::size_t,cudaStream_t,std::int32_t,std::int32_t,
+                                 const double*,bool,const double*,const std::uint8_t*,double*,double) {
+  assert(false);
+}
+void launch_spin_matrix_product_kernel(dim3,dim3,std::size_t,cudaStream_t,std::int32_t,std::int32_t,
+                                      std::int32_t,const double*,bool,bool,const double*,bool,
+                                      const std::uint8_t*,double*) {
+  assert(false);
+}
+void launch_copy_selected_matrices_kernel(dim3,dim3,std::size_t,cudaStream_t,std::int32_t,
+                                         std::int32_t,std::int32_t,const std::uint8_t*,
+                                         const double*,double*) {
+  assert(false);
+}
 }
 #define GENERATIVEQC_HAS_CUDA 1
 """
@@ -84,17 +106,24 @@ int main(int argc,char** argv) {
   if (mode=="setup" || mode=="setup-destroy") setup_status=CUBLAS_STATUS_INTERNAL_ERROR;
   if (mode=="allocation") create_status=CUBLAS_STATUS_ALLOC_FAILED;
   if (mode=="create-error") create_status=CUBLAS_STATUS_INTERNAL_ERROR;
+  if (mode=="runtime-query") runtime_status=9;
+  if (mode=="provider-query") provider_version_status=CUBLAS_STATUS_INTERNAL_ERROR;
+  if (mode=="provider-query-allocation") provider_version_status=CUBLAS_STATUS_ALLOC_FAILED;
   if (mode=="capture") capture=1;
   if (fail_destroy) destroy_failures=1;
   MatrixLibraryOwner owner;
   const auto stream=reinterpret_cast<void*>(1);
   const int n=mode=="small" ? 16 : 17;
   const auto status=owner.prepare(stream,n);
-  const bool error=fail_destroy || mode=="setup" || mode=="create-error";
+  const bool binding_error=mode=="runtime-query" || mode=="provider-query" ||
+                           mode=="provider-query-allocation";
+  const bool error=fail_destroy || mode=="setup" || mode=="create-error" || binding_error;
   assert(status==(mode=="capture" ? GENERATIVEQC_STATUS_INVALID_ARGUMENT :
+                 mode=="provider-query-allocation" ? GENERATIVEQC_STATUS_OUT_OF_MEMORY :
                  error ? GENERATIVEQC_STATUS_CUDA_ERROR : GENERATIVEQC_STATUS_SUCCESS));
-  const bool enabled=mode=="admit" || fail_destroy;
+  const bool enabled=mode=="admit" || fail_destroy || binding_error;
   assert(owner.library_enabled()==enabled);
+  assert((owner.view().binding_!=nullptr)==(status==GENERATIVEQC_STATUS_SUCCESS));
   assert(live==(enabled?1:0));
   if (fail_destroy) assert(destroys==1 && owner.view().blas_!=nullptr);
   if (mode=="oversized") assert(destroys==1 && owner.retained_bytes()==0);
@@ -128,32 +157,38 @@ def matrix_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> tuple[Path, Path]:
     folder = tmp_path_factory.mktemp("ks-matrix-provider")
-    header = (ROOT / "src/scf/cuda/matrix_library.hpp").read_text()
-    source = (ROOT / "src/scf/cuda/matrix_library.cpp").read_text()
     api = (ROOT / "src/api/c_api_resources.cpp").read_text()
-    namespace = "namespace generativeqc::scf::cuda_execution {"
-    header = header[header.index(namespace) : header.index("/** Use the resolved")]
-    source = source[
-        source.index(namespace) : source.index(
-            "namespace {", source.index(namespace) + len(namespace)
-        )
-    ]
+    fixture = ROOT / "tests/native/fixtures/matrix_mask"
+    (folder / "generated_matrix_product_lowering.hpp").write_text(
+        emit_matrix_product_cuda()
+    )
     unit = folder / "probe.cpp"
     unit.write_text(
         PREFIX
-        + header
-        + "\n}\n"
-        + source
-        + '\n}\nextern "C" {\n'
+        + '\nextern "C" {\n'
         + _definition(api, "int generativeqc_resource_ks_matrix_provider_cuda_v1(")
         + "\n}\n"
         + DRIVER
     )
-    args = ("-std=c++17", "-Wall", "-Wextra", "-Werror")
-    executable = native_cxx.build_executable(
-        [unit], folder / "probe", compile_args=args
+    args = (
+        "-std=c++20",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        f"-I{fixture}",
+        f"-I{folder}",
+        f"-I{ROOT / 'src'}",
+        f"-I{ROOT / 'include'}",
     )
-    library = native_cxx.build_shared([unit], folder / "probe.so", compile_args=args)
+    sources = [
+        unit,
+        ROOT / "src/scf/cuda/matrix_library.cpp",
+        ROOT / "src/tensor/cuda_matrix_product.cpp",
+    ]
+    executable = native_cxx.build_executable(
+        sources, folder / "probe", compile_args=args
+    )
+    library = native_cxx.build_shared(sources, folder / "probe.so", compile_args=args)
     return executable, library
 
 
@@ -164,6 +199,9 @@ def matrix_probe(
         "admit",
         "allocation",
         "create-error",
+        "runtime-query",
+        "provider-query",
+        "provider-query-allocation",
         "capture",
         "oversized",
         "oversized-destroy",

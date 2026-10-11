@@ -249,6 +249,7 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
     "scf/cuda/runtime_support.",
     "scf/cuda/scf_matrix_kernels.",
     "scf/cuda/launch_geometry.",
+    "tensor/cuda_matrix_product.hpp",
 )
 # Device queue owners consume borrowed metadata and screening contracts. They
 # cannot acquire host bucket/graph ownership or integral recurrence code.

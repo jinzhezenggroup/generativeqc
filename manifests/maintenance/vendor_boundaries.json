@@ -248,8 +248,6 @@
       "references": {
         "cublasCreate": 1,
         "cublasDestroy": 3,
-        "cublasDgemm": 2,
-        "cublasDgemmStridedBatched": 2,
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1,
@@ -480,6 +478,16 @@
       "reason": "Shared strict-FP64 symmetric-product owner submits admitted rank-2k operations; canonical potential lowering retains generated indexed/empty-domain fallback and explicit resource admission.",
       "references": {
         "cublasDsyr2k": 1
+      }
+    },
+    "src/tensor/cuda_matrix_product.cpp": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/matrix_product.py",
+      "reason": "Shared immutable matrix-product binding selects canonical strict-FP64 portfolios and owns singleton/strided GEMM submissions through a borrowed prepared context. Activity and resources stay with the enclosing executor.",
+      "references": {
+        "cublasDgemm": 1,
+        "cublasDgemmStridedBatched": 1,
+        "cublasGetVersion": 1
       }
     },
     "src/tensor/cuda_vector_contraction.cpp": {
