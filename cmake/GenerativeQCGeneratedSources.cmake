@@ -1199,7 +1199,23 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.cpp")
   set(_generativeqc_libxc_cuda_registry_args)
+  set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+    # The descriptor's capability identity hashes these compiler families,
+    # including modules not imported by this run. The generic Python depfile
+    # cannot see those bytes or the catalog/Maple/work-policy data reads.
+    file(GLOB_RECURSE _generativeqc_libxc_cuda_science_inputs CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/upstream/libxc-fulltree/7.0.0/*")
+    list(APPEND _generativeqc_libxc_cuda_science_inputs
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/upstream/libxc/7.0.0/functionals.c"
+      "${CMAKE_CURRENT_SOURCE_DIR}/upstream/libxc/7.0.0/work_mgga_inc.c")
     foreach(_generativeqc_libxc_cuda_shard RANGE 0 31)
       list(APPEND GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_SOURCES
            "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_${_generativeqc_libxc_cuda_shard}.cu")
@@ -1212,6 +1228,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cuda_registry.py"
     OUTPUTS ${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_SOURCES}
     DEPENDS
+      ${_generativeqc_libxc_cuda_science_inputs}
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_program.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_runtime.cuh"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/xc_point_cuda.py"

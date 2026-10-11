@@ -176,6 +176,38 @@ capability promotion, installed artifact reuse or a complete endpoint timing.
 - A mixed CXX/CUDA AOT object library needs CUDA include usage requirements on
   its CXX registry dispatcher too; link its compile interface to CUDA::cudart.
 
+### Build-graph review and current-master composition
+
+The generated grid includes and calls the automatic registry even when that
+registry is inert. Every standalone grid consumer therefore needs its include
+directory, object library and codegen dependency. The initial integration wired
+the DFT driver but missed the COSX driver; the latter now shares the same objects
+instead of compiling another registry or relying on the main library's private
+include paths. A regression enumerates all standalone grid consumers and rejects
+each omitted dependency independently.
+
+The Python codegen depfile records imported modules only. Automatic descriptors
+also depend on catalog/Maple/work-policy data and the complete common, integral
+and XC source inventories hashed into their provenance. The enabled AOT rule
+now tracks those input families, including file additions; the disabled rule
+does not acquire this scientific dependency set. A lightweight CMake/Ninja probe
+executes the real declaration with a counter generator. Changes to the catalog,
+unimported identity source, JSON, Maple, registration owner and both pinned work
+policy files regenerate the enabled outputs. The disabled probe remains inert.
+Both original omissions reproduce against `cc01e2716`; this is build-graph
+evidence, not a local CUDA compile or device measurement.
+
+Composition of author head `6bbc00f24a0a977b43474e4a2b7d67c3be42b83f` with
+master `f0b2d02e5d4c1da81cb03ceeecb682a943186453` preserves the author’s
+requalification and formatting changes. All compiler and native execution bytes
+match the previously reviewed composition. The descriptor identities already
+requalified at `fecef17bf` remain unchanged: the additional master changes are
+CI routing and its tests, outside this compiler provenance closure. The retained
+GPU receipts keep their actual source/binary binding; the bounded build/ownership
+repairs do not add numerical, resource, full-SCF or performance claims.
+
+Agent: dot
+
 ## Rejected shortcuts
 
 Do not duplicate the scalar point algebra, hand-write promoted mathematical
