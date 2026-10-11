@@ -40,10 +40,11 @@ ledger() {
 }
 
 run_point() {
-  local mode="$1" case_name="$2" atoms="$3" round="$4"
+  local population="$1" mode="$2" case_name="$3" atoms="$4" round="$5"
   local enabled=0
   [[ "$mode" == incremental ]] && enabled=1
-  local prefix="$output/$case_name/direct-$atoms-$mode-$round"
+  mkdir -p "$output/$population"
+  local prefix="$output/$population/direct-$atoms-$mode-$round"
   local env_args=(GENERATIVEQC_INCREMENTAL_DIRECT_JK="$enabled")
   if [[ "$mode" == incremental ]]; then
     env_args+=(GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL="$rebuild_interval")
@@ -73,24 +74,24 @@ run_point() {
 # Interleaved A-B-B-A per size: each set of four runs shares the same
 # allocation, binary, device visibility and local thermal/clock epoch.
 for atoms in 12 24 48 96; do
-  run_point baseline "water-$atoms" "$atoms" 1
-  run_point incremental "water-$atoms" "$atoms" 1
-  run_point incremental "water-$atoms" "$atoms" 2
-  run_point baseline "water-$atoms" "$atoms" 2
+  run_point rhf baseline "water-$atoms" "$atoms" 1
+  run_point rhf incremental "water-$atoms" "$atoms" 1
+  run_point rhf incremental "water-$atoms" "$atoms" 2
+  run_point rhf baseline "water-$atoms" "$atoms" 2
 done
 
 for atoms in 12 24 48 96; do
-  run_point baseline "water-$atoms-cation-uhf" "$atoms" 1
-  run_point incremental "water-$atoms-cation-uhf" "$atoms" 1
-  run_point incremental "water-$atoms-cation-uhf" "$atoms" 2
-  run_point baseline "water-$atoms-cation-uhf" "$atoms" 2
+  run_point uhf baseline "water-$atoms-cation-uhf" "$atoms" 1
+  run_point uhf incremental "water-$atoms-cation-uhf" "$atoms" 1
+  run_point uhf incremental "water-$atoms-cation-uhf" "$atoms" 2
+  run_point uhf baseline "water-$atoms-cation-uhf" "$atoms" 2
 done
 
 for atoms in 24 96; do
-  run_point baseline "water-$atoms-moved" "$atoms" 1
-  run_point incremental "water-$atoms-moved" "$atoms" 1
-  run_point incremental "water-$atoms-moved" "$atoms" 2
-  run_point baseline "water-$atoms-moved" "$atoms" 2
+  run_point moved baseline "water-$atoms-moved" "$atoms" 1
+  run_point moved incremental "water-$atoms-moved" "$atoms" 1
+  run_point moved incremental "water-$atoms-moved" "$atoms" 2
+  run_point moved baseline "water-$atoms-moved" "$atoms" 2
 done
 
 # PBE0 cold re-verification control (fresh process per sample, off/on/on/off),
