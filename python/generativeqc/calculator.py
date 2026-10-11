@@ -649,6 +649,13 @@ class Calculator:
                 else self._method_name
             )
             self._ks_options = resolve_ks_options(ks_resolution_name, ks_options)
+            from .ks import _automatic_semilocal_name
+
+            # Explicit MethodIR/composition inputs use the same capability
+            # boundary as selectors; their transport family grants no forces.
+            self._automatic_libxc_name = _automatic_semilocal_name(
+                self._ks_options.method_ir
+            )
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:

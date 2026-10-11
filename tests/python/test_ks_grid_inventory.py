@@ -21,6 +21,46 @@ native_probe = point_budget.native_probe
 _request = point_budget._request
 
 
+@pytest.mark.parametrize("functional", (0, 1, 2))
+@pytest.mark.parametrize("spins", (1, 2))
+def test_code_scoped_inventory_uses_actual_native_feature_layout(
+    native_probe: Any, functional: int, spins: int
+) -> None:
+    """The additive bridge admits tau without changing v1's boolean contract."""
+    points, tile = 490, 37
+    output = (ctypes.c_uint64 * 3)()
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v2(
+            2, 2, 2, 6, points, 8, spins, functional, tile, output, 3
+        )
+        == 0
+    )
+    _, borrowed, grid = _shapes(native_probe, points, spins, functional, tile)
+    assert output[1] == borrowed + grid
+    if functional == 2:
+        assert (
+            native_probe.generativeqc_resource_ks_cuda_v1(
+                2, 2, 2, 6, points, 8, spins, functional, tile, output, 3
+            )
+            == 1
+        )
+
+
+@pytest.mark.parametrize("functional", (196839, 2**32, 2**64 - 1))
+def test_code_scoped_inventory_rejects_missing_or_unrepresentable_program(
+    native_probe: Any, functional: int
+) -> None:
+    """Unavailable providers never become a curated family or mutate outputs."""
+    output = (ctypes.c_uint64 * 3)(7, 8, 9)
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v2(
+            2, 2, 2, 6, 490, 8, 2, functional, 37, output, 3
+        )
+        == 1
+    )
+    assert list(output) == [7, 8, 9]
+
+
 def _shapes(
     probe: Any,
     points: int,

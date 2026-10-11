@@ -93,9 +93,27 @@ def test_shared_boundary_classes_are_public_without_name_blacklist(name: str) ->
     assert calculator.ks_options.scf_domain == AUTOMATIC_SCF_DOMAIN
 
 
-def test_automatic_libxc_cuda_remains_explicitly_unavailable() -> None:
-    with pytest.raises(ValueError, match="supports CPU only"):
-        Calculator(method="libxc:GGA_X_APBE", basis="sto-3g", device="cuda")
+def test_automatic_libxc_cuda_resolves_semantically_without_granting_forces() -> None:
+    calculator = Calculator(method="libxc:GGA_X_APBE", basis="sto-3g", device="cuda")
+    assert calculator._automatic_libxc_name == "GGA_X_APBE"
+    assert calculator.ks_options.coefficients == (1.0, 1.0, 0.0)
+    assert calculator.capabilities.supported_properties == frozenset(("energy",))
+    assert calculator._default_properties() == frozenset(("energy",))
+
+
+@pytest.mark.parametrize("name", ("LDA_C_CHACHIYO", "GGA_X_APBE", "MGGA_X_LTA"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_explicit_automatic_method_ir_does_not_inherit_curated_cuda_forces(
+    name: str, spin: str
+) -> None:
+    from generativeqc_compiler.method import resolve_bulk_ks
+
+    method = resolve_bulk_ks(name, spin=spin, backend="cuda").method
+    calculator = Calculator(method=method, basis="sto-3g", device="cuda")
+    assert calculator._automatic_libxc_name == name
+    assert calculator.method_ir.identity == method.identity
+    assert calculator.capabilities.supported_properties == frozenset(("energy",))
+    assert calculator._default_properties() == frozenset(("energy",))
 
 
 def test_libxc_selector_parser_is_explicit_about_spin() -> None:

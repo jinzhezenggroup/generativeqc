@@ -2,8 +2,12 @@
 
 Imported semilocal functionals are admitted by structural capability, not by a
 positive evidence whitelist. A representable non-curated LDA/GGA/rho-sigma-tau
-meta-GGA is public on the supported CPU path unless an explicit functional-
+meta-GGA resolves on CPU/CUDA unless an explicit functional-
 specific defect is present in the Libxc blacklist.
+
+Backend resolution is semantic, not a claim that an installed library packages
+the executor. Native CUDA preparation requires the opt-in static provider and
+its strict-FP64, pure-semilocal execution contract; it never falls back to CPU.
 
 Qualification producers retain a stricter candidate entry point so regression
 campaigns can attach compiled/runtime evidence without making that evidence a
@@ -143,6 +147,7 @@ def _build_resolution(
     compiled_cpu: dict[str, typing.Any] | None,
     public_dft: bool,
     admission: str,
+    backend: str = "cpu",
 ) -> BulkKsResolution:
     functional_spec = functional(functional_name, spin=spin)
     method = MethodIR(
@@ -169,6 +174,7 @@ def _build_resolution(
         ),
         public_dft=public_dft,
         admission=admission,
+        backend=backend,
     )
 
 
@@ -230,9 +236,9 @@ def resolve_bulk_ks(
     public-method receipt is required. The evidence argument remains accepted
     only for API compatibility and does not grant or revoke user capability.
     """
-    if backend != "cpu":
+    if backend not in ("cpu", "cuda"):
         raise UnsupportedMethod(
-            "automatic bulk Libxc KS resolution currently supports CPU only"
+            "automatic bulk Libxc KS resolution supports CPU and CUDA only"
         )
     _ = evidence
     capability = _structural_capability(name, evidence=None, enforce_blacklist=True)
@@ -245,6 +251,7 @@ def resolve_bulk_ks(
         compiled_cpu=None,
         public_dft=True,
         admission="default-allow/explicit-blacklist",
+        backend=backend,
     )
 
 

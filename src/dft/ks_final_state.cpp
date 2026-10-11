@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <string_view>
 
 #include "dft/semilocal_family.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
@@ -10,6 +11,7 @@
 #include "scf/reference/mean_field.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #endif
 
@@ -31,6 +33,20 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
+  bool automatic_backend_valid = fock.backend == scf::FockBackend::Cpu;
+#if GENERATIVEQC_HAS_CUDA
+  if (automatic_libxc && fock.backend == scf::FockBackend::Cuda) {
+    const auto* program = generated::automatic_cuda_point_entry(model.functional);
+    // A CUDA ordinal alone cannot authorize a detached automatic state. Bind
+    // the installed provider to the same canonical science as CPU execution.
+    automatic_backend_valid =
+        program && program->functional_code == model.functional && program->expression_identity &&
+        std::string_view(program->expression_identity) ==
+            automatic_entry.program->expression_identity &&
+        program->ingredient_mask == automatic_entry.program->ingredient_mask &&
+        program->domain_version == automatic_entry.program->domain_version;
+  }
+#endif
   const auto* family_metadata = split_hybrid || automatic_libxc
                                     ? nullptr
                                     : semilocal_family_metadata_from_code(model.functional);
@@ -122,9 +138,9 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       !std::isfinite(model.semilocal_exchange_scale) || model.semilocal_exchange_scale < 0 ||
       !std::isfinite(model.semilocal_correlation_scale) || model.semilocal_correlation_scale < 0 ||
       (automatic_libxc &&
-       (fock.backend != scf::FockBackend::Cpu || fock.spec.exchange.present ||
-        model.range_correction || model.nonlocal_correlation ||
-        model.semilocal_exchange_scale != 1.0 || model.semilocal_correlation_scale != 1.0)) ||
+       (!automatic_backend_valid || fock.spec.exchange.present || model.range_correction ||
+        model.nonlocal_correlation || model.semilocal_exchange_scale != 1.0 ||
+        model.semilocal_correlation_scale != 1.0)) ||
       (fock.spec.exchange.present &&
        (fock.spec.exchange.op != scf::FockOperator::FullRange ||
         (fock.spec.exchange.approximation != scf::FockApproximation::Exact &&

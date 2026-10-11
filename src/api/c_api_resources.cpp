@@ -271,6 +271,39 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
 #endif
 }
 
+/** Code-scoped additive inventory for generic KS. Unlike v1's LDA/PBE jet
+ * flag, the exact program determines ingredient/feature widths, including tau.
+ * Missing static CUDA providers fail before allocation or context creation. */
+int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::size_t shells,
+                                     std::size_t primitives, std::size_t points,
+                                     std::size_t diis_history, std::size_t spins,
+                                     std::size_t functional, std::size_t tile_points,
+                                     std::uint64_t* output, std::size_t count) {
+  if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) ||
+      functional > std::numeric_limits<std::uint32_t>::max())
+    return 1;
+#if GENERATIVEQC_HAS_CUDA
+  try {
+    const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
+    const auto xc = generativeqc::dft::cuda_xc_layout_shape(
+        atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
+        tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+    const auto xc_and_grid = generativeqc::runtime::size_add(
+        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points));
+    const auto direct =
+        generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives);
+    output[0] = state;
+    output[1] = xc_and_grid;
+    output[2] = direct;
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+#else
+  return 2;
+#endif
+}
+
 /** Shape-only opaque matrix-provider reservation, separate from explicit arenas.
  * This additive query keeps the KS v1 three-output numeric inventory unchanged.
  * It never creates a CUDA context or provider handle. */

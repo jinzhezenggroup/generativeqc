@@ -201,11 +201,17 @@ def _cuda_item_inventory(
     diis_history: typing.Any,
     requires_first_ao_derivatives: typing.Any,
     tile: typing.Any,
+    functional_code: int | None = None,
 ) -> typing.Any:
-    query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
+    query_name = (
+        "generativeqc_resource_ks_cuda_v1"
+        if functional_code is None
+        else "generativeqc_resource_ks_cuda_v2"
+    )
+    query = getattr(library, query_name, None)
     if query is None:
         raise NotImplementedError(
-            "native library has no KS CUDA allocation inventory v1"
+            f"native library has no KS CUDA allocation inventory {query_name}"
         )
     orbital = item["orbital"]
     args = (
@@ -216,7 +222,9 @@ def _cuda_item_inventory(
         item["grid_points"],
         diis_history,
         item["spins"],
-        int(requires_first_ao_derivatives),
+        int(requires_first_ao_derivatives)
+        if functional_code is None
+        else functional_code,
         tile,
     )
     if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
@@ -228,6 +236,12 @@ def _cuda_item_inventory(
     query.restype = ctypes.c_int
     output = (ctypes.c_uint64 * 3)()
     if query(*args, output, len(output)):
+        if functional_code is not None:
+            raise NotImplementedError(
+                "automatic KS CUDA inventory requires a packaged static point provider; "
+                "build with GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON and use "
+                "valid launch/DIIS dimensions"
+            )
         raise NotImplementedError(
             "KS CUDA inventory requires a CUDA build and valid launch/DIIS dimensions"
         )
@@ -326,15 +340,12 @@ def ks_resource_request(
             "KS planning supports electronic contributions only; "
             "post-SCF corrections require a separate resource owner"
         )
-    from .ks import _automatic_semilocal_name
+    from .ks import _automatic_semilocal_name, _native_semilocal_code
 
     automatic_name = _automatic_semilocal_name(model.method_ir)
-    if automatic_name is not None and backend != "cpu":
-        raise NotImplementedError(
-            "automatic Libxc KS resource planning currently supports CPU only"
-        )
-    automatic_cpu = automatic_name is not None
-    if "tau" in model.functional.ingredients and not automatic_cpu:
+    automatic = automatic_name is not None
+    automatic_cuda = automatic and backend == "cuda"
+    if "tau" in model.functional.ingredients and not automatic:
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
         )
@@ -343,6 +354,12 @@ def ks_resource_request(
         raise ValueError("KS precision must be 'fp64' or 'auto'")
     if precision == "auto" and backend != "cuda":
         raise NotImplementedError("KS automatic precision currently requires CUDA")
+    if automatic_cuda and (precision != "fp64" or model.xc_schedule != "device_fused"):
+        raise NotImplementedError(
+            "automatic CUDA KS requires strict-FP64 device-fused execution"
+        )
+    if automatic_cuda and include_forces:
+        raise NotImplementedError("automatic CUDA KS forces are not qualified")
     if backend == "cuda" and model.has_nonlocal_correlation:
         raise NotImplementedError(
             "self-consistent nonlocal correlation currently requires CPU"
@@ -440,7 +457,9 @@ def ks_resource_request(
         "density_tolerance": density_tolerance,
         "screening_tolerance": screening_tolerance,
         "ks_options": model.to_payload(),
-        "outputs": "energy+forces" if backend == "cuda" or cpu_forces else "energy",
+        "outputs": "energy+forces"
+        if (backend == "cuda" and not automatic_cuda) or cpu_forces
+        else "energy",
         "inventory_version": 1,
         "schedule": "ordinary-stream-round-robin"
         if backend == "cuda"
@@ -463,13 +482,19 @@ def ks_resource_request(
     if precision == "auto":
         history_iterations = checked_bytes(2 * max_iterations + 4, "KS mixed history")
         controls["history_iterations"] = history_iterations
+    elif automatic_cuda:
+        # Automatic RKS/UKS share a bounded physical F[D] closure after DIIS.
+        history_iterations = checked_bytes(max_iterations + 4, "KS automatic history")
+        controls["history_iterations"] = history_iterations
     identity = ResourceIdentity(
         method,
         "native-ks-direct-v1",
         backend,
         precision,
         json.dumps({"items": items}),
-        ("energy", "forces") if backend == "cuda" or cpu_forces else ("energy",),
+        ("energy", "forces")
+        if (backend == "cuda" and not automatic_cuda) or cpu_forces
+        else ("energy",),
         json.dumps(controls, sort_keys=True),
     )
     exclusions = (
@@ -610,6 +635,11 @@ def ks_resource_request(
                     diis_history=diis_history,
                     requires_first_ao_derivatives=requires_first_ao_derivatives,
                     tile=model.tile_points,
+                    functional_code=(
+                        _native_semilocal_code(model.method_ir)
+                        if automatic_cuda
+                        else None
+                    ),
                 )
                 for item in items
             ]
@@ -660,16 +690,17 @@ def ks_resource_request(
                     last_phase,
                 )
             )
-            estimates.append(
-                ResourceEstimate(
-                    "serialized generated KS force device staging cap",
-                    512 << 20,
-                    f"device:{device_id}",
-                    first_phase,
-                    last_phase,
-                    kind="persistent",
+            if not automatic_cuda:
+                estimates.append(
+                    ResourceEstimate(
+                        "serialized generated KS force device staging cap",
+                        512 << 20,
+                        f"device:{device_id}",
+                        first_phase,
+                        last_phase,
+                        kind="persistent",
+                    )
                 )
-            )
     except (NotImplementedError, RuntimeError, OSError) as error:
         return ResourceRequest(
             name, identity, (), exclusions, unsupported_reason=str(error)

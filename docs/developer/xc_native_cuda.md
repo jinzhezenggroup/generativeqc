@@ -49,9 +49,12 @@ capability is implied by these interfaces.
 
 `GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON` builds static ordinary E/vxc
 entries from the common structural automatic registry. It is off by default;
-the disabled registry returns no automatic entries. Enabling this internal
-build option **does not admit public automatic CUDA KS or force methods**.
-Unsupported products continue to fail explicitly rather than stage CPU science.
+the disabled registry returns no automatic entries. An enabled library can
+prepare public automatic pure-semilocal RKS/UKS energy endpoints through the
+ordinary native KS owner. The contract is strict-FP64, device-fused, all-electron
+execution with J only. Missing static providers fail with a build-option
+diagnostic; there is no CPU fallback or runtime NVCC/Maple/Libxc.
+Analytic automatic CUDA forces and other unqualified products remain rejected.
 
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
@@ -62,6 +65,16 @@ turning it into an installed artifact/cache key or a resource admission claim.
 Automatic entries reuse the existing AO, density-feature and potential kernels
 with strict FP64 and the bounded one-tile fallback. They do not inherit curated
 mixed precision, response, local-AO selection, batching or graph qualification.
+The KS owner also keeps automatic programs on ordinary single-iteration streams
+rather than admitting curated device chunks, graph replay or incremental J.
+CPU/CUDA resolve the same MethodIR and bind the same canonical expression and
+work-domain identity. The code-scoped KS resource inventory v2 obtains the
+actual static ingredient/feature widths, including tau; it never substitutes a
+same-family LDA/PBE shape or claims automatic force storage/capability.
+Automatic RKS and UKS also use a bounded physical F[D] closure after DIIS,
+with four additional history slots accounted by both native and public resource
+owners. Detached snapshots retain the shared physical/canonical validation
+gates rather than treating an SCF convergence flag as sufficient authorization.
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that
@@ -69,6 +82,17 @@ binary and run `tests/python/test_libxc_automatic_cuda_xc.py`. The independent
 PySCF 2.14.0 / Libxc 7.0.0 gate checks both physical spin layouts, partial tiles,
 fixed-density XC energy/potential, replay, density directions and changed
 geometry. This is not an SCF, analytic-force or installed-bundle qualification.
+
+For the public ordinary-stream SCF gate, build the native library with the
+option enabled, set `GENERATIVEQC_LIBRARY` to that library and
+`GENERATIVEQC_AUTOMATIC_CUDA_KS_TEST=1` inside a finite Slurm allocation, and run
+`tests/python/test_libxc_automatic_cuda_ks.py`. It compares cold, warm
+recomputation and changed-geometry RKS/UKS with pinned PySCF/Libxc on exported
+exact grids using explicit Hcore seeds and an asymmetric H4/STO-3G fixture,
+checks physical density/Fock and energy directions, and records
+complete endpoint timings and J-only semantic work. Optional
+`GENERATIVEQC_AUTOMATIC_CUDA_KS_EVIDENCE_DIR` retains source/binary-bound receipts.
+These are qualification data, not an installed bundle or a positive user list.
 
 ### Curated execution
 

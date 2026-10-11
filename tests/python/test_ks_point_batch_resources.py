@@ -183,6 +183,7 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
         "int generativeqc_resource_ledger_bind_v1(",
         "int generativeqc_resource_ledger_read_v1(",
         "int generativeqc_resource_ks_cuda_v1(",
+        "int generativeqc_resource_ks_cuda_v2(",
         "int generativeqc_resource_quadrature_cuda_v1(",
     ):
         source += _definition(api, signature) + "\n"
@@ -398,6 +399,10 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         ctypes.c_size_t,
     ]
     probe.generativeqc_resource_ks_cuda_v1.restype = ctypes.c_int
+    probe.generativeqc_resource_ks_cuda_v2.argtypes = (
+        probe.generativeqc_resource_ks_cuda_v1.argtypes
+    )
+    probe.generativeqc_resource_ks_cuda_v2.restype = ctypes.c_int
     probe.fleet.argtypes = (
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )

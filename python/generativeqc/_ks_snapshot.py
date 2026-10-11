@@ -31,9 +31,8 @@ from . import _native
 from .batch import PreparedBatch
 from .ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
+    _native_semilocal_code,
     electronic_method_ir,
-    native_xc_functional_code,
-    scf_domain_for_method,
     uses_molecular_nonlocal_domain,
 )
 
@@ -284,12 +283,12 @@ class NativeKsSnapshot:
             )
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
-            method_name = self._batch._calculator._method_name
-            functional_code = native_xc_functional_code(method_name)
+            options = self._batch._calculator.ks_options
+            functional_code = _native_semilocal_code(options.method_ir)
             if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:
                 expected_domain_version = LIBXC_WORK_DOMAIN_VERSION
             else:
-                expected_domain = scf_domain_for_method(method_name)
+                expected_domain = options.scf_domain
                 expected_domain_version = (
                     4
                     if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
@@ -903,8 +902,7 @@ class NativeKsSnapshot:
         if (
             options is None
             or options.coefficients != self.coefficients
-            or functional
-            != native_xc_functional_code(self._batch._calculator._method_name)
+            or functional != _native_semilocal_code(options.method_ir)
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
@@ -1068,7 +1066,7 @@ class NativeKsSnapshot:
                 {
                     "native_owner": owner,
                     "functional": spec.identity,
-                    "scf_domain": scf_domain_for_method(method),
+                    "scf_domain": options.scf_domain,
                     "grid": grid.identity,
                     **(
                         {"grid_provenance": dict(self.grid_provenance)}

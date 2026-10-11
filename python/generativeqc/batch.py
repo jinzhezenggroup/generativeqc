@@ -422,6 +422,10 @@ class PreparedBatch:
                             _native.METHOD_RCCSD,
                             _native.METHOD_RCCSD_T,
                         )
+                        # Automatic preparation carries build/domain/policy
+                        # blockers in the context, not just its status enum.
+                        or getattr(calculator, "_automatic_libxc_name", None)
+                        is not None
                         else None
                     ),
                 )

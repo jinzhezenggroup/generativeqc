@@ -67,13 +67,13 @@ def test_provider_source_identity_covers_layout_and_emitted_contract() -> None:
         assert altered.source_identity != provider.source_identity
 
 
-def test_emission_does_not_grant_public_cuda_admission() -> None:
+def test_semantic_cuda_resolution_does_not_grant_optional_mechanisms() -> None:
     from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
-    from generativeqc_compiler.method.spec import UnsupportedMethod
 
-    emit_automatic_cuda_provider("GGA_X_APBE")
-    with pytest.raises(UnsupportedMethod, match="supports CPU only"):
-        resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+    provider = emit_automatic_cuda_provider("GGA_X_APBE")
+    resolved = resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+    assert resolved.backend == "cuda"
+    assert "&launch, &launch_batch, {}" in emit_automatic_cuda_descriptor(provider)
 
 
 def test_cpu_and_cuda_share_structural_registry_without_a_positive_whitelist() -> None:

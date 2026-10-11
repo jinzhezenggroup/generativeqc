@@ -70,8 +70,6 @@ def test_automatic_cpu_planning_keeps_exact_source_and_optional_force_work(
     assert energy.requests[0].identity.observables == ("energy",)
     assert force.requests[0].identity.observables == ("energy", "forces")
     assert force.peak_bytes["host"] >= 256 << 20
-    with pytest.raises(NotImplementedError, match="supports CPU only"):
-        estimate_ks_resources([H2], method=method, backend="cuda")
 
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))

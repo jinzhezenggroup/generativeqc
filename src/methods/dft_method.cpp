@@ -40,6 +40,7 @@
 
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/cuda_fock_execution.hpp"
@@ -287,11 +288,28 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
     execution_plan.automatic_program = semilocal.automatic_program;
-    if (execution_plan.automatic_program &&
-        (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
-         ks_input->has_nonlocal_correlation != 0))
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "automatic Libxc semilocal KS currently requires pure CPU execution");
+    if (execution_plan.automatic_program) {
+      if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
+          ks_input->exchange_term_count != 0 || ks_input->has_nonlocal_correlation != 0)
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                          "automatic Libxc KS requires pure CPU/CUDA semilocal execution");
+#if GENERATIVEQC_HAS_CUDA
+      if (backend == GENERATIVEQC_BACKEND_CUDA) {
+        const auto* program = dft::generated::automatic_cuda_point_entry(execution_plan.functional);
+        if (!program)
+          throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                            "automatic Libxc CUDA KS requires a static provider; build with "
+                            "GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON");
+        // CPU and CUDA must bind the same canonical point/domain contract.
+        const auto& cpu = *execution_plan.automatic_program;
+        if (std::string_view(program->expression_identity) != cpu.expression_identity ||
+            program->ingredient_mask != cpu.ingredient_mask ||
+            program->domain_version != cpu.domain_version)
+          throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
+                            "automatic Libxc CPU/CUDA scientific identity mismatch");
+      }
+#endif
+    }
     if (execution_plan.generated_split_hybrid && backend != GENERATIVEQC_BACKEND_CUDA)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -626,7 +644,11 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
 /** The method's global ledger supplies the budget. Size the common direct
  * source explicitly so its standalone default cap is not a second KS limit. */
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
-                                    generativeqc_backend backend) noexcept {
+                                    generativeqc_backend backend,
+                                    const NativeKsExecutionPlan& plan) noexcept {
+  // Automatic CUDA KS is energy-only. Do not retain unqualified derivative
+  // sources outside its exact J-only resource inventory.
+  if (plan.automatic_program) return 0;
 #if GENERATIVEQC_HAS_CUDA
   if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda) {
     const auto exact = [](const scf::FockTermSpec& term) {
@@ -842,14 +864,18 @@ class KsPreparedCalculation final : public PreparedCalculation {
         backend_(backend),
         fock_(system_, auxiliary ? &*auxiliary : nullptr, *options_.resolved_fock_build, device,
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
-                  ? ks_provider_bytes(
-                        system_, backend,
-                        ks_direct_derivative_order(*options_.resolved_fock_build, backend))
+                  ? ks_provider_bytes(system_, backend,
+                                      ks_direct_derivative_order(*options_.resolved_fock_build,
+                                                                 backend, execution_plan_))
                   : options_.density_fitting_memory_budget_bytes,
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
-                  ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
+                  ? ks_direct_derivative_order(*options_.resolved_fock_build, backend,
+                                               execution_plan_)
                   : 0U,
-              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U,
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+                      execution_plan_.automatic_program
+                  ? 0U
+                  : 1U,
               ks_fitted_projection_reservation(system_, execution_plan_,
                                                *options_.resolved_fock_build)),
         basis_(system_),
