@@ -53,6 +53,7 @@ def run_endpoint(
     forces: bool = True,
     lambda_interval: int | None = 1,
     ccsd_mixed: bool = False,
+    lambda_mixed: bool = False,
 ) -> dict:
     """Use a fresh process with matched controls and no recycled solver state."""
     assert os.environ.get("SLURM_JOB_ID")
@@ -60,7 +61,7 @@ def run_endpoint(
     source = tmp_path / "input.txt"
     output = (
         tmp_path
-        / f"result-{int(mixed)}-ccsd-{int(ccsd_mixed)}-forces-{int(forces)}-lambda-{lambda_interval}.json"
+        / f"result-{int(mixed)}-ccsd-{int(ccsd_mixed)}-forces-{int(forces)}-lambda-{lambda_interval}-lmp-{int(lambda_mixed)}.json"
     )
     write_input(source, metadata)
     command = [
@@ -91,10 +92,12 @@ def run_endpoint(
     ]
     if lambda_interval is not None:
         command.append(str(lambda_interval))
-    if ccsd_mixed:
+    if ccsd_mixed or lambda_mixed:
         if lambda_interval is None:
             command.append("30")
-        command.extend(("1", "1", "1", "1"))
+        command.extend(("1", "1", "1", str(int(ccsd_mixed))))
+        if lambda_mixed:
+            command.append("1")
     completed = subprocess.run(
         command, capture_output=True, text=True, check=False, timeout=120
     )
@@ -103,19 +106,31 @@ def run_endpoint(
 
 
 @pytest.mark.parametrize("name", ["h2", "water", "lih"])
+@pytest.mark.parametrize("lambda_mixed", [False, True])
 def test_ccsd_warmup_preserves_complete_fp64_energy_and_forces(
-    name: str, tmp_path: Path
+    name: str, lambda_mixed: bool, tmp_path: Path
 ) -> None:
-    """The new CCSD candidate, not the existing triples candidate, runs here."""
+    """CCSD and optional Lambda warm starts retain complete FP64 force gates."""
     metadata, _ = load_fixture(name)
     strict = run_endpoint(tmp_path, metadata, mixed=False)
-    mixed = run_endpoint(tmp_path, metadata, mixed=False, ccsd_mixed=True)
+    mixed = run_endpoint(
+        tmp_path, metadata, mixed=False, ccsd_mixed=True, lambda_mixed=lambda_mixed
+    )
     reference = independent(metadata, True)[0]
     assert mixed["ccsd_mixed_precision_requested"] == 1
     assert mixed["ccsd_mixed_precision"] == 1
     assert mixed["ccsd_precision_switches"] == 1
     assert mixed["ccsd_fp32_gemm_calls"] > 0
     assert mixed["triples_fp32_gemms"] == 0
+    if lambda_mixed:
+        assert mixed["lambda_mixed_precision_requested"] == 1
+        if mixed["lambda_mixed_precision"]:
+            assert mixed["lambda_precision_switches"] == 1
+            assert mixed["lambda_fp32_gemm_calls"] > 0
+            assert mixed["lambda_strict_actions"] > 0
+        else:
+            assert mixed["lambda_mixed_precision_refused"] == 1
+            assert mixed["lambda_fp32_gemm_calls"] == 0
     np.testing.assert_allclose(mixed["total_energy"], reference, atol=3e-9, rtol=0)
     np.testing.assert_allclose(
         mixed["total_energy"], strict["total_energy"], atol=3e-10, rtol=0
@@ -141,7 +156,9 @@ def test_ccsd_warmup_preserves_complete_fp64_energy_and_forces(
         numeric_force = -(energies[1] - energies[0]) / (2 * step)
         np.testing.assert_allclose(analytic_force, numeric_force, atol=3e-7, rtol=3e-7)
         direction_errors.append(abs(numeric_force - analytic_force))
-    (tmp_path / f"ccsd-warmup-{name}-accuracy.json").write_text(
+    (
+        tmp_path / f"ccsd-warmup-{name}-lambda-{int(lambda_mixed)}-accuracy.json"
+    ).write_text(
         json.dumps(
             {
                 "oracle_total_energy": reference,

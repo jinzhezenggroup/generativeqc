@@ -59,6 +59,8 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.df_auxiliary_reduction = !(mode & 4);
     response.df_matrix_gemm = !(mode & 8);
     response.df_core_reuse = !(mode & 64);
+    response.df_mixed_precision = mode & 4096;
+    if (mode & 8192) response.df_mixed_precision_max_iterations = 2;
     response.df_audit_matrix_gemm = !(mode & 128);
     if (!(mode & 2048)) {
       response.df_primal_matrix_gemm = mode & 1024;
@@ -68,6 +70,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
       // Large finite seeds overflow intermediate adjoints. The sticky flag
       // must reject the complete action before the adapter publishes outputs.
       generativeqc::cc::detail::DFLambdaActions actions(p, cc, response, 0, false, true);
+      if (response.df_mixed_precision) (void)actions.begin_mixed_precision();
       std::vector<double> one(n1, std::numeric_limits<double>::max()),
           two(n2, std::numeric_limits<double>::max()), out_one, out_two;
       actions.transpose(bool(mode & 256), one, two, out_one, out_two);
@@ -119,7 +122,19 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              d.df_audit_arena_bytes,
                              std::size_t(d.df_primal_matrix_gemm),
                              d.df_available_device_bytes,
-                             d.df_device_limit_bytes};
+                             d.df_device_limit_bytes,
+                             std::size_t(d.df_mixed_precision),
+                             std::size_t(d.df_mixed_precision_refused),
+                             d.df_mixed_storage_bytes,
+                             d.df_mixed_input_offset_bytes,
+                             d.df_mixed_actions,
+                             d.df_strict_actions,
+                             d.df_precision_switches,
+                             d.df_fp32_gemm_calls,
+                             d.df_fp32_gemm_summands,
+                             d.df_precision_cast_elements,
+                             d.df_mixed_iterations,
+                             d.df_strict_iterations};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

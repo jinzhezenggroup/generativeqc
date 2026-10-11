@@ -296,6 +296,17 @@ class CudaLambdaActions {
     target.df_scratch_avoided_bytes = d.df_scratch_avoided_bytes;
     target.df_primal_matrix_gemm = d.df_primal_matrix_gemm;
     target.audit_schedule_hash = d.audit_schedule_hash;
+    target.df_mixed_precision = d.df_mixed_precision;
+    target.df_mixed_precision_refused = d.df_mixed_precision_refused;
+    target.df_mixed_storage_bytes = d.df_mixed_storage_bytes;
+    target.df_mixed_input_offset_bytes = d.df_mixed_input_offset_bytes;
+    target.df_mixed_actions = d.df_mixed_actions;
+    target.df_strict_actions = d.df_strict_actions;
+    target.df_precision_switches = d.df_precision_switches;
+    target.df_fp32_gemm_calls = d.df_fp32_gemm_calls;
+    target.df_fp32_gemm_summands = d.df_fp32_gemm_summands;
+    target.df_precision_cast_elements = d.df_precision_cast_elements;
+    target.mixed_program_hash = d.mixed_program_hash;
 
     target.shared_program_hash = d.shared_program_hash;
     target.independent_program_hash = d.independent_program_hash;
@@ -366,6 +377,11 @@ class CudaLambdaActions {
                             : generated::run_lambda_transpose_cuda(state_),
                 out_one, out_two);
     transfers.complete();
+  }
+
+  bool begin_mixed_precision() { return df_ && df_->begin_mixed_precision(); }
+  void finish_mixed_precision() {
+    if (df_) df_->finish_mixed_precision();
   }
 
   void set_parameter_seeds(std::span<const double> lambda1, std::span<const double> lambda2) {
@@ -576,9 +592,35 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   trace_work(phase_work);
   rhs_trace.finish();
   Trace gmres_trace("cc_lambda_gmres");
-  auto solved = response::solve_response(
-      response_plan, response_problem, rhs, {},
-      preconditioned ? std::span<const double>(independent) : std::span<const double>{});
+  const auto diagonal =
+      preconditioned ? std::span<const double>(independent) : std::span<const double>{};
+  std::size_t warmup_iterations = 0, warmup_actions = 0, warmup_preconditioner_actions = 0;
+  response::GmresResult solved;
+  if (owner.begin_mixed_precision()) {
+    auto warmup_options = options.gmres;
+    warmup_options.absolute_tolerance = options.df_mixed_precision_warmup_tolerance;
+    warmup_options.relative_tolerance = 0.0;
+    warmup_options.max_iterations =
+        std::min(options.gmres.max_iterations, options.df_mixed_precision_max_iterations);
+    warmup_options.restart = std::min(warmup_options.restart, warmup_options.max_iterations);
+    const auto warmup_plan = response::prepare_response(response_problem, warmup_options);
+    auto warmup = response::solve_response(warmup_plan, response_problem, rhs, {}, diagonal);
+    owner.finish_mixed_precision();
+    if (warmup.status == response::GmresStatus::nonfinite_input ||
+        warmup.status == response::GmresStatus::nonfinite_operator ||
+        warmup.status == response::GmresStatus::nonfinite_preconditioner)
+      throw std::runtime_error("nonfinite RCCSD CUDA Lambda mixed warmup");
+    warmup_iterations = warmup.iterations;
+    warmup_actions = warmup.operator_actions;
+    warmup_preconditioner_actions = warmup.preconditioner_actions;
+    // No approximate Krylov basis or residual crosses this boundary. The
+    // original controller recomputes J^T x in FP64 from this finite proposal,
+    // including after finite warmup exhaustion or optional workspace refusal.
+    solved =
+        response::solve_response(response_plan, response_problem, rhs, warmup.solution, diagonal);
+  } else {
+    solved = response::solve_response(response_plan, response_problem, rhs, {}, diagonal);
+  }
   if (!solved.converged()) throw std::runtime_error("RCCSD CUDA Lambda GMRES did not converge");
 
   gmres_trace.finish();
@@ -620,10 +662,13 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   result.diagnostic.lambda_residual_norm = solved.residual_norm;
   result.diagnostic.independent_residual_norm = independent_norm;
   result.diagnostic.independent_residual_max = independent_max;
-  result.diagnostic.iterations = solved.iterations;
-  result.diagnostic.operator_actions = solved.operator_actions;
+  result.diagnostic.iterations = checked_add(solved.iterations, warmup_iterations);
+  result.diagnostic.operator_actions = checked_add(solved.operator_actions, warmup_actions);
+  result.diagnostic.df_mixed_iterations = warmup_iterations;
+  result.diagnostic.df_strict_iterations = solved.iterations;
   result.diagnostic.diagonal_preconditioned = preconditioned;
-  result.diagnostic.preconditioner_actions = solved.preconditioner_actions;
+  result.diagnostic.preconditioner_actions =
+      checked_add(solved.preconditioner_actions, warmup_preconditioner_actions);
   if (fixed_orbital) {
     owner.set_parameter_seeds(result.lambda1, result.lambda2);
     fixed_orbital->foo =

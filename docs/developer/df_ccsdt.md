@@ -33,12 +33,12 @@ second batched arena. Pair projection keeps the original physical error bound
 and may refuse states that do not meet that bound.
 Neither mixed residuals nor rounded cuts can certify convergence: the original
 energy/residual tolerances and independent expanded FP64 replay still apply.
-Lambda, parameter/factor VJPs, (T), orbital response and nuclear derivatives are
-unchanged FP64 consumers. Resource refusal retains strict execution; numerical
+The strict Lambda solve, parameter/factor VJPs, (T), orbital response and nuclear
+derivatives remain FP64 consumers. Resource refusal retains strict execution; numerical
 failure is reported, not hidden by a retry. This is an internal candidate, not
 a new public method precision policy or a default performance claim.
 
-The developer `df_ccsdt_force_endpoint` benchmark accepts a final
+The developer `df_ccsdt_force_endpoint` benchmark accepts a
 `CCSD_MIXED_PRECISION_0_OR_1` argument after `LAMBDA_PRIMAL_MATRIX_0_OR_1`.
 Its diagnostics distinguish FP32 GEMMs, casts, warmup evaluations and the
 precision switch from FP64 work. Use complete cold E+F timing and independent
@@ -52,6 +52,44 @@ inputs/cuts/seeds remain separate; only sequential temporary storage aliases.
 `df_scratch_avoided_bytes` the eliminated second reservation, not measured peak
 VRAM. Optional audit or allocation refusal still restores the smaller operator
 or scalar layout.
+
+### Internal Lambda mixed-precision preconvergence
+
+`LambdaOptions::df_mixed_precision` is a separate, default-off CUDA experiment.
+Only the compiler-owned staged auxiliary transpose uses uniform FP32 storage
+and pedantic FP32 contractions during a bounded GMRES warm start. Its core
+adjoint, primal state, RHS, packed host Krylov algebra, diagonal preconditioner
+and ordered accumulation stay FP64. Each Q output widens separately before
+the original FP64 accumulation; no FP32 Q subtotal replaces that order.
+
+Warmup uses absolute tolerance `1e-6`, zero relative tolerance and at most 16
+iterations, independently configurable through the Lambda options. A finite
+exhausted, stagnant or broken-down proposal may seed a **new original FP64
+GMRES solve**, never certify convergence. This new solve starts with empty
+Krylov history and a fresh FP64 physical action. The original strict tolerances,
+independently expanded transpose audit and all parameter/factor/force VJPs
+remain unchanged. Nonfinite failures propagate without publication or a quiet
+strict retry.
+
+The opt-in halves the requested strict auxiliary Q batch, down to one Q; default
+FP64 callers retain the original schedule. Immutable FP32 factors/amplitudes
+and dynamic cut seeds borrow a tail of the existing shared strict scratch
+lease, outside every warmup core/auxiliary/tau scratch high-water mark. There
+is no new owned device allocation. Begin the single-use epoch only after fresh FP64
+primal/RHS work; permanently finish it before any strict replay/audit/VJP can
+overwrite that tail. Refused storage or provider descriptors retain bounded
+FP64 actions. Host descriptor and warm-proposal capacities are budgeted.
+
+The benchmark's trailing `LAMBDA_MIXED_PRECISION_0_OR_1` argument follows the
+CCSD precision flag. Diagnostics separate mixed/strict iterations and actions,
+FP32 GEMM calls/summands, converted elements, the permanent switch and borrowed
+storage/input offset. Borrowed bytes are not extra allocations or measured
+peak VRAM. Qualify complete cold E+F time, total operator work, independent
+energies/forces and sampled occupancy separately; small-fixture correctness
+does not imply a general production precision policy.
+
+See the [Lambda warm-start decision](../../.agents/notes/implemented/performance/2026-10-11-df-lambda-mixed-warmup.md)
+for rationale and source-matched evidence.
 
 ### Scientific definition
 

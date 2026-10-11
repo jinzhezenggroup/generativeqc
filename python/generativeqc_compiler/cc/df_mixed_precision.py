@@ -9,6 +9,7 @@ from generativeqc_compiler.tensor import Node, Program
 from generativeqc_compiler.tensor.precision import lower_precision
 
 DF_CC_WARMUP_QUALIFICATION = "df-ccsd/fp32-auxiliary-warmup-v1"
+DF_LAMBDA_WARMUP_QUALIFICATION = "df-lambda/fp32-auxiliary-warmup-v1"
 
 
 def auxiliary_warmup_program(source: Program) -> Program:
@@ -19,6 +20,22 @@ def auxiliary_warmup_program(source: Program) -> Program:
     certificate: the controller switches permanently to the original FP64
     graph, clears mixed DIIS history and performs independent physical replay.
     """
+    return _auxiliary_warmup_program(source, DF_CC_WARMUP_QUALIFICATION)
+
+
+def lambda_auxiliary_warmup_program(source: Program) -> Program:
+    """Retype only a bounded Lambda warm-start operator, never its certificate.
+
+    The primal state and core adjoint remain FP64. The native owner widens each
+    Q cotangent before ordered FP64 accumulation. A separate, original FP64
+    GMRES solve must start from the warm proposal with a fresh physical residual;
+    independent expanded audits and all parameter/force VJPs remain unchanged.
+    """
+    return _auxiliary_warmup_program(source, DF_LAMBDA_WARMUP_QUALIFICATION)
+
+
+def _auxiliary_warmup_program(source: Program, qualification: str) -> Program:
+    """Share uniform storage/compute lowering without sharing scientific identity."""
     if any(node.spec.dtype != "float64" for node in source.live_nodes):
         raise ValueError("DF auxiliary warmup requires a uniform FP64 source")
     mapping: dict[Node, Node] = {}
@@ -34,12 +51,10 @@ def auxiliary_warmup_program(source: Program) -> Program:
         provenance={
             **source.provenance,
             "fp64_source_equation": source.logical_hash,
-            "native_precision_boundary": DF_CC_WARMUP_QUALIFICATION,
+            "native_precision_boundary": qualification,
         },
     )
-    directive = PrecisionDirective(
-        "float32", "float32", "float32", DF_CC_WARMUP_QUALIFICATION
-    )
+    directive = PrecisionDirective("float32", "float32", "float32", qualification)
     return lower_precision(
         candidate,
         {
