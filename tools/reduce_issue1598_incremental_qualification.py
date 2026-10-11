@@ -352,9 +352,7 @@ def main() -> None:
     ledger_lines = sum(1 for _ in ledger_path.open()) if ledger_path.exists() else 0
 
     per_round_rows = [row for row in hf_rows if isinstance(row.get("round"), int)]
-    matched_rows = [
-        row for row in hf_rows if row.get("round") == "all-matched"
-    ]
+    matched_rows = [row for row in hf_rows if row.get("round") == "all-matched"]
     payload = {
         "schema_version": 1,
         "issue": 1598,
