@@ -1180,6 +1180,13 @@ class CompiledFunction:
                 dict(record)
                 for record in self._execution.molecular.diagnostics.values()
             ),
+            "molecular_profile_enabled": self._execution.molecular.profile_enabled,
+            "molecular_profile_ns": dict(
+                self._execution.molecular.profile_totals_ns
+            ),
+            "molecular_profile_counts": dict(
+                self._execution.molecular.profile_counts
+            ),
         }
 
     def close(self) -> None:
