@@ -180,6 +180,10 @@ def structured_scf_portfolios() -> tuple[StructuredPortfolio, ...]:
                     target=target,
                 )
             )
+        if request.scientific_identity is None:
+            raise ValueError(
+                "structured region requires a scientific equation identity"
+            )
         portfolios.append(
             StructuredPortfolio(
                 request,
