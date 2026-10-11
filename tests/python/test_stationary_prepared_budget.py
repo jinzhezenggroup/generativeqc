@@ -44,7 +44,9 @@ def test_prepared_artifact_resources_close_when_publication_fails(
             "binary_sha256": "d" * 64,
         }
     )
-    monkeypatch.setattr(runtime, "compile_stationary_cuda", lambda *_a, **_kw: stationary)
+    monkeypatch.setattr(
+        runtime, "compile_stationary_cuda", lambda *_a, **_kw: stationary
+    )
     monkeypatch.setattr(runtime, "compile_grid", lambda *_a, **_kw: grid)
 
     events: list[str] = []
@@ -67,7 +69,9 @@ def test_prepared_artifact_resources_close_when_publication_fails(
         monkeypatch.setattr(owner._lease, "install", reject_install)
 
     error = ValueError if failure == "artifact-collision" else RuntimeError
-    message = "conflicting binaries" if failure == "artifact-collision" else "injected lease"
+    message = (
+        "conflicting binaries" if failure == "artifact-collision" else "injected lease"
+    )
     with pytest.raises(error, match=message):
         owner.ensure(
             state=SimpleNamespace(),
