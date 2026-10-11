@@ -14,8 +14,14 @@ from time import perf_counter
 import numpy as np
 import pytest
 from generativeqc import Calculator, KsOptions
+from generativeqc._dft_gradient import StationaryKsState
 from generativeqc._ks_snapshot import NativeKsSnapshot
-from generativeqc_compiler.common.provenance import atomic_json, file_hash
+from generativeqc_compiler.common.provenance import (
+    atomic_json,
+    canonical_hash,
+    file_hash,
+)
+from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.method import resolve_bulk_ks
 from test_libxc_automatic_point_native import NAMES
@@ -190,6 +196,16 @@ def test_automatic_cpu_complete_final_state_lifecycle(name: str, spins: int) -> 
             snapshot = NativeKsSnapshot(batch, 0)
             assert snapshot.backend == "cpu"
             state = _state(snapshot)
+            with NativeAO(atoms, charge=spins - 1, multiplicity=spins) as basis:
+                decoded = StationaryKsState.from_native(batch, basis)
+                try:
+                    assert decoded.identity.regularization_identity == canonical_hash(
+                        {"scf_domain": calculator.ks_options.scf_domain}
+                    )
+                    np.testing.assert_array_equal(decoded.density, state["density"])
+                    np.testing.assert_array_equal(decoded.fock, state["fock"])
+                finally:
+                    decoded._source.close()
             expected = _reference(name, spins, atoms, state)
             np.testing.assert_allclose(
                 result.energy, expected["energy"], rtol=0, atol=3e-9
