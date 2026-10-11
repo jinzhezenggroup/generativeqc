@@ -76,7 +76,7 @@ def test_equal_spin_removes_repeated_scalar_work(method: str) -> None:
     assert len(graph.topological_order(bound)) < len(graph.topological_order(roots))
 
 
-def test_native_equal_spin_selector_preserves_uks_response_and_opt_out(
+def test_native_equal_spin_selector_defaults_on_for_rks_and_preserves_uks_opt_out(
     tmp_path: Path,
 ) -> None:
     """Execute the production host selector, not a Python policy imitation."""
@@ -97,7 +97,8 @@ def test_native_equal_spin_selector_preserves_uks_response_and_opt_out(
         + r"""
 int main() {
   unsetenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");
-  assert(!use_equal_spin_points(1));
+  assert(use_equal_spin_points(1));
+  assert(!use_equal_spin_points(2));
   setenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", "1", 1);
   assert(use_equal_spin_points(1));
   assert(!use_equal_spin_points(2));

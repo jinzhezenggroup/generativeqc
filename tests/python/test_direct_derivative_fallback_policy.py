@@ -98,9 +98,13 @@ void prepare(CudaDirectJkPlan* plan, bool resident_source_only, bool through_f,
 }
 int main() {
   unsetenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK");
-  assert(!direct_shell_derivative_fallback_requested(1));
-  for (const char* selection : {"0", "1"}) {
-    setenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK", selection, 1);
+  assert(direct_shell_derivative_fallback_requested(1));
+  assert(!direct_shell_derivative_fallback_requested(0));
+  for (const char* selection : {"unset", "0", "1"}) {
+    if (std::strcmp(selection, "unset") == 0)
+      unsetenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK");
+    else
+      setenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK", selection, 1);
     for (bool coverage : {false, true})
       for (unsigned derivative_order : {0U, 1U})
         for (bool resident_source_only : {false, true})
@@ -113,7 +117,7 @@ int main() {
               exchange_attempts = coulomb_attempts = 0;
               prepare(&plan, resident_source_only, through_f, derivative_order, budget);
               const bool attempt = !resident_source_only && !through_f;
-              const bool requested = derivative_order && selection[0] == '1';
+              const bool requested = derivative_order && selection[0] != '0';
               const bool retained = attempt && !limited && (coverage || requested);
               assert(exchange_attempts == unsigned(attempt));
               assert(bool(plan.generated_exchange) == retained);

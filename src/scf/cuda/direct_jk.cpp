@@ -55,14 +55,14 @@ void direct_jk_require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
 }
 
-/** Request bounded shell ownership for retained derivatives, not SCF values.
+/** Default to bounded shell ownership for retained derivatives, not SCF values.
  * The existing value-capability and bounded-value opt-in gates remain separate.
  * Value-only and borrowed resident-source plans do not acquire this resource. */
 bool direct_shell_derivative_fallback_requested(unsigned derivative_order) {
   if (derivative_order == 0) return false;
   const char* selection = std::getenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK");
-  if (!selection || std::strcmp(selection, "0") == 0) return false;
-  if (std::strcmp(selection, "1") == 0) return true;
+  if (!selection || std::strcmp(selection, "1") == 0) return true;
+  if (std::strcmp(selection, "0") == 0) return false;
   throw std::invalid_argument("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK must be '0' or '1'");
 }
 

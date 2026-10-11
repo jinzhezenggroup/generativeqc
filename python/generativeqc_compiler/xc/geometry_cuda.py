@@ -134,8 +134,8 @@ def _emit_restricted_point_capability(
 
     Every registered unpolarized consumer has an equal-spin lowering. Runtime
     generation/scratch gates must still prove that its producer supplies equal
-    features. The old PBE0 composition check controls only the retained default
-    qualification and subnormal policy, not candidate eligibility.
+    features. The old PBE0 composition check preserves established restricted
+    mathematics and subnormal policy, not candidate eligibility.
     """
     record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
     legacy_default = (
@@ -159,14 +159,12 @@ def _emit_restricted_point_capability(
         f"constexpr bool stationary_restricted_point_capable = {str(capable).lower()};",
         "// Retained spelling for the v1 binding-metrics ABI, not a method whitelist.",
         f"constexpr bool stationary_pbe0_restricted_point_capable = {str(capable).lower()};",
-        f"constexpr bool stationary_legacy_restricted_point_default = {str(legacy_default).lower()};",
         "inline bool stationary_restricted_point_selected(bool requested) {",
         "  if (!requested || !stationary_restricted_point_capable) return false;",
         '  const char* selection = std::getenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");',
-        '  if (selection && std::strcmp(selection, "1") == 0) return true;',
-        '  if (selection && std::strcmp(selection, "0") != 0)',
+        '  if (!selection || std::strcmp(selection, "1") == 0) return true;',
+        '  if (std::strcmp(selection, "0") == 0) return false;',
         "    throw std::invalid_argument(\"GENERATIVEQC_CUDA_XC_EQUAL_SPIN must be '0' or '1'\");",
-        "  return stationary_legacy_restricted_point_default;",
         "}",
         "__device__ inline StationaryPointValue stationary_evaluate_restricted_point(",
         "    const double rho[2], const double gradient[2][3], const double tau[2]) {",

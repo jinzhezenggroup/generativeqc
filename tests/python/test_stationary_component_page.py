@@ -193,8 +193,8 @@ def test_component_page_missing_artifact_kind_fails_closed(
     assert owner.used == 0
 
 
-@pytest.mark.parametrize("mode", [None, "scalar", "invalid"])
-def test_component_page_retains_explicit_scalar_fallback(
+@pytest.mark.parametrize("mode", [None, "bulk", "scalar", "invalid"])
+def test_component_page_defaults_bulk_and_retains_scalar_fallback(
     monkeypatch: pytest.MonkeyPatch, mode: str | None
 ) -> None:
     owner = _owner(7, 1024)
@@ -207,6 +207,11 @@ def test_component_page_retains_explicit_scalar_fallback(
             owner.integral_page(0, "overlap", ((2, 0),))
         return
     owner.integral_page(0, "overlap", ((2, 0),))
-    assert owner.scalar_packed_descriptors == 3
-    assert owner.component_page_arrays is None
-    assert owner.bulk_packed_descriptors == 0
+    if mode == "scalar":
+        assert owner.scalar_packed_descriptors == 3
+        assert owner.component_page_arrays is None
+        assert owner.bulk_packed_descriptors == 0
+    else:
+        assert owner.scalar_packed_descriptors == 0
+        assert owner.component_page_arrays is not None
+        assert owner.bulk_packed_descriptors == 3

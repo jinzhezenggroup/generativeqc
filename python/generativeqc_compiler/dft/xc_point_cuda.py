@@ -91,8 +91,8 @@ _EQUAL_SPIN_SELECTOR = r"""
 bool use_equal_spin_points(std::size_t spins) {
   if (spins != 1) return false;
   const char* selection = std::getenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");
-  if (!selection || std::strcmp(selection, "0") == 0) return false;
-  if (std::strcmp(selection, "1") == 0) return true;
+  if (!selection || std::strcmp(selection, "1") == 0) return true;
+  if (std::strcmp(selection, "0") == 0) return false;
   throw std::invalid_argument("GENERATIVEQC_CUDA_XC_EQUAL_SPIN must be '0' or '1'");
 }
 """
@@ -119,7 +119,7 @@ def emit_automatic_point_kernel() -> str:
 
 
 def emit_equal_spin_point_selector() -> str:
-    """Emit one opt-in policy for curated, split and automatic RKS providers.
+    """Emit the default-on policy for curated, split and automatic RKS providers.
 
     The caller supplies the standard cstdlib/cstring/stdexcept includes. Source
     availability grants neither public method admission nor response support.

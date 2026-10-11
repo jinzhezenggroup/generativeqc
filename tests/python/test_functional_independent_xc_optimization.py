@@ -230,22 +230,18 @@ def stationary_points(
 
 
 @pytest.mark.parametrize("consumer", range(len(STATIONARY_CONSUMERS)))
-def test_stationary_candidate_opt_in_preserves_qualified_default(
+def test_stationary_default_on_with_explicit_opt_out(
     stationary_points: ctypes.CDLL,
     consumer: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Execute the generated selector, including invalid and disabled requests."""
-    _, spec = STATIONARY_CONSUMERS[consumer]
-    legacy_default = dict(spec.components) == {
-        "GGA_X_PBE": Fraction(3, 4),
-        "GGA_C_PBE": Fraction(1),
-    }
     variable = "GENERATIVEQC_CUDA_XC_EQUAL_SPIN"
     monkeypatch.delenv(variable, raising=False)
-    assert stationary_points.selected(consumer, True) == legacy_default
+    assert stationary_points.selected(consumer, True) == 1
+    assert stationary_points.selected(consumer, False) == 0
     monkeypatch.setenv(variable, "0")
-    assert stationary_points.selected(consumer, True) == legacy_default
+    assert stationary_points.selected(consumer, True) == 0
     monkeypatch.setenv(variable, "1")
     assert stationary_points.selected(consumer, True) == 1
     assert stationary_points.selected(consumer, False) == 0

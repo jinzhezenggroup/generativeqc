@@ -181,9 +181,9 @@ def _resolve_restricted_point_policy(selection: bool | None = None) -> bool:
 
     This requests a schedule, not an equal-spin proof. Native mathematical,
     generation and scratch admission gates still select the actual kernel.
-    Registered candidates share the generic equal-spin XC opt-in; only the
-    previously qualified composition retains its default. The PBE0-named
-    environment variable remains a compatibility spelling for this request.
+    All registered candidates now default to equal-spin XC sharing when the
+    producer and resource gates pass. The PBE0-named environment variable
+    remains a compatibility spelling for this request.
     Older stationary/grid artifacts retain the general point route.
     """
     if selection is not None:
@@ -1218,7 +1218,7 @@ class _CudaSources:
             raise ValueError("stationary CUDA page requires uniform rank two or four")
         if self.component_mode:
             packing = os.environ.get(
-                "GENERATIVEQC_STATIONARY_COMPONENT_PACKING", "scalar"
+                "GENERATIVEQC_STATIONARY_COMPONENT_PACKING", "bulk"
             )
             if packing not in ("scalar", "bulk"):
                 raise ValueError(

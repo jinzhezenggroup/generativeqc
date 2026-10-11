@@ -181,6 +181,8 @@ int main() {{
   }}
   unsetenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");
   launch(nullptr,nullptr,nullptr,37,1,nullptr,nullptr,nullptr,code,1,1,nullptr);
+  assert(observed_restricted);
+  launch(nullptr,nullptr,nullptr,37,2,nullptr,nullptr,nullptr,code,1,1,nullptr);
   assert(!observed_restricted);
   const auto previous_calls = calls;
   launch(nullptr,nullptr,nullptr,0,1,nullptr,nullptr,nullptr,code,1,1,nullptr);
