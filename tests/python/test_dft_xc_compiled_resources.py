@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from generativeqc_compiler.common.cuda_resources import KernelResources
@@ -14,6 +16,75 @@ from generativeqc_compiler.dft.xc_compiled_resources import (
 )
 
 TARGET = cuda_target_info("sm_120")
+
+
+@pytest.mark.parametrize("typed_literals", (False, True))
+def test_resource_demangler_preserves_active_scopes(
+    monkeypatch: pytest.MonkeyPatch, typed_literals: bool
+) -> None:
+    from tools import validate_native_xc_resources
+
+    resources = pbe_resources()
+    names = [item.function for item in resources]
+    if typed_literals:
+        names = [
+            name.replace("<4,", "<(long)4,")
+            .replace("<5,", "<(long)5,")
+            .replace("true", "(bool)1")
+            .replace("false", "(bool)0")
+            for name in names
+        ]
+    monkeypatch.setattr(
+        validate_native_xc_resources, "_demangler", lambda _: Path("/test/cu++filt")
+    )
+    monkeypatch.setattr(
+        validate_native_xc_resources.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0, stdout="\n".join(names) + "\n", stderr=""
+        ),
+    )
+    decoded = validate_native_xc_resources._demangle(resources, nvcc=Path("/test/nvcc"))
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+    )
+    expected = native_grid_xc_compiled_region_evidence(
+        resources,
+        shape=shape,
+        functional="PBE",
+        target=TARGET,
+        source_identity="s" * 64,
+    )
+    actual = native_grid_xc_compiled_region_evidence(
+        decoded, shape=shape, functional="PBE", target=TARGET, source_identity="s" * 64
+    )
+    assert actual.to_payload() == expected.to_payload()
+    missing_fp64 = tuple(
+        item for item in decoded if "tiled_density_product<false>" not in item.function
+    )
+    with pytest.raises(ValueError, match="strict-FP64 tiled density-product kernel"):
+        native_grid_xc_compiled_region_evidence(
+            missing_fp64,
+            shape=shape,
+            functional="PBE",
+            target=TARGET,
+            source_identity="s" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "kernel<(bool)10>",
+        "kernel<(bool)0x1>",
+        "kernel<(float)4>",
+        "kernel<(custom_type)4>",
+    ),
+)
+def test_resource_demangler_does_not_normalize_unknown_values(name: str) -> None:
+    from tools.validate_native_xc_resources import _canonical_template_literals
+
+    assert _canonical_template_literals(name) == name
 
 
 def resource(
