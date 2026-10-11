@@ -161,9 +161,13 @@ _SCIENCE_INPUTS = (
 )
 
 
-@pytest.mark.parametrize("enabled", (False, True), ids=("off", "on"))
+@pytest.mark.parametrize(
+    ("enabled", "functionals"),
+    ((False, ()), (True, ()), (True, ("GGA_X_APBE", "MGGA_X_LTA"))),
+    ids=("off", "full", "selected"),
+)
 def test_registry_incremental_build_tracks_science_only_when_enabled(
-    tmp_path: Path, enabled: bool
+    tmp_path: Path, enabled: bool, functionals: tuple[str, ...]
 ) -> None:
     """Execute the real declaration with a counter generator, not CUDA/NVCC."""
     cmake, ninja = shutil.which("cmake"), shutil.which("ninja")
@@ -185,10 +189,12 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         "p = argparse.ArgumentParser()\n"
         "p.add_argument('--output-directory', type=pathlib.Path)\n"
         "p.add_argument('--disabled', action='store_true')\n"
+        "p.add_argument('--functional', action='append')\n"
         "a = p.parse_args()\n"
         "a.output_directory.mkdir(parents=True, exist_ok=True)\n"
         "counter = a.output_directory / 'runs.txt'\n"
         "counter.write_text(str(int(counter.read_text()) + 1 if counter.exists() else 1))\n"
+        "(a.output_directory / 'functionals.txt').write_text(';'.join(a.functional or []))\n"
         "names = ['registry.hpp', 'registry.cpp']\n"
         "if not a.disabled: names += [str(i) + '.cu' for i in range(32)]\n"
         "for name in names:\n"
@@ -200,6 +206,7 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         f'include("{ROOT / "cmake/GenerativeQCGenerated.cmake"}")\n'
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'ON' if enabled else 'OFF'})\n"
+        f'set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "{";".join(functionals)}")\n'
         + declaration
     )
     build = tmp_path / "build"
@@ -224,6 +231,9 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
 
     assert run() == 1
     assert run() == 1
+    assert (
+        build / "generated/libxc_semilocal_cuda/functionals.txt"
+    ).read_text() == ";".join(functionals)
     expected = 1
     for relative in (*_SCIENCE_INPUTS, "python/generativeqc_compiler/common/added.py"):
         path = tmp_path / relative
@@ -232,3 +242,69 @@ def test_registry_incremental_build_tracks_science_only_when_enabled(
         assert run() == expected, relative
     shards = list((build / "generated/libxc_semilocal_cuda").glob("*.cu"))
     assert len(shards) == (32 if enabled else 0)
+
+
+@pytest.mark.parametrize("cuda_enabled", (False, True))
+@pytest.mark.parametrize("functional_name", ("GGA_X_APBE", "OFF", "0"))
+def test_explicit_package_requires_cuda_and_opt_in(
+    tmp_path: Path, cuda_enabled: bool, functional_name: str
+) -> None:
+    """Exercise the actual option guard without configuring a compiler/GPU."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("option guard requires CMake")
+    source = (ROOT / "CMakeLists.txt").read_text()
+    start = source.index('set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS ""')
+    end = source.index("option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE", start)
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(AutomaticCudaOptions LANGUAGES NONE)\n"
+        f"set(GENERATIVEQC_ENABLE_CUDA {'ON' if cuda_enabled else 'OFF'})\n"
+        f"set(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT {'OFF' if cuda_enabled else 'ON'})\n"
+        + source[start:end]
+    )
+    result = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(tmp_path / "build"),
+            f"-DGENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS={functional_name}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "requires CUDA and automatic CUDA AOT" in " ".join(result.stderr.split())
+
+
+def test_explicit_package_rejects_cuda_detection_fallback(tmp_path: Path) -> None:
+    """A requested package cannot quietly disappear if nvcc is unavailable."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("option guard requires CMake")
+    source = (ROOT / "CMakeLists.txt").read_text()
+    start = source.rindex(
+        'if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND'
+    )
+    end = source.index("# Scoped GenerativeQC-owned GFN2", start)
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(AutomaticCudaFallback LANGUAGES NONE)\n"
+        "set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS GGA_X_APBE)\n"
+        "set(GENERATIVEQC_ENABLE_CUDA OFF)\n" + source[start:end]
+    )
+    result = subprocess.run(
+        [cmake, "-S", str(tmp_path), "-B", str(tmp_path / "build")],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "cannot use the CPU-only compiler fallback" in " ".join(
+        result.stderr.split()
+    )

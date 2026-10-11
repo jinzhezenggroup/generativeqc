@@ -27,6 +27,13 @@ if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
 endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
+set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "" CACHE STRING
+    "Semicolon-separated automatic CUDA AOT registrations; empty selects the opt-in full catalog")
+if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
+   (NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OR NOT GENERATIVEQC_ENABLE_CUDA))
+  message(FATAL_ERROR
+    "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS requires CUDA and automatic CUDA AOT")
+endif()
 option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE
        "Reuse compiler-owned AO radial and axis work for 4/10 jets" ON)
 option(GENERATIVEQC_ENABLE_CUTENSOR "Link the optional native cuTENSOR provider" OFF)
@@ -254,6 +261,12 @@ if(GENERATIVEQC_ENABLE_CUDA)
     message(WARNING "CUDA compiler not found; building the CPU reference backend only")
     set(GENERATIVEQC_ENABLE_CUDA OFF)
   endif()
+endif()
+
+if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
+   NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR
+    "The selected automatic CUDA AOT package cannot use the CPU-only compiler fallback")
 endif()
 
 # Scoped GenerativeQC-owned GFN2 CPU runtime is registered below.
