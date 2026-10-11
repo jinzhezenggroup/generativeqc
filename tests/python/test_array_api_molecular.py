@@ -444,6 +444,18 @@ def test_molecular_source_phase_profiling_is_opt_in(
         compiled.close()
 
 
+def test_method_neutral_identity_tracks_spin_and_method() -> None:
+    singlet = xp.MolecularModel(("H", "H"), method="uhf", multiplicity=1)
+    triplet = xp.MolecularModel(("H", "H"), method="uhf", multiplicity=3)
+    another_method = xp.MolecularModel(("H", "H"), method="pbe-rks")
+    assert singlet != triplet
+    assert singlet != another_method
+    assert singlet._payload()["multiplicity"] == 1
+    assert triplet._payload()["multiplicity"] == 3
+    with pytest.raises(FrozenInstanceError):
+        singlet._multiplicity = 3
+
+
 @pytest.mark.parametrize(
     "options, message",
     [
