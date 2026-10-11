@@ -11,11 +11,11 @@
     "src/posthf/mp2_derivative_common.cpp": "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657",
     "src/posthf/mp2_derivative_common.hpp": "877332e87e8889570b2056be8bb23de18a8f47a9d611e843d0d92191a15b50a9",
     "tests/native/mp2_derivative_pullback_probe.cpp": "a66370233c5c437d6bf84fd62e69293659489722f5d28fdb48c91b04efbf612a",
-    "tests/python/test_mp2_derivative_pullback_probe.py": "ecc301e7f5d62a3cd355f3819ac880c9340f069ed3c1132f649c1d1d4d44bb0b"
+    "tests/python/test_mp2_derivative_pullback_probe.py": "a2c4c8926c99e665ab5004c16dc3047508cf2149c3b383940d2ee6ea54bad1d7"
   },
-  "post_qualification_delta": "Only Python test type annotations, canonical LF disposition metadata, evidence and tracker formatting changed after qualification. Common C++/header/native probe remain byte-identical. Published artifact hashes distinguish formatting from executed source hashes.",
+  "post_qualification_delta": "Only Python test type annotations, canonical LF disposition metadata, evidence and tracker formatting changed after qualification. Common C++/header/native probe remain byte-identical. Published artifact hashes distinguish formatting from executed source hashes. After upstream integration, source-bound instrumentation is opt-in (GENERATIVEQC_MP2_WORK_PROBE=1); default CI retains unmodified C++ independent-oracle, fallback and molecular tests.",
   "source_inventory": "cmake/GenerativeQCSourceIdentity.json",
-  "measurement_scope": "Source-matched completed CPU endpoint pairs in cpu-summary.json; no CUDA-device execution. Raw overall/resource gates remain FAIL at the documented unmeasured sentinel. Uncompleted matrix cases remain unqualified.",
+  "measurement_scope": "Source-matched completed CPU endpoint pairs in cpu-summary.json.gz; no CUDA-device execution. Raw overall/resource gates remain FAIL at the documented unmeasured sentinel. Uncompleted matrix cases remain unqualified.",
   "checks": {
     "native_probe": "32 baseline / 48 candidate PASS",
     "build": "both verified-sccache CPU CMake builds exit0",
@@ -30,7 +30,7 @@
     "h2-records.json.gz": "33293a9c9cf781e885dc5dbd0294d19cc8d614fbf58438bc3bb9fa52ddfa58f4",
     "payload.cpp": "87752931e661c087c4aa84f47f6f18e962e2cd185219a4952ecd19a37a40f72a",
     "cpu-endpoints.json.gz": "deba94d2f528a17adb671c935cbf533b985cfb42779e8aab1756891c3074c6f3",
-    "cpu-summary.json": "7c938b8085450268568a5e548119f5d372b12fc09270dbf5fe5102649ea19164"
+    "cpu-summary.json.gz": "7d7f061062492912f1b214c2d4f10ec93d90899bc5bf04e3c84eb04570063f1b"
   },
   "tracker": {
     "source_sha256": "f38cb4761a689c8452cd86ad9fd988efb97528c9f121f4cada454928da01cb14",
@@ -40,5 +40,16 @@
     "published_source_sha256": "87752931e661c087c4aa84f47f6f18e962e2cd185219a4952ecd19a37a40f72a",
     "publication_delta": "pre-commit.ci be594163 changed only payload.cpp formatting; source_sha256 remains the actually executed tracker. Both executed source texts are retained in cpu-endpoints.json.gz.",
     "hpc_loaded_shared_library_sha256": "7f0656c481756f8efc2d43c0e6ac44eebbf7bb8e7b509566fccecfa50c518539"
+  },
+  "summary_storage": {
+    "encoding": "gzip",
+    "decoded_bytes": 20850,
+    "decoded_sha256": "7c938b8085450268568a5e548119f5d372b12fc09270dbf5fe5102649ea19164",
+    "reason": "Lossless storage compaction after merging newer upstream evidence; all summary records unchanged."
+  },
+  "upstream_integration": {
+    "commit": "1ac537e67b60b4e0e733de42783d4d5f755e3f5e",
+    "base": "8504566587a58613e408c40d55d19509469e03f1",
+    "scope": "Published MP2 common/header/native probe bytes unchanged. The broader production inventory changed; historical loaded-library identities and endpoint receipts qualify the original measured snapshots, not the integrated build. Latest-head build and endpoint qualification must be assessed separately."
   }
 }

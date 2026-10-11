@@ -1,6 +1,6 @@
 # Compact factorized MP2 first-stage evidence
 
-Bounded CPU qualification for one #1626 slice. `cpu-summary.json` lists the
+Bounded CPU qualification for one #1626 slice. `cpu-summary.json.gz` lists the
 completed pairs and the exact collection time; unfinished matrix cases remain
 unqualified. This evidence does not qualify a CUDA device, full UMP2 forces,
 dense RCCSD(T), broader endpoint profitability, or issue closure.
@@ -37,7 +37,7 @@ allocator overhead and borrowed Python data. RSS is a cumulative process high
 water mark and includes the Python process/oracle. Timings from those runs are
 interposed; separate timing records omit the tracker and contain seven repeated
 warm E+F measurements. These small, sequential samples do not establish an
-endpoint speedup; `cpu-summary.json` retains their medians and ranges separately.
+endpoint speedup; `cpu-summary.json.gz` retains their medians and ranges separately.
 
 ## Additional completed CPU evidence
 
@@ -90,13 +90,29 @@ measurement. `artifacts.payload.cpp` binds published bytes;
 The bundle preserves the exact measured source, so reproducing it does not
 depend on retaining an unmerged commit after squash.
 
+## Upstream integration and storage
+
+The summary is losslessly gzip-compressed; decode it with Python
+`gzip.decompress` before parsing JSON. Its decoded SHA and byte count are in
+`provenance.json`; every original record and value is retained.
+
+Integration commit `1ac537e67` preserves the qualified MP2 common/header/native
+probe byte-for-byte, while merging newer upstream production
+inputs. The historical source/library identities above qualify the original
+measured snapshots, not the integrated build. Latest-head build and endpoint
+qualification require separate evidence; CI success alone is not that scientific
+acceptance.
+
 ## Reproduction
 
 Use immutable LF baseline/candidate source snapshots and a verified compiler
 cache. Build CPU Release libraries with CUDA and packaged CPU force AOT disabled,
 then select each actual library explicitly with `GENERATIVEQC_LIBRARY`. Retain
 compiler-cache statistics and verbose launcher commands. The bounded common
-harness is `tests/python/test_mp2_derivative_pullback_probe.py`.
+harness is `tests/python/test_mp2_derivative_pullback_probe.py`. Default CI runs
+unmodified C++ with independent oracles. Set `GENERATIVEQC_MP2_WORK_PROBE=1`
+only for the opt-in, source-bound accumulation/work audit; numerical, staged
+fallback and molecular ERI-center tests remain enabled by default.
 
 Compile `payload.cpp` to a PIC object through that launcher and link a shared
 library. Run `endpoint.py --source SOURCE --case h2 --scientific --payload

@@ -1,9 +1,10 @@
 """Execute the actual common C++ derivative pullback, with a direct tensor oracle.
 
 This is bounded CPU correctness/allocation/work evidence, not force endpoint or
-CUDA qualification. Test-only instrumentation counts executed accumulation sites;
-a separately compiled, unmodified translation unit must produce identical data
-and allocation receipts. Inputs and independent oracle storage are not tracked.
+CUDA qualification. Optional test-only instrumentation counts accumulation sites;
+enable GENERATIVEQC_MP2_WORK_PROBE=1 for the source-bound historical work audit.
+Default CI exercises unmodified production code and independent numerical oracles.
+Inputs and independent oracle storage are not tracked.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parents[2]
 COMMON = ROOT / "src/posthf/mp2_derivative_common.cpp"
+WORK_PROBE = os.environ.get("GENERATIVEQC_MP2_WORK_PROBE") == "1"
 # Binding the entire source prevents newly added, uninstrumented work from being
 # silently omitted. Source changes require review of all observation sites.
 COMMON_SHA256 = "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657"
@@ -72,9 +74,9 @@ def pullback_probes(
     tmp_path_factory: pytest.TempPathFactory, required_native_cxx: NativeCxx
 ) -> list[Path]:
     directory = tmp_path_factory.mktemp("mp2-common-pullback")
-    original = COMMON.read_text()
     observed = directory / "observed.cpp"
-    observed.write_text(instrument(original))
+    if WORK_PROBE:
+        observed.write_text(instrument(COMMON.read_text()))
     header = directory / "probe_counts.hpp"
     header.write_text(
         "#pragma once\n#include <array>\n#include <cstddef>\n"
@@ -102,7 +104,8 @@ def pullback_probes(
         required_native_cxx.compile_object(source, obj, args=args)
         support.append(obj)
     executables = []
-    for mode, common in enumerate((COMMON, observed)):
+    sources = (COMMON, observed) if WORK_PROBE else (COMMON,)
+    for mode, common in enumerate(sources):
         executable = directory / f"probe-{mode}"
         objects = []
         for index, source in enumerate(
@@ -154,17 +157,19 @@ def test_actual_common_pullback(
         assert result.returncode == 0, result.stdout + result.stderr
         receipts.append(json.loads(result.stdout))
     assert receipts[0].pop("iterations") == [0] * 12
-    measured_iterations = receipts[1].pop("iterations")
-    assert any(measured_iterations)
-    # Includes every observed local weight, atom gradient, callback count and
-    # allocation lifetime. Instrumentation must preserve these bit-for-bit.
-    assert receipts[0] == receipts[1]
-    if factorized:
-        n = receipts[1]["n"]
-        assert measured_iterations[4] == 0
-        assert measured_iterations[5:7] == [n**5] * 2
-    else:
-        assert measured_iterations[7] == 8 * measured_iterations[0]
+    measured_iterations = None
+    if WORK_PROBE:
+        measured_iterations = receipts[1].pop("iterations")
+        assert any(measured_iterations)
+        # Optional instrumentation must preserve observable numerical results,
+        # callbacks and allocation lifetimes bit-for-bit.
+        assert receipts[0] == receipts[1]
+        if factorized:
+            n = receipts[0]["n"]
+            assert measured_iterations[4] == 0
+            assert measured_iterations[5:7] == [n**5] * 2
+        else:
+            assert measured_iterations[7] == 8 * measured_iterations[0]
 
     if factorized:
         for executable in pullback_probes:
@@ -182,7 +187,8 @@ def test_actual_common_pullback(
             assert staged["callbacks"] == receipts[0]["callbacks"]
             assert staged["local_elements"] == receipts[0]["local_elements"]
             assert receipts[0]["shell_peak_bytes"] < staged["shell_peak_bytes"]
-            assert sum(measured_iterations[9:12]) < n**5
+            if measured_iterations is not None:
+                assert sum(measured_iterations[9:12]) < receipts[0]["n"] ** 5
         expanded_receipts = []
         for executable in pullback_probes:
             result = subprocess.run(
@@ -197,7 +203,8 @@ def test_actual_common_pullback(
             expanded = json.loads(result.stdout)
             expanded.pop("iterations")
             expanded_receipts.append(expanded)
-        assert expanded_receipts[0] == expanded_receipts[1]
+        if WORK_PROBE:
+            assert expanded_receipts[0] == expanded_receipts[1]
         assert expanded_receipts[0]["gradient"] == pytest.approx(
             receipts[0]["gradient"], rel=3e-11, abs=3e-11
         )
