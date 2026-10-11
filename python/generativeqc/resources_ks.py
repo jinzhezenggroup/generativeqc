@@ -326,7 +326,15 @@ def ks_resource_request(
             "KS planning supports electronic contributions only; "
             "post-SCF corrections require a separate resource owner"
         )
-    if "tau" in model.functional.ingredients:
+    from .ks import _automatic_semilocal_name
+
+    automatic_name = _automatic_semilocal_name(model.method_ir)
+    if automatic_name is not None and backend != "cpu":
+        raise NotImplementedError(
+            "automatic Libxc KS resource planning currently supports CPU only"
+        )
+    automatic_cpu = automatic_name is not None
+    if "tau" in model.functional.ingredients and not automatic_cpu:
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
         )
@@ -367,6 +375,8 @@ def ks_resource_request(
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
     cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
+    # Imported CPU tau uses the same four AO jets and dense potential matrices
+    # as GGA; tau and its point differential are fixed-size stack values.
     requires_first_ao_derivatives = bool(model.ao_order)
     unrestricted = model.method_ir.spin == "polarized"
     items = []

@@ -31,7 +31,10 @@ from generativeqc import (
 )
 from generativeqc import batch as batch_module
 from generativeqc import calculator as calculator_module
-from generativeqc._cpu_force_resources import cpu_force_inventory
+from generativeqc._cpu_force_resources import (
+    cpu_force_inventory,
+    qualified_direct_semilocal_context,
+)
 from generativeqc.batch import PreparedBatch
 from generativeqc_compiler.method import (
     MethodSpec,
@@ -275,7 +278,21 @@ def test_automatic_guess_does_not_hide_unexpected_native_query_failure(
         assert explicit.initial_guess == InitialGuessSpec("minao")
 
 
-@pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])
+@pytest.mark.parametrize(
+    "method",
+    [
+        "lda-rks",
+        "pbe-rks",
+        "lda-uks",
+        "pbe-uks",
+        "libxc:LDA_C_CHACHIYO",
+        "libxc:GGA_X_APBE",
+        "libxc:MGGA_X_LTA",
+        "libxc-uks:LDA_C_CHACHIYO",
+        "libxc-uks:GGA_X_APBE",
+        "libxc-uks:MGGA_X_LTA",
+    ],
+)
 @pytest.mark.parametrize("basis", ["sto-3g", "def2-svp"])
 def test_energy_defaults_preserve_one_shot_and_batch_domains(
     fake_native: typing.Any,
@@ -301,12 +318,15 @@ def test_energy_defaults_preserve_one_shot_and_batch_domains(
     force.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "method", ["pbe-rks", "libxc:GGA_X_APBE", "libxc-uks:MGGA_X_LTA"]
+)
 def test_explicit_small_force_routes_and_budget_transitions(
-    fake_native: typing.Any, monkeypatch: typing.Any
+    fake_native: typing.Any, monkeypatch: typing.Any, method: str
 ) -> typing.Any:
     monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", fake_native.force)
     calc = Calculator(
-        method="pbe-rks", resource_budget=ResourceBudget(host_bytes=512 << 20)
+        method=method, resource_budget=ResourceBudget(host_bytes=512 << 20)
     )
     assert calc.singlepoint(H2, properties=FORCES).forces is not None
     with calc.prepare_batch([H2]) as batch:
@@ -322,6 +342,33 @@ def test_explicit_small_force_routes_and_budget_transitions(
             )
         assert batch.execute(strict=True).items[0].forces is None
     assert fake_native.force_calls == 3
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("_automatic_libxc_name", "GGA_C_APBE"),
+        ("_device_name", "cuda"),
+        ("_density_fitting_mode", 1),
+        ("_precision_mode", 99),
+        ("_dispersion_method_ir", object()),
+    ],
+)
+def test_automatic_force_context_rejects_wrong_point_or_provider(
+    fake_native: typing.Any,
+    field: str,
+    value: typing.Any,
+) -> None:
+    calculator = Calculator(method="libxc:GGA_X_APBE", basis="sto-3g", device="cpu")
+    assert qualified_direct_semilocal_context(calculator)
+    setattr(calculator, field, value)
+    assert not qualified_direct_semilocal_context(calculator)
+
+
+def test_automatic_ecp_context_remains_energy_only(fake_native: typing.Any) -> None:
+    calculator = Calculator(method="libxc:GGA_X_APBE", basis=_synthetic_ecp_basis())
+    assert not qualified_direct_semilocal_context(calculator)
+    assert calculator.capabilities.supported_properties == ENERGY
 
 
 def test_force_upgrade_over_budget_preserves_plan_and_skips_replay(

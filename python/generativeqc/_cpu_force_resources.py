@@ -45,15 +45,34 @@ def qualified_direct_semilocal_context(calculator: typing.Any) -> bool:
     """One admission predicate for the optional all-electron CPU force owner."""
     from . import _native
 
+    options = calculator._ks_options
+    if options is None:
+        return False
+    automatic_name = calculator._automatic_libxc_name
+    if automatic_name is None:
+        supported_method = calculator._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
+    else:
+        # The live point provider supplies E/vrho/gradient/vtau to the common
+        # geometry pullback. Its carrier name is not scientific force identity.
+        plan = options.execution_plan
+        functional = plan.semilocal.functional if plan.semilocal else None
+        supported_method = (
+            functional is not None
+            and functional.components == ((automatic_name, 1),)
+            and functional.ingredients
+            in (("rho",), ("rho", "sigma"), ("rho", "sigma", "tau"))
+            and len(options.method_ir.primitives) == 1
+            and not plan.exchange
+            and calculator._precision_mode == _native.PRECISION_FP64
+        )
+
     return (
         calculator._device_name == "cpu"
-        and calculator._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
+        and supported_method
         and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
-        and calculator._automatic_libxc_name is None
         and calculator._dispersion_method_ir is None
-        and calculator._ks_options is not None
-        and calculator._ks_options.coefficients == (1.0, 1.0, 0.0)
-        and calculator._ks_options.execution_plan.nonlocal_correlation is None
+        and options.coefficients == (1.0, 1.0, 0.0)
+        and options.execution_plan.nonlocal_correlation is None
         and qualified_all_electron_basis(calculator._basis)
     )
 

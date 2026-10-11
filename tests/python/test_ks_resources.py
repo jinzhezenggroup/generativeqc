@@ -57,6 +57,23 @@ def test_topology_controls_and_spin_bind_the_resource_identity() -> None:
         assert estimate_ks_resources([H2], **options).identity != base.identity
 
 
+@pytest.mark.parametrize(
+    "method", ("libxc:LDA_C_CHACHIYO", "libxc:GGA_X_APBE", "libxc:MGGA_X_LTA")
+)
+def test_automatic_cpu_planning_keeps_exact_source_and_optional_force_work(
+    method: str,
+) -> None:
+    energy = estimate_ks_resources([H2], method=method)
+    force = estimate_ks_resources([H2], method=method, include_forces=True)
+    assert energy.status == force.status == "feasible"
+    assert energy.identity != force.identity
+    assert energy.requests[0].identity.observables == ("energy",)
+    assert force.requests[0].identity.observables == ("energy", "forces")
+    assert force.peak_bytes["host"] >= 256 << 20
+    with pytest.raises(NotImplementedError, match="supports CPU only"):
+        estimate_ks_resources([H2], method=method, backend="cuda")
+
+
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
 def test_cpu_budget_covers_prepare_replay_rebuild_and_singlepoint(
     method: typing.Any,
