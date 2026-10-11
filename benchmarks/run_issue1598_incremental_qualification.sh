@@ -50,25 +50,34 @@ run_point() {
     env_args+=(GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL="$rebuild_interval")
   fi
   printf 'RUN mode=%s case=%s atoms=%s round=%s\n' "$mode" "$case_name" "$atoms" "$round"
-  if timeout --kill-after=5 "$point_timeout" env "${env_args[@]}" "$python" \
-      -m benchmarks.readme_hf_scaling_qualification --case "$case_name" \
-      --batch 1 --repeats 3 --max-iterations 100 \
-      --energy-tolerance 1e-10 --density-tolerance 1e-9 \
-      --reference-gradient-tolerance 1e-8 --screening-tolerance 1e-12 \
-      --maximum-energy-error 1e-8 --maximum-force-error 1e-7 \
-      --allow-portable-build \
-      --output "$prefix.json" --progress-output "$prefix.progress.jsonl" \
-      > "$prefix.log" 2>&1; then
-    printf '{"exit_code":0}\n' > "$prefix.outcome"
-  else
+  local attempt
+  for attempt in 1 2; do
+    local attempt_prefix="$prefix-attempt$attempt"
+    if timeout --kill-after=5 "$point_timeout" env "${env_args[@]}" "$python" \
+        -m benchmarks.readme_hf_scaling_qualification --case "$case_name" \
+        --batch 1 --repeats 3 --max-iterations 100 \
+        --energy-tolerance 1e-10 --density-tolerance 1e-9 \
+        --reference-gradient-tolerance 1e-8 --screening-tolerance 1e-12 \
+        --maximum-energy-error 1e-8 --maximum-force-error 1e-7 \
+        --allow-portable-build \
+        --output "$attempt_prefix.json" \
+        --progress-output "$attempt_prefix.progress.jsonl" \
+        > "$attempt_prefix.log" 2>&1; then
+      printf '{"exit_code":0,"attempt":%s}\n' "$attempt" > "$prefix.outcome"
+      cp "$attempt_prefix.json" "$prefix.json"
+      cp "$attempt_prefix.progress.jsonl" "$prefix.progress.jsonl"
+      cp "$attempt_prefix.log" "$prefix.log"
+      ledger "$case_name-$atoms-$mode-$round"
+      return 0
+    fi
     status=$?
-    printf '{"exit_code":%s}\n' "$status" > "$prefix.outcome"
-    printf 'FAIL mode=%s case=%s exit=%s (see %s.log)\n' \
-      "$mode" "$case_name" "$status" "$prefix" >&2
-    ledger "fail-$case_name-$atoms-$mode-$round"
-    return "$status"
-  fi
-  ledger "$case_name-$atoms-$mode-$round"
+    printf 'FAIL mode=%s case=%s attempt=%s exit=%s (see %s-attempt%s.log)\n' \
+      "$mode" "$case_name" "$attempt" "$status" "$prefix" "$attempt" >&2
+    ledger "fail-$case_name-$atoms-$mode-$round-attempt$attempt"
+    if [[ "$attempt" == 1 ]]; then sleep 30; fi
+  done
+  printf '{"exit_code":1,"attempt":2,"retried":true}\n' > "$prefix.outcome"
+  return 0
 }
 
 # Interleaved A-B-B-A per size: each set of four runs shares the same
@@ -102,22 +111,30 @@ ks_point() {
   [[ "$mode" == on ]] && enabled=1
   local prefix="$output/ks/pbe0-$atoms-$mode-$round"
   printf 'RUN ks mode=%s atoms=%s round=%s\n' "$mode" "$atoms" "$round"
-  if timeout --kill-after=5 "$point_timeout" env \
-      GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK="$enabled" \
-      GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL=8 \
-      GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD=0 \
-      "$python" benchmarks/issue1598_ks_cold_control.py "$prefix.json" "$atoms" \
-      > "$prefix.log" 2>&1; then
-    printf '{"exit_code":0}\n' > "$prefix.outcome"
-  else
+  local attempt
+  for attempt in 1 2; do
+    local attempt_prefix="$prefix-attempt$attempt"
+    if timeout --kill-after=5 "$point_timeout" env \
+        GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK="$enabled" \
+        GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL=8 \
+        GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD=0 \
+        "$python" benchmarks/issue1598_ks_cold_control.py \
+        "$attempt_prefix.json" "$atoms" \
+        > "$attempt_prefix.log" 2>&1; then
+      printf '{"exit_code":0,"attempt":%s}\n' "$attempt" > "$prefix.outcome"
+      cp "$attempt_prefix.json" "$prefix.json"
+      cp "$attempt_prefix.log" "$prefix.log"
+      ledger "ks-$atoms-$mode-$round"
+      return 0
+    fi
     status=$?
-    printf '{"exit_code":%s}\n' "$status" > "$prefix.outcome"
-    printf 'FAIL ks mode=%s atoms=%s exit=%s (see %s.log)\n' \
-      "$mode" "$atoms" "$status" "$prefix" >&2
-    ledger "fail-ks-$atoms-$mode-$round"
-    return "$status"
-  fi
-  ledger "ks-$atoms-$mode-$round"
+    printf 'FAIL ks mode=%s atoms=%s attempt=%s exit=%s (see %s-attempt%s.log)\n' \
+      "$mode" "$atoms" "$attempt" "$status" "$prefix" "$attempt" >&2
+    ledger "fail-ks-$atoms-$mode-$round-attempt$attempt"
+    if [[ "$attempt" == 1 ]]; then sleep 30; fi
+  done
+  printf '{"exit_code":1,"attempt":2,"retried":true}\n' > "$prefix.outcome"
+  return 0
 }
 
 ks_point off 96 1

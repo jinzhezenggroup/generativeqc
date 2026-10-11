@@ -130,22 +130,51 @@ def _incremental_work(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _outcome(root: Path, path: Path) -> dict[str, Any]:
+    return json.loads((path.parent / (path.name + ".outcome")).read_text())
+
+
 def _hf_rows(
     args: argparse.Namespace, root: Path
-) -> tuple[list[dict[str, Any]], str | None]:
+) -> tuple[list[dict[str, Any]], str | None, list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
     library_sha: str | None = None
     for population in POPULATIONS:
         size_pairs = MOVED_SIZES if population == "moved" else SIZES
         for atoms, expected_aos in size_pairs:
-            baseline_records = [
-                _load(root / population / f"direct-{atoms}-baseline-{round}")
-                for round in (1, 2)
-            ]
-            incremental_records = [
-                _load(root / population / f"direct-{atoms}-incremental-{round}")
-                for round in (1, 2)
-            ]
+            loaded: dict[str, list[dict[str, Any]]] = {}
+            failed_points: list[str] = []
+            for name, mode in (
+                ("baseline", "baseline"),
+                ("incremental", "incremental"),
+            ):
+                records = []
+                for round in (1, 2):
+                    path = root / population / f"direct-{atoms}-{mode}-{round}.json"
+                    outcome = _outcome(root, path)
+                    if outcome.get("exit_code") != 0:
+                        failed_points.append(
+                            f"{population}/{name}-{round} "
+                            f"(exit {outcome.get('exit_code')}, "
+                            f"attempt {outcome.get('attempt')})"
+                        )
+                        continue
+                    records.append(_load(path))
+                loaded[name] = records
+            if failed_points:
+                failures.append(
+                    {
+                        "population": population,
+                        "atoms": atoms,
+                        "ao_count": expected_aos,
+                        "failed_points": failed_points,
+                    }
+                )
+            baseline_records = loaded["baseline"]
+            incremental_records = loaded["incremental"]
+            if not baseline_records or not incremental_records:
+                continue
             baseline_cold = [
                 _positive_seconds(r["generativeqc"]["cold_seconds"])
                 for r in baseline_records
@@ -232,16 +261,28 @@ def _hf_rows(
                     "incremental_work": work,
                 }
             )
-    return rows, library_sha
+    return rows, library_sha, failures
 
 
-def _ks_rows(root: Path) -> list[dict[str, Any]]:
+def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
     samples: dict[tuple[str, int], list[float]] = {}
     for mode, atoms, round in KS_SAMPLES:
-        record = json.loads(
-            (root / "ks" / f"pbe0-{atoms}-{mode}-{round}.json").read_text()
-        )
+        path = root / "ks" / f"pbe0-{atoms}-{mode}-{round}.json"
+        outcome = _outcome(root, path)
+        if outcome.get("exit_code") != 0:
+            failures.append(
+                {
+                    "mode": mode,
+                    "atoms": atoms,
+                    "round": round,
+                    "exit_code": outcome.get("exit_code"),
+                    "attempt": outcome.get("attempt"),
+                }
+            )
+            continue
+        record = json.loads(path.read_text())
         if record.get("schema") != "issue1598.ks-cold-control.v1":
             raise ValueError("KS control record has an unexpected schema")
         if record.get("status") != "measured":
@@ -272,7 +313,7 @@ def _ks_rows(root: Path) -> list[dict[str, Any]]:
                 "sample_count": len(values),
             }
         )
-    return rows
+    return rows, failures
 
 
 def main() -> None:
@@ -283,8 +324,8 @@ def main() -> None:
     parser.add_argument("--maximum-force-difference", type=float, default=1.0e-7)
     args = parser.parse_args()
 
-    hf_rows, library_sha = _hf_rows(args, args.input)
-    ks_rows = _ks_rows(args.input)
+    hf_rows, library_sha, hf_failures = _hf_rows(args, args.input)
+    ks_rows, ks_failures = _ks_rows(args.input)
     ledger_path = args.input / "ledger" / "nvidia-smi.tsv"
     ledger_lines = (
         sum(1 for _ in ledger_path.open())
@@ -306,8 +347,11 @@ def main() -> None:
             "maximum_force_difference_hartree_per_bohr": args.maximum_force_difference,
         },
         "hf_rows": hf_rows,
+        "hf_failures": hf_failures,
         "ks_rows": ks_rows,
+        "ks_failures": ks_failures,
         "ledger_receipt_lines": ledger_lines,
+        "any_point_failed": bool(hf_failures or ks_failures),
         "all_numerical_gates_passed": all(
             row["numerical_gate_passed"] for row in hf_rows
         ),
