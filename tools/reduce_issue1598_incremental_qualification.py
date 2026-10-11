@@ -40,7 +40,7 @@ def _load(path: Path) -> dict[str, Any]:
 def _maximum_abs_difference(first: Any, second: Any) -> float:
     if isinstance(first, list) or isinstance(second, list):
         if not isinstance(first, list) or not isinstance(second, list):
-            raise ValueError("result shapes differ")
+            raise TypeError("result shapes differ")
         if len(first) != len(second):
             raise ValueError("result shapes differ")
         if not first:
@@ -49,7 +49,7 @@ def _maximum_abs_difference(first: Any, second: Any) -> float:
             _maximum_abs_difference(a, b) for a, b in zip(first, second, strict=True)
         )
     if type(first) not in (int, float) or type(second) not in (int, float):
-        raise ValueError("benchmark results require numeric values")
+        raise TypeError("benchmark results require numeric values")
     a = float(first)
     b = float(second)
     difference = abs(a - b)
