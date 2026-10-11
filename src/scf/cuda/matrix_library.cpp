@@ -5,6 +5,7 @@
 #include <initializer_list>
 #include <limits>
 #include <mutex>
+#include <new>
 
 #include "runtime/allocation_measurement.hpp"
 #include "scf/cuda/launch_geometry.hpp"
