@@ -78,6 +78,16 @@ Automatic entries reuse the existing AO, density-feature and potential kernels
 with strict FP64 and the bounded one-tile fallback. They do not inherit curated
 mixed precision, response, local-AO selection, batching or graph qualification.
 
+The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
+structurally registered automatic provider (`0` restores the old path).
+Its RKS-only sibling shares scalar work after polarized differentiation,
+leaving independent sigma-ab and all work-domain floors/clamps unchanged.
+UKS and the explicitly disabled arm retain the original body; both arms keep the existing 128-thread automatic schedule and
+bounded traversal. The descriptor's exact source identity covers both bodies
+and the selector. This does not add response support, installed variants,
+public backend admission, or resource/performance qualification. See
+[equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
+
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that
 binary and run `tests/python/test_libxc_automatic_cuda_xc.py`. The independent

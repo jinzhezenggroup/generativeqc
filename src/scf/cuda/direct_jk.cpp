@@ -54,6 +54,18 @@ void direct_jk_check(cudaError_t error) {
 void direct_jk_require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
 }
+
+/** Default to bounded shell ownership for retained derivatives, not SCF values.
+ * The existing value-capability and bounded-value opt-in gates remain separate.
+ * Value-only and borrowed resident-source plans do not acquire this resource. */
+bool direct_shell_derivative_fallback_requested(unsigned derivative_order) {
+  if (derivative_order == 0) return false;
+  const char* selection = std::getenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK");
+  if (!selection || std::strcmp(selection, "1") == 0) return true;
+  if (std::strcmp(selection, "0") == 0) return false;
+  throw std::invalid_argument("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK must be '0' or '1'");
+}
+
 std::size_t direct_jk_product(std::size_t a, std::size_t b) {
   std::size_t out;
   if (!generativeqc::runtime::checked_multiply(a, b, out)) throw std::bad_alloc();
@@ -579,9 +591,14 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                                        [](auto angular) { return angular == 3; });
     if (!resident_source_only && !through_f && budget > plan->device_bytes) {
       const auto optional_budget = budget - plan->device_bytes;
+      // The bounded derivative program covers the complete shell domain even
+      // when the streaming value portfolio covers only a subset. Its retained
+      // owner must not activate that unqualified bounded value portfolio.
+      const bool derivative_shell_fallback =
+          direct_shell_derivative_fallback_requested(derivative_order);
       plan->generated_exchange = prepare_generated_exchange(
           host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
-          derivative_order != 0, false);
+          derivative_order != 0, derivative_shell_fallback);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);

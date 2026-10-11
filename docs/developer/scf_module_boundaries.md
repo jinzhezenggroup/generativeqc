@@ -222,6 +222,23 @@ the coupled numerical launch sequence. The separately built angular-force
 kernel has its own device-link constraints: do not change standalone versus
 relocatable compilation without checking the real NVCC build graph and endpoint.
 
+The opt-in `GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK=1` lets a retained
+first-derivative s/p/d Direct owner prepare its existing bounded shell program
+even when streaming value kernels do not cover the complete shell domain.
+An unset variable or `0` retains the incumbent preparation; other values are
+rejected when the derivative-owner candidate is requested. The policy is read
+at preparation, not execution. Value-only, borrowed resident-source, and
+through-f plans keep their existing ownership rules.
+
+This candidate does not select bounded SCF values: their independent capability
+and qualification opt-in gates remain unchanged. It uses the original optional
+provider allowance and charges retained buffers to the existing diagnostic.
+Insufficient budget or unavailable preparation retains the complete bounded
+force fallback. No functional-name gate, precision change, integral formula,
+public ABI, or new default is introduced. Complete endpoint, work-count and
+independent force qualification remain required before promoting this candidate.
+See the [ownership decision](../../.agents/notes/implemented/performance/2026-10-11-orthogonal-direct-derivative-ownership.md).
+
 Full-range nuclear derivatives can partition a mixed f basis by the borrowed
 class-major topology: the 21 s/p/d quartet classes use separate low-order,
 weighted order-four/five, cooperative order-six/seven and materialized dddd
