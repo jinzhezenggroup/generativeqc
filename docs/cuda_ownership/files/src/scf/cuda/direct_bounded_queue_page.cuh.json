@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_bounded_queue_page.cuh",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Bounded block/page claims and candidate address decoding over borrowed geometry-sorted shell-pair inventories. Preserves incumbent pair ordering and permits inactive-block rejection before pair-range loads; no integral recurrence, screening threshold or derivative algebra.",
+  "regions": []
+}
