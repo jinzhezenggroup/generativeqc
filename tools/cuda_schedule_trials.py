@@ -135,8 +135,7 @@ def _constant_edits(source: str, values: dict[str, int]) -> str:
         allowed = (ast.Constant, ast.BinOp, ast.LShift)
         if any(
             not isinstance(node, allowed)
-            or isinstance(node, ast.Constant)
-            and type(node.value) is not int
+            or (isinstance(node, ast.Constant) and type(node.value) is not int)
             for node in ast.walk(assignment.value)
         ):
             raise ValueError(f"{name} is no longer a constant expression")
@@ -406,10 +405,8 @@ def prepare_trial(
     if output.exists() or output.is_symlink():
         raise ValueError("trial output already exists")
     output = output.resolve()
-    if (
-        output == root
-        or root in output.parents
-        and output.relative_to(root).parts[0] != ".artifacts"
+    if output == root or (
+        root in output.parents and output.relative_to(root).parts[0] != ".artifacts"
     ):
         raise ValueError("in-repository trials must live under ignored .artifacts")
     if "benchmarks" in output.parts and "results" in output.parts:
