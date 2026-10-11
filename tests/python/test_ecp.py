@@ -259,7 +259,7 @@ def detached_native(
     )
     system = ctypes.c_void_p()
     atoms = (_native.AtomDescriptor * 3)(
-        *(_native.AtomDescriptor(z, *r) for z, r in zip((11, 1, 2), xyz))
+        *(_native.AtomDescriptor(z, *r) for z, r in zip((11, 1, 2), xyz, strict=True))
     )
     shells = (_native.ShellDescriptor * 2)(
         _native.ShellDescriptor(1, orbital, 0, 1), _native.ShellDescriptor(2, 1, 1, 1)
@@ -341,7 +341,7 @@ def detached_reference(
         for channel, exponent, coefficient in records
     ]
     mol = gto.M(
-        atom=list(zip(("Na", "H", "He"), xyz)),
+        atom=list(zip(("Na", "H", "He"), xyz, strict=True)),
         unit="Bohr",
         verbose=0,
         basis={"H": [[orbital, [0.7, 1.0]]], "He": [[1, [1.1, 1.0]]]},

@@ -8,11 +8,13 @@ Python is still a **build-time** dependency for source builds because repository
 code generation is currently implemented in Python. This is separate from the
 installed runtime dependency.
 
-Installed Python console scripts forward runtime commands to their packaged
-native executable. `GENERATIVEQC_NATIVE_CLI` can select an explicit executable;
-an invalid override fails instead of falling back. Source-only compiler installs
-retain their Python administration compatibility interface. The native executable
-never discovers, starts, or silently falls back to a Python interpreter.
+The installed SDK places `generativeqc` directly in `bin/`. Wheels place the
+full C++ executable next to `generativeqc/lib/` and install a small **native**
+launcher into the environment's `bin/` (the wheel scripts directory).
+The launcher locates the matching packaged binary within its own installation
+prefix and replaces its process using `execv`; neither command launches or
+imports Python. A missing or ambiguous packaged binary fails closed. Python
+APIs remain available but do not supply any runtime console-script fallback.
 
 ## Install a native runtime
 
@@ -306,8 +308,6 @@ generativeqc profile clear
 generativeqc profile validate accepted-bundle/
 generativeqc profile export accepted-bundle/ profile.zip
 generativeqc profile diagnose
-generativeqc autotune --show-profile
-generativeqc autotune --clear-profile
 ```
 
 `profile show` reports the resolved cache root and active profile index without
@@ -389,8 +389,8 @@ checkpoint, process-RSS cap or free-memory guarantee.
 The top-level CLI keeps one stable subcommand layout while implementations move
 from Python to the native runtime. The native executable owns method/basis
 discovery, calculations, resource dry runs and profile administration,
-validation, installation and kernel-library selection. Actual `autotune`
-search remains an explicit **build-time compiler workflow**: it generates and
-compiles new kernels and collects independent reference gates. Use
-`python -m generativeqc autotune INPUT.xyz` for that source/toolchain operation;
-the SDK executable explains this boundary instead of starting an interpreter.
+validation, installation and kernel-library selection. Autotuning that generates and compiles new kernels is an explicit
+**build-time/compiler tool**: `generativeqc-tune --quick INPUT.xyz` (or
+`python -m generativeqc.tune_cli --quick INPUT.xyz`). It is not a
+`generativeqc` subcommand, and its former profile aliases have been retired.
+Runtime use of already accepted kernels requires neither Python nor a compiler.

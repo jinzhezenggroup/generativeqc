@@ -204,7 +204,7 @@ def endpoint_gate(
     if len(iterations) != 1:
         failures.append("SCF iteration branches differ")
     energy_error, force_error, translation_error = 0.0, 0.0, 0.0
-    for left, right in zip(baseline, candidate):
+    for left, right in zip(baseline, candidate, strict=True):
         energies = np.asarray(left["energies"]) - np.asarray(right["energies"])
         forces = np.asarray(left["forces"]) - np.asarray(right["forces"])
         if not np.all(np.isfinite(energies)) or not np.all(np.isfinite(forces)):
@@ -291,7 +291,7 @@ def dft_endpoint_gate(
         failures.append("endpoint samples are not explicitly synchronized")
     interleaved = True
     pair_ids = []
-    for index, (left, right) in enumerate(zip(baseline, candidate)):
+    for index, (left, right) in enumerate(zip(baseline, candidate, strict=True)):
         left_pair, right_pair = left.get("pair_id"), right.get("pair_id")
         if (
             left_pair is None

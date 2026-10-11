@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Standalone diagnostic qualification; no CMake/runtime/default modifications.
+# Standalone diagnostic qualification; no production default promotion.
 set -euo pipefail
 qualification_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 qualification_build=${1:?usage: qualify_ks_matrix_provider.sh ABSOLUTE_NEW_OUTPUT CUDA_ROOT SM_ARCH PYTHON}
@@ -27,12 +27,17 @@ fi
 "$qualification_nvcc" --version > "$qualification_build/nvcc-version.txt"
 "$qualification_cxx" --version > "$qualification_build/cxx-version.txt"
 export CCACHE_BASEDIR="$qualification_root"
-qualification_includes=(-I"$qualification_root/src" -I"$qualification_root/include" -I"$qualification_cuda/include")
+"$qualification_python" "$qualification_root/tools/generate_matrix_product_cuda.py" \
+  --output "$qualification_build/generated_matrix_product_lowering.hpp"
+qualification_includes=(-I"$qualification_build" -I"$qualification_root/src" -I"$qualification_root/include" -I"$qualification_cuda/include")
 for qualification_unit in matrix_library runtime_support; do
   "$qualification_cache" "$qualification_cxx" -std=c++20 -O3 -fPIC -MD \
     -MF "$qualification_build/$qualification_unit.d" "${qualification_includes[@]}" \
     -c "$qualification_root/src/scf/cuda/$qualification_unit.cpp" -o "$qualification_build/$qualification_unit.o"
 done
+"$qualification_cache" "$qualification_cxx" -std=c++20 -O3 -fPIC -MD \
+  -MF "$qualification_build/cuda_matrix_product.d" "${qualification_includes[@]}" \
+  -c "$qualification_root/src/tensor/cuda_matrix_product.cpp" -o "$qualification_build/cuda_matrix_product.o"
 "$qualification_cache" "$qualification_nvcc" -std=c++20 -O3 -arch="sm_$qualification_arch" \
   -ccbin "$qualification_cxx" -MD -MF "$qualification_build/scf_matrix_kernels.d" \
   "${qualification_includes[@]}" -c "$qualification_root/src/scf/cuda/scf_matrix_kernels.cu" \
@@ -43,13 +48,15 @@ done
   -o "$qualification_build/driver.o"
 "$qualification_nvcc" -ccbin "$qualification_cxx" "$qualification_build/driver.o" \
   "$qualification_build/matrix_library.o" "$qualification_build/runtime_support.o" \
+  "$qualification_build/cuda_matrix_product.o" \
   "$qualification_build/scf_matrix_kernels.o" -lcublas \
   -Xlinker=--wrap=cublasCreate_v2 -Xlinker=--wrap=cudaMemGetInfo \
   -o "$qualification_build/matrix-qualification"
 "$qualification_cache" --show-stats > "$qualification_build/cache-after.txt"
 ldd "$qualification_build/matrix-qualification" > "$qualification_build/ldd.txt"
 git -C "$qualification_root" rev-parse HEAD > "$qualification_build/source-head.txt"
-git -C "$qualification_root" ls-files --stage -- src include cmake CMakeLists.txt \
+git -C "$qualification_root" ls-files --stage -- src include cmake CMakeLists.txt python/generativeqc_compiler \
+  tools/generate_matrix_product_cuda.py \
   benchmarks/ks_matrix_provider_qualification.py tests/native/test_ks_matrix_provider_cuda.cu \
   tools/qualify_ks_matrix_provider.sh > "$qualification_build/source-blobs-modes.txt"
 git -C "$qualification_root" status --porcelain --untracked-files=no > "$qualification_build/source-status.txt"

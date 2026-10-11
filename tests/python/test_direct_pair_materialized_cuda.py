@@ -121,3 +121,15 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
     (tmp_path / "derivative-gpu.log").write_text(derivative.stdout + derivative.stderr)
     assert derivative.returncode == 0, derivative.stdout + derivative.stderr
     assert "RHF/UHF J'/K' and exact work PASS" in derivative.stdout
+    responses = subprocess.run(
+        [str(executable), "--shared-responses"],
+        capture_output=True,
+        text=True,
+        timeout=360,
+        check=False,
+    )
+    (tmp_path / "shared-response-gpu.log").write_text(
+        responses.stdout + responses.stderr
+    )
+    assert responses.returncode == 0, responses.stdout + responses.stderr
+    assert "shared scalar responses and exact primitive work PASS" in responses.stdout

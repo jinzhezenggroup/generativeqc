@@ -831,7 +831,9 @@ class PreparedBatch:
         from generativeqc_compiler.dft import NativeAO
 
         from ._cpu_force_resources import (
+            CPU_DF_FORCE_PRIMITIVE_CAP,
             CPU_FORCE_HOST_CAP,
+            CPU_MIXED_DF_INTEGRAL_TERMS,
             cpu_force_inventory,
             qualified_basis,
             qualified_direct_semilocal_context,
@@ -845,7 +847,10 @@ class PreparedBatch:
         direct_semilocal_all_electron = (
             not ecp_force and qualified_direct_semilocal_context(calculator)
         )
-        from .ks import cpu_stationary_all_electron_force_eligible
+        from .ks import (
+            cpu_stationary_all_electron_force_eligible,
+            mixed_density_fitted_force_eligible,
+        )
 
         direct_compiled_all_electron = (
             not ecp_force
@@ -865,10 +870,17 @@ class PreparedBatch:
             and calculator._automatic_libxc_name is None
             and calculator._dispersion_method_ir is None
             and calculator._ks_options is not None
-            and calculator._ks_options.execution_plan.nonlocal_correlation is None
-            and all(
-                term.operator == "full-range"
-                for term in calculator._ks_options.execution_plan.exchange
+            and (
+                (
+                    calculator._ks_options.execution_plan.nonlocal_correlation is None
+                    and all(
+                        term.operator == "full-range"
+                        for term in calculator._ks_options.execution_plan.exchange
+                    )
+                )
+                or mixed_density_fitted_force_eligible(
+                    calculator._ks_options.method_ir, backend="cpu"
+                )
             )
         )
         if calculator._device_name != "cpu" or not (
@@ -897,9 +909,21 @@ class PreparedBatch:
                 * grid.angular_polar
                 * grid.angular_azimuth,
                 ecp_terms=len(terms),
-                range_exchange_sources=sum(
-                    term.operator in ("short-range", "long-range")
-                    for term in calculator._ks_options.execution_plan.exchange
+                native_fitted_integrals=density_fitted_all_electron,
+                integral_terms=(
+                    CPU_MIXED_DF_INTEGRAL_TERMS
+                    if density_fitted_all_electron
+                    and calculator._ks_options.has_range_exchange
+                    else 32
+                ),
+                range_exchange_sources=(
+                    1
+                    if density_fitted_all_electron
+                    and calculator._ks_options.has_range_exchange
+                    else sum(
+                        term.operator in ("short-range", "long-range")
+                        for term in calculator._ks_options.execution_plan.exchange
+                    )
                 ),
                 nonlocal_correlation=(
                     getattr(
@@ -930,6 +954,17 @@ class PreparedBatch:
                     basis,
                     execution="native",
                     max_host_bytes=CPU_FORCE_HOST_CAP,
+                    integral_terms=(
+                        CPU_MIXED_DF_INTEGRAL_TERMS
+                        if density_fitted_all_electron
+                        and calculator._ks_options.has_range_exchange
+                        else 32
+                    ),
+                    max_primitive_records=(
+                        CPU_DF_FORCE_PRIMITIVE_CAP
+                        if density_fitted_all_electron
+                        else 2_000_000
+                    ),
                     cache=Path(
                         os.environ.get(
                             "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cpu"

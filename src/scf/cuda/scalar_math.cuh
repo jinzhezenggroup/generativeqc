@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
 #include <cmath>
 #include <type_traits>
+
+#include "integrals/execution_qualifiers.hpp"
 
 // Shared device scalar/AD and special-function arithmetic. Ordinary inline
 // linkage permits reuse across CUDA owners without forcing compiler inlining.
@@ -41,8 +41,9 @@ struct Dual3 {
 struct MixedPrecisionFloat {
   float value;
 
-  __device__ inline MixedPrecisionFloat() : value(0.0F) {}
-  __device__ inline MixedPrecisionFloat(double input) : value(static_cast<float>(input)) {}
+  GENERATIVEQC_ERI_DEVICE inline MixedPrecisionFloat() : value(0.0F) {}
+  GENERATIVEQC_ERI_DEVICE inline MixedPrecisionFloat(double input)
+      : value(static_cast<float>(input)) {}
 };
 
 /** Use FP32 recurrence coefficients only for the mixed value evaluator. */
@@ -50,55 +51,57 @@ template <typename Scalar>
 using EvaluationReal =
     std::conditional_t<std::is_same_v<Scalar, MixedPrecisionFloat>, MixedPrecisionFloat, double>;
 
-__device__ __forceinline__ MixedPrecisionFloat operator+(MixedPrecisionFloat a,
-                                                         MixedPrecisionFloat b) {
+GENERATIVEQC_ERI_DEVICE GENERATIVEQC_ERI_INLINE MixedPrecisionFloat
+operator+(MixedPrecisionFloat a, MixedPrecisionFloat b) {
   return static_cast<double>(a.value + b.value);
 }
-__device__ __forceinline__ MixedPrecisionFloat operator-(MixedPrecisionFloat a,
-                                                         MixedPrecisionFloat b) {
+GENERATIVEQC_ERI_DEVICE GENERATIVEQC_ERI_INLINE MixedPrecisionFloat
+operator-(MixedPrecisionFloat a, MixedPrecisionFloat b) {
   return static_cast<double>(a.value - b.value);
 }
-__device__ __forceinline__ MixedPrecisionFloat operator*(MixedPrecisionFloat a,
-                                                         MixedPrecisionFloat b) {
+GENERATIVEQC_ERI_DEVICE GENERATIVEQC_ERI_INLINE MixedPrecisionFloat
+operator*(MixedPrecisionFloat a, MixedPrecisionFloat b) {
   return static_cast<double>(a.value * b.value);
 }
-__device__ __forceinline__ MixedPrecisionFloat operator/(MixedPrecisionFloat a,
-                                                         MixedPrecisionFloat b) {
+GENERATIVEQC_ERI_DEVICE GENERATIVEQC_ERI_INLINE MixedPrecisionFloat
+operator/(MixedPrecisionFloat a, MixedPrecisionFloat b) {
   return static_cast<double>(a.value / b.value);
 }
-__device__ __forceinline__ MixedPrecisionFloat operator*(MixedPrecisionFloat a, double b) {
+GENERATIVEQC_ERI_DEVICE GENERATIVEQC_ERI_INLINE MixedPrecisionFloat operator*(MixedPrecisionFloat a,
+                                                                              double b) {
   return a * MixedPrecisionFloat{b};
 }
-__device__ __forceinline__ MixedPrecisionFloat operator*(double a, MixedPrecisionFloat b) {
+GENERATIVEQC_ERI_DEVICE GENERATIVEQC_ERI_INLINE MixedPrecisionFloat
+operator*(double a, MixedPrecisionFloat b) {
   return MixedPrecisionFloat{a} * b;
 }
 
-__device__ inline Dual operator+(Dual a, Dual b) {
+GENERATIVEQC_ERI_DEVICE inline Dual operator+(Dual a, Dual b) {
   return {a.value + b.value, a.derivative + b.derivative};
 }
-__device__ inline Dual operator-(Dual a, Dual b) {
+GENERATIVEQC_ERI_DEVICE inline Dual operator-(Dual a, Dual b) {
   return {a.value - b.value, a.derivative - b.derivative};
 }
-__device__ inline Dual operator*(Dual a, Dual b) {
+GENERATIVEQC_ERI_DEVICE inline Dual operator*(Dual a, Dual b) {
   return {a.value * b.value, a.derivative * b.value + a.value * b.derivative};
 }
-__device__ inline Dual operator/(Dual a, Dual b) {
+GENERATIVEQC_ERI_DEVICE inline Dual operator/(Dual a, Dual b) {
   const double inverse_square = 1.0 / (b.value * b.value);
   return {a.value / b.value, (a.derivative * b.value - a.value * b.derivative) * inverse_square};
 }
-__device__ inline Dual operator*(double a, Dual b) { return Dual{a, 0.0} * b; }
-__device__ inline Dual operator/(Dual a, double b) { return a / Dual{b, 0.0}; }
-__device__ inline Dual operator/(double a, Dual b) { return Dual{a, 0.0} / b; }
+GENERATIVEQC_ERI_DEVICE inline Dual operator*(double a, Dual b) { return Dual{a, 0.0} * b; }
+GENERATIVEQC_ERI_DEVICE inline Dual operator/(Dual a, double b) { return a / Dual{b, 0.0}; }
+GENERATIVEQC_ERI_DEVICE inline Dual operator/(double a, Dual b) { return Dual{a, 0.0} / b; }
 
-__device__ inline Dual3 operator+(Dual3 a, Dual3 b) {
+GENERATIVEQC_ERI_DEVICE inline Dual3 operator+(Dual3 a, Dual3 b) {
   return {a.value + b.value, a.derivative_x + b.derivative_x, a.derivative_y + b.derivative_y,
           a.derivative_z + b.derivative_z};
 }
-__device__ inline Dual3 operator-(Dual3 a, Dual3 b) {
+GENERATIVEQC_ERI_DEVICE inline Dual3 operator-(Dual3 a, Dual3 b) {
   return {a.value - b.value, a.derivative_x - b.derivative_x, a.derivative_y - b.derivative_y,
           a.derivative_z - b.derivative_z};
 }
-__device__ inline Dual3 operator*(Dual3 a, Dual3 b) {
+GENERATIVEQC_ERI_DEVICE inline Dual3 operator*(Dual3 a, Dual3 b) {
   return {
       a.value * b.value,
       a.derivative_x * b.value + a.value * b.derivative_x,
@@ -106,7 +109,7 @@ __device__ inline Dual3 operator*(Dual3 a, Dual3 b) {
       a.derivative_z * b.value + a.value * b.derivative_z,
   };
 }
-__device__ inline Dual3 operator/(Dual3 a, Dual3 b) {
+GENERATIVEQC_ERI_DEVICE inline Dual3 operator/(Dual3 a, Dual3 b) {
   const double inverse_square = 1.0 / (b.value * b.value);
   return {
       a.value / b.value,
@@ -115,11 +118,15 @@ __device__ inline Dual3 operator/(Dual3 a, Dual3 b) {
       (a.derivative_z * b.value - a.value * b.derivative_z) * inverse_square,
   };
 }
-__device__ inline Dual3 operator*(double a, Dual3 b) { return Dual3{a, 0.0, 0.0, 0.0} * b; }
-__device__ inline Dual3 operator/(Dual3 a, double b) { return a / Dual3{b, 0.0, 0.0, 0.0}; }
+GENERATIVEQC_ERI_DEVICE inline Dual3 operator*(double a, Dual3 b) {
+  return Dual3{a, 0.0, 0.0, 0.0} * b;
+}
+GENERATIVEQC_ERI_DEVICE inline Dual3 operator/(Dual3 a, double b) {
+  return a / Dual3{b, 0.0, 0.0, 0.0};
+}
 
 template <typename Scalar>
-__device__ inline Scalar scalar(double value, double derivative = 0.0) {
+GENERATIVEQC_ERI_DEVICE inline Scalar scalar(double value, double derivative = 0.0) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
     return {value, derivative};
   } else if constexpr (std::is_same_v<Scalar, Dual3>) {
@@ -132,7 +139,7 @@ __device__ inline Scalar scalar(double value, double derivative = 0.0) {
 }
 
 template <typename Scalar>
-__device__ inline double scalar_value(Scalar value) {
+GENERATIVEQC_ERI_DEVICE inline double scalar_value(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
     return value.value;
   } else if constexpr (std::is_same_v<Scalar, Dual3>) {
@@ -145,7 +152,7 @@ __device__ inline double scalar_value(Scalar value) {
 }
 
 template <typename Scalar>
-__device__ inline Scalar qexp(Scalar value) {
+GENERATIVEQC_ERI_DEVICE inline Scalar qexp(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
     const double result = exp(value.value);
     return {result, result * value.derivative};
@@ -161,7 +168,7 @@ __device__ inline Scalar qexp(Scalar value) {
 }
 
 template <typename Scalar>
-__device__ inline Scalar qsqrt(Scalar value) {
+GENERATIVEQC_ERI_DEVICE inline Scalar qsqrt(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
     const double result = sqrt(value.value);
     return {result, 0.5 * value.derivative / result};
@@ -178,7 +185,7 @@ __device__ inline Scalar qsqrt(Scalar value) {
 }
 
 template <typename Scalar>
-__device__ inline Scalar qerf(Scalar value) {
+GENERATIVEQC_ERI_DEVICE inline Scalar qerf(Scalar value) {
   if constexpr (std::is_same_v<Scalar, Dual>) {
     const double result = erf(value.value);
     const double factor = 2.0 / sqrt(kPi) * exp(-value.value * value.value);
@@ -196,7 +203,7 @@ __device__ inline Scalar qerf(Scalar value) {
 }
 
 template <typename Scalar>
-__device__ inline Scalar boys0(Scalar x) {
+GENERATIVEQC_ERI_DEVICE inline Scalar boys0(Scalar x) {
   if (scalar_value(x) < 1.0e-8) {
     const Scalar x2 = x * x;
     const Scalar x3 = x2 * x;

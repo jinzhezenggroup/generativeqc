@@ -147,6 +147,33 @@ the remedy is not to weaken the test to accept a status-only error.
   same sites. Do not hide that baseline defect, claim the whole curated KS
   driver passed, or weaken its identity gate as part of this automatic patch.
 
+## Same-input kinetic-boundary correction
+
+Subsequent independent diagnosis established that the retained TPSS discrepancy
+cannot be dismissed solely as different rounded AO inputs or an arbitrary
+nonsmooth subgradient convention. An exact dyadic, same-input physical rank-one
+state gives the normalized `tau_W/tau` predicate one ulp above one; the selected
+constant branch loses a valid inward PSD derivative. The full unoccupied Fock
+entry is zero instead of the independently verified `-3.3455150091360384`.
+Both trace-changing and fixed-electron inward PSD directions expose the error.
+
+The shared canonical repair in PR #2279 is composed into this endpoint. It
+changes only the exact kinetic predicate, retains raw branch derivatives and
+work floors, and protects subnormal products. The independent native CPU tests
+cover the exact full coefficients, the two valid directions, and empty/floored
+spin controls; the full imported E/vxc/fxc fixtures and CPU/CUDA mathematical
+identity checks also pass. The
+[physical kinetic predicate decision](../numerics/2026-10-11-physical-kinetic-predicates.md)
+records the proof and the rejected whole-ratio rewrite that introduced new
+minority-spin failures.
+
+The source-bound v12 GPU receipts above remain measurements of their original
+source. They are not relabeled as GPU measurements of the corrected expression,
+and the original H2 device full-Fock rows have not been rerun here. The retained
+aggregate-driver exit 1 and matching native-consumer control likewise remain
+historical failures. This correction resolves the demonstrated shared-source
+predicate defect without claiming a new complete GPU campaign.
+
 ## Remaining boundary
 
 Do not close remaining #1118 lanes or promote forces from this source patch.

@@ -57,6 +57,25 @@ def test_automatic_composite_schedule_prefers_more_concurrent_points() -> None:
     assert selected.host_bound <= 2 << 30
 
 
+def test_lazy_native_derivative_owner_is_charged_before_tile_selection() -> None:
+    baseline = _plan(tile_points=256)
+    extra = 8 << 20
+    mixed = _plan(tile_points=256, native_derivative_bytes=extra)
+    assert mixed.native_bytes == baseline.native_bytes + extra
+    assert mixed.device_bound == baseline.device_bound + extra
+    assert mixed.host_bound == baseline.host_bound + extra
+    with pytest.raises(ValueError, match="no admitted"):
+        _plan(native_derivative_bytes=1 << 30, max_device_bytes=1 << 30)
+
+
+@pytest.mark.parametrize("invalid", (-1, True, 1.5, 2**64))
+def test_lazy_native_derivative_capacity_rejects_invalid_metadata(
+    invalid: object,
+) -> None:
+    with pytest.raises(ValueError, match="native_derivative_bytes"):
+        _plan(native_derivative_bytes=invalid)
+
+
 @pytest.mark.parametrize("scope", ["device", "host"])
 def test_tight_totals_retain_old_tile_and_explicit_requests_fail(scope: str) -> None:
     baseline = _plan(tile_points=256)

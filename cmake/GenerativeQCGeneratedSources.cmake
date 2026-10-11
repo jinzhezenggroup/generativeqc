@@ -4,6 +4,22 @@ include_guard(GLOBAL)
 # live in GenerativeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(generativeqc_register_host_generated_sources target)
+  generativeqc_register_generated_sources(
+    NAME generativeqc_matrix_product_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_matrix_product_cuda.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_matrix_product_lowering.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/matrix_product.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ir.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/program.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/native_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/lowering_provider.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/lowering_contract.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_matrix_product_lowering.hpp"
+    COMMENT "Generating canonical matrix-product lowering portfolios")
   set(_generativeqc_history_dependencies
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history_artifacts.py"

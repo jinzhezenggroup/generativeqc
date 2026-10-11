@@ -50,7 +50,7 @@ def test_final_projection_replay_and_geometry(
         for moved in (False, True):
             coordinates = np.array([r for _, r in case.atoms])
             coordinates[1, 0] += 0.001 if moved else 0
-            atoms = [(z, r) for (z, _), r in zip(case.atoms, coordinates)]
+            atoms = [(z, r) for (z, _), r in zip(case.atoms, coordinates, strict=True)]
             mol = gto.M(atom=atoms, unit="Bohr", basis="def2-svp", verbose=0)
             oracle = (scf.RHF if method == "rhf" else scf.UHF)(mol).density_fit(
                 auxbasis="def2-svp"

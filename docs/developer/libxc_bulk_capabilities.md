@@ -21,6 +21,23 @@ intrinsic claims:
 C and CUDA source emitters are also available, but source emission is not
 compilation or runtime evidence.
 
+## Physical boundary predicates
+
+Before differentiation, the shared physical-coordinate adapter compares imported
+`tau_W/tau <= 1` branches as `sigma_total <= 8*(rho_total*tau_total)`.
+This avoids fractional-density round trips selecting the saturated branch at an
+exact physical rank-one state. Branch values and their raw Libxc derivatives
+remain unchanged, including empty/minority-spin work coordinates. If the
+physical density-times-tau product is at or below the binary64 normal minimum,
+the original normalized comparison is retained to avoid a new underflow branch.
+Other comparisons, worker floors, and acceptance tolerances are unchanged.
+
+The same canonical Graph feeds CPU and CUDA source emission. The exact-input
+full-coefficient and inward positive-semidefinite density-direction regressions
+are in `tests/python/test_libxc_physical_kinetic_predicate.py`; the rationale and
+rejected whole-ratio rewrite are recorded in the
+[physical kinetic predicate decision](../../.agents/notes/implemented/numerics/2026-10-11-physical-kinetic-predicates.md).
+
 ## Qualification evidence is not an admission whitelist
 
 Higher stages are optional regression/qualification claims. They are computed

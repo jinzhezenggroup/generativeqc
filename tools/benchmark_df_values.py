@@ -118,7 +118,8 @@ def write_workloads(
                     )
                 for primitives in product(*lengths):
                     populations = [
-                        signatures[(l, p)] for l, p in zip(angular, primitives)
+                        signatures[(l, p)]
+                        for l, p in zip(angular, primitives, strict=True)
                     ]
                     frequency = math.prod(map(len, populations))
                     chosen = np.unique(
@@ -361,7 +362,7 @@ def main() -> None:
     }
     report_path = directory / "report.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
-    runnable = [t for t, r in zip(trials, compiled) if r["eligible"]]
+    runnable = [t for t, r in zip(trials, compiled, strict=True) if r["eligible"]]
     if not runnable:
         raise RuntimeError("no eligible value candidates")
     driver, executable = directory / "driver.cu", directory / "benchmark"

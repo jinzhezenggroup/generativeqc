@@ -437,6 +437,17 @@ if(GENERATIVEQC_BUILD_CLI)
   target_compile_options(generativeqc_cli PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
   set_target_properties(generativeqc_cli PROPERTIES OUTPUT_NAME generativeqc)
+  if(GENERATIVEQC_PYTHON_WHEEL)
+    # A native PATH launcher finds the full CLI in the adjacent wheel package.
+    # The full binary stays beside its shared library for relocatable RPATH;
+    # neither installed command invokes Python at runtime.
+    add_executable(generativeqc_wheel_launcher src/cli/wheel_launcher.cpp)
+    set_target_properties(generativeqc_wheel_launcher PROPERTIES
+      OUTPUT_NAME generativeqc
+      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/wheel_scripts")
+    target_compile_options(generativeqc_wheel_launcher PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
+  endif()
   if(APPLE)
     set_target_properties(generativeqc_cli PROPERTIES
       INSTALL_RPATH "@loader_path/../${CMAKE_INSTALL_LIBDIR}")
@@ -559,6 +570,12 @@ install(TARGETS generativeqc
 )
 if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  if(GENERATIVEQC_PYTHON_WHEEL AND DEFINED SKBUILD_SCRIPTS_DIR)
+    # scikit-build-core places this executable in wheel .data/scripts (venv/bin).
+    # A Python entry point would shadow it and reintroduce Python startup.
+    install(TARGETS generativeqc_wheel_launcher
+      RUNTIME DESTINATION "${SKBUILD_SCRIPTS_DIR}")
+  endif()
   # The CLI embeds the BSE-derived Gaussian basis catalog in its binary.
   install(FILES LICENSES/bse-data-BSD-3-Clause.txt
                 LICENSES/nlohmann-json-MIT.txt

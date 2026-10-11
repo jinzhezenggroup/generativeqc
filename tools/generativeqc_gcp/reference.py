@@ -106,10 +106,10 @@ def _overlap(
     ha, hb = 0.5 * (za + zb), 0.5 * (zb - za)
     av = _aaux(ha * r)
     bv = _bint(hb * r) if same else _baux(hb * r)
-    f0 = sum(w * av[p] * bv[q] for w, p, q in zip(wt, pa, qb))
+    f0 = sum(w * av[p] * bv[q] for w, p, q in zip(wt, pa, qb, strict=True))
     f1 = -sum(
         w * (ha * av[p + 1] * bv[q] + hb * av[p] * bv[q + 1])
-        for w, p, q in zip(wt, pa, qb)
+        for w, p, q in zip(wt, pa, qb, strict=True)
     )
     s = cnorm * r**m * f0
     ds = cnorm * (m * r ** (m - 1) * f0 + r**m * f1)

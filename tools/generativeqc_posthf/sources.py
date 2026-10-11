@@ -780,7 +780,9 @@ class NativeSource:
             )
             full = signature.component_shape
             for begin in product(*(range(0, n, axis_tile) for n in full)):
-                shape = tuple(min(axis_tile, n - b) for n, b in zip(full, begin))
+                shape = tuple(
+                    min(axis_tile, n - b) for n, b in zip(full, begin, strict=True)
+                )
                 consumer = RawBlock(
                     TensorLayout(signature.tensor_indices, shape), budget_bytes
                 )
@@ -813,6 +815,7 @@ class NativeSource:
                 request.integral.operator.basis_roles,
                 request.shell_indices,
                 request.tile.offsets,
+                strict=True,
             )
         ):
             shells = self.auxiliary_shells if role == "auxiliary" else self.shells

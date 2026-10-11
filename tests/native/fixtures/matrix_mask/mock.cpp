@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 
+#include "runtime/lowering_binding.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
@@ -23,6 +24,14 @@ cudaError_t cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* c) {
 }
 cudaError_t cudaGetDevice(int* d) {
   *d = 0;
+  return 0;
+}
+cudaError_t cudaRuntimeGetVersion(int* version) {
+  *version = 12900;
+  return 0;
+}
+cublasStatus_t cublasGetVersion(cublasHandle_t, int* version) {
+  *version = 12901;
   return 0;
 }
 cudaError_t cudaSetDevice(int) { return 0; }
@@ -116,6 +125,38 @@ void launch_spin_matrix_product_kernel(dim3, dim3, std::size_t, cudaStream_t str
 }  // namespace generativeqc::scf::cuda_execution
 
 extern "C" {
+int probe_binding(int dimension, int batch, int spins, int library, int change) {
+  try {
+    const auto handle = library ? reinterpret_cast<void*>(2) : nullptr;
+    const generativeqc::tensor::CudaMatrixProductBinding binding(expected_stream, handle, dimension,
+                                                                 batch, spins);
+    if (change == 7) {
+      for (bool spin : {false, true})
+        for (bool left : {false, true})
+          for (bool right : {false, true})
+            for (bool transpose : {false, true}) {
+              if (!spin && (left || right)) continue;
+              const auto& site = binding.site(spin, left, right, transpose);
+              const auto selected = site.candidate();
+              if (site.request->precisions.size() != 1 ||
+                  !site.request->precisions[0].arithmetic.is_strict_fp64() ||
+                  selected.provider != (library ? "cublas" : "generated.cuda") ||
+                  !selected.capture_safe || !site.retained_incumbent ||
+                  !selected.cost.source.empty() || selected.cost.kernel_ns ||
+                  selected.provider_bytes != (library ? 96ULL << 20 : 0) ||
+                  selected.temporary_bytes != binding.scratch_bytes())
+                return 0;
+            }
+      return 1;
+    }
+    return binding.compatible(change == 1 ? nullptr : expected_stream,
+                              change == 2 ? reinterpret_cast<void*>(3) : handle,
+                              dimension + (change == 3), change == 6 ? 1 : batch + (change == 4),
+                              change == 6 ? 1 : spins + (change == 5));
+  } catch (const std::exception&) {
+    return -1;
+  }
+}
 long long probe_matrix_offset(int row, int col, int leading_dimension) {
   return matrix_offset(row, col, leading_dimension);
 }
@@ -138,10 +179,17 @@ int probe_submit(int spin_api, int batch, int spins, int n, int left_spin, int t
                  const std::uint8_t* active, double* output, double* scratch, std::size_t capacity,
                  int library, double scale) {
   using namespace generativeqc::scf::cuda_execution;
-  MatrixLibraryResources r{expected_stream, reinterpret_cast<void*>(2), scratch, capacity};
-  if (spin_api)
-    return launch_spin_matrix_product(r, batch, spins, n, left, left_spin, transpose, right,
-                                      right_spin, active, output, library);
-  return launch_matrix_product(r, batch, n, left, transpose, right, active, output, library, scale);
+  try {
+    const auto handle = library ? reinterpret_cast<void*>(2) : nullptr;
+    const generativeqc::tensor::CudaMatrixProductBinding binding(expected_stream, handle, n, batch,
+                                                                 spins);
+    MatrixLibraryResources r{expected_stream, handle, scratch, capacity, &binding};
+    if (spin_api)
+      return launch_spin_matrix_product(r, batch, spins, n, left, left_spin, transpose, right,
+                                        right_spin, active, output);
+    return launch_matrix_product(r, batch, n, left, transpose, right, active, output, scale);
+  } catch (const std::exception&) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
 }
 }

@@ -1,10 +1,9 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
 #include <cstdint>
 #include <type_traits>
 
+#include "integrals/execution_qualifiers.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
@@ -13,8 +12,9 @@
 namespace generativeqc::scf::cuda_execution {
 
 template <typename Scalar>
-__device__ inline Vec3<Scalar> atom_position(const DeviceBatch& batch, std::int64_t atom,
-                                             std::int64_t derivative_coordinate) {
+GENERATIVEQC_ERI_DEVICE inline Vec3<Scalar> atom_position(const DeviceBatch& batch,
+                                                          std::int64_t atom,
+                                                          std::int64_t derivative_coordinate) {
   const std::int64_t base = atom * 3;
   if constexpr (std::is_same_v<Scalar, Dual3>) {
     // Any coordinate belonging to the requested atom denotes the combined
@@ -35,7 +35,8 @@ __device__ inline Vec3<Scalar> atom_position(const DeviceBatch& batch, std::int6
 }
 
 template <typename Scalar>
-__device__ inline Scalar distance_squared(const Vec3<Scalar>& first, const Vec3<Scalar>& second) {
+GENERATIVEQC_ERI_DEVICE inline Scalar distance_squared(const Vec3<Scalar>& first,
+                                                       const Vec3<Scalar>& second) {
   const Scalar dx = first.x - second.x;
   const Scalar dy = first.y - second.y;
   const Scalar dz = first.z - second.z;
@@ -43,8 +44,9 @@ __device__ inline Scalar distance_squared(const Vec3<Scalar>& first, const Vec3<
 }
 
 template <typename Scalar>
-__device__ inline Vec3<Scalar> product_center(double alpha, const Vec3<Scalar>& first, double beta,
-                                              const Vec3<Scalar>& second) {
+GENERATIVEQC_ERI_DEVICE inline Vec3<Scalar> product_center(double alpha, const Vec3<Scalar>& first,
+                                                           double beta,
+                                                           const Vec3<Scalar>& second) {
   using Real = EvaluationReal<Scalar>;
   const Real alpha_value{alpha};
   const Real beta_value{beta};

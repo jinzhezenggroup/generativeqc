@@ -344,13 +344,13 @@ def _published_rvv10_decimal(
         k = [Dec("1.5") * b * pi * (r / (9 * pi)) ** (Dec(1) / 6) for r in rho]
         omega = [
             (c * sum(x * x for x in g) ** 2 / r**4 + 4 * pi * r / 3).sqrt()
-            for r, g in zip(rho, grad)
+            for r, g in zip(rho, grad, strict=True)
         ]
         beta = (3 / b**2) ** Dec("0.75") / 32
-        energy = beta * sum(wi * r for wi, r in zip(w, rho))
+        energy = beta * sum(wi * r for wi, r in zip(w, rho, strict=True))
         for i in range(len(rho)):
             for j in range(len(rho)):
-                r2 = sum((a - bb) ** 2 for a, bb in zip(xyz[i], xyz[j]))
+                r2 = sum((a - bb) ** 2 for a, bb in zip(xyz[i], xyz[j], strict=True))
                 z, zp = 1 + omega[i] / k[i] * r2, 1 + omega[j] / k[j] * r2
                 theta = rho[i] / k[i] ** Dec("1.5")
                 theta_p = rho[j] / k[j] ** Dec("1.5")

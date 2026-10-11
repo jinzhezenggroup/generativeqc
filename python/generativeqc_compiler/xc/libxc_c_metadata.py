@@ -52,7 +52,7 @@ def split_fields(text: str) -> list[str]:
         elif char in "([{":
             stack.append(char)
         elif char in ")]}":
-            if not stack or stack.pop() != dict(zip(")]}", "([{"))[char]:
+            if not stack or stack.pop() != dict(zip(")]}", "([{", strict=True))[char]:
                 raise CMetadataError("unbalanced C initializer")
         elif char == "," and not stack:
             field = text[start:index].strip()

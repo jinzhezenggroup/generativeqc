@@ -200,7 +200,7 @@ def _calculator_gradient(case: typing.Any) -> typing.Any:
     def gradient(coordinates: typing.Any, policy: typing.Any) -> typing.Any:
         atoms = [
             (symbol, tuple(float(value) for value in row))
-            for symbol, row in zip(case["symbols"], coordinates)
+            for symbol, row in zip(case["symbols"], coordinates, strict=True)
         ]
         result = calculator.singlepoint(
             atoms,
