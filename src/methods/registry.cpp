@@ -15,6 +15,7 @@
 #include "methods/ump2_method.hpp"
 #include "methods/xtb_method.hpp"
 #include "runtime/provider_registry.hpp"
+#include "scf/initial_guess/automatic_policy.hpp"
 
 namespace generativeqc::methods {
 namespace {
@@ -161,7 +162,7 @@ void validate_preliminary_system(const generativeqc_method_descriptor& descripto
                       "initial-density preparation requires an all-electron restricted singlet");
   if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO &&
       std::any_of(system.atoms.begin(), system.atoms.end(), [](const auto& atom) {
-        return atom.atomic_number < 1 || atom.atomic_number > 18;
+        return !scf::initial_guess::automatic_minao_element_eligible(atom.atomic_number);
       }))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "MINAO initial guess is currently qualified for H-Ar");
@@ -173,15 +174,18 @@ void validate_option_family(const MethodDefinition& definition,
   if (descriptor.initial_guess) {
     const auto family = definition.provider.domain.family;
     const bool minao = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO;
-    const bool cuda_minao = minao && backend == GENERATIVEQC_BACKEND_CUDA &&
-                            family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL;
-    if ((family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
-         family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) ||
-        (!cuda_minao && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE) ||
-        descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
-        descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
-        (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
-         descriptor.method != GENERATIVEQC_METHOD_RHF))
+    const bool admitted =
+        minao ? scf::initial_guess::automatic_minao_model_eligible(
+                    descriptor.method, family, backend, descriptor.precision_mode,
+                    descriptor.density_fitting_mode, true, false)
+              : (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                 family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) &&
+                    backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+                    descriptor.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
+                    descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+                    (family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
+                     descriptor.method == GENERATIVEQC_METHOD_RHF);
+    if (!admitted)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         minao ? "MINAO requires FP64 exact restricted CPU HF/KS or CUDA KS"
                               : "preliminary SCF requires CPU FP64 exact restricted HF/KS");

@@ -752,6 +752,44 @@ enum {
  * @execution Synchronous, context-free discovery; no device initialization or allocation.
  */
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_capabilities_v1(void);
+
+/** Shape-only request for the version-1 automatic cold-start policy.
+ * restricted describes the requested scientific spin model, not the transport
+ * carrier ID. has_ecp covers both removed core electrons and ECP terms.
+ * NULL atomic_numbers with atom_count=0 queries model admission only; a
+ * nonempty list additionally queries the element domain. This does not inspect
+ * coordinates, basis coefficients, density, or the preparation memory budget.
+ */
+typedef struct generativeqc_initial_guess_auto_policy {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  generativeqc_method method;
+  generativeqc_backend backend;
+  generativeqc_precision_mode precision_mode;
+  generativeqc_density_fitting_mode density_fitting_mode;
+  uint32_t restricted;
+  uint32_t has_ecp;
+  const int32_t* atomic_numbers;
+  size_t atom_count;
+} generativeqc_initial_guess_auto_policy;
+
+/** @native-contract generativeqc_initial_guess_auto_kind_v1
+ * @behavior Resolve automatic MINAO eligibility using the native admission policy.
+ * @inputs request carries the current struct_size/abi_version, a registered method, CPU or
+ * CUDA backend, valid precision and density-fitting modes, Boolean restricted/has_ecp,
+ * and either a nonempty atomic-number list (1..118) or NULL with atom_count=0.
+ * @outputs On SUCCESS, writes GENERATIVEQC_INITIAL_GUESS_MINAO or zero (Hcore). Model-only
+ * admission is not a complete system or execution capability. Explicit initial-guess choices
+ * do not use this query; preparation retains its singlet, basis, density, and budget gates.
+ * @lifetime Borrows the request and atomic_numbers for this call only; retains nothing.
+ * @errors Invalid requests return INVALID_ARGUMENT, descriptor version/size mismatches return
+ * ABI_MISMATCH, and unknown methods return NOT_IMPLEMENTED. Preserves output on failure.
+ * @execution Synchronous, allocation-free discovery. No context, device initialization,
+ * compiler, Python interpreter, or scientific integral evaluation is required.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* resolved_kind);
+
 /** @native-contract generativeqc_calculation_get_initial_guess_diagnostic
  * @behavior Read the most recently retained preliminary-guess outcome.
  * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and

@@ -319,8 +319,107 @@ void check() {
   matched(cold_hf, scf::run_prepared_fock_strategy(hf, controls));
 }
 }  // namespace
+void check_automatic_policy() {
+  generativeqc_initial_guess_auto_policy request{};
+  request.struct_size = sizeof(request);
+  request.abi_version = GENERATIVEQC_ABI_VERSION;
+  request.method = GENERATIVEQC_METHOD_RHF;
+  request.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  request.restricted = 1;
+  uint32_t kind = 99;
+  const auto resolve = [&] {
+    require(generativeqc_initial_guess_auto_kind_v1(&request, &kind) == GENERATIVEQC_STATUS_SUCCESS,
+            "automatic policy query failed");
+    return kind;
+  };
+  require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "CPU RHF model declined");
+  const int32_t water_numbers[] = {8, 1, 1};
+  request.atomic_numbers = water_numbers;
+  request.atom_count = 3;
+  require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "H-Ar system declined");
+  const int32_t mixed_numbers[] = {2, 20};
+  request.atomic_numbers = mixed_numbers;
+  request.atom_count = 2;
+  require(resolve() == 0, "heavy element admitted");
+  request.atomic_numbers = water_numbers;
+  request.atom_count = 3;
+  request.has_ecp = 1;
+  require(resolve() == 0, "ECP admitted");
+  request.has_ecp = 0;
+  request.restricted = 0;
+  require(resolve() == 0, "unrestricted spin admitted");
+  request.restricted = 1;
+  request.method = GENERATIVEQC_METHOD_UHF;
+  require(resolve() == 0, "UHF carrier admitted");
+  request.method = GENERATIVEQC_METHOD_MP2;
+  require(resolve() == 0, "correlated method admitted");
+  request.method = GENERATIVEQC_METHOD_RHF;
+  request.backend = GENERATIVEQC_BACKEND_CUDA;
+  require(resolve() == 0, "CUDA HF admitted");
+  request.method = GENERATIVEQC_METHOD_PBE_RKS;
+  require(resolve() == GENERATIVEQC_INITIAL_GUESS_MINAO, "CUDA KS policy declined");
+  request.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  require(resolve() == 0, "mixed precision admitted");
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+  require(resolve() == 0, "DF admitted");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  require(resolve() == 0, "CPU DF admitted");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_AUTO;
+  require(resolve() == 0, "automatic DF admitted");
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+
+  const auto failure = [&](generativeqc_status expected) {
+    kind = 99;
+    require(generativeqc_initial_guess_auto_kind_v1(&request, &kind) == expected,
+            "invalid automatic policy status");
+    require(kind == 99, "failed policy query modified output");
+  };
+  request.restricted = 2;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.restricted = 1;
+  request.has_ecp = 2;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.has_ecp = 0;
+  request.backend = -1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  request.precision_mode = -1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.density_fitting_mode = -1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  const int32_t invalid_numbers[] = {0, 119};
+  request.atomic_numbers = invalid_numbers;
+  request.atom_count = 1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.atomic_numbers = invalid_numbers + 1;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.atomic_numbers = nullptr;
+  failure(GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  request.atom_count = 0;
+  request.struct_size = 0;
+  failure(GENERATIVEQC_STATUS_ABI_MISMATCH);
+  request.struct_size = sizeof(request);
+  request.abi_version = GENERATIVEQC_ABI_VERSION + 1;
+  failure(GENERATIVEQC_STATUS_ABI_MISMATCH);
+  request.abi_version = GENERATIVEQC_ABI_VERSION;
+  request.method = -1;
+  failure(GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+  require(generativeqc_initial_guess_auto_kind_v1(nullptr, &kind) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null policy request accepted");
+  require(generativeqc_initial_guess_auto_kind_v1(&request, nullptr) ==
+              GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "null policy output accepted");
+}
+
 int main() {
   try {
+    check_automatic_policy();
     check();
     std::cout << "preliminary SCF contracts passed\n";
     return 0;

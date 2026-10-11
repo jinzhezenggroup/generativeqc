@@ -294,6 +294,21 @@ class InitialGuessOptionsDescriptor(ctypes.Structure):
     ]
 
 
+class InitialGuessAutoPolicyDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("method", ctypes.c_int32),
+        ("backend", ctypes.c_int32),
+        ("precision_mode", ctypes.c_int32),
+        ("density_fitting_mode", ctypes.c_int32),
+        ("restricted", ctypes.c_uint32),
+        ("has_ecp", ctypes.c_uint32),
+        ("atomic_numbers", ctypes.POINTER(ctypes.c_int32)),
+        ("atom_count", ctypes.c_size_t),
+    ]
+
+
 class InitialGuessDiagnosticDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),

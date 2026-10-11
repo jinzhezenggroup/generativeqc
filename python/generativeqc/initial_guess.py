@@ -129,6 +129,76 @@ def supports_automatic_minao(library: object) -> bool:
     return bool(query() & _native.INITIAL_GUESS_CAPABILITY_MINAO)
 
 
+def _native_automatic_minao_eligible(
+    calculator: typing.Any,
+    *,
+    restricted: bool,
+    has_ecp: bool,
+    atomic_numbers: typing.Sequence[int] = (),
+) -> bool | None:
+    """Marshal policy facts, leaving selection to the shared native owner.
+
+    ``None`` means the additive query is absent, not a failed native admission.
+    Query failures stay visible; only old libraries use the compatibility policy.
+    """
+    library = getattr(calculator, "_library", None)
+    query = getattr(library, "generativeqc_initial_guess_auto_kind_v1", None)
+    if query is None:
+        return None
+    storage = (
+        (ctypes.c_int32 * len(atomic_numbers))(*atomic_numbers)
+        if atomic_numbers
+        else None
+    )
+    request = _native.InitialGuessAutoPolicyDescriptor(
+        ctypes.sizeof(_native.InitialGuessAutoPolicyDescriptor),
+        _native.ABI_VERSION,
+        calculator._method,
+        _native.BACKEND_CPU_REFERENCE
+        if calculator._device_name == "cpu"
+        else _native.BACKEND_CUDA,
+        calculator._precision_mode,
+        calculator._density_fitting_mode,
+        int(restricted),
+        int(has_ecp),
+        storage,
+        len(atomic_numbers),
+    )
+    query.argtypes = [
+        ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    query.restype = ctypes.c_int
+    resolved = ctypes.c_uint32()
+    _native.check(library, query(ctypes.byref(request), ctypes.byref(resolved)))
+    if resolved.value not in (0, 3):
+        raise RuntimeError("unsupported native automatic initial-guess policy")
+    return resolved.value == 3
+
+
+def _automatic_minao_model_eligible(
+    calculator: typing.Any, *, restricted: bool, has_ecp: bool
+) -> bool:
+    """Use native model admission, retaining Hcore compatibility with older SDKs."""
+    admitted = _native_automatic_minao_eligible(
+        calculator, restricted=restricted, has_ecp=has_ecp
+    )
+    if admitted is not None:
+        return admitted
+    return (
+        (
+            calculator._device_name == "cpu"
+            or calculator._capabilities.family == "density_functional"
+        )
+        and calculator._precision_mode == _native.PRECISION_FP64
+        and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
+        and restricted
+        and not has_ecp
+        and calculator._capabilities.family in ("hartree_fock", "density_functional")
+        and supports_automatic_minao(calculator._library)
+    )
+
+
 def read_initial_guess_diagnostic(
     library: object, handle: object, index: int | None = None
 ) -> dict | None:
@@ -287,9 +357,19 @@ def initial_guess_for_systems(
 
     for system in systems:
         atoms = tuple(Atom.from_value(atom) for atom in system)
-        if any(not 1 <= atom.atomic_number <= 18 for atom in atoms):
+        core_electrons, ecp_terms = resolve_ecp(calculator._basis, atoms)
+        has_ecp = any(core_electrons) or bool(ecp_terms)
+        admitted = _native_automatic_minao_eligible(
+            calculator,
+            restricted=True,
+            has_ecp=has_ecp,
+            atomic_numbers=tuple(atom.atomic_number for atom in atoms),
+        )
+        if admitted is False:
             return None
-        if any(resolve_ecp(calculator._basis, atoms)[0]):
+        if admitted is None and (
+            has_ecp or any(not 1 <= atom.atomic_number <= 18 for atom in atoms)
+        ):
             return None
     return policy
 
