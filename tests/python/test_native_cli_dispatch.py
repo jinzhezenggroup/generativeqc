@@ -83,7 +83,7 @@ def _install_fake_wheel(
     root: Path, compiled_launcher: Path, version: str = "python3.11"
 ) -> Path:
     launcher = root / "bin/generativeqc"
-    launcher.parent.mkdir(parents=True)
+    launcher.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(compiled_launcher, launcher)
     launcher.chmod(0o755)
     native = root / "lib" / version / "site-packages/generativeqc/bin/generativeqc"
