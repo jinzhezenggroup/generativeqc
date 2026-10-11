@@ -120,6 +120,7 @@ def run(args: argparse.Namespace) -> dict:
             ROOT / "src",
             ROOT / "include",
             generated_dir,
+            generated_dir / "libxc_semilocal_cuda",
         ),
         options=(
             "--fmad=false",

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "dft/semilocal_family.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -52,6 +53,9 @@ CudaXcProgramTraits cuda_xc_program_traits(std::uint32_t functional) noexcept {
   if (generated::split_hybrid_registered(functional))
     return {true, true, generated::split_hybrid_is_mgga(functional),
             generated::split_hybrid_fast_path_capabilities(functional)};
+  if (const auto* program = generated::automatic_cuda_point_entry(functional))
+    return {true, program->ingredient_mask != 1U, program->ingredient_mask == 15U,
+            program->fast_paths};
   return {};
 }
 
@@ -257,6 +261,7 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
                                    layout.functional, layout.spins == 2, layout.tile_points,
                                    layout.response, layout.ao_precision, layout.exchange_scale,
                                    layout.correlation_scale, layout.borrowed_grid)),
+      point_program_(generated::automatic_cuda_point_entry(layout_.functional)),
       point_launcher_(cuda_xc_detail::resolve_point_launcher(layout_.functional, layout_.response)),
       arena_(arena),
       arena_bytes_(arena_bytes),
@@ -378,6 +383,9 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   check(cudaStreamIsCapturing(stream_, &capture));
   if (capture != cudaStreamCaptureStatusNone)
     throw std::invalid_argument("XC point batch preparation cannot capture");
+  // Automatic AOT entries qualify only the bounded one-tile FP64 executor.
+  // Keep optional batching closed until its complete endpoint/resource gates.
+  if (generated::automatic_cuda_point_entry(layout_.functional)) return;
   if (!admitted_density_[0].precision.arithmetic.is_strict_fp64()) return;
   // Optional providers keep their qualified materialization/epilogue. This
   // candidate must never silently replace a selected library execution path.
