@@ -388,6 +388,12 @@ supports Boolean/numeric casts. Complex-to-real conversion must first select
 `real` or `imag`. Compilation still admits only bool/float32/float64 inputs and
 qualified float32/float64 arithmetic, without implicit Boolean/numeric promotion.
 
+The `RHF` molecular extension accepts float64 `(natoms, 3)` Bohr coordinates,
+returns scalar total Hartree energy, and supplies complete analytic nuclear
+gradients in Hartree/Bohr to first-order public AD. It binds a fixed all-electron
+closed-shell method, not a density/Fock derivative. Configuration and the
+first-order native source-cut contract are defined in the experimental guide.
+
 (python-array-errors)=
 ## Experimental array failures
 
@@ -403,6 +409,13 @@ publish a successful compiled result. Foreign device arrays
 are rejected before hidden host conversion, including nested host containers.
 DLPack protocol/device/copy failures raise `DLPackInteropError`; a failed handoff
 is never retried with weaker copy requirements.
+
+Molecular source capture validates immutable policy, dtype/geometry shape,
+matching backend/device and a 16-source limit without running SCF. Missing native
+libraries, unsupported basis/ECP/spin/derivative domains, resource failures or
+nonconvergence propagate; no successful partial molecular result is published.
+The compiler's tensor budgets do not replace native `ResourceBudget` preflight
+or the molecular iteration bound.
 
 (python-array-ownership)=
 ## Experimental arrays and DLPack ownership
@@ -420,6 +433,13 @@ consumer is supported; otherwise `copy=False` is required. Imported storage can
 be shared with the producer: keep the protocol owners alive and do not race
 writes across consumers. Device relocation needs a separate explicit copy.
 
+`RHF` settings are immutable. Compiled source owners retain native method
+workspaces, not reusable energies for changed geometries. Eager molecular calls
+release owners before returning; compiled `close()` releases both method and
+algebra owners. Molecular VJP snapshots the forward geometry/energy/gradient and
+replays without solving SCF again. Lowered molecular tapes require the compiled
+owner's source bindings rather than being self-contained native method code.
+
 (python-array-backends)=
 ## Experimental array backend boundary
 
@@ -436,6 +456,12 @@ fail rather than falling back. Capability
 reports separate frontend representation, execution and production qualification.
 DLPack interop verifies same-device transfer, but accepting a DLPack producer
 does not add that device to the eager namespace or native chemistry support.
+
+Molecular `RHF` sources admit explicit CPU or CUDA, with the same backend/logical
+device as the surrounding compiled algebra. CUDA stages host coordinates and
+returns host values; no resident GPU-array or performance qualification follows.
+The native CPU method's ABI label `cpu_reference` is not the Array API
+`backend="reference"` interpreter; the latter cannot execute molecular sources.
 
 (python-fock-values)=
 ## Fock and fixed-density values
