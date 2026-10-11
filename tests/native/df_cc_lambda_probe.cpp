@@ -60,6 +60,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.df_matrix_gemm = !(mode & 8);
     response.df_core_reuse = !(mode & 64);
     response.serial_scratch_reuse = mode & 4096;
+    response.cuda_resident_krylov = mode & 8192;
     response.df_audit_matrix_gemm = !(mode & 128);
     if (!(mode & 2048)) {
       response.df_primal_matrix_gemm = mode & 1024;
@@ -120,7 +121,18 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              d.df_audit_arena_bytes,
                              std::size_t(d.df_primal_matrix_gemm),
                              d.df_available_device_bytes,
-                             d.df_device_limit_bytes};
+                             d.df_device_limit_bytes,
+                             std::size_t(d.resident_krylov),
+                             std::size_t(d.resident_krylov_refused),
+                             d.resident_krylov_bytes,
+                             d.resident_device_admission_bytes,
+                             d.resident_provider_allowance_bytes,
+                             d.resident_provider_observed_bytes,
+                             std::size_t(d.resident_provider_version),
+                             std::size_t(d.resident_runtime_version),
+                             d.krylov_h2d_bytes,
+                             d.krylov_d2h_bytes,
+                             d.krylov_synchronizations};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

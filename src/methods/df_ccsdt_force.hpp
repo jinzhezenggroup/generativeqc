@@ -98,6 +98,9 @@ struct DFCCSDTResult {
  * eight for forces. Positive limits remain explicit overrides. The solver
  * admits the actual tile under its existing full budget and dimension checks;
  * this does not change standalone CCSD or any response precision policy.
+ * lambda_resident_krylov is a default-off storage binding of the same physical
+ * Lambda actions. Its admission includes both providers and the DF device
+ * ceiling; refusal retains the existing host-vector response schedule.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -111,7 +114,7 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = false);
+    bool lambda_serial_scratch_reuse = false, bool lambda_resident_krylov = false);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

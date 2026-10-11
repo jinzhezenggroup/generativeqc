@@ -111,7 +111,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = false) {
+    bool lambda_serial_scratch_reuse = false, bool lambda_resident_krylov = false) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
@@ -239,6 +239,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   phase = Clock::now();
   if (trace.enabled()) Trace::label("phase", "corrected_lambda");
   cc::LambdaOptions lambda_options;
+  lambda_options.cuda_resident_krylov = lambda_resident_krylov;
   lambda_options.serial_scratch_reuse = lambda_serial_scratch_reuse;
   lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
   lambda_options.df_matrix_gemm = lambda_matrix_gemm;
@@ -678,7 +679,7 @@ DFCCSDTResult run_df_ccsdt_native(
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
     std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
     bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
-    bool lambda_serial_scratch_reuse) {
+    bool lambda_serial_scratch_reuse, bool lambda_resident_krylov) {
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
   // Resolve endpoint policy before passing a positive limit to the solver.
@@ -717,7 +718,7 @@ DFCCSDTResult run_df_ccsdt_native(
         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
-        diagnostic, lambda_serial_scratch_reuse);
+        diagnostic, lambda_serial_scratch_reuse, lambda_resident_krylov);
   };
   try {
     return finish(attempt());

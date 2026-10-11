@@ -40,7 +40,7 @@ struct MethodError : std::runtime_error {
 };
 int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
-bool expected_packed = false, expected_serial_scratch = false;
+bool expected_packed = false, expected_serial_scratch = false, expected_resident_krylov = false;
 bool expected_parallel_gap = false, expected_gap_cotangents = true;
 generativeqc::runtime::PrecisionDirective expected_w;
 std::size_t expected_lambda_interval = 1;
@@ -170,6 +170,7 @@ assert(admitted_triples_w.qualification == expected_w.qualification);
 assert(admitted_triples_w.math_mode == expected_w.math_mode);
 assert(lambda_true_residual_interval == expected_lambda_interval);
 assert(lambda_serial_scratch_reuse == expected_serial_scratch);
+assert(lambda_resident_krylov == expected_resident_krylov);
 assert(lambda_primal_matrix == (physical_replay == nullptr));
 later_phase(state.budget);
 DFCCSDTResult result;
@@ -192,9 +193,10 @@ int main() {
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
-                               expected_serial_scratch);
+                               expected_serial_scratch, expected_resident_krylov);
   };
   for (bool serial_scratch : {false, true})
+  for (bool resident_krylov : {false, true})
   for (bool mixed_w : {false, true})
   for (std::size_t interval : {1, 30})
   for (bool selected_packed : {false, true})
@@ -208,6 +210,7 @@ int main() {
       : runtime::PrecisionDirective{};
   expected_lambda_interval = interval;
   expected_serial_scratch = serial_scratch;
+  expected_resident_krylov = resident_krylov;
   expected_packed = selected_packed;
   expected_parallel_gap = parallel_gap;
   expected_gap_cotangents = gap_cotangents;
@@ -293,7 +296,7 @@ int main() {
       execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
-      expected_serial_scratch);
+      expected_serial_scratch, expected_resident_krylov);
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -304,7 +307,7 @@ int main() {
         execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
-        true, true, false, nullptr, expected_serial_scratch);
+        true, true, false, nullptr, expected_serial_scratch, expected_resident_krylov);
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();

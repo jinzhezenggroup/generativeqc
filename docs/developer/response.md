@@ -280,13 +280,15 @@ These exceptions retain their owners and explicit retirement conditions in the
 inventory. No new default algorithm or scientific capability is inferred from
 shared orchestration.
 
-### Native conventional CUDA Lambda residency
+### Native CUDA Lambda residency
 
 `LambdaOptions::cuda_resident_krylov` enables an internal, non-default binding
-of the existing conventional RCCSD Lambda action to `solve_response_resident`.
+of the existing conventional or DF RCCSD Lambda action to `solve_response_resident`.
 The corresponding native RCCSD/CCSD(T) force overloads accept the trailing
 `resident_lambda_krylov` execution option. Installed public calculators retain
 their existing schedule; this option does not add a scientific capability.
+The native DF complete force owner separately accepts a trailing
+`lambda_resident_krylov` option, also default-off.
 
 The same nonsymmetric logical response plan serves host and resident schedules.
 The method adapter owns weighted pair projection, denominators and both physical
@@ -304,12 +306,30 @@ and fence counters are reported separately. Optional budget/provider-allocation
 refusal retains host-vector execution; stream, kernel and numerical failures do
 not trigger a scientific retry. All queued work drains before owner teardown.
 
+DF borrows its existing input/error view and stream. Both host and resident
+schedules call the same physical transpose dispatcher: expanded Q, scalar
+staged, or bounded matrix-tail actions retain their original equations and
+independent expanded audit. The internal device entry point returns borrowed
+outputs, valid until the next action; consumers enqueue on that same stream and
+check the sticky error before publication. Its opaque stream view does not add
+a CUDA header dependency to CPU/source-only clients.
+
+DF admission also charges the additional resident/provider allowance against
+its complete host-plus-device numeric budget and original available/device
+ceiling. The original action provider and vector provider are separate live
+owners; neither allowance can be omitted. Refusal must not disable the original
+right preconditioner or select a different physical/audit equation.
+
 `tests/native/test_cc_resident_endpoint.cpp` exercises same-backend complete
 RCCSD E+F pairs against pinned independent molecular references, process-cold,
 process-warm and changed geometry cases, and two valid endpoint budgets. These
 fresh-state calls do not claim prepared-plan or borrowed-lease warm reuse.
-Conventional residency remains opt-in pending broader performance/resource and
-prepared-lifetime acceptance. DF Lambda residency is not implemented by it.
+`tests/python/test_df_lambda_resident_cuda.py` covers physical factor response,
+independent determinant finite differences, tail schedules and refusal/recovery.
+`tests/python/test_df_resident_force_cuda.py` pairs complete DF RCCSD/CCSD(T)
+E+F endpoints with independent molecular energy/force-direction references.
+Both residency bindings remain opt-in pending broader performance/resource and
+prepared-lifetime acceptance. These fixtures do not establish prepared reuse.
 
 ## CPKS boundary
 

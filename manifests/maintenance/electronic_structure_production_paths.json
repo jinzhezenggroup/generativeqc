@@ -665,6 +665,8 @@
       "evidence": [
         "tests/native/test_cc_lambda_preconditioner.cpp",
         "tests/native/test_cc_resident_endpoint.cpp",
+        "tests/python/test_df_lambda_resident_cuda.py",
+        "tests/python/test_df_resident_force_cuda.py",
         "benchmarks/results/response-contract/2026-10-11/qualification-resident-lambda.json.xz",
         "benchmarks/results/response-contract/2026-10-11/qualification-resident-integration.json.xz",
         "tests/python/test_rccsd_native_lambda_owner.py"
@@ -719,9 +721,9 @@
         }
       },
       "exception": {
-        "missing_capability": "Default conventional and DF Lambda retain host vectors. Conventional CUDA has an opt-in shared resident/right-preconditioned binding and native E+F qualification driver; DF residency and broader default-promotion/prepared-lifetime gates remain missing.",
+        "missing_capability": "Default conventional and DF Lambda retain host vectors. Both have an opt-in shared resident/right-preconditioned binding and native E+F qualification drivers; broader source-matched default-promotion/prepared-lifetime gates remain missing.",
         "owner": "src/cc/lambda_response_cuda.cu",
-        "retirement_condition": "Qualify the conventional candidate's matched complete endpoint A/B, full provider/resource accounting and prepared-lifetime domain before default promotion; integrate DF resident actions without removing their diagonal policy or independent audits."
+        "retirement_condition": "Qualify conventional and DF candidates' matched complete endpoint A/B, full provider/resource accounting and prepared-lifetime domains before default promotion; retain diagonal policy and independent audits."
       },
       "execution_owner": "src/cc/lambda_response_cuda.cu",
       "id": "cc-response-cuda-rccsd-lambda",

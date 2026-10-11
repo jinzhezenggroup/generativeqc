@@ -225,6 +225,11 @@ class CudaLambdaActions {
     if (p.naux) {
       df_ = std::make_unique<detail::DFLambdaActions>(p, cc, options, device, with_source,
                                                       with_parameters);
+      const auto resident = df_->resident_state();
+      stream_ = static_cast<cudaStream_t>(resident.stream);
+      state_.bar_singles_residual = resident.seed_one;
+      state_.bar_doubles_residual = resident.seed_two;
+      state_.error = resident.error;
       return;
     }
 
@@ -317,10 +322,17 @@ class CudaLambdaActions {
   std::size_t numeric_capacity_bytes() const {
     return df_ ? df_->diagnostic().numeric_capacity_bytes : numeric_capacity_bytes_;
   }
-  std::size_t h2d_bytes() const { return df_ ? df_->diagnostic().h2d_bytes : h2d_bytes_; }
-  std::size_t d2h_bytes() const { return df_ ? df_->diagnostic().d2h_bytes : d2h_bytes_; }
+  std::size_t device_limit_bytes() const {
+    return df_ ? df_->diagnostic().df_device_limit_bytes : std::numeric_limits<std::size_t>::max();
+  }
+  std::size_t h2d_bytes() const {
+    return checked_add(h2d_bytes_, df_ ? df_->diagnostic().h2d_bytes : 0);
+  }
+  std::size_t d2h_bytes() const {
+    return checked_add(d2h_bytes_, df_ ? df_->diagnostic().d2h_bytes : 0);
+  }
   std::size_t synchronizations() const {
-    return df_ ? df_->diagnostic().synchronizations : synchronizations_;
+    return checked_add(synchronizations_, df_ ? df_->diagnostic().synchronizations : 0);
   }
 
   void df_diagnostic(LambdaDiagnostic& target) const {
@@ -492,6 +504,8 @@ class CudaLambdaActions {
   }
 
   void cleanup() noexcept {
+    // The DF owner drains and destroys its borrowed stream and action arena.
+    if (df_) return;
     if (stream_) (void)cudaStreamSynchronize(stream_);
     if (base_) (void)cudaFree(base_);
     if (stream_) (void)cudaStreamDestroy(stream_);
@@ -538,10 +552,10 @@ class CudaLambdaResidentBackend final : public response::ResidentResponseBackend
         slots_(response::resident_gmres_workspace(plan).vector_slots),
         allocation_bytes_(required_bytes(plan, owner.layout_, !diagonal.empty())),
         preconditioned_(!diagonal.empty()) {
-    if (owner.df_ || dimension_ != owner.layout_.dimension() ||
+    if (dimension_ != owner.layout_.dimension() ||
         dimension_ > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
         (!diagonal.empty() && diagonal.size() != dimension_))
-      throw std::invalid_argument("invalid conventional resident Lambda binding");
+      throw std::invalid_argument("invalid resident Lambda binding");
     try {
       if (!vectors_ops_.prepare(owner_.stream_)) throw std::bad_alloc();
       cuda_check(cudaMalloc(reinterpret_cast<void**>(&allocation_), allocation_bytes_));
@@ -648,10 +662,14 @@ class CudaLambdaResidentBackend final : public response::ResidentResponseBackend
         vector(source), owner_.state_.bar_singles_residual, owner_.state_.bar_doubles_residual,
         owner_.layout_.n1, dimension_, representatives_, partners_, weights_);
     cuda_check(cudaGetLastError());
-    const auto output = generated::run_lambda_transpose_cuda(owner_.state_);
+    const auto output = [&]() -> std::pair<const double*, const double*> {
+      if (owner_.df_) return owner_.df_->transpose_device(false);
+      const auto conventional = generated::run_lambda_transpose_cuda(owner_.state_);
+      return {conventional.t1, conventional.t2};
+    }();
     pack_lambda_coordinates<<<blocks(), 256, 0, owner_.stream_>>>(
-        output.t1, output.t2, vector(destination), owner_.layout_.n1, dimension_, representatives_,
-        partners_, weights_, owner_.state_.error);
+        output.first, output.second, vector(destination), owner_.layout_.n1, dimension_,
+        representatives_, partners_, weights_, owner_.state_.error);
     cuda_check(cudaGetLastError());
     int error = 0;
     HostTransferFence transfers(owner_.stream_);
@@ -831,19 +849,28 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   std::size_t resident_bytes = 0;
   std::size_t resident_provider_bytes = 0;
   std::size_t resident_device_admission = 0;
+  std::size_t resident_extra_admission = 0;
   int resident_provider_version = 0, resident_runtime_version = 0;
-  if (options.cuda_resident_krylov && !p.naux &&
+  if (options.cuda_resident_krylov &&
       layout.dimension() <= static_cast<std::size_t>(std::numeric_limits<int>::max())) {
     const auto required =
         CudaLambdaResidentBackend::required_bytes(response_plan, layout, preconditioned);
     const auto complete_device_admission =
         checked_add(checked_add(owner.owned_device_bytes(), p.reference_retained_bytes),
                     checked_add(required, tensor::CudaKrylovVectors::kProviderAllowance));
-    if (complete_device_admission <= options.max_bytes) {
+    const auto extra_admission =
+        checked_add(required, tensor::CudaKrylovVectors::kProviderAllowance);
+    // DF's max_bytes bounds simultaneous host plus device storage; its
+    // independent device ceiling must also include both provider owners.
+    const bool df_admitted = !p.naux || (checked_add(owner.numeric_capacity_bytes(),
+                                                     extra_admission) <= options.max_bytes &&
+                                         complete_device_admission <= owner.device_limit_bytes());
+    if (complete_device_admission <= options.max_bytes && df_admitted) {
       try {
         resident = std::make_unique<CudaLambdaResidentBackend>(owner, response_plan, diagonal);
         resident_bytes = resident->owned_resident_bytes();
         resident_device_admission = complete_device_admission;
+        resident_extra_admission = extra_admission;
         resident_provider_bytes = resident->provider_observed_bytes();
         resident_provider_version = resident->provider_version();
         resident_runtime_version = resident->runtime_version();
@@ -951,7 +978,8 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
                           checked_mul(checked_mul(p.nvir, p.nvir), checked_mul(p.nvir, p.nvir)));
     owner.df_factors(*fixed_orbital);
   }
-  result.diagnostic.numeric_capacity_bytes = owner.numeric_capacity_bytes();
+  result.diagnostic.numeric_capacity_bytes =
+      checked_add(owner.numeric_capacity_bytes(), p.naux ? resident_extra_admission : 0);
   result.diagnostic.owned_device_bytes = checked_add(owner.owned_device_bytes(), resident_bytes);
   result.diagnostic.h2d_bytes = owner.h2d_bytes();
   result.diagnostic.d2h_bytes = owner.d2h_bytes();

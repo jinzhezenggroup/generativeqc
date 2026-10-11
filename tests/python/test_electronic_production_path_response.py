@@ -23,7 +23,11 @@ def test_cpu_and_cuda_lambda_keep_one_scientific_owner() -> None:
         in cuda["exception"]["missing_capability"]
     )
     assert "opt-in" in cuda["exception"]["missing_capability"]
-    assert "DF residency" in cuda["exception"]["missing_capability"]
+    assert (
+        "Both have an opt-in shared resident/right-preconditioned binding"
+        in cuda["exception"]["missing_capability"]
+    )
+    assert "prepared-lifetime" in cuda["exception"]["missing_capability"]
     assert "before default promotion" in cuda["exception"]["retirement_condition"]
     assert "diagonal policy" in cuda["exception"]["retirement_condition"]
     assert cuda["evidence_levels"]["public"]["state"] == "missing"

@@ -67,6 +67,8 @@ gate is not weakened or counted as passing here.
 
 ## References
 
+- The subsequent [DF action binding](2026-10-11-df-lambda-resident-actions.md)
+  extends the same controller while retaining both provider allowances.
 - #932 and PR #2272.
 - [Earlier consumer boundaries](2026-10-11-response-consumer-contracts.md).
 - `docs/developer/response.md`.

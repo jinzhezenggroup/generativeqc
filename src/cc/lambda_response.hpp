@@ -70,7 +70,7 @@ struct LambdaOptions {
    * cuts, solver state, outputs or the optional invariant frontier.
    */
   bool serial_scratch_reuse{false};
-  // Unpromoted conventional-CUDA schedule. Budget/allocation refusal retains
+  // Unpromoted CUDA schedule. Budget/allocation refusal retains
   // the host-vector path with the same diagonal policy and physical audits.
   bool cuda_resident_krylov{false};
 };
@@ -146,7 +146,7 @@ LambdaResult solve_lambda_cpu_with_energy_source(const Problem& problem,
 #if GENERATIVEQC_HAS_CUDA
 /** Solve RCCSD Lambda with generated RHS/J^T actions executed on CUDA.
  *
- * Scalar GMRES control remains host-owned. The opt-in conventional resident
+ * Scalar GMRES control remains host-owned. The opt-in resident
  * schedule keeps vectors, weighted pair projection and right preconditioning
  * on the existing action stream; budget/allocation refusal retains host vectors.
  * Generated scientific actions never use a CPU response fallback.

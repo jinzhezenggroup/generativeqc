@@ -202,6 +202,7 @@ def run(
     primal_matrix: bool = False,
     native_defaults: bool = False,
     serial_scratch_reuse: bool = False,
+    resident_krylov: bool = False,
     overflow: bool = False,
     core_reuse: bool = True,
     audit_matrix: bool = True,
@@ -233,7 +234,7 @@ def run(
     result = [np.full(shape, np.nan) for shape in shapes]
     outputs = (dp * len(result))(*(x.ctypes.data_as(dp) for x in result))
     values = np.full(6, np.nan)
-    counts = np.zeros(29, dtype=np.uintp)
+    counts = np.zeros(40, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -251,7 +252,8 @@ def run(
         + 512 * int(batch_large)
         + 1024 * int(primal_matrix)
         + 2048 * int(native_defaults)
-        + 4096 * int(serial_scratch_reuse),
+        + 4096 * int(serial_scratch_reuse)
+        + 8192 * int(resident_krylov),
         budget,
         device_budget,
         ptrs,

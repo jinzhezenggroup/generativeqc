@@ -48,7 +48,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
         "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
-        "reference_experiment,lambda_serial_scratch_reuse}; }\n"
+        "reference_experiment,lambda_serial_scratch_reuse,lambda_resident_krylov}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -114,6 +114,7 @@ struct DFCCSDTResult {
   bool replay_matrix;
   DFCCSDTReferenceExperiment* reference_experiment;
   bool serial_scratch_reuse;
+  bool resident_krylov;
 };
 """
         + declaration
@@ -171,7 +172,7 @@ int main() {
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame) ||
      ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30 ||
      ordinary.batch_limit != 32 || explicit_matrix.batch_limit != 8 ||
-     !ordinary.replay_matrix) return 7;
+     !ordinary.replay_matrix || ordinary.resident_krylov || explicit_matrix.resident_krylov) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
   explicit_frame.profile_jk = true;
@@ -188,6 +189,10 @@ int main() {
       context,system,system,descriptor,true,true,true,true,true,8,8,{},
       true,false,true,false,false,{},1);
   if(strict_lambda.lambda_interval != 1) return 44;
+  const auto resident_lambda=run_df_ccsdt_native(
+      context,system,system,descriptor,true,true,true,true,true,8,8,{},
+      true,false,true,false,false,{},30,true,true,true,nullptr,false,true);
+  if(!resident_lambda.resident_krylov || resident_lambda.serial_scratch_reuse) return 51;
   const char* missing[]{"endpoint","input","output","1"};
   const char* matrix[]{"endpoint","input","output","1","1","1","1"};
   const char* scalar[]{"endpoint","input","output","1","1","1","0"};

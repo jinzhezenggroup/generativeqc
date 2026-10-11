@@ -751,14 +751,27 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
   Fence fence{s.storage.stream};
   if (one.size() != s.n1 || two.size() != s.n2)
     throw std::invalid_argument("DF Lambda transpose seed shape mismatch");
-  s.clear_error();
   s.upload(s.state.bar_singles_residual, one.data(), s.n1);
   s.upload(s.state.bar_doubles_residual, two.data(), s.n2);
+  const auto output = transpose_device(independent);
+  s.output(output.first, output.second, out_one, out_two);
+  fence.complete();
+}
+
+DFLambdaResidentState DFLambdaActions::resident_state() const noexcept {
+  const auto& s = *impl_;
+  return {s.storage.stream, s.state.bar_singles_residual, s.state.bar_doubles_residual,
+          s.state.error};
+}
+
+std::pair<const double*, const double*> DFLambdaActions::transpose_device(bool independent) {
+  auto& s = *impl_;
+  Fence fence{s.storage.stream};
+  s.clear_error();
   if (s.metrics.df_auxiliary_reduction && !independent) {
     s.reduced_transpose();
-    s.output(s.sum1, s.sum2, out_one, out_two);
     fence.complete();
-    return;
+    return {s.sum1, s.sum2};
   }
   if (independent && s.metrics.df_audit_matrix_gemm) {
     // Keep the expanded independent core and original per-Q virtual adjoint;
@@ -776,9 +789,8 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
       ++s.metrics.df_generated_kernels;
       s.record_stage(audit_auxiliary);
     }
-    s.output(s.sum1, s.sum2, out_one, out_two);
     fence.complete();
-    return;
+    return {s.sum1, s.sum2};
   }
   const auto core = independent ? generated_response::run_independent_transpose_cuda(s.state)
                                 : generated_response::run_transpose_cuda(s.state);
@@ -798,8 +810,8 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
     s.record(generated_response::virtual_amplitude_vjp_contraction_terms,
              generated_virtual::amplitude_vjp_cuda_operation_count);
   }
-  s.output(s.sum1, s.sum2, out_one, out_two);
   fence.complete();
+  return {s.sum1, s.sum2};
 }
 
 void DFLambdaActions::seeds(std::span<const double> one, std::span<const double> two) {
