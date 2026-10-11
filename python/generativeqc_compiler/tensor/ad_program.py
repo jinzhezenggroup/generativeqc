@@ -83,9 +83,9 @@ ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def _input_groups(program: Program) -> dict[str, tuple[Node, ...]]:
-    """Group live occurrences of each named input without interpreter imports."""
+    """Group declared input occurrences, including disconnected AD arguments."""
     groups: dict[str, list[Node]] = {}
-    for node in program.live_nodes:
+    for node in program.nodes:
         if node.op == "input":
             groups.setdefault(node.attrs["name"], []).append(node)
     return {name: tuple(nodes) for name, nodes in groups.items()}
