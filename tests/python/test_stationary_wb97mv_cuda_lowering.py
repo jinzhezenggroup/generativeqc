@@ -76,5 +76,6 @@ def test_spin_projection_preserves_method_owned_parameters(spin: str) -> None:
     assert polarized_point in source
     capable = str(spin == "unpolarized").lower()
     assert f"stationary_restricted_point_capable = {capable};" in source
-    assert "stationary_legacy_restricted_point_default = false;" in source
+    assert 'if (!selection || std::strcmp(selection, "1") == 0) return true;' in source
+    assert 'if (std::strcmp(selection, "0") == 0) return false;' in source
     assert spec.spin == spin

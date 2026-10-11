@@ -430,7 +430,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
         "density_jet_policy_sha256": "2a117b6ec5c566b996f75795650288182faa93a83b263689431f62d6c8e3a529",
-        "restricted_point_policy_sha256": "3cca4e9020484742d4f48a55352d9f8cef5deb088017889d1871820f082a7462",
+        "restricted_point_policy_sha256": "14eb08de9be6003c466bff8f9449c95749a38e3bcbb9cf13bcad3d4420ccca51",
         "kind_table_sha256": "eeec6bd71f566741e4d0978df5b354095c875be183b0cf3138df3a1e8fd47a6a",
         "component_arrays_sha256": "08ea283e18c790a26edcdcac01479def6a7188d9c1a96b8831b4f2b71c8d6045",
         "component_page_sha256": "09be8b78cfee217fef2e37ed5bb26b7a5231f63bd5303dcccacdb6fd1ccb4d9b",
@@ -468,7 +468,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
         ),
         "bulk_sha256": (
-            "e7be8d14b6c75664fd990c9bb279bba8105c3151a472539b9a8795610555dfb3"
+            "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
         ),
         "scalar_sha256": (
             "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
