@@ -348,11 +348,12 @@
     "src/tensor/cuda_contraction.cuh": {
       "classification": "provider",
       "contract": "src/tensor/native_contraction.hpp",
-      "reason": "Shared typed prepared contraction executor owns provider setup, matrix submission and result auditing.",
+      "reason": "Shared typed prepared contraction executor owns provider setup, ordinary and independent-pair matrix submission, stream-exclusive pointer binding and complete result auditing.",
       "references": {
         "cublasCreate": 1,
         "cublasDestroy": 2,
         "cublasDgemm": 1,
+        "cublasDgemmBatched": 1,
         "cublasDgemmStridedBatched": 1,
         "cublasGetVersion": 1,
         "cublasLtGetVersion": 1,

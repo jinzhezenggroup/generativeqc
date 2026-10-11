@@ -1,0 +1,29 @@
+{
+  "schema": "generativeqc.post-qualification-source-repair.v1",
+  "scope": "Clear only a handled CUDA allocation last-error before the optional arena retry; propagate unexpected CUDA errors without replay.",
+  "gpu_evidence": "The retained GPU observations qualify the pre-repair measured bytes. No repaired-source GPU execution or new timing is claimed.",
+  "patch": {
+    "path": "post-qualification-allocation-repair.patch",
+    "bytes": 3330,
+    "sha256": "7ed684d76765230bc46024c2dd1b1c819adaf4e878aec1342799ff7c15fce59f"
+  },
+  "files": {
+    "src/cc/df_triples_cuda.cu": {
+      "receipt": "remote/source/src/cc/df_triples_cuda.cu",
+      "measured_sha256": "3fdf580acd7efc484a3113780efefa1c5d6a967b00152ed2810a6f551c5b959b",
+      "repaired_sha256": "9339b158461fc272c25882ceca1cc6782902f2b62f1df392df3640f85b75fbd6"
+    },
+    "tests/python/test_df_triples_independent_pair.py": {
+      "receipt": "reviewed-tests/tests/python/test_df_triples_independent_pair.py",
+      "measured_sha256": "2a0632e5a5606029a9afecdd3d3d88421eff742b07e6d7ba500270cd13d875c2",
+      "repaired_sha256": "4079627fa88a6feed29b7d8622884e4180de5371f527186350d45b9dc9498b91"
+    }
+  },
+  "validation": {
+    "kind": "host-only error-recovery regression",
+    "test": "tests/python/test_df_triples_independent_pair.py::test_actual_owner_optional_allocation_retry_is_preexecution_and_typed",
+    "domains": 10,
+    "new_gpu_run": false
+  },
+  "pre_repair_submission_commit": "be4a7ab285cddccb237e4f663bac424f5205ec0b"
+}

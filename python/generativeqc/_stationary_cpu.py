@@ -421,7 +421,9 @@ def complete_rks_gradient_diagnostic(
     """Consume one live native CPU RKS/UKS state with complete plan-owned sources.
 
     Admitted public-state domain is direct real FP64 integer RKS/UKS with
-    validated LDA/PBE/r2SCAN/global-hybrid MethodIR. The consumer also executes
+    validated LDA/PBE/r2SCAN/global-hybrid MethodIR, or an imported pure semilocal
+    rho/rho-sigma/rho-sigma-tau MethodIR with the native Libxc work-point provider.
+    The consumer also executes
     range-separated exchange sources for validated stationary plans through d,
     and through f when the primary integrals are density fitted.
     Mixed DF uses the shared native fitted primary and only one compiler-generated

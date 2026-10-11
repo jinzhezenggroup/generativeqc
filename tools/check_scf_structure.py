@@ -286,6 +286,8 @@ CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 # such as generated_shell_task.hpp.cuh must not acquire device implementation.
 CUDA_EXACT_ALLOWED = {
     "cuda_direct_fock_lowering": ("scf/generated_shell_task.hpp",),
+    # Qualifier-only leaf permits the same numerical owner to lower on CPU.
+    "cuda_integral_numerics": ("integrals/execution_qualifiers.hpp",),
     # Generic rounded accumulation changes no compiler-owned spin/operator
     # equations. Admit this leaf only, not the broader runtime implementation.
     "cuda_direct_contractions": ("runtime/compensated_atomic.cuh",),

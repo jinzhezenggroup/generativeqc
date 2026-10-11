@@ -229,9 +229,10 @@ class Calculator:
         ``<method>-d4-rks/uks`` selectors whose electronic lowerers are
         qualified, a spin-explicit PBE-family MethodIR with one production
         D3(BJ) correction, or the canonical r2SCAN-3c MethodIR. Automatic Libxc
-        selectors are currently
-        CPU FP64 energy/SCF only and use structural admission plus the explicit
-        negative blacklist. The composite forms bind the exact def2-mTZVPP basis
+        selectors use CPU FP64 structural admission plus the explicit negative
+        blacklist. Direct all-electron s/p/d contexts additionally support
+        explicitly requested bounded analytic forces; energy remains the default.
+        The composite forms bind the exact def2-mTZVPP basis
         and compose r2SCAN + D4 + gCP without a named native scientific driver.
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
         tile schedule. ``dispersion_memory_budget_bytes`` independently bounds
@@ -868,7 +869,7 @@ class Calculator:
             )
         cpu_direct_semilocal_force = qualified_direct_semilocal_context(self)
         semilocal_force = (
-            self._automatic_libxc_name is None
+            (self._automatic_libxc_name is None or cpu_direct_semilocal_force)
             and self._ks_options is not None
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
             and not (
