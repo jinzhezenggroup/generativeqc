@@ -1,4 +1,5 @@
 """Distribution tests needing neither CUDA nor the full C++ build."""
+
 from __future__ import annotations
 
 import hashlib
@@ -63,7 +64,9 @@ class NativeCliPackageTests(unittest.TestCase):
             self.assertIn(f"{root}/lib/libgenerativeqc_stationary_sm_120.so", names)
             self.assertNotIn(f"{root}/lib/libgenerativeqc.a", names)
             self.assertTrue(
-                bundle.getmember(f"{root}/lib/libgenerativeqc_stationary_sm_120.so").issym()
+                bundle.getmember(
+                    f"{root}/lib/libgenerativeqc_stationary_sm_120.so"
+                ).issym()
             )
             metadata = json.load(bundle.extractfile(f"{root}/build-metadata.json"))
             self.assertEqual(metadata["core_linkage"], "static")

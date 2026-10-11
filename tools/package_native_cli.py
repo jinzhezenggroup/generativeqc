@@ -4,6 +4,7 @@
 The GenerativeQC core is statically linked in the distribution preset. CUDA
 providers and normal Linux runtime libraries remain external dependencies.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -52,7 +53,9 @@ def _copy_runtime_tree(prefix: Path, staging: Path) -> list[str]:
             if ".so" not in source.name and source.suffix != ".json":
                 continue
             if source.name.startswith("libgenerativeqc.so"):
-                raise ValueError("Static-core distribution must not ship libgenerativeqc.so")
+                raise ValueError(
+                    "Static-core distribution must not ship libgenerativeqc.so"
+                )
             rel = source.relative_to(prefix)
             target = staging / rel
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -72,8 +75,12 @@ def _archive_tree(source: Path, destination: Path, epoch: int) -> None:
     # Fixed metadata and gzip headers make identical installation trees
     # reproducible across workflow attempts (without copying archive-sized RAM).
     with destination.open("wb") as output:
-        with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=epoch) as compressed:
-            with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT) as archive:
+        with gzip.GzipFile(
+            fileobj=output, mode="wb", filename="", mtime=epoch
+        ) as compressed:
+            with tarfile.open(
+                fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT
+            ) as archive:
                 entries = [source, *sorted(source.rglob("*"))]
                 for path in entries:
                     info = archive.gettarinfo(
@@ -170,7 +177,9 @@ def package_native_cli(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prefix", type=Path, required=True)
-    parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument(
+        "--source-root", type=Path, default=Path(__file__).resolve().parent.parent
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--commit", required=True)
