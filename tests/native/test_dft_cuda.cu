@@ -14,9 +14,9 @@
 #include <vector>
 
 #include "dft/cuda_xc.hpp"
-#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
+#include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
