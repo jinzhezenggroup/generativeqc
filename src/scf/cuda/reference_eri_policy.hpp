@@ -1,12 +1,25 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <string_view>
 
 #include "scf/cuda/direct_jk_source_policy.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
 inline constexpr std::size_t kReferenceEriCacheLimit = 256ULL << 20;
+
+/** Experimental measured-plan admission. The immutable mask is captured once
+ * per owner, never consulted by kernels or graphs. Unset preserves complete
+ * residency and its existing automatic eligibility/defaults. */
+using ReferenceResidentBucketPolicy = DirectJkResidentBucketPolicy;
+
+inline ReferenceResidentBucketPolicy reference_resident_bucket_policy() noexcept {
+  return direct_jk_resident_bucket_policy(std::getenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK"),
+                                          std::getenv("GENERATIVEQC_RHF_RESIDENT_MAX_BYTES"));
+}
 
 using ReferenceResidentValuesSelection = DirectJkSourceSelection;
 

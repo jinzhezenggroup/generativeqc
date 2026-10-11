@@ -1,0 +1,2 @@
+3.13.11 | packaged by conda-forge | (main, Dec  6 2025, 11:24:03) [GCC 14.3.0]
+numpy 2.3.5 pytest 9.0.1

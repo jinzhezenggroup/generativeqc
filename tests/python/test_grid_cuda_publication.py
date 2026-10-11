@@ -275,15 +275,17 @@ int check_density_binding(int mode) {
   if (mode == 5) p.density_jets_ready = false;
   if (mode == 7) p.feature_mask = 3;
   if (mode == 8) p.features_ready = false;
+  if (mode == 9 || mode == 10) p.feature_mask = 1;
+  if (mode == 10) p.identical_spin_density = false;
   const auto generation = mode == 6 ? p.generation - 1 : p.generation;
   const double* work = p.work + 1;
   std::uint64_t flags = 99;
-  const int status = grid_cuda_density_jets_v2(&p,generation,4,&work,&flags,nullptr,0);
-  const bool admitted = mode <= 2;
+  const int status = grid_cuda_density_jets_v2(&p,generation,mode >= 9 ? 1 : 4,&work,&flags,nullptr,0);
+  const bool admitted = mode <= 2 || mode >= 9;
   if ((status == 0) != admitted) return 60;
   if (!admitted && (work || flags)) return 61;
   if (admitted && work != p.work) return 62;
-  if (admitted && flags != std::uint64_t(mode == 0)) return 63;
+  if (admitted && flags != std::uint64_t(mode == 0 || mode == 2 || mode == 9)) return 63;
   return 0;
 }
 """
@@ -393,7 +395,7 @@ def publication_probe(
     return executable
 
 
-@pytest.mark.parametrize("mode", range(9))
+@pytest.mark.parametrize("mode", range(11))
 def test_density_binding_requires_current_owned_restricted_features(
     publication_probe: Path, mode: int
 ) -> None:

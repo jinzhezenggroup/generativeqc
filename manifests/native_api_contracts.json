@@ -2,6 +2,36 @@
   "schema_version": 1,
   "policy": "Source-owned structured facets plus reviewed signatures and C++ public record fields; no debt allowlist. Structural coverage requires semantic source review. Generated identifiers are covered by the public method catalog. Implicit/inherited C++ operations are not separately declared by this wrapper.",
   "declarations": {
+    "generativeqc_initial_guess_auto_system_kind_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "d260d310bd41384345a312f111ccb41fba728289e19a775086d6b933e1bfa397",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+  "generativeqc_initial_guess_auto_kind_v1": {
+    "kind": "c-function",
+    "header": "include/generativeqc/generativeqc.h",
+    "signature_sha256": "7b68461c8747acd6b4272fc7b02e9a960eedd5a28b695ac24e67df6a6b4c1c3c",
+    "required_facets": [
+      "behavior",
+      "errors",
+      "execution",
+      "inputs",
+      "lifetime",
+      "outputs"
+    ],
+    "fields": [],
+    "field_declarations": []
+  },
     "generativeqc_ks_options_version": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

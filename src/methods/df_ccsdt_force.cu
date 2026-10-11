@@ -111,7 +111,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = false) {
+    bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
+    bool lambda_mixed_precision = false) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
@@ -144,7 +145,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                             checked_add(recycle_bytes,
                                         physical_replay ? physical_replay->output_bytes : 0)),
                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
-                packed_diis);
+                packed_diis, ccsd_mixed_precision);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   if (reference_experiment) {
     reference_experiment->reference = state.reference;
@@ -245,6 +246,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   lambda_options.df_core_reuse = lambda_core_reuse;
   lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
   lambda_options.df_primal_matrix_gemm = lambda_primal_matrix;
+  lambda_options.df_mixed_precision = lambda_mixed_precision;
   lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
   lambda_options.cc_tolerance = 1e-9;
   lambda_options.lambda_tolerance = 1e-9;
@@ -678,7 +680,7 @@ DFCCSDTResult run_df_ccsdt_native(
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
     std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
     bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
-    bool lambda_serial_scratch_reuse) {
+    bool lambda_serial_scratch_reuse, bool ccsd_mixed_precision, bool lambda_mixed_precision) {
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
   // Resolve endpoint policy before passing a positive limit to the solver.
@@ -717,7 +719,7 @@ DFCCSDTResult run_df_ccsdt_native(
         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
-        diagnostic, lambda_serial_scratch_reuse);
+        diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision);
   };
   try {
     return finish(attempt());

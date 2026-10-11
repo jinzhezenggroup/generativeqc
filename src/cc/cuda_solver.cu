@@ -74,6 +74,22 @@ __global__ void accumulate_df(const double* values, std::size_t count, double* s
     sum[i] = generativeqc_tensor::finite(__dadd_rn(sum[i], values[i]), error, 0);
 }
 
+// Only an internal approximate warm start may be projected. The compiler's
+// pair map owns the symmetry and mean; supplied asymmetric guesses never
+// admit this path, and every published result still has a fresh FP64 replay.
+__global__ void project_mixed_pair_state(double* values, std::size_t count,
+                                         generated::RestrictedPairCoordinates coordinates,
+                                         int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto partner = coordinates(index).partner;
+    if (index > partner) continue;
+    const auto mean =
+        generativeqc_tensor::finite(coordinates.project(values[index], values[partner]), error, 0);
+    values[index] = values[partner] = mean;
+  }
+}
+
 struct Layout {
   std::array<std::size_t, 15> inputs{};
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
@@ -83,6 +99,7 @@ struct Layout {
   std::size_t df_bov{}, df_bvv{}, df_arena{}, df_sum{}, df_prepare{};
   std::size_t df_arena_elements{};
   std::size_t df_paired_tau{}, df_pair_maxima{};
+  std::array<std::size_t, 5> df_mixed_inputs{};
 };
 
 std::size_t reserve(Layout& layout, std::size_t& cursor, std::size_t bytes) {
@@ -111,6 +128,9 @@ struct Owner {
   generated::df::BatchedReplayCudaState batch_replay_state;
   std::size_t replay_batch{};
   generated::dfhoist::CudaState hoisted_state;
+  generated::dfhoist::MixedAuxiliaryCudaState mixed_state;
+  bool mixed_active{}, mixed_packed_refused{};
+  float *mixed_bov{}, *mixed_bvv{};
   generated::dfpairs::CudaState paired_state;
   bool pairs_enabled{};
   double* paired_tau{};
@@ -170,7 +190,8 @@ struct Owner {
                   generated::dfhoist::iteration_packed_dimensions_fit(p.nocc, p.nvir));
     if (naux)
       plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction,
-                               options.df_matrix_gemm && matrix_dimensions_fit);
+                               options.df_matrix_gemm && matrix_dimensions_fit, 1,
+                               options.df_mixed_precision);
     const std::array<const std::vector<double>*, 15> host = {
         &p.foo,  &p.fov,  &p.fvv, &p.ovov, &p.ovvo,       &p.oovv,       &p.ovvv,         &p.ovoo,
         &p.oooo, &p.vvvv, &p.d1,  &p.d2,   &p.initial_t1, &p.initial_t2, &p.canonical_eps};
@@ -191,6 +212,12 @@ struct Owner {
       if (naux) {
         layout.df_bov = reserve(layout, cursor, checked_mul(p.df_bov.size(), sizeof(double)));
         layout.df_bvv = reserve(layout, cursor, checked_mul(p.df_bvv.size(), sizeof(double)));
+        if (plan.mixed_auxiliary) {
+          const std::array<std::size_t, 5> counts{p.df_bov.size(), p.df_bvv.size(), n1, n2, n2};
+          for (std::size_t index = 0; index < counts.size(); ++index)
+            layout.df_mixed_inputs[index] =
+                reserve(layout, cursor, checked_mul(counts[index], sizeof(float)));
+        }
         auto auxiliary =
             replay_matrix ? std::max(plan.auxiliary,
                                      generated::df::virtual_replay_arena_elements(p.nocc, p.nvir))
@@ -198,9 +225,9 @@ struct Owner {
         if (pairs_enabled) {
           auxiliary = std::max(auxiliary,
                                generated::dfpairs::auxiliary_packed_arena_elements(p.nocc, p.nvir));
-          if (plan.auxiliary_batch_size > 1)
+          if (plan.strict_auxiliary_batch_size > 1)
             auxiliary = std::max(auxiliary, generated::dfpairs::auxiliary_batched_arena_elements(
-                                                p.nocc, p.nvir, plan.auxiliary_batch_size));
+                                                p.nocc, p.nvir, plan.strict_auxiliary_batch_size));
           layout.df_paired_tau =
               reserve(layout, cursor,
                       checked_mul(generated::dfpairs::occupied_tau_elements(p.nocc, p.nvir),
@@ -262,16 +289,20 @@ struct Owner {
         total = checked_add(
             total, generated::df::batch_replay_binding_host_bytes(1 + (naux % replay_batch > 1)));
       if (pairs_enabled)
-        total = checked_add(
-            total,
-            generated::dfpairs::contraction_host_bytes(
-                plan.auxiliary_batch_size > 1 ? 1 + (naux % plan.auxiliary_batch_size > 1) : 0));
-      return plan.matrix_gemm ? checked_add(checked_add(total, kContractionProviderAllowance),
-                                            generated::dfhoist::contraction_host_bytes(
-                                                plan.auxiliary_batch_size > 1
-                                                    ? 1 + (naux % plan.auxiliary_batch_size > 1)
-                                                    : 0))
-                              : total;
+        total = checked_add(total, generated::dfpairs::contraction_host_bytes(
+                                       plan.strict_auxiliary_batch_size > 1
+                                           ? 1 + (naux % plan.strict_auxiliary_batch_size > 1)
+                                           : 0));
+      if (plan.mixed_auxiliary)
+        total = checked_add(total, generated::dfhoist::mixed_contraction_host_bytes(
+                                       1 + (naux % plan.auxiliary_batch_size != 0)));
+      return plan.matrix_gemm
+                 ? checked_add(checked_add(total, kContractionProviderAllowance),
+                               generated::dfhoist::contraction_host_bytes(
+                                   plan.strict_auxiliary_batch_size > 1
+                                       ? 1 + (naux % plan.strict_auxiliary_batch_size > 1)
+                                       : 0))
+                 : total;
     };
     auto combined = build_layout();
     if (plan.matrix_gemm) {
@@ -283,7 +314,7 @@ struct Owner {
           if (!generated::dfhoist::auxiliary_batched_dimensions_fit(p.nocc, p.nvir, batch))
             continue;
           plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true,
-                                   batch);
+                                   batch, options.df_mixed_precision);
           combined = build_layout();
           if (combined <= options.max_bytes) break;
         } catch (const std::length_error&) {
@@ -339,8 +370,9 @@ struct Owner {
     if (pair_candidate && plan.hoisted && plan.matrix_gemm) {
       try {
         if (generated::dfpairs::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
-            (plan.auxiliary_batch_size == 1 || generated::dfpairs::auxiliary_batched_dimensions_fit(
-                                                   p.nocc, p.nvir, plan.auxiliary_batch_size))) {
+            (plan.strict_auxiliary_batch_size == 1 ||
+             generated::dfpairs::auxiliary_batched_dimensions_fit(
+                 p.nocc, p.nvir, plan.strict_auxiliary_batch_size))) {
           pairs_enabled = true;
           const auto candidate = build_layout();
           pairs_enabled = candidate <= options.max_bytes;
@@ -538,9 +570,31 @@ struct Owner {
           hoisted_state.o = p.nocc;
           hoisted_state.v = p.nvir;
           generated::dfhoist::prepare_contractions(
-              hoisted_state, contractions, plan.auxiliary_batch_size,
-              naux % plan.auxiliary_batch_size, diagnostic.df_gemm_calls,
+              hoisted_state, contractions, plan.strict_auxiliary_batch_size,
+              naux % plan.strict_auxiliary_batch_size, diagnostic.df_gemm_calls,
               diagnostic.df_gemm_summands);
+          if (plan.mixed_auxiliary) {
+            mixed_state.o = p.nocc;
+            mixed_state.v = p.nvir;
+            mixed_state.stream = stream;
+            mixed_state.error = state.error;
+            mixed_state.auxiliary_arena = reinterpret_cast<float*>(base + layout.df_arena);
+            mixed_bov = reinterpret_cast<float*>(base + layout.df_mixed_inputs[0]);
+            mixed_bvv = reinterpret_cast<float*>(base + layout.df_mixed_inputs[1]);
+            mixed_state.t1 = reinterpret_cast<float*>(base + layout.df_mixed_inputs[2]);
+            mixed_state.t2 = reinterpret_cast<float*>(base + layout.df_mixed_inputs[3]);
+            mixed_state.df_tau = reinterpret_cast<float*>(base + layout.df_mixed_inputs[4]);
+            generated::dfhoist::prepare_mixed_contractions(
+                mixed_state, contractions, plan.auxiliary_batch_size,
+                naux % plan.auxiliary_batch_size, diagnostic.df_fp32_gemm_calls,
+                diagnostic.df_fp32_gemm_summands);
+            cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
+            cast_fp32(df_bov, mixed_bov, p.df_bov.size());
+            cast_fp32(df_bvv, mixed_bvv, p.df_bvv.size());
+            check_generated_error();
+            mixed_active = diagnostic.df_mixed_precision = true;
+            diagnostic.df_mixed_program_hash = generated::dfhoist::mixed_auxiliary_equation_hash;
+          }
         }
         if (replay_matrix) {
           static_cast<generated::df::CudaState&>(replay_state) = df_state;
@@ -560,8 +614,8 @@ struct Owner {
           paired_state.v = p.nvir;
           try {
             generated::dfpairs::prepare_contractions(
-                paired_state, contractions, plan.auxiliary_batch_size,
-                naux % plan.auxiliary_batch_size, diagnostic.df_gemm_calls,
+                paired_state, contractions, plan.strict_auxiliary_batch_size,
+                naux % plan.strict_auxiliary_batch_size, diagnostic.df_gemm_calls,
                 diagnostic.df_gemm_summands);
           } catch (const std::bad_alloc&) {
             paired_state.paired_contractions.release();
@@ -608,6 +662,7 @@ struct Owner {
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
+      diagnostic.df_mixed_precision_refused = options.df_mixed_precision && !mixed_active;
       diagnostic.df_replay_matrix_gemm = replay_matrix;
       diagnostic.conventional_prepared_contractions = conventional_prepared;
       diagnostic.conventional_provider_capacity_bytes =
@@ -618,13 +673,15 @@ struct Owner {
                                 : 0;
       diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kContractionProviderAllowance : 0;
       diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
+      diagnostic.df_strict_auxiliary_batch_size = plan.strict_auxiliary_batch_size;
       diagnostic.df_occupied_pairs = pairs_enabled;
       if (layout.df_paired_tau) {
         diagnostic.df_pair_capacity_bytes = checked_add(
             checked_mul(generated::dfpairs::occupied_tau_elements(p.nocc, p.nvir), sizeof(double)),
             sizeof(pair_bound::ProjectionMaxima));
         diagnostic.df_pair_binding_host_bytes = generated::dfpairs::contraction_host_bytes(
-            plan.auxiliary_batch_size > 1 ? 1 + (naux % plan.auxiliary_batch_size > 1) : 0);
+            plan.strict_auxiliary_batch_size > 1 ? 1 + (naux % plan.strict_auxiliary_batch_size > 1)
+                                                 : 0);
       }
       diagnostic.owned_device_bytes =
           std::max(diagnostic.owned_device_bytes,
@@ -644,6 +701,43 @@ struct Owner {
 
   ~Owner() { cleanup(); }
 
+  void cast_fp32(const double* source, float* target, std::size_t count) {
+    generativeqc_tensor::
+        convert_fp64_to_fp32_kernel<<<generativeqc_tensor::blocks(count, 256), 256, 0, stream>>>(
+            source, target, count, state.error, 1);
+    cuda_check(cudaGetLastError());
+    diagnostic.df_precision_cast_elements =
+        checked_add(diagnostic.df_precision_cast_elements, count);
+  }
+
+  void finish_mixed_warmup() {
+    // A mixed residual is an iteration aid, never a physical certificate.
+    // Remove redundant-coordinate FP32 noise before strict pair admission.
+    // No supplied guess or FP64 iteration is projected by this boundary.
+    if (pairs_enabled) {
+      project_mixed_pair_state<<<generativeqc_tensor::blocks(n2, 256), 256, 0, stream>>>(
+          const_cast<double*>(state.t2), n2, coordinates, state.error);
+      cuda_check(cudaGetLastError());
+      check_generated_error();
+      ++diagnostic.df_mixed_pair_projection_calls;
+      diagnostic.df_mixed_pair_projection_bytes = checked_mul(2 * sizeof(double), n2);
+      if (mixed_packed_refused && history.capacity()) {
+        // The full history lease is larger than the original packed one.
+        // Borrow it at the packed stride after discarding all old rows;
+        // retain actual allocation accounting and the original symmetry gate.
+        packed = true;
+        history_elements = checked_add(n1, checked_add(n2, n1) / 2);
+        metric_weights = reinterpret_cast<unsigned char*>(base + layout.metric_weights);
+        cuda_check(cudaMemsetAsync(packing_refused, 0, sizeof(int), stream));
+        diagnostic.packed_diis = true;
+      }
+    }
+    history.clear();
+    mixed_active = false;
+    ++restarts;
+    ++diagnostic.df_precision_switches;
+  }
+
   void refuse_packed_history(const SolverOptions& options) {
     // Called only after a drained packing audit, before any extrapolation.
     // Reset histories, retaining the current full physical amplitudes/residual.
@@ -652,6 +746,7 @@ struct Owner {
     history_base = nullptr;
     vectors = errors = nullptr;
     history.clear();
+    mixed_packed_refused = mixed_active;
     packed = false;
     metric_weights = nullptr;
     diagnostic.packed_diis = false;
@@ -826,14 +921,32 @@ struct Owner {
       hoisted_state.df_Xv = hoisted_state.df_Wvovo + n2;
       hoisted_state.df_tau = generated::dfhoist::run_prepare_cuda(hoisted_state).tau;
       ++diagnostic.df_preparation_calls;
-      const bool use_pairs = prepare_occupied_pairs(tolerance);
-      for (std::size_t q = 0; q < naux; q += plan.auxiliary_batch_size) {
-        const auto batch = std::min(plan.auxiliary_batch_size, naux - q);
+      if (mixed_active) {
+        cast_fp32(state.t1, const_cast<float*>(mixed_state.t1), n1);
+        cast_fp32(state.t2, const_cast<float*>(mixed_state.t2), n2);
+        cast_fp32(hoisted_state.df_tau, const_cast<float*>(mixed_state.df_tau), n2);
+        ++diagnostic.df_mixed_evaluations;
+      }
+      const bool use_pairs = !mixed_active && prepare_occupied_pairs(tolerance);
+      const auto batch_limit =
+          !mixed_active ? plan.strict_auxiliary_batch_size : plan.auxiliary_batch_size;
+      for (std::size_t q = 0; q < naux; q += batch_limit) {
+        const auto batch = std::min(batch_limit, naux - q);
         hoisted_state.q = batch;
         hoisted_state.bov = df_bov + q * n1;
         hoisted_state.bvv = df_bvv + q * state.v * state.v;
         generated::dfhoist::AuxiliaryOutputs row{};
-        if (use_pairs) {
+        if (mixed_active) {
+          mixed_state.q = batch;
+          mixed_state.bov = mixed_bov + q * n1;
+          mixed_state.bvv = mixed_bvv + q * state.v * state.v;
+          const auto mixed_row = generated::dfhoist::run_mixed_auxiliary_cuda(mixed_state);
+          generated::dfhoist::accumulate_mixed_auxiliary_cuda(
+              mixed_state, mixed_row, const_cast<double*>(hoisted_state.df_Lvv),
+              const_cast<double*>(hoisted_state.df_Wvoov),
+              const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
+              df_sum + n1, df_sum);
+        } else if (use_pairs) {
           paired_state.q = batch;
           paired_state.bov = hoisted_state.bov;
           paired_state.bvv = hoisted_state.bvv;
@@ -842,13 +955,13 @@ struct Owner {
           row = generated::dfhoist::run_auxiliary_cuda(hoisted_state);
         }
         // These read-only core views alias mutable, owner-retained cut storage.
-        if (use_pairs)
+        if (!mixed_active && use_pairs)
           generated::dfpairs::accumulate_occupied_auxiliary_cuda(
               paired_state, row, const_cast<double*>(hoisted_state.df_Lvv),
               const_cast<double*>(hoisted_state.df_Wvoov),
               const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
               df_sum + n1, df_sum);
-        else
+        else if (!mixed_active)
           generated::dfhoist::accumulate_auxiliary_cuda(
               hoisted_state, row, const_cast<double*>(hoisted_state.df_Lvv),
               const_cast<double*>(hoisted_state.df_Wvoov),
@@ -857,22 +970,25 @@ struct Owner {
         diagnostic.df_auxiliary_slices += batch;
         ++diagnostic.df_auxiliary_tiles;
         diagnostic.df_virtual_operations +=
-            use_pairs          ? (batch > 1 ? generated::dfpairs::auxiliary_batched_cuda_operations
-                                            : generated::dfpairs::auxiliary_packed_cuda_operations)
-            : batch > 1        ? generated::dfhoist::auxiliary_batched_operations
-            : plan.matrix_gemm ? generated::dfhoist::auxiliary_packed_operations
-                               : generated::dfhoist::auxiliary_operation_count;
+            use_pairs ? (batch > 1 ? generated::dfpairs::auxiliary_batched_cuda_operations
+                                   : generated::dfpairs::auxiliary_packed_cuda_operations)
+            : batch > 1 || mixed_active ? generated::dfhoist::auxiliary_batched_operations
+            : plan.matrix_gemm          ? generated::dfhoist::auxiliary_packed_operations
+                                        : generated::dfhoist::auxiliary_operation_count;
         ++diagnostic.df_accumulation_calls;
-        diagnostic.df_accumulation_bytes =
-            checked_add(diagnostic.df_accumulation_bytes,
-                        checked_mul(checked_mul(batch + 2, plan.accumulation), sizeof(double)));
+        diagnostic.df_accumulation_bytes = checked_add(
+            diagnostic.df_accumulation_bytes,
+            checked_mul(
+                plan.accumulation,
+                checked_add(checked_mul(batch, mixed_active ? sizeof(float) : sizeof(double)),
+                            2 * sizeof(double))));
         diagnostic.df_contraction_terms = checked_add(
             diagnostic.df_contraction_terms,
             use_pairs ? (batch > 1 ? generated::dfpairs::auxiliary_batched_contraction_terms(
                                          state.o, state.v, batch)
                                    : generated::dfpairs::auxiliary_packed_contraction_terms(
                                          state.o, state.v))
-            : batch > 1
+            : batch > 1 || mixed_active
                 ? generated::dfhoist::auxiliary_batched_contraction_terms(state.o, state.v, batch)
                 : plan.auxiliary_terms);
         if (plan.matrix_gemm) {
@@ -882,11 +998,12 @@ struct Owner {
                          ? generated::dfpairs::auxiliary_batched_packing_elements(state.o, state.v,
                                                                                   batch)
                          : generated::dfpairs::auxiliary_packed_packing_elements(state.o, state.v))
-              : batch > 1
+              : batch > 1 || mixed_active
                   ? generated::dfhoist::auxiliary_batched_packing_elements(state.o, state.v, batch)
                   : generated::dfhoist::auxiliary_packing_elements(state.o, state.v);
-          diagnostic.df_packing_bytes =
-              checked_add(diagnostic.df_packing_bytes, checked_mul(packing, 2 * sizeof(double)));
+          diagnostic.df_packing_bytes = checked_add(
+              diagnostic.df_packing_bytes,
+              checked_mul(packing, 2 * (mixed_active ? sizeof(float) : sizeof(double))));
         }
       }
       cuda_check(cudaGetLastError());
@@ -1142,7 +1259,11 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       [&](const std::optional<generated::DeviceIterationOutputs>& carried) {
         const auto iteration_started = std::chrono::steady_clock::now();
         generated::DeviceIterationOutputs output{};
-        if (carried) {
+        const bool warmup_exhausted =
+            owner.mixed_active &&
+            owner.diagnostic.df_mixed_evaluations >= options.df_mixed_precision_max_evaluations;
+        if (warmup_exhausted) owner.finish_mixed_warmup();
+        if (carried && !warmup_exhausted) {
           output = *carried;
         } else {
           output = owner.iteration(options.residual_tolerance);
@@ -1150,7 +1271,17 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
           if (owner.state.canonical_eps)
             owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
         }
-        const auto status = owner.read_status(output);
+        auto status = owner.read_status(output);
+        if (owner.mixed_active &&
+            (std::max(status[1], status[2]) <= options.df_mixed_precision_switch_residual ||
+             owner.diagnostic.df_mixed_evaluations >= options.df_mixed_precision_max_evaluations)) {
+          owner.finish_mixed_warmup();
+          output = owner.iteration(options.residual_tolerance);
+          ++owner.diagnostic.iteration_graph_calls;
+          if (owner.state.canonical_eps)
+            owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
+          status = owner.read_status(output);
+        }
         owner.diagnostic.iteration_seconds +=
             std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
                 .count();

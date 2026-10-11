@@ -337,7 +337,8 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   scf::FockBuildSpec fock;
   fock.spin =
       unrestricted(execution_plan) ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
-  if (options.preliminary_guess && fock.spin != scf::FockSpin::Restricted)
+  if (options.preliminary_guess && !options.preliminary_guess->automatic_cpu &&
+      fock.spin != scf::FockSpin::Restricted)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "preliminary SCF requires a restricted target");
   fock.derivative_order = 0;
@@ -856,6 +857,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
+    scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
@@ -895,6 +897,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
    * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
    * providers is currently admitted; UKS, CUDA, Direct, corrections and
    * unrepresented XC graphs remain fail-closed until separately qualified. */
+  [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
+      const noexcept {
+    return options_.preliminary_guess;
+  }
+
   [[nodiscard]] bool supports_native_pbe_force() const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE ||
@@ -2469,10 +2476,11 @@ class KsPreparedBatch final : public PreparedBatch {
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
 #if GENERATIVEQC_HAS_CUDA
-        if (item.plan->cuda_plan() && options_.preliminary_guess) {
+        if (item.plan->cuda_plan() && item.plan->initial_guess_policy()) {
           auto& diagnostic = preliminary_diagnostics[i];
           preliminary_requested[i] = true;
-          diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+          diagnostic.requested_kind =
+              static_cast<std::uint32_t>(item.plan->initial_guess_policy()->kind);
           diagnostic.target_attempts = 1;
           if (result.warm_start_used) {
             diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
@@ -2563,10 +2571,10 @@ class KsPreparedBatch final : public PreparedBatch {
           const bool discarded_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
           auto native = item.plan->run(seed, reuse && item.resident_warm,
                                        warm_enabled_ && warm_updates_, !attempt);
-          if (attempt && options_.preliminary_guess) {
+          if (attempt && item.plan->initial_guess_policy()) {
             auto& diagnostic = native.preliminary_guess;
             diagnostic.requested_kind =
-                static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+                static_cast<std::uint32_t>(item.plan->initial_guess_policy()->kind);
             diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
             diagnostic.target_attempts = 2;
             diagnostic.discarded_target_iterations = discarded_iterations;

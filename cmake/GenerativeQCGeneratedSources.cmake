@@ -1220,6 +1220,12 @@ macro(generativeqc_register_cuda_generated_sources target)
   set(_generativeqc_libxc_cuda_registry_args)
   set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+    # Packaging selects structural registrations, never numerical admission.
+    # Unpackaged codes retain the null-descriptor, fail-closed runtime path.
+    foreach(_generativeqc_libxc_cuda_functional IN LISTS GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS)
+      list(APPEND _generativeqc_libxc_cuda_registry_args
+           --functional "${_generativeqc_libxc_cuda_functional}")
+    endforeach()
     # The descriptor's capability identity hashes these compiler families,
     # including modules not imported by this run. The generic Python depfile
     # cannot see those bytes or the catalog/Maple/work-policy data reads.

@@ -1,0 +1,9 @@
+{
+  "schema": "generativeqc.historical-benchmark-history-pointer.v1",
+  "decision": "negative-evidence; opt-in retained",
+  "commit": "0d712298bd59f1842911ae481e3790b9a417df21",
+  "tree": "4db07a60ec635f7914d39936b55c33b20b54037a",
+  "manifest_sha256": "b60e01f6e79dc20d76cd21302798d0d40a23ed4c4e68a27f3f2811623e7b9cab",
+  "path": "benchmarks/results/issue1598-incremental-direct-jk-20261011",
+  "verifier": "tools/verify_issue1598_history.py"
+}

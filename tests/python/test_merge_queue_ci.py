@@ -69,10 +69,7 @@ def test_ci_aggregate_accepts_only_explicitly_confirmed_orphans() -> None:
     assert "Accept an orphaned merge-group run" in section
     assert "needs.merge_queue_liveness.outputs.active == 'false'" in section
     assert "needs.merge_queue_liveness.outputs.active != 'false'" in section
-    assert (
-        "if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}"
-        in section
-    )
+    assert "if: ${{ !cancelled() && github.event_name != 'push' }}" in section
 
 
 def test_dequeue_cleanup_cancels_only_runs_with_deleted_queue_refs() -> None:
@@ -95,12 +92,16 @@ def test_dequeue_cleanup_cancels_only_runs_with_deleted_queue_refs() -> None:
         ("merge_group", "refs/heads/gh-readonly-queue/master/pr-1", True),
         ("schedule", "refs/heads/master", True),
         ("workflow_dispatch", "refs/heads/master", True),
+        ("workflow_dispatch", "refs/tags/v0.1.0", True),
+        # Push runs build master caches/versioned artifacts; their required
+        # CPU/Python jobs are skipped, so the correctness aggregate skips too.
         ("push", "refs/heads/master", False),
-        ("push", "refs/heads/feature", True),
+        ("push", "refs/heads/feature", False),
+        ("push", "refs/tags/v0.1.0", False),
     ],
 )
 @pytest.mark.parametrize("cancelled", [True, False])
-def test_aggregate_gates_required_events_and_skips_only_master_pushes(
+def test_aggregate_gates_required_events_and_skips_push_runs(
     event: str, ref: str, expected: bool, cancelled: bool
 ) -> None:
     source = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")

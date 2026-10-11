@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -66,6 +67,82 @@ int main() {
                                                  0,
                                                  1};
     generativeqc::System helium(context, he_descriptor);
+
+    const std::array<generativeqc_atom, 1> ca_atoms{{{20, 0.0, 0.0, 0.0}}};
+    auto ca_descriptor = he_descriptor;
+    ca_descriptor.atoms = ca_atoms.data();
+    ca_descriptor.charge = 18;
+    generativeqc::System calcium_ion(context, ca_descriptor);
+    generativeqc_initial_guess_options automatic{};
+    automatic.struct_size = sizeof(automatic);
+    automatic.abi_version = GENERATIVEQC_ABI_VERSION;
+    automatic.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+    require(generativeqc_initial_guess_capabilities_v1() &
+                GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU,
+            "native automatic CPU execution capability is unavailable");
+    for (const auto method_name : {"rhf", "pbe-rks"}) {
+      auto automatic_method = generativeqc::default_method_descriptor(method_name);
+      automatic_method.initial_guess = &automatic;
+      const std::array<const generativeqc_system*, 2> mixed{{helium.get(), calcium_ion.get()}};
+      generativeqc_batch* handle = nullptr;
+      generativeqc::check(
+          generativeqc_batch_prepare(context.get(), mixed.data(), mixed.size(), &automatic_method,
+                                     GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, &handle));
+      const std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> owner(
+          handle, generativeqc_batch_destroy);
+      std::array<generativeqc_batch_item_result_descriptor, 2> results{};
+      for (auto& result : results) {
+        result.struct_size = sizeof(result);
+        result.abi_version = GENERATIVEQC_ABI_VERSION;
+      }
+      for (unsigned attempt = 0; attempt < 2; ++attempt) {
+        generativeqc::check(
+            generativeqc_batch_execute(handle, nullptr, 0, results.data(), results.size()));
+        for (std::size_t index = 0; index < results.size(); ++index) {
+          require(results[index].status == GENERATIVEQC_STATUS_SUCCESS,
+                  "native automatic mixed batch did not converge");
+          generativeqc_initial_guess_diagnostic diagnostic{};
+          diagnostic.struct_size = sizeof(diagnostic);
+          diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
+          const auto status =
+              generativeqc_batch_get_initial_guess_diagnostic(handle, index, &diagnostic);
+          if (index) {
+            require(status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                    "native Hcore fallback published a preliminary diagnostic");
+            continue;
+          }
+          generativeqc::check(status);
+          require(diagnostic.requested_kind == GENERATIVEQC_INITIAL_GUESS_MINAO,
+                  "an unsupported neighbor changed native automatic selection");
+          require(diagnostic.outcome == (attempt ? 1U : 2U),
+                  "native per-item cold/warm initial-guess lifecycle drifted");
+        }
+      }
+      automatic_method.initial_guess = nullptr;
+      generativeqc::Calculation core(context, calcium_ion, automatic_method);
+      const auto reference = core.execute();
+      require(std::abs(results[1].energy - reference.energy) < 1e-10,
+              "native automatic fallback changed target equations");
+      automatic_method.initial_guess = &automatic;
+      generativeqc::Calculation automatic_single(context, calcium_ion, automatic_method);
+      require(std::abs(automatic_single.execute().energy - reference.energy) < 1e-10,
+              "single-system native automatic fallback changed target equations");
+      automatic.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
+      automatic_method.initial_guess = &automatic;
+      handle = nullptr;
+      require(
+          generativeqc_batch_prepare(context.get(), mixed.data(), mixed.size(), &automatic_method,
+                                     0, &handle) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "explicit MINAO silently fell back for a heavy element");
+      automatic.kind = GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+      automatic.max_iterations = 65;
+      handle = nullptr;
+      require(
+          generativeqc_batch_prepare(context.get(), mixed.data(), mixed.size(), &automatic_method,
+                                     0, &handle) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "automatic domain fallback hid invalid preparation controls");
+      automatic.max_iterations = 0;
+    }
 
     generativeqc_method_descriptor method{sizeof(generativeqc_method_descriptor),
                                           GENERATIVEQC_ABI_VERSION,

@@ -59,3 +59,7 @@ This supersedes execution, not eager conformance, in
 [the eager boundary note](2026-10-11-array-api-standard-eager-boundary.md).
 Revisit when additional primitives/backends and higher-order transforms have
 independent gates, or allowed Slurm GPUs provide real-device evidence.
+
+The [molecular source-cut follow-up](2026-10-11-array-api-molecular-source-cuts.md)
+adds complete RHF nuclear-gradient composition without replacing this frontend
+or claiming arbitrary electronic-method or GPU-performance qualification.

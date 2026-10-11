@@ -28,6 +28,27 @@ from tools.generate_libxc_semilocal_cpu_registry import write_if_changed
 SHARD_COUNT = 32
 
 
+def select_entries(
+    functionals: list[str] | None = None,
+) -> tuple[AutomaticRegistryEntry, ...]:
+    """Select an explicit package, preserving structural order and provenance.
+
+    Absence of a selection preserves the existing opt-in full-catalog census.
+    Unsupported names fail before any output is written. Duplicate requests
+    cannot create duplicate kernels, and request order cannot change shards.
+    This is an artifact-content policy, not public or scientific admission.
+    """
+    entries = automatic_registry_entries()
+    if functionals is None:
+        return entries
+    requested = set(functionals)
+    known = {entry.name for entry in entries}
+    if not requested or requested - known:
+        unknown = ", ".join(sorted(requested - known)) or "<empty selection>"
+        raise ValueError(f"unregistered automatic CUDA AOT functional: {unknown}")
+    return tuple(entry for entry in entries if entry.name in requested)
+
+
 def emit_header() -> str:
     """Declare a transport lookup with process-lifetime library ownership."""
     return """// Generated automatic Libxc CUDA registry; do not edit.
@@ -71,7 +92,7 @@ const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t code) noexcep
 
 
 def emit_shard(index: int, entries: tuple[AutomaticRegistryEntry, ...]) -> str:
-    """Emit one bounded AOT unit from the common complete structural census."""
+    """Emit one bounded AOT unit from an authenticated structural package."""
     if not 0 <= index < SHARD_COUNT:
         raise ValueError("automatic CUDA registry shard index is out of range")
     selected = entries[index::SHARD_COUNT]
@@ -103,7 +124,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-directory", required=True, type=Path)
     parser.add_argument("--disabled", action="store_true")
+    parser.add_argument(
+        "--functional",
+        action="append",
+        help="package only requested structural registrations (repeatable)",
+    )
     args = parser.parse_args()
+    if args.disabled and args.functional:
+        parser.error("--functional cannot be combined with --disabled")
+    try:
+        entries = () if args.disabled else select_entries(args.functional)
+    except ValueError as error:
+        parser.error(str(error))
     output = args.output_directory
     write_if_changed(
         output / "generated_libxc_semilocal_cuda_registry.hpp", emit_header()
@@ -114,7 +146,6 @@ def main() -> None:
     )
     if args.disabled:
         return
-    entries = automatic_registry_entries()
     for index in range(SHARD_COUNT):
         write_if_changed(
             output / f"generated_libxc_semilocal_cuda_{index}.cu",

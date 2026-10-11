@@ -106,7 +106,8 @@ launcher. `cache`, `max_bytes`, `max_work`, `max_nodes` and `compile_timeout`
 control artifacts, resources and finite compiler lifetime. Forward and
 derivative programs pass the same backend admission. Native CPU supports float64
 contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
-`sqrt` and exact `pow`. Other operations fail closed; full eager conformance does
+`sqrt` and exact `pow`; CUDA admits float32 and float64 for these scalar functions.
+Other operations fail closed; full eager conformance does
 not imply full compiler coverage. Higher-order public transforms are unsupported.
 
 Inputs are non-differentiable by default. When the lowered program will be used
@@ -169,6 +170,187 @@ finite Python float literals as ordinary scalar values, so expressions such as
 of that Python float. During capture, negative-zero float literals are rejected because exact
 rational constants cannot preserve their sign. Explicitly scientific arrays
 retain the stricter exact-scalar spelling rules.
+
+## Generic native molecular method sources
+
+Use `xp.MolecularModel` to connect any **existing, supported** native
+`Calculator` method selector (such as `rhf`, `uhf`, or a qualified
+`pbe-rks`/`pbe0-rks` route) without writing a separate frontend or
+first-order TensorIR rule for each functional:
+
+```python
+pbe = xp.MolecularModel(("O", "H", "H"), method="pbe-rks",
+                        basis="sto-3g", backend="cpu")
+energy_grad = xp.value_and_grad(lambda coordinates: pbe(coordinates))
+value, gradient = energy_grad(coordinates)
+energy_grad.close()
+```
+
+`method` passes through the established native method/MethodIR resolution,
+using the native method's own analytic energy and force operators.
+`multiplicity`, `density_fitting` and `auxiliary_basis` are part of the
+immutable source identity; unknown or unsupported scientific combinations fail
+through the native capability/resource gate, without CPU or finite-difference
+fallback. This is an *interface generalization*, **not** evidence that all DFT
+functionals, ECPs, unrestricted or CC methods already provide qualified analytic
+nuclear gradients. Energy-only calls are allowed for energy-capable methods;
+`grad`/`value_and_grad` require the method's genuine analytic forces.
+The initial public method-neutral source remains host-staged FP64 and first
+order; higher-order implicit/response gradients are not inferred.
+
+### Diagnose small-endpoint overhead
+
+The opt-in environment switch
+`GENERATIVEQC_ARRAY_API_PROFILE=1` must be set **before constructing the
+compiled function**. `compiled.compilation_info()` then exposes
+`molecular_profile_ns` and `molecular_profile_counts`. The stages are
+`source_input_scan`, `source_geometry`, `source_calculator_lookup`,
+`source_native_singlepoint`, `source_result_publication`,
+`source_diagnostics`, `tensor_snapshot_binding`,
+`tensor_build_cold`, `molecular_dispatch`, and `tensor_execute`.
+`molecular_dispatch` includes its nested source stages, so do **not** sum all
+stage totals as if they were disjoint. Timings use CPU wall clocks around
+synchronous calls and are **not** CUDA-event/kernel measurements.
+
+For alternating complete energy-and-gradient endpoints with a separately
+subtracted cold profile:
+
+```bash
+python benchmarks/array_api_rhf_endpoint.py --backend cuda --molecule h2 \
+  --profile-molecular --repeats 10 --output /tmp/rhf-profile.json
+```
+
+This command still requires the documented bounded Slurm GPU allocation.
+`warm_phase_profile` reports the mean time per profiled warm call; profile
+sampling changes the measured timing and disables the ordinary 5% parity verdict.
+Run again without `--profile-molecular` for fair endpoint comparisons. Neither
+mode by itself certifies GPU peak memory or exact-J/K operator-work parity.
+
+## Compose native RHF energies with the unified molecular operator
+
+`MolecularModel` is a GenerativeQC extension, not a standard Array API function.
+Selecting `method="rhf"` binds the native all-electron closed-shell RHF solver
+and its complete analytic force endpoint. It composes inside ordinary captured
+Array API expressions:
+
+```python
+rhf = xp.MolecularModel(("O", "H", "H"), method="rhf", basis="sto-3g", backend="cpu")
+
+@xp.compile(backend="cpu")
+def energy(coordinates, strength):
+    separation = coordinates[1] - coordinates[2]
+    return rhf(coordinates) + strength * xp.sum(separation * separation)
+
+coordinates = xp.asarray(
+    [[0.0, 0.0, 0.0], [0.0, -1.43, 1.11], [0.0, 1.43, 1.11]],
+    dtype=xp.float64,
+)
+energy_and_gradient = xp.value_and_grad(energy, argnums=0)
+value, nuclear_gradient = energy_and_gradient(coordinates, xp.asarray(0.0))
+forces = -nuclear_gradient
+energy_and_gradient.close()
+energy.close()
+```
+
+Coordinates have shape `(number_of_nuclei, 3)` in **Bohr**, energy is total
+**Hartree**, and nuclear gradients/forces are **Hartree/Bohr**. These are full
+geometric derivatives, including orbital stationarity, basis/Pulay and nuclear
+repulsion contributions. They are **not** the density derivative/Fock test
+described earlier. Nonlinear surrounding energy expressions and compiled
+geometry transformations use the same first-order chain rule. `grad`, combined
+`value_and_grad`, JVP and snapshot VJP are supported. Changed geometries always
+run a new native endpoint; identical operator/geometry expressions within one
+capture share one source invocation. VJP replay uses the saved forward source
+and does not rerun SCF after the caller changes an input.
+
+The molecular method is an **explicit native source cut**. Capture records its
+settings and geometry subprogram without loading a native library or executing
+SCF. The derivative tape contains its local first-order jet; after AD lowering,
+runtime binds that jet exactly at the snapshot geometry, preserving the native
+energy without duplicate displacement arithmetic. TensorIR compiles the
+surrounding algebra and its chain rule; the native RHF driver still owns the
+solver and its analytic molecular derivative. This does not differentiate the
+SCF iteration history, implement arbitrary electronic methods, or add higher
+derivatives/response solvers. A molecular `lower()` result requires its public
+compiled owner's source bindings; it is not a standalone TensorIR executable
+with only the user's original inputs.
+
+Configuration requires a nonempty tuple of at most 256 nuclei, a valid
+method-specific electron/spin occupation, an admitted Gaussian basis, float64
+coordinates, finite positive tolerances and bounded iteration counts. Restricted
+RHF specifically requires a positive even electron count and singlet multiplicity.
+Scientifically annotated coordinates must use complete, spin-independent `atom`
+and `cartesian` index spaces; matching AO/orbital extents do not authorize a
+nuclear-coordinate binding. These domains survive native snapshots and AD.
+Density fitting, unrestricted methods and ECPs are admitted *only* when the
+selected native Calculator supports the exact requested basis, backend and
+analytic derivative; the generic interface does not create missing scientific
+capabilities. Nested molecular dependencies in geometry remain unsupported.
+Capture admits at most 16 distinct molecular sources. Native
+nonconvergence, basis/derivative/resource errors propagate without publication
+or fallback. `resource_budget` is the existing `ResourceBudget` for native method
+preflight; the compiler's `max_bytes`/`max_work`/`max_nodes` bound **tensor algebra**,
+not the independent SCF/J/K endpoint's work or resident memory.
+
+`backend="cuda"` must be selected on both `MolecularModel` and `compile`/AD, with the same
+logical `device`. The interface stages host coordinates/results, not resident
+GPU arrays. CUDA failures do not rerun on CPU. The native CPU ABI calls its
+scientific backend `cpu_reference`; this label means the **native C++ CPU method**,
+not `backend="reference"`'s Array API interpreter. Molecular source execution
+does not support the latter. `compilation_info()["molecular_calls"]` reports
+native backend, source/force call counts, SCF iteration totals and last geometry
+identity. `close()` releases retained native method and compiled tensor owners.
+
+Run CPU endpoint acceptance with an actual built/installed native library:
+
+```bash
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
+  pytest -q tests/python/test_array_api_molecular.py
+GENERATIVEQC_LIBRARY=build/libgenerativeqc.so PYTHONPATH=python:. \
+  python benchmarks/array_api_rhf_endpoint.py --backend cpu --molecule water \
+    --repeats 10 --output /tmp/array-api-rhf-cpu.json
+```
+
+The benchmark compares identical FP64 exact-J/K complete energy/nuclear-gradient
+calls with fresh Hcore starts, alternates order, separates cold JIT, and reports
+numerical errors and actual SCF iterations. It reports a measured 5% timing
+target separately from qualification: peak memory and a complete native
+operator-work inventory are not measured by this script. **No GPU parity is
+qualified by a CPU result.** CUDA tests/benchmarks require an explicit finite-time
+Slurm `srun` on an allowed node (`n1`, `n2`, `n4`, `n5`), a compatible partition/GPU
+request and the unchanged scheduler-assigned `CUDA_VISIBLE_DEVICES`. Select
+`GENERATIVEQC_ARRAY_API_CUDA_TEST=1` for the real-device molecular test, or
+`--backend cuda` for the benchmark; source/planner checks are not device evidence.
+Pass `--cuda-arch` matching the selected GPU when it differs from the default
+`sm_120`; this selects the tensor compiler target without changing Slurm visibility.
+SSH host aliases and Slurm node names are distinct: these machines report
+`node1`, `node2`, `node4`, and `node5` to the scheduler. Both verified naming
+forms are admitted; `n3`/`node3` remains excluded during maintenance.
+
+On an allowed remote machine with a source-matched CUDA library and the verified
+compiler-cache launcher/toolkit on `PATH`, run the real-device acceptance and
+complete endpoint benchmark in the same allocation. For example, after connecting
+to `n4` and changing to that machine's checkout:
+
+```bash
+srun --partition=main --nodelist=node4 --gres=gpu:5090:1 \
+  --nodes=1 --ntasks=1 --cpus-per-task=8 --mem=24G --time=00:20:00 \
+  bash -lc '
+    set -e
+    export PYTHONPATH=python:.
+    export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+    export GENERATIVEQC_ARRAY_API_CUDA_TEST=1 GENERATIVEQC_TENSOR_ARCH=sm_120
+    python -m pytest -q tests/python/test_array_api_native_cuda.py \
+      tests/python/test_array_api_molecular.py
+    python benchmarks/array_api_rhf_endpoint.py --backend cuda --cuda-arch sm_120 \
+      --molecule water --repeats 10 --output /tmp/array-api-rhf-gpu.json
+  '
+```
+
+The scheduled molecular gate checks H2/STO-3G, HeH+/def2-SVP and water/STO-3G
+gradients against independent central energy differences, plus compiled nonlinear
+geometry composition and a mutation-safe reusable VJP. A CUDA library build or
+planner test alone does not satisfy this gate.
 
 ## Scientific metadata remains explicit
 

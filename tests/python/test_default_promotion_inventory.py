@@ -44,6 +44,19 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+def test_partial_source_default_requires_new_qualification(tmp_path: Path) -> None:
+    """A measured explicit mask cannot silently become the production default."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_jk_source_policy.hpp"
+    original = source.read_text()
+    source.write_text(original.replace("mask{(1U << 28) - 1}", "mask{32752}"))
+    assert any(
+        "experimental partial source default or admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 @pytest.mark.parametrize(
     "relative,before,after",
     [
@@ -843,25 +856,34 @@ def test_preliminary_initial_guess_default_is_audited(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("initializer", ["{}", "{false}", " = false"])
+@pytest.mark.parametrize(
+    "relative,structure,control",
+    [
+        ("src/cc/solver.hpp", "SolverOptions", "cc-option:new_default_off_path"),
+        (
+            "src/cc/lambda_response.hpp",
+            "LambdaOptions",
+            "cc-option:lambda.new_default_off_path",
+        ),
+    ],
+)
 def test_new_cc_default_off_option_must_be_registered(
-    tmp_path: Path, initializer: str
+    tmp_path: Path, initializer: str, relative: str, structure: str, control: str
 ) -> None:
+    """New primal and response controls must not bypass policy registration."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
-    source = tmp_path / "src/cc/solver.hpp"
+    source = tmp_path / relative
     original = source.read_text()
     changed = original.replace(
-        "struct SolverOptions {",
-        f"struct SolverOptions {{\n  bool new_default_off_path{initializer};",
+        f"struct {structure} {{",
+        f"struct {structure} {{\n  bool new_default_off_path{initializer};",
         1,
     )
     assert changed != original
     source.write_text(changed)
     errors = validate_inventory(payload, root=tmp_path)
-    assert any(
-        "cc-option:new_default_off_path" in error and "unregistered" in error
-        for error in errors
-    )
+    assert any(control in error and "unregistered" in error for error in errors)
 
 
 @pytest.mark.parametrize("initializer", ["{}", "{false}", " = false"])

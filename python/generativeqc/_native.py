@@ -39,6 +39,7 @@ PROPERTY_FORCES = 1 << 1
 INITIAL_GUESS_CAPABILITY_HF = 1 << 0
 INITIAL_GUESS_CAPABILITY_LDA = 1 << 1
 INITIAL_GUESS_CAPABILITY_MINAO = 1 << 2
+INITIAL_GUESS_CAPABILITY_AUTO_CPU = 1 << 3
 BACKEND_CPU_REFERENCE = 0
 BACKEND_CUDA = 1
 BACKEND_HYBRID_CUDA = 2
@@ -291,6 +292,21 @@ class InitialGuessOptionsDescriptor(ctypes.Structure):
         ("radial_points", ctypes.c_uint32),
         ("angular_polar", ctypes.c_uint32),
         ("angular_azimuth", ctypes.c_uint32),
+    ]
+
+
+class InitialGuessAutoPolicyDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("method", ctypes.c_int32),
+        ("backend", ctypes.c_int32),
+        ("precision_mode", ctypes.c_int32),
+        ("density_fitting_mode", ctypes.c_int32),
+        ("restricted", ctypes.c_uint32),
+        ("has_ecp", ctypes.c_uint32),
+        ("atomic_numbers", ctypes.POINTER(ctypes.c_int32)),
+        ("atom_count", ctypes.c_size_t),
     ]
 
 
