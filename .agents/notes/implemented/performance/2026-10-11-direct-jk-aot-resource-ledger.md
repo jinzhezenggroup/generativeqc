@@ -304,6 +304,12 @@ different line-marker-sensitive context. The gate rejects sccache rather than
 silently treating the two source spellings as equivalent; the repository's
 general compiler-cache preference remains unchanged for other consumers.
 
+The gate also rejects non-empty `NVCC_PREPEND_FLAGS` and
+`NVCC_APPEND_FLAGS` before any generation, cache lookup, or compilation. NVCC
+applies those environment options outside explicit argv and append flags can
+override optimizer/resource settings without changing preprocessed bytes; they
+therefore cannot be allowed to replay a cubin under the qualified identity.
+
 ## Production Ninja recipe and PIC binding
 
 Independent CMake-shaped controls then showed that cache/config fields alone

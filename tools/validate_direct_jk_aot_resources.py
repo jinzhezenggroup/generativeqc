@@ -108,6 +108,20 @@ class LedgerError(ValueError):
     """Raised when the committed ledger is missing or structurally invalid."""
 
 
+def validate_ambient_nvcc_flags() -> None:
+    """Reject NVCC environment overrides that can supersede explicit argv."""
+    overrides = {
+        name: os.environ.get(name, "")
+        for name in ("NVCC_PREPEND_FLAGS", "NVCC_APPEND_FLAGS")
+        if os.environ.get(name, "")
+    }
+    if overrides:
+        raise ValueError(
+            "production AOT resource qualification forbids ambient NVCC flag "
+            f"overrides: {overrides!r}"
+        )
+
+
 def _tool_version(tool: Path) -> str:
     result = subprocess.run(
         [str(tool), "--version"], check=True, capture_output=True, text=True, timeout=30
@@ -1008,6 +1022,7 @@ def run_measurement(
     """
     # Read CMake's configured values, including -D/preset overrides, before
     # generation or compilation. A constant alone cannot guard production drift.
+    validate_ambient_nvcc_flags()
     working_directory, cache_executable, effective_launcher = (
         validate_production_shard_count(cmake_cache, nvcc)
     )

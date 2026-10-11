@@ -870,6 +870,21 @@ class TestCompileImplementationIdentity:
 
 
 class TestProductionContextBinding:
+    @pytest.mark.parametrize("name", ["NVCC_PREPEND_FLAGS", "NVCC_APPEND_FLAGS"])
+    def test_ambient_nvcc_flags_fail_closed(
+        self, monkeypatch: pytest.MonkeyPatch, name: str
+    ) -> None:
+        monkeypatch.setenv(name, "--maxrregcount=32")
+        with pytest.raises(ValueError, match=name):
+            validator.validate_ambient_nvcc_flags()
+
+    def test_empty_ambient_nvcc_flags_are_the_qualified_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("NVCC_PREPEND_FLAGS", "")
+        monkeypatch.setenv("NVCC_APPEND_FLAGS", "")
+        validator.validate_ambient_nvcc_flags()
+
     def test_release_definition_is_in_preprocessing_and_flag_identity(self) -> None:
         command = validator._preprocess_command(
             Path("/fake/nvcc"), Path("shard.cu"), Path("generated")
