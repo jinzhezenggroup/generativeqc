@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "sha256": "e9c07fc2ccbb3f31364d66330e6d4c83607a63a5929844cb81f0940c0802b4f3",
+      "path": "pyscf/cc/gccsd_t.py",
+      "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/gccsd_t.py"
+    },
+    {
+      "sha256": "4c0bf0e03192ce0e162de785380334db88f26cc604d538f62d63091bf27b6ddb",
+      "path": "pyscf/cc/uccsd_t_slow.py",
+      "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/uccsd_t_slow.py"
+    }
+  ],
+  "license": "Apache-2.0",
+  "version": "2.14.0"
+}

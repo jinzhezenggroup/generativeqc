@@ -120,3 +120,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
 Choose a currently available permitted node and its compatible partition/GPU
 type; do not schedule a maintenance node. An unallocated host run skips the
 CUDA-only cases and is not evidence of CUDA correctness.
+
+## Shared unrestricted triples tiles
+
+The [unrestricted triples tile graph](uccsd_triples.md) reuses these amplitudes,
+spin-labelled feed conventions and native TensorIR backends for canonical (T)
+channels. Its fixed-amplitude qualification does not imply a complete UCCSD(T)
+energy or nuclear-force owner.
