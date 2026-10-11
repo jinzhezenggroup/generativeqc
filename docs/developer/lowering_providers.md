@@ -560,6 +560,11 @@ KS force qualification: `generativeqc_structured_scf_endpoint_probe`,
 `generativeqc_stationary_pbe_uks_spd_manifest`. Building only `generativeqc` does
 not refresh optional force companions; stale compiler contracts must remain
 rejected rather than rewriting manifest hashes around an old binary.
+Use `through-d-{cartesian,spherical}` and `large-spd-{cartesian,spherical}`
+for the admitted KS analytic-force domain. The original through-f and def2-TZVP
+fixtures remain distinct: unsupported KS f-shell force rows stay rejected and
+cannot provide complete-endpoint profitability, even when their energy/D/F and
+final-state diagnostics pass. They do not authorize a CPU/reference fallback.
 
 KS Direct J/K transform submissions borrow the KS matrix owner's frozen context
 only for the call; the longer-lived integral source stores no borrowed binding.

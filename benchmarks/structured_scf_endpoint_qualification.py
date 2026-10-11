@@ -43,16 +43,22 @@ def write_json(path: Path, value: dict) -> None:
 
 
 def model(case: str, method: str, moved: bool = False) -> dict:
-    """Small, through-f rectangular, and 96-AO domains without molecule selectors."""
+    """Cover admitted spd endpoints and retain explicit unsupported f-force domains."""
     restricted = method in ("rhf", "rks")
     representation = "spherical" if case.endswith("spherical") else "cartesian"
-    if case.startswith("through-f"):
+    if case.startswith(("through-d", "through-f")):
         numbers, positions = [2, 1], [[0.0, 0.0, 0.0], [0.3, 0.2, 1.6]]
-        basis = "diagnostic-spdf"
+        basis = "diagnostic-spd" if case.startswith("through-d") else "diagnostic-spdf"
     else:
         numbers = [8, 1, 1]
         positions = [[0.0, 0.0, 0.0], [1.43, 0.0, 1.11], [-1.43, 0.0, 1.11]]
-        basis = "sto-3g" if case == "small" else "def2-tzvp"
+        basis = (
+            "sto-3g"
+            if case == "small"
+            else "def2-svp"
+            if case.startswith("large-spd")
+            else "def2-tzvp"
+        )
         if case.startswith("large"):
             numbers *= 2
             positions += [[0.3, 0.2, 5.4], [1.66, 0.3, 6.62], [-1.18, 0.1, 6.43]]
@@ -64,7 +70,7 @@ def model(case: str, method: str, moved: bool = False) -> dict:
         "atomic_numbers": numbers,
         "coordinates": positions,
         "charge": (1 if restricted else 0)
-        if basis == "diagnostic-spdf"
+        if basis.startswith("diagnostic-spd")
         else (0 if restricted else 1),
         "multiplicity": 1 if restricted else 2,
         "basis": basis,
@@ -92,13 +98,14 @@ def basis_and_inputs(spec: dict) -> tuple:
         )
     )
     basis = spec["basis"]
-    if basis == "diagnostic-spdf":
+    if basis.startswith("diagnostic-spd"):
         elements = tuple(
             ElementBasis(
                 number,
                 tuple(
                     BasisShell(angular, (str(exponent),), (("1",),))
                     for angular, exponent in shell_data
+                    if angular <= (2 if basis == "diagnostic-spd" else 3)
                 ),
             )
             for number, shell_data in (
@@ -445,6 +452,9 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
                         "energy": item.energy if np.isfinite(item.energy) else None,
                         "forces": None if item.forces is None else item.forces.tolist(),
                         "iterations": item.iterations,
+                        "transport_diagnostic": None
+                        if item.ks_transport_diagnostic is None
+                        else item.ks_transport_diagnostic.to_payload(),
                         "complete_seconds": seconds,
                         "preparation_seconds": preparation if phase == 0 else 0.0,
                         "cold_total_seconds": preparation + seconds
@@ -455,7 +465,7 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
                         if item.ks_diagnostic is None
                         else item.ks_diagnostic.to_payload(),
                     }
-                    if item.succeeded:
+                    if item.converged:
                         from benchmarks.ks_matrix_provider_qualification import (
                             final_state_gates,
                         )
@@ -497,8 +507,12 @@ def main() -> int:
             "small",
             "through-f-cartesian",
             "through-f-spherical",
+            "through-d-cartesian",
+            "through-d-spherical",
             "large-cartesian",
             "large-spherical",
+            "large-spd-cartesian",
+            "large-spd-spherical",
         ),
         required=True,
     )

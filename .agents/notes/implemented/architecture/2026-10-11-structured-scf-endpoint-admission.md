@@ -51,6 +51,20 @@ thresholds remain unchanged. Native HF orbital downloads are column-major,
 unlike exported symmetric matrices; transpose each orbital frame before applying
 generalized-eigen/metric gates rather than weakening those gates.
 
+Endpoint admission is bounded by the existing consumer contract. CUDA KS force
+descriptors admit s/p/d only: retain through-f and def2-TZVP energy/D/F diagnostics
+as negative complete-force evidence, and qualify through-d plus def2-SVP endpoints
+independently. Unsupported force rows cannot earn profitability or authorize a
+CPU/PySCF force substitution. Do not change the original f fixtures into d fixtures.
+
+The first native HF endpoint fixture omitted the molecular owner's radial and
+contraction normalization. Both generated/library runs then agreed with each
+other but failed the independent reference. Normalize raw shells using the same
+public molecular preparation seam before creating the cached owner. Separately,
+building the main library does not rebuild optional stationary force companions;
+their old compiler contracts correctly failed closed. Build the companion manifest
+targets and retain the rejected rows, rather than relabeling old binaries.
+
 ## Rejected alternatives
 
 - Store a KS binding in the integral source: risks dangling views after geometry

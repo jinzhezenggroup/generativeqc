@@ -88,3 +88,20 @@ def test_nonfinite_reference_is_rejected_without_nan_errors(field: str) -> None:
     result = qualification.assess(actual, reference)
     assert result["accepted"] is False
     assert result["errors"][field] is None
+
+
+@pytest.mark.parametrize("case", ["through-d-cartesian", "through-d-spherical"])
+def test_admitted_spd_fixture_preserves_rectangular_transform_domain(case: str) -> None:
+    spec = qualification.model(case, "rks")
+    _, _, inputs, _ = qualification.basis_and_inputs(spec)
+    assert max(shell["angular_momentum"] for shell in inputs["shells"]) == 2
+    assert len(inputs["atomic_numbers"]) == 2
+    assert inputs["charge"] == 1
+
+
+def test_large_spd_fixture_does_not_silently_change_the_f_fixture() -> None:
+    spd = qualification.model("large-spd-cartesian", "rks")
+    original = qualification.model("large-cartesian", "rks")
+    assert spd["basis"] == "def2-svp"
+    assert original["basis"] == "def2-tzvp"
+    assert spd["coordinates"] == original["coordinates"]
