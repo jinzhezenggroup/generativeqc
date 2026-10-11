@@ -106,7 +106,7 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     assert "python-nightly:" not in section
     assert "env: &python_ci_env" not in section
     assert "steps: &python_ci_steps" not in section
-    assert 'test_targets+=(tests/python/test_wb97mv_complete.py)' in section
+    assert "test_targets+=(tests/python/test_wb97mv_complete.py)" in section
     assert 'test_targets+=("${nightly_hessian_paths[@]}")' in section
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
