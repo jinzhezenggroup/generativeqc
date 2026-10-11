@@ -75,9 +75,7 @@ class NativeCliScopeTests(unittest.TestCase):
         with patch.object(
             scope.subprocess,
             "run",
-            return_value=subprocess.CompletedProcess(
-                [], 0, stdout=paths, stderr=b""
-            ),
+            return_value=subprocess.CompletedProcess([], 0, stdout=paths, stderr=b""),
         ) as command:
             self.assertEqual(scope.select_tier("merge_group", BASE, HEAD), "fast")
             self.assertIn("-z", command.call_args.args[0])
