@@ -38,7 +38,7 @@
     {
       "name": "cuda-release-cli-sm120",
       "displayName": "Standalone native CUDA CLI distribution (sm_120)",
-      "description": "Release CUDA/AOT code generation, PCH, compiler cache and a static GenerativeQC core; no Python runtime.",
+      "description": "Single native C++/CUDA executable: production AOT compiled into core, no Python-only stationary plug-ins; ccache/PCH enabled.",
       "inherits": "cuda-release-sm120",
       "binaryDir": "${sourceDir}/build/cuda-release-cli-sm120",
       "cacheVariables": {
@@ -46,7 +46,7 @@
         "GENERATIVEQC_BUILD_CLI": "ON",
         "GENERATIVEQC_BUILD_TESTS": "OFF",
         "GENERATIVEQC_ENABLE_AOT_SHELLS": "ON",
-        "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT": "ON",
+        "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT": "OFF",
         "GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT": "ON",
         "GENERATIVEQC_ENABLE_CXX_PCH": "ON",
         "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
