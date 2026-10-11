@@ -56,6 +56,17 @@ describes the final attempt; it is not a count or history of all discarded
 work. Complete endpoint timing and transport measurement must include every
 attempt and preparation/finalization phase separately.
 
+`BatchItemResult.fock_builds` is a separate execution-level target-Fock count.
+Ordinary device-fused CUDA KS inventories every normally terminated attempt,
+including a discarded nonconverged warm attempt and its cold retry. Each
+attempt's physical-build event ledger must agree with its actual counter;
+nonconvergence does not fabricate a final-state precision audit. Exceptions,
+missing inventories, chunk/replay execution, or counter overflow leave the
+endpoint count unavailable (`None`), even if the retry converges. The returned
+`ks_diagnostic.fock_builds` and history keep their final-attempt meaning.
+Preliminary-method work remains in its separate initial-guess diagnostic and
+is not included in this target-Fock count.
+
 Valid nonconverged batch items retain their actual history. Invalid or
 numerically failed items have no diagnostic. A replay invalidates cached C
 records before executing; Python snapshots from earlier results remain

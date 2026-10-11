@@ -765,7 +765,9 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds ( c
 
 Physical Fock builds in the last counted batch execution, including final
 rebuilds. CPU owners and CUDA KS owners with a complete operator census are
-supported. A joint UHF alpha/beta J/K evaluation counts once. Returns
+supported. Retry-aware ordinary CUDA KS owners include all normally
+terminated target attempts; preliminary-method work is reported separately.
+A joint UHF alpha/beta J/K evaluation counts once. Returns
 NOT_IMPLEMENTED for unexecuted items, uninstrumented CUDA paths (including
 chunk/replay), or incompletely counted warm-to-cold retries. The result is
 never inferred from iteration count.
