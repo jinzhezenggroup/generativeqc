@@ -129,10 +129,11 @@ Packed layout metadata is included in complete numeric admission. Allocation or
 capacity refusal preserves whole-source exact Direct fallback.
 
 The analogous `GENERATIVEQC_KS_RESIDENT_BUCKET_MASK` and
-`GENERATIVEQC_KS_RESIDENT_MAX_BYTES` controls apply to eligible restricted,
-full-range FP64 global hybrids, including PBE0. Their unset mask retains complete
-residency; the unset ceiling retains KS's existing method/domain policy. These
-do not bypass the complete resource planner, enable UKS/RSH/DF, or widen cold
+`GENERATIVEQC_KS_RESIDENT_MAX_BYTES` controls apply to eligible full-range
+strict-FP64 Direct RKS/UKS owners, including Coulomb-only, global-hybrid and
+compatible nonlocal compositions. Their unset mask retains complete residency;
+the unset ceiling retains KS's existing method/domain policy. These controls
+do not bypass the complete resource planner, enable RSH/DF, or widen cold
 automatic eligibility. Screened partial sources freeze and share the incumbent
 Schwarz row layout and compact bucket extents before choosing storage. They do
 not cache density-dependent masks or regenerate a full source per action.
