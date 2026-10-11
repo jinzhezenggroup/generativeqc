@@ -8,8 +8,8 @@ preparing a cuBLAS binding prove that it executed.
 
 ## Follow-up source
 
-The endpoint follow-up is based on master `140160231`; the independently qualified
-measured scientific source is `7d8f4ba22883f9c3accfec70a3e8640510ffbe2c`, with scientific
+The endpoint follow-up is based on master `140160231`; the measured scientific
+source is `7d8f4ba22883f9c3accfec70a3e8640510ffbe2c`, with scientific
 inventory `9aa64b6d646babde52e5420799f377c01850624e5043f382ef4c2b011d2937f3`.
 Receipt-only changes do not change that scientific inventory. This is a follow-up
 to merged #2263, not a replacement of its primitive qualification.
@@ -25,11 +25,9 @@ to merged #2263, not a replacement of its primitive qualification.
   transform envelopes. A requested Graph is not an admitted/executed Graph.
 
 The original post-fix endpoint source `607d47b1e2383bdd7618ddc9264f9d7a8205d6b2`
-was based on `bd6f78288`, before rebasing onto merged #2263. Its separate
-[science](endpoint-science-607d47b1e.json),
-[performance decision summary](endpoint-performance-607d47b1e.json), and
-[validation](endpoint-validation-607d47b1e.json) receipts are historical evidence,
-not validation of the new tip. The new source is rebuilt and rerun independently;
+was based on `bd6f78288`, before rebasing onto merged #2263. Its compact
+[outcome/decision/validation history](endpoint-history-607d47b1e.json) is historical
+evidence, not validation of the new tip. The new source is rebuilt and rerun independently;
 no old measurements are relabelled with its SHA.
 
 ### Recorded results for `7d8f4ba22`
@@ -53,12 +51,15 @@ on the 48-public/50-direct domain; its span envelope is 292/4,800. That KS trace
 records stream submissions, not Graph admission. These observations establish
 executed adoption, not profitability or full-method/default qualification.
 
-JSON publications are compact machine-readable records to respect the repository
-retention budget. Scientific phase arrays follow `phase_order`; performance
-observations use a zero-based `profile_index` to borrow the corresponding full
-identity without duplicating it. The final report preserves every paired cost,
-work count and policy decision. The historical performance publication retains
-decisions and the hash of the complete raw report; its original timings/work
+JSON publications use losslessly expanding tables to respect the repository
+retention budget: combine `defaults` with each `columns`/`rows` pair, then remove
+fields identified by zero-based `absent` indices. Scientific phase arrays follow
+`phase_order`. Performance identities combine `identity_defaults` and the profile
+identity; `model_key` resolves model, reference and artifact facts from the
+scientific receipt. Observations borrow that identity with a zero-based
+`profile_index`. The final report preserves every paired cost, work count and
+policy decision. The historical publication retains outcomes, decisions and
+raw receipt/report hashes; its original phases, errors and timings/work
 remain in the recorded ignored local directory, not a new archive or Release.
 
 ## Admission boundaries
