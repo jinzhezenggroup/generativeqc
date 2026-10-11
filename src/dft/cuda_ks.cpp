@@ -2490,7 +2490,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool direct_global_hybrid =
         has_exchange && restricted_global_hybrid_exchange_coefficient(exchange_coefficient) &&
         !fitted_coulomb && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
-        !incremental_direct_jk && final_spec.derivative_order == 0 && final_spec.coulomb.present &&
+        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        final_spec.derivative_order == 0 && final_spec.coulomb.present &&
         final_spec.coulomb.coefficient == 1.0 &&
         final_spec.coulomb.approximation == scf::FockApproximation::Exact &&
         final_spec.coulomb.op == scf::FockOperator::FullRange && final_spec.exchange.present &&
