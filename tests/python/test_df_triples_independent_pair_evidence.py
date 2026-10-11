@@ -55,7 +55,10 @@ def repaired_source_hashes(
         (BUNDLE / "post-qualification-allocation-repair.json").read_text()
     )
     assert metadata["schema"] == "generativeqc.post-qualification-source-repair.v1"
-    assert metadata["pre_repair_submission_commit"] == "be4a7ab285cddccb237e4f663bac424f5205ec0b"
+    assert (
+        metadata["pre_repair_submission_commit"]
+        == "be4a7ab285cddccb237e4f663bac424f5205ec0b"
+    )
     assert metadata["validation"]["new_gpu_run"] is False
     patch = BUNDLE / metadata["patch"]["path"]
     assert patch.name == "post-qualification-allocation-repair.patch"
