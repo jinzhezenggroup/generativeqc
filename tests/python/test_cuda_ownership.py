@@ -31,6 +31,19 @@ def test_current_report_is_generated_deterministically_from_source_and_ledger() 
     assert any((root / "docs/cuda_ownership/files").rglob("*.json"))
 
 
+def test_shared_execution_qualifiers_have_exact_runtime_ownership() -> None:
+    """Shared execution annotations must stay explicitly inventoried."""
+    root = Path(__file__).resolve().parents[2]
+    ledger = load_ledger(root / "docs/cuda_ownership")
+    path = "src/integrals/execution_qualifiers.hpp"
+    record = next(row for row in ledger["files"] if row["path"] == path)
+    assert record["role"] == record["subsystem"] == "runtime"
+    assert record["regions"] == []
+    ledger["files"].remove(record)
+    with pytest.raises(ValueError, match="unclassified=.*execution_qualifiers"):
+        ownership_report(root, ledger)
+
+
 def ledger_for(tmp_path: typing.Any) -> typing.Any:
     (tmp_path / "src").mkdir()
     (tmp_path / "src/sample.cu").write_text(
