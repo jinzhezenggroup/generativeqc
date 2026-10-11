@@ -47,8 +47,8 @@ builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
 `master` push, using the `cuda-release-cli-sm120` CMake preset:
 
 - Full `Release` code generation (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`),
-  AOT shell/stationary kernels, precompiled C++ headers, ccache, and the pinned
-  CUDA 12.9 toolchain.
+  CLI-reachable AOT shell kernels and native CPU derivative shards, precompiled
+  C++ headers, ccache, and the pinned CUDA 12.9 toolchain.
 - `GENERATIVEQC_MONOLITHIC_CLI=ON`: links the GenerativeQC **core** statically
   into `bin/generativeqc`, removing its `libgenerativeqc.so` dependency.
   The normal shared-library C++ SDK and Python wheel are unchanged.
@@ -73,9 +73,14 @@ a Git SHA suffix. A binary includes the compiled native core, but this is **not*
 a fully statically linked Linux executable: CUDA runtime/math libraries and the
 NVIDIA driver, plus normal host providers (such as OpenBLAS, OpenSSL and
 libarchive), still need to be installed. On a host with a nonstandard CUDA
-library location, configure the dynamic loader's library path. Separately
-compiled stationary AOT plug-ins and their manifests stay in the archive's
-`lib/` directory; preserve that directory next to `bin/`.
+library location, configure the dynamic loader's library path. The archive
+contains **one GenerativeQC executable** (`bin/generativeqc`), with no
+GenerativeQC shared libraries or separate stationary AOT plug-ins. Existing
+native AOT shell and CPU derivative code is compiled into the C++ core. The
+independent `stationary_*` CUDA derivative `.so` modules serve the Python
+force-consumer route, which the native CLI does not invoke, so bundling those
+modules would not add native CLI force capabilities. Their Python package and
+shared-SDK distribution semantics are unchanged.
 
 The current distributable specifically targets **sm_120 (Blackwell)**. It does
 not support every CUDA architecture (for example, Ada sm_89) without a separate
