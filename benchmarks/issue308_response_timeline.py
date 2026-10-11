@@ -40,6 +40,7 @@ from benchmarks.df_component_ledger import (
     read_trace,
 )
 from benchmarks.issue206_resident_sentinel import validate_response_record
+from tools.generativeqc_validation.record import load_record
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
@@ -65,6 +66,16 @@ CANDIDATE_CONTROLS = (
     "GENERATIVEQC_DF_RESPONSE_ALGEBRA",
     "GENERATIVEQC_DF_RAW_STAGING",
 )
+
+
+def retained_force_reference_path(path: Path) -> Path:
+    """Resolve a retained plain reference or its lossless gzip companion."""
+    path = path.resolve()
+    if not path.is_file() and path.suffix == ".json":
+        companion = path.with_suffix(".json.gz")
+        if companion.is_file():
+            return companion
+    return path
 
 
 def validate_three_center_response_work(
@@ -259,10 +270,10 @@ def main() -> None:
         / "benchmarks/results/issue206-metric-gemv/measurements"
         / f"{args.aos}ao-b{args.batch}-forces-blas.json"
     )
-    reference_path = reference_path.resolve()
+    reference_path = retained_force_reference_path(reference_path)
     if not reference_path.is_file():
         parser.error("supply --reference with a retained matched complete-force result")
-    reference = json.loads(reference_path.read_text())
+    reference = load_record(reference_path)
     case = benchmark_cases()[CASES[args.aos]]
     geometries = scaled_geometries(case.atoms, args.batch)
     inputs = reference["workload"]
