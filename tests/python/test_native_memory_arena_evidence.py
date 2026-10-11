@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
-import gzip
+import hashlib
 import json
+import lzma
 import re
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-RECORD = ROOT / "benchmarks/results/native-memory-arena-20261011/evidence.json.gz"
+RECORD = ROOT / "benchmarks/results/native-memory-arena-20261011/evidence.json.xz"
 
 
 @pytest.fixture(scope="module")
 def evidence() -> dict:
-    return json.loads(gzip.decompress(RECORD.read_bytes()))
+    stored = RECORD.read_bytes()
+    raw = lzma.decompress(stored)
+    metadata = json.loads(RECORD.with_name("storage.json").read_text())
+    assert len(stored) == metadata["stored_bytes"]
+    assert hashlib.sha256(stored).hexdigest() == metadata["stored_sha256"]
+    assert len(raw) == metadata["decoded_bytes"] == 6_352_916
+    assert hashlib.sha256(raw).hexdigest() == metadata["decoded_sha256"]
+    assert (
+        metadata["decoded_sha256"]
+        == "e8b1b1541e3df8364c72a3f7254b3c73a9ce110d7014cbfaa8241aae13acbd6e"
+    )
+    return json.loads(raw)
 
 
 def test_cross_size_default_has_a_separate_serial_scratch_boundary(

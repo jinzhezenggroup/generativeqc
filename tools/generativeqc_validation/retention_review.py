@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import lzma
 from collections import Counter
 from pathlib import PurePosixPath
 
@@ -35,6 +36,11 @@ def raw_json_markers(path: str, data: bytes) -> list[str]:
         try:
             data = gzip.decompress(data)
         except (OSError, EOFError):
+            return []
+    elif path.endswith(".json.xz"):
+        try:
+            data = lzma.decompress(data)
+        except (lzma.LZMAError, EOFError):
             return []
     elif not path.endswith(".json"):
         return []

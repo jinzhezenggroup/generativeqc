@@ -11,7 +11,7 @@ operator order are unchanged.
 Qualification is source-bound. Reusing this record for another revision, a
 different provider/cache choice or combined serial scratch is not valid.
 Cross-size CMake generation is default-on after the complete lifecycle comparisons
-retained in `evidence.json.gz`; it is not justified by arena slot counts alone.
+retained in `evidence.json.xz`; it is not justified by arena slot counts alone.
 Serial scratch is not promoted.
 
 ## Scope and observations
@@ -81,3 +81,8 @@ record. No release, external archive or publishing workflow is created.
 
 See `.agents/notes/implemented/performance/2026-10-11-memory-aware-native-arena-candidates.md`
 for the lifetime/capacity proof, rejected alternatives and promotion boundary.
+
+The XZ record decodes to the exact original 6,352,916 JSON bytes.
+`storage.json` pins both stored and decoded hashes and the original Git object
+for independent recovery. Recompression changes no measurements, rows, scripts,
+source bytes, unfavorable outcomes or acceptance decisions.
