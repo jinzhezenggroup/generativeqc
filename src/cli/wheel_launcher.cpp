@@ -37,8 +37,7 @@ fs::path executable_path() {
 #elif defined(__APPLE__)
   char placeholder[1] = {};
   std::uint32_t count = sizeof(placeholder);
-  if (::_NSGetExecutablePath(placeholder, &count) == 0)
-    return fs::canonical(fs::path(placeholder));
+  if (::_NSGetExecutablePath(placeholder, &count) == 0) return fs::canonical(fs::path(placeholder));
   std::vector<char> buffer(count + 1, '\0');
   if (::_NSGetExecutablePath(buffer.data(), &count) != 0)
     throw std::runtime_error("cannot locate the wheel launcher executable");
