@@ -227,18 +227,14 @@ def _hf_rows(
                     base["generativeqc"]["energies_hartree"],
                     inc["generativeqc"]["energies_hartree"],
                 )
-                for base, inc in zip(
-                    baseline_records, incremental_records, strict=True
-                )
+                for base, inc in zip(baseline_records, incremental_records, strict=True)
             )
             force_difference = max(
                 _maximum_abs_difference(
                     base["generativeqc"]["forces_hartree_per_bohr"],
                     inc["generativeqc"]["forces_hartree_per_bohr"],
                 )
-                for base, inc in zip(
-                    baseline_records, incremental_records, strict=True
-                )
+                for base, inc in zip(baseline_records, incremental_records, strict=True)
             )
             baseline_branches = _branches(baseline_records[0])
             incremental_branches = _branches(incremental_records[0])
@@ -334,11 +330,7 @@ def main() -> None:
     hf_rows, library_sha, hf_failures = _hf_rows(args, args.input)
     ks_rows, ks_failures = _ks_rows(args.input)
     ledger_path = args.input / "ledger" / "nvidia-smi.tsv"
-    ledger_lines = (
-        sum(1 for _ in ledger_path.open())
-        if ledger_path.exists()
-        else 0
-    )
+    ledger_lines = sum(1 for _ in ledger_path.open()) if ledger_path.exists() else 0
 
     payload = {
         "schema_version": 1,
@@ -365,12 +357,8 @@ def main() -> None:
         "all_iteration_branches_match": all(
             row["iteration_branches_match"] for row in hf_rows
         ),
-        "any_warm_endpoint_win": any(
-            row["warm_speedup"] > 1.0 for row in hf_rows
-        ),
-        "any_cold_endpoint_win": any(
-            row["cold_speedup"] > 1.0 for row in hf_rows
-        ),
+        "any_warm_endpoint_win": any(row["warm_speedup"] > 1.0 for row in hf_rows),
+        "any_cold_endpoint_win": any(row["cold_speedup"] > 1.0 for row in hf_rows),
         "best_warm_speedup": max(row["warm_speedup"] for row in hf_rows),
         "best_cold_speedup": max(row["cold_speedup"] for row in hf_rows),
     }
@@ -390,8 +378,8 @@ def main() -> None:
             f"{row['cold_speedup']:>12.3f}  "
             f"{row['incremental_work']['quartet_tile_reduction_fraction']:>11.3%}  "
             f"{row['incremental_work']['shell_quartet_reduction_fraction']:>12.3%}  "
-            f"{str(row['iteration_branches_match']):>8}  "
-            f"{str(row['numerical_gate_passed']):>9}"
+            f"{row['iteration_branches_match']!s:>8}  "
+            f"{row['numerical_gate_passed']!s:>9}"
         )
     for row in ks_rows:
         if "median_complete_seconds" in row:
