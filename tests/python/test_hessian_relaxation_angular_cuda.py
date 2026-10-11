@@ -80,7 +80,7 @@ def test_asymmetric_pd_weighted_gradient_matches_native_derivatives(
                 )
             actual = owner.finish()
             assert owner.statistics["weight_uploads"] == 1
-        axes = [np.arange(o, o + source.shell_sizes[s]) for o, s in zip(offsets, slots)]
+        axes = [np.arange(o, o + source.shell_sizes[s]) for o, s in zip(offsets, slots, strict=True)]
         # The CPU derivative oracle has its own native recurrence. It does not
         # call the generated scalar DAG, emitter or CUDA contraction under test.
         raw = source.integral_derivatives()["eri"]

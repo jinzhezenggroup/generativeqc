@@ -57,7 +57,7 @@ def test_physical_components_and_history_match_independent_state(
             ]
         )
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms)],
+        atom=[(label, atom.position) for label, atom in zip(labels, atoms, strict=True)],
         basis=basis,
         charge=charge,
         spin=multiplicity - 1,
@@ -127,7 +127,7 @@ def test_physical_components_and_history_match_independent_state(
     # CPU RKS and UKS both close a converged iterate with the physical Fock.
     expected_rebuilds = 0 if device == "cuda" else 2
     assert diagnostic.fock_builds == native.iterations + expected_rebuilds
-    for previous, current in zip(diagnostic.history, diagnostic.history[1:]):
+    for previous, current in zip(diagnostic.history, diagnostic.history[1:], strict=False):
         assert current.energy_change == pytest.approx(
             abs(current.components.total - previous.components.total), abs=1e-14
         )
