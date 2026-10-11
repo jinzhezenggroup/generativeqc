@@ -20,6 +20,11 @@ controls for both execution and warm-retry diagnostics and allocation semantics.
 Selection reuses explicit MINAO admission; projection and target equations are
 unchanged. Invalid controls still fail before a domain fallback can hide them.
 
+For that positively discovered CPU path, a basis package's unused ECP records
+are not a constructor-wide veto. The actual target's ECP cores/terms determine
+per-item admission. Explicit requests and CUDA/old-library constructors retain
+their previous conservative basis-level ECP checks.
+
 Add a population-aware allocation-free system query using the existing request
 structure rather than extending its v1 layout. Python marshals normalized topology
 and records input-ordered resolved kinds in the resource schedule identity. It
@@ -49,7 +54,7 @@ Target admission remains responsible for invalid methods, spin and basis.
 Native policy tests cover discovery, populations, malformed descriptors and
 controls. Installed-compatible C++ batch tests exercise mixed He/Ca2+ cold/warm
 execution for RHF/PBE and explicit rejection. Python endpoint tests extend this
-to RHF/PBE/PBE0 moved coordinates, failed neighbors and retained-state replay,
+to RHF/PBE/PBE0 mixed ECP/all-electron bases, moved coordinates, failed neighbors and retained-state replay,
 plus exact/below-limit resource admission and planner-query effect tests.
 Acceptance is limited to this CPU policy slice, not the complete #2227 tracker.
 

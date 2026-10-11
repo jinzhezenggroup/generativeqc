@@ -1065,11 +1065,20 @@ class Calculator:
             self._ks_options is not None
             and self._ks_options.method_ir.spin == "unpolarized"
         )
+        native_per_item_guess = False
         if self._automatic_initial_guess:
-            from .initial_guess import _automatic_minao_model_eligible
+            from .initial_guess import (
+                _automatic_minao_model_eligible,
+                _uses_native_automatic_cpu,
+            )
 
+            native_per_item_guess = _uses_native_automatic_cpu(self)
+            # A basis package can contain unused ECP records. Only the qualified
+            # native per-item path may defer those facts to actual target admission.
             if _automatic_minao_model_eligible(
-                self, restricted=restricted, has_ecp=basis_has_ecp
+                self,
+                restricted=restricted,
+                has_ecp=basis_has_ecp and not native_per_item_guess,
             ):
                 self._initial_guess = InitialGuessSpec("minao")
 
@@ -1087,7 +1096,10 @@ class Calculator:
                 or self._precision_mode != _native.PRECISION_FP64
                 or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                 or not restricted
-                or basis_has_ecp
+                or (
+                    basis_has_ecp
+                    and not (self._automatic_initial_guess and native_per_item_guess)
+                )
                 or self._capabilities.family
                 not in ("hartree_fock", "density_functional")
             ):

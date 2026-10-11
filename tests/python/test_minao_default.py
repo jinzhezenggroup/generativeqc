@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from generativeqc import (
+    BasisProvenance,
+    BasisSet,
+    BasisShell,
     Calculator,
+    ElementBasis,
     GridSpec,
     InitialGuessSpec,
     KsOptions,
@@ -239,6 +243,77 @@ def test_all_ineligible_default_keeps_target_inventory(native: None) -> None:
         reference.energy, abs=1e-10
     )
     assert result.initial_guess is None
+
+
+@pytest.mark.parametrize("method", ["rhf", "pbe-rks", "pbe0-rks"])
+def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
+    native: None, method: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unused ECP metadata is not a model-wide veto on a per-system policy."""
+    potential = {
+        "ecp_type": "scalar_ecp",
+        "angular_momentum": [0],
+        "r_exponents": [2],
+        "gaussian_exponents": ["0.8"],
+        "coefficients": [["-2"]],
+    }
+    shells = (BasisShell(0, ("1",), (("1",),)),)
+    basis = BasisSet(
+        "mixed automatic-policy fixture",
+        (
+            ElementBasis(2, shells),
+            ElementBasis(
+                11, shells, ecp_core_electrons=10, ecp_data=json.dumps([potential])
+            ),
+        ),
+        BasisProvenance("synthetic test", "1", "CC0", "0" * 64),
+    )
+    options = (
+        {"ks_options": KsOptions(grid=GridSpec(8, 6, 12))}
+        if method.endswith("-rks")
+        else {}
+    )
+    systems = [[("He", (0, 0, 0))], [("Na", (0, 0, 0))]]
+    automatic = Calculator(method, basis, device="cpu", **options)
+    core = Calculator(method, basis, device="cpu", initial_guess=None, **options)
+    assert automatic.initial_guess == InitialGuessSpec("minao")
+    assert automatic.capabilities == core.capabilities
+    request = automatic._resource_request(
+        systems,
+        charges=[0, -1],
+        properties=("energy",),
+        ks_options=automatic.ks_options,
+    )
+    assert json.loads(request.identity.schedule)["initial_guess_resolved_kinds"] == [
+        3,
+        0,
+    ]
+    with core.prepare_batch(systems, charges=[0, -1]) as batch:
+        reference = batch.execute(strict=True, properties=("energy",))
+    with automatic.prepare_batch(systems, charges=[0, -1]) as batch:
+        result = batch.execute(strict=True, properties=("energy",))
+        warm = batch.execute(strict=True, properties=("energy",))
+    assert result.items[0].initial_guess["outcome"] == "used"
+    assert warm.items[0].initial_guess["outcome"] == "existing_density"
+    assert result.items[1].initial_guess is None and warm.items[1].initial_guess is None
+    assert [item.energy for item in result.items] == pytest.approx(
+        [item.energy for item in reference.items], abs=1e-9
+    )
+    with pytest.raises(NotImplementedError, match="MINAO requires"):
+        Calculator(
+            method,
+            basis,
+            device="cpu",
+            initial_guess=InitialGuessSpec("minao"),
+            **options,
+        )
+    monkeypatch.setattr(
+        automatic._library,
+        "generativeqc_initial_guess_capabilities_v1",
+        lambda: _native.INITIAL_GUESS_CAPABILITY_MINAO,
+    )
+    legacy = Calculator(method, basis, device="cpu", **options)
+    assert legacy.initial_guess is None
 
 
 def test_default_checkpoint_density_skips_preparation(
