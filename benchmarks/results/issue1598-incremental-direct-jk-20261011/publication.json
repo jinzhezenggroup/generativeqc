@@ -144,12 +144,6 @@
    "role": "samples"
   },
   {
-   "path": "old/rhf/direct-96-baseline-1.json.gz",
-   "bytes": 26307,
-   "sha256": "d30a6e94bb8f7a45cc3b9c0f5e8787073e717cfa899c35806e523ff098c3ac77",
-   "role": "samples"
-  },
-  {
    "path": "old/rhf/direct-96-baseline-1.outcome.gz",
    "bytes": 77,
    "sha256": "451c72ae271f03ebb86f43b8cac63e7068d55b82a5e51f0a36df4eb914c8076a",
@@ -181,8 +175,8 @@
   },
   {
    "path": "README.md",
-   "bytes": 3411,
-   "sha256": "a7ac11dd47e1b8198616d441243dc58a6bf3701ae11a4ad767c3916f07b3da5f",
+   "bytes": 11520,
+   "sha256": "f61fff9ee4e09a304b8aeb17dfe5bdfecd9e8bc8d9859395cac304e09cb28d79",
    "role": "reproduction"
   },
   {
