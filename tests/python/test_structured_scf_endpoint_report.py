@@ -17,6 +17,7 @@ def receipt(mask: int, repeat: int, seconds: float = 1.0) -> dict:
         "host": "node1",
         "gpu_inventory": "GPU-uuid, RTX5090, driver",
         "cuda_visible_devices": "1",
+        "reference_sha256": {"0": "reference0", "1": "reference1"},
         "mask": mask,
         "repeat": repeat,
         "status": "PASS",

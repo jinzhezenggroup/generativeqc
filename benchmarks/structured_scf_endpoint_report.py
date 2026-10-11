@@ -18,6 +18,7 @@ IDENTITY_FIELDS = (
     "host",
     "gpu_inventory",
     "cuda_visible_devices",
+    "reference_sha256",
 )
 
 
@@ -130,6 +131,14 @@ def compare(
                     ],
                     "candidate_iterations": [
                         row["iterations"] for row in offered["rows"]
+                    ],
+                    "generated_fock_builds": [
+                        (row.get("diagnostic") or {}).get("fock_builds")
+                        for row in generated["rows"]
+                    ],
+                    "candidate_fock_builds": [
+                        (row.get("diagnostic") or {}).get("fock_builds")
+                        for row in offered["rows"]
                     ],
                     "generated_seconds": native_costs,
                     "candidate_seconds": library_costs,

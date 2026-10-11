@@ -562,16 +562,28 @@ def main() -> int:
         ["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT, text=True
     ).strip():
         raise ValueError("qualification requires clean committed source")
+    source = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+    ).strip()
+    library_sha256 = hashlib.sha256(args.library.read_bytes()).hexdigest()
     try:
+        reference_sha256 = {
+            str(moved): hashlib.sha256(
+                (args.reference / f"{moved}.json").read_bytes()
+            ).hexdigest()
+            for moved in (0, 1)
+        }
         rows = (
             hf_probe(spec, args.output, args.driver.resolve(), args.mask, args.batch)
             if args.method.endswith("hf")
             else ks_probe(spec, args.output, args.library, args.mask, args.batch)
         )
         for row in rows:
-            reference = json.loads(
-                (args.reference / f"{int(row['phase'] >= 3)}.json").read_text()
-            )
+            moved = str(int(row["phase"] >= 3))
+            reference_bytes = (args.reference / f"{moved}.json").read_bytes()
+            if hashlib.sha256(reference_bytes).hexdigest() != reference_sha256[moved]:
+                raise ValueError("independent reference changed during qualification")
+            reference = json.loads(reference_bytes)
             _, _, inputs, _ = basis_and_inputs(
                 model(args.case, args.method, row["phase"] >= 3)
             )
@@ -583,6 +595,19 @@ def main() -> int:
                     "reference scientific inputs do not match the endpoint"
                 )
             row["assessment"] = assess(row, reference)
+        if (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+            ).strip()
+            != source
+            or subprocess.check_output(
+                ["git", "status", "--porcelain", "--untracked-files=no"],
+                cwd=ROOT,
+                text=True,
+            ).strip()
+            or hashlib.sha256(args.library.read_bytes()).hexdigest() != library_sha256
+        ):
+            raise ValueError("source or selected library changed during qualification")
     except Exception as error:
         write_json(
             args.output / "receipt.json",
@@ -593,6 +618,7 @@ def main() -> int:
                 "model": spec,
                 "mask": args.mask,
                 "batch": args.batch,
+                "source": source,
                 "profitable": None,
                 "default_promoted": False,
             },
@@ -622,10 +648,10 @@ def main() -> int:
             ],
             text=True,
         ).strip(),
-        "source": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
-        ).strip(),
-        "library_sha256": hashlib.sha256(args.library.read_bytes()).hexdigest(),
+        "source": source,
+        "source_identity": loaded.generativeqc_get_source_identity().decode(),
+        "library_sha256": library_sha256,
+        "reference_sha256": reference_sha256,
         "slurm_job": os.environ["SLURM_JOB_ID"],
         "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
         "profitable": None,
