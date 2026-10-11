@@ -298,8 +298,28 @@ def test_native_xc_batch_defaults_are_audited(
         ),
         (
             "src/dft/cuda_ks_final_validation_policy.hpp",
-            "fock_exchange_coefficient == -0.125",
-            "fock_exchange_coefficient == -0.25",
+            "std::isfinite(coefficient)",
+            "true",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "coefficient < 0.0",
+            "coefficient <= 0.0",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "coefficient >= -0.5",
+            "coefficient >= -1.0",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "final_validation_partial && matrix_products.library_enabled()",
+            "matrix_products.library_enabled()",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "final_validation_partial && matrix_products.library_enabled()",
+            "final_validation_partial",
         ),
         (
             "src/dft/cuda_ks.cpp",
@@ -311,7 +331,7 @@ def test_native_xc_batch_defaults_are_audited(
 def test_native_ks_final_validation_default_is_audited(
     tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
-    """Default promotion must not silently expand the measured scope or leases."""
+    """Audit exact-hybrid bounds and required matrix resources and live leases."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / relative
