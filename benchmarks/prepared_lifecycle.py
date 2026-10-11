@@ -19,6 +19,11 @@ from typing import Any
 import numpy as np
 from generativeqc import Calculator
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 HE = [("He", (0.0, 0.0, 0.0))]
 
@@ -119,7 +124,7 @@ def main() -> None:
     parser.add_argument("--method", choices=("rhf", "pbe-rks"), required=True)
     parser.add_argument("--forces", action="store_true")
     parser.add_argument("--repeats", type=int, default=5)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     arguments = parser.parse_args()
     if arguments.repeats <= 0:
         parser.error("repeats must be positive")
