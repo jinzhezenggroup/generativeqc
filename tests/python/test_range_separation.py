@@ -207,9 +207,9 @@ def test_primitive_parts_against_independent_libcint(
     centers = [(0.1, 0.2, -0.1), (0.4, -0.3, 0.2), (-0.2, 0.6, 0.3), (0.3, 0.2, 0.8)]
     labels = [f"H{i}" for i in range(4)]
     mol = pyscf.gto.M(
-        atom=list(zip(labels, centers)),
+        atom=list(zip(labels, centers, strict=True)),
         basis={
-            label: [[0, [exponent, 1.0]]] for label, exponent in zip(labels, exponents)
+            label: [[0, [exponent, 1.0]]] for label, exponent in zip(labels, exponents, strict=True)
         },
         unit="Bohr",
         cart=True,
@@ -352,10 +352,10 @@ def test_generated_range_values_and_all_center_derivatives_against_libcint(
     actual, derivative = evaluate(centers)
     labels = [f"H{i}" for i in range(4)]
     mol = pyscf.gto.M(
-        atom=list(zip(labels, centers)),
+        atom=list(zip(labels, centers, strict=True)),
         basis={
             label: [[l, [exponent, 1.0]]]
-            for label, l, exponent in zip(labels, angular, exponents)
+            for label, l, exponent in zip(labels, angular, exponents, strict=True)
         },
         unit="Bohr",
         cart=True,
@@ -364,7 +364,7 @@ def test_generated_range_values_and_all_center_derivatives_against_libcint(
     normalization = []
     from generativeqc_compiler.integral.shell_spec import cartesian_components
 
-    for slot, (l, exponent) in enumerate(zip(angular, exponents)):
+    for slot, (l, exponent) in enumerate(zip(angular, exponents, strict=True)):
         norm = []
         for component in cartesian_components(l):
             powers = tuple(component.count(axis) for axis in "xyz")

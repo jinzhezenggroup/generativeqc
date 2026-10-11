@@ -91,7 +91,7 @@ def test_every_public_cartesian_component_against_pyscf(
         exponents = [alpha] * len(components[0]) + [beta] * len(components[1])
         raw_norms = [
             gaussian_self_norm(e, name)
-            for e, name in zip(exponents, components[0] + components[1])
+            for e, name in zip(exponents, components[0] + components[1], strict=True)
         ]
         scales = np.sqrt(overlap.diagonal() / raw_norms)
         raw_reference = reference / np.outer(scales, scales)

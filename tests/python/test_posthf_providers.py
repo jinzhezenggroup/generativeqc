@@ -218,7 +218,7 @@ def test_actual_f_partial_shell_tiles(source_factory: typing.Any) -> None:
         if request.shell_indices == (0, 1, 2, 0):
             begin = source.global_offsets(request)
             tile = source.tile(request)
-            slices = tuple(slice(b, b + n) for b, n in zip(begin, tile.shape))
+            slices = tuple(slice(b, b + n) for b, n in zip(begin, tile.shape, strict=True))
             np.testing.assert_allclose(tile, a["ao"][slices], atol=1e-11, rtol=1e-10)
             found |= request.tile.shape[1] == 1
     assert found
