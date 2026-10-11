@@ -27,7 +27,10 @@ def _program(backend: str) -> Program:
     return codegen._prepare_production(codegen.iteration_program(2, 3), backend)
 
 
-def test_shared_plan_retained_slots_exclude_every_dynamic_write() -> None:
+@pytest.mark.parametrize("cross_size", [False, True])
+def test_shared_plan_retained_slots_exclude_every_dynamic_write(
+    cross_size: bool,
+) -> None:
     cpu, cuda = (_program(backend) for backend in ("cpu", "cuda"))
     plans = [codegen._iteration_reuse_plan(program) for program in (cpu, cuda)]
     assert plans[0].identity == plans[1].identity
@@ -36,7 +39,13 @@ def test_shared_plan_retained_slots_exclude_every_dynamic_write() -> None:
     for program, plan in zip((cpu, cuda), plans):
         nodes = codegen._execution_nodes(program)
         numbers = {node: number for number, node in enumerate(nodes)}
-        arena = codegen._arena_plan(program, retained_nodes=plan.invariant_nodes)
+        with codegen.cross_size_arena_candidate(cross_size):
+            arena = codegen._arena_plan(program, retained_nodes=plan.invariant_nodes)
+            unretained = codegen._arena_plan(program)
+        # Retained owners keep their established exclusive layout in either mode.
+        assert arena == codegen._arena_plan(
+            program, retained_nodes=plan.invariant_nodes
+        )
         arenas.append(arena)
         pinned = {arena.node_slots[numbers[node]] for node in plan.invariant_nodes}
         assert len(pinned) == len(plan.invariant_nodes)
@@ -52,10 +61,13 @@ def test_shared_plan_retained_slots_exclude_every_dynamic_write() -> None:
         # position followed a same-shaped dynamic temporary.
         for o, v in ((1, 1), (1, 7), (7, 1), (2, 3), (20, 80)):
             extents = {"o": o, "v": v}
-            sizes = [math.prod(extents[x] for x in shape) for shape in arena.slots]
+            sizes = [
+                max(math.prod(extents[x] for x in shape) for shape in capacity)
+                for capacity in arena.slots
+            ]
             assert sum(sizes) >= sum(
-                math.prod(extents[x] for x in shape)
-                for shape in codegen._arena_plan(program).slots
+                max(math.prod(extents[x] for x in shape) for shape in capacity)
+                for capacity in unretained.slots
             )
     assert arenas[0] == arenas[1]
     with pytest.raises(ValueError, match="conventional"):
