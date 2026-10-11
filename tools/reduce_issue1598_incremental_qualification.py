@@ -93,6 +93,8 @@ def _branches(record: dict[str, Any]) -> list[tuple[int, ...]]:
 
 
 def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[str, Any]:
+    if phase not in ("cold", "warm"):
+        raise ValueError("unexpected incremental work phase")
     samples = (
         [{"convergence": record["generativeqc"]["cold_convergence"]}]
         if phase == "cold"
@@ -106,85 +108,76 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
     typed = [value for value in diagnostics if isinstance(value, dict)]
     if any(value.get("active") is not True for value in typed):
         raise ValueError("incremental benchmark did not activate Direct-J/K updates")
-    anchor_builds = sum(_count(value["anchor_full_builds"]) for value in typed)
-    bypass_builds = sum(_count(value["bypass_full_builds"]) for value in typed)
-    post_scf_builds = sum(_count(value["post_scf_full_builds"]) for value in typed)
-    full_builds = anchor_builds + bypass_builds + post_scf_builds
-    build_categories = {
-        "anchor_full_builds": anchor_builds,
-        "bypass_full_builds": bypass_builds,
-        "post_scf_full_builds": post_scf_builds,
-        # CUDA quartet counters cover SCF anchors/deltas, not bypass or
-        # post-SCF finalization. Keep endpoint build totals separate.
-        "quartet_work_scope": "SCF anchor/delta builds only",
+    categories = {
+        key: sum(_count(value[key]) for value in typed)
+        for key in ("anchor_full_builds", "bypass_full_builds", "post_scf_full_builds")
     }
-    delta_builds = sum(_count(value["delta_builds"]) for value in typed)
-    full_shells = sum(_count(value["full_admitted_shell_quartets"]) for value in typed)
-    delta_shells = sum(
-        _count(value["delta_admitted_shell_quartets"]) for value in typed
-    )
-    full_tiles = sum(_count(value["full_admitted_quartet_tiles"]) for value in typed)
-    delta_tiles = sum(_count(value["delta_admitted_quartet_tiles"]) for value in typed)
-    if phase == "cold" and any(
-        value.get("quartet_work_counters_valid") is not True for value in typed
-    ):
-        return {
-            "phase": "cold",
-            "sample_count": len(typed),
-            **build_categories,
-            "full_builds": full_builds,
-            "delta_builds": delta_builds,
-            "no_incremental_opportunity": delta_builds == 0,
-            "quartet_work_counters_valid": False,
-            "shell_quartet_reduction_fraction": None,
-            "quartet_tile_reduction_fraction": None,
-        }
-    if delta_builds == 0:
-        # A population that converges before the first delta update has no
-        # incremental opportunity; quartet counters may legitimately be
-        # invalid there, and its timings remain valid matched endpoints.
-        if anchor_builds == 0:
-            raise ValueError("incremental benchmark lacks measurable anchor work")
-        return {
-            "sample_count": len(typed),
-            **build_categories,
-            "full_builds": full_builds,
-            "delta_builds": 0,
-            "full_admitted_shell_quartets_per_build": (
-                full_shells / anchor_builds if full_shells else None
-            ),
-            "delta_admitted_shell_quartets_per_build": 0.0,
-            "shell_quartet_reduction_fraction": 0.0,
-            "full_admitted_quartet_tiles_per_build": (
-                full_tiles / anchor_builds if full_tiles else None
-            ),
-            "delta_admitted_quartet_tiles_per_build": 0.0,
-            "quartet_tile_reduction_fraction": 0.0,
-            "no_incremental_opportunity": True,
-        }
-    if any(value.get("quartet_work_counters_valid") is not True for value in typed):
-        raise ValueError("incremental quartet work counters are not complete")
-    if anchor_builds == 0 or full_shells == 0 or full_tiles == 0:
-        raise ValueError("incremental benchmark lacks measurable anchor work")
-    full_shells_per_build = full_shells / anchor_builds
-    delta_shells_per_build = delta_shells / delta_builds
-    full_tiles_per_build = full_tiles / anchor_builds
-    delta_tiles_per_build = delta_tiles / delta_builds
-    return {
+    anchors = categories["anchor_full_builds"]
+    deltas = sum(_count(value["delta_builds"]) for value in typed)
+    fields = [
+        f"{mode}_{kind}_shell_quartets"
+        for mode in ("full", "delta")
+        for kind in ("candidate", "admitted", "rejected")
+    ] + ["full_admitted_quartet_tiles", "delta_admitted_quartet_tiles"]
+    recorded = {key: sum(_count(value[key]) for value in typed) for key in fields}
+    valid = all(value.get("quartet_work_counters_valid") is True for value in typed)
+    result = {
+        "phase": phase,
         "sample_count": len(typed),
-        **build_categories,
-        "full_builds": full_builds,
-        "delta_builds": delta_builds,
-        "full_admitted_shell_quartets_per_build": full_shells_per_build,
-        "delta_admitted_shell_quartets_per_build": delta_shells_per_build,
-        "shell_quartet_reduction_fraction": 1.0
-        - delta_shells_per_build / full_shells_per_build,
-        "full_admitted_quartet_tiles_per_build": full_tiles_per_build,
-        "delta_admitted_quartet_tiles_per_build": delta_tiles_per_build,
-        "quartet_tile_reduction_fraction": 1.0
-        - delta_tiles_per_build / full_tiles_per_build,
-        "no_incremental_opportunity": False,
+        **categories,
+        "full_builds": sum(categories.values()),
+        "delta_builds": deltas,
+        "no_incremental_opportunity": deltas == 0,
+        "quartet_work_scope": "SCF anchor/delta builds only",
+        "quartet_work_counters_valid": valid,
+        # Preserve raw diagnostics separately; invalid counters are not zero work.
+        "recorded_quartet_counts": recorded,
+        **{key: recorded[key] if valid else None for key in fields},
     }
+    for kind in ("candidate", "admitted", "rejected"):
+        result[f"{kind}_shell_quartet_reduction_fraction"] = None
+        for mode in ("full", "delta"):
+            result[f"{mode}_{kind}_shell_quartets_per_build"] = None
+    result["admitted_quartet_tile_reduction_fraction"] = None
+    for mode in ("full", "delta"):
+        result[f"{mode}_admitted_quartet_tiles_per_build"] = None
+    if not valid:
+        if phase == "warm" and deltas:
+            raise ValueError("incremental quartet work counters are not complete")
+        if phase == "warm" and not anchors:
+            raise ValueError("incremental benchmark lacks measurable anchor work")
+        return result
+    if not anchors:
+        raise ValueError("incremental benchmark lacks measurable anchor work")
+    for value in typed:
+        for mode in ("full", "delta"):
+            if value[f"{mode}_candidate_shell_quartets"] != (
+                value[f"{mode}_admitted_shell_quartets"]
+                + value[f"{mode}_rejected_shell_quartets"]
+            ):
+                raise ValueError("candidate/admitted/rejected quartet counts disagree")
+        if value["delta_builds"] == 0 and any(
+            value[key] for key in fields if key.startswith("delta_")
+        ):
+            raise ValueError("delta quartet work without a delta build")
+    for kind in ("candidate", "admitted", "rejected"):
+        full = recorded[f"full_{kind}_shell_quartets"] / anchors
+        delta = recorded[f"delta_{kind}_shell_quartets"] / deltas if deltas else 0.0
+        result[f"full_{kind}_shell_quartets_per_build"] = full
+        result[f"delta_{kind}_shell_quartets_per_build"] = delta
+        result[f"{kind}_shell_quartet_reduction_fraction"] = (
+            1.0 - delta / full if deltas and full else (0.0 if not deltas else None)
+        )
+    full_tiles = recorded["full_admitted_quartet_tiles"] / anchors
+    delta_tiles = recorded["delta_admitted_quartet_tiles"] / deltas if deltas else 0.0
+    result["full_admitted_quartet_tiles_per_build"] = full_tiles
+    result["delta_admitted_quartet_tiles_per_build"] = delta_tiles
+    result["admitted_quartet_tile_reduction_fraction"] = (
+        1.0 - delta_tiles / full_tiles
+        if deltas and full_tiles
+        else (0.0 if not deltas else None)
+    )
+    return result
 
 
 def _source_identity(record: dict[str, Any]) -> tuple[Any, ...]:
@@ -200,6 +193,8 @@ def _source_identity(record: dict[str, Any]) -> tuple[Any, ...]:
         or type(source["dirty"]) is not bool
     ):
         raise ValueError("invalid measured source identity")
+    if source["dirty"]:
+        raise ValueError("qualification requires a clean measured checkout")
     accelerator = record["environment"]["accelerator"]
     return (
         commit,
@@ -620,9 +615,42 @@ def _ks_rows(root: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             or not device
         ):
             raise ValueError("KS control build/device identity missing")
-        current = (library, source, device, record["allocation"])
+        environment = record.get("environment")
+        expected_controller = {
+            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK": "1" if mode == "on" else "0",
+            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL": "8",
+            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD": "0",
+        }
+        if not isinstance(environment, dict) or any(
+            environment.get(key) != value for key, value in expected_controller.items()
+        ):
+            raise ValueError("KS controller configuration does not match runner")
+        harness = record.get("harness_sha256")
+        expected_harness = hashlib.sha256(
+            (
+                Path(__file__).resolve().parents[1]
+                / "benchmarks/issue1598_ks_cold_control.py"
+            ).read_bytes()
+        ).hexdigest()
+        if harness != expected_harness:
+            raise ValueError("KS harness identity does not match measured source")
+        shared_environment = {
+            key: value
+            for key, value in environment.items()
+            if key != "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK"
+        }
+        current = (
+            library,
+            source,
+            device,
+            record["allocation"],
+            harness,
+            shared_environment,
+        )
         if identity is not None and current != identity:
-            raise ValueError("KS matrix did not use one build/device allocation")
+            raise ValueError(
+                "KS matrix did not use one build/device/controller allocation"
+            )
         identity = current
         if record["acceptance"].get("gate") is not True:
             raise ValueError(f"KS {mode}-{atoms} independent acceptance failed")
@@ -690,6 +718,7 @@ def main() -> None:
             "energy+force replays, interleaved A-B-B-A per size"
         ),
         "library_sha256": library_sha,
+        "source_policy": "clean measured checkout required; dirty records rejected",
         "thresholds": {
             "maximum_energy_difference_hartree": args.maximum_energy_difference,
             "maximum_force_difference_hartree_per_bohr": args.maximum_force_difference,

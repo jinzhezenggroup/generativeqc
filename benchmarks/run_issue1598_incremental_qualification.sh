@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# #1598 Incremental Direct-J/K promotion gate: matched complete endpoints.
+# #1598 Incremental Direct-J/K gate: complete warm E/F, prepared-plan cold.
 #
 # Runs the audited HF comparator with independent GPU4PySCF references over
 # RHF, UHF-cation and moved nested-water populations at 96/192/384/768 AOs,
 # interleaved A-B-B-A per size, cold plus fixed-density warm replays per run,
 # plus a PBE0 cold re-verification control. Every run is a fresh process.
 set -euo pipefail
+
+require_clean_checkout() {
+  local state
+  state="$(git status --porcelain=v1 --untracked-files=all)"
+  if [[ -n "$state" ]]; then
+    printf 'Qualification requires a clean checkout, including untracked inputs\n' >&2
+    return 2
+  fi
+}
+require_clean_checkout
 
 : "${GENERATIVEQC_LIBRARY:?Select the Release CUDA library built from the measured source}"
 : "${ISSUE1598_ALLOCATION:?Name the finite GPU allocation (Slurm job id or notebook name)}"

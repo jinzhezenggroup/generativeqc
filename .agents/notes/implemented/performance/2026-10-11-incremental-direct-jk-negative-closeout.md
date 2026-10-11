@@ -108,3 +108,12 @@ Build provenance supplied by the campaign owner: Inspire notebook
 The retained library/source hashes bind the measured artifact, but retained
 receipts do not independently reconstruct compiler commands or certify this
 workaround. No fresh GPU campaign or build is claimed by this closeout.
+
+Future reproduction requires a clean checkout (including untracked inputs);
+the reducer rejects dirty measured source rather than implying its HEAD
+reconstructs modified inputs. SCF quartet census retains candidate, admitted
+and rejected categories separately; admitted-only reduction is not total
+screening work. Invalid counters remain unknown with raw diagnostics retained.
+KS pooling binds the runner's mode/cadence/threshold, common environment and
+exact harness bytes before accepting recomputed native/oracle E/F values.
+These reproduction constraints do not requalify missing historical evidence.

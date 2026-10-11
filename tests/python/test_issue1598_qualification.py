@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CAPSULE = ROOT / "benchmarks/results/issue1598-incremental-direct-jk-20261011"
 
 
-def _ks_identity(atoms: int) -> dict:
+def _ks_identity(atoms: int, mode: str = "off") -> dict:
     raw = (
         ROOT
         / (
@@ -36,6 +36,14 @@ def _ks_identity(atoms: int) -> dict:
             "probe": {"source_identity": "b" * 64, "device": {"name": "gpu"}},
         },
         "allocation": {"hostname": "host"},
+        "environment": {
+            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK": "1" if mode == "on" else "0",
+            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL": "8",
+            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD": "0",
+        },
+        "harness_sha256": hashlib.sha256(
+            (ROOT / "benchmarks/issue1598_ks_cold_control.py").read_bytes()
+        ).hexdigest(),
     }
 
 
@@ -101,6 +109,10 @@ def _record(round: int) -> dict:
                                 "bypass_full_builds": 0,
                                 "post_scf_full_builds": 2,
                                 "delta_builds": 0,
+                                "full_candidate_shell_quartets": 0,
+                                "full_rejected_shell_quartets": 0,
+                                "delta_candidate_shell_quartets": 0,
+                                "delta_rejected_shell_quartets": 0,
                                 "full_admitted_shell_quartets": 0,
                                 "delta_admitted_shell_quartets": 0,
                                 "full_admitted_quartet_tiles": 0,
@@ -454,7 +466,9 @@ def test_cold_work_is_separate_from_no_opportunity_warm_work(matrix: Path) -> No
     assert row["incremental_cold_work"]["no_incremental_opportunity"] is False
     assert row["incremental_cold_work"]["delta_builds"] == 19
     assert row["incremental_cold_work"]["quartet_work_counters_valid"] is False
-    assert row["incremental_cold_work"]["quartet_tile_reduction_fraction"] is None
+    assert (
+        row["incremental_cold_work"]["admitted_quartet_tile_reduction_fraction"] is None
+    )
 
 
 @pytest.mark.parametrize("damage", [None, "energy", "force", "nan", "partial"])
@@ -575,7 +589,7 @@ def test_ks_samples_require_matched_identities(
         record = {
             "schema": "issue1598.ks-cold-control.v1",
             "status": "measured",
-            **_ks_identity(48),
+            **_ks_identity(48, mode),
             **_ks_numerics(48),
             "complete_seconds": 1.0,
             "iterations": 2,
@@ -618,7 +632,11 @@ def test_quartet_denominators_exclude_uncounted_finalization(
             bypass_full_builds=bypass_builds,
             delta_builds=delta_builds,
             quartet_work_counters_valid=True,
+            full_candidate_shell_quartets=150,
+            full_rejected_shell_quartets=50,
             full_admitted_shell_quartets=100,
+            delta_candidate_shell_quartets=150 * delta_builds,
+            delta_rejected_shell_quartets=100 * delta_builds,
             delta_admitted_shell_quartets=50 * delta_builds,
             full_admitted_quartet_tiles=20,
             delta_admitted_quartet_tiles=10 * delta_builds,
@@ -633,8 +651,8 @@ def test_quartet_denominators_exclude_uncounted_finalization(
     assert work["full_admitted_shell_quartets_per_build"] == 100
     assert work["full_admitted_quartet_tiles_per_build"] == 20
     expected = 0.5 if delta_builds else 0.0
-    assert work["shell_quartet_reduction_fraction"] == expected
-    assert work["quartet_tile_reduction_fraction"] == expected
+    assert work["admitted_shell_quartet_reduction_fraction"] == expected
+    assert work["admitted_quartet_tile_reduction_fraction"] == expected
 
 
 @pytest.mark.parametrize("delta_builds", [0, 1])
@@ -775,3 +793,164 @@ def test_ks_acceptance_requires_valid_unique_cold_oracle(damage: str) -> None:
         oracle["energy"] = float("nan")
     with pytest.raises(ValueError):
         reducer._ks_acceptance(record, reference, 48)
+
+
+@pytest.mark.parametrize(
+    "state", ["", " M tracked.py", "M  staged.py", "?? untracked.py"]
+)
+def test_campaign_clean_guard_precedes_measurement(state: str) -> None:
+    source = (
+        ROOT / "benchmarks/run_issue1598_incremental_qualification.sh"
+    ).read_text()
+    start = source.index("require_clean_checkout() {")
+    end = source.index("\n}\n", start) + 3
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f"set -eu\ngit() {{ printf '%s' {state!r}; }}\n"
+            + source[start:end]
+            + "\nrequire_clean_checkout\nprintf 'measurement-started'\n",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if state:
+        assert result.returncode == 2
+        assert "measurement-started" not in result.stdout
+        assert "clean checkout" in result.stderr
+    else:
+        assert result.returncode == 0 and result.stdout == "measurement-started"
+    assert source.index("require_clean_checkout\n") < source.index('mkdir -p "$output"')
+
+
+@pytest.mark.parametrize("mode", ["baseline", "incremental"])
+def test_dirty_measured_source_cannot_be_qualified(matrix: Path, mode: str) -> None:
+    path = matrix / f"rhf/direct-12-{mode}-1.json"
+    record = json.loads(path.read_text())
+    record["environment"]["git"]["dirty"] = True
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="clean measured checkout"):
+        _rows(matrix)
+
+
+@pytest.mark.parametrize("phase", ["cold", "warm"])
+def test_admitted_reduction_does_not_hide_candidate_or_rejected_work(
+    phase: str,
+) -> None:
+    record = _record(1)
+    for items in [
+        record["generativeqc"]["cold_convergence"],
+        *[s["convergence"] for s in record["generativeqc"]["warm_samples"]],
+    ]:
+        items[0]["incremental_direct_jk"].update(
+            quartet_work_counters_valid=True,
+            delta_builds=1,
+            full_candidate_shell_quartets=100,
+            full_admitted_shell_quartets=100,
+            full_rejected_shell_quartets=0,
+            delta_candidate_shell_quartets=100,
+            delta_admitted_shell_quartets=50,
+            delta_rejected_shell_quartets=50,
+            full_admitted_quartet_tiles=20,
+            delta_admitted_quartet_tiles=10,
+        )
+    work = reducer._incremental_work(record, phase=phase)
+    count = 1 if phase == "cold" else 3
+    assert (
+        work["full_candidate_shell_quartets"]
+        == work["delta_candidate_shell_quartets"]
+        == 100 * count
+    )
+    assert work["delta_rejected_shell_quartets"] == 50 * count
+    assert work["candidate_shell_quartet_reduction_fraction"] == 0
+    assert work["admitted_shell_quartet_reduction_fraction"] == 0.5
+    assert "shell_quartet_reduction_fraction" not in work
+
+
+def test_invalid_quartet_counters_remain_unknown() -> None:
+    work = reducer._incremental_work(_record(1))
+    assert work["quartet_work_counters_valid"] is False
+    assert work["full_candidate_shell_quartets"] is None
+    assert work["admitted_shell_quartet_reduction_fraction"] is None
+    assert work["recorded_quartet_counts"]["full_candidate_shell_quartets"] == 0
+
+
+def test_inconsistent_quartet_partition_fails() -> None:
+    record = _record(1)
+    record["generativeqc"]["warm_samples"][0]["convergence"][0][
+        "incremental_direct_jk"
+    ].update(
+        quartet_work_counters_valid=True,
+        full_candidate_shell_quartets=10,
+    )
+    for sample in record["generativeqc"]["warm_samples"][1:]:
+        sample["convergence"][0]["incremental_direct_jk"][
+            "quartet_work_counters_valid"
+        ] = True
+    with pytest.raises(ValueError, match="counts disagree"):
+        reducer._incremental_work(record)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "cadence",
+        "threshold",
+        "selector",
+        "harness",
+        "missing_environment",
+        "missing_controller",
+        "other_environment",
+    ],
+)
+def test_ks_pool_requires_controller_and_harness_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str | None
+) -> None:
+    monkeypatch.setattr(reducer, "KS_SAMPLES", (("off", 48, 1), ("on", 48, 1)))
+    root = tmp_path / "ks"
+    root.mkdir()
+    for mode in ("off", "on"):
+        record = {
+            "schema": "issue1598.ks-cold-control.v1",
+            "status": "measured",
+            **_ks_identity(48, mode),
+            **_ks_numerics(48),
+            "complete_seconds": 1.0,
+            "iterations": 2,
+            "fock_builds": 2,
+            "incremental_direct_jk": {"active": mode == "on"},
+            "acceptance": {"gate": True},
+        }
+        if mode == "on":
+            environment = record["environment"]
+            if damage == "cadence":
+                environment[
+                    "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL"
+                ] = "1"
+            elif damage == "threshold":
+                environment[
+                    "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD"
+                ] = "1"
+            elif damage == "selector":
+                environment["GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK"] = "0"
+            elif damage == "harness":
+                record["harness_sha256"] = "d" * 64
+            elif damage == "missing_environment":
+                del record["environment"]
+            elif damage == "missing_controller":
+                del environment[
+                    "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL"
+                ]
+            elif damage == "other_environment":
+                environment["GENERATIVEQC_DIFFERENT_POLICY"] = "1"
+        (root / f"pbe0-48-{mode}-1.json").write_text(json.dumps(record))
+        (root / f"pbe0-48-{mode}-1.outcome").write_text('{"exit_code":0,"attempt":1}')
+    if damage:
+        with pytest.raises(ValueError, match="controller|harness|build/device"):
+            reducer._ks_rows(tmp_path)
+    else:
+        rows, failures = reducer._ks_rows(tmp_path)
+        assert not failures and len(rows) == 4
