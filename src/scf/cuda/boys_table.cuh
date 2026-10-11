@@ -1,10 +1,9 @@
 #pragma once
 
-#include <cuda_runtime.h>
-
 #include <cmath>
 #include <type_traits>
 
+#include "integrals/execution_qualifiers.hpp"
 #include "scf/cuda/integral_limits.hpp"
 #include "scf/cuda/scalar_math.cuh"
 
@@ -13,7 +12,7 @@
 namespace generativeqc::scf::cuda_execution {
 
 template <unsigned MaximumOrder, typename Scalar>
-__device__ inline void boys_values(Scalar argument, Scalar* values) {
+GENERATIVEQC_ERI_DEVICE inline void boys_values(Scalar argument, Scalar* values) {
   static_assert(MaximumOrder <= kMaximumCoulombOrder);
   if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
     // The alternating high-order series loses too many digits in FP32 near
