@@ -81,15 +81,11 @@ def main() -> None:
         coordinates = np.asarray(
             [[0.0, 0.0, 0.0], [0.0, -1.43, 1.11], [0.0, 1.43, 1.11]]
         )
-    operator = (
-        xp.RHF(elements, basis=arguments.basis, backend=arguments.backend)
-        if arguments.method.lower() == "rhf"
-        else xp.MolecularModel(
-            elements,
-            method=arguments.method,
-            basis=arguments.basis,
-            backend=arguments.backend,
-        )
+    operator = xp.MolecularModel(
+        elements,
+        method=arguments.method,
+        basis=arguments.basis,
+        backend=arguments.backend,
     )
     native = Calculator(
         method=arguments.method,
@@ -153,7 +149,7 @@ def main() -> None:
                     or float(np.max(np.abs(np.asarray(gradient) + reference.forces)))
                     > 1e-8
                 ):
-                    raise RuntimeError("warm RHF replay failed numerical acceptance")
+                    raise RuntimeError("warm molecular replay failed numerical acceptance")
         ratio = statistics.median(samples["array_api"]) / statistics.median(
             samples["native"]
         )
