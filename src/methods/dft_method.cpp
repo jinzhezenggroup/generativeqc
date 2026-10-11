@@ -903,11 +903,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return options_.preliminary_guess;
   }
 
-  [[nodiscard]] bool supports_native_pbe_force() const noexcept {
+  [[nodiscard]] bool supports_native_gga_force() const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
          options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
-        execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe ||
+        (execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe &&
+         execution_plan_.semilocal_family != dft::SemilocalFamily::B3lyp) ||
         execution_plan_.spin_channels != 1 || execution_plan_.automatic_program ||
         execution_plan_.generated_split_hybrid || execution_plan_.range_exchange ||
         execution_plan_.nonlocal_correlation || execution_plan_.d4_correction ||
@@ -931,17 +932,24 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !admitted_term(spec.coulomb) ||
         !admitted_term(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
       return false;
-    const bool pbe = !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 = spec.exchange.present && spec.exchange.coefficient == -0.125 &&
+    const bool pbe_family = execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe;
+    const bool pbe = pbe_family && !spec.exchange.present &&
+                     options_.semilocal_exchange_scale == 1.0;
+    const bool pbe0 = pbe_family && spec.exchange.present &&
+                      spec.exchange.coefficient == -0.125 &&
                       options_.semilocal_exchange_scale == 0.75;
-    return (pbe || pbe0) && (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
-                             scf::cpu_stationary_direct_force_work_admitted(
-                                 system_, pbe0, grid_.point_count(), options_.xc_tile_points));
+    const bool b3lyp = !pbe_family && spec.exchange.present &&
+                       spec.exchange.coefficient == -0.1 &&
+                       options_.semilocal_exchange_scale == 1.0;
+    return (pbe || pbe0 || b3lyp) &&
+           (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+            scf::cpu_stationary_direct_force_work_admitted(
+                system_, spec.exchange.present, grid_.point_count(), options_.xc_tile_points));
   }
 
   [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept override {
     return capabilities_.supported_properties |
-           (supports_native_pbe_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
+           (supports_native_gga_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   }
 
   const core::System& system() const noexcept { return system_; }
@@ -1505,17 +1513,21 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return cuda_integral_gradient(expected, output, maximum_bytes, work, detail, &density,
                                     &weighted_density);
 #endif
-    if (!supports_native_pbe_force()) {
-      detail = "CPU Direct KS stationary integral sources require a qualified PBE/PBE0 owner";
+    if (!supports_native_gga_force()) {
+      detail = "CPU Direct KS stationary integral sources require a qualified GGA owner";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     if (density.size() != 1 || weighted_density.size() != 1) {
       detail = "CPU Direct stationary D/W spin shape mismatch";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+    const auto method = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
+                            ? scf::CpuStationaryGga::B3lyp
+                        : fock_.strategy().spec.exchange.present
+                            ? scf::CpuStationaryGga::Pbe0
+                            : scf::CpuStationaryGga::Pbe;
     auto candidate = scf::cpu_stationary_integral_gradient(fock_, density[0], weighted_density[0],
-                                                           fock_.strategy().spec.exchange.present,
-                                                           maximum_bytes);
+                                                           method, maximum_bytes);
     work[3] = candidate.numeric_capacity;
     output = std::move(candidate.sources);
     detail.clear();
@@ -2016,7 +2028,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
    * token-qualified stationary derivative sources and one complete force sink.
    * This is intentionally not a second batch-specific DFT force equation. */
   void add_prepared_native_forces(Result& result) {
-    if (!supports_native_pbe_force())
+    if (!supports_native_gga_force())
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "native DFT analytic forces are unqualified for this prepared context (#2151)");
@@ -2053,9 +2065,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
       throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
     runtime::CpuRetainedCapacity retained_integrals(runtime::vector_bytes(integrals));
 
-    const auto xc = dft::stationary_pbe_xc_derivative(
-        basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
-        options_.semilocal_correlation_scale);
+    const auto xc = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
+                        ? dft::stationary_b3lyp_xc_derivative(
+                              basis_, grid_, frame.density, options_.xc_tile_points)
+                        : dft::stationary_pbe_xc_derivative(
+                              basis_, grid_, frame.density, options_.xc_tile_points,
+                              options_.semilocal_exchange_scale,
+                              options_.semilocal_correlation_scale);
     const std::size_t ncoord = 3 * system_.atoms.size();
     if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
       throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
@@ -2082,7 +2098,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   Result execute(bool compute_forces) override {
     invalidate_final_state();
-    if (compute_forces && !supports_native_pbe_force()) {
+    if (compute_forces && !supports_native_gga_force()) {
       const char* issue = execution_plan_.automatic_program ? "#1122"
                           : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
                               ? "#164"
