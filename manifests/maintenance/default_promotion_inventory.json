@@ -61,6 +61,7 @@
         ".agents/notes/implemented/performance/2026-10-10-screened-hybrid-phase-source.md",
         ".agents/notes/implemented/performance/2026-10-11-screened-hybrid-cold-auto.md",
         ".agents/notes/implemented/performance/2026-10-11-hybrid-phase-source-default.md",
+        "benchmarks/results/hybrid-phase-source-default-20261011/README.md",
         "tests/python/test_ks_phase_source_auto_policy.py",
         "tests/python/test_ks_phase_resident_values_cuda.py",
         "tests/python/test_rhf_resident_values_lifetime.py"

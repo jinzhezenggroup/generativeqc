@@ -193,6 +193,11 @@ the incumbent energy baseline: its first resident build establishes new energy
 history, as the device-chunk path already does. This is an explicit bounded
 fallback, not a cross-provider convergence shortcut.
 
+The bounded default decision and its limits are recorded in
+`.agents/notes/implemented/performance/2026-10-11-hybrid-phase-source-default.md`.
+Source-matched default routing, warm handoff and complete E+F qualification
+recipes are in `benchmarks/results/hybrid-phase-source-default-20261011/README.md`.
+
 The independent raw J/K, same-grid PySCF energy and optional complete cold energy
 endpoint gates are in `tests/python/test_ks_phase_resident_values_cuda.py`. Run
 them only through a finite-time Slurm allocation with

@@ -48,7 +48,31 @@ different moved-geometry iteration counts must not become kernel-speed claims.
 Host policy and mutation guards cover unset/auto/0/1 and exclusions. Native
 probes cover default cold/warm/external seeds and exact budget fallback.
 Source-matched endpoint receipts are retained under
-`benchmarks/results/hybrid-phase-source-default-20261011/` after qualification.
+`benchmarks/results/hybrid-phase-source-default-20261011/`.
+
+The clean measured revision is `1cef1189224c6ddcb29d684f9ef7eaa0aa0e34f8`,
+rebased onto master `637466c624c4c4c4dd4eb7c511a2c88675744325` including the
+resident final-state proof and native force-owner changes. Jobs 7338/7340 run
+two actual-unset ABBA cohorts on separate RTX 5090 UUIDs. All 32 water-96 and
+16 generated-small complete E+F oracle gates pass; maximum large energy/force
+errors are 9.5497e-12 Eh and 3.8277e-11 Eh/Bohr. Every automatic cold phase
+constructs 1,873,221,716 values, audits 17 source Focks and charges one handoff;
+every warm phase has one physical Fock without source preparation.
+
+Cold complete medians are 97.8693 s disabled and 76.2461 s unset. Baseline
+cold work varies across 17/19/21/22 Focks, while default work is consistently
+17 resident actions plus one incumbent handoff. This is a descriptive endpoint
+ratio, not a work-matched integral-kernel gain. Warm/moved/moved-warm work is
+1/12/1 in every arm. The resource heuristic is still not a profitability model.
+
+Job 7345 passes four independent signed J/K and same-grid PBE0/B3LYP probes,
+including default admission/refusal and chunk widths 1/2, plus three independent
+RHF original/displaced tests for the shared owner. Job 7347 reports zero
+memcheck errors. Final host suites pass 994 and 336 cases; four unrelated
+offline GFN1-D3-asset cases remain explicitly deselected. Initial fixture-only
+missing-LibXC and missing-SONAME-alias failures are retained separately, not
+deleted or pooled with accepted measurements. Production source/binary bytes
+remain unchanged when those fixture omissions are corrected.
 
 ## Revisit when
 
