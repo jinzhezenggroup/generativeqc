@@ -18,8 +18,9 @@ on:
       - "cmake/GenerativeQCCudaImplib.cmake"
       - "cmake/3rdparty/implib/**"
       - "pyproject.toml"
-      - "CMakeLists.txt"
-      - "src/cli/**"
+      # Wheel-specific native launcher and explicit tuner packaging changes.
+      # Avoid triggering the expensive CUDA wheel for every CLI/CMake edit.
+      - "src/cli/wheel_launcher.cpp"
       - "python/generativeqc/tune_cli.py"
       - "python/ci/prepare-wheel-build.sh"
       - "python/ci/repair-wheel.sh"
