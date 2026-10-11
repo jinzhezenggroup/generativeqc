@@ -54,7 +54,14 @@ def test_traversal_publication_binds_original_receipts_and_reviewed_sources() ->
     assert build["no_public_or_result_abi_change"]
     identity = evidence["source_reconstruction"]["reviewed_source_identity"]
     assert not identity["gpu_repeat_required"]
+    historical_reviewed_hashes = {
+        "src/cc/df_triples_cuda.cu": "0200d6a106a36612e24cc5e137d7dc998bfcfdea2a960dc8985df38f1858bedf",
+        "src/cc/df_triples_traversal.hpp": "83bcb0a95ee33741af0a8ed1434d413d4afb5b4c46cae01299c8850e7ce324b9",
+    }
     for relative, row in identity["files"].items():
+        # Later qualified owners bind their own current bytes. Restore this
+        # exact historical reviewed snapshot without normalizing today's code.
+        assert row["reviewed_sha256"] == historical_reviewed_hashes[relative]
         assert row["formatter_output_exactly_matches_reviewed"]
         assert (
             hashlib.sha256(restored["qualified-source/" + relative]).hexdigest()
@@ -62,10 +69,6 @@ def test_traversal_publication_binds_original_receipts_and_reviewed_sources() ->
         )
         assert (
             hashlib.sha256(restored["reviewed-source/" + relative]).hexdigest()
-            == row["reviewed_sha256"]
-        )
-        assert (
-            hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
             == row["reviewed_sha256"]
         )
     header = identity["files"]["src/cc/df_triples_traversal.hpp"]

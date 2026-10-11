@@ -57,7 +57,7 @@ std::size_t reserve(std::size_t& cursor, std::size_t n) {
 struct Layout {
   std::array<std::size_t, 9> sizes{}, inputs{};
   std::size_t panels{}, moments{}, partials{}, energies{}, energy{}, error{}, library{};
-  std::size_t execution_storage{};
+  std::size_t execution_storage{}, paired_pointers{}, paired_pointer_bytes{};
   std::size_t arena{}, total{}, panel_capacity{}, v3{}, tiles{};
   unsigned blocks{};
 };
@@ -65,7 +65,8 @@ struct Layout {
 Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
               std::size_t execution_bytes = 0, std::size_t host_binding_bytes = 0,
               std::size_t execution_provider_bytes = provider_allowance,
-              std::size_t library_bytes = blas_workspace, bool external_inputs = false) {
+              std::size_t library_bytes = blas_workspace, bool external_inputs = false,
+              std::size_t paired_pointer_bytes = 0) {
   const auto oo = checked_mul(o, o), vv = checked_mul(v, v), ov = checked_mul(o, v);
   const auto ovv = checked_mul(o, vv);
   // Check every dimension and physical leading dimension before reading inputs
@@ -99,6 +100,8 @@ Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
   p.panels = reserve(cursor, bytes(checked_mul(p.panel_capacity, p.v3)));
   p.moments = reserve(cursor, bytes(checked_mul(6, p.v3)));
   p.execution_storage = reserve(cursor, execution_bytes);
+  p.paired_pointer_bytes = paired_pointer_bytes;
+  p.paired_pointers = reserve(cursor, paired_pointer_bytes);
   p.partials = reserve(cursor, bytes(p.blocks));
   p.energies = reserve(cursor, bytes(p.tiles));
   p.energy = reserve(cursor, sizeof(double));
@@ -442,6 +445,16 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     if (p.total > max_bytes) p = planned_layout(1);
   }
   if (p.total > max_bytes) throw std::length_error("DF triples exceed numeric memory budget");
+  // Keep the original panel/provider choices when optional pointer storage
+  // cannot fit; paired dispatch is not a reason to reduce those earlier choices.
+  const auto unpaired_layout = p;
+  if (p.panel_capacity == 3 && execution_plan.pair_pointer_bytes()) {
+    const auto paired =
+        layout(o, v, q, p.panel_capacity, execution_plan.storage_bytes(o, v, p.panel_capacity),
+               generated_df::WExecution::host_bytes(execution_plan),
+               execution_plan.provider_bytes(), 0, false, execution_plan.pair_pointer_bytes());
+    if (paired.total <= max_bytes) p = paired;
+  }
   const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
   const double minimum = validate_inputs(o, v, q, p, host, threshold);
 
@@ -451,11 +464,23 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
   int failed = 0;
   {
     runtime::CudaDeviceScope device_scope(device);
-    generativeqc_tensor::Context context;
     cudaDeviceProp properties{};
     generativeqc_tensor::cuda_check(cudaGetDeviceProperties(&properties, device));
-    context.prepare(device, properties.major, properties.minor, p.arena, p.error, p.library, 0, 0,
-                    false);
+    std::optional<generativeqc_tensor::Context> context_owner;
+    const auto prepare_context = [&](const Layout& requested) {
+      context_owner.emplace();
+      context_owner->prepare(device, properties.major, properties.minor, requested.arena,
+                             requested.error, requested.library, 0, 0, false);
+    };
+    try {
+      prepare_context(p);
+    } catch (const generativeqc_tensor::DeviceAllocationError&) {
+      if (!p.paired_pointer_bytes) throw;
+      context_owner.reset();
+      p = unpaired_layout;
+      prepare_context(p);
+    }
+    auto& context = *context_owner;
     generated_df::WExecution execution(execution_plan, o, v, q, context,
                                        context.arena + p.execution_storage, p.panel_capacity,
                                        result.fp64_gemms, result.fp32_gemms,
@@ -534,12 +559,35 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
           continue;
         const auto slot = panel_slot_for(occupied[index]);
         const auto* panel = panels + slot * p.v3;
+        // Equal-index non-FP64 tiles still require all six original seeds.
+        std::array<std::size_t, 6> seed_permutations{};
+        std::size_t seed_count = 0;
         for (std::size_t permutation = 0; permutation < 6; ++permutation) {
           const auto* order = generated_df::permutations[permutation];
           if (occupied[order[0]] != occupied[index]) continue;
           // Equal physical tuples have identical W seeds; every original
           // energy contribution still loads its canonical stored seed.
           if (sources.index[permutation] != permutation) continue;
+          seed_permutations[seed_count++] = permutation;
+        }
+        if (seed_count == 2 && p.paired_pointer_bytes) {
+          const auto* first_order = generated_df::permutations[seed_permutations[0]];
+          const auto* second_order = generated_df::permutations[seed_permutations[1]];
+          const bool swapped = occupied[second_order[0]] == occupied[first_order[0]] &&
+                               occupied[second_order[1]] == occupied[first_order[2]] &&
+                               occupied[second_order[2]] == occupied[first_order[1]];
+          if (swapped && execution.build_w_pair(context, in, occupied[first_order[0]],
+                                                occupied[first_order[1]], occupied[first_order[2]],
+                                                panel, moments + seed_permutations[0] * p.v3,
+                                                moments + seed_permutations[1] * p.v3,
+                                                context.arena + p.paired_pointers)) {
+            result.moment_gemms += 4;
+            continue;
+          }
+        }
+        for (std::size_t seed = 0; seed < seed_count; ++seed) {
+          const auto permutation = seed_permutations[seed];
+          const auto* order = generated_df::permutations[permutation];
           execution.build_w(context, in, occupied[order[0]], occupied[order[1]], occupied[order[2]],
                             panel, moments + permutation * p.v3, slot);
           result.moment_gemms += 2;

@@ -215,6 +215,30 @@ static __global__ void audit_contraction(const T* values, std::size_t count, int
       atomicCAS(error, 0, 1);
 }
 
+struct IndependentPairPointers {
+  const double* left[2];
+  const double* right[2];
+  double* outputs[2];
+};
+
+#if !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+/** Publish borrowed addresses on the consumer stream. Reusing the same table
+ * after a preceding GEMM needs no host staging allocation or broadcast copy. */
+static __global__ void bind_independent_pair_pointers(IndependentPairPointers* table,
+                                                      const double* first_left,
+                                                      const double* second_left,
+                                                      const double* first_right,
+                                                      const double* second_right,
+                                                      double* first_output, double* second_output) {
+  table->left[0] = first_left;
+  table->left[1] = second_left;
+  table->right[0] = first_right;
+  table->right[1] = second_right;
+  table->outputs[0] = first_output;
+  table->outputs[1] = second_output;
+}
+#endif
+
 /** Backend implementation identities, supplied only by compiler/provider
  * preparation. Scientific request metadata never includes this choice. */
 enum class ContractionAlgorithm : std::uint8_t {
@@ -574,6 +598,16 @@ class PreparedContractions {
   // Graph launches need their own replay work accounting. Until that owner is
   // connected, reject capture instead of counting only the capture enqueue.
   static constexpr bool supports_capture = false;
+  /** Caller-owned, stream-exclusive scratch for independent FP64 products.
+   * CuMetal retains ordinary execution instead of depending on an unavailable
+   * pointer-batched entry. This size is charged before execution, never here. */
+  static constexpr std::size_t independent_pair_storage_bytes() {
+#if GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+    return 0;
+#else
+    return sizeof(IndependentPairPointers);
+#endif
+  }
   // Include owner records, bounded variant storage and a conservative second
   // descriptor copy live during construction. No cache grows during replay.
   static constexpr std::size_t storage_bytes(std::size_t requests, std::size_t variants = 1) {
@@ -956,6 +990,114 @@ class PreparedContractions {
     *summands_ += work;
   }
 
+  /** Query an already-prepared independent pair without choosing a provider.
+   * Checked/scaled/mixed/batched requests retain their original execution.
+   * Binding, context generation, device and capture errors remain hard errors. */
+  bool independent_pair_supported(std::size_t slot, std::size_t occupied, std::size_t virtuals,
+                                  std::size_t auxiliary, cudaStream_t stream) const {
+    const auto& selected = bound_variant(occupied, virtuals, auxiliary, stream);
+    return independent_pair_compatible(selected, slot);
+  }
+
+  /** Apply one original request to two independent sets of borrowed views.
+   * The caller owns aligned device scratch until this stream drains, and cannot
+   * reuse it concurrently on another stream. No allocation/provider preparation
+   * occurs here. Sharing read-only inputs is legal; every output must be disjoint
+   * from both inputs of both products and from scratch. All refusals/counter
+   * checks precede enqueue, and execution failures never retry partial work.
+   * One dispatch counts two semantic products and every original finite value. */
+  void execute_independent_pair(std::size_t slot, std::size_t occupied, std::size_t virtuals,
+                                std::size_t auxiliary, cudaStream_t stream,
+                                const double* first_left, const double* second_left,
+                                const double* first_right, const double* second_right,
+                                double* first_output, double* second_output, int* error,
+                                void* pointer_storage, std::size_t pointer_bytes) const {
+    const auto& selected = bound_variant(occupied, virtuals, auxiliary, stream);
+    if (!independent_pair_compatible(selected, slot))
+      throw std::logic_error("native contraction has no prepared independent-pair recipe");
+#if !GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+    const auto& request = selected.requests[slot];
+    if (!first_left || !second_left || !first_right || !second_right || !first_output ||
+        !second_output || !error || !pointer_storage ||
+        pointer_bytes < independent_pair_storage_bytes() ||
+        reinterpret_cast<std::uintptr_t>(pointer_storage) % alignof(IndependentPairPointers))
+      throw std::invalid_argument("independent contraction pair buffer/scratch mismatch");
+    const auto overlaps = [](const void* first, std::size_t first_bytes, const void* second,
+                             std::size_t second_bytes) {
+      const auto first_address = reinterpret_cast<std::uintptr_t>(first);
+      const auto second_address = reinterpret_cast<std::uintptr_t>(second);
+      return first_address <= second_address ? second_address - first_address < first_bytes
+                                             : first_address - second_address < second_bytes;
+    };
+    const auto left_bytes =
+        contraction_product(request.operands[0].storage_elements(), sizeof(double));
+    const auto right_bytes =
+        contraction_product(request.operands[1].storage_elements(), sizeof(double));
+    const auto output_bytes =
+        contraction_product(request.operands[2].storage_elements(), sizeof(double));
+    if (overlaps(first_output, output_bytes, second_output, output_bytes))
+      throw std::invalid_argument("independent contraction outputs must be disjoint");
+    for (const auto* output : {first_output, second_output}) {
+      for (const auto* input : {first_left, second_left})
+        if (overlaps(output, output_bytes, input, left_bytes))
+          throw std::invalid_argument("independent contraction output aliases an input");
+      for (const auto* input : {first_right, second_right})
+        if (overlaps(output, output_bytes, input, right_bytes))
+          throw std::invalid_argument("independent contraction output aliases an input");
+      if (overlaps(pointer_storage, independent_pair_storage_bytes(), output, output_bytes))
+        throw std::invalid_argument("independent contraction scratch aliases an output");
+      if (overlaps(error, sizeof(int), output, output_bytes))
+        throw std::invalid_argument("independent contraction arithmetic state aliases an output");
+    }
+    for (const auto* input : {first_left, second_left}) {
+      if (overlaps(pointer_storage, independent_pair_storage_bytes(), input, left_bytes))
+        throw std::invalid_argument("independent contraction scratch aliases an input");
+      if (overlaps(error, sizeof(int), input, left_bytes))
+        throw std::invalid_argument("independent contraction arithmetic state aliases an input");
+    }
+    for (const auto* input : {first_right, second_right}) {
+      if (overlaps(pointer_storage, independent_pair_storage_bytes(), input, right_bytes))
+        throw std::invalid_argument("independent contraction scratch aliases an input");
+      if (overlaps(error, sizeof(int), input, right_bytes))
+        throw std::invalid_argument("independent contraction arithmetic state aliases an input");
+    }
+    if (overlaps(pointer_storage, independent_pair_storage_bytes(), error, sizeof(int)))
+      throw std::invalid_argument("independent contraction scratch aliases arithmetic state");
+    const auto work = contraction_product(request.affine_summands(), 2);
+    if (*calls_ == std::numeric_limits<std::size_t>::max() ||
+        work > std::numeric_limits<std::size_t>::max() - *summands_)
+      throw std::length_error("native contraction diagnostic counter overflow");
+    auto* table = static_cast<IndependentPairPointers*>(pointer_storage);
+    bind_independent_pair_pointers<<<1, 1, 0, stream>>>(table, first_left, second_left, first_right,
+                                                        second_right, first_output, second_output);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+    const auto transpose_left = request.a_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
+    const auto transpose_right = request.b_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
+    const double alpha = request.coefficient, beta = request.beta;
+    generativeqc_tensor::blas_check(cublasDgemmBatched(
+        context_->handle(), transpose_right, transpose_left, int(request.n), int(request.m),
+        int(request.k), &alpha, table->right, int(request.leading_dimension(1)), table->left,
+        int(request.leading_dimension(0)), &beta, table->outputs, int(request.leading_dimension(2)),
+        2));
+    const auto count = request.output_elements();
+    const auto leading_output = request.leading_dimension(2);
+    // Dense adjacent cubes share one scan without omitting any finite check.
+    // Padded or unrelated outputs keep their two original affine scans.
+    if (leading_output == request.n && second_output == first_output + count) {
+      const auto combined = contraction_product(count, 2);
+      audit_contraction<<<generativeqc_tensor::blocks(combined, 256), 256, 0, stream>>>(
+          first_output, combined, error);
+    } else {
+      for (const auto* output : {first_output, second_output})
+        audit_contraction<<<generativeqc_tensor::blocks(count, 256), 256, 0, stream>>>(
+            output, count, error, request.n, leading_output);
+    }
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+    ++*calls_;
+    *summands_ += work;
+#endif
+  }
+
   /** Execute a compiler-proven forward/transpose pair with joint checked
    * publication. All binding, pointer and counter checks occur
    * before enqueue; failure never falls back to separate partial contractions. */
@@ -1032,6 +1174,21 @@ class PreparedContractions {
     std::vector<std::unique_ptr<CudaCutlassContraction>> cutlass;
 #endif
   };
+  static bool independent_pair_compatible(const Variant& selected, std::size_t slot) {
+    if (slot >= selected.requests.size())
+      throw std::logic_error("native contraction shape changed; prepare again");
+#if GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+    return false;
+#else
+    const auto& request = selected.requests[slot];
+    return selected.algorithms[slot] == ContractionAlgorithm::PedanticBlas &&
+           request.precision.is_strict_fp64() &&
+           request.publication_dtype == PrecisionDtype::Fp64 && request.batches == 1 &&
+           request.checked_update_identity.empty() &&
+           request.checked_publication_identity.empty() && !request.checked_right_symmetrization &&
+           !request.checked_transpose_pair_role && !selected.batch_scales[slot].rank;
+#endif
+  }
   const Variant& bound_variant(std::size_t o, std::size_t v, std::size_t q,
                                cudaStream_t stream) const {
     // Every execution entry, including joint checked publication, must honor

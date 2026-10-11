@@ -343,6 +343,24 @@ list. Non-FP64 and one/two-panel execution retain the original traversal;
 force/response traversal is unchanged. `P` always reports actual panel builds,
 not occupied-tile or W counts. This schedule adds no buffers or provider.
 
+Within that FP64/three-panel energy domain, compatible swapped occupied W seeds
+may share a pointer-batched dispatch for each of their two original typed cuts.
+Each seed retains its original alpha, beta, physical views and first-then-second
+product order; no sum, equation or reduction is reassociated. The compiler emits
+bindings to the original strict descriptors, while the shared tensor backend
+owns address publication and vendor dispatch. Moment counters still count two
+semantic products per seed; FP64 driver counters count actual submissions.
+
+The optional six-pointer table occupies 48 device bytes, charged with arena
+alignment after the original panel/provider admission. Insufficient budget or a
+typed preparation allocation failure keeps those original choices and ordinary
+seed dispatch. Nonadjacent outputs, generated/mixed providers, CuMetal and
+force/response retain ordinary execution. Every finite output value is audited;
+only dense adjacent outputs share an audit launch. No execution error retries
+partially evaluated W. See the [shared pair contract](lowering_providers.md#independent-prepared-pairs)
+and `tests/python/test_df_triples_independent_pair.py` for descriptor, grouping
+and pre-execution allocation-refusal gates.
+
 `tests/python/test_df_triples_traversal.py` executes the actual helper and checks
 tile coverage, canonical addressing and the bounded LRU. The default-promotion
 inventory audits the FP64/three-panel guard and canonical reduction binding.
