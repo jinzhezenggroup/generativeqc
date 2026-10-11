@@ -11,7 +11,10 @@ import argparse
 import os
 import re
 import subprocess
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 _FULL_FILES = frozenset(
     {
@@ -62,10 +65,11 @@ def select_tier(event: str, base: str, head: str) -> str:
         return "release"
     try:
         result = subprocess.run(
-            ["git", "diff", "--name-only", "-z", base, head, "--"],
+            # Include both paths of renames, including native-source removals
+            # whose unchanged contents were moved into a documentation path.
+            ["git", "diff", "--no-renames", "--name-only", "-z", base, head, "--"],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
     except (OSError, subprocess.CalledProcessError):
         return "release"

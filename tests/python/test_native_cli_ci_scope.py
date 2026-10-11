@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -80,6 +82,125 @@ class NativeCliScopeTests(unittest.TestCase):
             self.assertEqual(scope.select_tier("merge_group", BASE, HEAD), "fast")
             self.assertIn("-z", command.call_args.args[0])
             self.assertNotIn("--diff-filter=ACMRT", command.call_args.args[0])
+
+    def test_real_git_rename_and_deletion_keep_original_native_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args: str) -> str:
+                return subprocess.check_output(
+                    ["git", "-C", str(root), *args], text=True, timeout=10
+                ).strip()
+
+            git("init", "-q")
+            source = root / "src/cli/old source.cpp"
+            source.parent.mkdir(parents=True)
+            source.write_text("int native_only() { return 42; }\n")
+            git("add", ".")
+            git(
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.com",
+                "commit",
+                "-qm",
+                "native source",
+            )
+            base = git("rev-parse", "HEAD")
+            (root / "docs").mkdir()
+            git("mv", "src/cli/old source.cpp", "docs/renamed.md")
+            git(
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.com",
+                "commit",
+                "-qm",
+                "move native source into docs",
+            )
+            renamed = git("rev-parse", "HEAD")
+            git("rm", "docs/renamed.md")
+            git(
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.com",
+                "commit",
+                "-qm",
+                "remove moved source",
+            )
+            for head in (renamed, git("rev-parse", "HEAD")):
+                for event in ("pull_request", "merge_group"):
+                    with self.subTest(head=head, event=event):
+                        result = subprocess.check_output(
+                            [
+                                sys.executable,
+                                str(MODULE),
+                                "--event",
+                                event,
+                                "--base-sha",
+                                base,
+                                "--head-sha",
+                                head,
+                            ],
+                            cwd=root,
+                            text=True,
+                            timeout=10,
+                        )
+                        self.assertEqual(result.strip(), "release")
+
+    def test_synthetic_merge_compares_against_its_current_base(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args: str) -> str:
+                return subprocess.check_output(
+                    [
+                        "git",
+                        "-C",
+                        str(root),
+                        "-c",
+                        "user.name=fixture",
+                        "-c",
+                        "user.email=fixture@example.com",
+                        *args,
+                    ],
+                    text=True,
+                    timeout=10,
+                ).strip()
+
+            git("init", "-q", "-b", "base")
+            (root / "src").mkdir()
+            (root / "src/core.cpp").write_text("int value = 1;\n")
+            git("add", ".")
+            git("commit", "-qm", "initial source")
+            git("checkout", "-qb", "docs")
+            (root / "README.md").write_text("documentation only\n")
+            git("add", ".")
+            git("commit", "-qm", "documentation change")
+            git("checkout", "-q", "base")
+            (root / "src/core.cpp").write_text("int value = 2;\n")
+            git("commit", "-qam", "concurrent native base change")
+            base = git("rev-parse", "HEAD")
+            git("merge", "--no-ff", "-qm", "synthetic merge", "docs")
+            head = git("rev-parse", "HEAD")
+            for event in ("pull_request", "merge_group"):
+                result = subprocess.check_output(
+                    [
+                        sys.executable,
+                        str(MODULE),
+                        "--event",
+                        event,
+                        "--base-sha",
+                        base,
+                        "--head-sha",
+                        head,
+                    ],
+                    cwd=root,
+                    text=True,
+                    timeout=10,
+                )
+                self.assertEqual(result.strip(), "skip")
 
 
 if __name__ == "__main__":

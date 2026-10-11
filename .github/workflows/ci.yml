@@ -1503,7 +1503,9 @@ jobs:
           archives=(dist/*.tar.gz)
           [[ "${#archives[@]}" -eq 1 ]]
           archive="${archives[0]}"
-          cli="$PWD/build/cuda-release-cli-sm120/generativeqc"
+          # CMake rewrites RUNPATH during installation; these are the exact
+          # installed bytes consumed by the packager, not the build-tree ELF.
+          cli="$PWD/build/native-cli-prefix/bin/generativeqc"
           stage="$(mktemp -d)"
           trap 'rm -rf "$stage"' EXIT
           tar -xzf "$archive" -C "$stage"
@@ -1602,4 +1604,7 @@ jobs:
         if: needs.merge_queue_liveness.outputs.active != 'false'
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
+          # Scheduled correctness runs intentionally do not publish CLI artifacts.
+          # Selected PR/queue/manual builds must never pass with a skipped job.
+          allowed-skips: ${{ github.event_name == 'schedule' && 'native-cli-artifact' || '' }}
           jobs: ${{ toJSON(needs) }}
