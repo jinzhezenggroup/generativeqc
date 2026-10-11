@@ -1,6 +1,7 @@
 """Resident reuse must obey each call's admission caps before any device work."""
 
 import inspect
+from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -50,7 +51,7 @@ def test_prepared_artifact_resources_close_when_publication_fails(
     events: list[str] = []
 
     @contextmanager
-    def resource(name: str):
+    def resource(name: str) -> Iterator[SimpleNamespace]:
         events.append(f"enter:{name}")
         try:
             yield SimpleNamespace()
@@ -62,7 +63,7 @@ def test_prepared_artifact_resources_close_when_publication_fails(
 
     if failure == "lease-install":
 
-        def reject_install(*_args, **_kwargs):
+        def reject_install(*_args: object, **_kwargs: object) -> None:
             raise RuntimeError("injected lease installation failure")
 
         monkeypatch.setattr(owner._lease, "install", reject_install)
