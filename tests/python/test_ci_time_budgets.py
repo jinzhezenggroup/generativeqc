@@ -124,7 +124,12 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     assert "rebalance_lookup" in section
     assert "pinned_core_owner" in section
     assert "current_index % 3" in section
-    assert "coverage-report-python-core-c" in section
+    assert (
+        "coverage-report-python-core-c"
+        in path.read_text()
+        .split("\n  upload-coverage:\n", 1)[1]
+        .split("\n  pass:\n", 1)[0]
+    )
     assert "name: python (${{ matrix.shard }})" in section
     assert "coverage-report-python-${{ matrix.shard }}" in section
     assert "benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}" in section
