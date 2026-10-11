@@ -17,11 +17,14 @@ struct DFIterationPlan {
   std::size_t preparation_terms{}, auxiliary_terms{}, core_terms{};
   bool matrix_gemm{};
   std::size_t auxiliary_batch_size{1};
+  bool mixed_auxiliary{};
+  std::size_t strict_auxiliary_batch_size{1};
 };
 
 inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size_t q, bool cuda,
                                          bool allow_hoisting, bool matrix_gemm = false,
-                                         std::size_t auxiliary_batch_size = 1) {
+                                         std::size_t auxiliary_batch_size = 1,
+                                         bool mixed_auxiliary = false) {
   using generated::df::checked_add;
   using generated::df::checked_mul;
   namespace fast = generated::dfhoist;
@@ -57,6 +60,7 @@ inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size
   plan.core_terms = core_work;
   if (cuda && matrix_gemm) {
     plan.matrix_gemm = true;
+    plan.mixed_auxiliary = mixed_auxiliary;
     plan.iteration = fast::iteration_packed_arena_elements(o, v);
     plan.auxiliary = std::max(plan.auxiliary, fast::auxiliary_packed_arena_elements(o, v));
     plan.preparation = fast::prepare_packed_arena_elements(o, v);
@@ -66,9 +70,20 @@ inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size
     if (auxiliary_batch_size > 1) {
       plan.auxiliary_batch_size = auxiliary_batch_size;
       // Retain one-Q capacity for an uneven tail and independent replay.
-      plan.auxiliary = std::max(plan.auxiliary,
-                                fast::auxiliary_batched_arena_elements(o, v, auxiliary_batch_size));
+      auto batched = fast::auxiliary_batched_arena_elements(o, v, auxiliary_batch_size);
+      // Uniform FP32 warmup has identical slot geometry at half the byte
+      // width. Strict polishing borrows this lease, never a second arena.
+      if (mixed_auxiliary) batched = checked_add(batched, 1) / 2;
+      plan.auxiliary = std::max(plan.auxiliary, batched);
     }
+    plan.strict_auxiliary_batch_size = mixed_auxiliary
+                                           ? std::max<std::size_t>(1, plan.auxiliary_batch_size / 2)
+                                           : plan.auxiliary_batch_size;
+    // Fixed, Q-independent slots make half-width Q8 slightly smaller than
+    // FP64 Q4. Include those slots rather than shrinking polishing to Q2.
+    if (mixed_auxiliary && plan.strict_auxiliary_batch_size > 1)
+      plan.auxiliary = std::max(plan.auxiliary, fast::auxiliary_batched_arena_elements(
+                                                    o, v, plan.strict_auxiliary_batch_size));
   }
   return plan;
 }

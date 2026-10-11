@@ -35,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 30)
+    if (argc < 4 || argc > 32)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
@@ -48,7 +48,9 @@ int main(int argc, char** argv) {
           "[FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 "
           "[LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 "
           "[LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1 "
-          "[LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1 [LIFECYCLE_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]");
+          "[LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1 [LIFECYCLE_0_OR_1 "
+          "[CCSD_MIXED_PRECISION_0_OR_1 "
+          "[LAMBDA_MIXED_PRECISION_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -105,6 +107,8 @@ int main(int argc, char** argv) {
     const bool lambda_primal_matrix = argc <= 27 || selector(27);
     const bool lambda_serial_scratch_reuse = argc > 28 && selector(28);
     const bool triples_w_fp32 = argc > 23 && selector(23);
+    const bool ccsd_mixed_precision = argc > 30 && selector(30);
+    const bool lambda_mixed_precision = argc > 31 && selector(31);
     // The complete DF force owner defaults to amortized FP64 Lambda checks.
     // Explicit interval 1 retains the historical per-iteration control.
     const auto lambda_true_residual_interval = unsigned_argument(24, 30);
@@ -174,7 +178,8 @@ int main(int argc, char** argv) {
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
           admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix,
-          lambda_primal_matrix, nullptr, lambda_serial_scratch_reuse);
+          lambda_primal_matrix, nullptr, lambda_serial_scratch_reuse, ccsd_mixed_precision,
+          lambda_mixed_precision);
       const char* suffix = repetition == 2 ? ".moved-warm.json" : repetition ? ".warm.json" : "";
       std::ofstream output(std::string(argv[2]) + suffix);
       if (!output) throw std::runtime_error("cannot open completed force output");
@@ -221,6 +226,21 @@ int main(int argc, char** argv) {
       work_field("source_seconds", result.primal.problem_seconds);
       work_field("ccsd_seconds", result.primal.solver_seconds);
       field("ccsd_matrix_gemm", result.solver.df_matrix_gemm ? 1 : 0);
+      field("ccsd_mixed_precision_requested", ccsd_mixed_precision);
+      field("ccsd_mixed_precision", result.solver.df_mixed_precision);
+      field("ccsd_mixed_precision_refused", result.solver.df_mixed_precision_refused);
+      output << "  \"ccsd_mixed_program_hash\": "
+             << std::quoted(
+                    result.solver.df_mixed_program_hash ? result.solver.df_mixed_program_hash : "")
+             << ",\n";
+      work_field("ccsd_mixed_evaluations", result.solver.df_mixed_evaluations);
+      work_field("ccsd_fp32_gemm_calls", result.solver.df_fp32_gemm_calls);
+      work_field("ccsd_fp32_gemm_summands", result.solver.df_fp32_gemm_summands);
+      work_field("ccsd_precision_cast_elements", result.solver.df_precision_cast_elements);
+      work_field("ccsd_precision_switches", result.solver.df_precision_switches);
+      work_field("ccsd_mixed_pair_projection_calls", result.solver.df_mixed_pair_projection_calls);
+      work_field("ccsd_mixed_pair_projection_bytes", result.solver.df_mixed_pair_projection_bytes);
+      work_field("ccsd_strict_batch_size", result.solver.df_strict_auxiliary_batch_size);
       field("ccsd_replay_matrix_gemm", result.solver.df_replay_matrix_gemm ? 1 : 0);
       work_field("ccsd_gemm_calls", result.solver.df_gemm_calls);
       work_field("ccsd_gemm_summands", result.solver.df_gemm_summands);
@@ -390,6 +410,8 @@ int main(int argc, char** argv) {
       work_field("lambda_gemm_summands", result.lambda.df_gemm_summands);
       work_field("lambda_packing_output_bytes", result.lambda.df_packing_output_bytes);
       work_field("lambda_provider_allowance", result.lambda.df_provider_allowance_bytes);
+      work_field("lambda_shared_scratch_bytes", result.lambda.df_shared_scratch_bytes);
+      work_field("lambda_scratch_avoided_bytes", result.lambda.df_scratch_avoided_bytes);
       work_field("lambda_available_device_bytes", result.lambda.df_available_device_bytes);
       work_field("lambda_device_limit_bytes", result.lambda.df_device_limit_bytes);
       output << "  \"lambda_shared_program_hash\": "
@@ -410,6 +432,23 @@ int main(int argc, char** argv) {
       field("lambda_primal_matrix_requested", lambda_primal_matrix);
       field("lambda_serial_scratch_reuse_requested", lambda_serial_scratch_reuse);
       field("lambda_primal_matrix", result.lambda.df_primal_matrix_gemm);
+      field("lambda_mixed_precision_requested", lambda_mixed_precision);
+      field("lambda_mixed_precision", result.lambda.df_mixed_precision);
+      field("lambda_mixed_precision_refused", result.lambda.df_mixed_precision_refused);
+      work_field("lambda_mixed_storage_bytes", result.lambda.df_mixed_storage_bytes);
+      work_field("lambda_mixed_input_offset_bytes", result.lambda.df_mixed_input_offset_bytes);
+      work_field("lambda_mixed_actions", result.lambda.df_mixed_actions);
+      work_field("lambda_strict_actions", result.lambda.df_strict_actions);
+      work_field("lambda_precision_switches", result.lambda.df_precision_switches);
+      work_field("lambda_fp32_gemm_calls", result.lambda.df_fp32_gemm_calls);
+      work_field("lambda_fp32_gemm_summands", result.lambda.df_fp32_gemm_summands);
+      work_field("lambda_precision_cast_elements", result.lambda.df_precision_cast_elements);
+      work_field("lambda_mixed_iterations", result.lambda.df_mixed_iterations);
+      work_field("lambda_strict_iterations", result.lambda.df_strict_iterations);
+      output << "  \"lambda_mixed_program_hash\": "
+             << std::quoted(result.lambda.mixed_program_hash ? result.lambda.mixed_program_hash
+                                                             : "")
+             << ",\n";
       work_field("lambda_audit_arena_bytes", result.lambda.df_audit_arena_bytes);
       output << "  \"lambda_audit_schedule_hash\": "
              << std::quoted(result.lambda.audit_schedule_hash ? result.lambda.audit_schedule_hash
