@@ -9,21 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-ROUTINE_SHARDS = (
-    "core-a",
-    "core-b",
-    "runtime-heavy",
-    "posthf",
-    "ecp-forces",
-    "compiler-heavy",
-)
-NIGHTLY_SHARDS = ("nightly-hessian", "nightly-wb97mv")
-
-
-def _shards(event: str) -> tuple[str, ...]:
-    if event in {"schedule", "workflow_dispatch"}:
-        return ROUTINE_SHARDS + NIGHTLY_SHARDS
-    return ROUTINE_SHARDS
+SHARDS = ("core-a", "core-b", "runtime-heavy", "posthf", "ecp-forces", "compiler-heavy")
 
 
 def _selection(event: str, shard: str) -> tuple[str, list[str], list[str]]:
@@ -50,7 +36,7 @@ def _selection(event: str, shard: str) -> tuple[str, list[str], list[str]]:
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 def test_every_python_test_file_has_exactly_one_ci_shard(event: str) -> None:
-    selections = {shard: _selection(event, shard) for shard in _shards(event)}
+    selections = {shard: _selection(event, shard) for shard in SHARDS}
     expected = Counter(
         test.relative_to(ROOT).as_posix()
         for test in (ROOT / "tests/python").rglob("test_*.py")
@@ -87,12 +73,12 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
 
 
 @pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))
-@pytest.mark.parametrize("shard", ROUTINE_SHARDS + NIGHTLY_SHARDS)
+@pytest.mark.parametrize("shard", SHARDS)
 def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     distribution, _, arguments = _selection(event, shard)
     assert "--deselect" not in arguments
     assert distribution == (
-        "worksteal" if shard in {"core-a", "core-b", "nightly-wb97mv"} else "loadfile"
+        "worksteal" if shard in {"core-a", "core-b"} else "loadfile"
     )
 
 
@@ -100,9 +86,9 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
 def test_nightly_heavy_tests_move_without_duplicate_or_missing_owners(
     event: str,
 ) -> None:
-    selections = {shard: _selection(event, shard)[1] for shard in _shards(event)}
+    selections = {shard: _selection(event, shard)[1] for shard in SHARDS}
     wb97mv = "tests/python/test_wb97mv_complete.py"
-    assert selections["nightly-wb97mv"] == [wb97mv]
+    assert wb97mv in selections["compiler-heavy"]
     assert wb97mv not in selections["core-a"]
     assert wb97mv not in selections["core-b"]
     for path in (
@@ -111,16 +97,16 @@ def test_nightly_heavy_tests_move_without_duplicate_or_missing_owners(
         "tests/python/test_hessian_reference.py",
         "tests/python/test_hessian_hvp.py",
     ):
-        assert path in selections["nightly-hessian"]
+        assert path in selections["runtime-heavy"]
         assert path not in selections["posthf"]
 
 
 @pytest.mark.parametrize("event", ("pull_request", "merge_group", "push"))
 def test_routine_shards_keep_expensive_files_and_no_extra_jobs(event: str) -> None:
-    assert _shards(event) == ROUTINE_SHARDS
-    selections = {shard: _selection(event, shard)[1] for shard in _shards(event)}
+    selections = {shard: _selection(event, shard)[1] for shard in SHARDS}
     wb97mv = "tests/python/test_wb97mv_complete.py"
     assert sum(wb97mv in targets for targets in selections.values()) == 1
+    assert wb97mv not in selections["compiler-heavy"]
     for path in (
         "tests/python/test_hessian_analytic.py",
         "tests/python/test_hessian_directional.py",
@@ -128,6 +114,7 @@ def test_routine_shards_keep_expensive_files_and_no_extra_jobs(event: str) -> No
         "tests/python/test_hessian_hvp.py",
     ):
         assert path in selections["posthf"]
+        assert path not in selections["runtime-heavy"]
 
 
 def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
