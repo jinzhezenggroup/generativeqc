@@ -132,6 +132,8 @@ def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -
         "test_stationary_aot_generation.py",
         "test_cc_shared_iteration_driver.py",
         "test_rccsd_codegen_no_numpy.py",
+        "test_dft_mp_v1_capacity.py",
+        "test_df_lambda_frontier.py",
     ):
         assert f"tests/python/{filename}" in targets
 
@@ -201,9 +203,12 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
     expected = {
         # Landed dedicated transfers supersede historical core pins.
         "ecp-forces": ("test_mixed_rsh_df_forces.py",),
+        "compiler-heavy": (
+            "test_dft_mp_v1_capacity.py",
+            "test_df_lambda_frontier.py",
+        ),
         "core-b": (
             "test_df_lambda_core_reuse.py",
-            "test_df_lambda_frontier.py",
             "test_df_triples_distinct_moments.py",
             "test_df_lambda_matrix_audit.py",
         ),

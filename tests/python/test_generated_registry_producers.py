@@ -18,6 +18,7 @@ set(CMAKE_CURRENT_SOURCE_DIR "${SOURCE_ROOT}")
 set(CMAKE_CUDA_ARCHITECTURES 120)
 set(GENERATIVEQC_ENABLE_CUDA ON)
 set(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT OFF)
+set(_generativeqc_cuda_compile_pool "")
 file(WRITE "${CMAKE_BINARY_DIR}/producers.txt" "")
 function(generativeqc_register_generated_sources)
   cmake_parse_arguments(P "ADD_TO_TARGET" "NAME;TARGET;GENERATOR;COMMENT"
@@ -29,11 +30,21 @@ function(generativeqc_register_generated_sources)
          "${name}|${generator}|${P_TARGET}|${P_ADD_TO_TARGET}\n")
   endforeach()
 endfunction()
-# Observe declarations only; this probe deliberately has no runtime target.
+# Observe producer declarations only; object-library wiring is exercised by
+# the real-target build-closure probes, not this compiler-free inventory.
+function(add_library)
+endfunction()
+function(add_dependencies)
+endfunction()
+function(target_link_libraries)
+endfunction()
+function(set_target_properties)
+endfunction()
 function(target_include_directories)
 endfunction()
 function(target_sources)
 endfunction()
+include("${SOURCE_ROOT}/cmake/GenerativeQCCuda.cmake")
 include("${SOURCE_ROOT}/cmake/GenerativeQCGeneratedSources.cmake")
 generativeqc_register_host_generated_sources(generativeqc)
 generativeqc_register_cuda_generated_sources(generativeqc)
@@ -61,14 +72,25 @@ def _assert_producers(rows: list[str]) -> None:
         assert found[name] == [(generator, "generativeqc", "TRUE")], (name, found[name])
 
 
-def test_libxc_and_direct_headers_keep_one_attached_producer(tmp_path: Path) -> None:
+@pytest.mark.parametrize("automatic_cuda", [False, True], ids=["off", "on"])
+def test_libxc_and_direct_headers_keep_one_attached_producer(
+    tmp_path: Path, automatic_cuda: bool
+) -> None:
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("CMake unavailable")
     (tmp_path / "CMakeLists.txt").write_text(CMAKE_PROBE, encoding="utf-8")
     build = tmp_path / "build"
     result = subprocess.run(
-        [cmake, "-S", str(tmp_path), "-B", str(build), f"-DSOURCE_ROOT={ROOT}"],
+        [
+            cmake,
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(build),
+            f"-DSOURCE_ROOT={ROOT}",
+            f"-DGENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT={'ON' if automatic_cuda else 'OFF'}",
+        ],
         capture_output=True,
         text=True,
         timeout=30,

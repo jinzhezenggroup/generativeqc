@@ -22,7 +22,7 @@ import typing
 from collections.abc import Mapping
 from dataclasses import dataclass
 from fractions import Fraction
-from itertools import product
+from itertools import pairwise, product
 from types import MappingProxyType
 
 import numpy as np
@@ -439,9 +439,7 @@ def _jvp_segment_sum(
     source = np.moveaxis(tangents[0], node.attrs["axis"], 0)
     target = np.moveaxis(result, node.attrs["axis"], 0)
     # Segment boundaries form one fewer adjacent (start, stop) intervals.
-    for segment, (start, stop) in enumerate(
-        zip(node.attrs["offsets"], node.attrs["offsets"][1:], strict=False)
-    ):
+    for segment, (start, stop) in enumerate(pairwise(node.attrs["offsets"])):
         target[segment] = np.sum(source[start:stop], axis=0, dtype=node.spec.dtype)
     return result
 

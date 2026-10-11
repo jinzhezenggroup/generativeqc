@@ -110,6 +110,16 @@ namespace cuda_xc_detail {
 using CudaXcPointLauncher = void (*)();
 template <unsigned F, bool R> void launch_points() {}
 template <unsigned Mask> void launch_split_hybrid_points() {}
+}
+namespace generativeqc::dft::generated {
+struct AutomaticPointStub {
+  void (*launch)(){};
+  unsigned ingredient_mask{1};
+  generativeqc::dft::CudaXcFastPathCapabilities fast_paths{};
+};
+const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
+}
+namespace cuda_xc_detail {
 """
         + emit_native_xc_point_dispatch()
         + "\n}\n"
