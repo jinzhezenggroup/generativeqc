@@ -184,9 +184,8 @@ jobs:
         compiler: [gcc, clang]
     runs-on: ubuntu-24.04
     env:
-      # Keep each compiler cache bounded so both matrix jobs can share the
-      # repository's Actions cache quota. Compiler identity and flags remain
-      # part of ccache's own key, so a miss affects speed rather than validity.
+      # All CPU consumers share one bounded master snapshot. ccache keeps
+      # compiler, instrumentation, and source identities separate internally.
       CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -482,8 +481,8 @@ jobs:
           python3 -m pytest -q \
             tests/python/test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources \
             --basetemp build/ao-radial-compile
-      # Merge-group refs are ephemeral, so saving actions/cache there cannot
-      # accelerate the next queue group. Stable PR/master refs still benefit.
+      # This consumer never publishes an incomplete or branch-scoped cache.
+      # The trusted full CUDA CLI producer saves after both compile variants.
       - name: Check Fock and proposal preflight without a GPU
         env:
           CUDA_VISIBLE_DEVICES: ""
@@ -882,8 +881,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
-      # The seven Python shards build the same native library. Stable refs may
-      # publish it, while ephemeral merge-group refs remain read-only consumers.
+      # All seven Python shards consume the same master CPU compiler cache;
+      # no test shard races to publish an immutable partial snapshot.
       - name: Install GenerativeQC editable package
         run: |
           # Dependencies and build requirements are already present. Reuse the
@@ -917,9 +916,8 @@ jobs:
           key: ${{ steps.gfn1_reference_sources.outputs.cache-primary-key }}
       - name: Show ccache statistics
         run: ccache --show-stats
-      # Probe caches are useful only for shards that compile native probes.
-      # Merge-group refs are ephemeral, so they restore but never publish caches.
-
+      # Native probes share the already restored local CPU cache; they do not
+      # each download and publish a separate 256 MiB compiler snapshot.
       - name: Reset native probe ccache statistics
         run: ccache --zero-stats
       - name: Prepare bounded native diagnostics
@@ -957,8 +955,8 @@ jobs:
             "${coverage_args[@]}" \
             "${diagnostic_args[@]}" \
             "${extra_args[@]}"
-      # ccache only retains successful compiler outputs, even if a later test
-      # fails or times out. Partial snapshots must not freeze the complete key.
+      # Probe compilations may reuse the local cache; test failures never
+      # publish a partial cache or poison the trusted master snapshot.
       - name: Show post-test ccache statistics
         if: always()
         run: ccache --show-stats
@@ -1052,6 +1050,7 @@ jobs:
             /usr/local/bin/ccache
       - name: Restore shared Linux CPU ccache (CodSpeed)
         id: benchmark_ccache
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -1240,7 +1239,8 @@ jobs:
         (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    # Account for both the fast CI compilation and the full release AOT seed.
+    timeout-minutes: 210
     permissions:
       contents: read
       actions: read
