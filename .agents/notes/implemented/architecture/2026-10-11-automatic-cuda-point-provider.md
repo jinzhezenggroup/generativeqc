@@ -75,7 +75,7 @@ This is historical intermediate-snapshot evidence, not final source binding.
 The final source adds totals-stride overflow protection, explicit disabled
 packaging, retained prepared identity and direct single/batched point probes.
 
-### Final source-matched qualification
+### Initial source-matched qualification
 
 Scientific/native source: `fad1b85fa2aafda4162e4e758d92f3f98cc38453`.
 Both remote source trees were checked against the complete tracked-file SHA256
@@ -124,6 +124,41 @@ Ignored artifacts live under `.cache/1118-runtime/` in the runtime worktree:
 `final-native/native-resources-final/report.json`. Remote frozen inputs/results
 are n5 `qc-1118-native-v1-20261011` (compiled final bytes) and n1
 `qc-1118-native-v3-20261011` (qualification). No release/tag/asset is published.
+
+### Upstream integration and repeated qualification
+
+PR #2255 merged as upstream `e370c490f` while the native stage was being
+published. Integration source is
+`fecef17bf9ca0049ecd5f3c4da1677e2733cb66b`; it retains the upstream final
+point/force evidence note and this stage's common structural registry owner.
+The native grid emission remains byte-identical, but other merged compiler
+modules change the importer/compiler-inventory identities. The initial receipts
+therefore cannot be relabeled as current or replayed with overridden identities.
+
+A new frozen tracked-file manifest was verified on n5 and n1
+`qc-1118-native-merged-20261011`. All 197 registrations / 394 kernels were
+regenerated and recompiled with current identities and the same release/cache
+contract. Size and pressure values remain exactly those above. New binary SHA256:
+`4bc35f00f1c68c1407e6cdd823b8e2198af8978bf827d14e4393f6dfcd079a6a`.
+
+- **209 host/compiler tests pass**, with 100 real-device cases skipped locally;
+  public docstrings pass; **518 compiler modules, zero dependency errors**.
+- **Slurm job 7450**, n1 RTX 5090, passes **all 100 GPU tests**, the curated
+  native suite, and both automatic/curated memcheck gates (**zero errors**).
+  All 44 independent native receipts match current compiler identities; energy,
+  potential and directional error maxima remain exactly the initial values.
+- The current release native grid resource report again has all five PBE
+  pressure sets identical to the retained pre-refactor baseline. Its object is
+  **9,327,640 bytes**, binding
+  `5b938e4c3f454656f0040c517077f45a4234ff36c399d42ba16078ca531123c1`.
+- A fresh default-off CMake configuration still compiles only the inert CXX
+  registry, not automatic CUDA scientific shards.
+
+Current ignored evidence is `.cache/1118-runtime/merged-gpu/`, `merged-native/`,
+`compiler-merged.log`, `structure-merged.log`, `docstrings-merged.log` and the
+`merged-source-*` archive/manifest. The earlier source-bound evidence is retained
+as history, not overwritten. Public CUDA KS/force and packaging/promotion gates
+remain open; this requalification does not upgrade their claims.
 
 Source/host tests protect one ABI/traversal owner, deterministic identities,
 continued public rejection and curated capability behavior. Preserve curated
