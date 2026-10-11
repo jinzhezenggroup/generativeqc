@@ -119,6 +119,7 @@ def prepare_case(case: str, destination: Path) -> None:
             zip(
                 [original.atom_symbol(index) for index in range(original.natm)],
                 original.atom_coords(),
+                strict=True,
             )
         )
         orbital_basis = "cc-pvdz" if case == "ethane58" else "cc-pvtz"

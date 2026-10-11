@@ -135,7 +135,7 @@ def main() -> None:
     ).stdout.splitlines()
     if len(names) != len(rows):
         raise ValueError("demangler did not preserve the kernel inventory")
-    for row, name in zip(rows, names):
+    for row, name in zip(rows, names, strict=True):
         row["name"] = name
     report = {
         "schema_version": 1,
