@@ -6,18 +6,28 @@ import json
 import os
 import shutil
 import subprocess
-import sys
+import venv
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(scope="module")
+def inventory_python(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Keep an editable install's redirect finder out of the copied checkout."""
+    directory = tmp_path_factory.mktemp("inventory-python")
+    builder = venv.EnvBuilder(with_pip=False)
+    builder.create(directory)
+    return Path(builder.ensure_directories(directory).env_exec_cmd)
+
+
 @pytest.mark.parametrize("backend", ["Ninja", "Unix Makefiles"])
 @pytest.mark.parametrize("selection", ["auto", "pbe_rks;pbe_rks", ""])
 def test_build_refreshes_compiler_profile_inventory(
-    tmp_path: Path, backend: str, selection: str
+    tmp_path: Path, inventory_python: Path, backend: str, selection: str
 ) -> None:
     cmake = shutil.which("cmake")
     builder = "ninja" if backend == "Ninja" else "make"
@@ -46,7 +56,10 @@ def test_build_refreshes_compiler_profile_inventory(
     (source / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
         "project(stationary_inventory NONE)\n"
-        f'set(Python3_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
+        f'set(Python3_EXECUTABLE "{inventory_python.as_posix()}")\n'
+        # Isolate discovery, not the caller's CMake launcher (which can itself
+        # need PYTHONPATH to load a pip-installed CMake wrapper).
+        f'set(ENV{{PYTHONPATH}} "{Path(np.__file__).resolve().parent.parent.as_posix()}")\n'
         'include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")\n'
         # Match the source-identity membership watcher: it does not detect
         # content edits in existing files and cannot replace discovery edges.
@@ -58,7 +71,14 @@ def test_build_refreshes_compiler_profile_inventory(
         "add_custom_target(inventory ALL)\n"
     )
     build = tmp_path / "build"
-    environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    # The clean interpreter reuses NumPy's installed files without executing the
+    # parent environment's .pth hooks, which can redirect compiler imports away
+    # from this fixture even when the generator prepends its source directory.
+    environment = {
+        **os.environ,
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+    }
 
     def run(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -80,6 +100,21 @@ def test_build_refreshes_compiler_profile_inventory(
         f"-DGENERATIVEQC_STATIONARY_AOT_PROFILES={selection}",
     )
     assert configured.returncode == 0, configured.stdout + configured.stderr
+    dependencies = {
+        Path(line)
+        for line in (build / "CMakeFiles/generativeqc_stationary_profile_inputs.txt")
+        .read_text()
+        .splitlines()
+    }
+    assert all(path.is_relative_to(source) for path in dependencies)
+    assert (
+        source / "python/generativeqc_compiler/method/stationary_cuda.py"
+        in dependencies
+    )
+    assert (
+        source / "python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
+        in dependencies
+    )
     original = (build / "selected.txt").read_text()
     if selection == "auto":
         assert "pbe_rks" in original.split(";")
