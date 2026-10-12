@@ -15,7 +15,6 @@
 #include <utility>
 
 #include "api/handles.hpp"
-#include "methods/batch_capabilities.hpp"
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_spd_force_policy.hpp"
@@ -28,6 +27,7 @@
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/scf_common_options.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
@@ -2443,9 +2443,9 @@ generativeqc_status item_exception_status() {
  * Geometry is rebuilt per item, while model/basis/charge/spin remain immutable.
  * No HF graph or Python calculation loop participates in this schedule. */
 class KsPreparedBatch final : public PreparedBatch,
-                                public BatchWarmStarts,
-                                public BatchKsTransportDiagnostics,
-                                public BatchDfMetricDiagnostics {
+                              public BatchWarmStarts,
+                              public BatchKsTransportDiagnostics,
+                              public BatchDfMetricDiagnostics {
  public:
   KsPreparedBatch(Capabilities capabilities, std::vector<core::System> systems,
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,

@@ -5,8 +5,8 @@
 #include <stdexcept>
 #include <utility>
 
-#include "methods/method.hpp"
 #include "methods/batch_capabilities.hpp"
+#include "methods/method.hpp"
 #include "molecule/basis.hpp"
 
 // Inject only inside reset. Ordinary numerical tests keep allocation enabled.
@@ -159,18 +159,19 @@ void optional_batch_capabilities() {
     }
   };
   PlainBatch plain;
-  require(dynamic_cast<BatchWarmStarts*>(&plain) == nullptr, "seed capability is mandatory");
-  require(dynamic_cast<BatchDirectQueueProfiles*>(&plain) == nullptr,
+  PreparedBatch* erased = &plain;
+  require(dynamic_cast<BatchWarmStarts*>(erased) == nullptr, "seed capability is mandatory");
+  require(dynamic_cast<BatchDirectQueueProfiles*>(erased) == nullptr,
           "direct-profile capability is mandatory");
-  require(dynamic_cast<BatchEigensolverProfiles*>(&plain) == nullptr,
+  require(dynamic_cast<BatchEigensolverProfiles*>(erased) == nullptr,
           "eigensolver-profile capability is mandatory");
-  require(dynamic_cast<BatchDfMetricDiagnostics*>(&plain) == nullptr,
+  require(dynamic_cast<BatchDfMetricDiagnostics*>(erased) == nullptr,
           "DF metric capability is mandatory");
-  require(dynamic_cast<BatchKsTransportDiagnostics*>(&plain) == nullptr,
+  require(dynamic_cast<BatchKsTransportDiagnostics*>(erased) == nullptr,
           "KS transport capability is mandatory");
-  require(dynamic_cast<BatchCorrelationDiagnostics*>(&plain) == nullptr,
+  require(dynamic_cast<BatchCorrelationDiagnostics*>(erased) == nullptr,
           "correlation capability is mandatory");
-  require(dynamic_cast<BatchCcPerformanceDiagnostics*>(&plain) == nullptr,
+  require(dynamic_cast<BatchCcPerformanceDiagnostics*>(erased) == nullptr,
           "CC performance capability is mandatory");
   require(plain.execute({}, false).size() == 1, "plain batch execution failed");
   plain.reset_execution();

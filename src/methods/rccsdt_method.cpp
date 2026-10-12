@@ -19,8 +19,8 @@
 #include "cc/triples_cuda.hpp"
 #include "generated_rccsdt_cpu.hpp"
 #include "methods/correlated_cuda_reference.hpp"
-#include "methods/correlated_warm_reference.hpp"
 #include "methods/batch_capabilities.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
@@ -342,9 +342,9 @@ class RccsdtPrepared final : public PreparedCalculation {
 };
 
 class RccsdtPreparedBatch final : public PreparedBatch,
-                                public BatchWarmStarts,
-                                public BatchCorrelationDiagnostics,
-                                public BatchCcPerformanceDiagnostics {
+                                  public BatchWarmStarts,
+                                  public BatchCorrelationDiagnostics,
+                                  public BatchCcPerformanceDiagnostics {
  public:
   RccsdtPreparedBatch(Capabilities capabilities, core::ContextState& context,
                       std::vector<core::System> systems,

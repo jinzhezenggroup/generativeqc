@@ -1,4 +1,5 @@
 #include "methods/method.hpp"
+
 #include "methods/batch_capabilities.hpp"
 
 namespace generativeqc::methods {

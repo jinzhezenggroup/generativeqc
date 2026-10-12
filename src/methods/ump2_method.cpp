@@ -7,8 +7,8 @@
 #include <mutex>
 #include <optional>
 
-#include "methods/correlated_warm_reference.hpp"
 #include "methods/batch_capabilities.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/ump2_cpu_generated.hpp"

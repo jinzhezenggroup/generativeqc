@@ -414,8 +414,8 @@ generativeqc_status item_exception_status() {
 }
 
 class Mp2PreparedBatch final : public PreparedBatch,
-                                public BatchWarmStarts,
-                                public BatchCorrelationDiagnostics {
+                               public BatchWarmStarts,
+                               public BatchCorrelationDiagnostics {
  public:
   Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
                    std::vector<core::System> systems,

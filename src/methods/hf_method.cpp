@@ -294,10 +294,10 @@ class HfPreparedCalculation final : public PreparedCalculation {
 };
 
 class HfPreparedBatch final : public PreparedBatch,
-                                public BatchWarmStarts,
-                                public BatchDirectQueueProfiles,
-                                public BatchEigensolverProfiles,
-                                public BatchDfMetricDiagnostics {
+                              public BatchWarmStarts,
+                              public BatchDirectQueueProfiles,
+                              public BatchEigensolverProfiles,
+                              public BatchDfMetricDiagnostics {
  public:
   HfPreparedBatch(Capabilities capabilities, const runtime::ExecutionContext& execution,
                   std::vector<core::System> systems, scf::ScfOptions options,

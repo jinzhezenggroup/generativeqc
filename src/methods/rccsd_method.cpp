@@ -23,8 +23,8 @@
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "methods/correlated_cuda_reference.hpp"
-#include "methods/correlated_warm_reference.hpp"
 #include "methods/batch_capabilities.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
@@ -869,9 +869,9 @@ class RccsdPrepared final : public PreparedCalculation {
 };
 
 class RccsdPreparedBatch final : public PreparedBatch,
-                                public BatchWarmStarts,
-                                public BatchCorrelationDiagnostics,
-                                public BatchCcPerformanceDiagnostics {
+                                 public BatchWarmStarts,
+                                 public BatchCorrelationDiagnostics,
+                                 public BatchCcPerformanceDiagnostics {
  public:
   RccsdPreparedBatch(Capabilities capabilities, core::ContextState& context,
                      std::vector<core::System> systems,

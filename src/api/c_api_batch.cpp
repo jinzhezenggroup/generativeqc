@@ -11,8 +11,8 @@
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
-#include "methods/method.hpp"
 #include "methods/batch_capabilities.hpp"
+#include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
 
 extern "C" {
@@ -135,7 +135,8 @@ generativeqc_status generativeqc_batch_get_cc_performance_diagnostic(
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     const auto* capability =
-        dynamic_cast<const generativeqc::methods::BatchCcPerformanceDiagnostics*>(batch->plan.get());
+        dynamic_cast<const generativeqc::methods::BatchCcPerformanceDiagnostics*>(
+            batch->plan.get());
     if (!capability) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const auto value = capability->cc_performance_diagnostic(index);
     if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
