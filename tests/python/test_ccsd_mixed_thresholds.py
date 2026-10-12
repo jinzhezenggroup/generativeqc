@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from benchmarks.ccsd_mixed_thresholds import controls, maximum_force_error
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_threshold_scan_changes_only_the_warmup_policy() -> None:
