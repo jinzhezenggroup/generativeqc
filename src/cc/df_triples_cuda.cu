@@ -1211,6 +1211,11 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       context_owner = prepare_context();
     } catch (const generativeqc_tensor::DeviceAllocationError&) {
       if (!fused_selected) throw;
+      // A real failed allocation also sets the runtime's thread-local error.
+      // Consume only the expected refusal; never hide a different driver error.
+      const auto pending = cudaGetLastError();
+      if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+        generativeqc_tensor::cuda_check(pending);
       // Preflight cannot prevent a concurrent external allocation. Retire the
       // failed owner before one bounded retry with the original page/panel plan.
       fused_selected = false;
