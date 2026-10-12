@@ -1006,8 +1006,24 @@ ScfResult run_rks(
                          ks.physical_residual < residual_tolerance &&
                          (!ordinary_primary || residual_max_abs(final_residual) <=
                                                    std::min(1.0e-8, options.density_tolerance));
-      runtime::sample_cpu_capacity(runtime::add_capacity(
-          retained_capacity(density), runtime::vector_capacities(final.fock, final_residual)));
+      if (result.converged && evaluate_xc.program) {
+        // Export diagonalizes this last F[D], not the pre-rebuild operator.
+        // Certify its projector now so a rejected closure can spend the
+        // unused SCF budget instead of publishing an unexportable state.
+        orbitals = generalized_eigen(final.fock, orthogonalizer, n);
+        projected = density_from_orbitals(orbitals.vectors, n, occupied, 2.0);
+        const double canonical_change = density_rms(projected, density);
+        double maximum_change = 0.0;
+        for (std::size_t index = 0; index < density.size(); ++index)
+          maximum_change = std::max(maximum_change, std::abs(projected[index] - density[index]));
+        result.density_rms = std::max(result.density_rms, canonical_change);
+        ks.density_change = result.density_rms;
+        result.converged = canonical_change < std::min(1.0e-8, options.density_tolerance) &&
+                           maximum_change <= 1.0e-8;
+      }
+      runtime::sample_cpu_capacity(
+          runtime::add_capacity(retained_capacity(density),
+                                runtime::vector_capacities(final.fock, final_residual, projected)));
       result.energy = final.energy;
       if (result.converged && options.retain_ks_state)
         result.ks_physical_fock = std::move(final.fock);

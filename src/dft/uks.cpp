@@ -305,164 +305,215 @@ ScfResult run_uks_impl(
     bool stabilized{};
   };
 
-  const ::generativeqc::solver::SelfConsistentPolicy policy{
-      options.max_iterations, options.energy_tolerance, options.density_tolerance, residual_gate,
-      true};
-  auto outcome = ::generativeqc::solver::run_self_consistent(
-      UksState{std::move(alpha), std::move(beta)}, policy,
-      [&](const UksState& state, unsigned) {
-        const bool stabilized = stabilize_occupations;
-        auto physical = evaluate(plan, long_range_correction, basis, grid, state.alpha, state.beta,
-                                 evaluate_xc, options, nonlocal_correlation, nonlocal_domain);
-        ++result.fock_builds;
-        Matrix ra = commutator_residual(physical.fock.alpha, state.alpha, ints.overlap, n);
-        Matrix rb = commutator_residual(physical.fock.beta, state.beta, ints.overlap, n);
-        const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
-        auto effective = split_spin_matrices(
-            diis.update(concatenate(physical.fock.alpha, physical.fock.beta), concatenate(ra, rb)),
-            n * n);
-        ca = stabilized ? stabilized_uks_orbitals(effective.first, state.alpha, ints.overlap, x, n)
-                        : generalized_eigen(effective.first, x, n);
-        cb = stabilized ? stabilized_uks_orbitals(effective.second, state.beta, ints.overlap, x, n)
-                        : generalized_eigen(effective.second, x, n);
-        Matrix next_a = density_from_orbitals(ca.vectors, n, na, 1.0);
-        Matrix next_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
-        const double change_a = density_rms(next_a, state.alpha);
-        const double change_b = density_rms(next_b, state.beta);
-        return UksLoopEvaluation{std::move(physical.fock),
-                                 std::move(ra),
-                                 std::move(rb),
-                                 std::move(effective.first),
-                                 std::move(effective.second),
-                                 std::move(next_a),
-                                 std::move(next_b),
-                                 physical.components,
-                                 physical.components.total(),
-                                 std::max(change_a, change_b),
-                                 std::max(residual_a, residual_b),
-                                 std::hypot(change_a, change_b) / std::sqrt(2.0),
-                                 std::hypot(residual_a, residual_b) / std::sqrt(2.0),
-                                 dot(state.alpha, ints.overlap),
-                                 dot(state.beta, ints.overlap),
-                                 stabilized};
-      },
-      [&](UksState& state, UksLoopEvaluation evaluation,
-          const ::generativeqc::solver::SelfConsistentProgress& progress) {
-        runtime::sample_cpu_capacity(runtime::add_capacity(
-            runtime::add_capacity(
-                runtime::add_capacity(
-                    plan.cpu_observation_capacity(),
-                    long_range_correction ? long_range_correction->cpu_observation_capacity() : 0),
-                diis.numeric_capacity()),
-            runtime::vector_capacities(basis.packed, grid.points(), grid.weights(), grid.owners(),
-                                       x, state.alpha, state.beta, ca.values, ca.vectors, cb.values,
-                                       cb.vectors, evaluation.physical_fock.alpha,
-                                       evaluation.physical_fock.beta, evaluation.alpha_residual,
-                                       evaluation.beta_residual, evaluation.effective_alpha,
-                                       evaluation.effective_beta, evaluation.next_alpha,
-                                       evaluation.next_beta, diagnostic.history)));
+  unsigned used_iterations = 0;
+  while (used_iterations < options.max_iterations) {
+    const unsigned remaining_iterations = options.max_iterations - used_iterations;
+    const ::generativeqc::solver::SelfConsistentPolicy policy{
+        remaining_iterations, options.energy_tolerance, options.density_tolerance, residual_gate,
+        true};
+    auto outcome = ::generativeqc::solver::run_self_consistent(
+        UksState{std::move(alpha), std::move(beta)}, policy,
+        [&](const UksState& state, unsigned) {
+          const bool stabilized = stabilize_occupations;
+          auto physical =
+              evaluate(plan, long_range_correction, basis, grid, state.alpha, state.beta,
+                       evaluate_xc, options, nonlocal_correlation, nonlocal_domain);
+          ++result.fock_builds;
+          Matrix ra = commutator_residual(physical.fock.alpha, state.alpha, ints.overlap, n);
+          Matrix rb = commutator_residual(physical.fock.beta, state.beta, ints.overlap, n);
+          const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
+          auto effective =
+              split_spin_matrices(diis.update(concatenate(physical.fock.alpha, physical.fock.beta),
+                                              concatenate(ra, rb)),
+                                  n * n);
+          ca = stabilized
+                   ? stabilized_uks_orbitals(effective.first, state.alpha, ints.overlap, x, n)
+                   : generalized_eigen(effective.first, x, n);
+          cb = stabilized
+                   ? stabilized_uks_orbitals(effective.second, state.beta, ints.overlap, x, n)
+                   : generalized_eigen(effective.second, x, n);
+          Matrix next_a = density_from_orbitals(ca.vectors, n, na, 1.0);
+          Matrix next_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
+          const double change_a = density_rms(next_a, state.alpha);
+          const double change_b = density_rms(next_b, state.beta);
+          return UksLoopEvaluation{std::move(physical.fock),
+                                   std::move(ra),
+                                   std::move(rb),
+                                   std::move(effective.first),
+                                   std::move(effective.second),
+                                   std::move(next_a),
+                                   std::move(next_b),
+                                   physical.components,
+                                   physical.components.total(),
+                                   std::max(change_a, change_b),
+                                   std::max(residual_a, residual_b),
+                                   std::hypot(change_a, change_b) / std::sqrt(2.0),
+                                   std::hypot(residual_a, residual_b) / std::sqrt(2.0),
+                                   dot(state.alpha, ints.overlap),
+                                   dot(state.beta, ints.overlap),
+                                   stabilized};
+        },
+        [&](UksState& state, UksLoopEvaluation evaluation,
+            const ::generativeqc::solver::SelfConsistentProgress& progress) {
+          runtime::sample_cpu_capacity(runtime::add_capacity(
+              runtime::add_capacity(
+                  runtime::add_capacity(plan.cpu_observation_capacity(),
+                                        long_range_correction
+                                            ? long_range_correction->cpu_observation_capacity()
+                                            : 0),
+                  diis.numeric_capacity()),
+              runtime::vector_capacities(basis.packed, grid.points(), grid.weights(), grid.owners(),
+                                         x, state.alpha, state.beta, ca.values, ca.vectors,
+                                         cb.values, cb.vectors, evaluation.physical_fock.alpha,
+                                         evaluation.physical_fock.beta, evaluation.alpha_residual,
+                                         evaluation.beta_residual, evaluation.effective_alpha,
+                                         evaluation.effective_beta, evaluation.next_alpha,
+                                         evaluation.next_beta, diagnostic.history)));
 
-        // Preserve #305's occupation-cycle policy: only subsequent proposals
-        // are shifted, while every physical convergence gate remains unshifted.
-        if (!progress.converged && progress.iteration > 1 &&
-            progress.energy_change < options.energy_tolerance &&
-            progress.residual_rms < residual_gate &&
-            progress.state_rms >= options.density_tolerance)
-          stabilize_occupations = true;
+          // Preserve #305's occupation-cycle policy: only subsequent proposals
+          // are shifted, while every physical convergence gate remains unshifted.
+          if (!progress.converged && progress.iteration > 1 &&
+              progress.energy_change < options.energy_tolerance &&
+              progress.residual_rms < residual_gate &&
+              progress.state_rms >= options.density_tolerance)
+            stabilize_occupations = true;
 
-        // UKS convergence certifies the CURRENT physical state. The DIIS/level-
-        // shifted proposal is only a check and must never replace that state.
-        if (progress.converged || progress.iteration == options.max_iterations)
-          return UksState{std::move(state.alpha), std::move(state.beta)};
-        return UksState{std::move(evaluation.next_alpha), std::move(evaluation.next_beta)};
-      },
-      [&](const ::generativeqc::solver::SelfConsistentProgress& progress,
-          const UksLoopEvaluation& evaluation) {
-        result.energy = progress.energy;
-        result.iterations = progress.iteration;
-        result.energy_change = progress.energy_change;
-        result.density_rms = evaluation.joined_density_rms;
-        diagnostic.physical_residual = progress.residual_rms;
-        result.physical_residual_rms = evaluation.joined_residual_rms;
-        diagnostic.components = evaluation.components;
-        diagnostic.electrons = {evaluation.alpha_electrons, evaluation.beta_electrons};
-        diagnostic.density_change = progress.state_rms;
-        diagnostic.history.push_back(
-            {progress.iteration, evaluation.components, progress.energy_change, progress.state_rms,
-             progress.residual_rms, diagnostic.electrons, evaluation.stabilized});
-      },
-      [&](const ::generativeqc::solver::SelfConsistentProgress&,
-          const UksLoopEvaluation& evaluation) {
-        // Keep DIIS active until the CURRENT physical state also meets the
-        // maximum-entry gate required by the bounded final closure.
-        return strategy.backend != FockBackend::Cpu ||
-               std::max(residual_max_abs(evaluation.alpha_residual),
-                        residual_max_abs(evaluation.beta_residual)) <=
-                   std::min(1.0e-8, options.density_tolerance);
-      });
-  alpha = std::move(outcome.state.alpha);
-  beta = std::move(outcome.state.beta);
-  result.converged = outcome.converged;
+          // UKS convergence certifies the CURRENT physical state. The DIIS/level-
+          // shifted proposal is only a check and must never replace that state.
+          if (progress.converged || progress.iteration == remaining_iterations)
+            return UksState{std::move(state.alpha), std::move(state.beta)};
+          return UksState{std::move(evaluation.next_alpha), std::move(evaluation.next_beta)};
+        },
+        [&](const ::generativeqc::solver::SelfConsistentProgress& progress,
+            const UksLoopEvaluation& evaluation) {
+          result.energy = progress.energy;
+          result.iterations = used_iterations + progress.iteration;
+          result.energy_change = progress.energy_change;
+          result.density_rms = evaluation.joined_density_rms;
+          diagnostic.physical_residual = progress.residual_rms;
+          result.physical_residual_rms = evaluation.joined_residual_rms;
+          diagnostic.components = evaluation.components;
+          diagnostic.electrons = {evaluation.alpha_electrons, evaluation.beta_electrons};
+          diagnostic.density_change = progress.state_rms;
+          // A restarted stage has no preceding within-stage energy. Match the
+          // existing RKS unavailable-baseline marker without changing arithmetic.
+          const bool unavailable_stage_baseline = progress.iteration == 1 && used_iterations > 0 &&
+                                                  std::isinf(progress.energy_change) &&
+                                                  progress.energy_change > 0.0;
+          const double history_energy_change =
+              unavailable_stage_baseline ? -1.0 : progress.energy_change;
+          diagnostic.history.push_back({used_iterations + progress.iteration, evaluation.components,
+                                        history_energy_change, progress.state_rms,
+                                        progress.residual_rms, diagnostic.electrons,
+                                        evaluation.stabilized});
+        },
+        [&](const ::generativeqc::solver::SelfConsistentProgress&,
+            const UksLoopEvaluation& evaluation) {
+          // Keep DIIS active until the CURRENT physical state also meets the
+          // maximum-entry gate required by the bounded final closure.
+          return strategy.backend != FockBackend::Cpu ||
+                 std::max(residual_max_abs(evaluation.alpha_residual),
+                          residual_max_abs(evaluation.beta_residual)) <=
+                     std::min(1.0e-8, options.density_tolerance);
+        });
+    alpha = std::move(outcome.state.alpha);
+    beta = std::move(outcome.state.beta);
+    used_iterations += outcome.progress.iteration;
+    result.converged = outcome.converged;
 
-  if (!result.converged) {
-    result.density = concatenate(alpha, beta);
-    return result;
-  }
-
-  // Close the successful UKS state on the actual unshifted physical operator.
-  // DIIS/stabilized proposal orbitals are only a convergence device and must
-  // never become the derivative-state proof. A small bounded fixed-point
-  // correction mirrors the shared final-state policy without another SCF loop.
-  auto final = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc, options,
-                        nonlocal_correlation, nonlocal_domain);
-  ++result.fock_builds;
-  double previous_physical_energy = result.energy;
-  result.converged = false;
-  constexpr unsigned maximum_final_corrections = 4;
-  for (unsigned correction = 0; correction < maximum_final_corrections; ++correction) {
-    // A degenerate occupied/virtual boundary must retain the already qualified
-    // occupation choice. Only the proposal is shifted; next remains F[D].
-    ca = stabilize_occupations
-             ? stabilized_uks_orbitals(final.fock.alpha, alpha, ints.overlap, x, n)
-             : generalized_eigen(final.fock.alpha, x, n);
-    cb = stabilize_occupations ? stabilized_uks_orbitals(final.fock.beta, beta, ints.overlap, x, n)
-                               : generalized_eigen(final.fock.beta, x, n);
-    Matrix projected_a = density_from_orbitals(ca.vectors, n, na, 1.0);
-    Matrix projected_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
-    const double change_a = density_rms(projected_a, alpha);
-    const double change_b = density_rms(projected_b, beta);
-    const double density_change = std::max(change_a, change_b);
-    result.density_rms = std::hypot(change_a, change_b) / std::sqrt(2.0);
-    alpha = std::move(projected_a);
-    beta = std::move(projected_b);
-
-    auto next = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
-                         options, nonlocal_correlation, nonlocal_domain);
-    ++result.fock_builds;
-    const Matrix ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
-    const Matrix rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
-    const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
-    diagnostic.physical_residual = std::max(residual_a, residual_b);
-    result.physical_residual_rms = std::hypot(residual_a, residual_b) / std::sqrt(2.0);
-    diagnostic.components = next.components;
-    diagnostic.electrons = {dot(alpha, ints.overlap), dot(beta, ints.overlap)};
-    diagnostic.density_change = density_change;
-    result.energy = next.components.total();
-    result.energy_change = std::abs(result.energy - previous_physical_energy);
-    final = std::move(next);
-    if (result.energy_change < options.energy_tolerance &&
-        density_change < options.density_tolerance &&
-        diagnostic.physical_residual < residual_gate &&
-        (strategy.backend != FockBackend::Cpu ||
-         std::max(residual_max_abs(ra), residual_max_abs(rb)) <=
-             std::min(1.0e-8, options.density_tolerance))) {
-      result.converged = true;
-      break;
+    if (!result.converged) {
+      result.density = concatenate(alpha, beta);
+      return result;
     }
-    previous_physical_energy = result.energy;
+
+    // Close the successful UKS state on the actual unshifted physical operator.
+    // DIIS/stabilized proposal orbitals are only a convergence device and must
+    // never become the derivative-state proof. A small bounded fixed-point
+    // correction mirrors the shared final-state policy without another SCF loop.
+    auto final = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
+                          options, nonlocal_correlation, nonlocal_domain);
+    ++result.fock_builds;
+    double previous_physical_energy = result.energy;
+    result.converged = false;
+    constexpr unsigned maximum_final_corrections = 4;
+    for (unsigned correction = 0; correction < maximum_final_corrections; ++correction) {
+      // A degenerate occupied/virtual boundary must retain the already qualified
+      // occupation choice. Only the proposal is shifted; next remains F[D].
+      ca = stabilize_occupations
+               ? stabilized_uks_orbitals(final.fock.alpha, alpha, ints.overlap, x, n)
+               : generalized_eigen(final.fock.alpha, x, n);
+      cb = stabilize_occupations
+               ? stabilized_uks_orbitals(final.fock.beta, beta, ints.overlap, x, n)
+               : generalized_eigen(final.fock.beta, x, n);
+      Matrix projected_a = density_from_orbitals(ca.vectors, n, na, 1.0);
+      Matrix projected_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
+      const double change_a = density_rms(projected_a, alpha);
+      const double change_b = density_rms(projected_b, beta);
+      const double density_change = std::max(change_a, change_b);
+      result.density_rms = std::hypot(change_a, change_b) / std::sqrt(2.0);
+      alpha = std::move(projected_a);
+      beta = std::move(projected_b);
+
+      auto next = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
+                           options, nonlocal_correlation, nonlocal_domain);
+      ++result.fock_builds;
+      const Matrix ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
+      const Matrix rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
+      const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
+      diagnostic.physical_residual = std::max(residual_a, residual_b);
+      result.physical_residual_rms = std::hypot(residual_a, residual_b) / std::sqrt(2.0);
+      diagnostic.components = next.components;
+      diagnostic.electrons = {dot(alpha, ints.overlap), dot(beta, ints.overlap)};
+      diagnostic.density_change = density_change;
+      result.energy = next.components.total();
+      result.energy_change = std::abs(result.energy - previous_physical_energy);
+      final = std::move(next);
+      if (result.energy_change < options.energy_tolerance &&
+          density_change < options.density_tolerance &&
+          diagnostic.physical_residual < residual_gate &&
+          (strategy.backend != FockBackend::Cpu ||
+           std::max(residual_max_abs(ra), residual_max_abs(rb)) <=
+               std::min(1.0e-8, options.density_tolerance))) {
+        result.converged = true;
+        if (evaluate_xc.program) {
+          // The physical export reconstructs occupations from the final F[D].
+          // A small commutator alone does not certify that last projector.
+          ca = generalized_eigen(final.fock.alpha, x, n);
+          cb = generalized_eigen(final.fock.beta, x, n);
+          projected_a = density_from_orbitals(ca.vectors, n, na, 1.0);
+          projected_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
+          const double canonical_a = density_rms(projected_a, alpha);
+          const double canonical_b = density_rms(projected_b, beta);
+          double maximum_change = 0.0;
+          for (std::size_t index = 0; index < alpha.size(); ++index) {
+            maximum_change = std::max(maximum_change, std::abs(projected_a[index] - alpha[index]));
+            maximum_change = std::max(maximum_change, std::abs(projected_b[index] - beta[index]));
+          }
+          diagnostic.density_change = std::max(density_change, std::max(canonical_a, canonical_b));
+          result.density_rms =
+              std::max(result.density_rms, std::hypot(canonical_a, canonical_b) / std::sqrt(2.0));
+          result.converged =
+              std::max(canonical_a, canonical_b) < std::min(1.0e-8, options.density_tolerance) &&
+              maximum_change <= 1.0e-8;
+          runtime::sample_cpu_capacity(runtime::add_capacity(
+              runtime::add_capacity(plan.cpu_observation_capacity(), diis.numeric_capacity()),
+              runtime::vector_capacities(basis.packed, grid.points(), grid.weights(), grid.owners(),
+                                         x, alpha, beta, ca.values, ca.vectors, cb.values,
+                                         cb.vectors, final.fock.alpha, final.fock.beta, projected_a,
+                                         projected_b, ra, rb, diagnostic.history)));
+        }
+        if (result.converged) break;
+      }
+      previous_physical_energy = result.energy;
+    }
+    if (result.converged && options.retain_ks_state)
+      result.ks_physical_fock = concatenate(final.fock.alpha, final.fock.beta);
+    // Only the generic ordinary owner retries a rejected final closure. Preserve
+    // every iteration/Fock count and reuse, rather than increase, its SCF budget.
+    if (result.converged || !evaluate_xc.program || options.max_iterations - used_iterations < 2)
+      break;
+    diis.clear();
   }
-  if (result.converged && options.retain_ks_state)
-    result.ks_physical_fock = concatenate(final.fock.alpha, final.fock.beta);
   result.density = concatenate(alpha, beta);
   return result;
 }

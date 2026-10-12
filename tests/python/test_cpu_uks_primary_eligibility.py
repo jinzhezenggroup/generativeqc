@@ -24,10 +24,10 @@ def test_cpu_uks_primary_eligibility(tmp_path: Path) -> None:
         pytest.skip("requires ccache and a host C++ compiler")
     source = (ROOT / "src/dft/uks.cpp").read_text()
     start = source.index(
-        "      [&](const ::generativeqc::solver::SelfConsistentProgress&,"
+        "        [&](const ::generativeqc::solver::SelfConsistentProgress&,"
     )
-    end = source.index("\n      });", start)
-    predicate = source[start:end] + "\n      }"
+    end = source.index("\n        });", start)
+    predicate = source[start:end] + "\n        }"
     algebra = (ROOT / "src/scf/reference/mean_field.cpp").read_text()
     start = algebra.index("double residual_max_abs(")
     norm = algebra[start : algebra.index("\n\n", start)]

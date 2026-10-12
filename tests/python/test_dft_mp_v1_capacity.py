@@ -618,10 +618,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
         ),
         "init_sha256": (
-            "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
+            "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
         ),
         "decode_sha256": (
-            "c6f25b0a324bd9532d22a6ce4120bcab758a97ba3ff42db016a5bbfc617746d4"
+            "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
         ),
         "grid_cache_sha256": (
             "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"

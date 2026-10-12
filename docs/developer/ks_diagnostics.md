@@ -50,6 +50,13 @@ iteration loop. The final diagnostic retains those final physical components
 and residual separately from the original historical rows.
 
 `fock_builds` includes final validation rebuilds for this solve.
+
+Automatic CPU semilocal programs additionally certify the occupied projector
+of the last physical `F[D]` before publishing a retained final state. A rejected
+closure resumes nonlinear iterations with cleared DIIS history using only the
+unused primary iteration budget. The returned history keeps consecutive global
+iteration numbers, and `fock_builds` includes every final-closure rebuild. This
+does not certify a previously unavailable CPU precision/operator inventory.
 `initial_density_used` describes this solve's actual initial state. When the
 prepared batch retries a rejected warm attempt from a cold seed, the snapshot
 describes the final attempt; it is not a count or history of all discarded
