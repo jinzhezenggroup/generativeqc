@@ -161,10 +161,16 @@ def test_capacity_audit_rejects_unreviewed_snapshot_decode_bypass(
         for node in owner.body
         if isinstance(node, ast.FunctionDef) and node.name == "decode"
     )
-    decode.body.insert(0, ast.Return(value=ast.Dict(keys=[], values=[])))
+    # Change only decode, not the spelling or layout of any other owner.
+    # The injected early return would skip all provider-provenance admission.
+    lines = source.splitlines(keepends=True)
+    lines.insert(
+        decode.body[0].lineno - 1,
+        " " * decode.body[0].col_offset + "return {}\n",
+    )
     target = tmp_path / relative
     target.parent.mkdir(parents=True)
-    target.write_text(ast.unparse(tree))
+    target.write_text("".join(lines))
     with pytest.raises(RuntimeError, match="snapshot functional contract changed"):
         qualify_capacity._snapshot_functional_contract(tmp_path)
 
