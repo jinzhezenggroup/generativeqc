@@ -186,3 +186,87 @@ def test_oversized_receipt_fails_before_json_parsing(tmp_path: Path) -> None:
     (tmp_path / "reference.json").write_bytes(b"x" * (256 * 1024 + 1))
     with pytest.raises(ValueError, match="byte limit"):
         _load(tmp_path)
+
+
+def _assert_retained_replicas(root: Path) -> None:
+    manifest = json.loads((root / "manifest.json").read_text())
+    reference = json.loads((root / "reference.json").read_text())
+    replay = reference["replay"]
+    assert [entry["path"] for entry in manifest["replicas"]] == [
+        "acquisition-first.json", "acquisition-second.json"
+    ]
+    assert replay["replicas"] == ["first", "second"]
+    assert replay["receipt_sha256"] == [
+        entry["sha256"] for entry in manifest["replicas"]
+    ]
+    assert len(replay["process_ids"]) == 2
+    assert replay["process_ids"][0] != replay["process_ids"][1]
+    for entry, replica, process_id in zip(
+        manifest["replicas"], replay["replicas"], replay["process_ids"], strict=True
+    ):
+        raw = (root / entry["path"]).read_bytes()
+        assert len(raw) == entry["bytes"]
+        assert hashlib.sha256(raw).hexdigest() == entry["sha256"]
+        original = json.loads(raw)
+        expected = copy.deepcopy(reference)
+        expected.pop("replay")
+        expected["replica"] = replica
+        expected["process_id"] = process_id
+        # This compares every input, matrix, AO field and provenance field,
+        # not only selected summary numbers or the raw file hashes.
+        assert original == expected
+
+
+def _copy_with_replicas(root: Path) -> None:
+    _copy_reference(root)
+    for name in ("acquisition-first.json", "acquisition-second.json"):
+        (root / name).write_bytes((REFERENCE_DIR / name).read_bytes())
+
+
+def test_both_complete_raw_replicas_match_validated_reference() -> None:
+    _assert_retained_replicas(REFERENCE_DIR)
+
+
+@pytest.mark.parametrize("name", ("acquisition-first.json", "acquisition-second.json"))
+@pytest.mark.parametrize("damage", ("missing", "corrupt"))
+def test_raw_replica_loss_or_corruption_fails(
+    tmp_path: Path, name: str, damage: str
+) -> None:
+    _copy_with_replicas(tmp_path)
+    path = tmp_path / name
+    if damage == "missing":
+        path.unlink()
+        error = FileNotFoundError
+    else:
+        path.write_bytes(path.read_bytes() + b" ")
+        error = AssertionError
+    with pytest.raises(error):
+        _assert_retained_replicas(tmp_path)
+
+
+@pytest.mark.parametrize("field", ("identity", "records", "provenance"))
+def test_raw_replica_semantic_mutants_fail(tmp_path: Path, field: str) -> None:
+    _copy_with_replicas(tmp_path)
+    path = tmp_path / "acquisition-second.json"
+    original = json.loads(path.read_text())
+    if field == "identity":
+        original["process_id"] += 1
+    elif field == "records":
+        original["records"][-1]["ecp_raw"]["values"][0][0] += 0.01
+    else:
+        original["provenance"]["generator_sha256"] = "0" * 64
+    raw = (json.dumps(original, sort_keys=True, indent=2) + "\n").encode()
+    path.write_bytes(raw)
+    # Bind the synthetic envelope to this mutant so full-object comparison,
+    # rather than the separately tested byte checksum, rejects the defect.
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["replicas"][1]["sha256"] = hashlib.sha256(raw).hexdigest()
+    manifest["replicas"][1]["bytes"] = len(raw)
+    manifest_path.write_text(json.dumps(manifest))
+    reference_path = tmp_path / "reference.json"
+    reference = json.loads(reference_path.read_text())
+    reference["replay"]["receipt_sha256"][1] = manifest["replicas"][1]["sha256"]
+    reference_path.write_text(json.dumps(reference))
+    with pytest.raises(AssertionError):
+        _assert_retained_replicas(tmp_path)
