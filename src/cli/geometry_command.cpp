@@ -73,6 +73,8 @@ void select_stage_method(RunOptions& input, std::string name) {
   std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
     return static_cast<char>(std::tolower(c));
   });
+  if (name == "ccsd(t)") name = "rccsd(t)";
+  if (name == "df-ccsd(t)") name = "df-rccsd(t)";
   input.composition = nullptr;
   if (name == "gfn2-xtb" || name == "gfn2") {
     input.method_name = "gfn2-xtb";
