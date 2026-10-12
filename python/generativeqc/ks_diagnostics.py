@@ -6,6 +6,10 @@ import typing
 from dataclasses import asdict, dataclass
 
 from generativeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 from . import _native
@@ -167,7 +171,11 @@ def read_ks_diagnostic(
         return None
     _native.check(library, status)
     # Domain IDs identify numerical policies, independently of method aliases.
-    if expected_domain == AUTOMATIC_SCF_DOMAIN:
+    if expected_domain == DENSITY_WORK_DOMAIN:
+        if summary.scf_domain_version != DENSITY_WORK_DOMAIN_VERSION:
+            raise RuntimeError("native density-work Libxc diagnostic domain mismatch")
+        domain = DENSITY_WORK_DOMAIN
+    elif expected_domain == AUTOMATIC_SCF_DOMAIN:
         if summary.scf_domain_version != LIBXC_WORK_DOMAIN_VERSION:
             raise RuntimeError("native automatic Libxc diagnostic domain mismatch")
         domain = AUTOMATIC_SCF_DOMAIN

@@ -148,8 +148,8 @@ A pass binds all of the following into
 `generativeqc.libxc-compiled-cpu-result/v2`:
 
 - exact functional capability identity;
-- `generativeqc.libxc-bulk-point-program-binding/v4` identity and payload, including
-  the pinned density threshold;
+- exact point binding and pinned density threshold: binding v4 for legacy
+  domains, v5 with a separately identified restricted companion for density work;
 - point-expression and emitted-artifact identities;
 - compiler executable hash and version;
 - generated translation-unit hash;
@@ -287,11 +287,23 @@ against the current owner and rejected when stale. Prepared programs retain the
 owner identity captured at construction.
 
 The production-domain, compiled-CPU, molecular-SCF, and sharded-catalog producers
-share this structural recipe, not functional-name branches. The molecular-SCF
-producer currently blocks this work domain before native execution: a polarized
-callback alone does not qualify restricted normalization in the active
-`[floor, 2*floor)` tail. Both-spin molecular evidence remains required; ordinary
-geometry success cannot waive this missing contract. The catalog campaign
+share this structural recipe, not functional-name branches. Density-work CPU RKS
+uses a distinct `RestrictedSemilocalPointProgram` callback on original total
+density, gradient and tau; it does not fold total inputs into polarized spins.
+The existing polarized descriptor retains its binary layout. Its RKS overload
+rejects domain version 5, while legacy domains retain their existing spin-fold
+fallback. Automatic CPU method dispatch selects the registered restricted
+descriptor for density-only LDA and the polarized descriptor for UKS.
+Public KS plans and diagnostic readers select the density-work domain by the
+same ingredient-family policy and require exact native version 5; legacy
+automatic semilocal diagnostics still require version 4. Neither reader accepts
+the other's version merely because both belong to the automatic registry.
+The compiled-CPU receipt includes restricted interior, vacuum and active
+`[floor, 2*floor)` smoke cases in addition to polarized E/vxc. The molecular
+producer verifies the actual native registry's restricted expression identity
+against that companion before running the unchanged both-spin lifecycle matrix.
+Ordinary geometry success cannot waive the total-density tail contract or
+establish physical empty-spin/birth qualification. The catalog campaign
 v2 records each registration's candidate domain and the shard's domain set.
 Older unclipped LDA failures remain diagnostic artifacts, but an unclipped
 receipt cannot provide new density-work compilation/admission evidence.

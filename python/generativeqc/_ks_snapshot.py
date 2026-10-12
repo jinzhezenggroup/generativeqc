@@ -24,7 +24,14 @@ from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_FUNCTIONAL_CODE_BASE,
     automatic_functional_ingredients,
 )
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import (
+    LIBXC_WORK_DOMAIN,
+    LIBXC_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
@@ -289,7 +296,10 @@ class NativeKsSnapshot:
             options = self._batch._calculator.ks_options
             functional_code = _native_semilocal_code(options.method_ir)
             if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:
-                expected_domain_version = LIBXC_WORK_DOMAIN_VERSION
+                expected_domain_version = {
+                    LIBXC_WORK_DOMAIN: LIBXC_WORK_DOMAIN_VERSION,
+                    DENSITY_WORK_DOMAIN: DENSITY_WORK_DOMAIN_VERSION,
+                }.get(options.scf_domain)
             else:
                 expected_domain = options.scf_domain
                 expected_domain_version = (

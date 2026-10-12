@@ -471,6 +471,11 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
+  generativeqc_native_test(generativeqc_dft_restricted_point_tests
+                       tests/native/test_dft_restricted_point.cpp)
+  add_dependencies(generativeqc_dft_restricted_point_tests generativeqc_libxc_semilocal_cpu_codegen)
+  target_include_directories(generativeqc_dft_restricted_point_tests PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/libxc_semilocal_cpu")
   generativeqc_native_test(generativeqc_uks_tests tests/native/test_uks.cpp)
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_wb97mv_scf_tests tests/native/test_wb97mv_scf.cpp)
