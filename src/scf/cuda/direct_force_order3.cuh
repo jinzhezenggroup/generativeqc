@@ -167,7 +167,7 @@ __device__ inline __noinline__ void contract_two_electron_force_order3_class_tas
 
     const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
         n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
-        coulomb_coefficient, exchange_coefficient);
+        coulomb_coefficient, exchange_coefficient, batch.direct_force_seed);
     if (density_coefficient == 0.0) continue;
 
     unsigned component[4];

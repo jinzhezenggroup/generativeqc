@@ -166,9 +166,9 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
     bool allow_resident = true, const double* beta = nullptr, double* beta_exchange = nullptr);
 
-/** Eligibility for the explicitly requested canonical bilinear experiment.
- * Specialized SPD derivative leases retain the caller's bounded polarization
- * schedule until a measured crossover is qualified. This is not a default. */
+/** Eligibility for the default reuse-preserving shell bilinear derivative.
+ * Canonical residency alone does not admit this schedule. No device work is
+ * submitted; unavailable shell storage preserves bounded polarization. */
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept;
 
 /** One unscreened canonical traversal of P:(J'(D)-K'(D)/2).

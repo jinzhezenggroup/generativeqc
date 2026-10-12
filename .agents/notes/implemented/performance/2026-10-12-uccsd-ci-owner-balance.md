@@ -101,3 +101,48 @@ Extend the executable all-event ownership regression with the gradient
 pin, worksteal mode, absent/untracked/tracked/missing behavior, and
 unchanged indices for unrelated files. No scientific code, test oracle,
 fixture reuse, acceptance gate, or worker count changes.
+
+## Follow-up: keep corrected Lambda on parallel core-a workers
+
+PR #2347 at bfa436a7de1003ac18c3f5d9a7552af10f95fe09 tested merge tree
+53ee27af0fc47016f5bd57d7aea1c66ed7563c8b in run 38205701393. Core-c job
+114670271600 reached its unchanged 30-minute pytest deadline with only
+corrected-Lambda parameter-storage admission and late-triples-failure cases
+unfinished. Its log records 20 corrected-Lambda host passes and three CUDA
+skips, including all three independent molecular finite-difference adjoints
+and the restricted-limit comparison. No assertion failure was reported.
+
+The new file first started at 05:27:26 UTC, nearly twenty minutes after the
+pytest step began. Its completed host cases span about 1,492 summed seconds
+between logged start/result timestamps. This is an observational scheduling
+measure, not JUnit phase timing or a complete-file wall time; the interrupted
+cases are excluded. The function-scoped small_corrected fixture reconstructs
+live parent, standard adjoint and triples owners for every negative control.
+Closing and mutating those owners is part of the tests, so sharing mutable
+owners or replacing fresh qualification would weaken their isolation.
+
+Pin the complete corrected-Lambda file to core-a through the existing hotspot
+mechanism, alongside the independently reviewed gradient pin from e3454647.
+Keep worksteal and the original core inventory index. Same-run core-a already
+ran all 17 gradient cases (14 host passes, three CUDA skips), with at least
+948.74 worker-seconds in its slowest-duration table, and completed in
+838.30 s, versus core-b 1,465.50 s;
+posthf, runtime-heavy and compiler-heavy took 855.07, 1,077.48 and 912.32 s.
+The larger observed parallel margin supports core-a. It does not predict the
+new critical path, and final rerouted CI remains the completion authority.
+
+Serial loadfile transfer is rejected: the observed corrected-Lambda workload
+already approaches the entire step budget before including its two unfinished
+cases, collection or unrelated files. No scientific source, test body, fixture
+scope, oracle, numerical threshold, worker count, timeout or cache behavior
+changes. The ownership regression includes both pinned files for every event
+and absent, untracked, tracked and tracked-but-missing inventories, retaining
+exactly one owner and unchanged modulo indices for all unrelated test files.
+
+- https://github.com/jinzhezenggroup/generativeqc/actions/runs/38205701393/job/114670271600
+
+## Superseding parallel allocation
+
+The paired core-a placement is superseded by the measured split in
+[the parallel-tail balance note](2026-10-12-uccsd-parallel-tail-balance.md).
+The historical observations above remain unchanged.

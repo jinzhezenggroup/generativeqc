@@ -177,6 +177,14 @@ generativeqc_status generativeqc_batch_get_ks_diagnostic(const generativeqc_batc
                                                history_capacity);
 }
 
+generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_ks_coulomb_exchange_work_v1* out) {
+  if (!batch || index >= batch->ks_diagnostics.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  return generativeqc::api::copy_ks_coulomb_exchange_work(batch->ks_diagnostics[index], out);
+}
+
 generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_ks_ao_selection_diagnostic_v1* out) {
