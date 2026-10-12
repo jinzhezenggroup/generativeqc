@@ -313,6 +313,8 @@ core_hotspots_a=(
   # PR #2347 / run 38205701393 left two corrected-Lambda cases at timeout.
   # Fresh per-test owners need parallel worksteal, not serial loadfile.
   tests/python/test_uccsd_t_lambda.py
+  # Complete corrected force cases retain fresh owners on parallel worksteal.
+  tests/python/test_uccsd_t_gradient.py
 )
 core_hotspots_b=(
   tests/python/test_df_lambda_core_reuse.py

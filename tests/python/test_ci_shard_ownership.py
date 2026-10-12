@@ -207,7 +207,11 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_dft_mp_v1_capacity.py",
             "test_df_lambda_frontier.py",
         ),
-        "core-a": ("test_uccsd_gradient.py", "test_uccsd_t_lambda.py"),
+        "core-a": (
+            "test_uccsd_gradient.py",
+            "test_uccsd_t_lambda.py",
+            "test_uccsd_t_gradient.py",
+        ),
         "core-b": (
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
@@ -250,6 +254,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
     parallel = {
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_lambda.py",
+        "tests/python/test_uccsd_t_gradient.py",
     }
     owners = {
         **dict.fromkeys(parallel, "core-a"),

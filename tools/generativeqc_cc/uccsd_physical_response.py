@@ -13,7 +13,7 @@ import math
 import time
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from generativeqc.response_solver import GMRESOptions, _vector_norm
@@ -45,6 +45,17 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from typing_extensions import Self
+
+    _RelaxedArguments = tuple[
+        Mapping[str, np.ndarray],
+        np.ndarray,
+        str,
+        str,
+        str,
+        float,
+        float,
+        Mapping[str, Any],
+    ]
 
 
 @dataclass(frozen=True)
@@ -91,7 +102,7 @@ class UCCSDPhysicalResponseOptions:
 
 
 @dataclass(frozen=True)
-class UCCSDRelaxedCotangents:
+class _UCCSDRelaxedCotangents:
     """Detached full-Frobenius raw-MO/overlap weights with fresh stationarity.
 
     g_ab is alpha-alpha/beta-beta chemists' order; g_ba is not another input.
@@ -136,7 +147,12 @@ class UCCSDRelaxedCotangents:
         object.__setattr__(self, "provenance", _freeze(self.provenance))
 
 
-class PreparedUCCSDPhysicalResponse:
+@dataclass(frozen=True)
+class UCCSDRelaxedCotangents(_UCCSDRelaxedCotangents):
+    """Standard CCSD relaxed weights; corrected records are not this subtype."""
+
+
+class _PreparedUCCSDPhysicalResponse:
     """Borrow live Lambda/provider and use one shared UHF response contract.
 
     The source/provider/reference, native executor and admitted solver/backend
@@ -147,8 +163,8 @@ class PreparedUCCSDPhysicalResponse:
 
     def __init__(
         self,
-        lambdas: PreparedUCCSDLambda,
-        result: UCCSDLambdaResult,
+        lambdas: Any,
+        result: Any,
         provider: ConventionalProvider,
         *,
         options: UCCSDPhysicalResponseOptions | None = None,
@@ -157,16 +173,7 @@ class PreparedUCCSDPhysicalResponse:
         nuclear_repulsion: float | None = None,
     ) -> None:
         started = time.perf_counter()
-        if not isinstance(lambdas, PreparedUCCSDLambda):
-            raise TypeError("physical UCCSD requires PreparedUCCSDLambda")
-        lambdas._check_open()
-        if (
-            not isinstance(result, UCCSDLambdaResult)
-            or result.state_identity != lambdas.state_identity
-        ):
-            raise ValueError(
-                "physical UCCSD requires the matching standard Lambda state"
-            )
+        self._validate_lambda(lambdas, result)
         parent = lambdas.prepared
         reference = parent.reference
         if (
@@ -189,7 +196,10 @@ class PreparedUCCSDPhysicalResponse:
         self.nmo = reference.nmo
         self.raw_bytes = (3 * self.nmo**4 + 4 * self.nmo**2) * 8
         preliminary = checked_bytes(
-            lambdas.peak_bytes + 12 * self.raw_bytes + provider.budget_bytes,
+            lambdas.peak_bytes
+            + 12 * self.raw_bytes
+            + provider.budget_bytes
+            + self._additional_numeric_bytes(),
             "physical UCCSD persistent/state storage",
         )
         if preliminary > options.max_bytes:
@@ -232,7 +242,7 @@ class PreparedUCCSDPhysicalResponse:
             response_backend,
         )
         self.layout = self.operator.problem.layout
-        self.solver = (
+        self.solver: Any = (
             solver
             if solver is not None
             else (
@@ -268,6 +278,7 @@ class PreparedUCCSDPhysicalResponse:
                 self.hamiltonian.orbital_jvp.program,
                 self.programs.primal,
                 self.programs.weights,
+                *self._additional_programs(),
             )
         }
         backend_bytes = checked_bytes(
@@ -294,10 +305,8 @@ class PreparedUCCSDPhysicalResponse:
             + 2
             * self._resources[self.hamiltonian.orbital_jvp.derivative_hash].scalar_work
             + options.max_operator_actions * self.operator_work
-            + lambdas._resources[parent.program.logical_hash].scalar_work
-            + lambdas._resources[
-                lambdas.programs.stationarity_vjp.derivative_hash
-            ].scalar_work,
+            + lambdas.qualification_scalar_work
+            + self._additional_scalar_work(),
             "complete physical UCCSD semantic work",
         )
         if self.planned_work > options.max_total_work:
@@ -429,6 +438,7 @@ class PreparedUCCSDPhysicalResponse:
             self.backend,
             self.operator,
             self.solver,
+            *self._additional_binding(),
         )
         values = {}
         for spin, name in (("alpha", "a"), ("beta", "b")):
@@ -450,6 +460,62 @@ class PreparedUCCSDPhysicalResponse:
         self._assert_current()
         self.preparation_seconds = time.perf_counter() - started
 
+    def _validate_lambda(self, lambdas: Any, result: Any) -> None:
+        if not isinstance(lambdas, PreparedUCCSDLambda):
+            raise TypeError("physical UCCSD requires PreparedUCCSDLambda")
+        lambdas._check_open()
+        if (
+            not isinstance(result, UCCSDLambdaResult)
+            or result.state_identity != lambdas.state_identity
+        ):
+            raise ValueError(
+                "physical UCCSD requires the matching standard Lambda state"
+            )
+
+    def _additional_numeric_bytes(self) -> int:
+        return 0
+
+    def _additional_programs(self) -> tuple:
+        return ()
+
+    def _additional_scalar_work(self) -> int:
+        return 0
+
+    def _additional_binding(self) -> tuple:
+        return ()
+
+    def _qualify_lambda(self) -> tuple:
+        packed, diagnostics = self.lambdas.qualify(self.result)
+        return packed, diagnostics, None
+
+    def _correction_weights(self, fresh: Any, counter: dict) -> Any:
+        return None
+
+    def _combine_weights(self, weights: dict, correction: Any) -> dict:
+        if correction is None:
+            return weights
+        additional = correction["weights"]
+        if weights.keys() != additional.keys():
+            raise ValueError("corrected physical weight inventory differs")
+        with np.errstate(over="raise", invalid="raise"):
+            combined = {
+                name: values + additional[name] for name, values in weights.items()
+            }
+        if any(not np.isfinite(values).all() for values in combined.values()):
+            raise FloatingPointError("nonfinite corrected physical weights")
+        return combined
+
+    def _additional_identity(self, correction: Any) -> dict:
+        return {}
+
+    def _additional_provenance(self, correction: Any) -> dict:
+        return {}
+
+    def _make_result(
+        self, arguments: _RelaxedArguments, correction: Any
+    ) -> _UCCSDRelaxedCotangents:
+        return UCCSDRelaxedCotangents(*arguments)
+
     def _assert_current(self) -> None:
         if self._closed:
             raise RuntimeError("physical UCCSD response is closed")
@@ -466,6 +532,7 @@ class PreparedUCCSDPhysicalResponse:
             self.backend,
             self.operator,
             self.solver,
+            *self._additional_binding(),
         )
         if any(
             actual is not expected
@@ -539,16 +606,17 @@ class PreparedUCCSDPhysicalResponse:
         self._assert_current()
         return values
 
-    def solve(self) -> UCCSDRelaxedCotangents:
+    def solve(self) -> _UCCSDRelaxedCotangents:
         """Requalify CC/Lambda, solve shared UHF adjoint, and freshly check all rotations."""
         self._assert_current()
         started = time.perf_counter()
-        packed, lambda_diagnostics = self.lambdas.qualify(self.result)
+        packed, lambda_diagnostics, fresh = self._qualify_lambda()
         counter = {
             "work": lambda_diagnostics["executed_semantic_scalar_work"],
             "native_calls": lambda_diagnostics["native_calls"],
             "operator_actions": 0,
         }
+        correction = self._correction_weights(fresh, counter)
         fields = self._run(self.hamiltonian.primal, {}, counter)
         drift = max(
             float(
@@ -595,7 +663,9 @@ class PreparedUCCSDPhysicalResponse:
         )
         if residual > self.lambdas.options.cc_tolerance:
             raise ImplicitSolveError("physical UCCSD fresh CC stationarity failed")
-        correlation = self._run(self.programs.weights, extra, counter)
+        correlation = self._combine_weights(
+            self._run(self.programs.weights, extra, counter), correction
+        )
         rhs = self.layout.pack(
             correlation["orbital_rhs_a"], correlation["orbital_rhs_b"]
         )
@@ -651,15 +721,18 @@ class PreparedUCCSDPhysicalResponse:
         else:
             solution, response_residual, iterations = np.empty(0), 0.0, 0
         alpha, beta = self.layout.split(solution)
-        weights = self._run(
-            self.programs.weights,
-            {
-                **extra,
-                "bar_reference_electronic_energy": np.array(1.0),
-                "bar_fov_aa": alpha,
-                "bar_fov_bb": beta,
-            },
-            counter,
+        weights = self._combine_weights(
+            self._run(
+                self.programs.weights,
+                {
+                    **extra,
+                    "bar_reference_electronic_energy": np.array(1.0),
+                    "bar_fov_aa": alpha,
+                    "bar_fov_bb": beta,
+                },
+                counter,
+            ),
+            correction,
         )
         stationarity = max(
             float(np.max(np.abs(weights[f"stationarity_{spin}"]), initial=0))
@@ -680,40 +753,45 @@ class PreparedUCCSDPhysicalResponse:
                 "binding": self.programs.binding_hash,
                 "physical_lagrangian": self.programs.pullback.derivative_hash,
                 "operator": self.operator.identity,
+                **self._additional_identity(correction),
             }
         )
-        return UCCSDRelaxedCotangents(
-            published,
-            solution,
-            self.lambdas.state_identity,
-            self.result.lambda_identity,
-            identity,
-            response_residual,
-            stationarity,
-            {
-                "tensor_backend": self.lambdas.prepared.executor.backend,
-                "source_backend": self.source.backend,
-                "orbital_backend": self.provider.backend,
-                "numeric_bound_bytes": self.peak_bytes,
-                "planned_semantic_scalar_work": self.planned_work,
-                "executed_semantic_scalar_work": counter["work"],
-                "work_model": "generated tensor scalar-loop work plus shared UHF matrix arithmetic; producer recurrence and host Krylov work excluded",
-                "planned_producer_tiles": self.planned_producer_tiles,
-                "planned_raw_transform_scalar_work": self.producer_transform_work,
-                "planned_primitive_source_terms": self.planned_primitive_terms,
-                "producer_work_model": "conservative full-traversal primitive tuples, including public-basis expansion; recurrence FLOPs and external Krylov work are not scalar-counted",
-                "native_calls": counter["native_calls"],
-                "operator_actions": counter["operator_actions"],
-                "iterations": iterations,
-                "binding_drift": drift,
-                "fresh_cc_residual_max": residual,
-                "raw_hf_energy_drift": hf_drift,
-                "lambda_qualification": lambda_diagnostics,
-                "physical_response_endpoint_seconds": self.preparation_seconds
-                + time.perf_counter()
-                - started,
-                "scope": "relaxed raw-MO full-Frobenius cotangents; AO/nuclear bindings remain explicit",
-            },
+        return self._make_result(
+            (
+                published,
+                solution,
+                self.lambdas.state_identity,
+                self.result.lambda_identity,
+                identity,
+                response_residual,
+                stationarity,
+                {
+                    "tensor_backend": self.lambdas.prepared.executor.backend,
+                    "source_backend": self.source.backend,
+                    "orbital_backend": self.provider.backend,
+                    "numeric_bound_bytes": self.peak_bytes,
+                    "planned_semantic_scalar_work": self.planned_work,
+                    "executed_semantic_scalar_work": counter["work"],
+                    "work_model": "generated tensor scalar-loop work plus shared UHF matrix arithmetic; producer recurrence and host Krylov work excluded",
+                    "planned_producer_tiles": self.planned_producer_tiles,
+                    "planned_raw_transform_scalar_work": self.producer_transform_work,
+                    "planned_primitive_source_terms": self.planned_primitive_terms,
+                    "producer_work_model": "conservative full-traversal primitive tuples, including public-basis expansion; recurrence FLOPs and external Krylov work are not scalar-counted",
+                    "native_calls": counter["native_calls"],
+                    "operator_actions": counter["operator_actions"],
+                    "iterations": iterations,
+                    "binding_drift": drift,
+                    "fresh_cc_residual_max": residual,
+                    "raw_hf_energy_drift": hf_drift,
+                    "lambda_qualification": lambda_diagnostics,
+                    "physical_response_endpoint_seconds": self.preparation_seconds
+                    + time.perf_counter()
+                    - started,
+                    "scope": "relaxed raw-MO full-Frobenius cotangents; AO/nuclear bindings remain explicit",
+                    **self._additional_provenance(correction),
+                },
+            ),
+            correction,
         )
 
     def close(self) -> None:
@@ -729,3 +807,32 @@ class PreparedUCCSDPhysicalResponse:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+
+class PreparedUCCSDPhysicalResponse(_PreparedUCCSDPhysicalResponse):
+    """Standard CCSD physical response with the unchanged standard Lambda gate."""
+
+    def __init__(
+        self,
+        lambdas: PreparedUCCSDLambda,
+        result: UCCSDLambdaResult,
+        provider: ConventionalProvider,
+        *,
+        options: UCCSDPhysicalResponseOptions | None = None,
+        response_backend: Any = None,
+        solver: Any = None,
+        nuclear_repulsion: float | None = None,
+    ) -> None:
+        super().__init__(
+            lambdas,
+            result,
+            provider,
+            options=options,
+            response_backend=response_backend,
+            solver=solver,
+            nuclear_repulsion=nuclear_repulsion,
+        )
+
+    def solve(self) -> UCCSDRelaxedCotangents:
+        """Freshly qualify standard CCSD/Lambda and every orbital rotation."""
+        return cast("UCCSDRelaxedCotangents", super().solve())

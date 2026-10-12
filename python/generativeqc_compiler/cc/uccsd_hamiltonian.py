@@ -302,6 +302,26 @@ def build_lagrangian_programs(
         inputs=RAW_INPUTS,
         max_elements=max_elements,
     )
+    weights = _physical_weights(layout, pullback)
+    return UCCSDHamiltonianResponsePrograms(
+        primal, pullback, weights, cc.logical_hash, hamiltonian.primal.logical_hash
+    )
+
+
+def build_hamiltonian_cotangent_program(
+    layout: UCCSDLayout, hamiltonian: UCCSDHamiltonianPrograms
+) -> Program:
+    """Transport externally supplied canonical bars through the existing raw VJP.
+
+    General rotation bars, including their symmetric part, are retained. A
+    correction-only consumer seeds reference electronic energy with zero;
+    adding its oo/vv Fock bars must replace the diagonal denominator chain.
+    """
+    return _physical_weights(layout, hamiltonian.pullback)
+
+
+def _physical_weights(layout: UCCSDLayout, pullback: VJPProgram) -> Program:
+    """Share full-frame metric and UHF sign conventions across both pullbacks."""
     outputs = {
         name: pullback.program.outputs[f"bar_{name}"]
         for name in RAW_INPUTS
@@ -322,14 +342,11 @@ def build_lagrangian_programs(
         outputs[f"orbital_rhs_{spin}"] = slice_tensor(
             stationarity, ((0, occupied[spin]), (occupied[spin], counts[spin]))
         )
-    weights = Program(
+    return Program(
         outputs,
         provenance={
             "physical_lagrangian_pullback": pullback.derivative_hash,
             "overlap": "-sym(G_U)/2 for each spin, then accumulate physical AO binding",
             "orbital_rhs": "+antisym(G_U)_ia for shared UHF C exp(-K) convention",
         },
-    )
-    return UCCSDHamiltonianResponsePrograms(
-        primal, pullback, weights, cc.logical_hash, hamiltonian.primal.logical_hash
     )

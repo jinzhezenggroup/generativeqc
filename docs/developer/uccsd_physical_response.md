@@ -4,8 +4,9 @@
 [UCCSD Lambda owner](uccsd_lambda.md), its result, and an identity-matched
 conventional provider/source. `PreparedUCCSDGradient` adds complete all-electron
 conventional nuclear derivatives in the supplied reference's AO frame. These
-are internal APIs, not Calculator/native method registration, frozen-core/ECP
-support, or corrected-UCCSD(T) forces.
+are internal APIs, not Calculator/native method registration or frozen-core/ECP
+support. Distinct corrected-UCCSD(T) owners share the same physical/nuclear
+implementation, as described in the corrected composition section.
 
 ## One physical Hamiltonian DAG
 
@@ -115,3 +116,77 @@ analytic oracle can differ at microhartree scale, so its `2e-6` force gate is
 paired with a separate `2e-7` complete-energy finite-difference gate; the latter
 is not relaxed. Real CUDA tests require finite Slurm allocation and explicit
 `GENERATIVEQC_TENSOR_CUDA_TEST=1`.
+
+## Corrected UCCSD(T) composition
+
+`PreparedUCCSDTPhysicalResponse` borrows a distinct
+`PreparedUCCSDTLambda`, its matching result, a
+`PreparedUCCSDTriplesFockResponse`, and the conventional provider. The Lambda
+and full-Fock consumers must borrow the **same live triples owner**, parent,
+state and native backend, not just numerically similar detached records.
+Standard physical and gradient APIs still reject corrected owners/results;
+neither corrected record is a standard-result subtype.
+
+Each solve freshly qualifies corrected amplitude stationarity and every
+triples source bar/energy, then independently replays the full same-space Fock
+response. Their source bars and channel/total energies must agree within the
+bounded corrected-Lambda tolerance; source/template/backend identities remain
+exact. The second replay is charged in full rather than trusting a previous
+detached record or assuming bitwise numerical replay determinism.
+
+Complete triples Hamiltonian bars seed the **existing raw-Hamiltonian VJP**,
+with zero reference-electronic-energy seed. Full oo/vv denominator moments
+replace the eps diagonal chain. The same general-frame transport produces
+rotation bars `G`, all-rotation stationarity `G-G.T`, per-spin overlap
+`-(G+G.T)/4`, and the occupied/virtual shared-UHF RHS. Correction weights enter
+both the initial RHS and the final CC+reference+Z pullback. Omitting their
+symmetric metric/Pulay chain or checking only ov stationarity is not valid.
+
+`PreparedUCCSDTGradient` binds the distinct corrected physical result to the
+same native one-electron, overlap, spin-owned shell-ERI and nuclear-repulsion
+consumers. It adds nuclear repulsion exactly once, publishes freshly replayed
+CCSD+(T) energies, and returns `UCCSDTGradientResult`. Parent CC energy and
+primal residual checks remain **CCSD** checks, not comparisons against the
+corrected correlation energy. All existing shell/representation/CPU policy and
+CUDA no-fallback boundaries apply unchanged.
+
+```python
+from tools.generativeqc_cc import (
+    PreparedUCCSDLambda,
+    PreparedUCCSDTriplesResponse,
+    PreparedUCCSDTLambda,
+    PreparedUCCSDTriplesFockResponse,
+    PreparedUCCSDTPhysicalResponse,
+    PreparedUCCSDTGradient,
+)
+
+with (
+    PreparedUCCSDLambda(parent, state) as standard,
+    PreparedUCCSDTriplesResponse(parent, state) as triples,
+    PreparedUCCSDTLambda(standard, triples) as corrected,
+    PreparedUCCSDTriplesFockResponse(triples) as fock,
+    PreparedUCCSDTPhysicalResponse(
+        corrected, corrected.solve(), fock, provider
+    ) as physical,
+    PreparedUCCSDTGradient(physical) as nuclear,
+):
+    result = nuclear.solve()
+```
+
+The physical budget additionally admits both replay endpoints, simultaneous
+old/fresh bars, complete Fock storage, one extra raw VJP and transport/publication
+staging. GPU callers must supply the matching exact CUDA spin backend and
+sufficient explicit aggregate budgets, as for standard response. These are
+logical reservations and semantic generated work, not an allocator-enforced
+RSS limit, hardware FLOPs or complete-method timing claim.
+
+`test_uccsd_t_gradient.py` exercises reconverged complete-energy finite
+differences for every physical coordinate (`2e-7`), qualified independent
+restricted corrected analytic gradients (`2e-8`),
+restricted RCCSD(T) force parity (`2e-8`), freshness, distinct method types,
+admission, borrowed lifetime and all-rotation failure gates. The independent
+analytic oracle receives explicitly solved **corrected** Lambda. The installed
+unrestricted analytic endpoint disagrees with its own reconverged complete
+energy differences on these fixtures even with corrected Lambda; it is not a
+valid force oracle here. Open/broken branches retain the full-coordinate `2e-7`
+finite-difference gate, not a relaxed tolerance or omitted coordinate.
