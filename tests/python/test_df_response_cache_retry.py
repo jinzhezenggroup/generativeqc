@@ -28,6 +28,8 @@ _SHIM = r"""
 #include <string>
 #include <vector>
 #include "runtime/execution_precision.hpp"
+#include "cc/solver.hpp"
+namespace cc = generativeqc::cc;
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point x) {
   return std::chrono::duration<double>(Clock::now() - x).count();
@@ -41,7 +43,9 @@ struct MethodError : std::runtime_error {
 int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
 bool expected_packed = false, expected_serial_scratch = false;
-bool expected_ccsd_mixed = false, expected_lambda_mixed = false;
+std::optional<bool> expected_ccsd_mixed;
+bool expected_lambda_mixed = false;
+double expected_ccsd_switch = cc::SolverOptions{}.df_mixed_precision_switch_residual;
 bool expected_resident_krylov = false;
 bool expected_parallel_gap = false, expected_gap_cotangents = true;
 generativeqc::runtime::PrecisionDirective expected_w;
@@ -135,9 +139,10 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::
                                         const generativeqc_method_descriptor& d, void*, const std::vector<double>*,
                                         void*, std::size_t reserve, const core::System*, bool, bool,
                                         void*, std::size_t, bool, bool packed_diis,
-                                        bool ccsd_mixed_precision) {
+                                        std::optional<bool> ccsd_mixed_precision, double ccsd_mixed_switch_residual) {
   assert(packed_diis == expected_packed);
   assert(ccsd_mixed_precision == expected_ccsd_mixed);
+  assert(ccsd_mixed_switch_residual == expected_ccsd_switch);
   ++calls;
   RccsdNativeState s;
   s.resource = std::make_unique<ResourceOwner>();
@@ -198,10 +203,11 @@ int main() {
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
-                               expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov);
+                               expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov, expected_ccsd_switch);
   };
   for (bool mixed_lambda : {false, true})
-  for (bool mixed_ccsd : {false, true})
+  for (std::optional<bool> mixed_ccsd : {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}})
+  for (double switch_residual : {100.0 * 1e-9, 1e-4})
   for (bool serial_scratch : {false, true})
   for (bool resident_krylov : {false, true})
   for (bool mixed_w : {false, true})
@@ -217,6 +223,7 @@ int main() {
       : runtime::PrecisionDirective{};
   expected_lambda_interval = interval;
   expected_ccsd_mixed = mixed_ccsd;
+  expected_ccsd_switch = switch_residual;
   expected_lambda_mixed = mixed_lambda;
   expected_serial_scratch = serial_scratch;
   expected_resident_krylov = resident_krylov;
@@ -305,7 +312,7 @@ int main() {
       execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
-      expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov);
+      expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov, expected_ccsd_switch);
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -316,7 +323,7 @@ int main() {
         execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
-        true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov);
+        true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov, expected_ccsd_switch);
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();

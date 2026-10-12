@@ -16,6 +16,11 @@ import subprocess
 import time
 from pathlib import Path
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 
 def digest(path: Path) -> str:
     """Bind measurement records to the actual executable, library and input."""
@@ -79,7 +84,7 @@ def main() -> None:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument(
         "--thresholds", type=float, nargs="+", default=[1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
     )
