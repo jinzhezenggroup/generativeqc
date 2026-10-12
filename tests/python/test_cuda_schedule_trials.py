@@ -361,16 +361,50 @@ int main() {
         + "\n}\n",
         encoding="utf-8",
     )
-    binary = native_cxx.build_executable(
-        [probe],
-        tmp_path / "point_trial",
-        compile_args=(
-            "-std=c++17",
-            f"-I{root / 'src'}",
-            f"-I{tmp_path}",
-            f"-I{root / 'tests/native/fixtures/xc_point_policy'}",
-        ),
-    )
+    try:
+        binary = native_cxx.build_executable(
+            [probe],
+            tmp_path / "point_trial",
+            compile_args=(
+                "-std=c++17",
+                f"-I{root / 'src'}",
+                f"-I{tmp_path}",
+                f"-I{root / 'tests/native/fixtures/xc_point_policy'}",
+            ),
+        )
+    except subprocess.CalledProcessError as exc:
+        # A captured compile error otherwise hides its diagnostic from pytest.
+        # Keep the exact inputs and complete streams in the existing failure artifact.
+        evidence = root / ".artifacts/point-schedule-trial-native-failure"
+        evidence.mkdir(parents=True, exist_ok=True)
+        inputs = {}
+        for source_file in (
+            probe,
+            variant_path,
+            tmp_path / "point_program.hpp",
+            tmp_path / "point_dispatch.hpp",
+            tmp_path / "cuda_runtime_api.h",
+            root / "tests/native/fixtures/xc_point_policy/contract.cpp",
+        ):
+            data = source_file.read_bytes()
+            (evidence / source_file.name).write_bytes(data)
+            inputs[source_file.name] = hashlib.sha256(data).hexdigest()
+        record = {
+            "command": exc.cmd,
+            "returncode": exc.returncode,
+            "stdout": exc.stdout,
+            "stderr": exc.stderr,
+            "input_sha256": inputs,
+        }
+        (evidence / "failure.json").write_text(
+            json.dumps(record, indent=2) + "\n", encoding="utf-8"
+        )
+        diagnostic = f"Native probe evidence: {evidence}\n{(exc.stderr or '')[:6000]}"
+        if hasattr(exc, "add_note"):
+            exc.add_note(diagnostic)
+        else:
+            print(diagnostic)
+        raise
     subprocess.run([str(binary)], check=True, timeout=30)
 
 
