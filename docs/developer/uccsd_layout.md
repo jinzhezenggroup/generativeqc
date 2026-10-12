@@ -76,6 +76,22 @@ sqrt/multiplicity rescaling is applied. Signed zero denotes numerical zero;
 its sign bit on repeated-index entries is not a storage invariant. This explicit
 CPU conversion materializes the full array; it is not a bounded native solver path.
 
+## Cotangent maps
+
+`block.pack_dual(full_bar)` and `layout.pack_dual(mapping)` apply the transpose
+of signed expansion, summing all four signed members for same-spin doubles.
+Unlike amplitude packing, they accept arbitrary finite full cotangents without
+antisymmetry; repeated-index entries act on no excitation and are ignored.
+`unpack_dual(packed_bar)` applies the minimum-norm full lift: signed expansion
+divided by `full_metric_weight`. It is a right inverse of `pack_dual`, not
+ordinary amplitude expansion. All conversions retain the same strict FP64,
+shape, finite-input and non-aliasing contracts.
+
+These maps serve the [native Lambda/parameter owner](uccsd_lambda.md). Published
+physical Lambda arrays use ordinary `unpack`; same-spin full residual VJP seeds
+use `unpack_dual` and are smaller by four. Neither map introduces RCCSD's
+pair-symmetric square-root weighting.
+
 ## Metrics and excitation normalization
 
 Let `E_ai = a†_a a_i` and `D_ijab = a†_a a†_b a_j a_i` with each axis carrying
