@@ -113,7 +113,7 @@ adapter behavior is exercised through Python ctypes; those executions are
 outside the separate C++ coverage instrumentation reported by Codecov.
 
 Routine log/XML files named in this historical account are now represented in
-[the retention audit](../retention-238/migration.json), with extracted measurements,
+[the retention audit](../retention-238/migration.json.gz), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
 
 ## Lossless retained storage

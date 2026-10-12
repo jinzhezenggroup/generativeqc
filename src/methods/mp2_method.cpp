@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
 
 #include "api/handles.hpp"
 #include "methods/correlated_cuda_reference.hpp"
@@ -14,9 +16,11 @@
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/rhf_source_handoff.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include <cuda_runtime_api.h>
 #endif
@@ -72,6 +76,7 @@ class Mp2Prepared final : public PreparedCalculation {
                                      bool* warm_start_fallback,
                                      std::optional<scf::HfWarmState>* retained_warm_state) {
     std::lock_guard<std::mutex> lock(mutex_);
+    runtime::df_progress::Scope trace("mp2_endpoint");
     last_.reset();
     if (warm_start_fallback) *warm_start_fallback = false;
     try {
@@ -105,8 +110,15 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
+      const auto* source_override = std::getenv("GENERATIVEQC_MP2_REFERENCE_SOURCE");
+      const bool share_reference_source =
+          !source_override || std::string_view(source_override) != "0";
+      std::shared_ptr<const integrals::ElectronInteractionSource> reference_source;
+      scf::CudaRhfSourceHandoff source_handoff;
       bool reference_plan_reused = false;
       const auto run_reference = [&](const std::vector<double>* seed) {
+        reference_source.reset();
+        source_handoff = {};
         scf::ScfResult candidate;
         if (!density_fitted_ && !cuda) {
           if (!cpu_exact_plan_) {
@@ -130,9 +142,10 @@ class Mp2Prepared final : public PreparedCalculation {
         } else {
           bool attempt_reused = false;
           try {
-            candidate =
-                scf::run_rhf_cuda_cached(cuda_reference_plan_.slot(), system_, reference_options,
-                                         context_.device_id, seed, &attempt_reused);
+            candidate = scf::run_rhf_cuda_cached(
+                cuda_reference_plan_.slot(), system_, reference_options, context_.device_id, seed,
+                &attempt_reused, share_reference_source ? &reference_source : nullptr,
+                share_reference_source ? &source_handoff : nullptr);
           } catch (...) {
             reference_plan_reused = false;
             throw;
@@ -168,6 +181,12 @@ class Mp2Prepared final : public PreparedCalculation {
       reference_capacity =
           std::max(reference_capacity,
                    posthf::checked_add(hf.reference->numeric_capacity_bytes, warm_capacity));
+      reference_capacity =
+          std::max(reference_capacity,
+                   posthf::checked_add(source_handoff.numeric_peak_bytes, warm_capacity));
+      // Keep one source owner, as in CC: only a unique resident source can
+      // return its executable to the warm cache after the complete endpoint.
+      source_handoff.source.reset();
       auto* reference_plan = !density_fitted_ && cuda ? cuda_reference_plan_.slot() : nullptr;
 
       if (retained_warm_state) {
@@ -196,23 +215,48 @@ class Mp2Prepared final : public PreparedCalculation {
         conventional_source = &*prepared_source;
       }
       const auto prepare_source = [&] {
-        if ((!prepared_exact || density_fitted_) && !raw_source) {
+        if (reference_source && !density_fitted_) {
+          conventional_source = reference_source.get();
+          return;
+        }
+        if ((!prepared_exact || density_fitted_) && !raw_source)
           raw_source =
               std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
-          conventional_source = raw_source.get();
-        }
+        if (raw_source) conventional_source = raw_source.get();
       };
-      const auto corr = run_with_cuda_reference_budget(
-          reference_plan, phase_budget, [&](std::size_t correlation_budget) {
-            prepare_source();
-            return density_fitted_
-                       ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget,
-                                                    threshold_,
-                                                    options_.density_fitting_relative_threshold, 8,
-                                                    fitted_cuda_, context_.device_id)
-                       : mp2::conventional_energy(ref, *conventional_source, correlation_budget,
-                                                  threshold_, 8, cuda, context_.device_id);
-          });
+      const auto run_phase = [&](auto&& operation) {
+        return run_with_cuda_reference_budget(
+            reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+              try {
+                return operation(correlation_budget);
+              } catch (const std::length_error&) {
+                if (!reference_source) throw;
+              } catch (const std::bad_alloc&) {
+                if (!reference_source) throw;
+              }
+              // Optional source residency must not reject a previously
+              // admitted endpoint. Unwind phase-local work, release the source
+              // once, then reconstruct the bounded compatibility provider.
+              conventional_source = nullptr;
+              reference_source.reset();
+              runtime::df_progress::Scope::label("mp2_reference_source_fallback", "memory");
+              return operation(correlation_budget);
+            });
+      };
+      const auto corr = run_phase([&](std::size_t correlation_budget) {
+        prepare_source();
+        runtime::df_progress::Scope::number(
+            "mp2_energy_device_source",
+            conventional_source &&
+                conventional_source->supports_device_read(
+                    integrals::ElectronInteractionOperator::eri, context_.device_id));
+        return density_fitted_
+                   ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
+                                                options_.density_fitting_relative_threshold, 8,
+                                                fitted_cuda_, context_.device_id)
+                   : mp2::conventional_energy(ref, *conventional_source, correlation_budget,
+                                              threshold_, 8, cuda, context_.device_id);
+      });
       // Preserve this completed phase's simultaneous peak if force admission
       // subsequently retires the optional reference executable.
       const auto energy_capacity =
@@ -222,34 +266,40 @@ class Mp2Prepared final : public PreparedCalculation {
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
-      const bool force_started_with_reference_plan = cuda_reference_plan_.get() != nullptr;
+      const bool force_started_with_reference_plan =
+          cuda_reference_plan_.get() != nullptr || reference_source != nullptr;
       if (compute_forces) {
-        // The compatibility force planner does not borrow the prepared ERIs.
-        // Retire its view before its owner and create RawSource only afterward.
-        prepared_source.reset();
-        cpu_exact_plan_.reset();
-        if (!raw_source)
-          raw_source =
-              std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
+        // Preserve the legacy CPU force reservation; CUDA keeps the qualified
+        // source across energy, adjoint, response and relaxed-weight replay.
+        if (!cuda) {
+          prepared_source.reset();
+          cpu_exact_plan_.reset();
+          prepared_exact = nullptr;
+          conventional_source = nullptr;
+        }
         response::GmresOptions response_options;
         response_options.relative_tolerance = 1e-10;
         response_options.absolute_tolerance = 1e-12;
         response_options.restart = 30;
         response_options.max_iterations = 200;
-        force_diagnostic = run_with_cuda_reference_budget(
-            reference_plan, phase_budget, [&](std::size_t correlation_budget) {
-              response_options.max_workspace_bytes = correlation_budget;
-              return density_fitted_
-                         ? mp2::density_fitted_force_cpu(
-                               ref, *raw_source, correlation_budget, threshold_,
-                               options_.density_fitting_relative_threshold, 1e-10, response_options)
-                         : (cuda
-                                ? mp2::conventional_force_cuda(ref, *raw_source, correlation_budget,
-                                                               threshold_, 1e-10, response_options,
-                                                               context_.device_id)
-                                : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
-                                                              threshold_, 1e-10, response_options));
-            });
+        force_diagnostic = run_phase([&](std::size_t correlation_budget) {
+          prepare_source();
+          runtime::df_progress::Scope::number(
+              "mp2_force_device_source",
+              conventional_source &&
+                  conventional_source->supports_device_read(
+                      integrals::ElectronInteractionOperator::eri, context_.device_id));
+          response_options.max_workspace_bytes = correlation_budget;
+          return density_fitted_
+                     ? mp2::density_fitted_force_cpu(
+                           ref, *raw_source, correlation_budget, threshold_,
+                           options_.density_fitting_relative_threshold, 1e-10, response_options)
+                     : (cuda ? mp2::conventional_force_cuda(ref, *conventional_source,
+                                                            correlation_budget, threshold_, 1e-10,
+                                                            response_options, context_.device_id)
+                             : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
+                                                           threshold_, 1e-10, response_options));
+        });
         result.forces = force_diagnostic->forces;
       }
       result.convergence = {hf.iterations, hf.energy_change, ref.commutator_residual, true};
@@ -313,6 +363,15 @@ class Mp2Prepared final : public PreparedCalculation {
         else
           std::copy_n(conventional_response_hash, sizeof(conventional_response_hash),
                       last_->response_operator_hash);
+      }
+      // Do this after peak accounting: the provider already charges a
+      // source-owned executable, so charging it again after reclaim would
+      // double-count the completed force phase. All source reads are drained.
+      if (cuda && reference_source) {
+        conventional_source = nullptr;
+        (void)scf::reclaim_rhf_cuda_reference_plan(cuda_reference_plan_.slot(), reference_source);
+        last_->reference_execution_plan_owned_device_bytes =
+            cuda_reference_plan_.owned_device_bytes();
       }
       return result;
     } catch (const std::length_error& e) {

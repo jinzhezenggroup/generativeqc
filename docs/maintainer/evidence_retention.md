@@ -339,7 +339,7 @@ identity. Availability of debugging archives is distinct from numerical truth.
 
 ## Baseline cleanup (#238)
 
-The [migration audit](../../benchmarks/results/retention-238/migration.json)
+The [migration audit](../../benchmarks/results/retention-238/migration.json.gz)
 records original hashes/bytes, extracted JSON measurements, compiler resource
 diagnostics, test totals/failures/skips and retained profiler CSV exports.
 It removes 161 transient files (3,482,611 bytes) from baseline

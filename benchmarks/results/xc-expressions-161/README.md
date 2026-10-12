@@ -77,5 +77,5 @@ deterministically regenerated from the contract and scientific revision rather
 than duplicated here. `manifest.json` hashes every raw archived file.
 
 Routine log/XML files named in this historical account are now represented in
-[the retention audit](../retention-238/migration.json), with extracted measurements,
+[the retention audit](../retention-238/migration.json.gz), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
