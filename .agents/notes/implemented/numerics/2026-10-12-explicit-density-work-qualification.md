@@ -1,6 +1,7 @@
 # Decision: qualify density-only LDA with an explicit work-input contract
 
 Status: implemented
+Restricted normalization follow-up: `2026-10-12-restricted-density-native-abi.md`.
 Date: 2026-10-12
 
 ## Problem

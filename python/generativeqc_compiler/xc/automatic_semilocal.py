@@ -6,13 +6,28 @@ import re
 from dataclasses import dataclass
 from functools import cache
 
+from .density_work import DENSITY_WORK_DOMAIN
 from .libxc_bulk_capabilities import available_capabilities, functional_capability
-from .libxc_work import LIBXC_WORK_DOMAIN
+from .libxc_work import LIBXC_WORK_DOMAIN, automatic_work_policy
 from .spec import AUTO_BULK_COMPONENTS, UnsupportedXC
 
 AUTOMATIC_FUNCTIONAL_CODE_BASE = 0x30000
 AUTOMATIC_SCF_DOMAIN = LIBXC_WORK_DOMAIN
 _SUPPORTED_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
+
+
+def automatic_scf_domain(name: str) -> str:
+    """Select the exact native worker domain by ingredient family, not alias.
+
+    Density-only registrations use distinct total-density RKS and per-spin UKS
+    layouts under version 5. Other ingredients retain their existing worker.
+    This numerical identity alone does not promote a backend or product.
+    """
+    return (
+        DENSITY_WORK_DOMAIN
+        if automatic_work_policy(name).family == "lda"
+        else AUTOMATIC_SCF_DOMAIN
+    )
 
 
 @dataclass(frozen=True)
@@ -107,4 +122,5 @@ __all__ = [
     "automatic_functional_code",
     "automatic_functional_ingredients",
     "automatic_registry_entries",
+    "automatic_scf_domain",
 ]
