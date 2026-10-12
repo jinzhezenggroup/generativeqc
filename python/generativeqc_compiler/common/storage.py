@@ -173,14 +173,27 @@ def _overlap(left: AllocationRange, right: AllocationRange) -> bool:
     )
 
 
-def analyze_storage(
+@dataclass(frozen=True)
+class StorageLifetimes:
+    """Validated owner lifetimes without quadratic coloring diagnostics.
+
+    Symbolic planners reuse alias/effect legality without substituting concrete
+    byte counts for runtime dimensions or materializing every interference edge.
+    """
+
+    ranges: tuple[AllocationRange, ...]
+    blocked_spaces: tuple[str, ...]
+    donations: tuple[tuple[int, Hashable, Hashable], ...]
+
+
+def analyze_lifetimes(
     values: typing.Any,
     operations: typing.Any,
     *,
     inputs: typing.Any,
     outputs: typing.Any,
-) -> StorageAnalysis:
-    """Analyze aliases/lifetimes and greedily assign reusable owned storage."""
+) -> StorageLifetimes:
+    """Resolve aliases, retained effects and donation legality in an ordered region."""
 
     if not isinstance(values, (tuple, list)) or not values:
         raise ValueError("storage analysis requires buffer values")
@@ -337,6 +350,27 @@ def analyze_storage(
         seen_donors.add(donor)
         seen_recipients.add(recipient)
 
+    return StorageLifetimes(
+        tuple(ranges), tuple(sorted(blocked_spaces)), tuple(donation_events)
+    )
+
+
+def analyze_storage(
+    values: typing.Any,
+    operations: typing.Any,
+    *,
+    inputs: typing.Any,
+    outputs: typing.Any,
+) -> StorageAnalysis:
+    """Analyze aliases/lifetimes and greedily assign reusable owned storage."""
+    operations = tuple(operations)
+    lifetimes = analyze_lifetimes(values, operations, inputs=inputs, outputs=outputs)
+    by_key = {value.key: value for value in values}
+    order = {value.key: index for index, value in enumerate(values)}
+    ranges = lifetimes.ranges
+    blocked_spaces = lifetimes.blocked_spaces
+    donation_events = lifetimes.donations
+    end = len(operations) + 1
     donation_pairs = {
         frozenset((donor, recipient)) for _, donor, recipient in donation_events
     }

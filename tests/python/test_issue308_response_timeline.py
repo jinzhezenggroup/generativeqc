@@ -1,8 +1,13 @@
 """Hardware-free regression tests for the #308 response timeline gates."""
 
+import gzip
+import json
+from pathlib import Path
+
 import pytest
 
 from benchmarks.issue308_response_timeline import (
+    retained_force_reference_path,
     validate_metric_response_work,
     validate_three_center_response_work,
 )
@@ -84,3 +89,24 @@ def test_metric_work_accepts_exact_host_fallback_bytes() -> None:
         validate_metric_response_work({"metric_derivative_weight_bytes": 5 * 5 * 8}, 5)
         == 25
     )
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_timeline_retained_force_reference_storage(
+    tmp_path: Path, compressed: bool
+) -> None:
+    from tools.generativeqc_validation.record import load_record
+
+    logical = tmp_path / "forces.json"
+    stored = logical.with_suffix(".json.gz") if compressed else logical
+    payload = {"forces": [[1.0, -2.0, 3.0]], "seconds": [0.2, 0.3]}
+    data = json.dumps(payload).encode()
+    stored.write_bytes(gzip.compress(data, mtime=0) if compressed else data)
+    actual = retained_force_reference_path(logical)
+    assert actual == stored
+    assert load_record(actual) == payload
+
+
+def test_timeline_missing_reference_does_not_invent_a_companion(tmp_path: Path) -> None:
+    logical = tmp_path / "missing.json"
+    assert retained_force_reference_path(logical) == logical

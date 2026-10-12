@@ -68,10 +68,10 @@ def test_value_geometry_retains_all_live_state_and_prunes_only_dead_state(
 #include <limits>
 #include <type_traits>
 #include "integrals/execution_qualifiers.hpp"
+#include "scf/cuda/integral_limits.hpp"
 #define __device__
 #define __forceinline__ inline
 struct MixedPrecisionFloat { double value; };
-constexpr unsigned kMaximumCoulombOrder=32;
 constexpr double kPi=3.141592653589793238462643383279502884;
 template<class T> T scalar(double x) { return T(x); }
 inline double scalar_value(double x) { return x; }
@@ -144,6 +144,7 @@ extern "C" unsigned run(const double* input, double* output, unsigned mode) {
             "-O2",
             "-ffp-contract=off",
             f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
         ),
         compile_timeout=60,
         link_timeout=60,

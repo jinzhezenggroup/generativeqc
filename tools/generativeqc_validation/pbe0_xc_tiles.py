@@ -28,6 +28,8 @@ def verify_point_family_pairs(
 
     Promotion additionally requires ``require_improvement=True``. A valid
     numerical/work receipt alone does not authorize changing the default.
+    Legacy v1 receipts remain auditable, but cannot qualify current promotion
+    without the explicit producer/policy provenance required by v2.
     """
     _verify_pairs(
         record,
@@ -44,11 +46,18 @@ def _verify_pairs(
     point_family: bool,
     require_improvement: bool = True,
 ) -> None:
-    assert record["schema"] == (
-        "generativeqc.pbe0-xc-point-family-pairs.v1"
+    schemas = (
+        (
+            "generativeqc.pbe0-xc-point-family-pairs.v1",
+            "generativeqc.pbe0-xc-point-family-pairs.v2",
+        )
         if point_family
-        else "generativeqc.pbe0-xc-tile-pairs.v1"
+        else ("generativeqc.pbe0-xc-tile-pairs.v1",)
     )
+    assert record["schema"] in schemas
+    explicit_policy = point_family and record["schema"].endswith(".v2")
+    if point_family and require_improvement:
+        assert explicit_policy, "current promotion requires explicit v2 point policy"
     assert record["stage"] == reference["stage"] == "complete"
     assert record["protocol"] == reference["protocol"]
     assert record["scf_tiles"] == {
@@ -65,6 +74,20 @@ def _verify_pairs(
         assert request is None or (
             request["tiles"] >= 2 and request["device_bytes"] >= 0
         )
+        if explicit_policy:
+            assert record["point_spin_channels"] == 1
+            policies = record["point_equal_spin_policy"]
+            assert policies["baseline"] == policies["candidate"]
+            assert policies["baseline"] in ("0", "1")
+            assert record["point_family_effect"] == (
+                "ordinary-physical-family-binding"
+                if policies["baseline"] == "0"
+                else "shared-method-bound-equal-spin-physical"
+            )
+            # The shared equal-spin physical consumer cannot establish a gain
+            # attributable to physical family specialization.
+            if require_improvement:
+                assert policies["baseline"] == "0"
     assert record["force_tile_points"] == 256 and not record["feasibility"]
     assert record["density_scope"] == (
         "separate independently converged publicly frozen warm snapshots"
@@ -84,6 +107,11 @@ def _verify_pairs(
                 if item["geometry"] == geometry and item["phase"] in ("cold", "moved")
             )
             diagnostic = row["diagnostics"]
+            if explicit_policy:
+                assert (
+                    diagnostic["requested_equal_spin_policy"]
+                    == policies[row["selection"]]
+                )
             expected_errors = {
                 "energy": block_error(
                     [diagnostic["energy"]], [oracle["energy"]], atol=1e-8, rtol=0

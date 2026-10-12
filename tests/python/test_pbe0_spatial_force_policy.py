@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_method_authenticates_pbe0_spatial_force_default(
+def test_method_authenticates_global_hybrid_spatial_force_default(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     """Check every composition, approximation, size, spin and precision guard."""
@@ -66,6 +66,7 @@ PREFIX = r"""
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <vector>
 #include "dft/cuda_ks_final_validation_policy.hpp"
@@ -125,16 +126,25 @@ int main() {
     assert(method.qualified_spatial_force_default() == (aos >= 384));
   }
   reject([](auto& value) { value.execution_plan_.spin_channels = 2; });
-  reject([](auto& value) { value.execution_plan_.semilocal_family = dft::SemilocalFamily::Other; });
+  // Eligible B3LYP has 20% exact K and no PBE label; the method catalog
+  // has already authenticated its full semilocal/exact exchange composition.
+  Method b3lyp;
+  b3lyp.execution_plan_.semilocal_family = dft::SemilocalFamily::Other;
+  b3lyp.fock_.strategy_value.spec.exchange.coefficient = -0.1;
+  b3lyp.options_.semilocal_exchange_scale = 1.0;
+  assert(b3lyp.qualified_spatial_force_default());
   reject([](auto& value) { value.fock_.strategy_value.backend = scf::FockBackend::Cpu; });
   reject([](auto& value) { value.fock_.strategy_value.spec.derivative_order = 1; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.present = false; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.coefficient = 0.5; });
   reject([](auto& value) { value.fock_.strategy_value.spec.exchange.present = false; });
-  for (double coefficient : {0.25, -0.25, std::nextafter(-0.125, 0.0)})
+  for (double coefficient : {0.0, 0.25, -0.500001, std::numeric_limits<double>::infinity()})
     reject([coefficient](auto& value) { value.fock_.strategy_value.spec.exchange.coefficient = coefficient; });
-  reject([](auto& value) { value.options_.semilocal_exchange_scale = 1.0; });
-  reject([](auto& value) { value.options_.semilocal_correlation_scale = 0.5; });
+  // Semilocal XC composition is orthogonal to the exact Direct J/K recurrence.
+  Method scaled;
+  scaled.options_.semilocal_exchange_scale = 1.0;
+  scaled.options_.semilocal_correlation_scale = 0.5;
+  assert(scaled.qualified_spatial_force_default());
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.approximation = scf::FockApproximation::DensityFitted; });
   reject([](auto& value) { value.fock_.strategy_value.spec.exchange.approximation = scf::FockApproximation::DensityFitted; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.op = scf::FockOperator::LongRange; });

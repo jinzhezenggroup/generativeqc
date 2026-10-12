@@ -38,6 +38,12 @@ constexpr std::uint64_t artifact_limit = std::uint64_t{2} * 1024 * 1024 * 1024;
 const Json policy = {
     {"precision", "fp64"}, {"spin", {"rhf", "uhf"}}, {"consumers", {"fock", "force"}}};
 
+#if GENERATIVEQC_MONOLITHIC_CLI
+constexpr const char* binary_profile_requires_shared_core =
+    "Monolithic CLI cannot activate a local binary profile; use the shared-core CLI "
+    "or set GENERATIVEQC_PROFILE=off to retain the official linked core";
+#endif
+
 void require(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -491,6 +497,13 @@ Json select_profile(int ordinal) {
     const auto profile = validate_profile_bundle(directory);
     require(profile.at("identity") == compatible_identity(probe),
             "GPU/runtime/driver/source/ABI identity changed");
+#if GENERATIVEQC_MONOLITHIC_CLI
+    if (!profile.value("kernels", Json::array()).empty()) {
+      diagnostics["binary_profile_requires_shared_core"] = true;
+      diagnostics["rejected"].push_back(binary_profile_requires_shared_core);
+      return diagnostics;
+    }
+#endif
     check_toolchain(profile);
     verify_library(directory, probe, ordinal, !profile.value("kernels", Json::array()).empty());
     diagnostics.update({{"source", "local"},
@@ -631,6 +644,9 @@ int profile_bundle_command(int argc, char** argv) {
     TemporaryDirectory staging(std::filesystem::temp_directory_path());
     extract_archive(argv[3], staging.path);
     const auto profile = validate_profile_bundle(staging.path);
+#if GENERATIVEQC_MONOLITHIC_CLI
+    require(profile.value("kernels", Json::array()).empty(), binary_profile_requires_shared_core);
+#endif
     const auto probe = probe_device(0);
     require(profile.at("identity") == compatible_identity(probe),
             "GPU/runtime/driver/source/ABI identity changed");
@@ -662,6 +678,12 @@ int profile_bundle_command(int argc, char** argv) {
 void activate_local_profile(int argc, char** argv, int device_id) {
   (void)argc;
   const auto diagnostics = select_profile(device_id);
+#if GENERATIVEQC_MONOLITHIC_CLI
+  const char* requested_profile = std::getenv("GENERATIVEQC_PROFILE");
+  if (requested_profile && *requested_profile && std::string_view(requested_profile) != "off" &&
+      diagnostics.value("binary_profile_requires_shared_core", false))
+    throw UsageError(binary_profile_requires_shared_core);
+#endif
   if (diagnostics.at("source") != "local") return;
   // DFT schedule-only bundles require workload-specific admission in the KS
   // prepared owner. Do not pretend loading their binary applies that schedule.

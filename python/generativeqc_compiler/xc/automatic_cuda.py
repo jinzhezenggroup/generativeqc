@@ -12,6 +12,7 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.xc_point_cuda import (
     emit_automatic_point_kernel,
     emit_device_point_value,
+    emit_equal_spin_point_selector,
     emit_point_traversal,
 )
 
@@ -51,12 +52,14 @@ class AutomaticCudaPointProvider:
 def emit_automatic_cuda_provider(name: str) -> AutomaticCudaPointProvider:
     """Emit a static E/vxc provider using the incumbent CUDA point traversal.
 
-    RKS/UKS remain runtime layouts, not separate mathematical/AOT variants. The
-    ordinary provider has no response/fxc entry. Component scaling is rejected
+    RKS/UKS retain one canonical polarized mathematical identity. An opt-in RKS
+    sibling shares identical scalar work after differentiation; it is not a
+    second functional formula. The provider has no response/fxc entry. Scaling is rejected
     rather than silently reinterpreting an imported immutable point program.
     Host callers validate tile/spin dimensions before submitting either kernel.
     """
     point = emit_automatic_point(name, backend="cuda")
+    restricted = emit_automatic_point(name, backend="cuda", equal_spin=True)
     feature_terms = {2: 1, 5: 4, 7: 5}[len(point.features)]
     provider_name = f"{point.function_name}_provider"
     code = automatic_functional_code(point.name)
@@ -64,6 +67,8 @@ def emit_automatic_cuda_provider(name: str) -> AutomaticCudaPointProvider:
         (
             '#include "tensor/cuda_runtime.cuh"',
             '#include "dft/cuda_xc_point_program.hpp"',
+            "#include <cstdlib>",
+            "#include <cstring>",
             "#include <limits>",
             "#include <stdexcept>",
             f"namespace generativeqc::dft::cuda_xc_detail::{provider_name} {{",
@@ -71,26 +76,36 @@ def emit_automatic_cuda_provider(name: str) -> AutomaticCudaPointProvider:
             "using generativeqc_tensor::finite;",
             emit_device_point_value(),
             point.source,
-            f"struct {provider_name} {{",
-            "  __device__ static DevicePointValue physical_point(",
-            "      I, const double rho[2], const double (&gradient)[2][3],",
-            "      const double tau[2], double exchange_scale, double correlation_scale) {",
-            "    if (exchange_scale != 1.0 || correlation_scale != 1.0) {",
-            "      DevicePointValue invalid;",
-            "      invalid.valid = false;",
-            "      return invalid;",
-            "    }",
-            f"    return {point.function_name}(rho, gradient, tau);",
-            "  }",
-            "};",
+            restricted.source,
+            _emit_adapter(provider_name, point.function_name),
+            _emit_adapter(f"{provider_name}_equal_spin", restricted.function_name),
             emit_point_traversal(),
             emit_automatic_point_kernel(),
+            emit_equal_spin_point_selector(),
             _emit_launchers(code, feature_terms, provider_name),
             "}  // namespace",
             "",
         )
     )
     return AutomaticCudaPointProvider(point, provider_name, feature_terms, source)
+
+
+def _emit_adapter(provider_name: str, function_name: str) -> str:
+    """Apply the same scaling contract to both canonical and restricted bodies."""
+    return f"""
+struct {provider_name} {{
+  __device__ static DevicePointValue physical_point(
+      I, const double rho[2], const double (&gradient)[2][3],
+      const double tau[2], double exchange_scale, double correlation_scale) {{
+    if (exchange_scale != 1.0 || correlation_scale != 1.0) {{
+      DevicePointValue invalid;
+      invalid.valid = false;
+      return invalid;
+    }}
+    return {function_name}(rho, gradient, tau);
+  }}
+}};
+"""
 
 
 def _emit_launchers(code: int, feature_terms: int, provider_name: str) -> str:
@@ -110,6 +125,13 @@ void launch(cudaStream_t stream, const double* features, const double* weights,
   validate_launch(count, spins, functional, exchange_scale, correlation_scale);
   if (delta) throw std::invalid_argument("automatic CUDA XC response is unavailable");
   if (!count) return;
+  if (use_equal_spin_points(spins)) {{
+    automatic_evaluate_points<{feature_terms}, false, {provider_name}_equal_spin>
+        <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+            features, weights, count, spins, coefficients, totals, error,
+            functional, exchange_scale, correlation_scale, count);
+    return;
+  }}
   automatic_evaluate_points<{feature_terms}, false, {provider_name}>
       <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
           features, weights, count, spins, coefficients, totals, error,
@@ -123,6 +145,13 @@ void launch_batch(cudaStream_t stream, const double* features, const double* wei
   if (!tile_points || tile_points > std::size_t{{std::numeric_limits<I>::max()}})
     throw std::invalid_argument("invalid automatic CUDA XC point tile size");
   if (!count) return;
+  if (use_equal_spin_points(spins)) {{
+    automatic_evaluate_points<{feature_terms}, true, {provider_name}_equal_spin>
+        <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+            features, weights, count, spins, coefficients, totals, error,
+            functional, exchange_scale, correlation_scale, tile_points);
+    return;
+  }}
   automatic_evaluate_points<{feature_terms}, true, {provider_name}>
       <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
           features, weights, count, spins, coefficients, totals, error,

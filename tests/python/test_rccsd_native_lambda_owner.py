@@ -11,7 +11,10 @@ import pytest
 from _cc_owner_test_support import compile_owner, write_df_cpu_headers
 
 
-def test_native_lambda_owner_fresh_replay_and_budget(tmp_path: Path) -> None:
+@pytest.mark.parametrize("cross_size", [False, True])
+def test_native_lambda_owner_fresh_replay_and_budget(
+    tmp_path: Path, cross_size: bool
+) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("C++ compiler unavailable")
@@ -23,6 +26,7 @@ def test_native_lambda_owner_fresh_replay_and_budget(tmp_path: Path) -> None:
             str(root / "tools/generate_rccsd_native.py"),
             "--cpu-header",
             str(header),
+            *(["--cross-size-arena"] if cross_size else []),
         ],
         cwd=root,
         check=True,

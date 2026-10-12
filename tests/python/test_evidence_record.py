@@ -2,6 +2,7 @@
 
 import gzip
 import json
+import lzma
 import typing
 from pathlib import Path
 
@@ -150,3 +151,38 @@ def test_gzip_json_and_record_parts_restore_exact_values(tmp_path: typing.Any) -
     (tmp_path / "water.json.gz").write_bytes(compressed_part)
     assert load_json(tmp_path / "evidence.json.gz") == main
     assert load_record(tmp_path / "evidence.json.gz")["timings"] == values
+
+
+def test_xz_json_preserves_exact_bytes_and_ordinary_reader(tmp_path: Path) -> None:
+    raw = b'{"negative":false,"values":[0.12345678901234567,1e-14,-0.0]}'
+    stored = lzma.compress(raw)
+    assert lzma.decompress(stored) == raw
+    assert decode_json(stored) == json.loads(raw)
+    assert decode_json(stored, path="evidence.json.xz") == json.loads(raw)
+    path = tmp_path / "evidence.json.xz"
+    path.write_bytes(stored)
+    assert load_json(path) == json.loads(raw)
+    assert load_record(path) == json.loads(raw)
+
+
+def test_xz_publication_uses_hash_bound_logical_record(tmp_path: Path) -> None:
+    stored = lzma.compress(b'{"negative":false,"timings":[1.2,1.3]}')
+    (tmp_path / "evidence.json.xz").write_bytes(stored)
+    manifest = {
+        "files": [
+            {
+                "path": "evidence.json.xz",
+                "role": "evidence",
+                "bytes": len(stored),
+                "sha256": digest(stored),
+            }
+        ]
+    }
+    (tmp_path / "publication.json").write_text(json.dumps(manifest))
+    assert load_publication_record(tmp_path, name="evidence.json") == {
+        "negative": False,
+        "timings": [1.2, 1.3],
+    }
+    (tmp_path / "evidence.json.xz").write_bytes(stored + b"changed")
+    with pytest.raises(ValueError, match="checksum/size"):
+        load_publication_record(tmp_path, name="evidence.json")

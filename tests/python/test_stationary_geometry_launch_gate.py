@@ -35,7 +35,9 @@ def test_bulk_geometry_launches_preserve_sticky_status_and_fail_closed(
     source = tmp_path / "launch.cpp"
     source.write_text(
         PREFIX
+        + f"constexpr bool stationary_restricted_point_capable={str(capable).lower()};\n"
         + f"constexpr bool stationary_pbe0_restricted_point_capable={str(capable).lower()};\n"
+        + "bool stationary_restricted_point_selected(bool requested) { return requested && stationary_pbe0_restricted_point_capable; }\n"
         + "void execute(bool precomputed_point=true) {\n"
         + branch
         + "}\n"

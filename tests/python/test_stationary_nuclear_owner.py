@@ -6,11 +6,28 @@ import ast
 from pathlib import Path
 
 import generativeqc.stationary_nuclear as production
+import numpy as np
+import pytest
 
 from tools.generativeqc_hessian import perturbation as perturbation_shim
 from tools.generativeqc_hessian import response as response_shim
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_real_fp64_validation_does_not_copy_existing_numeric_storage() -> None:
+    matrix = np.eye(3, dtype=np.float64)
+    energies = np.arange(3.0)
+    assert production._finite_matrix(matrix, name="matrix", nmo=3) is matrix
+    assert production._orbital_energies(energies, nmo=3) is energies
+
+
+def test_nuclear_inputs_must_remain_finite_after_fp64_conversion() -> None:
+    if np.finfo(np.longdouble).max <= np.finfo(np.float64).max:
+        pytest.skip("platform has no floating dtype wider than FP64")
+    matrix = np.full((3, 3), np.finfo(np.longdouble).max, dtype=np.longdouble)
+    with pytest.raises(ValueError, match="representable in FP64"):
+        production.metric_density_response_mo(matrix, nocc=1)
 
 
 def test_hessian_shims_reuse_production_stationary_nuclear_objects() -> None:

@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
     [
         ("PBE0", "unpolarized", True),
         ("PBE0", "polarized", False),
-        ("PBE", "unpolarized", False),
+        ("PBE", "unpolarized", True),
     ],
 )
 def test_capability_requires_exact_components_not_a_functional_label(
@@ -45,7 +45,9 @@ def test_capability_requires_exact_components_not_a_functional_label(
     assert (
         f"stationary_pbe0_restricted_point_capable = {str(capable).lower()}" in source
     )
-    assert ("evaluate_pbe0_restricted_bound" in source) == capable
+    assert ("evaluate_pbe0_restricted_bound" in source) == (
+        method == "PBE0" and spin == "unpolarized"
+    )
     renamed = replace(semilocal, identifier="not-a-named-functional")
     assert source == _emit_restricted_point_capability(1, renamed)
     half_exchange = replace(
@@ -69,6 +71,7 @@ def test_restricted_point_policy_defaults_on_with_explicit_opt_out(
     from generativeqc import _stationary_cuda as runtime
 
     variable = "GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT"
+    monkeypatch.delenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", raising=False)
     monkeypatch.delenv(variable, raising=False)
     assert runtime._resolve_restricted_point_policy()
     monkeypatch.setenv(variable, "on")
@@ -82,6 +85,22 @@ def test_restricted_point_policy_defaults_on_with_explicit_opt_out(
         runtime._resolve_restricted_point_policy()
     with pytest.raises(TypeError, match="boolean"):
         runtime._resolve_restricted_point_policy(1)
+
+
+def test_generic_restricted_point_policy_overrides_legacy_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", "off")
+    assert not runtime._resolve_restricted_point_policy()
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "off")
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", "on")
+    assert runtime._resolve_restricted_point_policy()
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_RESTRICTED_POINT", "yes")
+    with pytest.raises(ValueError, match="'off' or 'on'"):
+        runtime._resolve_restricted_point_policy()
 
 
 @pytest.mark.parametrize(
@@ -196,6 +215,88 @@ def test_native_consumer_rejects_stale_or_unknown_proofs(
     source.write_text(_NATIVE_PREFIX + native + _NATIVE_DRIVER)
     executable = native_cxx.build_executable(
         [source], tmp_path / "binding", compile_args=["-std=c++17", "-O2"]
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+@pytest.mark.parametrize("functional_code", (0, 917))
+@pytest.mark.parametrize("coefficient_count", (1, 4, 5))
+def test_emitted_point_inputs_follow_layout_not_functional_code(
+    tmp_path: Path,
+    native_cxx: NativeCxx,
+    functional_code: int,
+    coefficient_count: int,
+) -> None:
+    """Execute the real feature join with opaque rho/GGA/meta-GGA selectors."""
+    setup = _block(
+        _STATIONARY_SCIENTIFIC_KERNELS, "__device__ bool geometry_point_setup("
+    )
+    source = tmp_path / "ingredient-point.cpp"
+    source.write_text(
+        _POINT_PREFIX.replace(
+            "stationary_functional=1,stationary_coefficients=4",
+            f"stationary_functional={functional_code},stationary_coefficients={coefficient_count}",
+        )
+        + r"""
+#include <cassert>
+#include <limits>
+constexpr bool stationary_restricted_point_capable = true;
+struct StationaryPointValue {
+  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};
+  bool valid{true};
+};
+StationaryPointValue stationary_evaluate_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  StationaryPointValue output;
+  output.energy = 7;
+  for (size_t spin = 0; spin < 2; ++spin) {
+    output.rho[spin] = rho[spin];
+    output.kinetic[spin] = tau[spin];
+    for (size_t axis = 0; axis < 3; ++axis)
+      output.gradient[spin][axis] = gradient[spin][axis];
+  }
+  return output;
+}
+StationaryPointValue stationary_evaluate_restricted_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  return stationary_evaluate_point(rho, gradient, tau);
+}
+"""
+        + "template <bool restricted_point = false>\n"
+        + setup
+        + r"""
+int main() {
+  double features[20];
+  for (size_t index = 0; index < 20; ++index)
+    features[index] = double(index + 1);
+  for (size_t spin = 0; spin < 2; ++spin) {
+    if (stationary_coefficients == 1)
+      for (size_t axis = 0; axis < 3; ++axis)
+        features[(5 * spin + axis + 1) * 2 + 1] = std::numeric_limits<double>::quiet_NaN();
+    if (stationary_coefficients != 5)
+      features[(5 * spin + 4) * 2 + 1] = std::numeric_limits<double>::quiet_NaN();
+  }
+  generativeqc::dft::GridTaskView view{2, features, nullptr};
+  double raw[2]{3, 5}, gradient[6]{}, seed{};
+  int error{};
+  StationaryPointValue value;
+  assert(geometry_point_setup(view, 1, 0, 1, raw, nullptr, 0, 0,
+                              gradient, value, seed, &error));
+  assert(error == 0 && seed == 35);
+  for (size_t spin = 0; spin < 2; ++spin) {
+    assert(value.rho[spin] == double(10 * spin + 2));
+    for (size_t axis = 0; axis < 3; ++axis)
+      assert(value.gradient[spin][axis] ==
+             (stationary_coefficients > 1 ? double(10 * spin + 2 * axis + 4) : 0));
+    assert(value.kinetic[spin] == (stationary_coefficients == 5 ? double(10 * spin + 10) : 0));
+  }
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [source],
+        tmp_path / "ingredient-point",
+        compile_args=["-std=c++17", "-O2", "-I", str(ROOT / "src")],
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

@@ -6,9 +6,11 @@
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
+#include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
+#include "scf/initial_guess/automatic_policy.hpp"
 
 extern "C" {
 
@@ -16,7 +18,57 @@ uint32_t generativeqc_initial_guess_options_version(void) { return 1; }
 
 uint32_t generativeqc_initial_guess_capabilities_v1(void) {
   return GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
-         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO;
+         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO |
+         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU;
+}
+
+generativeqc_status generativeqc_initial_guess_auto_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* resolved_kind) {
+  if (!request || !resolved_kind) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(request)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if ((request->backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+       request->backend != GENERATIVEQC_BACKEND_CUDA) ||
+      (request->precision_mode != GENERATIVEQC_PRECISION_FP64 &&
+       request->precision_mode != GENERATIVEQC_PRECISION_AUTO) ||
+      (request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO) ||
+      request->restricted > 1 || request->has_ecp > 1 ||
+      (request->atomic_numbers == nullptr) != (request->atom_count == 0))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* capabilities = generativeqc::methods::find_capabilities(request->method);
+  if (!capabilities) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  bool elements_eligible = true;
+  for (size_t index = 0; index < request->atom_count; ++index) {
+    const auto atomic_number = request->atomic_numbers[index];
+    if (atomic_number < 1 || atomic_number > 118) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    elements_eligible =
+        elements_eligible &&
+        generativeqc::scf::initial_guess::automatic_minao_element_eligible(atomic_number);
+  }
+  const bool eligible = generativeqc::scf::initial_guess::automatic_minao_model_eligible(
+      request->method, capabilities->family, request->backend, request->precision_mode,
+      request->density_fitting_mode, request->restricted != 0, request->has_ecp != 0);
+  *resolved_kind = eligible && elements_eligible ? GENERATIVEQC_INITIAL_GUESS_MINAO : 0;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status generativeqc_initial_guess_auto_system_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, int64_t electron_count,
+    uint32_t multiplicity, uint32_t* resolved_kind) {
+  if (!request || !resolved_kind) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(request)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (!request->atom_count || electron_count < 0 || !multiplicity)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  uint32_t kind = 0;
+  const auto status = generativeqc_initial_guess_auto_kind_v1(request, &kind);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  *resolved_kind = generativeqc::scf::initial_guess::automatic_minao_population_eligible(
+                       electron_count, multiplicity)
+                       ? kind
+                       : 0;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
@@ -72,8 +124,14 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  generativeqc::api::PreparedPublication publication(*calculation->plan);
   calculation->precision_work.reset();
   calculation->initial_guess.reset();
+  calculation->precision = {};
+  calculation->incremental_direct_jk = {};
+  calculation->precision_available = false;
+  calculation->scf_diagnostic.reset();
+  calculation->ks_diagnostic.reset();
   // An attempted execution revokes any internal final-state token even if
   // the output descriptor is rejected before the method can run.
   try {
@@ -93,13 +151,6 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  // Reset to the conservative FP64 record before the run so a failed or
-  // fallback execution can never expose the previous successful mixed run.
-  calculation->precision = {};
-  calculation->incremental_direct_jk = {};
-  calculation->precision_available = false;
-  calculation->scf_diagnostic.reset();
-  calculation->ks_diagnostic.reset();
   try {
     // NULL/zero is an execution request, not merely a copy-out choice: the
     // backend must not launch or assemble analytic-force work in this mode.
@@ -128,6 +179,7 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
       // This completed nonconverged run is a new failure and replaces it;
       // successful calls continue to preserve borrowed diagnostic strings.
       calculation->context->last_detail = "SCF did not converge";
+      publication.commit();
       return GENERATIVEQC_STATUS_NOT_CONVERGED;
     }
     if (!omit_forces) {
@@ -137,9 +189,9 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
       std::copy(native.forces.begin(), native.forces.end(), output->forces);
     }
     calculation->precision_work = std::move(native.precision_work);
+    publication.commit();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
-    calculation->plan->invalidate_result();
     return generativeqc::api::map_exception(&calculation->context->last_detail);
   }
 }
@@ -161,6 +213,13 @@ generativeqc_status generativeqc_calculation_get_ks_diagnostic(
   std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
   return generativeqc::api::copy_ks_diagnostic(calculation->ks_diagnostic, out, history,
                                                history_capacity);
+}
+
+generativeqc_status generativeqc_calculation_get_ks_coulomb_exchange_work_v1(
+    const generativeqc_calculation* calculation, generativeqc_ks_coulomb_exchange_work_v1* out) {
+  if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  return generativeqc::api::copy_ks_coulomb_exchange_work(calculation->ks_diagnostic, out);
 }
 
 generativeqc_status generativeqc_calculation_get_ks_transport_diagnostic(

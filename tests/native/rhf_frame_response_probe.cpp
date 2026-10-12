@@ -15,6 +15,7 @@
 #include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 
 extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
@@ -200,6 +201,8 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
     check(scf::create_cuda_direct_jk_plan(0, {raw.orbital()}, 0, 0.0, 1ULL << 30, &plan, stats,
                                           detail));
     counts[0] = scf::cuda_direct_jk_resident_value_bytes(plan);
+    const auto bucket_policy = scf::cuda_execution::reference_resident_bucket_policy();
+    if (!bucket_policy.valid) throw std::runtime_error("invalid resident bucket policy");
     const auto prepare_started = std::chrono::steady_clock::now();
     generativeqc_status prepared;
     {
@@ -219,7 +222,8 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
         }
         ~AdmissionScope() { runtime::active_device_resource_ledger = previous; }
       } admission;
-      prepared = scf::prepare_cuda_direct_jk_resident_values(plan, maximum_cache_bytes, detail);
+      prepared = scf::prepare_cuda_direct_jk_selected_resident_values(
+          plan, std::min(maximum_cache_bytes, bucket_policy.ceiling), bucket_policy.mask, detail);
       if (admission.refused &&
           (prepared != GENERATIVEQC_STATUS_OUT_OF_MEMORY || admission.refused->rejected != 1 ||
            admission.refused->live != 0 || admission.refused->peak != 0))
@@ -237,13 +241,14 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
     counts[4] = counts[5] = 0;
     counts[6] = prepared;
     if (counts[1]) {
-      check(scf::prepare_cuda_direct_jk_resident_values(plan, maximum_cache_bytes, detail));
+      check(scf::prepare_cuda_direct_jk_selected_resident_values(plan, maximum_cache_bytes,
+                                                                 bucket_policy.mask, detail));
       if (scf::cuda_direct_jk_plan_diagnostic(plan).device_bytes != stats.device_bytes)
         throw std::runtime_error("idempotent resident preparation changed ownership");
       const auto original_device = plan->device_id;
       plan->device_id = original_device + 1;
-      const auto mismatched =
-          scf::prepare_cuda_direct_jk_resident_values(plan, maximum_cache_bytes, detail);
+      const auto mismatched = scf::prepare_cuda_direct_jk_selected_resident_values(
+          plan, maximum_cache_bytes, bucket_policy.mask, detail);
       plan->device_id = original_device;
       if (mismatched != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
         throw std::runtime_error("idempotent resident preparation accepted a foreign device");

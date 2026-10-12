@@ -216,9 +216,22 @@
       "owner": "bounded PBE0 primitive-local spatial force recurrence reuse",
       "reason": "Lossless receipts preserve all 60 complete independent E/F calls and 40 timed samples, genuine unset selection, source/artifact/cache provenance, both sanitizer layouts, the full racecheck timeout and failed coverage assertion. Earlier rejected/pilot populations are separate and never pooled. Seven historical JSON members are whitespace-reencoded with identical parsed data and original Git identities; no storage-budget increase or external archive.",
       "review_document": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/README.md"
+    },
+    "native-memory-arena-20261011": {
+      "owner": "native FP64 cross-size arena complete-endpoint qualification",
+      "reason": "Lossless XZ recompression retains the exact original 6,352,916 decoded JSON bytes, including all cold/warm/moved-warm measurements, independent references, source and script receipts, full logs and unfavorable serial-scratch evidence. No observations, policy caps or acceptance decisions change; original and decoded identities are pinned in storage.json.",
+      "review_document": "benchmarks/results/native-memory-arena-20261011/README.md"
     }
   },
   "files": [
+    {
+      "bytes": 145996,
+      "classification": "required-compact-accepted-evidence",
+      "family": "native-memory-arena-20261011",
+      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
+      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
+      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -274,14 +287,6 @@
       "path": "benchmarks/results/cuda-ownership/df/rejected-inventory-run.json.gz",
       "role": "scientific-record",
       "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
-    },
-    {
-      "bytes": 146796,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/samples.json.gz",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "5caa3e5c5dfc60dba7eed5a8afcf80aeb6d5bb8056023e2b9e8c7f4715f18838"
     },
     {
       "bytes": 155087,
@@ -452,28 +457,12 @@
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
     },
     {
-      "bytes": 166345,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-blas.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "502d55783e90f97419d96ab93491873653a74594fa94201a262cc7bbeec474a2"
-    },
-    {
       "bytes": 166398,
       "classification": "required-compact-accepted-evidence",
       "family": "issue206-metric-gemv",
       "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
       "role": "endpoint-or-numerical-samples",
       "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
-    },
-    {
-      "bytes": 267196,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/384ao-b4-forces-blas.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "4afc40f038cc07ff8fc22a7ef52d73ea948ffb84bc0329a9666b052d33609e37"
     },
     {
       "bytes": 143684,
@@ -564,12 +553,12 @@
       "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff"
     },
     {
-      "bytes": 381579,
+      "bytes": 192100,
       "classification": "required-compact-accepted-evidence",
       "family": "ks-resident-final-validation-20261010",
-      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.xz",
       "role": "endpoint-or-numerical-samples",
-      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c"
+      "sha256": "573a3132d73d971a93424f9226eac59823bf87fcb9baa124d815e685d4619204"
     },
     {
       "bytes": 197796,
@@ -626,14 +615,6 @@
       "sha256": "1d6dd690d29a8174c0eb0769c6f914b222dd7046e777a73e6ae3d4243b84bc48",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
-    },
-    {
-      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
-      "family": "pbe0-restricted-point-default-20261010",
-      "bytes": 214312,
-      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
     },
     {
       "bytes": 218108,

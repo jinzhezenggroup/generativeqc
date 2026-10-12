@@ -13,8 +13,10 @@ from tools.generativeqc_cc.lambda_equations import build_lambda_programs
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture(scope="module")
-def generated_header(tmp_path_factory: pytest.TempPathFactory) -> Path:
+@pytest.fixture(scope="module", params=[False, True])
+def generated_header(
+    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+) -> Path:
     folder = tmp_path_factory.mktemp("rccsd-arena-depth")
     output = folder / "generated.hpp"
     subprocess.run(
@@ -24,6 +26,7 @@ def generated_header(tmp_path_factory: pytest.TempPathFactory) -> Path:
             str(ROOT / "tools/generate_rccsd_native.py"),
             "--cpu-header",
             str(output),
+            *(["--cross-size-arena"] if request.param else []),
         ],
         cwd=ROOT,
         check=True,
@@ -41,6 +44,10 @@ def test_generated_response_arena_with_default_compiler_depth(
     compiler = shutil.which(compiler_name)
     if compiler is None:
         pytest.skip(f"{compiler_name} is unavailable")
+    cache = shutil.which("sccache") or shutil.which("ccache")
+    if cache is None:
+        pytest.skip("compiler cache unavailable")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     program = build_lambda_programs(2, 3).residual_vjp.program
     prepared = prepare_for_backend(program, "cpu")
     expected = sum(node.spec.size for node in prepared.live_nodes if node.op != "input")
@@ -56,6 +63,7 @@ def test_generated_response_arena_with_default_compiler_depth(
     output = tmp_path / "check"
     compiled = subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",

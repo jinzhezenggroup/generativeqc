@@ -11,6 +11,9 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_matrix_product_lowering.hpp"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/matrix_product.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/structured_scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/basis_transform.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/symmetric_rank_k.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/lowering.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ir.py"
@@ -102,6 +105,18 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
     COMMENT "Generating shared symmetric eigensolver lowering portfolio")
 
+  generativeqc_register_generated_sources(
+    NAME generativeqc_stationary_integral_weights_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_integral_weights.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_integral_weights.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_gradient.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_inline.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_integral_weights.hpp"
+    COMMENT "Generating shared stationary integral AD weights")
+
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_STATIONARY_CPU_AOT_DIRECTORY
         "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_derivatives")
@@ -131,6 +146,22 @@ macro(generativeqc_register_host_generated_sources target)
       COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
       COMMENT "Generating packaged stationary CPU s/p/d derivative inventory")
   endif()
+
+  set(_generativeqc_stationary_dispatch_enabled 0)
+  if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
+    set(_generativeqc_stationary_dispatch_enabled 1)
+  endif()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_stationary_cpu_dispatch_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_stationary_cpu_derivative_dispatch.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_cpu_derivative_dispatch.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/first_derivative_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/eri_weights.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_stationary_cpu_derivative_dispatch.hpp"
+         --enabled ${_generativeqc_stationary_dispatch_enabled}
+    COMMENT "Generating native bindings to packaged stationary CPU derivatives")
 
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_RANGE_DERIVATIVE_CPU_AOT_DIRECTORY
@@ -636,7 +667,7 @@ macro(generativeqc_register_host_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
     OUTPUTS "${GENERATIVEQC_RCCSD_CPU_HEADER}"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
-    ARGS --cpu-header "${GENERATIVEQC_RCCSD_CPU_HEADER}")
+    ARGS ${_generativeqc_native_arena_args} --cpu-header "${GENERATIVEQC_RCCSD_CPU_HEADER}")
 
   # The DF families share the existing RCCSD emitter. Their CPU queries
   # also own exact admission sizes for CUDA; generate once for both backends.
@@ -659,7 +690,7 @@ macro(generativeqc_register_host_generated_sources target)
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_native.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
-      ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+      ARGS ${_generativeqc_native_arena_args} --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
   endforeach()
 
   generativeqc_register_generated_sources(
@@ -674,7 +705,7 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
-    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    ARGS ${_generativeqc_native_arena_args} --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu")
@@ -693,7 +724,7 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/rhf_orbital_preconditioner.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
-    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    ARGS ${_generativeqc_native_arena_args} --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rhf_frame_response_cuda.cu")
@@ -707,7 +738,7 @@ macro(generativeqc_register_host_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
     OUTPUTS "${GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER}"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
-    ARGS --triples-fock-cpu-header "${GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER}")
+    ARGS ${_generativeqc_native_arena_args} --triples-fock-cpu-header "${GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER}")
 
   set(GENERATIVEQC_RCCSDT_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsdt_cpu.hpp")
@@ -1217,6 +1248,12 @@ macro(generativeqc_register_cuda_generated_sources target)
   set(_generativeqc_libxc_cuda_registry_args)
   set(_generativeqc_libxc_cuda_science_inputs)
   if(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT)
+    # Packaging selects structural registrations, never numerical admission.
+    # Unpackaged codes retain the null-descriptor, fail-closed runtime path.
+    foreach(_generativeqc_libxc_cuda_functional IN LISTS GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS)
+      list(APPEND _generativeqc_libxc_cuda_registry_args
+           --functional "${_generativeqc_libxc_cuda_functional}")
+    endforeach()
     # The descriptor's capability identity hashes these compiler families,
     # including modules not imported by this run. The generic Python depfile
     # cannot see those bytes or the catalog/Maple/work-policy data reads.
@@ -1260,7 +1297,14 @@ macro(generativeqc_register_cuda_generated_sources target)
   target_include_directories(generativeqc_libxc_semilocal_cuda PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}")
-  target_link_libraries(generativeqc_libxc_semilocal_cuda PRIVATE CUDA::cudart)
+  # Wheel objects need CUDA headers for the host registry, but resolve runtime
+  # providers through the final library's Implib trampolines, not SDK targets.
+  if(GENERATIVEQC_PYTHON_WHEEL)
+    generativeqc_ensure_cuda_wheel_import_interface()
+    target_link_libraries(generativeqc_libxc_semilocal_cuda PRIVATE generativeqc_cuda_wheel_imports)
+  else()
+    target_link_libraries(generativeqc_libxc_semilocal_cuda PRIVATE CUDA::cudart)
+  endif()
   set_target_properties(generativeqc_libxc_semilocal_cuda PROPERTIES
     POSITION_INDEPENDENT_CODE ON CXX_STANDARD 20 CUDA_STANDARD 20
     CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
@@ -1292,7 +1336,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
     OUTPUTS "${GENERATIVEQC_RCCSD_CUDA_SOURCE}"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
-    ARGS --cuda-source "${GENERATIVEQC_RCCSD_CUDA_SOURCE}")
+    ARGS ${_generativeqc_native_arena_args} --cuda-source "${GENERATIVEQC_RCCSD_CUDA_SOURCE}")
 
   set(GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_triples_response_cuda.cu")
@@ -1303,7 +1347,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
     OUTPUTS "${GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE}"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
-    ARGS --triples-cuda-source "${GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE}")
+    ARGS ${_generativeqc_native_arena_args} --triples-cuda-source "${GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE}")
 
   set(GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_triples_fock_response_cuda.cu")
@@ -1314,7 +1358,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
     OUTPUTS "${GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE}"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
-    ARGS --triples-fock-cuda-source "${GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE}")
+    ARGS ${_generativeqc_native_arena_args} --triples-fock-cuda-source "${GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE}")
 
   set(GENERATIVEQC_RCCSDT_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsdt_cuda.cu")
@@ -1346,7 +1390,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/indexed_cuda_reduction.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_gemm.py"
-    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    ARGS ${_generativeqc_native_arena_args} --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
   generativeqc_register_generated_sources(
     NAME generativeqc_df_lambda_codegen
@@ -1358,7 +1402,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda_cuda.cuh"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda_cuda.cu"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
-    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    ARGS ${_generativeqc_native_arena_args} --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
   set(GENERATIVEQC_MP2_GENERATED_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/generated/mp2")

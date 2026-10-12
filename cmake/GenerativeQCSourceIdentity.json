@@ -59,6 +59,7 @@
     "cmake/3rdparty/implib_manifest.json",
     "tools/generate_build_identity.py",
     "tools/generate_cuda_implib.py",
+    "tools/generate_nvidia_host_api.py",
     "tools/generate_method_parameters.py",
     "tools/generate_shell_kernels.py",
     "tools/generate_ecp_kernels.py",

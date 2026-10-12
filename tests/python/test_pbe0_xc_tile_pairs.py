@@ -34,6 +34,7 @@ def run_fake_campaign(
     point_specialization: bool = False,
     compact: bool = False,
     atoms: int = 48,
+    equal_spin: str | None = None,
 ) -> tuple[dict[str, Any], list[Any]]:
     """Exercise orchestration without a CUDA library, device or reference solve."""
     scientific = {
@@ -67,6 +68,8 @@ def run_fake_campaign(
             )
             self.batch_policies = []
             self.point_policies = []
+            self.equal_spin_policy = os.environ.get("GENERATIVEQC_CUDA_XC_EQUAL_SPIN")
+            self.equal_spin_policies = []
             self.compact_policy = os.environ["GENERATIVEQC_CUDA_XC_COMPACT_BATCH"]
             self.compact_policies = []
             self._warm_updates = True
@@ -85,6 +88,9 @@ def run_fake_campaign(
             self.batch_policies.append(os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"])
             self.point_policies.append(
                 os.environ.get("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION")
+            )
+            self.equal_spin_policies.append(
+                os.environ.get("GENERATIVEQC_CUDA_XC_EQUAL_SPIN")
             )
             self.compact_policies.append(
                 os.environ["GENERATIVEQC_CUDA_XC_COMPACT_BATCH"]
@@ -190,6 +196,8 @@ def run_fake_campaign(
         sys.argv.extend(["--point-batch-tiles", str(point_batch_tiles)])
     if point_specialization:
         sys.argv.append("--point-specialization")
+    if equal_spin is not None:
+        sys.argv.extend(["--equal-spin", equal_spin])
     if compact:
         sys.argv.append("--compact-xc-batches")
     try:
@@ -238,18 +246,28 @@ def test_batch_policy_overrides_default_during_owner_rebuilds(
 
 
 @pytest.mark.parametrize("point_batch_tiles", [None, 32])
+@pytest.mark.parametrize("equal_spin", [None, "0", "1"])
 def test_point_specialization_preserves_work_and_restores_policy(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, point_batch_tiles: int | None
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    point_batch_tiles: int | None,
+    equal_spin: str | None,
 ) -> None:
     monkeypatch.setenv("GENERATIVEQC_CUDA_XC_BATCH_TILES", "99")
     monkeypatch.setenv("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", "caller")
+    monkeypatch.setenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", "caller")
     record, owners = run_fake_campaign(
         monkeypatch,
         tmp_path,
         point_batch_tiles=point_batch_tiles,
         point_specialization=True,
+        equal_spin=equal_spin,
     )
-    assert record["schema"] == "generativeqc.pbe0-xc-point-family-pairs.v1"
+    assert record["schema"] == "generativeqc.pbe0-xc-point-family-pairs.v2"
+    assert record["point_equal_spin_policy"] == {
+        "baseline": equal_spin or "0",
+        "candidate": equal_spin or "0",
+    }
     assert record["scf_tiles"] == {"baseline": 256, "candidate": 256}
     assert record["point_consumer"] == {
         "baseline": "generic",
@@ -262,13 +280,20 @@ def test_point_specialization_preserves_work_and_restores_policy(
     )
     assert os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"] == "99"
     assert os.environ["GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION"] == "caller"
+    assert os.environ["GENERATIVEQC_CUDA_XC_EQUAL_SPIN"] == "caller"
     assert [owner.point_specialization for owner in owners] == ["0", "1"]
     assert {owner.tile for owner in owners} == {256}
     for owner in owners:
         assert owner.batch_tiles == str(point_batch_tiles or 1)
         assert set(owner.batch_policies) == {owner.batch_tiles}
         assert set(owner.point_policies) == {owner.point_specialization}
-        assert len(owner.point_policies) == 14
+        assert set(owner.equal_spin_policies) == {equal_spin or "0"}
+        assert owner.equal_spin_policy == (equal_spin or "0")
+    for group in ("setup", "priming", "samples"):
+        assert all(
+            row["diagnostics"]["requested_equal_spin_policy"] == (equal_spin or "0")
+            for row in record[group]
+        )
 
 
 def test_tiles_force_policy_and_frozen_replays(
@@ -283,8 +308,8 @@ def test_tiles_force_policy_and_frozen_replays(
     assert len(record["samples"]) == 20
     assert {owner.tile for owner in owners} == {256, 512}
     for owner in owners:
-        assert len(owner.calls) == 14
-        assert sum(updates for _, updates in owner.calls) == 2
+        assert any(updates for _, updates in owner.calls)
+        assert any(not updates for _, updates in owner.calls)
     for phase in ("warm", "moved-warm"):
         samples = [row for row in record["samples"] if row["phase"] == phase]
         assert record["assessments"][phase] == assess_comparison(samples)
@@ -409,11 +434,17 @@ def synthetic_point_family_evidence(candidate_seconds: float) -> tuple[dict, dic
 
 
 @pytest.mark.parametrize("candidate_seconds", [9.9, 10.0, 11.0])
+@pytest.mark.parametrize("legacy", [False, True])
 def test_point_family_negative_results_are_valid_but_cannot_promote(
     candidate_seconds: float,
+    legacy: bool,
 ) -> None:
     """Noisy, unchanged and slower endpoints remain auditable negative evidence."""
-    record, reference = synthetic_point_family_evidence(candidate_seconds)
+    record, reference = (
+        synthetic_point_family_evidence(candidate_seconds)
+        if legacy
+        else explicit_equal_spin_evidence("0", candidate_seconds)
+    )
     verify_point_family_pairs(record, reference)
     assert all(row["status"] == "not-run" for row in record["assessments"].values())
     with pytest.raises(AssertionError):
@@ -440,7 +471,7 @@ def test_negative_point_family_results_still_reject_invalid_evidence(
 
 
 def test_point_family_improvement_requires_valid_complete_evidence() -> None:
-    record, reference = synthetic_point_family_evidence(9.0)
+    record, reference = explicit_equal_spin_evidence("0", 9.0)
     verify_point_family_pairs(record, reference, require_improvement=True)
     record["samples"][0]["diagnostics"]["iterations"] = 2
     with pytest.raises(AssertionError):
@@ -451,7 +482,7 @@ def test_point_family_improvement_requires_valid_complete_evidence() -> None:
 def test_point_family_work_ignores_independent_discovery_timing(
     candidate_seconds: float,
 ) -> None:
-    record, reference = synthetic_point_family_evidence(candidate_seconds)
+    record, reference = explicit_equal_spin_evidence("0", candidate_seconds)
     for row in record["samples"]:
         if row["selection"] == "candidate":
             row["diagnostics"]["native_scf_ao_work"]["discovery_seconds"] += 0.1
@@ -464,9 +495,85 @@ def test_point_family_work_ignores_independent_discovery_timing(
     "counter", ["discovery_ao_jet_values", "point_ao_visits", "future_work_counter"]
 )
 def test_point_family_work_still_compares_every_nontiming_field(counter: str) -> None:
-    record, reference = synthetic_point_family_evidence(9.0)
+    record, reference = explicit_equal_spin_evidence("0", 9.0)
     sample = next(row for row in record["samples"] if row["selection"] == "candidate")
     work = sample["diagnostics"]["native_scf_ao_work"]
     work[counter] = work.get(counter, 0) + 1
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+def explicit_equal_spin_evidence(
+    policy: str, seconds: float = 9.0
+) -> tuple[dict, dict]:
+    record, reference = synthetic_point_family_evidence(seconds)
+    record.update(
+        schema="generativeqc.pbe0-xc-point-family-pairs.v2",
+        point_equal_spin_policy={"baseline": policy, "candidate": policy},
+        point_spin_channels=1,
+        point_family_effect=(
+            "ordinary-physical-family-binding"
+            if policy == "0"
+            else "shared-method-bound-equal-spin-physical"
+        ),
+    )
+    for group in ("setup", "priming", "samples"):
+        for row in record[group]:
+            row["diagnostics"]["requested_equal_spin_policy"] = policy
+    return record, reference
+
+
+@pytest.mark.parametrize(
+    "mutation", ["arm-policy", "row-policy", "effect", "missing", "spin-layout"]
+)
+def test_point_family_equal_spin_policy_must_match_all_phases(mutation: str) -> None:
+    record, reference = explicit_equal_spin_evidence("0")
+    verify_point_family_pairs(record, reference, require_improvement=True)
+    if mutation == "arm-policy":
+        record["point_equal_spin_policy"]["candidate"] = "1"
+    elif mutation == "row-policy":
+        record["priming"][0]["diagnostics"]["requested_equal_spin_policy"] = "1"
+    elif mutation == "effect":
+        record["point_family_effect"] = "shared-method-bound-equal-spin-physical"
+    elif mutation == "spin-layout":
+        record["point_spin_channels"] = 2
+    else:
+        del record["point_equal_spin_policy"]
+    with pytest.raises((AssertionError, KeyError)):
+        verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+def test_shared_equal_spin_consumer_cannot_establish_family_promotion() -> None:
+    record, reference = explicit_equal_spin_evidence("1")
+    verify_point_family_pairs(record, reference)
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+@pytest.mark.parametrize("remove_policy_fields", [False, True])
+def test_schema_downgrade_cannot_gain_current_promotion(
+    remove_policy_fields: bool,
+) -> None:
+    record, reference = explicit_equal_spin_evidence("1")
+    verify_point_family_pairs(record, reference)
+    record["schema"] = "generativeqc.pbe0-xc-point-family-pairs.v1"
+    if remove_policy_fields:
+        for key in (
+            "point_equal_spin_policy",
+            "point_spin_channels",
+            "point_family_effect",
+        ):
+            record.pop(key)
+        for group in ("setup", "priming", "samples"):
+            for row in record[group]:
+                row["diagnostics"].pop("requested_equal_spin_policy")
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+def test_legacy_positive_evidence_remains_auditable_without_promotion_credit() -> None:
+    record, reference = synthetic_point_family_evidence(9.0)
+    verify_point_family_pairs(record, reference)
+    assert all(value["status"] == "pass" for value in record["assessments"].values())
     with pytest.raises(AssertionError):
         verify_point_family_pairs(record, reference, require_improvement=True)

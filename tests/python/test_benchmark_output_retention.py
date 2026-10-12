@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import sys
 import typing
 from pathlib import Path
 
@@ -107,6 +108,107 @@ def test_argparse_reports_bad_output_without_starting_work(
         parser.parse_args(["--output", str(tmp_path / "benchmarks/results/x.json")])
     assert error.value.code == 2
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_array_api_rhf_rejects_retained_output_before_work(
+    tmp_path: typing.Any, monkeypatch: typing.Any, destination_kind: str
+) -> None:
+    from benchmarks import _retention, array_api_rhf_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        raise AssertionError("invalid output reached benchmark work")
+
+    monkeypatch.setattr(array_api_rhf_endpoint, "_scheduler_guard", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["array_api_rhf_endpoint", "--output", str(destination / existing.name)],
+    )
+    with pytest.raises(SystemExit) as error:
+        array_api_rhf_endpoint.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_native_cpu_ks_rejects_retained_output_before_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination_kind: str
+) -> None:
+    from benchmarks import _retention, native_cpu_ks_force_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("invalid output reached benchmark work")
+
+    monkeypatch.delenv("GENERATIVEQC_LIBRARY", raising=False)
+    monkeypatch.setattr(native_cpu_ks_force_endpoint, "endpoint", forbidden)
+    monkeypatch.setattr(native_cpu_ks_force_endpoint._native, "load_library", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["native_cpu_ks_force_endpoint", "--output", str(destination / existing.name)],
+    )
+    with pytest.raises(SystemExit) as error:
+        native_cpu_ks_force_endpoint.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
+def test_prepared_lifecycle_cli_rejects_retained_output_before_qualification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lifecycle runner must reject retained output before numerical work."""
+    from benchmarks import _retention, prepared_lifecycle
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(
+        prepared_lifecycle,
+        "qualify",
+        lambda *arguments: pytest.fail("qualification started before output admission"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prepared_lifecycle.py",
+            "--device",
+            "cpu",
+            "--method",
+            "rhf",
+            "--output",
+            str(tmp_path / "benchmarks/results/receipt.json"),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        prepared_lifecycle.main()
+    assert error.value.code == 2
+    assert not (tmp_path / "benchmarks").exists()
 
 
 def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None:

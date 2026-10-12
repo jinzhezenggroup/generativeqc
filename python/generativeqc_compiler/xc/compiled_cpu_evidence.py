@@ -20,7 +20,8 @@ from .bulk_point_program import (
     SemilocalPointBinding,
     native_domain_version,
 )
-from .bulk_runtime import PRODUCTION_DENSITY_CANDIDATE_DOMAIN
+from .bulk_runtime import build_bulk_runtime_program, production_candidate_domain
+from .density_work import DENSITY_WORK_DOMAIN
 from .libxc_bulk_capabilities import STAGE_EVIDENCE_SCHEMA, functional_capability
 
 RESULT_SCHEMA = "generativeqc.libxc-compiled-cpu-result/v2"
@@ -161,7 +162,7 @@ def _binding_payload(
     if value.get("capability_identity") != capability_identity:
         raise ValueError("compiled-CPU binding capability identity mismatch")
     domain = value.get("domain")
-    if domain != PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
+    if domain != production_candidate_domain(capability_name):
         raise ValueError("compiled-CPU binding domain mismatch")
     if value.get("domain_version") != native_domain_version(domain):
         raise ValueError("compiled-CPU binding native domain version mismatch")
@@ -222,6 +223,14 @@ def _binding_payload(
         "features": list(feature_tuple),
         "ingredient_mask": value["ingredient_mask"],
     }
+    if domain == DENSITY_WORK_DOMAIN:
+        from .bulk_point_program import bind_runtime_semilocal_point_program
+
+        current = bind_runtime_semilocal_point_program(
+            build_bulk_runtime_program(capability_name, domain=domain)
+        )
+        if payload != current.to_payload():
+            raise ValueError("compiled-CPU density work binding is stale")
     return payload
 
 
@@ -240,7 +249,7 @@ def build_result(
         raise ValueError("compiled-CPU binding functional mismatch")
     if binding.capability_identity != capability.identity:
         raise ValueError("compiled-CPU binding capability identity mismatch")
-    if binding.variant.domain != PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
+    if binding.variant.domain != production_candidate_domain(capability.name):
         raise ValueError(
             "compiled-CPU evidence requires density-screened production candidate domain"
         )

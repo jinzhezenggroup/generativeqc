@@ -784,6 +784,9 @@ def plan_cuda(
     preserve the original contraction tree. Programs carrying an explicit
     precision-execution contract keep their original tree until intermediate
     precision propagation through reassociation is defined.
+
+    Scalar functions retain each value's float32/float64 type and the shared
+    finite-domain diagnostics; their CUDA spelling is owned by the scalar emitter.
     """
     if not isinstance(program, Program) or not isinstance(target, CudaTargetInfo):
         raise TypeError("plan_cuda requires a Program and CudaTargetInfo")
@@ -830,10 +833,6 @@ def plan_cuda(
     if any(n.op in TRANSCENDENTALS for n, _ in nodes) and len(nodes) > INT_MAX // 2:
         raise ValueError("too many steps for transcendental domain diagnostics")
     for node, _ in nodes:
-        if node.op in TRANSCENDENTALS and node.spec.dtype != "float64":
-            raise ValueError(
-                "CUDA transcendental primitives are qualified only for float64"
-            )
         scalar = None if node.spec.dtype == "int64" else scalar_type(node.spec.dtype)
         checked_size(node.spec.size * node.spec.itemsize, "tensor bytes")
         for stride in strides(node.spec.shape):

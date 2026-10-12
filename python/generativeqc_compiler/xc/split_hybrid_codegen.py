@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.integral.cuda import CudaEmitter
+from generativeqc_compiler.xc.equal_spin import EQUAL_SPIN_BINDINGS, equal_spin_roots
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 from generativeqc_compiler.xc.split_hybrid_program import (
     _bound_component,
@@ -191,7 +192,30 @@ def _emit_component(
             "",
         ]
     )
-    return interior + _emit_work_wrapper(type_name, function_name, policy)
+    restricted_roots = equal_spin_roots(program.graph, roots)
+    restricted_emitter = CudaEmitter(program.graph, variables)
+    restricted_emitter.emit(restricted_roots)
+    restricted_interior = "\n".join(
+        [
+            f"__device__ inline {type_name} {function_name}_equal_spin_interior({signature}) {{",
+            *restricted_emitter.lines,
+            "  return {"
+            + restricted_emitter.reference(restricted_roots[0])
+            + ", {"
+            + ", ".join(
+                restricted_emitter.reference(root) for root in restricted_roots[1:]
+            )
+            + "}};",
+            "}",
+            "",
+        ]
+    )
+    return (
+        interior
+        + _emit_work_wrapper(type_name, function_name, policy)
+        + restricted_interior
+        + _emit_work_wrapper(type_name, f"{function_name}_equal_spin", policy)
+    )
 
 
 def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str, ...]]:
@@ -253,7 +277,31 @@ def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str,
             "",
         ]
     )
-    return body, type_name, selected
+    restricted_body = "\n".join(
+        [
+            f'inline constexpr const char* k{type_stem}EqualSpinExpressionIdentity = "'
+            + canonical_hash(
+                {
+                    "expression": expression_identity,
+                    "equal_spin_bindings": EQUAL_SPIN_BINDINGS,
+                }
+            )
+            + '";',
+            "// Paired sanitized inputs must match; sigma_ab remains independent.",
+            f"__device__ inline {type_name} {function_name}_equal_spin({signature}) {{",
+            f"  const auto exchange = {function_name}_exchange_equal_spin({arguments});",
+            f"  const auto correlation = {function_name}_correlation_equal_spin({arguments});",
+            f"  {type_name} out{{}};",
+            "  out.energy_density = exchange.energy_density + correlation.energy_density;",
+            f"  for (unsigned index = 0; index < {len(selected)}; ++index)",
+            "    out.feature_derivative[index] =",
+            "        exchange.feature_derivative[index] + correlation.feature_derivative[index];",
+            "  return out;",
+            "}",
+            "",
+        ]
+    )
+    return body + restricted_body, type_name, selected
 
 
 def emit_split_hybrid_device(identifier: str) -> str:

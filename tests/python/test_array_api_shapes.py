@@ -19,7 +19,7 @@ def test_expand_dims_matches_numpy_in_eager_and_captured_modes(
     expected = np.expand_dims(x, axis=axes)
     eager = xp.expand_dims(x, axes)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(a: object) -> object:
         return xp.expand_dims(a, axes)
 
@@ -36,7 +36,7 @@ def test_squeeze_matches_numpy_in_eager_and_captured_modes(
 ) -> None:
     x = np.arange(3.0, dtype=dtype).reshape(1, 3, 1)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(a: object) -> object:
         return xp.squeeze(a, axes)
 
@@ -49,7 +49,7 @@ def test_squeeze_matches_numpy_in_eager_and_captured_modes(
 def test_flip_eager_and_compiled_matches_numpy(axes: object) -> None:
     x = np.arange(24.0, dtype=np.float64).reshape(2, 3, 4)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(a: object) -> object:
         return xp.flip(a, axis=axes)
 
@@ -73,7 +73,7 @@ def test_moveaxis_eager_and_compiled_matches_numpy(
 ) -> None:
     x = np.arange(24.0).astype(np.float64).reshape(2, 3, 4)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(a: object) -> object:
         return xp.moveaxis(a, source, destination)
 
@@ -86,7 +86,7 @@ def test_moveaxis_eager_and_compiled_matches_numpy(
 def test_permute_dims_2025_12_signed_axes(axes: tuple[int, ...]) -> None:
     values = np.arange(24.0, dtype=np.float32).reshape(2, 3, 4)
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object) -> object:
         return xp.permute_dims(x, axes)
 
@@ -115,7 +115,7 @@ def test_broadcast_arrays_eager_compiled_and_mixed_dtype_preserve_types() -> Non
     assert eager[0].dtype == left.dtype
     assert eager[1].dtype == right.dtype
 
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object, y: object) -> object:
         a, b = xp.broadcast_arrays(x, y)
         return xp.sum(a) + xp.sum(b)
@@ -131,7 +131,7 @@ def test_broadcast_arrays_eager_compiled_and_mixed_dtype_preserve_types() -> Non
 
 
 def test_shape_ops_use_existing_tensorir_jvp_and_scientific_guardrails() -> None:
-    @xp.compile(differentiable=("x",))
+    @xp.compile(differentiable=("x",), backend="reference")
     def expression(x: object) -> object:
         reshaped = xp.expand_dims(x, axis=(0, -1))
         return xp.sum(xp.flip(reshaped, axis=-2))
@@ -181,11 +181,11 @@ def test_invalid_axes_fail_closed_before_eager_or_captured_execution(
     with pytest.raises((TypeError, ValueError)):
         operation(values)
     with pytest.raises((TypeError, ValueError)):
-        xp.compile(lambda x: operation(x)).lower(values)
+        xp.compile(lambda x: operation(x), backend="reference").lower(values)
 
 
 def test_capture_flip_rejects_excessive_static_gather_index_budget() -> None:
-    @xp.compile
+    @xp.compile(backend="reference")
     def expression(x: object) -> object:
         return xp.flip(x, axis=0)
 

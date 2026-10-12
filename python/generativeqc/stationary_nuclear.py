@@ -28,23 +28,33 @@ __all__ = [
 ]
 
 
+def _real_fp64(values: typing.Any, *, name: str) -> np.ndarray:
+    """Reject complex data before conversion without copying native FP64 arrays."""
+    raw = np.asarray(values)
+    if raw.dtype.kind not in "iuf" or np.iscomplexobj(raw):
+        raise ValueError(f"{name} must be real numeric data")
+    if not np.isfinite(raw).all():
+        raise ValueError(f"{name} must be finite")
+    with np.errstate(over="ignore", invalid="ignore"):
+        array = np.asarray(raw, dtype=np.float64)
+    if array is not raw and not np.isfinite(array).all():
+        raise ValueError(f"{name} must be representable in FP64")
+    return array
+
+
 def _finite_matrix(values: typing.Any, *, name: str, nmo: int) -> np.ndarray:
-    array = np.asarray(values, dtype=np.float64)
+    array = _real_fp64(values, name=name)
     if array.shape != (nmo, nmo):
         raise ValueError(f"{name} must have shape ({nmo}, {nmo}), got {array.shape}")
-    if not np.isfinite(array).all():
-        raise ValueError(f"{name} must be finite")
     return array
 
 
 def _orbital_energies(values: typing.Any, *, nmo: int) -> np.ndarray:
-    array = np.asarray(values, dtype=np.float64)
+    array = _real_fp64(values, name="orbital_energies")
     if array.shape != (nmo,):
         raise ValueError(
             f"orbital_energies must have shape ({nmo},), got {array.shape}"
         )
-    if not np.isfinite(array).all():
-        raise ValueError("orbital_energies must be finite")
     return array
 
 
@@ -52,11 +62,9 @@ def metric_density_response_mo(
     overlap_derivative_mo: typing.Any, *, nocc: int
 ) -> np.ndarray:
     """Return the known MO density connection `-1/2 (S_R D + D S_R)`."""
-    overlap = np.asarray(overlap_derivative_mo, dtype=np.float64)
+    overlap = _real_fp64(overlap_derivative_mo, name="overlap_derivative_mo")
     if overlap.ndim != 2 or overlap.shape[0] != overlap.shape[1]:
         raise ValueError("overlap_derivative_mo must be a square matrix")
-    if not np.isfinite(overlap).all():
-        raise ValueError("overlap_derivative_mo must be finite")
     nmo = overlap.shape[0]
     if not isinstance(nocc, (int, np.integer)) or not 0 < nocc < nmo:
         raise ValueError("nocc must be an integer between 1 and nmo-1")
@@ -331,25 +339,28 @@ def solve_stationary_nuclear_perturbations(
     resident_reconstruction_consumers: typing.Any = None,
     metric_response: typing.Callable[..., typing.Any] = metric_density_response_mo,
 ) -> StationaryNuclearBatchResponse:
-    """Solve a bounded set of perturbations through one injected multi-RHS solver."""
+    """Solve a bounded, possibly empty set through one injected multi-RHS solver.
+
+    Empty requests still validate the live reference and solver contract but
+    perform no metric/Fock action or reconstruction.
+    """
     if not callable(solver):
         raise TypeError("solver must be callable")
     if strategy not in ("sequential", "blocked", "recycled"):
         raise ValueError("strategy must be sequential, blocked or recycled")
     ref, layout = _validate_operator(operator)
-    frozen_values = np.asarray(frozen_focks)
-    overlap_values = np.asarray(overlaps)
+    frozen_values = _real_fp64(frozen_focks, name="frozen Fock derivatives")
+    overlap_values = _real_fp64(overlaps, name="overlap derivatives")
     expected_tail = (ref.nmo, ref.nmo)
     if (
         frozen_values.ndim != 3
         or overlap_values.ndim != 3
         or frozen_values.shape != overlap_values.shape
         or frozen_values.shape[1:] != expected_tail
-        or frozen_values.shape[0] < 1
     ):
         raise ValueError(
             "multi-RHS frozen Fock/overlap inputs must share shape "
-            "(nrhs, nmo, nmo) with nrhs >= 1"
+            "(nrhs, nmo, nmo) with nrhs >= 0"
         )
     prepared = tuple(
         _prepare_stationary_nuclear_perturbation(
@@ -371,6 +382,8 @@ def solve_stationary_nuclear_perturbations(
         raise ValueError(
             "resident_reconstruction_consumers must match perturbation count"
         )
+    if not callable(metric_response):
+        raise TypeError("metric_response must be callable")
 
     def solution_consumer(
         item: _PreparedNuclearPerturbation, consumer: typing.Any
@@ -389,7 +402,11 @@ def solve_stationary_nuclear_perturbations(
 
         return consume
 
-    packed = np.column_stack([layout.pack(-item.rhs) for item in prepared])
+    packed = (
+        np.column_stack([layout.pack(-item.rhs) for item in prepared])
+        if prepared
+        else np.empty((layout.dimension, 0), dtype=np.float64)
+    )
     multi = solver(
         operator,
         packed,

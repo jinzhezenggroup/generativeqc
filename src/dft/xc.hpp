@@ -290,6 +290,12 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
     const std::vector<std::vector<double>>& density, std::size_t tile_points,
     double exchange_scale = 1.0, double correlation_scale = 1.0);
 
+/** The same analytic moving-grid GGA AO/Becke pullback with the canonical
+ * generated B3LYP semilocal point response used by the prepared CPU SCF. */
+PbeStationaryXcDerivative stationary_b3lyp_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points);
+
 }  // namespace generativeqc::dft
 
 #endif

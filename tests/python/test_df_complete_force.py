@@ -57,7 +57,7 @@ def run(
     dp = ct.POINTER(ct.c_double)
     output = np.full((len(metadata["inputs"]["atomic_numbers"]), 3), 12345.0)
     values = np.full(16, 12345.0)
-    counts = np.zeros(12, dtype=np.uintp)
+    counts = np.zeros(20, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     with NativeSource(**source_arguments(metadata)) as source:
         code = probe(

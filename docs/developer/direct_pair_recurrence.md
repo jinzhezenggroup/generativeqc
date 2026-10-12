@@ -90,10 +90,53 @@ AO coefficients are never reconstructed by dividing Gaussian factors.
 
 The private workspace is bounded by the instantiated angular order and existing
 through-f Hermite limits; no global derivative tensor or retained lease is
-introduced. The L+1 simplex must fit the existing Coulomb order bound, so order
-twelve retains forward AD. Orders zero through six retain their specialized
-owners. Short-range production requests and separately selected reachable or
-convolved derivative algebra also retain their existing consumers.
+introduced. This shared owner's L+1 simplex must fit the existing primal Coulomb
+order bound, so order twelve retains generic forward AD. Orders zero through six
+retain their specialized owners. Short-range production requests and separately
+selected reachable or convolved derivative algebra also retain their existing
+consumers.
+
+## Generic high-order first responses
+
+The compiler lowers the generic order-7--12 `Dual3` Cartesian consumer to one
+FP64 scalar Coulomb simplex of degree `L+1`. First spatial derivatives are the
+next Cartesian states of the existing Coulomb recurrence; a lightweight view
+applies all nine product-center geometry seeds when the unchanged Hermite
+contraction reads a root. It does not retain three tangent simplexes. Exponents
+and the full/LR/SR radial boundary are fixed under these geometry derivatives.
+
+This lowering changes preparation/storage, not the six-loop contraction order,
+primitive traversal, scientific screening, force scatter, or thread geometry.
+The optional Hermite-convolution consumer also borrows the response view without
+changing its separate selection policy. Reachable preparation encloses the
+component box and its three raised faces, clips every bound to the `L+1` simplex,
+and falls back to complete preparation for invalid diagnostic extents. The extra
+response degree does not admit a higher-angular-momentum AO basis.
+
+The independent-center full/LR owner above already shares scalar states for
+orders seven through eleven and remains unchanged. This lowering covers its
+retained generic consumers, including order twelve, short-range requests and
+selected reachable/convolved derivative algebra.
+
+Low-order specializations, value-only arithmetic, single-direction `Dual`, mixed
+precision, and resident cooperative/materialized consumers retain their owners.
+In particular, an admitted s/p/d order-seven cooperative task already shares a
+scalar recurrence: it does not use this generic fallback. Generic preparation
+still repeats for each independently seeded atom unless another qualified owner
+shares it. Reduced storage alone is not proof of reduced endpoint work or time.
+
+`tests/python/test_reachable_coulomb.py` poisons unused scalar storage and checks
+every high-order response face against independent radial quadrature.
+`tests/python/test_hermite_convolution.py` and
+`tests/python/test_shared_rsh_preparation.py` check integral/jet semantics against
+independently raised/lowered Gaussian integrals. Real-device qualification uses
+`tests/python/test_direct_spatial_response_cuda.py`, enabled by
+`GENERATIVEQC_DIRECT_SPATIAL_RESPONSE_CUDA_TEST=1` only inside a finite Slurm GPU
+allocation. Its linked shell-pair probe resources and event intervals are not
+production-library resource or complete energy-plus-force endpoint receipts.
+
+The [lowering decision](../../.agents/notes/implemented/performance/2026-10-11-generic-coulomb-spatial-responses.md)
+records measured storage, retained fallbacks and remaining qualification gates.
 
 ## Legacy HF and dddd qualification
 

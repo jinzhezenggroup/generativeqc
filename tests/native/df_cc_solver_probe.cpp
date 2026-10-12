@@ -31,8 +31,11 @@ int main(int argc, char* argv[]) {
     options.df_replay_matrix_gemm = !(header[6] & 64);
     options.df_occupied_pairs = !(header[6] & 128);
     options.packed_diis = header[6] & 32;
+    options.df_mixed_precision = header[6] & (1ULL << 63);
+    if (header[6] & (1ULL << 62)) options.df_mixed_precision_max_evaluations = 2;
     // Probe-only high bits select a tile limit without changing the public API.
-    if (header[6] >> 8) options.df_auxiliary_batch_limit = header[6] >> 8;
+    const auto batch_limit = (header[6] & ~((1ULL << 63) | (1ULL << 62))) >> 8;
+    if (batch_limit) options.df_auxiliary_batch_limit = batch_limit;
     options.energy_tolerance = 1e-12;
     options.residual_tolerance = 1e-10;
     const auto o = p.nocc, v = p.nvir;
@@ -101,7 +104,12 @@ int main(int argc, char* argv[]) {
               << d.df_pair_evaluations << ' ' << d.df_pair_refusals << ' '
               << d.df_pair_projection_calls << ' ' << d.df_pair_projection_bytes << ' '
               << d.df_pair_geometry_elements << ' ' << d.df_pair_capacity_bytes << ' '
-              << d.df_pair_binding_host_bytes << '\n';
+              << d.df_pair_binding_host_bytes << ' ' << d.df_mixed_precision << ' '
+              << d.df_mixed_precision_refused << ' ' << d.df_mixed_evaluations << ' '
+              << d.df_fp32_gemm_calls << ' ' << d.df_fp32_gemm_summands << ' '
+              << d.df_precision_cast_elements << ' ' << d.df_precision_switches << ' '
+              << d.df_strict_auxiliary_batch_size << ' ' << d.df_mixed_pair_projection_calls << ' '
+              << d.df_mixed_pair_projection_bytes << '\n';
     for (double x : result.t1) std::cout << x << ' ';
     for (double x : result.t2) std::cout << x << ' ';
     std::cout << '\n' << result.reason << '\n';

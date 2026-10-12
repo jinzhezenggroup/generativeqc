@@ -16,7 +16,9 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.expr import AlgebraForm, Expr, Graph
 
 from . import libxc_bulk
+from .density_work import DENSITY_WORK_DOMAIN, apply_density_work, density_work_payload
 from .libxc_bulk_capabilities import functional_capability
+from .libxc_work import LibxcWorkPolicy, automatic_work_policy
 from .spec import UnsupportedXC
 
 if typing.TYPE_CHECKING:
@@ -30,8 +32,23 @@ _RUNTIME_DOMAINS = frozenset(
         libxc_bulk.BULK_SEMANTICS,
         PRODUCTION_CANDIDATE_DOMAIN,
         PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+        DENSITY_WORK_DOMAIN,
     )
 )
+
+
+def production_candidate_domain(name: str) -> str:
+    """Select the explicit qualification recipe, not production admission.
+
+    Density-only LDA can reuse the pinned worker projection. Other ingredient
+    families retain the unclipped candidate and all of its existing gates until
+    a separately qualified projection exists. Selection is structural rather
+    than a list of functional names.
+    """
+    capability = functional_capability(name)
+    if capability.family == "lda" and capability.required_ingredients == ("rho",):
+        return DENSITY_WORK_DOMAIN
+    return PRODUCTION_DENSITY_CANDIDATE_DOMAIN
 
 
 @dataclass(frozen=True)
@@ -47,6 +64,8 @@ class BulkRuntimeSpec:
     source_identity: str
     domain: str = libxc_bulk.BULK_SEMANTICS
     density_threshold: float | None = None
+    density_work_policy: LibxcWorkPolicy | None = None
+    density_work_source_identity: str | None = None
 
     def to_payload(self) -> dict[str, typing.Any]:
         """Return semantic identity without implying production admission."""
@@ -65,6 +84,11 @@ class BulkRuntimeSpec:
         }
         if self.density_threshold is not None:
             payload["density_threshold"] = self.density_threshold
+        if self.density_work_policy is not None:
+            payload["density_work"] = density_work_payload(
+                self.density_work_policy,
+                projection_source_identity=self.density_work_source_identity,
+            )
         return payload
 
     def validate_features(
@@ -97,7 +121,10 @@ class BulkRuntimeSpec:
 
         rows = dict(zip(self.features, x, strict=True))
         density_names = ("rho_a", "rho_b") if self.spin == "polarized" else ("rho",)
-        density_boundary = self.domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN
+        density_boundary = self.domain in (
+            PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+            DENSITY_WORK_DOMAIN,
+        )
         density_invalid = (
             any(np.any(rows[name] < 0) for name in density_names)
             if density_boundary
@@ -281,6 +308,11 @@ def build_bulk_runtime_program(
     without clipping so the independent campaign decides whether their E/vxc
     behavior is actually valid. Production-domain and molecular capability remain
     evidence gates owned by downstream lanes.
+
+    The separate density-only work domain evaluates LDA derivative roots at the
+    pinned safe densities, without differentiating clipping, and retains original
+    density energy weighting. It does not change the meaning of v1/v2 or claim
+    GGA/MGGA, particle-birth, molecular, or public qualification.
     """
     if domain not in _RUNTIME_DOMAINS:
         raise UnsupportedXC(f"unsupported bulk runtime domain {domain!r}")
@@ -297,7 +329,19 @@ def build_bulk_runtime_program(
 
     bulk = libxc_bulk.build_bulk_program(capability.name, spin=spin)
     density_threshold = None
-    if domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
+    density_work_policy = None
+    density_work_source_identity = None
+    if domain == DENSITY_WORK_DOMAIN:
+        if capability.family != "lda" or ingredients != ("rho",):
+            raise UnsupportedXC(
+                "density work domain currently requires density-only LDA ingredients"
+            )
+        density_work_policy = automatic_work_policy(capability.name)
+        density_threshold = density_work_policy.density_threshold
+        density_work_source_identity = density_work_payload(density_work_policy)[
+            "projection_owner_sha256"
+        ]
+    elif domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
         catalog = libxc_bulk.read_catalog()
         record = next(
             item for item in catalog["registrations"] if item["name"] == capability.name
@@ -330,6 +374,8 @@ def build_bulk_runtime_program(
         source_identity=bulk.identity,
         domain=domain,
         density_threshold=density_threshold,
+        density_work_policy=density_work_policy,
+        density_work_source_identity=density_work_source_identity,
     )
     available = _output_set(len(spec.features), order)
     requested = available if outputs is None else tuple(tuple(v) for v in outputs)
@@ -362,6 +408,10 @@ def build_bulk_runtime_program(
     roots = tuple(derivatives[output] for output in requested)
     if optimization == "after":
         graph, roots = graph.apply_algebra_form(roots, AlgebraForm.FACTORED_NARY)
+    if density_work_policy is not None:
+        roots = apply_density_work(
+            graph, roots, requested, spec.features, density_work_policy
+        )
     graph, roots = graph.lower_small_integer_powers(roots)
 
     reachable = graph.topological_order(roots)

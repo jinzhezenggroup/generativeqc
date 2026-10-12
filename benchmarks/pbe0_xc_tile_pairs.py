@@ -8,7 +8,9 @@ perform one physical iteration and one Fock build without warm fallback.
 With --point-batch-tiles both arms retain 256-point AO maps/contractions and
 only the candidate batches independent point domains within an explicit cap.
 With --point-specialization both arms use identical tile and batch requests;
-only the PBE point-consumer implementation changes.
+both also use the same explicit equal-spin policy, defaulting to disabled. If
+equal-spin is enabled, its method-bound physical consumer supersedes the family
+toggle; that comparison cannot attribute its gain to physical family lowering.
 With --compact-xc-batches both arms request the same point batching; only the
 candidate batches mapped contractions. The 12-atom case covers small AO domains.
 """
@@ -63,8 +65,18 @@ def main() -> None:
     parser.add_argument("--point-batch-tiles", type=int)
     parser.add_argument("--point-batch-bytes", type=int, default=32 * 1024 * 1024)
     parser.add_argument("--point-specialization", action="store_true")
+    parser.add_argument(
+        "--equal-spin",
+        choices=("0", "1"),
+        help="same policy for both arms; family comparisons default to 0",
+    )
     parser.add_argument("--compact-xc-batches", action="store_true")
     args = parser.parse_args()
+    equal_spin = (
+        args.equal_spin
+        if args.equal_spin is not None
+        else ("0" if args.point_specialization else None)
+    )
     allocation = os.environ.get("SLURM_JOB_ID") or (
         os.environ.get("INSPIRE_JOB_NAME") if args.point_specialization else None
     )
@@ -130,6 +142,8 @@ def main() -> None:
             values["GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION"] = (
                 "1" if arm == "candidate" else "0"
             )
+        if equal_spin is not None:
+            values["GENERATIVEQC_CUDA_XC_EQUAL_SPIN"] = equal_spin
         previous = {name: os.environ.get(name) for name in values}
         os.environ.update(values)
         try:
@@ -144,7 +158,7 @@ def main() -> None:
     root = Path(__file__).resolve().parents[1]
     record: dict[str, Any] = {
         "schema": (
-            "generativeqc.pbe0-xc-point-family-pairs.v1"
+            "generativeqc.pbe0-xc-point-family-pairs.v2"
             if args.point_specialization
             else (
                 "generativeqc.pbe0-xc-point-batch-pairs.v1"
@@ -164,6 +178,19 @@ def main() -> None:
             if args.point_specialization
             else None
         ),
+        "point_equal_spin_policy": (
+            {"baseline": equal_spin, "candidate": equal_spin}
+            if args.point_specialization
+            else None
+        ),
+        "point_spin_channels": 1 if args.point_specialization else None,
+        "point_family_effect": (
+            "ordinary-physical-family-binding"
+            if equal_spin == "0"
+            else "shared-method-bound-equal-spin-physical"
+        )
+        if args.point_specialization
+        else None,
         "force_tile_points": 256,
         "compact_xc_batch_request": args.compact_xc_batches,
         "density_scope": "separate independently converged publicly frozen warm snapshots",
@@ -179,6 +206,8 @@ def main() -> None:
                 for path in (
                     "python/generativeqc/batch.py",
                     "python/generativeqc_compiler/dft/xc_point_batch_cuda.py",
+                    "python/generativeqc_compiler/dft/ao_cuda.py",
+                    "python/generativeqc_compiler/dft/xc_point_cuda.py",
                     "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py",
                     "python/generativeqc_compiler/dft/xc_compiled_resources.py",
                     "src/dft/cuda_xc.hpp",
@@ -225,6 +254,7 @@ def main() -> None:
         assert all(error["passed"] for error in errors.values()), errors
         assert item.ks_diagnostic.tile_points == tiles[arm]
         return {
+            "requested_equal_spin_policy": equal_spin,
             "energy": item.energy,
             "forces": item.forces.tolist(),
             "errors": errors,

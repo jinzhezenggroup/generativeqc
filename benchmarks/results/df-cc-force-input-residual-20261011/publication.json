@@ -1,0 +1,53 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent complete-force gates pass, with a scoped fresh ABBA endpoint improvement; no statistical/global performance or latest-master claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 1827,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "156511a950f4afabab32c6a6d589b07d09ea0912af5581f819c840990e1c9221"
+    },
+    {
+      "bytes": 533,
+      "path": "production-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "327ecd42b60eb77e9bbe5245a563ae8cb636138974823c5e07d416b365210f03"
+    },
+    {
+      "bytes": 57948,
+      "path": "raw-receipts.json.xz",
+      "role": "samples",
+      "sha256": "197a015beb526c76a0dc1430acdf2367f66817425fb2663badc0a4c0decde7d9"
+    },
+    {
+      "bytes": 8379,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "a1aeceaf25d82088f51c594398212f4da6050028e7e8f14c144523c263cd532d"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=2",
+      "--time=00:30:00",
+      "bash",
+      "qualify-input-residual.sh",
+      "benchmark-only"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "34dd51ed3ebc5b03b17f095de2cd7b39903923c8"
+  }
+}

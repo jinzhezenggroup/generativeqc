@@ -6,6 +6,7 @@ function(generativeqc_add_api_sources target)
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
+    src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
@@ -21,7 +22,8 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_tuning.cpp
     src/api/c_api_ecp.cpp
     src/api/error.cpp
-    src/methods/registry.cpp)
+    src/methods/registry.cpp
+    src/methods/prepared_execution.cpp)
 endfunction()
 
 function(generativeqc_add_runtime_sources target)
@@ -148,6 +150,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/fock_provider.cpp
     src/scf/cuda_fock_provider.cpp
     src/scf/fock_prepared.cpp
+    src/scf/stationary_integral_gradient.cpp
     src/scf/fock_execution.cpp
     src/scf/rhf.cpp
     src/scf/solver/diis.cpp
@@ -236,6 +239,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/scf_matrix_kernels.cu
       src/scf/cuda/mean_field_setup.cu
       src/scf/cuda/scf_density_kernels.cu
+      src/scf/cuda/structured_matrix.cu
       src/scf/cuda/scf_diis_kernels.cu
       src/scf/cuda/scf_convergence_kernels.cu
       src/scf/cuda/basis_transform_kernels.cu

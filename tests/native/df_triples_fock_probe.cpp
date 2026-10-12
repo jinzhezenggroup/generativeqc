@@ -117,6 +117,10 @@ static int combined_probe_impl(std::size_t o, std::size_t v, std::size_t q,
                                      diagnostic.fp64_gemms};
       std::copy(std::begin(arithmetic), std::end(arithmetic), counts + 24);
     }
+    if (counts_size >= 31) {
+      counts[29] = r.fock.w_copy_calls;
+      counts[30] = r.fock.w_copy_bytes;
+    }
     return 0;
   } catch (const std::exception& e) {
     if (error && error_size) std::snprintf(error, error_size, "%s", e.what());

@@ -13,6 +13,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_options_version](#native-c-generativeqc-ks-options-version)
 - [generativeqc_initial_guess_options_version](#native-c-generativeqc-initial-guess-options-version)
 - [generativeqc_initial_guess_capabilities_v1](#native-c-generativeqc-initial-guess-capabilities-v1)
+- [generativeqc_initial_guess_auto_kind_v1](#native-c-generativeqc-initial-guess-auto-kind-v1)
+- [generativeqc_initial_guess_auto_system_kind_v1](#native-c-generativeqc-initial-guess-auto-system-kind-v1)
 - [generativeqc_calculation_get_initial_guess_diagnostic](#native-c-generativeqc-calculation-get-initial-guess-diagnostic)
 - [generativeqc_batch_get_initial_guess_diagnostic](#native-c-generativeqc-batch-get-initial-guess-diagnostic)
 - [generativeqc_get_abi_version](#native-c-generativeqc-get-abi-version)
@@ -41,6 +43,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
 - [generativeqc_calculation_get_scf_diagnostic](#native-c-generativeqc-calculation-get-scf-diagnostic)
 - [generativeqc_calculation_get_ks_diagnostic](#native-c-generativeqc-calculation-get-ks-diagnostic)
+- [generativeqc_calculation_get_ks_coulomb_exchange_work_v1](#native-c-generativeqc-calculation-get-ks-coulomb-exchange-work-v1)
 - [generativeqc_calculation_get_ks_transport_diagnostic](#native-c-generativeqc-calculation-get-ks-transport-diagnostic)
 - [generativeqc_calculation_get_precision_provenance](#native-c-generativeqc-calculation-get-precision-provenance)
 - [generativeqc_calculation_get_incremental_direct_jk_diagnostic](#native-c-generativeqc-calculation-get-incremental-direct-jk-diagnostic)
@@ -65,6 +68,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_batch_get_correlation_diagnostic](#native-c-generativeqc-batch-get-correlation-diagnostic)
 - [generativeqc_batch_get_cc_performance_diagnostic](#native-c-generativeqc-batch-get-cc-performance-diagnostic)
 - [generativeqc_batch_get_ks_diagnostic](#native-c-generativeqc-batch-get-ks-diagnostic)
+- [generativeqc_batch_get_ks_coulomb_exchange_work_v1](#native-c-generativeqc-batch-get-ks-coulomb-exchange-work-v1)
 - [generativeqc_batch_get_ks_transport_diagnostic](#native-c-generativeqc-batch-get-ks-transport-diagnostic)
 - [generativeqc_batch_get_ks_ao_selection_diagnostic_v1](#native-c-generativeqc-batch-get-ks-ao-selection-diagnostic-v1)
 - [generativeqc_batch_set_warm_start_updates](#native-c-generativeqc-batch-set-warm-start-updates)
@@ -192,13 +196,65 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_capabilities_v1 ( void ) ;
 ```
 
-**Behavior.** Return additive HF, LDA, and MINAO provider capability bits.
+**Behavior.** Return additive HF, LDA, MINAO, and CPU automatic-policy capability bits.
 
 **Outputs.** Ignore unknown bits. A positive bit does not waive the provider-specific backend,
 spin, basis, derivative, and resource admission checks documented with
 generativeqc_initial_guess_options.
 
 **Execution.** Synchronous, context-free discovery; no device initialization or allocation.
+
+(native-c-generativeqc-initial-guess-auto-kind-v1)=
+## generativeqc_initial_guess_auto_kind_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v1 ( const generativeqc_initial_guess_auto_policy * request , uint32_t * resolved_kind ) ;
+```
+
+**Behavior.** Resolve automatic MINAO eligibility using the native admission policy.
+
+**Inputs.** request carries the current struct_size/abi_version, a registered method, CPU or
+CUDA backend, valid precision and density-fitting modes, Boolean restricted/has_ecp,
+and either a nonempty atomic-number list (1..118) or NULL with atom_count=0.
+
+**Outputs.** On SUCCESS, writes GENERATIVEQC_INITIAL_GUESS_MINAO or zero (Hcore). Model-only
+admission is not a complete system or execution capability. Explicit initial-guess choices
+do not use this query; preparation retains its singlet, basis, density, and budget gates.
+
+**Lifetime.** Borrows the request and atomic_numbers for this call only; retains nothing.
+
+**Errors.** Invalid requests return INVALID_ARGUMENT, descriptor version/size mismatches return
+ABI_MISMATCH, and unknown methods return NOT_IMPLEMENTED. Preserves output on failure.
+
+**Execution.** Synchronous, allocation-free discovery. No context, device initialization,
+compiler, Python interpreter, or scientific integral evaluation is required.
+
+(native-c-generativeqc-initial-guess-auto-system-kind-v1)=
+## generativeqc_initial_guess_auto_system_kind_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind_v1 ( const generativeqc_initial_guess_auto_policy * request , int64_t electron_count , uint32_t multiplicity , uint32_t * resolved_kind ) ;
+```
+
+**Behavior.** Resolve automatic MINAO or Hcore for one system, including its population.
+
+**Inputs.** request has the same contract as generativeqc_initial_guess_auto_kind_v1 but
+requires a nonempty atomic-number list. electron_count is nonnegative and multiplicity
+is positive. Neither coordinates nor a prepared scientific owner are required.
+
+**Outputs.** On SUCCESS, writes MINAO only for an eligible positive even-electron singlet,
+otherwise zero (Hcore). This shape query does not waive seed-budget or density gates.
+
+**Lifetime.** Borrows the request and atomic_numbers for this call only; retains nothing.
+
+**Errors.** Uses the model query's status codes; invalid populations return INVALID_ARGUMENT.
+Preserves output on failure, including an empty system request.
+
+**Execution.** Synchronous, allocation-free, context-free discovery; no device or science work.
 
 (native-c-generativeqc-calculation-get-initial-guess-diagnostic)=
 ## generativeqc_calculation_get_initial_guess_diagnostic
@@ -737,7 +793,9 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds ( c
 
 Physical Fock builds in the last counted batch execution, including final
 rebuilds. CPU owners and CUDA KS owners with a complete operator census are
-supported. A joint UHF alpha/beta J/K evaluation counts once. Returns
+supported. Retry-aware ordinary CUDA KS owners include all normally
+terminated target attempts; preliminary-method work is reported separately.
+A joint UHF alpha/beta J/K evaluation counts once. Returns
 NOT_IMPLEMENTED for unexecuted items, uninstrumented CUDA paths (including
 chunk/replay), or incompletely counted warm-to-cold retries. The result is
 never inferred from iteration count.
@@ -1037,6 +1095,32 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** All energy terms are Hartree; spin electron counts and residual measures follow the KS
 descriptor comments, including unavailable-stage energy_change markers.
+
+(native-c-generativeqc-calculation-get-ks-coulomb-exchange-work-v1)=
+## generativeqc_calculation_get_ks_coulomb_exchange_work_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_coulomb_exchange_work_v1 ( const generativeqc_calculation * calculation , generativeqc_ks_coulomb_exchange_work_v1 * out ) ;
+```
+
+**Behavior.** Copy observed target-KS value-provider Coulomb/exchange applications.
+
+**Inputs.** Initialize out with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+NULL out probes completed KS-record availability.
+
+**Outputs.** Copies the narrow census, including discarded target attempts. Inspect complete
+before using counts; uninstrumented paths return complete=0 and zero unavailable fields.
+
+**Errors.** Invalid owner is INVALID_ARGUMENT; invalid descriptor is ABI_MISMATCH.
+NOT_IMPLEMENTED means no completed KS record. Failure leaves output untouched.
+
+**Lifetime.** The caller owns the copied record. Keep owner/context alive during this call.
+
+**Execution.** Synchronous; serialize execution, queries and destruction on this owner/context.
+
+**Units.** Logical applications, not recurrences, FLOPs, bytes or time.
 
 (native-c-generativeqc-calculation-get-ks-transport-diagnostic)=
 ## generativeqc_calculation_get_ks_transport_diagnostic
@@ -1881,6 +1965,32 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** All energy terms are Hartree; spin electron counts and residual measures follow the KS
 descriptor comments, including unavailable-stage energy_change markers.
+
+(native-c-generativeqc-batch-get-ks-coulomb-exchange-work-v1)=
+## generativeqc_batch_get_ks_coulomb_exchange_work_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1 ( const generativeqc_batch * batch , uint32_t index , generativeqc_ks_coulomb_exchange_work_v1 * out ) ;
+```
+
+**Behavior.** Copy one input item's observed target-KS value-provider J/K applications.
+
+**Inputs.** Initialize out with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+index is the zero-based original input index. NULL out probes completed-record availability.
+
+**Outputs.** Copies the narrow census, including discarded target attempts. Inspect complete
+before using counts; uninstrumented paths return complete=0 and zero unavailable fields.
+
+**Errors.** Invalid owner/index is INVALID_ARGUMENT; invalid descriptor is ABI_MISMATCH.
+NOT_IMPLEMENTED means no completed KS record. Failure leaves output untouched.
+
+**Lifetime.** The caller owns the copied record. Keep owner/context alive during this call.
+
+**Execution.** Synchronous; serialize execution, queries and destruction on this owner/context.
+
+**Units.** Logical applications, not recurrences, FLOPs, bytes or time.
 
 (native-c-generativeqc-batch-get-ks-transport-diagnostic)=
 ## generativeqc_batch_get_ks_transport_diagnostic

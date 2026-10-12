@@ -13,7 +13,7 @@ namespace generativeqc::scf::cuda_execution {
 
 template <unsigned MaximumOrder, typename Scalar>
 GENERATIVEQC_ERI_DEVICE inline void boys_values(Scalar argument, Scalar* values) {
-  static_assert(MaximumOrder <= kMaximumCoulombOrder);
+  static_assert(MaximumOrder <= kMaximumCoulombResponseOrder);
   if constexpr (std::is_same_v<Scalar, MixedPrecisionFloat>) {
     // The alternating high-order series loses too many digits in FP32 near
     // its branch boundary.  Evaluate the small special-function table in FP64

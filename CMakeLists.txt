@@ -19,8 +19,21 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCTests.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSourceIdentity.cmake")
 
 option(GENERATIVEQC_ENABLE_CUDA "Build the CUDA runtime backend" ON)
+option(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA
+       "Coalesce disjoint native FP64 scratch slots across symbolic capacities" ON)
+set(_generativeqc_native_arena_args)
+if(GENERATIVEQC_NATIVE_CROSS_SIZE_ARENA)
+  list(APPEND _generativeqc_native_arena_args --cross-size-arena)
+endif()
 option(GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT
        "Build experimental automatic semilocal CUDA E/vxc AOT plumbing" OFF)
+set(GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS "" CACHE STRING
+    "Semicolon-separated automatic CUDA AOT registrations; empty selects the opt-in full catalog")
+if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
+   (NOT GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT OR NOT GENERATIVEQC_ENABLE_CUDA))
+  message(FATAL_ERROR
+    "GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS requires CUDA and automatic CUDA AOT")
+endif()
 option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE
        "Reuse compiler-owned AO radial and axis work for 4/10 jets" ON)
 option(GENERATIVEQC_ENABLE_CUTENSOR "Link the optional native cuTENSOR provider" OFF)
@@ -37,6 +50,8 @@ option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
 option(GENERATIVEQC_BUILD_TESTS "Build native tests" ON)
 option(GENERATIVEQC_BUILD_CLI "Build the Python-free native command-line executable" ON)
+option(GENERATIVEQC_MONOLITHIC_CLI
+       "Link the native CLI to the static GenerativeQC core (external providers remain dynamic)" OFF)
 option(GENERATIVEQC_PYTHON_WHEEL
        "Install one unversioned shared library for a Python wheel" OFF)
 option(GENERATIVEQC_BUNDLE_XTB_OPENBLAS
@@ -101,6 +116,13 @@ elseif(NOT GENERATIVEQC_COMPILER_CACHE STREQUAL "off"
     endif()
   endif()
 endif()
+set(GENERATIVEQC_RESOLVED_COMPILER_CACHE
+    "${_generativeqc_compiler_cache}" CACHE FILEPATH
+    "Compiler cache executable selected by GenerativeQC" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_COMPILER_CACHE)
+set(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER "" CACHE FILEPATH
+    "CUDA host compiler selected by CMake" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER)
 if(_generativeqc_compiler_cache)
   get_filename_component(_generativeqc_compiler_cache_name
                          "${_generativeqc_compiler_cache}" NAME)
@@ -117,7 +139,16 @@ if(_generativeqc_compiler_cache)
   endif()
   if(NOT CMAKE_CUDA_COMPILER_LAUNCHER)
     set(CMAKE_CUDA_COMPILER_LAUNCHER "${_generativeqc_compiler_cache_launcher}")
+    set(_generativeqc_cuda_compiler_launcher_managed ON)
+  else()
+    set(_generativeqc_cuda_compiler_launcher_managed OFF)
   endif()
+  set(GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED
+      "${_generativeqc_cuda_compiler_launcher_managed}" CACHE BOOL
+      "Whether GenerativeQC selected the CUDA compiler launcher" FORCE)
+  set(GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER
+      "${CMAKE_CUDA_COMPILER_LAUNCHER}" CACHE STRING
+      "Effective CUDA compiler launcher recorded by GenerativeQC" FORCE)
   message(STATUS "GenerativeQC compiler cache: ${_generativeqc_compiler_cache}")
 endif()
 
@@ -187,6 +218,9 @@ if(GENERATIVEQC_ENABLE_CUDA)
     endif()
     set(CMAKE_CUDA_ARCHITECTURES ${_generativeqc_cuda_requested_architectures})
     enable_language(CUDA)
+    set(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER
+        "${CMAKE_CUDA_HOST_COMPILER}" CACHE FILEPATH
+        "CUDA host compiler selected by CMake" FORCE)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
@@ -248,8 +282,26 @@ if(GENERATIVEQC_ENABLE_CUDA)
   endif()
 endif()
 
+if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
+   NOT GENERATIVEQC_ENABLE_CUDA)
+  message(FATAL_ERROR
+    "The selected automatic CUDA AOT package cannot use the CPU-only compiler fallback")
+endif()
+
 # Scoped GenerativeQC-owned GFN2 CPU runtime is registered below.
-add_library(generativeqc SHARED)
+# The default SDK/wheel keeps its ABI-compatible shared core. Distribution-only
+# builds can instead link the same C++/CUDA core into the native CLI, avoiding a
+# second GenerativeQC runtime DSO. CUDA toolkit, driver and system providers
+# are intentionally not presented as a fully static Linux executable.
+if(GENERATIVEQC_MONOLITHIC_CLI)
+  if(NOT GENERATIVEQC_BUILD_CLI OR GENERATIVEQC_PYTHON_WHEEL)
+    message(FATAL_ERROR
+      "GENERATIVEQC_MONOLITHIC_CLI requires the native CLI and is not a wheel build")
+  endif()
+  add_library(generativeqc STATIC)
+else()
+  add_library(generativeqc SHARED)
+endif()
 target_link_libraries(generativeqc PRIVATE Threads::Threads)
 generativeqc_configure_cutensor(generativeqc)
 generativeqc_configure_cutlass(generativeqc)
@@ -428,12 +480,15 @@ if(GENERATIVEQC_BUILD_CLI)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
     COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
-  target_link_libraries(generativeqc_cli PRIVATE generativeqc nlohmann_json::nlohmann_json
+  generativeqc_link_cli_core(generativeqc_cli)
+  target_link_libraries(generativeqc_cli PRIVATE nlohmann_json::nlohmann_json
                         OpenSSL::Crypto LibArchive::LibArchive ${CMAKE_DL_LIBS})
   target_include_directories(generativeqc_cli PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_VERSION="${PROJECT_VERSION}")
+  target_compile_definitions(generativeqc_cli PRIVATE
+    GENERATIVEQC_MONOLITHIC_CLI=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>)
   target_compile_options(generativeqc_cli PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>)
   set_target_properties(generativeqc_cli PROPERTIES OUTPUT_NAME generativeqc)
@@ -531,7 +586,8 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_dft_df.py"
                      $<TARGET_FILE:generativeqc_cli>
-                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz")
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     $<BOOL:${GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT}>)
     add_test(NAME generativeqc_cli_profile_safety
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_profile_cache.py"

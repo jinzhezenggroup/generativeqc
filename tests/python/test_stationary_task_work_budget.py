@@ -11,6 +11,27 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _host_becke_dependencies() -> str:
+    """Keep extracted owners bound to the real generated representation and policy."""
+    from generativeqc_compiler.xc.becke_scaled_products import emit_binary_scaled_becke
+    from generativeqc_compiler.xc.grid_native import (
+        emit_grid_adjoint,
+        emit_grid_partials,
+    )
+    from generativeqc_compiler.xc.grid_phased import emit_phased_becke
+
+    return (
+        "#include <cstdlib>\n"
+        + '#include "'
+        + (ROOT / "src/dft/becke_scaled_policy.hpp").as_posix()
+        + '"\n'
+        + emit_grid_adjoint()
+        + emit_grid_partials()
+        + emit_phased_becke()
+        + emit_binary_scaled_becke()
+    )
+
+
 def _block(source: str, marker: str) -> str:
     start = source.index(marker)
     opening = source.index("{", start)
@@ -30,8 +51,10 @@ def test_native_task_budget_is_per_page_not_cumulative(
     tmp_path: Path, method: str
 ) -> None:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler required")
+    cache = shutil.which("sccache") or shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("C++ compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     pieces = [
         _block(header, "struct Owner {") + ";",
@@ -63,7 +86,8 @@ def test_native_task_budget_is_per_page_not_cumulative(
     )
     layout = _runtime_layout_cuda(plan).replace("__host__ __device__", "")
     source.write_text(
-        PREAMBLE
+        _host_becke_dependencies()
+        + PREAMBLE
         + layout
         + "using namespace generativeqc_stationary_cuda;\n"
         + "\n".join(pieces)
@@ -71,7 +95,7 @@ def test_native_task_budget_is_per_page_not_cumulative(
     )
     binary = tmp_path / "admission"
     subprocess.run(
-        [compiler, "-std=c++17", "-O2", str(source), "-o", str(binary)],
+        [cache, compiler, "-std=c++17", "-O2", str(source), "-o", str(binary)],
         check=True,
         capture_output=True,
         text=True,
@@ -231,7 +255,6 @@ PREAMBLE = r"""
 #include <stdexcept>
 using std::size_t;
 namespace generativeqc_stationary_cuda {}
-namespace generativeqc_grid_adjoint { struct CenterPair; }
 namespace generativeqc::runtime {
 template <class Element> struct OwnedCudaBuffer {
   explicit operator bool() const { return false; }

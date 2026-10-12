@@ -31,6 +31,7 @@ def test_fock_counts_require_complete_cuda_ks_work(tmp_path: Path) -> None:
 #include <optional>
 #include <vector>
 #include "generativeqc/generativeqc.h"
+#include "scf/target_fock_work.hpp"
 struct Work { bool complete{}, operator_inventory_complete{}; };
 struct Calculation {
   generativeqc_backend executed_backend;
@@ -38,7 +39,11 @@ struct Calculation {
   std::uint64_t fock_builds{53};
   unsigned iterations{4};
 };
-struct Item { Calculation calculation; bool warm_start_fallback{}; };
+struct Item {
+  Calculation calculation;
+  bool warm_start_fallback{};
+  std::optional<generativeqc::scf::TargetFockWork> target_fock_work;
+};
 struct Batch {
   std::vector<std::optional<int>> ks_diagnostics;
   std::vector<std::uint64_t> last_fock_builds{0};
@@ -69,7 +74,7 @@ int main() {
   };
   for (const auto& test : cases) {
     Batch batch{{test.ks ? std::optional<int>{1} : std::nullopt}};
-    Item item{{test.backend, {test.complete, test.operators}}, test.retry};
+    Item item{{test.backend, {test.complete, test.operators}}, test.retry, std::nullopt};
     publish(&batch, item);
     assert(batch.last_fock_builds[0] == test.expected);
   }
@@ -86,6 +91,8 @@ int main() {
             "-Werror",
             "-I",
             str(ROOT / "include"),
+            "-I",
+            str(ROOT / "src"),
             str(cpp),
             "-o",
             str(binary),
@@ -114,6 +121,7 @@ def test_rejected_batch_revokes_ks_ao_work(tmp_path: Path) -> None:
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
         pytest.skip("requires ccache and a host C++20 compiler")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/api/c_api_batch.cpp").read_text()
     getter = definition(
         source,
@@ -123,7 +131,8 @@ def test_rejected_batch_revokes_ks_ao_work(tmp_path: Path) -> None:
     # Only the admission boundary is under test. Stop before input loops or any
     # physical execution and exercise the unchanged getter on the same owner.
     prefix = execute[: execute.index("  const std::uint32_t system_count =")]
-    prefix += "  return GENERATIVEQC_STATUS_SUCCESS;\n}\n"
+    # Keep the real publication guard armed on rejection, not admitted test exit.
+    prefix += "  publication.commit();\n  return GENERATIVEQC_STATUS_SUCCESS;\n}\n"
     harness = r"""
 #include <algorithm>
 #include <cstdint>
@@ -135,6 +144,7 @@ def test_rejected_batch_revokes_ks_ao_work(tmp_path: Path) -> None:
 #include <vector>
 #include "generativeqc/generativeqc.h"
 #include "dft/ao_selection_work.hpp"
+#include "api/prepared_publication.hpp"
 namespace generativeqc::runtime::host_trace {
 struct Region { explicit Region(const char*) {} };
 }
@@ -149,11 +159,12 @@ generativeqc_status map_exception(std::string*) {
 }
 struct Context { std::recursive_mutex mutex; std::string last_detail; };
 struct Plan {
-  bool valid=true, fail=false;
+  bool valid=true, fail=false, rejected=false;
   void invalidate_result() {
     valid=false;
     if(fail) throw std::runtime_error("invalidation failed");
   }
+  void reject_execution() noexcept { valid=false; rejected=true; }
 };
 struct Diagnostic { generativeqc::dft::CudaXcAoSelectionWork cuda_ao_selection; };
 struct generativeqc_batch {
@@ -180,7 +191,7 @@ int main() {
     const auto expected=mode==0?GENERATIVEQC_STATUS_INVALID_ARGUMENT:
                         mode==1?GENERATIVEQC_STATUS_INTERNAL_ERROR:
                                 GENERATIVEQC_STATUS_SUCCESS;
-    if(status!=expected || plan.valid) return 2;
+    if(status!=expected || plan.valid || plan.rejected!=(mode!=2)) return 2;
     if(generativeqc_batch_get_ks_ao_selection_diagnostic_v1(&batch,0,&record)!=
        GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
       std::cerr << "stale AO work survived admission mode " << mode; return 3;

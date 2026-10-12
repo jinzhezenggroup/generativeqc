@@ -77,5 +77,8 @@ def trace(
         raise ValueError("array_frontend_version provenance is incompatible")
     return Program(
         _outputs(result, output_name=output_name),
+        # Keep the declared argument types for transforms of disconnected inputs.
+        # Dead definitions do not change the live equation or execution identity.
+        definitions=tuple(array.node for array in arrays.values()),
         provenance=metadata,
     )

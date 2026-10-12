@@ -231,7 +231,10 @@ POWERS = [
     "powers", POWERS, ids=lambda p: "order-" + str(sum(map(sum, p)))
 )
 @pytest.mark.parametrize("radial", range(3), ids=("full", "long", "short"))
-@pytest.mark.parametrize("case", ("distinct", "repeated", "diffuse", "translation"))
+@pytest.mark.parametrize(
+    "case",
+    ("distinct", "repeated", "diffuse", "translation", "directions", "separated"),
+)
 def test_generated_convolution_against_independent_cartesian_integral_and_jet(
     primitive: Callable[..., int], powers: Any, radial: int, case: str
 ) -> None:
@@ -250,9 +253,17 @@ def test_generated_convolution_against_independent_cartesian_integral_and_jet(
         mask = 8
     elif case == "translation":
         mask, omega = 15, 1.5
+    elif case == "directions":
+        mask = 17
+    elif case == "separated":
+        positions *= 8
     powers = np.asarray(powers, dtype=np.uint32)
     norm = normalization(powers, exponents)
     expected = independent_jet(powers, positions, exponents, radial, omega, mask) * norm
+    if case == "directions":
+        expected[1:] = expected[1:] @ np.asarray(
+            ((1.0, 0.25, -0.5), (-0.75, 1.0, 0.125), (0.375, -0.25, 1.0))
+        )
     if case == "translation":
         np.testing.assert_allclose(expected[1:], 0.0, atol=2e-11)
     for selected in range(4):
@@ -294,6 +305,35 @@ def test_mixed_evaluator_does_not_inherit_new_reassociation(
         np.testing.assert_array_equal(off, on)
 
 
+@pytest.mark.parametrize("order", (7, 8, 12))
+@pytest.mark.parametrize("selected", range(4))
+def test_generic_high_order_radial_limits_and_invalid_moments(
+    primitive: Callable[..., int], order: int, selected: int
+) -> None:
+    """Scalar responses must retain exact LR-zero and the nonfinite failure signal."""
+    powers = np.asarray(POWERS[order], dtype=np.uint32)
+    positions = np.asarray(
+        ((0.1, -0.2, -0.8), (0.3, 0.1, 0.7), (-0.5, 0.6, 0.2), (0.8, -0.4, 0.3))
+    )
+    exponents = np.asarray((0.8, 0.6, 0.7, 0.9))
+    actual = np.empty(4)
+    assert primitive(powers, positions, exponents, 0.0, 1, 1, selected, 1, actual) == 0
+    np.testing.assert_array_equal(actual, np.zeros(4))
+    norm = normalization(powers, exponents)
+    expected = independent_jet(powers, positions, exponents, 0, 0.0, 1) * norm
+    assert primitive(powers, positions, exponents, 0.0, 2, 1, selected, 1, actual) == 0
+    np.testing.assert_allclose(actual * norm, expected, rtol=3e-10, atol=2e-11)
+    for radial in (1, 2):
+        for omega in (-0.3, float("nan")):
+            assert (
+                primitive(
+                    powers, positions, exponents, omega, radial, 1, selected, 1, actual
+                )
+                == 0
+            )
+            assert np.isnan(actual[0])
+
+
 PROBE = r"""
 #include "generated_direct_cartesian.cuh"
 using namespace generativeqc::scf::cuda_execution;
@@ -307,6 +347,11 @@ template<unsigned L, typename Scalar> void run(const unsigned* powers, const dou
     if constexpr(std::is_same_v<Scalar,Dual3>) {
       const double seed=(mask & (1U<<i)) ? 1.0 : 0.0;
       center[i].x.derivative_x=seed; center[i].y.derivative_y=seed; center[i].z.derivative_z=seed;
+      if(mask & 16U) {
+        center[i].x.derivative_y=0.25*seed; center[i].x.derivative_z=-0.5*seed;
+        center[i].y.derivative_x=-0.75*seed; center[i].y.derivative_z=0.125*seed;
+        center[i].z.derivative_x=0.375*seed; center[i].z.derivative_y=-0.25*seed;
+      }
     }
   }
   const double p=exponent[0]+exponent[1],q=exponent[2]+exponent[3],rho=p*q/(p+q);

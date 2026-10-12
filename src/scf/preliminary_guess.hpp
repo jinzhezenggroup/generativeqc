@@ -29,6 +29,14 @@ std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
 void validate_preliminary_target(const core::System& system, const ResolvedFockBuild& strategy,
                                  const ScfOptions& options);
 
+/** Resolve AUTO_CPU to MINAO or no policy for this immutable target topology.
+ * Controls are validated before fallback. Explicit choices remain unchanged.
+ * Call before both cold execution and warm-retry diagnostics so unsupported
+ * neighbors cannot affect another item's policy or retry/allocation contract.
+ */
+void resolve_automatic_preliminary_guess(const core::System& system,
+                                         const ResolvedFockBuild& strategy, ScfOptions& options);
+
 /** Strict same-basis admission. No symmetry/trace repair or metric transport.
  * Ownership moves only after the raw candidate passes the existing ensemble gate. */
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,

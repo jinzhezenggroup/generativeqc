@@ -38,6 +38,9 @@ PREFIX = r"""
 extern "C" std::size_t probe_matrix_binding_host_bytes() {
   return generativeqc::tensor::CudaMatrixProductBinding::kPreparationHostBytes;
 }
+extern "C" std::size_t probe_structured_binding_host_bytes() {
+  return generativeqc::tensor::CudaStructuredProductBinding::kPreparationHostBytes;
+}
 constexpr int CUBLAS_STATUS_INTERNAL_ERROR=7;
 int device=1, memcalls=0, destroys=0, creates=0, live=0, syncs=0;
 int destroy_failures=0, create_status=0, setup_status=0, capture=0;
@@ -76,6 +79,10 @@ int cublasDgemm(cublasHandle_t,cublasOperation_t,cublasOperation_t,int,int,int,
 int cublasDgemmStridedBatched(cublasHandle_t,cublasOperation_t,cublasOperation_t,int,int,int,
                             const double*,const double*,int,long long,const double*,int,long long,
                             const double*,double*,int,long long,int) {
+  assert(false); return 0;
+}
+int cublasDsyrk(cublasHandle_t,cublasFillMode_t,cublasOperation_t,int,int,const double*,
+               const double*,int,const double*,double*,int) {
   assert(false); return 0;
 }
 namespace generativeqc::scf::cuda_execution {
@@ -127,6 +134,28 @@ int main(int argc,char** argv) {
   const bool enabled=mode=="admit" || fail_destroy || binding_error;
   assert(owner.library_enabled()==enabled);
   assert((owner.view().binding_!=nullptr)==(status==GENERATIVEQC_STATUS_SUCCESS));
+  if (status==GENERATIVEQC_STATUS_SUCCESS) {
+    using generativeqc::tensor::StructuredOperation;
+    const auto* structured=owner.view().structured_binding_;
+    assert(structured && structured->dimension()==n && structured->direct_dimension()==n);
+    assert(structured->systems()==1 && structured->spins()==2);
+    assert(structured->compatible(stream,owner.view().blas_,n,1,1));
+    assert(!structured->compatible(stream,owner.view().blas_,n,2,1));
+    for (std::size_t slot=0; slot<7; ++slot) {
+      const auto operation=static_cast<StructuredOperation>(slot);
+      assert(!structured->library(operation));
+      const auto offers=structured->candidates(operation);
+      assert(offers[0].provider=="generated.cuda" && offers[0].rejection.empty());
+      assert(offers[1].provider_bytes==96ULL<<20);
+      assert(offers[1].host_bytes==structured->kPreparationHostBytes);
+      assert(offers[1].temporary_bytes==n*std::size_t(n)*2*sizeof(double)*(slot<3 ? slot==1 ? 3 : 2 : 1));
+      assert(offers[1].rejection==(enabled ? "structured scientific endpoint qualification remains open" :
+                                           "borrowed provider context unavailable"));
+      assert(!offers[1].cost.measured && !offers[1].cost.kernel_ns);
+      assert(!offers[3].rejection.empty());
+      if (slot) assert(offers[2].rejection=="SYRK requires an unsigned Gram domain");
+    }
+  }
   assert(live==(enabled?1:0));
   if (fail_destroy) assert(destroys==1 && owner.view().blas_!=nullptr);
   if (mode=="oversized") assert(destroys==1 && owner.retained_bytes()==0);
@@ -225,6 +254,7 @@ def native_inventory(matrix_probe: tuple[Path, Path]) -> Any:
     query.argtypes = [ctypes.c_size_t, ctypes.POINTER(ctypes.c_uint64)]
     query.restype = ctypes.c_int
     library.probe_matrix_binding_host_bytes.restype = ctypes.c_size_t
+    library.probe_structured_binding_host_bytes.restype = ctypes.c_size_t
     return library
 
 
@@ -289,6 +319,21 @@ def test_python_budget_reserves_each_live_owner(
         len(systems) * native_inventory.probe_matrix_binding_host_bytes()
     )
     assert matrix_binding_host.kind == "persistent"
+    structured_binding_host = next(
+        e for e in plan.estimates if e.name == "all KS host structured_binding_host"
+    )
+    assert structured_binding_host.bytes == (
+        len(systems) * native_inventory.probe_structured_binding_host_bytes()
+    )
+    assert structured_binding_host.kind == "persistent"
+    host_exact = ResourceBudget(host_bytes=plan.peak_bytes["host"])
+    plan_resources([request], host_exact).require_feasible()
+    assert (
+        plan_resources(
+            [request], ResourceBudget(host_bytes=host_exact.host_bytes - 1)
+        ).status
+        == "infeasible"
+    )
     allowance = next(
         e
         for e in plan.estimates

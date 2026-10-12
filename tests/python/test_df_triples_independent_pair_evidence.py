@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
-from tools.generativeqc_validation.record import load_publication_record
+from tools.generativeqc_validation.record import load_json, load_publication_record
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = ROOT / "benchmarks/results/df-triples-independent-pair-20261011"
@@ -42,11 +42,56 @@ def retained() -> tuple[dict, dict[str, bytes]]:
     return load_publication_record(BUNDLE), restored
 
 
+def _apply_reviewed_force_owner(source: Path, executable: str) -> str:
+    """Replay #2303 after the allocation repair; keep both measured identities."""
+    relative = "src/cc/df_triples_cuda.cu"
+    bundle = ROOT / "benchmarks/results/df-triples-force-distinct-moments-20261012"
+    force = load_publication_record(bundle)
+    reconstruction = force["source_reconstruction"]
+    assert reconstruction["baseline"] == "34dd51ed3ebc5b03b17f095de2cd7b39903923c8"
+    receipts = json.loads(
+        lzma.decompress((bundle / "raw-receipts.json.xz").read_bytes())
+    )
+    baseline = receipts["baseline-source/" + relative]
+    assert baseline["encoding"] == "utf-8"
+    measured = baseline["data"].encode()
+    assert len(measured) == baseline["bytes"]
+    assert hashlib.sha256(measured).hexdigest() == baseline["sha256"]
+    destination = source / relative
+    assert destination.read_bytes() == measured
+    patches = [
+        "diff --git " + part
+        for part in gzip.decompress((bundle / reconstruction["patch"]).read_bytes())
+        .decode()
+        .split("diff --git ")[1:]
+        if part.startswith(f"a/{relative} b/{relative}\n")
+    ]
+    assert len(patches) == 1
+    patch = patches[0].encode()
+    assert len(patch) == 2878
+    assert hashlib.sha256(patch).hexdigest() == (
+        "bafd1ceda4ce1086580336dc53f0e3756eb95d7b6a391f37bc87deebbe4ab99f"
+    )
+    for options in (["--check"], []):
+        subprocess.run(
+            [executable, "apply", *options, "--whitespace=error-all"],
+            input=patch,
+            cwd=source,
+            check=True,
+            capture_output=True,
+        )
+    current = destination.read_bytes()
+    digest = hashlib.sha256(current).hexdigest()
+    assert digest == reconstruction["compiled_sources"][relative]
+    assert current == (ROOT / relative).read_bytes()
+    return digest
+
+
 @pytest.fixture(scope="module")
 def repaired_source_hashes(
     retained: tuple, tmp_path_factory: pytest.TempPathFactory
 ) -> dict[str, str]:
-    """Bind only the exact host-validated allocation repair to measured bytes."""
+    """Reconstruct reviewed later deltas without changing measured GPU identities."""
     executable = shutil.which("git")
     if not executable:
         pytest.skip("Git patch application is required for source reconstruction")
@@ -98,12 +143,60 @@ def repaired_source_hashes(
     for relative, row in metadata["files"].items():
         repaired = (source / relative).read_bytes()
         assert hashlib.sha256(repaired).hexdigest() == row["repaired_sha256"]
-        assert repaired == (ROOT / relative).read_bytes()
+        if relative != "src/cc/df_triples_cuda.cu":
+            assert repaired == (ROOT / relative).read_bytes()
         result[relative] = row["repaired_sha256"]
+
+    # The old allocation-repaired owner is the exact measured baseline for
+    # #2303. Replay its separately qualified forward-copy delta before binding
+    # current source; never relabel the independent-pair GPU receipts.
+    result["src/cc/df_triples_cuda.cu"] = _apply_reviewed_force_owner(
+        source, executable
+    )
+
+    # The independent-pair receipt predates #2269's cross-size CLI plumbing.
+    # Reconstruct that exact later delta from its separately retained source
+    # patch. This binds current bytes; it does not requalify them using the old
+    # independent-pair GPU/library hashes or transfer its prototype timing.
+    generator = "tools/generate_df_occupied_triples.py"
+    measured = restored["remote/source/" + generator]
+    assert (
+        hashlib.sha256(measured).hexdigest()
+        == evidence["qualification"]["build"]["source_sha256"]["source/" + generator]
+    )
+    arena = load_json(
+        ROOT / "benchmarks/results/native-memory-arena-20261011/evidence.json.xz"
+    )
+    assert arena["base_commit"] == "a70ebfc61644910a35916790febd51aaaffc293e"
+    generator_patches = [
+        "diff --git " + part
+        for part in arena["source_patch"].split("diff --git ")[1:]
+        if part.startswith(f"a/{generator} b/{generator}\n")
+    ]
+    assert len(generator_patches) == 1
+    generator_patch = generator_patches[0].encode()
+    assert len(generator_patch) == 1760
+    assert hashlib.sha256(generator_patch).hexdigest() == (
+        "f13cbd5d11cfe97e925aa0dbfeaaf45968b1238e3ae99e097013c013ba0f49fe"
+    )
+    destination = source / generator
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(measured)
+    for options in (["--check"], []):
+        subprocess.run(
+            [executable, "apply", *options, "--whitespace=error-all"],
+            input=generator_patch,
+            cwd=source,
+            check=True,
+            capture_output=True,
+        )
+    current = destination.read_bytes()
+    assert current == (ROOT / generator).read_bytes()
+    result[generator] = hashlib.sha256(current).hexdigest()
     return result
 
 
-def test_canonical_publication_binds_current_sources_not_prototype_timing(
+def test_publication_binds_measured_sources_and_reviewed_deltas_not_prototype_timing(
     retained: tuple,
     repaired_source_hashes: dict[str, str],
 ) -> None:
@@ -305,3 +398,31 @@ def test_historical_report_compaction_preserves_every_original_byte() -> None:
         hashlib.sha256(raw).hexdigest()
         == "3caf68447d26bfa614c9bb43ff123d03f34259285b05955c9025a95d0e16ec7f"
     )
+
+
+@pytest.mark.parametrize("drift", ("historical-source", "current-source"))
+def test_force_owner_reconstruction_rejects_unreviewed_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drift: str
+) -> None:
+    executable = shutil.which("git")
+    if not executable:
+        pytest.skip("Git patch application is required for source reconstruction")
+    relative = "src/cc/df_triples_cuda.cu"
+    bundle = ROOT / "benchmarks/results/df-triples-force-distinct-moments-20261012"
+    receipts = json.loads(
+        lzma.decompress((bundle / "raw-receipts.json.xz").read_bytes())
+    )
+    measured = receipts["baseline-source/" + relative]["data"].encode()
+    source = tmp_path / "reconstruction"
+    destination = source / relative
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(measured + (b"\n" if drift == "historical-source" else b""))
+    if drift == "current-source":
+        root = tmp_path / "current"
+        current = root / relative
+        current.parent.mkdir(parents=True)
+        current.write_bytes((ROOT / relative).read_bytes() + b"\n")
+        shutil.copytree(bundle, root / bundle.relative_to(ROOT))
+        monkeypatch.setitem(globals(), "ROOT", root)
+    with pytest.raises(AssertionError):
+        _apply_reviewed_force_owner(source, executable)

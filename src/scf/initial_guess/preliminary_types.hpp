@@ -19,6 +19,8 @@ enum class PreliminaryOutcome : std::uint32_t {
 /** Execution-only cold-start policy. Never changes the target method or controls. */
 struct PreliminaryOptions {
   PreliminaryKind kind{PreliminaryKind::HartreeFock};
+  /** Resolve per target before cold execution or warm retry bookkeeping. */
+  bool automatic_cpu{};
   unsigned max_iterations{32};
   unsigned diis_history{8};
   double energy_tolerance{1.0e-6};

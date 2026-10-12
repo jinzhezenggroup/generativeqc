@@ -19,8 +19,8 @@ def _preparation() -> tuple[str, str]:
     assert workflow.count(name) == 1
     step = workflow.split(name, 1)[1].split("      - name:", 1)[0]
     assert (
-        "if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy') && "
-        in step
+        "if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || "
+        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && " in step
     )
     assert "steps.gfn1_reference_sources.outputs.cache-hit != 'true'" in step
     commands = step.split("        run: |\n", 1)[1]
@@ -46,8 +46,8 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
         "      - name: Restore pinned GFN1 and D3 reference inputs\n", 1
     )[1].split("      - name:", 1)[0]
     assert (
-        "if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy'"
-        in cache
+        "if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || "
+        "matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy'" in cache
     )
     assert "upstream/manifest.json" in cache and "tools/source_registry.py" in cache
     assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in cache
@@ -111,7 +111,15 @@ def test_sync_commands_propagate_failure_before_testing(
 
 @pytest.mark.parametrize(
     "shard",
-    ["core-a", "core-b", "compiler-heavy", "posthf", "runtime-heavy", "ecp-forces"],
+    [
+        "core-a",
+        "core-b",
+        "core-c",
+        "compiler-heavy",
+        "posthf",
+        "runtime-heavy",
+        "ecp-forces",
+    ],
 )
 @pytest.mark.parametrize("cache_hit", ["true", "false", ""])
 @pytest.mark.parametrize("event", ["pull_request", "merge_group", "schedule"])
@@ -122,11 +130,12 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
     for name, expected in (
         (
             "Restore pinned GFN1 and D3 reference inputs",
-            shard in {"core-a", "core-b", "compiler-heavy"},
+            shard in {"core-a", "core-b", "core-c", "compiler-heavy"},
         ),
         (
             "Prepare pinned GFN1 and D3 reference inputs",
-            shard in {"core-a", "core-b", "compiler-heavy"} and cache_hit != "true",
+            shard in {"core-a", "core-b", "core-c", "compiler-heavy"}
+            and cache_hit != "true",
         ),
         (
             "Save pinned GFN1 and D3 reference inputs",

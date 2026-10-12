@@ -1,0 +1,558 @@
+{
+  "architecture": "sm_120",
+  "coverage": "stable AOT shard 6 (sm_120): ordinary RHF J/K streaming consumers dsss/ddss/ddps and every co-located kernel",
+  "flags": {
+    "architecture": "sm_120",
+    "code_generation": [
+      "--generate-code=arch=compute_120,code=[compute_120,sm_120]"
+    ],
+    "definitions": [
+      "NDEBUG",
+      "GENERATIVEQC_HAS_CUDA=1"
+    ],
+    "fast_compile": false,
+    "host_compiler": "nvcc-default",
+    "host_options": [
+      "-Xcompiler=-fPIC"
+    ],
+    "optimization": "-O3",
+    "ptxas_verbose": true,
+    "split_compile_threads": 1,
+    "standard": "c++20"
+  },
+  "generator_abi": 1,
+  "header_sha256": {
+    "runtime/compensated_atomic.cuh": "f2a4b2bbd3de7a777e4ffd3ec34e897c7985802431a3c12b96ffaabcd0f50d47",
+    "scf/generated_shell_task.hpp": "6b02b4446eca166f46553905ffc6369af689247d7f2ac06aa1b47e16b2eb083a"
+  },
+  "issue": "#2101",
+  "kernels": {
+    "generated_sm120_ddps_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 157,
+      "SHARED": 35328,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 162,
+      "SHARED": 35328,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 190,
+      "SHARED": 38856,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_rhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 188,
+      "SHARED": 41576,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 157,
+      "SHARED": 35328,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 35328,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 190,
+      "SHARED": 38856,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_fock_uhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 188,
+      "SHARED": 41576,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_force_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 38152,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_force_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 38152,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_force_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 38152,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_force_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 38152,
+      "STACK": 112
+    },
+    "generated_sm120_ddps_shell_class_mixed_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 162,
+      "SHARED": 19968,
+      "STACK": 56
+    },
+    "generated_sm120_ddps_shell_class_mixed_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 19968,
+      "STACK": 56
+    },
+    "generated_sm120_ddps_shell_class_mixed_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 162,
+      "SHARED": 19968,
+      "STACK": 56
+    },
+    "generated_sm120_ddps_shell_class_mixed_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 19968,
+      "STACK": 56
+    },
+    "generated_sm120_ddss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 106,
+      "SHARED": 22784,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 136,
+      "SHARED": 22784,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 154,
+      "SHARED": 26312,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_rhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 156,
+      "SHARED": 29032,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 106,
+      "SHARED": 22784,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 136,
+      "SHARED": 22784,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 154,
+      "SHARED": 26312,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_fock_uhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 156,
+      "SHARED": 29032,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_force_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1672,
+      "STACK": 112
+    },
+    "generated_sm120_ddss_shell_class_force_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1680,
+      "STACK": 112
+    },
+    "generated_sm120_ddss_shell_class_force_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1672,
+      "STACK": 112
+    },
+    "generated_sm120_ddss_shell_class_force_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1680,
+      "STACK": 112
+    },
+    "generated_sm120_ddss_shell_class_mixed_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 96,
+      "SHARED": 13696,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_mixed_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 128,
+      "SHARED": 13696,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_mixed_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 96,
+      "SHARED": 13696,
+      "STACK": 0
+    },
+    "generated_sm120_ddss_shell_class_mixed_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 128,
+      "SHARED": 13696,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 17408,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 118,
+      "SHARED": 17416,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 24328,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_rhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 29736,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 17408,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 17416,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 24328,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_fock_uhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 29736,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_force_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 240,
+      "SHARED": 3664,
+      "STACK": 0
+    },
+    "generated_sm120_dsss_shell_class_force_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 240,
+      "SHARED": 3664,
+      "STACK": 0
+    },
+    "generated_sm120_k_block_dsss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 24576,
+      "STACK": 16
+    },
+    "generated_sm120_k_block_dsss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 118,
+      "SHARED": 24584,
+      "STACK": 0
+    },
+    "generated_sm120_k_block_dsss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 31496,
+      "STACK": 0
+    },
+    "generated_sm120_k_block_dsss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 24576,
+      "STACK": 0
+    },
+    "generated_sm120_k_block_dsss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 24584,
+      "STACK": 0
+    },
+    "generated_sm120_k_block_dsss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 31496,
+      "STACK": 0
+    },
+    "generated_sm120_k_block_dsss_shell_class_force_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 230,
+      "SHARED": 12544,
+      "STACK": 128
+    },
+    "generated_sm120_k_block_dsss_shell_class_force_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 232,
+      "SHARED": 12552,
+      "STACK": 128
+    },
+    "generated_sm120_k_block_dsss_shell_class_force_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 230,
+      "SHARED": 12544,
+      "STACK": 128
+    },
+    "generated_sm120_k_block_dsss_shell_class_force_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 232,
+      "SHARED": 12552,
+      "STACK": 128
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 0,
+      "STACK": 104
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 1028,
+      "STACK": 112
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 4128,
+      "STACK": 240
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_rhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 25760,
+      "STACK": 224
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 0,
+      "STACK": 104
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 1028,
+      "STACK": 112
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 4128,
+      "STACK": 232
+    },
+    "generated_sm120_rys_task_ddss_shell_class_fock_uhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 255,
+      "SHARED": 25760,
+      "STACK": 224
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 246,
+      "SHARED": 0,
+      "STACK": 0
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 246,
+      "SHARED": 1028,
+      "STACK": 0
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 164,
+      "SHARED": 4128,
+      "STACK": 0
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_rhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 163,
+      "SHARED": 25760,
+      "STACK": 0
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 246,
+      "SHARED": 0,
+      "STACK": 0
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 246,
+      "SHARED": 1028,
+      "STACK": 0
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 4128,
+      "STACK": 8
+    },
+    "generated_sm120_rys_task_dsss_shell_class_fock_uhf_work_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 254,
+      "SHARED": 25760,
+      "STACK": 0
+    },
+    "generated_sm120_rys_value_ddps_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1504,
+      "STACK": 80
+    },
+    "generated_sm120_rys_value_ddps_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1512,
+      "STACK": 80
+    },
+    "generated_sm120_rys_value_ddps_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 126,
+      "SHARED": 1704,
+      "STACK": 80
+    },
+    "generated_sm120_rys_value_ddps_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1504,
+      "STACK": 80
+    },
+    "generated_sm120_rys_value_ddps_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1512,
+      "STACK": 80
+    },
+    "generated_sm120_rys_value_ddps_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 126,
+      "SHARED": 1704,
+      "STACK": 80
+    },
+    "generated_sm120_rys_value_ddss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1504,
+      "STACK": 40
+    },
+    "generated_sm120_rys_value_ddss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1512,
+      "STACK": 40
+    },
+    "generated_sm120_rys_value_ddss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 94,
+      "SHARED": 1704,
+      "STACK": 40
+    },
+    "generated_sm120_rys_value_ddss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 166,
+      "SHARED": 1504,
+      "STACK": 40
+    },
+    "generated_sm120_rys_value_ddss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1512,
+      "STACK": 40
+    },
+    "generated_sm120_rys_value_ddss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 94,
+      "SHARED": 1704,
+      "STACK": 40
+    },
+    "generated_sm120_rys_value_dsss_shell_class_fock_rhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1488,
+      "STACK": 24
+    },
+    "generated_sm120_rys_value_dsss_shell_class_fock_rhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1496,
+      "STACK": 24
+    },
+    "generated_sm120_rys_value_dsss_shell_class_fock_rhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 80,
+      "SHARED": 1688,
+      "STACK": 24
+    },
+    "generated_sm120_rys_value_dsss_shell_class_fock_uhf_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1488,
+      "STACK": 24
+    },
+    "generated_sm120_rys_value_dsss_shell_class_fock_uhf_persistent_kernel": {
+      "LOCAL": 0,
+      "REG": 168,
+      "SHARED": 1496,
+      "STACK": 24
+    },
+    "generated_sm120_rys_value_dsss_shell_class_fock_uhf_streaming_kernel": {
+      "LOCAL": 0,
+      "REG": 80,
+      "SHARED": 1688,
+      "STACK": 24
+    }
+  },
+  "manifest_sha256": "4327a87909b22a3af1518948cf9417d3b347289e86c0de8bebfa20dc7a189a64",
+  "preprocessed_sha256": "e58a8a275f63a30d7df980be752febae982a61f978c97e8b2fe22e7bd361de1d",
+  "schema": "generativeqc.direct-jk-aot-resource-ledger",
+  "schema_version": 1,
+  "shard_source_sha256": "a9fdacb018e1e1547ab71841e505260000f40cef5269a41ee48e42a9f4111370",
+  "toolchain": {
+    "cuobjdump": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0",
+    "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+    "ptxas": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+  },
+  "unit_mode": "stable-shards"
+}

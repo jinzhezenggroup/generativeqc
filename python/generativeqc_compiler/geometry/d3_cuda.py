@@ -234,7 +234,7 @@ class PreparedD3CudaBatch:
         self._lease = lease
         if old is not None:
             old.close()
-            old_lease.invalidate()
+            old_lease.close()
             self._rebuild_count += 1
 
     def _require_open(
@@ -276,6 +276,8 @@ class PreparedD3CudaBatch:
         gradients: bool = True,
         profile: bool = False,
     ) -> D3GeneratedCudaExecution:
+        if self._lease.running:
+            raise RuntimeError("prepared generated D3 CUDA execution is running")
         if type(gradients) is not bool:
             raise TypeError("gradients must be a Boolean")
         coordinates = self._coordinates(geometries)
@@ -298,7 +300,7 @@ class PreparedD3CudaBatch:
         request = self._prepared_request
         if request is None:
             raise RuntimeError("generated D3 CUDA prepared identity is missing")
-        self._lease.require(
+        self._lease.begin(
             request,
             max_host_bytes=self.max_bytes,
             max_device_bytes=self.max_bytes,
@@ -355,6 +357,7 @@ class PreparedD3CudaBatch:
         )
 
     def close(self) -> None:
+        self._lease.close()
         if self._prepared is not None:
             self._prepared.close()
         self._prepared = None
@@ -362,7 +365,6 @@ class PreparedD3CudaBatch:
         self._program = None
         self._plan = None
         self._prepared_request = None
-        self._lease.invalidate()
 
     def __enter__(self) -> Self:
         self._require_open()

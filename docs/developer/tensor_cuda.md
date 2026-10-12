@@ -54,6 +54,12 @@ symmetry violations, zero division and nonfinite intermediates fail explicitly.
 Unused feeds are allowed. Each named result owns independent host storage,
 including when two output names refer to the same logical tensor.
 
+Finite-domain `exp`, `log`, `sqrt` and rational `power` use the declared CUDA
+scalar type, including `expf`/`logf`/`sqrtf`/`powf` for float32. Ordinary and
+resident primal/JVP/VJP plans retain the same domain, overflow and error-recovery
+guards for both types. Float32 compilation keeps gradual underflow and rejects
+fast-math overrides; molecular RHF sources still require float64.
+
 A prepared plan owns its stream, cuBLAS handle, events and buffers. It does not
 assume that the existing `ContextState` owns an SCF stream. Execution requires
 the thread's current CUDA device to match the prepared device. Architecture

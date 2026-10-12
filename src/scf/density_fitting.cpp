@@ -770,11 +770,18 @@ DensityFittingRhfJk build_density_fitting_rhf_jk(const DensityFittingThreeCenter
   const std::size_t matrix_elements =
       checked_matrix_elements(three_center.nbf, "DF orbital dimension is invalid");
   validate_density(density, matrix_elements);
-  return {
-      three_center.nbf,
-      terms.coulomb ? build_coulomb(three_center, density) : std::vector<double>{},
-      terms.exchange ? build_exchange(three_center, density) : std::vector<double>{},
-  };
+  DensityFittingRhfJk result;
+  result.nbf = three_center.nbf;
+  result.coulomb_exchange_work = CoulombExchangeWork::empty();
+  if (terms.coulomb) {
+    result.coulomb = build_coulomb(three_center, density);
+    ++result.coulomb_exchange_work.coulomb_applications;
+  }
+  if (terms.exchange) {
+    result.exchange = build_exchange(three_center, density);
+    ++result.coulomb_exchange_work.exchange_applications;
+  }
+  return result;
 }
 
 DensityFittingUhfJk build_density_fitting_uhf_jk(const DensityFittingThreeCenter& three_center,
@@ -792,12 +799,20 @@ DensityFittingUhfJk build_density_fitting_uhf_jk(const DensityFittingThreeCenter
     for (std::size_t element = 0; element < matrix_elements; ++element)
       total_density[element] = alpha_density[element] + beta_density[element];
   }
-  return {
-      three_center.nbf,
-      terms.coulomb ? build_coulomb(three_center, total_density) : std::vector<double>{},
-      terms.exchange ? build_exchange(three_center, alpha_density) : std::vector<double>{},
-      terms.exchange ? build_exchange(three_center, beta_density) : std::vector<double>{},
-  };
+  DensityFittingUhfJk result;
+  result.nbf = three_center.nbf;
+  result.coulomb_exchange_work = CoulombExchangeWork::empty();
+  if (terms.coulomb) {
+    result.coulomb = build_coulomb(three_center, total_density);
+    ++result.coulomb_exchange_work.coulomb_applications;
+  }
+  if (terms.exchange) {
+    result.alpha_exchange = build_exchange(three_center, alpha_density);
+    ++result.coulomb_exchange_work.exchange_applications;
+    result.beta_exchange = build_exchange(three_center, beta_density);
+    ++result.coulomb_exchange_work.exchange_applications;
+  }
+  return result;
 }
 
 DensityFittingRhfGradient build_density_fitting_rhf_gradient(

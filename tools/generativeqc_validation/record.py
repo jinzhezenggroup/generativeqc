@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import lzma
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -16,15 +17,17 @@ from .retention import digest, safe_relative
 
 
 def decode_json(data: bytes, *, path: str | Path | None = None) -> Any:
-    """Decode ordinary or gzip-compressed JSON."""
+    """Decode ordinary, gzip-compressed or XZ-compressed JSON."""
     name = str(path) if path is not None else ""
     if name.endswith(".gz") or data.startswith(b"\x1f\x8b"):
         data = gzip.decompress(data)
+    elif name.endswith(".xz") or data.startswith(b"\xfd7zXZ\x00"):
+        data = lzma.decompress(data)
     return json.loads(data)
 
 
 def load_json(path: Path) -> Any:
-    """Load ordinary or gzip-compressed JSON from the checkout."""
+    """Load ordinary, gzip-compressed or XZ-compressed JSON from the checkout."""
     path = Path(path)
     return decode_json(path.read_bytes(), path=path)
 
@@ -82,7 +85,7 @@ def load_publication_record(
 ) -> dict:
     """Read a hash-bound record using its declared storage path, not a suffix.
 
-    ``name`` optionally names one logical plain JSON member; its gzip companion
+    ``name`` optionally names one logical plain JSON member; its gzip or XZ companion
     is accepted only when declared by the publication. Ambiguous roles, duplicate
     paths, escaping links and stale stored identities fail before decoding.
     This verifies storage, not the publication's scientific acceptance decision.
@@ -107,7 +110,9 @@ def load_publication_record(
         if len(data) != entry["bytes"] or digest(data) != entry["sha256"]:
             raise ValueError("publication member checksum/size mismatch")
         files[path] = data
-        if entry["role"] == role and (name is None or path in {name, name + ".gz"}):
+        if entry["role"] == role and (
+            name is None or path in {name, name + ".gz", name + ".xz"}
+        ):
             selected.append(path)
     if len(selected) != 1:
         raise ValueError("publication record selection must be unique")

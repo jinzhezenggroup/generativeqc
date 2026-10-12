@@ -155,10 +155,17 @@ static bool close(const double* actual,const double* expected,std::size_t n){
 """
 
 
-def test_runtime_shape_lambda_codegen_matches_tensorir(tmp_path: Path) -> None:
+@pytest.mark.parametrize("cross_size", [False, True])
+def test_runtime_shape_lambda_codegen_matches_tensorir(
+    tmp_path: Path, cross_size: bool
+) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("C++ compiler unavailable")
+    cache = shutil.which("sccache") or shutil.which("ccache")
+    if cache is None:
+        pytest.skip("compiler cache unavailable")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     root = Path(__file__).resolve().parents[2]
     header = tmp_path / "generated_rccsd_cpu.hpp"
     subprocess.run(
@@ -167,6 +174,7 @@ def test_runtime_shape_lambda_codegen_matches_tensorir(tmp_path: Path) -> None:
             str(root / "tools/generate_rccsd_native.py"),
             "--cpu-header",
             str(header),
+            *(["--cross-size-arena"] if cross_size else []),
         ],
         cwd=root,
         check=True,
@@ -188,6 +196,7 @@ def test_runtime_shape_lambda_codegen_matches_tensorir(tmp_path: Path) -> None:
     executable = tmp_path / "lambda"
     subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",

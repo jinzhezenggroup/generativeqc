@@ -223,5 +223,12 @@ def test_native_cpu_does_not_ignore_requested_or_invalid_selector(
     calculator = Calculator(method="pbe-rks")
     monkeypatch.setenv(SELECTORS[0], generic)
     monkeypatch.setenv(SELECTORS[1], legacy)
-    with pytest.raises(RuntimeError, match="invalid argument"):
+    with pytest.raises(RuntimeError) as error:
         calculator.prepare_batch([H2])
+    detail = (
+        f"{SELECTORS[1]} must be 0/off or 1/on"
+        if legacy == "false"
+        else "KS incremental Direct-J/K benchmark mode requires "
+        "strict-FP64 exact-direct CUDA KS"
+    )
+    assert str(error.value) == f"GENERATIVEQC error 1: {detail}"

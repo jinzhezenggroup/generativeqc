@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import typing
@@ -148,6 +149,16 @@ COLUMNS = (
     "pair_geometry_elements",
     "pair_capacity_bytes",
     "pair_binding_host_bytes",
+    "mixed_precision",
+    "mixed_precision_refused",
+    "mixed_evaluations",
+    "fp32_gemm_calls",
+    "fp32_gemm_summands",
+    "precision_cast_elements",
+    "precision_switches",
+    "strict_batch_size",
+    "mixed_pair_projection_calls",
+    "mixed_pair_projection_bytes",
 )
 
 
@@ -307,6 +318,8 @@ def _stream(
     replay_matrix: bool = True,
     occupied_pairs: bool = True,
     max_iterations: int = 100,
+    mixed_precision: bool = False,
+    mixed_two_evaluation_limit: bool = False,
 ) -> bytes:
     o, v = arrays["t1"].shape
     q = len(arrays["bov"]) if df else 0
@@ -325,7 +338,9 @@ def _stream(
             | (32 if packed_diis else 0)
             | (0 if replay_matrix else 64)
             | (0 if occupied_pairs else 128)
-            | (batch_limit << 8),
+            | (batch_limit << 8)
+            | ((1 << 63) if mixed_precision else 0)
+            | ((1 << 62) if mixed_two_evaluation_limit else 0),
         ],
         dtype=np.uint64,
     )
@@ -580,14 +595,22 @@ def test_input_residual_mixing_observes_updated_state(
             assert legacy["iterations_called"] > legacy["iterations"]
 
 
-def test_input_residual_default_is_cuda_df_energy_only() -> None:
-    """Keep the qualified dispatch narrower than the internal solver opt-in."""
+def test_input_residual_default_is_cuda_df_including_retained_response() -> None:
+    """Only the native CUDA DF amplitude owner promotes incoming residuals.
+
+    Match this assignment specifically: the independently qualified physical
+    replay option still has an energy-only guard and must not satisfy this test.
+    Retaining source response does not change standalone or Lambda defaults.
+    """
     header = (ROOT / "src/cc/solver.hpp").read_text()
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     assert "bool diis_input_residual{false};" in header
-    assert (
-        "execution.cuda_requested() && correlation_auxiliary && !retain_df_response;"
-        in source
+    assignment = re.search(
+        r"solver_options\.diis_input_residual\s*=\s*([^;]+);", source
+    )
+    assert assignment is not None
+    assert " ".join(assignment.group(1).split()) == (
+        "execution.cuda_requested() && correlation_auxiliary"
     )
     force = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     assert "&auxiliary, forces," in force

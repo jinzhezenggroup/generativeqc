@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,7 +27,17 @@ def between(text: str, begin: str, end: str) -> str:
     return text[start : text.index(end, start)]
 
 
-def control_sources() -> tuple[str, str, str]:
+def dft_initial_guess_policy(source: str) -> str:
+    """Extract the accessor itself, independent of the next force capability."""
+    # Start at the return type to omit the optional [[nodiscard]] attribute,
+    # which the deliberately limited C++ contract parser does not consume.
+    begin = source.index(
+        "const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy("
+    )
+    return cpp_function_definition(source[begin:], "initial_guess_policy")
+
+
+def control_sources() -> tuple[str, str, str, str]:
     hf = (ROOT / "src/scf/fleet.cpp").read_text()
     dft = (ROOT / "src/methods/dft_method.cpp").read_text()
     hf_retry = between(
@@ -47,11 +58,43 @@ def control_sources() -> tuple[str, str, str]:
         "    const auto* seed =\n        initial_density ? initial_density",
         "    scf::ScfResult native;",
     )
-    return hf_retry, dft_retry, dft_options
+    dft_policy = dft_initial_guess_policy(dft)
+    return hf_retry, dft_retry, dft_options, dft_policy
+
+
+@pytest.mark.parametrize(
+    "neighbor",
+    ["supports_native_pbe_force", "supports_native_gga_force", "other_capability"],
+)
+def test_dft_policy_extraction_ignores_neighbor(neighbor: str) -> None:
+    """Neighbor names and braces in comments/literals cannot move the seam."""
+    policy = dft_initial_guess_policy((ROOT / "src/methods/dft_method.cpp").read_text())
+    changed = policy.replace(
+        "return options_.preliminary_guess;",
+        "// brace } must not end the accessor\n"
+        '    [[maybe_unused]] const char* marker = "}";\n'
+        "    return options_.preliminary_guess;",
+    )
+    source = changed + f"\n bool {neighbor}() {{ return false; }}\n"
+    assert dft_initial_guess_policy(source).strip() == changed.strip()
+    mutated = changed.replace(
+        "return options_.preliminary_guess;", "return other_policy;"
+    )
+    assert "return other_policy;" in dft_initial_guess_policy(mutated)
+
+
+def test_dft_policy_extraction_rejects_missing_or_ambiguous_accessor() -> None:
+    policy = dft_initial_guess_policy((ROOT / "src/methods/dft_method.cpp").read_text())
+    with pytest.raises(ValueError):
+        dft_initial_guess_policy(
+            policy.replace("initial_guess_policy", "missing_policy")
+        )
+    with pytest.raises(ValueError):
+        dft_initial_guess_policy(policy + "\n" + policy)
 
 
 def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
-    hf, dft, options = control_sources()
+    hf, dft, options, _ = control_sources()
     assert "if (warm_retry) attempt_options.preliminary_guess.reset();" in hf
     assert "attempt_options," in hf
     assert "warm_enabled_ && warm_updates_, !attempt)" in dft
@@ -111,6 +154,7 @@ HARNESS = r"""
 #include <string>
 #include <vector>
 #include "generativeqc/generativeqc.h"
+#include "dft/scf_diagnostic.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
@@ -124,10 +168,13 @@ template <class T> std::size_t vector_bytes(const std::vector<T>& values) {
 enum class FockBackend { Cpu, Cuda };
 struct Strategy { FockBackend backend{FockBackend::Cpu}; };
 bool policy_enabled = true;
+bool shared_policy_enabled = true;
 struct Options {
   std::optional<initial_guess::PreliminaryOptions> preliminary_guess{std::in_place};
   std::optional<Strategy> resolved_fock_build{std::in_place};
-  Options() { if (!policy_enabled) preliminary_guess.reset(); }
+  explicit Options(bool enabled = policy_enabled) {
+    if (!enabled) preliminary_guess.reset();
+  }
 };
 struct Native {
   bool converged{};
@@ -179,7 +226,9 @@ Native run_fock_strategy_cached(int, const core::System&, const core::System*,
 }
 Item run_hf() {
   Item item;
-  Options execution_options;
+  Options execution_options(shared_policy_enabled);
+  // Native resolution has already selected this item's policy at the seam.
+  Options item_options;
   bool warm_starts_enabled_ = true;
   std::vector<std::optional<Warm>> warm_densities_{Warm{}};
   std::vector<int> independent_fock_plans_{0}, cuda_df_orthogonalizers_;
@@ -192,6 +241,7 @@ Item run_hf() {
 struct StubKsPlan {
   Options options_;
   std::vector<double> warm_{1};
+  // DFT_POLICY
   Native run(const std::vector<double>* initial_density, bool reuse_warm,
              bool update_warm, bool allow_preliminary = true) {
     // DFT_OPTIONS
@@ -201,7 +251,7 @@ struct StubKsPlan {
 struct Calculation {
   struct { unsigned iterations{}; } convergence;
   std::size_t fock_builds{};
-  std::optional<int> ks_diagnostic;
+  std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
 };
 struct BatchResult : Item { Calculation calculation; };
 struct KsItem {
@@ -210,11 +260,13 @@ struct KsItem {
   bool resident_warm{};
 };
 Item run_dft(bool resident) {
-  Options options_;
+  Options options_(shared_policy_enabled);
   bool warm_enabled_ = true, warm_updates_ = true;
   std::vector<KsItem> items_(1);
   items_[0].resident_warm = resident;
   std::vector<BatchResult> results(1);
+  std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
+      1, scf::CoulombExchangeWork::empty());
   results[0].warm_start_used = true;
   std::vector<bool> ready(1, true);
   std::vector<std::optional<std::vector<double>>> preliminary_seeds(1);
@@ -244,6 +296,7 @@ int main(int argc, char** argv) {
   }
   scenario = argv[2];
   policy_enabled = argc < 4 || std::string(argv[3]) != "disabled";
+  shared_policy_enabled = argc < 5 ? policy_enabled : std::string(argv[4]) != "disabled";
   const auto item = route == "hf" ? run_hf() : run_dft(route == "dft-resident");
   const auto& d = item.scf.preliminary_guess;
   std::cout << "{\"calls\":" << calls << ",\"preparations\":" << preparations
@@ -272,9 +325,10 @@ def host_control_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if ccache is None or compiler is None:
         pytest.skip("source-control harness requires ccache and a C++20 compiler")
     subprocess.run([ccache, "--version"], check=True, capture_output=True)
-    hf, dft, options = control_sources()
+    hf, dft, options, policy = control_sources()
     source = HARNESS.replace("// HF_RETRY", hf).replace("// DFT_RETRY", dft)
     source = source.replace("// DFT_OPTIONS", options)
+    source = source.replace("// DFT_POLICY", policy)
     directory = tmp_path_factory.mktemp("preliminary-control")
     path = directory / "control.cpp"
     object_path = directory / "control.o"
@@ -310,10 +364,23 @@ def host_control_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def probe(
-    binary: Path, route: str, scenario: str = "success", *, policy: bool = True
+    binary: Path,
+    route: str,
+    scenario: str = "success",
+    *,
+    policy: bool = True,
+    shared_policy: bool | None = None,
 ) -> dict:
+    if shared_policy is None:
+        shared_policy = policy
     completed = subprocess.run(
-        [str(binary), route, scenario, "enabled" if policy else "disabled"],
+        [
+            str(binary),
+            route,
+            scenario,
+            "enabled" if policy else "disabled",
+            "enabled" if shared_policy else "disabled",
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -323,10 +390,11 @@ def probe(
 
 @pytest.mark.parametrize("route", ["hf", "dft-imported", "dft-resident"])
 @pytest.mark.parametrize("scenario", ["success", "nonconverged", "runtime_error"])
+@pytest.mark.parametrize("shared_policy", [True, False])
 def test_actual_warm_retry_controls_use_only_core_and_count_work(
-    host_control_harness: Path, route: str, scenario: str
+    host_control_harness: Path, route: str, scenario: str, shared_policy: bool
 ) -> None:
-    result = probe(host_control_harness, route, scenario)
+    result = probe(host_control_harness, route, scenario, shared_policy=shared_policy)
     retry = scenario != "success"
     assert result["calls"] == 1 + retry
     assert result["preparations"] == 0
@@ -346,20 +414,28 @@ def test_actual_warm_retry_controls_use_only_core_and_count_work(
 
 @pytest.mark.parametrize("route", ["hf", "dft-imported", "dft-resident"])
 @pytest.mark.parametrize("scenario,calls", [("bad_alloc", 1), ("core_bad_alloc", 2)])
+@pytest.mark.parametrize("shared_policy", [True, False])
 def test_actual_warm_retry_controls_never_retry_allocation_failure(
-    host_control_harness: Path, route: str, scenario: str, calls: int
+    host_control_harness: Path,
+    route: str,
+    scenario: str,
+    calls: int,
+    shared_policy: bool,
 ) -> None:
-    result = probe(host_control_harness, route, scenario)
+    result = probe(host_control_harness, route, scenario, shared_policy=shared_policy)
     assert result["calls"] == calls
     assert result["preparations"] == 0
     assert result["status"] == result["oom"]
 
 
 @pytest.mark.parametrize("route", ["hf", "dft-imported", "dft-resident"])
+@pytest.mark.parametrize("shared_policy", [True, False])
 def test_failed_core_retry_is_terminal_for_active_preliminary_policy(
-    host_control_harness: Path, route: str
+    host_control_harness: Path, route: str, shared_policy: bool
 ) -> None:
-    result = probe(host_control_harness, route, "core_runtime_error")
+    result = probe(
+        host_control_harness, route, "core_runtime_error", shared_policy=shared_policy
+    )
     assert result["calls"] == 2
     assert result["preparations"] == 0
     assert result["status"] == result["numerical_failure"]
@@ -370,16 +446,44 @@ def test_failed_core_retry_is_terminal_for_active_preliminary_policy(
     "scenario,calls",
     [("bad_alloc", 2), ("core_bad_alloc", 3), ("core_runtime_error", 3)],
 )
+@pytest.mark.parametrize("shared_policy", [True, False])
 def test_disabled_policy_preserves_existing_hf_outer_retry_behavior(
-    host_control_harness: Path, scenario: str, calls: int
+    host_control_harness: Path, scenario: str, calls: int, shared_policy: bool
 ) -> None:
     # This records compatibility with the pre-existing HF catch-all lifecycle;
     # it is not an endorsement of retrying allocation errors in new policies.
-    result = probe(host_control_harness, "hf", scenario, policy=False)
+    result = probe(
+        host_control_harness, "hf", scenario, policy=False, shared_policy=shared_policy
+    )
     assert result["calls"] == calls
     assert result["status"] == result["success"]
     assert not result["first_policy"] and not result["last_policy"]
     assert result["preparations"] == 0 and result["kind"] == 0
+
+
+@pytest.mark.parametrize("route", ["dft-imported", "dft-resident"])
+@pytest.mark.parametrize(
+    "scenario,calls,status",
+    [
+        ("success", 1, "success"),
+        ("nonconverged", 2, "success"),
+        ("runtime_error", 2, "success"),
+        ("bad_alloc", 1, "oom"),
+        ("core_bad_alloc", 2, "oom"),
+        ("core_runtime_error", 2, "numerical_failure"),
+    ],
+)
+def test_disabled_dft_item_policy_does_not_inherit_shared_diagnostics(
+    host_control_harness: Path, route: str, scenario: str, calls: int, status: str
+) -> None:
+    result = probe(
+        host_control_harness, route, scenario, policy=False, shared_policy=True
+    )
+    assert result["calls"] == calls
+    assert result["status"] == result[status]
+    assert not result["first_policy"] and not result["last_policy"]
+    assert result["preparations"] == 0 and result["kind"] == 0
+    assert result["attempts"] == 0 and result["outcome"] == 0
 
 
 def test_widened_diagnostic_ctypes_layout_matches_public_c_header(

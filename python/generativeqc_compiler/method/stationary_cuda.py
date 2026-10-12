@@ -37,11 +37,7 @@ from generativeqc_compiler.method.stationary_resources import (
     GEOMETRY_MAX_SCRATCH_BYTES,
     GEOMETRY_THREADS,
 )
-from generativeqc_compiler.tensor.cuda_inline import (
-    InlineCudaOutput,
-    exact_cuda_literal,
-    lower_inline_cuda_output,
-)
+from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 from .spec import SemilocalXCPrimitive, resolve_method
@@ -52,6 +48,7 @@ from .stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from .stationary_weight_lowering import _weight_expression
 
 STATIONARY_RUNTIME_SOURCE_NAMES = (
     "one_electron",
@@ -146,37 +143,6 @@ def _split_compile_options(
     if not 1 <= threads <= 32:
         raise ValueError(f"{_SPLIT_COMPILE_THREADS_ENV} must be in [1,32]")
     return () if threads == 1 else (f"--split-compile={threads}",)
-
-
-def _weight_expression(
-    plan: StationaryGradientPlan, source: str
-) -> tuple[InlineCudaOutput, int]:
-    """Specialize one generated weight through the shared inline-consumer path."""
-    program = plan.integral_block(source, terms=1).weights
-    locations = {
-        "density_left": ("density", 0, 1),
-        "density_right": ("density", 2, 3),
-        "weighted_density": ("weighted_density", 0, 1),
-    }
-    if source == "exact_exchange":
-        # Ordered (ab|cd) derivatives contract D[a,c] D[b,d], independently
-        # in each spin channel. Coulomb instead uses D[a,b] D[c,d].
-        locations["density_left"] = ("density", 0, 2)
-        locations["density_right"] = ("density", 1, 3)
-    bindings = {
-        name: tuple(
-            f"{pointer}[{spin} * n * n + size_t(ao[{left}]) * n + size_t(ao[{right}])]"
-            for spin in range(plan.spin_blocks)
-        )
-        for name, (pointer, left, right) in locations.items()
-    }
-    lowered = lower_inline_cuda_output(program, output="weights", bindings=bindings)
-    required = set(lowered.required_inputs)
-    arity = max(
-        (right + 1 for name, (_, _, right) in locations.items() if name in required),
-        default=0,
-    )
-    return lowered, arity
 
 
 def emit_stationary_weight_cuda(plan: typing.Any) -> str:
@@ -405,7 +371,8 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     double* grad, StationaryPointValue& xc, double& becke_seed, int* error) {
   const size_t np = view.npoint;
   double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
-  if (stationary_functional != 0)
+  // Consume the emitted ingredient layout, never a functional's numeric code.
+  if (stationary_coefficients > 1)
     for (size_t s = 0; s < 2; ++s)
       for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
   if (stationary_coefficients == 5)
@@ -413,7 +380,7 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
   if constexpr (restricted_point) {
-    static_assert(!restricted_point || stationary_pbe0_restricted_point_capable);
+    static_assert(!restricted_point || stationary_restricted_point_capable);
     if (external) {
       atomicExch(error, 1);
       return false;
@@ -878,6 +845,7 @@ QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
 )
 STATIONARY_AOT_ASSETS = (
     "src/dft/stationary_gradient_cuda.cuh",
+    "src/dft/becke_scaled_policy.hpp",
     "src/dft/grid_task_view.cuh",
     "src/dft/xc_point.hpp",
     "src/integrals/eri_geometry.hpp",
@@ -1769,6 +1737,7 @@ def compile_stationary_cuda(
         asset_path(name)
         for name in (
             "src/dft/stationary_gradient_cuda.cuh",
+            "src/dft/becke_scaled_policy.hpp",
             "src/dft/grid_task_view.cuh",
             "src/dft/xc_point.hpp",
             "src/tensor/cuda_runtime.cuh",

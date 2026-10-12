@@ -56,6 +56,8 @@ class KsDiagnostic:
     the other. Electron counts use the AO overlap metric, not quadrature.
     A warm retry reports its final attempt; this is not a total-work counter
     for discarded attempts. Execution and transport profiling are separate.
+    The optional coulomb_exchange_work is a narrow, observed target-execution
+    census including discarded attempts; it does not certify full precision.
     """
 
     occupations: tuple[int, int]
@@ -70,6 +72,7 @@ class KsDiagnostic:
     density_change_max: float
     physical_residual_max: float
     history: tuple[KsIteration, ...]
+    coulomb_exchange_work: dict[str, typing.Any] | None = None
 
     def to_payload(self) -> typing.Any:
         """Copy every iteration; known unavailable stage baselines are null.
@@ -105,6 +108,36 @@ def _components(value: typing.Any) -> typing.Any:
         value.hartree_energy,
         value.xc_energy,
     )
+
+
+def _coulomb_exchange_work(
+    library: typing.Any, handle: typing.Any, index: typing.Any
+) -> dict[str, typing.Any] | None:
+    name = (
+        "generativeqc_calculation_get_ks_coulomb_exchange_work_v1"
+        if index is None
+        else "generativeqc_batch_get_ks_coulomb_exchange_work_v1"
+    )
+    query = getattr(library, name, None)
+    if query is None:
+        return None
+    record = _native.KsCoulombExchangeWorkDescriptor(
+        ctypes.sizeof(_native.KsCoulombExchangeWorkDescriptor), _native.ABI_VERSION
+    )
+    prefix = (handle,) if index is None else (handle, index)
+    status = query(*prefix, ctypes.byref(record))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    return {
+        "complete": bool(record.complete),
+        "coulomb_applications": record.coulomb_applications
+        if record.complete
+        else None,
+        "exchange_applications": record.exchange_applications
+        if record.complete
+        else None,
+    }
 
 
 def read_ks_diagnostic(
@@ -182,6 +215,7 @@ def read_ks_diagnostic(
         density_change_max=summary.density_change_max,
         physical_residual_max=summary.physical_residual_max,
         history=tuple(rows),
+        coulomb_exchange_work=_coulomb_exchange_work(library, handle, index),
     )
 
 

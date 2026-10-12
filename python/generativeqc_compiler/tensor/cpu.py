@@ -45,6 +45,10 @@ CPU_PRIMITIVES = frozenset(
         "add",
         "multiply",
         "divide",
+        "exp",
+        "log",
+        "sqrt",
+        "power",
         "scaled_bilinear",
         "einsum",
         "transpose",
@@ -281,6 +285,16 @@ def _emit_prepared_cpu(
             body.append(f"const double denominator = {read(node.inputs[1])};")
             body.append("if (denominator == 0.0) return false;")
             expression = f"{read(node.inputs[0])} / denominator"
+        elif node.op in {"exp", "log", "sqrt", "power"}:
+            body.append(f"const double argument = {read(node.inputs[0])};")
+            if node.op in {"log", "sqrt", "power"}:
+                predicate = "argument >= 0.0" if node.op == "sqrt" else "argument > 0.0"
+                body.append(f"if (!({predicate})) return false;")
+            function = "pow" if node.op == "power" else node.op
+            arguments = "argument"
+            if node.op == "power":
+                arguments += ", " + _literal(a["exponent"])
+            expression = f"std::{function}({arguments})"
         elif node.op == "scaled_bilinear":
             body.append("double value = 0.0;")
             arguments = ", ".join(read(child) for child in node.inputs)

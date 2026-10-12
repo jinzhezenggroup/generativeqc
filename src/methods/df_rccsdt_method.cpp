@@ -60,7 +60,8 @@ class DfRccsdtPrepared final : public PreparedCalculation {
   DfRccsdtPrepared(Capabilities capabilities, runtime::ExecutionContext execution,
                    core::System system, core::System auxiliary,
                    const generativeqc_method_descriptor& descriptor)
-      : capabilities_(capabilities),
+      : PreparedCalculation(execution.backend(), execution.device_id()),
+        capabilities_(capabilities),
         execution_(std::move(execution)),
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
@@ -95,7 +96,7 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     std::lock_guard<std::mutex> lock(mutex_);
     last_correlation_.reset();
     last_performance_.reset();

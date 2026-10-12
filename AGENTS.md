@@ -19,6 +19,27 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 - Preserve durable rationale for non-trivial architecture, numerics, performance,
   and compatibility decisions as Agent Notes under `.agents/notes/`.
 
+## Tests and refactoring
+
+- Test externally observable behavior, independent scientific oracles, error
+  handling, resource lifetime, stable ABIs, and explicitly required ownership
+  boundaries. Performance changes must retain appropriate endpoint qualification.
+- Do not add permanent required-CI tests that pin hashes of locally generated
+  source or production function bodies, require exact internal call counts, or
+  mandate specific function names, AST shapes, or try/except source ordering.
+  Refactors preserving the required semantics should not require updating
+  historical source fingerprints just to turn CI green.
+- Replace implementation-spelling checks with executable tests where feasible:
+  numerical parity, backend selection, capacity/overflow handling, failure
+  injection, cleanup order, and actual compiled host/CUDA contracts. Narrow
+  import/vendor boundary audits may remain when the boundary is intentional.
+- Preserve real integrity checks: pinned upstream/reference inputs, public ABI
+  compatibility, generated-asset provenance, and cache invalidation when inputs
+  change. A one-off byte-preservation comparison may document a migration but
+  must be opt-in rather than a permanent refactor blocker.
+- Do not remove numerical, safety, lifecycle, or independent reference coverage
+  merely to reduce CI time or avoid unrelated red checks.
+
 ## Compiler caching
 
 - Use a compiler cache for local C++ and CUDA builds, including PR qualification

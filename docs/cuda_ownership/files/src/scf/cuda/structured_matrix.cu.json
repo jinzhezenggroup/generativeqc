@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/structured_matrix.cu",
+  "role": "runtime",
+  "subsystem": "scf_tensor",
+  "reason": "Borrowed immutable structured bindings, charged scaling/publication spans, stream-ordered per-system masks and eigenvalue validation. Canonical mathematics and provider offers remain compiler-owned.",
+  "regions": []
+}

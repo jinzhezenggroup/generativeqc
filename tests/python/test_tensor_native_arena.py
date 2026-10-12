@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from itertools import combinations
 
@@ -26,7 +27,10 @@ from generativeqc_compiler.tensor import (
     multiply,
 )
 from generativeqc_compiler.tensor.iteration_reuse import analyze_iteration_reuse
-from generativeqc_compiler.tensor.native_arena import plan_symbolic_arena
+from generativeqc_compiler.tensor.native_arena import (
+    SymbolicArenaPlan,
+    plan_symbolic_arena,
+)
 
 from tools import generate_rccsd_native as codegen
 
@@ -101,7 +105,7 @@ def test_equal_representative_shapes_do_not_merge_distinct_symbols() -> None:
         plan.node_slots[nodes.index(row_value)]
         != plan.node_slots[nodes.index(column_value)]
     )
-    assert ("row_extent",) in plan.slots and ("column_extent",) in plan.slots
+    assert (("row_extent",),) in plan.slots and (("column_extent",),) in plan.slots
     assert "1" in plan.sizes
 
 
@@ -117,6 +121,102 @@ def test_permuted_equal_symbolic_products_can_share_capacity() -> None:
     plan = plan_symbolic_arena(program, dimension_symbol=_symbol)
     assert plan.node_slots[nodes.index(first)] == plan.node_slots[nodes.index(last)]
     assert plan.sizes == ("checked_product({columns,rows})",) * 2
+
+
+def test_cross_size_candidate_uses_runtime_maximum_not_representative_extents() -> None:
+    """Different runtime dimensions share only after the complete slot retires."""
+    rows, columns = _input("rows", "row_extent"), _input("columns", "column_extent")
+    row_value = multiply(rows, rows)
+    row_sum = einsum("i->", row_value)
+    column_value = einsum("i,->i", columns, row_sum)
+    program = Program({"result": column_value})
+    nodes = program.dependency_order
+    baseline = plan_symbolic_arena(
+        program, dimension_symbol=_symbol, execution_nodes=nodes
+    )
+    candidate = plan_symbolic_arena(
+        program, dimension_symbol=_symbol, execution_nodes=nodes, cross_size_reuse=True
+    )
+    row_number, column_number = nodes.index(row_value), nodes.index(column_value)
+    assert baseline.node_slots[row_number] != baseline.node_slots[column_number]
+    assert candidate.node_slots[row_number] == candidate.node_slots[column_number]
+    shared = candidate.node_slots[row_number]
+    assert candidate.slots[shared] == (("column_extent",), ("row_extent",))
+    assert candidate.sizes[shared] == (
+        "std::max({checked_product({column_extent}),checked_product({row_extent})})"
+    )
+    assert candidate.identity != baseline.identity
+    for row_extent, column_extent in ((1, 9), (9, 1), (3, 3), (256, 64)):
+        extents = {"row_extent": row_extent, "column_extent": column_extent}
+
+        def capacity(plan: SymbolicArenaPlan, extents: dict[str, int] = extents) -> int:
+            return int(
+                sum(
+                    max(
+                        np.prod([extents[symbol] for symbol in shape]) for shape in slot
+                    )
+                    for slot in plan.slots
+                )
+            )
+
+        assert capacity(candidate) < capacity(baseline)
+    assert candidate == plan_symbolic_arena(
+        program, dimension_symbol=_symbol, execution_nodes=nodes, cross_size_reuse=True
+    )
+
+
+def test_cross_size_candidate_preserves_retained_cache_admission() -> None:
+    """Until separately qualified, retained plans keep their exact old capacities."""
+    program = _chain()
+    retained = (program.live_nodes[1],)
+    baseline = plan_symbolic_arena(
+        program, dimension_symbol=_symbol, retained_nodes=retained
+    )
+    assert baseline == plan_symbolic_arena(
+        program,
+        dimension_symbol=_symbol,
+        retained_nodes=retained,
+        cross_size_reuse=True,
+    )
+
+
+def test_native_candidate_scope_is_nested_and_does_not_leak() -> None:
+    program = codegen.iteration_program(2, 3)
+    baseline = codegen._arena_plan(program)
+    with codegen.cross_size_arena_candidate():
+        candidate = codegen._arena_plan(program)
+        assert len(candidate.slots) < len(baseline.slots)
+        with codegen.cross_size_arena_candidate(False):
+            assert codegen._arena_plan(program) == baseline
+        assert codegen._arena_plan(program) == candidate
+    assert codegen._arena_plan(program) == baseline
+
+
+def test_native_candidate_changes_only_storage_not_cpu_or_cuda_arithmetic() -> None:
+    """Compare actual emitters, including every original CUDA kernel and launch."""
+    program = codegen.iteration_program(2, 3)
+    original = program.dumps()
+
+    def emitted() -> tuple[str, str]:
+        return (
+            codegen._cpu_function(program, "probe", "IterationOutputs"),
+            codegen._cuda_program(program, "iteration", "DeviceIterationOutputs"),
+        )
+
+    baseline = emitted()
+    with codegen.cross_size_arena_candidate():
+        candidate = emitted()
+
+    def arithmetic(source: str) -> str:
+        lines = (
+            line
+            for line in source.splitlines()
+            if not re.match(r"  double\* slot\d+=allocate", line)
+        )
+        return re.sub(r"slot\d+", "slot", "\n".join(lines))
+
+    assert tuple(map(arithmetic, candidate)) == tuple(map(arithmetic, baseline))
+    assert program.dumps() == original
 
 
 def test_borrowed_outputs_cannot_be_overwritten_by_later_branches() -> None:
@@ -285,6 +385,7 @@ def test_native_generator_is_only_a_domain_binding(
                 "dimension_symbol": codegen._dim,
                 "execution_nodes": codegen._execution_nodes(program),
                 "retained_nodes": reuse.invariant_nodes,
+                "cross_size_reuse": False,
             },
         )
     ]

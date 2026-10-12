@@ -154,6 +154,36 @@ class PreparedExecutionLease:
         self._executions = 0
         self._refreshes = 0
         self._invalidations = 0
+        self._running = False
+        self._closed = False
+        self._warmed = False
+
+    @property
+    def state(self) -> str:
+        """Native lifecycle vocabulary; not a scientific generation or cache hit."""
+        if self._closed:
+            return "closed"
+        if self._running:
+            return "running"
+        if self._failed:
+            return "failed"
+        if self._warmed:
+            return "warm"
+        return "unbound" if self._contract is None else "bound"
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _require_idle(self) -> None:
+        if self._closed:
+            raise RuntimeError("prepared execution lease is closed")
+        if self._running:
+            raise RuntimeError("prepared execution lease is running")
 
     @property
     def contract(self) -> PreparedExecutionContract | None:
@@ -195,6 +225,7 @@ class PreparedExecutionLease:
         host_bytes: int,
         device_bytes: int,
     ) -> PreparedExecutionContract:
+        self._require_idle()
         if self._contract is not None:
             raise RuntimeError("prepared execution lease is already installed")
         contract = PreparedExecutionContract(
@@ -202,6 +233,7 @@ class PreparedExecutionLease:
         )
         self._contract = contract
         self._failed = False
+        self._warmed = False
         return contract
 
     def require(
@@ -211,6 +243,8 @@ class PreparedExecutionLease:
         max_host_bytes: int,
         max_device_bytes: int,
     ) -> PreparedExecutionContract:
+        if self._closed:
+            raise RuntimeError("prepared execution lease is closed")
         contract = self._contract
         if contract is None:
             raise RuntimeError("prepared execution lease is not installed")
@@ -230,13 +264,41 @@ class PreparedExecutionLease:
             raise ValueError("prepared execution device budget exceeded")
         return contract
 
+    def begin(
+        self,
+        request: PreparedExecutionRequest,
+        *,
+        max_host_bytes: int,
+        max_device_bytes: int,
+    ) -> None:
+        """Enter one already-bound transaction without allocating or fencing.
+
+        The original consumer validates its source/solve leases and refreshes
+        failed storage before entry. Completion means its output/consumption
+        fences have already run, not merely that CUDA work was submitted.
+        """
+        self._require_idle()
+        self.require(
+            request, max_host_bytes=max_host_bytes, max_device_bytes=max_device_bytes
+        )
+        if self._failed:
+            raise RuntimeError(
+                "failed prepared execution requires refresh before execution"
+            )
+        self._running = True
+
     def mark_refresh(self) -> None:
+        self._require_idle()
         if self._contract is None:
             raise RuntimeError("cannot refresh an uninstalled prepared execution")
         self._failed = False
+        self._warmed = False
         self._refreshes += 1
 
     def mark_failure(self) -> None:
+        if self._closed:
+            return
+        self._running = self._warmed = False
         if self._contract is not None:
             self._failed = True
 
@@ -248,9 +310,20 @@ class PreparedExecutionLease:
                 "failed prepared execution requires refresh before success"
             )
         self._executions += 1
+        self._running = False
+        self._warmed = True
 
     def invalidate(self) -> None:
+        self._require_idle()
         if self._contract is not None:
             self._invalidations += 1
         self._contract = None
         self._failed = False
+        self._warmed = False
+
+    def close(self) -> None:
+        """Terminal gate; resources are still destroyed by their original owner."""
+        if self._closed:
+            return
+        self.invalidate()
+        self._closed = True

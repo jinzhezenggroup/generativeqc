@@ -1,0 +1,13 @@
+{
+  "decoded_bytes": 6352916,
+  "decoded_sha256": "e8b1b1541e3df8364c72a3f7254b3c73a9ce110d7014cbfaa8241aae13acbd6e",
+  "original_git_commit": "4ccc0338e2e2f285f67e7bea4655507236b536a5",
+  "original_path": "benchmarks/results/native-memory-arena-20261011/evidence.json.gz",
+  "original_stored_bytes": 296248,
+  "original_stored_sha256": "999fabdffef8f14ab02690e3139676cd868f3de3aec8463d9110fe341c3c1af8",
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "stored_bytes": 145996,
+  "stored_path": "evidence.json.xz",
+  "stored_sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad",
+  "transformation": "Lossless gzip-to-XZ recompression only; original decoded JSON bytes are unchanged."
+}

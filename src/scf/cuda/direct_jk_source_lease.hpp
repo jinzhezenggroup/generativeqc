@@ -8,11 +8,13 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-/** Method-neutral, phase-local lease of immutable full-range FP64 ERIs.
+/** Method-neutral lease of immutable full-range FP64 ERIs.
  * The common Direct provider remains the scientific owner. Consumers assemble
  * their own HF/KS equations and retire captured borrowers before this lease.
- * The caller-owned stream outlives destruction; no source survives into a
- * subsequent solve, geometry or derivative consumer.
+ * The caller-owned stream outlives destruction. An immutable-geometry owner may
+ * retain this lease for post-SCF value consumers, but these zero-order values
+ * never authorize a derivative action: gradients use the primary provider's
+ * derivative metadata and evaluate derivative integrals.
  */
 class DirectJkSourceLease {
  public:
@@ -30,27 +32,34 @@ class DirectJkSourceLease {
    * auto_policy defaults to the unchanged RHF generic/f-shell domain. The KS
    * screened policy is opt-in and does not turn the iteration limit into an
    * expected reuse count.
+   * bucket_mask defaults to complete residency. Partial masks share the full
+   * source's immutable Schwarz layout; uncached buckets remain exact Direct.
    */
   generativeqc_status prepare(
       int device, const std::vector<core::System>& systems, unsigned maximum_iterations,
       std::size_t direct_nbf, std::size_t required, std::size_t budget, const char* selection_value,
       const char* trace_name, bool cold_phase = false, bool generic_fock = false,
       double screening = 0.0, std::size_t value_ceiling = 8ULL << 30, bool own_outputs = true,
-      DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f);
+      DirectJkSourceAutoPolicy auto_policy = DirectJkSourceAutoPolicy::generic_f,
+      std::uint32_t bucket_mask = (1U << 28) - 1, unsigned spins = 1);
   bool active() const noexcept { return direct_ != nullptr; }
   std::size_t capacity_bytes() const noexcept { return capacity_bytes_; }
   std::size_t value_bytes() const noexcept { return value_bytes_; }
   const std::string& reason() const noexcept { return reason_; }
 
-  /** Enqueue raw restricted J/K without applying scientific coefficients.
+  /** Enqueue raw RKS/UKS J/K without applying scientific coefficients.
    * Preserve the caller's Schwarz threshold on each contraction. A null error
    * slot uses the lease's own slot. No allocation, upload or success-path fence
    * occurs; caller outputs must outlive the final audit.
    */
   generativeqc_status enqueue(FockBuildSpec spec, const double* density, double* coulomb,
                               double* exchange, int* numerical_error, double screening,
-                              std::string& detail);
-  /** Fence the last action's finite/census audit before publishing a result. */
+                              std::string& detail, const double* beta = nullptr,
+                              double* beta_exchange = nullptr);
+  /** Fence finite/census validation before publishing the last action.
+   * At the frozen Schwarz threshold every uncached value must be evaluated.
+   * A stricter replay predicate may skip recurrences but not source visits.
+   */
   generativeqc_status audit();
   /** Completed physical work, not host graph-capture calls. */
   void observe_completed(std::size_t physical_focks) const noexcept;
@@ -83,8 +92,9 @@ class DirectJkSourceLease {
   int* last_error_{};
   std::uint64_t* census_{};
   std::size_t matrix_elements_{}, output_elements_{}, correction_elements_{};
-  std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{};
+  std::size_t capacity_bytes_{}, value_bytes_{}, value_count_{}, source_value_count_{};
   std::size_t completed_values_{};
+  double source_screening_{}, last_screening_{};
   bool prepared_{};
   const char* selection_{"auto"};
   std::string reason_{"ineligible"};

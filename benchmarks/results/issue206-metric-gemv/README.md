@@ -102,3 +102,11 @@ independent NumPy and external references; it is never an automatic error
 fallback. The ledger requires removing the kernel and selector after complete
 #206 numerical, resource and endpoint acceptance, once independent gates and
 retained samples cover its regression role. Those closure gates remain open.
+
+The 2026-10-11 storage-only compaction retains the exact original 192-AO and
+384-AO batch-four force comparisons in `measurements/192ao-b4-forces-blas.json.gz`
+and `measurements/384ao-b4-forces-blas.json.gz`. Each adjacent `.storage.json`
+records original/stored sizes and hashes plus the original Git blob. Decompression restores the original JSON bytes, including
+all timings, forces, settings and ordering; historical summary hashes continue
+to identify those restored bytes. The live response-timeline reader accepts the
+compressed reference. No benchmark was rerun or acceptance gate changed.

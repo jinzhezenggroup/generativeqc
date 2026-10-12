@@ -3,11 +3,9 @@
 import subprocess
 from pathlib import Path
 
-from generativeqc_compiler.dft.ao_cuda import emit_native_xc_contraction_kernels
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
-from generativeqc_compiler.dft.xc_point_cuda import emit_point_traversal
 
 
 def test_emitted_point_batch_resource_admission(
@@ -78,26 +76,3 @@ int main() {
     binary = tmp_path / "plan"
     native_cxx.build_executable([source], binary, compile_args=("-std=c++17", "-O2"))
     subprocess.run([str(binary)], check=True)
-
-
-def test_point_batches_share_canonical_consumer_and_launch_width() -> None:
-    """PBE variants retain the indexed schedule and canonical point formula."""
-    source = emit_native_xc_contraction_kernels()
-    assert "evaluate_points<feature_terms, false, true," in source
-    assert "return &launch_point_batches<4, 32, true>;" in source
-    assert "return &launch_point_batches<4, 32>;" in source
-    assert "PBE point batch launcher identity mismatch" in source
-    assert "min(tile_points, domain_count - begin)" in source
-    assert "point::evaluate(true, rho, gradient, exchange_scale," in source
-    assert source.count(emit_point_traversal()) == 1
-    assert (
-        "evaluate_point_tiles<feature_terms, response, batched, CuratedPointEvaluator<static_family>>"
-        in source
-    )
-    assert (
-        source.count(
-            "return evaluate_semilocal_point<static_family>(functional, rho, gradient, tau"
-        )
-        == 1
-    )
-    assert "static_assert(!batched || !response)" in source

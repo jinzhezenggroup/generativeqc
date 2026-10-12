@@ -1,4 +1,4 @@
-"""Internal conventional RCCSD/RCCSD(T) equations, state and validation APIs.
+"""Internal conventional coupled-cluster equations, state and validation APIs.
 
 The facade accepts validated closed-shell RHF snapshots and conventional CPU
 integral providers. RCCSD supports CPU, ordinary-stream CUDA and resident CUDA;
@@ -8,6 +8,17 @@ the validated complete RCCSD(T) analytic-gradient owner as an internal force API
 These APIs still do not register Calculator methods or a native CCSD(T) prepared
 owner; the C ABI remains fail-closed until the generated response graph has that
 owner.
+
+PreparedUCCSD separately accepts validated UHF snapshots with conventional
+spin-resolved providers and shared native CPU/CUDA TensorIR contractions. Its
+explicit host-controlled iteration contract does not register Calculator
+UCCSD/UCCSD(T) methods or supply unrestricted Lambda or forces. PreparedUCCSDT
+qualifies a converged UCCSD state and adds all four canonical triples channels
+through bounded shared CPU/CUDA tiles with complete numeric/work admission.
+PreparedUCCSDLambda supplies native CPU/CUDA Lambda and fixed-orbital input
+cotangents in explicit physical excitation-dual coordinates, reusing the existing
+GMRES acceptance contract. It does not yet supply unrestricted orbital relaxation
+or nuclear forces.
 """
 
 from generativeqc_compiler.cc.doubles import build_ccsd_program
@@ -129,6 +140,14 @@ from .triples_tiles import (
     tile_triples_energy_masked,
     tile_triples_energy_tensorir,
 )
+from .uccsd_lambda import (
+    PreparedUCCSDLambda,
+    UCCSDLambdaOptions,
+    UCCSDLambdaResult,
+    UCCSDParameterCotangent,
+)
+from .uccsd_solver import PreparedUCCSD, UCCSDIteration, UCCSDResult
+from .uccsd_t import PreparedUCCSDT, UCCSDTOptions, UCCSDTResult
 
 __all__ = [
     "TRIPLES_RESPONSE_INPUTS",
@@ -170,6 +189,9 @@ __all__ = [
     "PreparedRCCSDTBatch",
     "PreparedRCCSDTForceBatch",
     "PreparedResidentCCSD",
+    "PreparedUCCSD",
+    "PreparedUCCSDLambda",
+    "PreparedUCCSDT",
     "RCCSDResult",
     "RCCSDTBatchItemResult",
     "RCCSDTCapabilities",
@@ -184,6 +206,13 @@ __all__ = [
     "TransportCompatibility",
     "TriplesTileConfig",
     "TriplesTileEnumerator",
+    "UCCSDIteration",
+    "UCCSDLambdaOptions",
+    "UCCSDLambdaResult",
+    "UCCSDParameterCotangent",
+    "UCCSDResult",
+    "UCCSDTOptions",
+    "UCCSDTResult",
     "accumulate_tile_triples_vjp",
     "amplitude_layouts",
     "batch_energy",

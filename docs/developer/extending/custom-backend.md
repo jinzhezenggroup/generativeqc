@@ -1,5 +1,16 @@
 # Custom backends
 
-**Status: framework only; no stable public backend plug-in contract yet.**
+**Not available:** there is no stable public third-party backend plug-in
+or backend-registration contract. The versioned public extension surface
+covers audited scientific composition and a bounded TensorIR subset, not
+an unrestricted CPU/GPU device interface.
 
-A future backend API should separate scientific semantics from execution capability and define discovery, memory/resource ownership, supported operators and derivatives, synchronization/lifetime rules, error behavior, and qualification gates.
+The [provider-selection ownership](../provider_selection_boundaries.md)
+describes internal scientific/execution responsibilities. The
+[experimental OpenCL adapter](../opencl_backend.md) executes selected
+generated scalar expressions but is **not** an OpenCL HF/DFT molecular
+backend or an example of a supported third-party plug-in ABI.
+
+Any future public backend interface will need explicit discovery,
+supported operators and derivatives, resource/memory ownership, stream
+and lifetime rules, error handling and independent numerical qualification.

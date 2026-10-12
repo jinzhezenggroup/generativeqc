@@ -1,0 +1,7 @@
+job=765 node=node4 visible=0
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+python/generativeqc_compiler/tensor/cuda_plan.py: OK
+tests/python/test_tensor_transcendentals_cuda.py: OK
+........................                                                 [100%]
+24 passed in 375.07s (0:06:15)

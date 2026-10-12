@@ -29,14 +29,19 @@ class CudaResources {
   /** Borrow execution state and a precharged arena span; acquire no ownership. */
   MatrixLibraryResources matrix_view(double* masked_output = nullptr,
                                      std::size_t masked_output_elements = 0) const {
-    return {stream_, blas_, masked_output, masked_output_elements,
-            matrix_binding_ ? &*matrix_binding_ : nullptr};
+    return {stream_,
+            blas_,
+            masked_output,
+            masked_output_elements,
+            matrix_binding_ ? &*matrix_binding_ : nullptr,
+            structured_binding_ ? &*structured_binding_ : nullptr};
   }
 
   int device_id_{-1};
   cudaStream_t stream_{};
   cublasHandle_t blas_{};
   std::optional<tensor::CudaMatrixProductBinding> matrix_binding_;
+  std::optional<tensor::CudaStructuredProductBinding> structured_binding_;
   ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles_;
   void* arena_{};
   DirectTileValidationRecord* direct_tile_validation_{};

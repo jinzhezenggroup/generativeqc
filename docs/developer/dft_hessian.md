@@ -59,8 +59,17 @@ vector. This is an executable source-level algebra slice for both RKS and UKS;
 native shell/center recovery, shared CPKS execution, XC/grid/partition motion
 and molecular assembly remain owned by their qualified consumers. In particular,
 compiled PBE0/B3LYP exchange HVP weights do **not** qualify hybrid molecular
-Hessians: the mixed K/XC CPKS response, metric/Pulay relaxation and complete
-molecular source inventory still need independent numerical acceptance.
+Hessians: the native mixed K/XC CPKS provider, metric/Pulay relaxation and
+complete molecular source inventory still need independent numerical acceptance.
+
+The shared closed-shell CPKS operator now accepts an explicit physical
+full-range exact-exchange fraction for CPU-side algebraic composition. It binds
+the resulting restricted spin-summed -a/2 raw K action into the response
+identity and **refuses nonzero exchange unless the backend explicitly declares
+raw full-range K support**. Semilocal a=0 keeps the same identity and behavior.
+This is a provider-checked, synthetic-oracle-tested response contract only;
+`NativeRKSResponse` remains restricted to native LDA/PBE, and no native PBE0,
+B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is now `generativeqc.stationary_nuclear`: metric-density
@@ -85,6 +94,34 @@ aliases to those installed consumers. The same owner is now exposed through
 all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS. Public calls retain
 explicit integral/output budgets and report the executed public endpoint in
 result diagnostics. Wider method/backend support remains separate.
+
+## Complete CPU endpoint benchmark and cold-JIT qualification
+
+Run the committed device-free driver through the *public* Calculator methods:
+
+```bash
+PYTHONPATH=python:. python tools/benchmark_cpu_hessian.py \\
+  --method pbe-rks --case h2 --repeats 3 \\
+  --output benchmarks/results/hessian-cpu-h2.json
+```
+
+The JSON retains every full-call endpoint-first, same-geometry, and
+changed-geometry timing sample for both HVP and raw full-Hessian paths. Each
+full call includes fresh SCF and stationary response. Every timed pair, including
+all same-geometry repeats, must pass finite real shape and `H @ v` parity checks;
+raw full-matrix asymmetry is recorded without post-hoc symmetrization.
+No CUDA acceptance is required. HVP precedes full Hessian in each pair in one
+shared process/cache, and the receipt records that ordering. In particular,
+the first full-Hessian call has already been warmed by one HVP; it is **not** an
+independent process-first trial. Neither endpoint-first sample establishes a
+compiler-cold measurement. Use separate fresh processes *and* independently
+empty cache directories for independent compiler-cold qualification.
+For large-domain compilation investigations, opt in with `--case he13`:
+this uses the 13-Cartesian-AO single-He `s+d+d` fixture from the existing
+resource-bound test. Its generated second-integral CPU C++ cold-JIT path has
+previously exceeded the 300-second compiler limit (#2272), so this is an
+explicit expensive diagnostic, not part of routine PR smoke tests. Do not infer
+that passing the smaller benchmark fixes that cold-compile blocker.
 
 ## Qualified execution boundary
 

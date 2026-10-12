@@ -105,6 +105,54 @@ void stationary_pbe_xc_nuclear_finite_difference() {
     }
   }
 }
+/** B3LYP reuses the exact GGA geometry pullback with its generated
+ * B88/LYP point derivatives, never the PBE XC scientific expression. */
+void stationary_b3lyp_xc_nuclear_finite_difference() {
+  const auto reference = h2();
+  const generativeqc::dft::GridSpec grid_spec{1, 8, 6, 12, 3, 1e-12};
+  const std::vector<double> restricted{0.9, 0.18, 0.18, 0.7};
+  const std::vector<double> alpha{0.52, 0.11, 0.11, 0.32};
+  const std::vector<double> beta{0.31, 0.035, 0.035, 0.39};
+  for (const auto& blocks : {std::vector<std::vector<double>>{restricted},
+                             std::vector<std::vector<double>>{alpha, beta}}) {
+    const generativeqc::dft::AoBasis basis(reference);
+    const generativeqc::dft::MolecularGrid grid(reference, grid_spec);
+    const auto response =
+        generativeqc::dft::stationary_b3lyp_xc_derivative(basis, grid, blocks, 17);
+    const auto energy = [&](const generativeqc::core::System& system) {
+      const generativeqc::dft::AoBasis displaced_basis(system);
+      const generativeqc::dft::MolecularGrid displaced_grid(system, grid_spec);
+      if (blocks.size() == 1)
+        return generativeqc::dft::integrate_b3lyp_rks(displaced_basis, displaced_grid, blocks[0],
+                                                      13)
+            .energy;
+      return generativeqc::dft::integrate_b3lyp_uks(displaced_basis, displaced_grid, blocks[0],
+                                                    blocks[1], 13)
+          .energy;
+    };
+    require(std::abs(response.energy - energy(reference)) < 1e-9,
+            "stationary B3LYP XC value disagrees with the SCF quadrature");
+    for (unsigned axis = 0; axis < 3; ++axis)
+      require(std::abs(response.gradient[axis] + response.gradient[3 + axis]) < 5e-9,
+              "stationary B3LYP XC violates rigid translation invariance");
+    const double step = 2e-4;
+    for (std::size_t atom = 0; atom < 2; ++atom)
+      for (unsigned axis = 0; axis < 3; ++axis) {
+        auto plus = reference;
+        auto minus = reference;
+        plus.atoms[atom].position[axis] += step;
+        minus.atoms[atom].position[axis] -= step;
+        const double fd = (energy(plus) - energy(minus)) / (2.0 * step);
+        if (!std::isfinite(fd) || std::abs(fd - response.gradient[3 * atom + axis]) > 4e-5) {
+          std::ostringstream message;
+          message << "stationary B3LYP AO/grid/Becke derivative mismatch"
+                  << " spin=" << blocks.size() << " atom=" << atom << " axis=" << axis
+                  << " FD=" << fd << " analytic=" << response.gradient[3 * atom + axis];
+          throw std::runtime_error(message.str());
+        }
+      }
+  }
+}
 }  // namespace
 
 int main() {
@@ -836,6 +884,7 @@ int main() {
     }
     require(pbe_tail_rejected, "PBE tail-v1 accepted an out-of-domain density");
     stationary_pbe_xc_nuclear_finite_difference();
+    stationary_b3lyp_xc_nuclear_finite_difference();
     std::cout << "DFT GridSpec v1 and generated LDA fixed-density gates passed\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

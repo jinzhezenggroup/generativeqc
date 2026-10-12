@@ -48,6 +48,7 @@ PREFIX = r"""
 #include <string>
 #include <vector>
 #include "hf/rhf_frame_response.hpp"
+#include "response/solve.hpp"
 using namespace generativeqc;
 using Clock = std::chrono::steady_clock;
 constexpr double kResidualTolerance = 1e-10;

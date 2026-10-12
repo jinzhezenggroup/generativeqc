@@ -95,8 +95,8 @@ square root of the A orbit weights to reproduce the dense coordinate metric.
 Singular extrapolation systems drop the oldest entry; nonfinite or extreme
 coefficients cannot be silently accepted. Setting `diis_size=0` disables DIIS.
 This describes CPU/conventional and default supplied-problem semantics; native
-CUDA DF energies select a separate
-[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies).
+CUDA DF amplitude owners, including the forward solve for analytic forces, select a separate
+[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies-and-forces).
 
 A candidate converges only when both energy change and the maximum absolute
 elements of R1/R2 meet their tolerances. Before acceptance, a fresh execution

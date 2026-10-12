@@ -22,8 +22,19 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
     ]
     # Extract the live production members/constructor/destructor, not a copied
     # model. Kernel methods are irrelevant to constructor unwind and excluded.
-    owner = source[
-        source.index("struct Layout {") : source.index("  void virtual_corrections()")
+    owner = source[source.index("struct Layout {") : source.index("  void cast_fp32(")]
+    owner += r"""
+  void cast_fp32(const double*, float*, std::size_t) {
+    throw std::logic_error("ownership test must not execute numerical callback");
+  }
+  void check_generated_error() {
+    throw std::logic_error("ownership test must not execute numerical callback");
+  }
+"""
+    owner += source[
+        source.index("  void refuse_packed_history(") : source.index(
+            "  void virtual_corrections()"
+        )
     ]
     owner += source[
         source.index("  void cleanup() noexcept {") : source.index(
@@ -228,6 +239,20 @@ namespace dfhoist {
 struct CudaState : dfcore::CudaState {
   double *prepare_arena{}, *auxiliary_arena{};
 };
+struct MixedAuxiliaryCudaState {
+  std::size_t o{}, v{}, q{};
+  cudaStream_t stream{};
+  int* error{};
+  const float *bov{}, *bvv{}, *t1{}, *t2{}, *df_tau{};
+  float* auxiliary_arena{};
+  tensor::PreparedContractions contractions;
+};
+constexpr const char* mixed_auxiliary_equation_hash="ownership-test-unused";
+constexpr std::size_t mixed_contraction_host_bytes(std::size_t variants) { return variants*512; }
+void prepare_mixed_contractions(MixedAuxiliaryCudaState&,tensor::CudaContractionContext&,
+                                std::size_t,std::size_t,std::size_t&,std::size_t&) {
+  throw std::logic_error("ownership test must not execute mixed numerical preparation");
+}
 constexpr std::size_t contraction_host_bytes(std::size_t variants) { return 1024+variants*512; }
 std::size_t prepared_batch=0,prepared_tail=0;
 void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t batch,

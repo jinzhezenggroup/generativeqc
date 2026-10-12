@@ -39,6 +39,7 @@ PROPERTY_FORCES = 1 << 1
 INITIAL_GUESS_CAPABILITY_HF = 1 << 0
 INITIAL_GUESS_CAPABILITY_LDA = 1 << 1
 INITIAL_GUESS_CAPABILITY_MINAO = 1 << 2
+INITIAL_GUESS_CAPABILITY_AUTO_CPU = 1 << 3
 BACKEND_CPU_REFERENCE = 0
 BACKEND_CUDA = 1
 BACKEND_HYBRID_CUDA = 2
@@ -294,6 +295,21 @@ class InitialGuessOptionsDescriptor(ctypes.Structure):
     ]
 
 
+class InitialGuessAutoPolicyDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("method", ctypes.c_int32),
+        ("backend", ctypes.c_int32),
+        ("precision_mode", ctypes.c_int32),
+        ("density_fitting_mode", ctypes.c_int32),
+        ("restricted", ctypes.c_uint32),
+        ("has_ecp", ctypes.c_uint32),
+        ("atomic_numbers", ctypes.POINTER(ctypes.c_int32)),
+        ("atom_count", ctypes.c_size_t),
+    ]
+
+
 class InitialGuessDiagnosticDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -505,6 +521,18 @@ class KsDiagnosticDescriptor(ctypes.Structure):
         ("xc_energy", ctypes.c_double),
         ("density_change_max", ctypes.c_double),
         ("physical_residual_max", ctypes.c_double),
+    ]
+
+
+class KsCoulombExchangeWorkDescriptor(ctypes.Structure):
+    """Narrow observed target-KS value-provider applications; not precision certification."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("complete", ctypes.c_int32),
+        ("coulomb_applications", ctypes.c_uint64),
+        ("exchange_applications", ctypes.c_uint64),
     ]
 
 
@@ -1207,6 +1235,20 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             ctypes.c_uint32,
         ]
         ks_query.restype = ctypes.c_int
+    for name, prefix in (
+        ("generativeqc_calculation_get_ks_coulomb_exchange_work_v1", [ctypes.c_void_p]),
+        (
+            "generativeqc_batch_get_ks_coulomb_exchange_work_v1",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+    ):
+        work_query = getattr(library, name, None)
+        if work_query is not None:
+            work_query.argtypes = [
+                *prefix,
+                ctypes.POINTER(KsCoulombExchangeWorkDescriptor),
+            ]
+            work_query.restype = ctypes.c_int
     for name, prefix in (
         ("generativeqc_calculation_get_ks_transport_diagnostic", [ctypes.c_void_p]),
         (

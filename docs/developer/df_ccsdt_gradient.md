@@ -385,6 +385,10 @@ products, RHF, CCSD, Lambda and orbital/nuclear response stay FP64. The emitted
 precision-schedule identity, actual arithmetic bits, FP32 GEMM count and cast
 element count identify the executed candidate rather than merely its request.
 
+The separately controlled CCSD and Lambda auxiliary warm starts do not enable
+this forward-W experiment. Their final strict FP64 solves/audits and derivative
+boundaries are documented in the [DF-CCSD(T) precision contract](df_ccsdt.md).
+
 This internal approximate-force candidate is not public mixed-precision method
 admission, and its FP64 reverse is not an exact derivative of discontinuous
 FP32 rounding. Independent physical energy/force gates are required. Complete

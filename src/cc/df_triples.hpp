@@ -74,6 +74,8 @@ struct DFCudaFockResult {
   std::size_t provider_retained_bytes{}, page_capacity{}, page_count{}, panel_capacity{};
   std::size_t occupied_pairs{}, unique_vector_cubes{}, vector_cubes{}, page_builds{};
   std::size_t panel_gemms{}, w_gemms{}, fock_gemms{}, contraction_summands{};
+  /** Forward-only copies into independent canonical W slots, never cotangent aliases. */
+  std::size_t w_copy_calls{}, w_copy_bytes{};
   std::size_t scalar_evaluations{}, audit_kernels{}, scatter_kernels{}, h2d_bytes{}, d2h_bytes{};
 };
 

@@ -15,6 +15,7 @@ from .ir import broadcast, einsum, input_tensor
 from .lowering import TensorLoweringAdapter
 from .native_lowering import emit_contraction_region_portfolio
 from .program import Program
+from .structured_scf import emit_structured_scf_cuda
 from .types import Index, IndexSpace, TensorSpec
 
 
@@ -191,4 +192,4 @@ def emit_matrix_product_cuda() -> str:
             "} // namespace generativeqc::tensor::matrix_product_lowering",
         ]
     )
-    return "\n".join(pieces) + "\n"
+    return "\n".join(pieces) + "\n" + emit_structured_scf_cuda()

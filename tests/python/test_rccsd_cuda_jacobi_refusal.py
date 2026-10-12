@@ -77,6 +77,11 @@ namespace generated { struct DeviceIterationOutputs { unsigned step{}; }; }
 void validate_problem(const Problem&,bool) {}
 void validate_options(const SolverOptions&) {}
 struct Owner {
+  // This harness covers strict Jacobi/event control, not mixed numerical actions.
+  bool mixed_active{};
+  void finish_mixed_warmup() {
+    throw std::logic_error("Jacobi control fixture must not execute mixed warmup");
+  }
   solver::DiisRing history;
   double configured_residual_tolerance{};
   SolverDiagnostic diagnostic;
@@ -90,6 +95,8 @@ struct Owner {
   struct State { double *canonical_eps=nullptr,*t1,*t2; } state{nullptr,&current1,&current2};
   Owner(const Problem&,const SolverOptions& options,int)
       : history(options.diis_size), configured_residual_tolerance(options.residual_tolerance) {
+    if(options.df_mixed_precision)
+      throw std::logic_error("Jacobi control fixture requires strict FP64 options");
     diagnostic.packed_diis=scenario!=0;
   }
   generated::DeviceIterationOutputs iteration(double residual_tolerance) {

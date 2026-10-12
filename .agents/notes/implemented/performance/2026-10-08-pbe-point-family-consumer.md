@@ -121,6 +121,9 @@ traffic or complete-endpoint evidence.
 
 ## References
 
+- [Equal-spin composition](2026-10-12-pbe-family-equal-spin-composition.md)
+  supersedes the physical routing discussion when that upstream path is active.
+
 - Issue #2072; scheduling-only sibling #2073; historical #1113 and #1125.
 - `docs/developer/xc_native_cuda.md` and
   `benchmarks/pbe0_xc_tile_pairs.py`.

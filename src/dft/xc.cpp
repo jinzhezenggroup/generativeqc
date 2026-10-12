@@ -1126,12 +1126,13 @@ SpinXcIntegral integrate_pbe_uks_with_tail(const AoBasis& basis, const Molecular
   return integrate_pbe_uks(basis, grid, alpha, beta, tile_points);
 }
 
-PbeStationaryXcDerivative stationary_pbe_xc_derivative(
+static PbeStationaryXcDerivative stationary_gga_xc_derivative(
     const AoBasis& basis, const MolecularGrid& grid,
-    const std::vector<std::vector<double>>& density, std::size_t tile_points, double exchange_scale,
-    double correlation_scale) {
-  // This is the derivative of the exact *discrete* PBE quadrature held by the
-  // prepared KS owner, not a new XC model or a finite-difference approximation.
+    const std::vector<std::vector<double>>& density, std::size_t tile_points, bool b3lyp,
+    double exchange_scale, double correlation_scale) {
+  // Shared analytic AO/moving-grid/Becke geometry response; evaluate the
+  // *same generated point program* as the prepared PBE or B3LYP SCF owner.
+  // No second B3LYP scientific XC formula or finite-difference production path.
   if (density.size() != 1 && density.size() != 2)
     throw std::invalid_argument("stationary PBE needs one RKS or two UKS density blocks");
   if (!std::isfinite(exchange_scale) || exchange_scale < 0.0 || !std::isfinite(correlation_scale) ||
@@ -1153,6 +1154,10 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
   result.gradient.assign(ncoord, 0.0);
   std::vector<double> weight_sensitivity(grid.point_count());
   std::vector<double> ao, density_phi(n), density_jet(3 * n);
+  const auto sample_owned = [&] {
+    runtime::sample_cpu_capacity(runtime::vector_capacities(result.gradient, weight_sensitivity, ao,
+                                                            density_phi, density_jet));
+  };
   static constexpr unsigned hessian[3][3]{{4, 5, 6}, {5, 7, 8}, {6, 8, 9}};
   const auto& points = grid.points();
   const auto& weights = grid.weights();
@@ -1160,6 +1165,7 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
   for (std::size_t begin = 0; begin < grid.point_count(); begin += tile_points) {
     const std::size_t count = std::min(tile_points, grid.point_count() - begin);
     ao.resize(10 * count * n);
+    sample_owned();
     basis.evaluate(points.data() + 3 * begin, count, 2, 0, n, ao.data(), ao.size());
     for (std::size_t local = 0; local < count; ++local) {
       const std::size_t point = begin + local;
@@ -1180,9 +1186,25 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
         rho[1] = rho[0];
         for (unsigned axis = 0; axis < 3; ++axis) grad_rho[1][axis] = grad_rho[0][axis];
       }
-      const auto xc =
-          evaluate_generated_pbe_point(rho, grad_rho, exchange_scale, correlation_scale);
-      if (!xc.valid) throw std::runtime_error("nonfinite stationary PBE point response");
+      const auto xc = [&] {
+        if (!b3lyp)
+          return evaluate_generated_pbe_point(rho, grad_rho, exchange_scale, correlation_scale);
+        const auto generated = evaluate_b3lyp_point(rho, grad_rho);
+        point::Value response{};
+        response.energy = generated.energy;
+        response.valid = std::isfinite(response.energy);
+        for (unsigned physical_spin = 0; physical_spin < 2; ++physical_spin) {
+          response.rho[physical_spin] = generated.rho[physical_spin];
+          response.valid = response.valid && std::isfinite(response.rho[physical_spin]);
+          for (unsigned axis = 0; axis < 3; ++axis) {
+            response.gradient[physical_spin][axis] = generated.gradient[physical_spin][axis];
+            response.valid =
+                response.valid && std::isfinite(response.gradient[physical_spin][axis]);
+          }
+        }
+        return response;
+      }();
+      if (!xc.valid) throw std::runtime_error("nonfinite stationary GGA point response");
       const double weight = weights[point];
       result.energy += weight * xc.energy;
       weight_sensitivity[point] = xc.energy;
@@ -1227,6 +1249,10 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
     }
   }
   const auto partition = grid.contract_weight_derivative(weight_sensitivity);
+  runtime::sample_cpu_capacity(
+      runtime::add_capacity(runtime::vector_bytes(partition),
+                            runtime::vector_capacities(result.gradient, weight_sensitivity, ao,
+                                                       density_phi, density_jet)));
   if (partition.size() != ncoord)
     throw std::runtime_error("stationary PBE Becke derivative shape mismatch");
   for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
@@ -1235,6 +1261,20 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
                                                     [](double x) { return std::isfinite(x); }))
     throw std::runtime_error("nonfinite stationary PBE XC geometry response");
   return result;
+}
+
+PbeStationaryXcDerivative stationary_pbe_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points, double exchange_scale,
+    double correlation_scale) {
+  return stationary_gga_xc_derivative(basis, grid, density, tile_points, false, exchange_scale,
+                                      correlation_scale);
+}
+
+PbeStationaryXcDerivative stationary_b3lyp_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points) {
+  return stationary_gga_xc_derivative(basis, grid, density, tile_points, true, 1.0, 1.0);
 }
 
 }  // namespace generativeqc::dft

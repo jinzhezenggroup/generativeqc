@@ -39,7 +39,8 @@ class Mp2Prepared final : public PreparedCalculation {
               std::optional<core::System> auxiliary, scf::ScfOptions options, std::size_t budget,
               std::size_t reference_capacity, double threshold, bool density_fitted,
               bool fitted_cuda)
-      : caps_(caps),
+      : PreparedCalculation(context.requested_backend, context.device_id),
+        caps_(caps),
         context_(context),
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
@@ -59,7 +60,7 @@ class Mp2Prepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
   }
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
@@ -357,7 +358,8 @@ class Mp2PreparedBatch final : public PreparedBatch {
   Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
                    std::vector<core::System> systems,
                    const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : capabilities_(capabilities),
+      : PreparedBatch(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         context_(&context),
         systems_(std::move(systems)),
         warm_starts_enabled_(warm_starts_enabled),
@@ -379,9 +381,8 @@ class Mp2PreparedBatch final : public PreparedBatch {
     for (auto& owner : owners_) owner->invalidate_result();
   }
 
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("MP2 batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());

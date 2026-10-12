@@ -2,6 +2,56 @@
   "benchmark_results_max_bytes": 67108864,
   "change_review_max_bytes": 2097152,
   "exceptions": {
+    "benchmarks/results/array-api-rhf-slurm-20261011/n1/tests.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
+      "sha256": "cc9cce96918f054928c4188f6e59587aceed18a993c845597c63331aa28a3d51"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n1/tests.xml": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
+      "sha256": "f4090e3652e02b2bf35498756d67465f25ba4fa838982c94b17d42a3aeb4efe9"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n4/tests.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
+      "sha256": "4dae84dcd14ff26b33e02ccdec61e50367fb10fb8f6b71a78e5f3c93fdda7337"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n4/tests.xml": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
+      "sha256": "032c863be36c57e1dc00448060e7fec88d31e5ddfcbbfc7241790184d6a07325"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact compiler/toolkit/profile qualification receipt for the frozen source-matched Release/sm_120 CUDA library. Retains initial/final configuration provenance, distinguishing the measured force-AOT-off build from an unverified prebuilt library; objects and full build logs remain ignored.",
+      "sha256": "541e886df4a66dd471caa3fc233f858f5f314275bb5cb09af2b1285d25aaee7d"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/build/initial-configure.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact compiler/toolkit/profile qualification receipt for the frozen source-matched Release/sm_120 CUDA library. Retains initial/final configuration provenance, distinguishing the measured force-AOT-off build from an unverified prebuilt library; objects and full build logs remain ignored.",
+      "sha256": "3424bc5d5ca2eb30ac4806207ff7115c5f552a04efef25aaaacc2784cafe453f"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/first-failing-tensor-gate.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact diagnostic receipt of the dormant float32 CUDA planner rejection exposed on scheduled hardware. Retains the failed acceptance and traceback rather than rewriting it as success; final passing cases and source/library identities are separate compact records.",
+      "sha256": "22e693a88988e6515f0ef654fbc6fccd9d254191dbeea7372b34fa346c90c3a1"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/typed-tensor-gate.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
+      "sha256": "a1dc02ea5c412021fb0093d69e2c972a8da00fff0a4ac73889f3665bad499aec"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/typed-tensor-tests.xml": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
+      "sha256": "6354023f6a2440ae16a15173bbf2e22db0735a5a92f54fbdf3d0f2b7ac0c2db2"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n2-driver-discovery.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact failed scheduler/device-discovery receipt explaining why no PRO 6000 numerical/performance acceptance is claimed. Keeps the NVML driver/library mismatch distinct from the successfully qualified n1/n4 CUDA source.",
+      "sha256": "2bb20dfe86d765e1d03215266b640dd7e61fb1207b72e6370c3638eef7ea5322"
+    },
     "benchmarks/results/ecp-consumers-171/raw-evidence.zip": {
       "owner": "ecp-consumers-171",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ecp-consumers-171/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",

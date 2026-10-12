@@ -306,8 +306,8 @@ class CudaCacheRefreshTests(unittest.TestCase):
     def test_refresh_pathspecs_cover_all_existing_cuda_cache_key_inputs(self) -> None:
         key = next(
             line
-            for line in _step("Restore CUDA ccache").splitlines()
-            if "key: ccache-cuda-" in line
+            for line in _step("Restore shared Linux CUDA ccache").splitlines()
+            if "key: ccache-linux-cuda-" in line
         )
         dependencies = re.findall(r"'([^']+)'", key)
         match = re.search(r"cuda_inputs=\(\s*(.*?)\s*\)", SCRIPT, re.DOTALL)

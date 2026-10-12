@@ -349,17 +349,22 @@ preserves shared-science choices, measured evidence and remaining qualification.
 The [s/p/d shard decision](../../.agents/notes/implemented/architecture/2026-09-22-stationary-cuda-spd-derivative-shards.md)
 records the multicomponent lowering, compiler boundary and resource caps.
 
-## Restricted PBE0 point schedule
+## Restricted point schedule
 
-`GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT=off|on` requests the private
+`GENERATIVEQC_STATIONARY_RESTRICTED_POINT=off|on` requests the private
 restricted geometry-point schedule; its default is `on`, with `off` retaining
-the general point route for qualification or diagnosis. It does not change
+the general point route for qualification or diagnosis. The previous
+`GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT` spelling remains a fallback when
+the generic variable is unset. It does not change
 the SCF policy, precision, functional weights, force assembly or public force
 capability, and a request alone does not prove fast-path execution.
 
-The compiler admits only explicitly unpolarized PBE components with exact
-semilocal weights 3/4 exchange and 1 correlation. The optional grid v2 getter
-lends a generation-bound identical-spin density-and-gradient witness from the
+All registered unpolarized stationary consumers have a bound-point lowering.
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN=1` opts these consumers into candidate execution;
+without this opt-in only the already-qualified exact 3/4-exchange, 1-correlation
+composition retains its bound-point default and subnormal policy. See the
+[registry-wide qualification contract](../maintainer/xc_equal_spin_qualification.md).
+The optional grid v2 getter lends a generation-bound identical-spin feature witness from the
 owned density producer. The optional stationary resident-weight enqueue v2
 rejects stale generations and unknown flags before geometry work. Selection
 also requires precomputed phased storage, sufficient atom scratch and no
