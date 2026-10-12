@@ -198,7 +198,7 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
                     f"     {'true' if item['stationary_second_order'] else 'false'},",
                     f"     {force_profiles_cpp},",
                     f"     {len(force_profiles)}U,",
-                    f"     {{{cpp_fast_path_capabilities(item)}}},
+                    f"     {{{cpp_fast_path_capabilities(item)}}},",
                     f"     {{{ids_cpp}}},",
                     f"     {{{coeffs_cpp}}},",
                     f"     {len(component_ids)}U,",
