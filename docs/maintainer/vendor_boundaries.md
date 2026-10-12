@@ -23,6 +23,16 @@ settings. The enclosing device/stream owner settles work and explicitly resets
 handles before releasing its stream or restoring the caller's device. The shared
 service neither allocates numeric workspace nor synchronizes.
 
+The streamed metric-panel transform (`df_generated_tiles.hpp`) and SCF
+density-seed reconstruction (`df_scf_factor.cpp`) now submit their explicit
+column-major FP64 views through `scf_matrix_product_view` in this existing
+provider adapter. The scientific owners still specify transpose, M/N/K,
+physical leading dimensions and alpha/beta, including the rank-truncated
+Gram reconstruction and split-panel accumulation. The adapter borrows the
+prepared BLAS context/stream, introduces no allocations or provider choice,
+and maps library failure to the same `generativeqc_status` and context.
+Both former direct-vendor source entries are retired from the manifest.
+
 Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation
 selectors remain classified as migration work.

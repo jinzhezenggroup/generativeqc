@@ -12,6 +12,18 @@ namespace generativeqc::scf::cuda_df {
  * Scientific callers own equation/order semantics; this boundary owns only
  * library submission, strides, accumulation coefficients, and failure mapping.
  */
+/** Borrowed strict-FP64 column-major matrix product for DF SCF owners.
+ * The caller specifies mathematical transposes, M/N/K, physical leading
+ * dimensions and accumulation scalars. This adapter alone submits to the
+ * retained provider; it never allocates, changes the stream/math policy,
+ * reselects a backend, or prepares a handle during CUDA Graph capture.
+ */
+generativeqc_status scf_matrix_product_view(
+    CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,
+    std::size_t columns, std::size_t reduction, const double* left, std::size_t left_ld,
+    const double* right, std::size_t right_ld, double* output, std::size_t output_ld,
+    double alpha, double beta, const char* failure_context, std::string& detail);
+
 generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
                                      std::size_t batch_size, std::size_t nbf, const double* left,
                                      std::size_t left_stride, const double* right,

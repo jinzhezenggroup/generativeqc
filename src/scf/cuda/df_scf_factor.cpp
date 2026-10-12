@@ -131,15 +131,13 @@ generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,
   launch_density_exchange_factor(plan.stream, plan.nbf, rank, state.d_fock, state.d_eigenvalues,
                                  state.d_alpha_factor);
   if (rank) {
-    const double one = 1, zero = 0;
-    const auto n = static_cast<int>(plan.nbf);
     const auto product = trace_call("density_seed_reconstruction", plan.stream, [&] {
-      return cublasDgemm(plan.blas, CUBLAS_OP_N, CUBLAS_OP_T, n, n, static_cast<int>(rank), &one,
-                         state.d_alpha_factor, n, state.d_alpha_factor, n, &zero, state.d_temporary,
-                         n);
+      return scf_matrix_product_view(
+          plan, false, true, plan.nbf, plan.nbf, rank, state.d_alpha_factor, plan.nbf,
+          state.d_alpha_factor, plan.nbf, state.d_temporary, plan.nbf, 1.0, 0.0,
+          "reconstruct density seed", detail);
     });
-    if (product != CUBLAS_STATUS_SUCCESS)
-      return blas_failure(product, "reconstruct density seed", detail);
+    if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
   } else {
     error =
         cudaMemsetAsync(state.d_temporary, 0, plan.matrix_elements * sizeof(double), plan.stream);
