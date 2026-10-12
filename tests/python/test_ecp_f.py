@@ -5,9 +5,16 @@ import typing
 
 import numpy as np
 import pytest
+from _ecp_f_hf_reference import load_reference as load_f_reference
 from generativeqc import Calculator, ResourceBudget
 from generativeqc.ecp import ecp_integrals
-from test_ecp import detached_native, detached_reference, fixture, reference
+from test_ecp import (
+    _record_from_resolved_basis,
+    detached_native,
+    detached_reference,
+    fixture,
+    reference,
+)
 
 
 def require_device(device: typing.Any) -> None:
@@ -92,17 +99,19 @@ def test_f_complete_hf_energy_and_force(
     device: typing.Any, representation: typing.Any, spin: typing.Any
 ) -> None:
     require_device(device)
-    scf = pytest.importorskip("pyscf.scf")
-    atoms, basis, mol = fixture(representation=representation, f_shell=True, spin=spin)
-    oracle = (scf.UHF(mol) if spin else scf.RHF(mol)).run(conv_tol=1e-12)
-    assert oracle.converged
+    atoms, resolved_basis, resolved_ecp, expected = load_f_reference(
+        representation=representation, spin=spin
+    )
+    basis = _record_from_resolved_basis(
+        resolved_basis, resolved_ecp, representation, frozen=True
+    )
     result = Calculator(
         method="uhf" if spin else "rhf", basis=basis, device=device
     ).singlepoint(atoms, charge=spin, multiplicity=spin + 1)
     assert result.converged
-    np.testing.assert_allclose(result.energy, oracle.e_tot, atol=2e-8, rtol=0)
+    np.testing.assert_allclose(result.energy, expected["energy"][0], atol=2e-8, rtol=0)
     np.testing.assert_allclose(
-        result.forces, -oracle.nuc_grad_method().kernel(), atol=2e-6, rtol=0
+        result.forces, np.asarray(expected["forces"]).reshape(2, 3), atol=2e-6, rtol=0
     )
     np.testing.assert_allclose(result.forces.sum(axis=0), 0, atol=2e-7)
 
