@@ -22,6 +22,11 @@ from time import perf_counter
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 
 def digest(path: Path) -> str:
     """Hash source/library provenance without a binary-sized temporary."""
@@ -237,7 +242,7 @@ def main() -> None:
     parser.add_argument("--atoms", required=True, type=int, choices=(3, 48, 96))
     parser.add_argument("--arm", required=True, choices=("core", "huckel"))
     parser.add_argument("--repeat", type=int, default=0)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=raw_output_path)
     measure(parser.parse_args())
 
 
