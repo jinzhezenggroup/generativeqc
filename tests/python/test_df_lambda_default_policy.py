@@ -192,7 +192,7 @@ void check_complete_probe() {
     const auto requested=cap?std::stoull(cap):8U;
     if(result.ccsd_batch_limit!=(requested?requested:32U) ||
        result.resident_krylov!=resident || result.forces!=forces ||
-       result.serial_scratch_reuse || result.ccsd_mixed != false || result.lambda_mixed)
+       !result.serial_scratch_reuse || result.ccsd_mixed != false || result.lambda_mixed)
       throw std::runtime_error("complete probe cap and residency selectors aliased");
   }
   unsetenv("GENERATIVEQC_TEST_CCSD_Q_CAP");
@@ -224,7 +224,9 @@ int main() {
      ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
      !explicit_matrix.parallel_gap || ordinary.request_gap || explicit_matrix.request_gap ||
      ordinary.ccsd_mixed || explicit_matrix.ccsd_mixed ||
-     ordinary.lambda_mixed || explicit_matrix.lambda_mixed) return 3;
+     ordinary.lambda_mixed || explicit_matrix.lambda_mixed ||
+     !ordinary.fused_scalar || !explicit_matrix.fused_scalar ||
+     !ordinary.serial_scratch_reuse || !explicit_matrix.serial_scratch_reuse) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame) ||
      ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30 ||
      ordinary.batch_limit != 32 || explicit_matrix.batch_limit != 8 ||
@@ -457,12 +459,12 @@ int main() {
                       "0","1",tolerance};
     try { (void)select(22,bad);return 38; } catch(const std::invalid_argument&) {}
   }
-  for(const char* fused : {"0", "1"}) for(const char* tolerance : {"auto", "1e-13"}) {
+  for(const char* fused : {"0", "1", "auto"}) for(const char* tolerance : {"auto", "1e-13"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
                            "6","8","0","0","2","1","7","0","0","1","auto",
                            "1","0",tolerance,fused};
     const auto result = select(23,selected);
-    if(result.fused_scalar != (fused[0]=='1') || select(22,selected).fused_scalar) return 39;
+    if(result.fused_scalar != (fused[0]!='0') || !select(22,selected).fused_scalar) return 39;
     if(std::string(tolerance)=="auto" &&
        (result.reference_energy_tolerance != 1e-12 || result.reference_density_tolerance != 1e-11))
       return 40;
@@ -515,12 +517,12 @@ int main() {
     if(select(28,selected).replay_matrix != (replay[0]=='1') ||
        !select(27,selected).replay_matrix || !ordinary.replay_matrix) return 47;
   }
-  for(const char* sharing : {"0", "1"}) {
+  for(const char* sharing : {"0", "1", "auto"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
                            "6","8","0","0","2","1","7","0","0","1","auto",
                            "1","0","auto","0","0","30","1","1","1",sharing};
-    if(select(29,selected).serial_scratch_reuse != (sharing[0]=='1') ||
-       select(28,selected).serial_scratch_reuse || ordinary.serial_scratch_reuse) return 48;
+    if(select(29,selected).serial_scratch_reuse != (sharing[0]!='0') ||
+       !select(28,selected).serial_scratch_reuse || !ordinary.serial_scratch_reuse) return 48;
   }
   for(const char* sharing : {"", "2", "true", "1x"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
