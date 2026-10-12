@@ -119,6 +119,7 @@ int main() {
     )
     result = subprocess.run(
         [str(executable)],
+        check=False,
         capture_output=True,
         text=True,
         timeout=10,
