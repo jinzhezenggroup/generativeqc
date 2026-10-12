@@ -32,7 +32,8 @@ def _generic_method(family: str = "dftb") -> SemiempiricalMethodIR:
         "charge" if dftb else "density_matrix", "atom" if dftb else "ao-pair"
     )
     resource = ParameterResource(
-        "radial:slater-koster" if dftb else "integral:nddo-one-center", "sha256:bound-v1"
+        "radial:slater-koster" if dftb else "integral:nddo-one-center",
+        "sha256:bound-v1",
     )
     nodes = (
         PrimitiveNode(
@@ -67,7 +68,10 @@ def _generic_method(family: str = "dftb") -> SemiempiricalMethodIR:
         ),
         state_fields=(state,),
         primitives=nodes,
-        requested_products=(ProductSpec("energy", 0), ProductSpec("nuclear-gradient", 1)),
+        requested_products=(
+            ProductSpec("energy", 0),
+            ProductSpec("nuclear-gradient", 1),
+        ),
     )
 
 
@@ -108,7 +112,10 @@ def test_real_gfn_graph_binds_parameter_and_state_requirements(name: str) -> Non
             assert DerivativeMechanism.INTEGRAL_ADJOINT in (
                 bound.derivative_mechanisms
             )
-    assert gradient.supported_atomic_numbers == legacy.parameter_set.supported_atomic_numbers
+    assert (
+        gradient.supported_atomic_numbers
+        == legacy.parameter_set.supported_atomic_numbers
+    )
     assert "runtime_executable" not in str(gradient.to_payload())
 
 
@@ -167,7 +174,9 @@ def test_semantic_resource_and_state_changes_invalidate_requirement_identity() -
         method,
         parameter_set=replace(
             method.parameter_set,
-            resources=(replace(method.parameter_set.resources[0], identity="sha256:v2"),),
+            resources=(
+                replace(method.parameter_set.resources[0], identity="sha256:v2"),
+            ),
         ),
     )
     changed_state = replace(
@@ -197,13 +206,17 @@ def test_product_request_and_derivative_semantics_fail_closed() -> None:
         method, requested_products=(ProductSpec("nuclear-gradient", 0),)
     )
     with pytest.raises(InvalidSemiempiricalMethod, match="unsupported"):
-        semiempirical_product_requirements(bad_order, ProductSpec("nuclear-gradient", 0))
+        semiempirical_product_requirements(
+            bad_order, ProductSpec("nuclear-gradient", 0)
+        )
 
     no_energy = replace(
         method, requested_products=(ProductSpec("nuclear-gradient", 1),)
     )
     with pytest.raises(InvalidSemiempiricalMethod, match="requires the total energy"):
-        semiempirical_product_requirements(no_energy, ProductSpec("nuclear-gradient", 1))
+        semiempirical_product_requirements(
+            no_energy, ProductSpec("nuclear-gradient", 1)
+        )
 
     with pytest.raises(TypeError, match="typed ProductSpec"):
         semiempirical_product_requirements(method, "energy")  # type: ignore[arg-type]
