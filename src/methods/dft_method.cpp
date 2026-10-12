@@ -22,6 +22,7 @@
 #include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/dft_method_owner_port.hpp"
 #include "methods/dft_method_preparation.hpp"
 #include "molecule/basis.hpp"
@@ -1914,7 +1915,11 @@ generativeqc_status item_exception_status() {
 /** Independent native KS owners, with ordinary-stream round-robin CUDA work.
  * Geometry is rebuilt per item, while model/basis/charge/spin remain immutable.
  * No HF graph or Python calculation loop participates in this schedule. */
-class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
+class KsPreparedBatch final : public PreparedBatch,
+                              public KsBatchOwnerPort,
+                              public BatchWarmStarts,
+                              public BatchKsTransportDiagnostics,
+                              public BatchDfMetricDiagnostics {
  public:
   KsPreparedBatch(Capabilities capabilities, std::vector<core::System> systems,
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
@@ -2399,16 +2404,6 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  // These profiles describe HF graph/provider layouts, not this method's
-  // ordinary-stream schedule. Absence is explicit at the common interface.
-  std::optional<std::vector<DirectShellClassProfileEntry>> last_direct_shell_class_profile()
-      const override {
-    return std::nullopt;
-  }
-  std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile() const override {
-    return std::nullopt;
-  }
-  std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const override { return {}; }
   std::vector<scf::CudaDensityFittingMetricDiagnostic> last_density_fitting_metric_diagnostics()
       const override {
     std::vector<scf::CudaDensityFittingMetricDiagnostic> result;
@@ -2421,9 +2416,6 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
           result.push_back(diagnostic);
         }
     return result;
-  }
-  std::vector<InactiveEigensolverProfileEntry> last_inactive_eigensolver_profile() const override {
-    return {};
   }
 
  private:

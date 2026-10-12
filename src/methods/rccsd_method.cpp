@@ -22,6 +22,7 @@
 #include "cc/reference_input.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
@@ -867,7 +868,10 @@ class RccsdPrepared final : public PreparedCalculation {
   mutable std::mutex mutex_;
 };
 
-class RccsdPreparedBatch final : public PreparedBatch {
+class RccsdPreparedBatch final : public PreparedBatch,
+                                 public BatchWarmStarts,
+                                 public BatchCorrelationDiagnostics,
+                                 public BatchCcPerformanceDiagnostics {
  public:
   RccsdPreparedBatch(Capabilities capabilities, core::ContextState& context,
                      std::vector<core::System> systems,
@@ -979,21 +983,6 @@ class RccsdPreparedBatch final : public PreparedBatch {
       std::size_t index) const noexcept override {
     if (index >= owners_.size() || !owners_[index]) return {};
     return owners_[index]->execution_resources();
-  }
-  std::optional<std::vector<DirectShellClassProfileEntry>> last_direct_shell_class_profile()
-      const override {
-    return std::nullopt;
-  }
-  std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile() const override {
-    return std::nullopt;
-  }
-  std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const override { return {}; }
-  std::vector<scf::CudaDensityFittingMetricDiagnostic> last_density_fitting_metric_diagnostics()
-      const override {
-    return {};
-  }
-  std::vector<InactiveEigensolverProfileEntry> last_inactive_eigensolver_profile() const override {
-    return {};
   }
 
  private:

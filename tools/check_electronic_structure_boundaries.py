@@ -35,6 +35,11 @@ KNOWN_METHOD_EDGES = {
 # headers. Freeze the exact current edge set so it may shrink while every new
 # post-HF -> SCF dependency is rejected.
 KNOWN_POSTHF_SCF_EDGES = {
+    # Existing CUDA DF response-plan calls previously obtained this declaration
+    # transitively through api/handles.hpp -> methods/method.hpp. Keep the debt
+    # visible at its actual consumer; this is not approval for new SCF coupling.
+    # See 2026-10-12-explicit-posthf-cuda-df-dependency.md in architecture notes.
+    ("posthf/bridge.cpp", "scf/cuda_density_fitting.hpp"),
     ("posthf/bridge.cpp", "scf/cuda_df_gradient.hpp"),
     ("posthf/bridge.cpp", "scf/cuda_one_electron_gradient.hpp"),
     ("posthf/bridge.cpp", "scf/cuda_weighted_eri.hpp"),
