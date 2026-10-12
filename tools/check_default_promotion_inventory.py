@@ -199,6 +199,8 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
         raise ValueError("XC point-batch default drifted from 32 tiles / 32 MiB")
     if not re.search(
         r'point_batch_size\("GENERATIVEQC_CUDA_XC_COMPACT_BATCH",\s*1\)', source
+    ) or not re.search(
+        r'point_batch_size\("GENERATIVEQC_CUDA_XC_RAGGED_BATCH",\s*1\)', source
     ):
         raise ValueError(
             "XC compact contraction default drifted from resource-guarded enablement"
@@ -206,6 +208,7 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
     return {
         "dft-policy:xc-point-batch-auto": relative.as_posix(),
         "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_CUDA_XC_RAGGED_BATCH": relative.as_posix(),
     }
 
 

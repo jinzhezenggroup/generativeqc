@@ -368,7 +368,8 @@ def test_stationary_tau_empty_spin_matches_independent_libxc(
         )
     reference[:, 9:11] = 0.5 * derivatives[3]
     candidate = _evaluate(stationary_points, consumer, False, inputs)
-    # Empty-spin rho/tau variations are not physical tangent directions. Their
+    # At fixed occupation, geometry derivatives do not vary empty-spin rho/tau.
+    # Population-birth directions are a separate contract. These coefficients'
     # finite work-domain extensions differ at the saturated spin boundary, so
     # gate the occupied-spin derivatives independently and all partials against
     # the actual native SCF policy rather than weakening oracle tolerances.

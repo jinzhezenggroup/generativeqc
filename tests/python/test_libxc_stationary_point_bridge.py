@@ -5,6 +5,8 @@ These fixed-feature checks do not certify a converged molecular force endpoint.
 
 from __future__ import annotations
 
+import ctypes as ct
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -158,6 +160,187 @@ def test_imported_point_code_cannot_wrap_to_registered_program(code: int) -> Non
         )
 
 
+@pytest.mark.parametrize(
+    ("name", "tail_energy", "tail_potential", "interior_energy", "interior_potential"),
+    (
+        (
+            "LDA_C_VWN_4",
+            -7.507157336220036e-21,
+            -9.08794956105623e-6,
+            -0.04193907322617088,
+            -0.07581761675210714,
+        ),
+        (
+            "LDA_C_CHACHIYO",
+            -5.81986732777399e-21,
+            -7.054113899082287e-6,
+            -0.04063514652527078,
+            -0.0736011811837693,
+        ),
+        (
+            "LDA_C_PZ_MOD",
+            -7.7127975777928e-21,
+            -9.333867975378661e-6,
+            -0.04143055425676998,
+            -0.07470320169925493,
+        ),
+    ),
+)
+def test_live_restricted_snapshot_uses_unpolarized_worker_in_active_tail(
+    name: str,
+    tail_energy: float,
+    tail_potential: float,
+    interior_energy: float,
+    interior_potential: float,
+) -> None:
+    """PySCF 2.14.0 / Libxc 7.0.0 spin-zero references, not a P2 fold."""
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    calculator = Calculator(
+        method=f"libxc:{name}",
+        basis="sto-3g",
+        device="cpu",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=16, angular_polar=6, angular_azimuth=12)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+    with (
+        calculator.prepare_batch([atoms]) as batch,
+        NativeAO(atoms, basis="sto-3g") as basis,
+    ):
+        batch.execute(strict=True, properties=("energy",))
+        source = StationaryKsState.from_native(batch, basis)._source
+        assert source.functional.spin == "unpolarized"
+        total_rho = np.array([0.0, 2.5e-16, 1.1e-15, 0.62])
+        rho = np.stack((total_rho / 2, total_rho / 2))
+        values = source.evaluate_xc_points(
+            source.functional, rho, np.zeros((2, total_rho.size, 3))
+        )
+        np.testing.assert_array_equal(values["energy"][:2], 0.0)
+        np.testing.assert_array_equal(values["rho"][:, :2], 0.0)
+        np.testing.assert_allclose(values["energy"][2], tail_energy, atol=2e-32, rtol=0)
+        np.testing.assert_allclose(
+            values["rho"][:, 2], tail_potential, atol=2e-14, rtol=0
+        )
+        np.testing.assert_allclose(
+            values["energy"][3], interior_energy, atol=2e-14, rtol=0
+        )
+        np.testing.assert_allclose(
+            values["rho"][:, 3], interior_potential, atol=2e-14, rtol=0
+        )
+        np.testing.assert_array_equal(values["gradient"], 0.0)
+        np.testing.assert_array_equal(values["kinetic"], 0.0)
+
+
+@pytest.mark.parametrize("name", ("GGA_X_APBE", "MGGA_X_LTA"))
+def test_restricted_legacy_domain_preserves_its_scf_continuation(name: str) -> None:
+    library = _native.load_library(device="cpu")
+    ingredients = ("rho", "sigma", "tau") if name == "MGGA_X_LTA" else ("rho", "sigma")
+    rho = np.full((2, 2), 0.31)
+    gradient = np.tile([0.015, -0.01, 0.005], (2, 2, 1))
+    tau = np.full((2, 2), 0.29)
+    arguments = (library, automatic_functional_code(name), rho, gradient, tau)
+    polarized = _scf_xc_points(*arguments, required_ingredients=ingredients)
+    restricted = _scf_xc_points(
+        *arguments, spin="unpolarized", required_ingredients=ingredients
+    )
+    for component in polarized:
+        np.testing.assert_array_equal(restricted[component], polarized[component])
+
+
+@pytest.mark.parametrize("unequal", ("rho", "gradient", "tau"))
+def test_restricted_transport_rejects_unequal_half_features(unequal: str) -> None:
+    features = {
+        "rho": np.full((2, 1), 0.31),
+        "gradient": np.zeros((2, 1, 3)),
+        "tau": np.full((2, 1), 0.29),
+    }
+    features[unequal][0] += 0.01
+    with pytest.raises(ValueError, match="equal half-feature channels"):
+        _scf_xc_points(
+            _native.load_library(device="cpu"),
+            automatic_functional_code("LDA_C_VWN_4"),
+            **features,
+            spin="unpolarized",
+            required_ingredients=("rho",),
+        )
+
+
+def test_restricted_transport_does_not_replay_a_legacy_polarized_library() -> None:
+    library = _native.load_library(device="cpu")
+    legacy = SimpleNamespace(
+        generativeqc_xc_point_batch_v2=library.generativeqc_xc_point_batch_v2,
+        generativeqc_xc_point_batch_v3=library.generativeqc_xc_point_batch_v3,
+    )
+    arguments = (
+        legacy,
+        automatic_functional_code("LDA_C_VWN_4"),
+        np.full((2, 1), 5.5e-16),
+        np.zeros((2, 1, 3)),
+    )
+    assert np.isfinite(
+        _scf_xc_points(*arguments, required_ingredients=("rho",))["energy"]
+    ).all()
+    with pytest.raises(NotImplementedError, match="required semilocal XC point bridge"):
+        _scf_xc_points(*arguments, spin="unpolarized", required_ingredients=("rho",))
+
+
+def test_native_layout_abi_keeps_equal_uks_polarized_and_rejects_bad_rks() -> None:
+    library = _native.load_library(device="cpu")
+    functional = automatic_functional_code("LDA_C_VWN_4")
+    rho = np.full((2, 1), 5.5e-16)
+    gradient = np.zeros((2, 1, 3))
+    tau = np.zeros_like(rho)
+    output = np.empty(11)
+    pointer = ct.POINTER(ct.c_double)
+    bridge = library.generativeqc_xc_point_batch_v4
+    bridge.argtypes = [
+        ct.c_uint32,
+        ct.c_uint32,
+        ct.c_double,
+        ct.c_double,
+        pointer,
+        pointer,
+        pointer,
+        ct.c_size_t,
+        pointer,
+        ct.c_size_t,
+    ]
+    bridge.restype = ct.c_int
+
+    def evaluate(spins: int) -> int:
+        return bridge(
+            functional,
+            spins,
+            1.0,
+            1.0,
+            rho.ctypes.data_as(pointer),
+            gradient.ctypes.data_as(pointer),
+            tau.ctypes.data_as(pointer),
+            1,
+            output.ctypes.data_as(pointer),
+            11,
+        )
+
+    assert evaluate(2) == 0
+    legacy = _scf_xc_points(
+        library, functional, rho, gradient, required_ingredients=("rho",)
+    )
+    np.testing.assert_array_equal(
+        output[:3], [legacy["energy"][0], *legacy["rho"][:, 0]]
+    )
+    assert evaluate(1) == 0
+    assert abs(output[0] - (-7.507157336220036e-21)) <= 2e-32
+    for spins in (0, 3):
+        assert evaluate(spins) == 1
+    for feature in (rho, gradient, tau):
+        original = feature.copy()
+        feature[0] += 0.01
+        assert evaluate(1) == 1
+        feature[...] = original
+
+
 def test_imported_live_snapshot_reaches_actual_stationary_point_model(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -195,7 +378,7 @@ def test_imported_live_snapshot_reaches_actual_stationary_point_model(
         source = state._source
         assert source.functional_code == automatic_functional_code("GGA_X_APBE")
         values = source.evaluate_xc_points(
-            source.functional, np.array([[0.42], [0.31]]), np.zeros((2, 1, 3))
+            source.functional, np.array([[0.365], [0.365]]), np.zeros((2, 1, 3))
         )
         assert all(np.isfinite(value).all() for value in values.values())
         monkeypatch.setattr(_stationary_cpu, "StationaryGradientPlan", observe_plan)

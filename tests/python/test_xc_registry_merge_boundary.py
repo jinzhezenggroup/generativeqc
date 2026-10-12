@@ -79,7 +79,7 @@ def test_d4_domain_is_selected_from_the_electronic_projection(automatic: bool) -
             "_is_pbe_d4_composition": lambda value: False,
             "_split_hybrid_record": lambda value: None,
             "_native_semilocal_record": record,
-            "AUTOMATIC_SCF_DOMAIN": "automatic-domain",
+            "automatic_scf_domain": lambda name: "automatic-domain",
         },
     )
     assert domain(composite) == ("automatic-domain" if automatic else "curated-domain")

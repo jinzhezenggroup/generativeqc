@@ -309,7 +309,7 @@ NATIVE_GRID_ABI_CONTRACT_SHA256 = (
 # Packaged s/p/d targets, profile selection and scientific generation are unchanged;
 # retain the full wiring digest so mutations of either integration fail closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "bc442b9076f4870a998d33908479e2f807b5686a88ff78b5f99538b8bd0eb0f5"
+    "ecd65e075929ef3f01fabab0b40af432dfff8cb26ba8be5f51c90b88b2e128cd"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -425,9 +425,10 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
 # Bind the existing capacity audit to semantic MethodIR/KSOptions identity.
-# Token, metadata-domain, coefficient/spin and exact-grid gates are unchanged.
+# Density-only automatic snapshots now require exact domain 5; legacy automatic
+# and curated domain, token, coefficient/spin and exact-grid gates are retained.
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
+    "985187cc57507421e9c7990c022e50b32b9a0d6d0a39a0507ae9e2df3d7e6573"
 )
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
