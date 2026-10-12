@@ -458,8 +458,15 @@ macro(generativeqc_configure_cuda_backend target)
     # Availability does not promote any public force capability by itself.
     set(_generativeqc_native_stationary_profiles)
     set(_generativeqc_native_stationary_sources)
-    foreach(_native_profile pbe_rks pbe_uks pbe0_rks pbe0_uks)
-      if(_native_profile IN_LIST _generativeqc_stationary_names AND
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+              --list-profiles
+      OUTPUT_VARIABLE _generativeqc_native_stationary_catalog
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      COMMAND_ERROR_IS_FATAL ANY)
+    foreach(_native_profile IN LISTS _generativeqc_stationary_names)
+      if(_native_profile IN_LIST _generativeqc_native_stationary_catalog AND
          GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND
          CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
         list(APPEND _generativeqc_native_stationary_profiles "${_native_profile}")

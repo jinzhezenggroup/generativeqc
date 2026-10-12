@@ -21,13 +21,21 @@ from tools.generate_df_kernels import write_if_changed
 def main() -> None:
     """Build-time only; generation neither loads the runtime nor probes a GPU."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     selection = parser.add_mutually_exclusive_group(required=True)
     selection.add_argument("--profile", choices=NATIVE_STATIONARY_CUDA_PROFILES)
+    selection.add_argument("--list-profiles", action="store_true")
     selection.add_argument(
         "--registry", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
     args = parser.parse_args()
+    if args.list_profiles:
+        if args.output is not None:
+            parser.error("--list-profiles does not write an output file")
+        print(";".join(NATIVE_STATIONARY_CUDA_PROFILES))
+        return
+    if args.output is None:
+        parser.error("generation requires --output")
     source = (
         emit_native_stationary_profile_cuda(args.profile)
         if args.profile

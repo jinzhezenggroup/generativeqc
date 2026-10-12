@@ -801,10 +801,8 @@ std::string_view native_cuda_stationary_profile(const NativeKsExecutionPlan& exe
       options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
       !options.resolved_fock_build ||
       options.resolved_fock_build->backend != scf::FockBackend::Cuda ||
-      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe ||
-      execution_plan.automatic_program || execution_plan.generated_split_hybrid ||
       execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
-      execution_plan.d4_correction || options.semilocal_correlation_scale != 1.0)
+      execution_plan.d4_correction)
     return {};
   const auto& spec = options.resolved_fock_build->spec;
   const auto admitted_term = [](const scf::FockTermSpec& term) {
@@ -815,13 +813,21 @@ std::string_view native_cuda_stationary_profile(const NativeKsExecutionPlan& exe
       !admitted_term(spec.coulomb) || !admitted_term(spec.exchange) ||
       execution_plan.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
     return {};
-  const bool hybrid = spec.exchange.present;
-  if (options.semilocal_exchange_scale != (hybrid ? 0.75 : 1.0) ||
-      (hybrid && spec.exchange.coefficient != (execution_plan.spin_channels == 1 ? -0.125 : -0.25)))
-    return {};
-  const auto profile = hybrid ? (execution_plan.spin_channels == 1 ? "pbe0_rks" : "pbe0_uks")
-                              : (execution_plan.spin_channels == 1 ? "pbe_rks" : "pbe_uks");
-  return dft::cuda_stationary_binding(profile) ? profile : std::string_view{};
+  // Convert the authenticated Fock density convention back to the MethodIR
+  // energy weight before matching the generated complete model contract.
+  const double exchange =
+      spec.exchange.present
+          ? -spec.exchange.coefficient * (execution_plan.spin_channels == 1 ? 2.0 : 1.0)
+          : 0.0;
+  const dft::CudaStationaryModel model{xc_functional_code(execution_plan),
+                                       scf_domain_version(execution_plan),
+                                       execution_plan.spin_channels,
+                                       grid.partition_iterations,
+                                       options.semilocal_exchange_scale,
+                                       options.semilocal_correlation_scale,
+                                       exchange};
+  const auto* binding = dft::cuda_stationary_binding(model);
+  return binding ? binding->profile : std::string_view{};
 }
 
 class KsPreparedCalculation final : public PreparedCalculation {
@@ -895,8 +901,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
   /** Force capability belongs to the immutable prepared context, never the
    * method-global manifest. CPU fitted/Direct PBE/PBE0 and RKS B3LYP retain
    * their existing derivative admission; CUDA requires a complete compiled
-   * s/p Direct PBE/PBE0 profile and valid bounded capacity. Corrections and
-   * other graphs remain fail-closed. */
+   * s/p Direct graph with a matching linked binding and valid bounded capacity.
+   * Corrections and graphs without a complete provider inventory remain fail-closed. */
   [[nodiscard]] bool supports_native_gga_force() const noexcept {
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
       const auto profile = admitted_cuda_stationary_profile();

@@ -334,6 +334,74 @@ def test_stationary_equal_spin_matches_independent_libxc(
     )
 
 
+def test_stationary_tau_empty_spin_matches_independent_libxc(
+    stationary_points: ctypes.CDLL,
+) -> None:
+    """The force point shares SCF's Libxc work-domain, not an interior-only DAG."""
+    pytest.importorskip("pyscf")
+    from pyscf.dft import libxc
+
+    consumer = next(
+        index for index, (code, _) in enumerate(STATIONARY_CONSUMERS) if code == 2
+    )
+    inputs = np.array(
+        [
+            [0.31, 0.0, 0.03, -0.02, 0.01, 0.0, 0.0, 0.0, 0.2, 0.0],
+            [0.0, 0.31, 0.0, 0.0, 0.0, 0.03, -0.02, 0.01, 0.0, 0.2],
+            [0.0] * 10,
+        ]
+    )
+    density = np.zeros((2, 6, len(inputs)))
+    density[:, 0] = inputs[:, :2].T
+    density[:, 1:4] = inputs[:, 2:8].reshape(-1, 2, 3).transpose(1, 2, 0)
+    density[:, 5] = inputs[:, 8:10].T
+    exc, derivatives, _, _ = libxc.eval_xc("R2SCAN", density, spin=1, deriv=1)
+    reference = np.zeros((len(inputs), 11))
+    reference[:, 0] = inputs[:, :2].sum(axis=1) * exc
+    reference[:, 1:3] = derivatives[0]
+    for spin in range(2):
+        reference[:, 3 + 3 * spin : 6 + 3 * spin] = (
+            2
+            * derivatives[1][:, 2 * spin, None]
+            * inputs[:, 2 + 3 * spin : 5 + 3 * spin]
+            + derivatives[1][:, 1, None] * inputs[:, 5 - 3 * spin : 8 - 3 * spin]
+        )
+    reference[:, 9:11] = 0.5 * derivatives[3]
+    candidate = _evaluate(stationary_points, consumer, False, inputs)
+    # Empty-spin rho/tau variations are not physical tangent directions. Their
+    # finite work-domain extensions differ at the saturated spin boundary, so
+    # gate the occupied-spin derivatives independently and all partials against
+    # the actual native SCF policy rather than weakening oracle tolerances.
+    admissible = np.ones(candidate.shape, dtype=bool)
+    for spin in range(2):
+        empty = (inputs[:, spin] == 0) & (inputs[:, :2].sum(axis=1) > 0)
+        admissible[empty, 1 + spin] = False
+        admissible[empty, 9 + spin] = False
+    np.testing.assert_allclose(
+        candidate[admissible], reference[admissible], rtol=2e-10, atol=2e-10
+    )
+    from generativeqc import _native
+    from generativeqc._ks_snapshot import _scf_xc_points
+
+    native = _scf_xc_points(
+        _native.load_library(device="cpu"),
+        2,
+        inputs[:, :2].T,
+        inputs[:, 2:8].reshape(-1, 2, 3).transpose(1, 0, 2),
+        inputs[:, 8:10].T,
+        required_ingredients=("rho", "sigma", "tau"),
+    )
+    actual_scf = np.column_stack(
+        (
+            native["energy"],
+            native["rho"].T,
+            native["gradient"].transpose(1, 0, 2).reshape(-1, 6),
+            native["kinetic"].T,
+        )
+    )
+    np.testing.assert_allclose(candidate, actual_scf, rtol=2e-13, atol=2e-13)
+
+
 @pytest.mark.parametrize(("code", "spec"), STATIONARY_CONSUMERS)
 def test_stationary_capability_depends_on_spin_not_a_named_method(
     code: int, spec: FunctionalSpec

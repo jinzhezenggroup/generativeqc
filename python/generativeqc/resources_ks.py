@@ -33,7 +33,7 @@ from .basis import BasisSet
 from .basis_capabilities import require_basis
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
-from .ks import resolve_ks_options
+from .ks import _native_semilocal_code, resolve_ks_options
 from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
@@ -320,9 +320,19 @@ def _cuda_item_inventory(
     *,
     diis_history: typing.Any,
     requires_first_ao_derivatives: typing.Any,
+    functional_code: int,
+    requires_tau: bool,
     tile: typing.Any,
 ) -> typing.Any:
-    query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
+    query = getattr(library, "generativeqc_resource_ks_cuda_v2", None)
+    selector = functional_code
+    if query is None:
+        if requires_tau:
+            raise NotImplementedError(
+                "tau-dependent CUDA KS planning requires point-program allocation inventory v2"
+            )
+        query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
+        selector = int(requires_first_ao_derivatives)
     if query is None:
         raise NotImplementedError(
             "native library has no KS CUDA allocation inventory v1"
@@ -336,7 +346,7 @@ def _cuda_item_inventory(
         item["grid_points"],
         diis_history,
         item["spins"],
-        int(requires_first_ao_derivatives),
+        selector,
         tile,
     )
     if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
@@ -596,7 +606,8 @@ def ks_resource_request(
             "automatic Libxc KS resource planning currently supports CPU only"
         )
     automatic_cpu = automatic_name is not None
-    if "tau" in model.functional.ingredients and not automatic_cpu:
+    requires_tau = "tau" in model.functional.ingredients
+    if requires_tau and not automatic_cpu and backend == "cpu":
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
         )
@@ -895,6 +906,8 @@ def ks_resource_request(
                     item,
                     diis_history=diis_history,
                     requires_first_ao_derivatives=requires_first_ao_derivatives,
+                    functional_code=_native_semilocal_code(model.method_ir),
+                    requires_tau=requires_tau,
                     tile=model.tile_points,
                 )
                 for item in items

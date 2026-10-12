@@ -17,6 +17,7 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     NATIVE_STATIONARY_CUDA_PROFILES,
     emit_native_stationary_profile_cuda,
     emit_native_stationary_registry_cpp,
+    native_stationary_model,
 )
 
 if TYPE_CHECKING:
@@ -77,19 +78,114 @@ def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
     assert f"native_exchange_slot = {exchange_slot};" in source
 
 
-def test_native_registry_contains_only_built_profiles() -> None:
-    selected = ("pbe0_uks", "pbe_rks")
+@pytest.mark.parametrize("selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks")])
+def test_native_registry_contains_only_built_profiles(
+    selected: tuple[str, ...], tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute emitted dispatch; labels cannot admit a different scientific graph."""
     registry = emit_native_stationary_registry_cpp(selected)
     assert registry == emit_native_stationary_registry_cpp(tuple(reversed(selected)))
-    assert 'profile == "pbe0_uks"' in registry
-    assert 'profile == "pbe_rks"' in registry
-    assert 'profile == "pbe_uks"' not in registry
-    assert "return nullptr;" in emit_native_stationary_registry_cpp(())
-    for invalid in (("pbe_rks", "pbe_rks"), ("lda_rks",)):
+    definitions = []
+    for profile in selected:
+        plan = _qualified_aot_profile(profile).plan
+        functional, domain, exchange_scale, correlation_scale = native_stationary_model(
+            profile
+        )
+        exchange = float(plan.exchange.coefficient) if plan.exchange else 0.0
+        definitions.append(
+            f"""
+namespace generativeqc::dft {{
+const CudaStationaryBinding& native_stationary_profile_{profile}() {{
+  static const CudaStationaryBinding binding = [] {{
+    CudaStationaryBinding result;
+    result.profile = "{profile}";
+    result.model = {{{functional}, {domain}, {plan.spin_blocks}, 3,
+                     {float(exchange_scale)!r}, {float(correlation_scale)!r}, {exchange!r}}};
+    return result;
+  }}();
+  return binding;
+}}
+}}
+"""
+        )
+    source = tmp_path / "registry.cpp"
+    source.write_text(
+        registry
+        + "\n".join(definitions)
+        + f"""
+#include <limits>
+int main() {{
+  using namespace generativeqc::dft;
+  const auto bindings = cuda_stationary_bindings();
+  if (bindings.size() != {len(selected)}) return 1;
+  if (cuda_stationary_binding("unbuilt_profile")) return 2;
+  for (const auto* binding : bindings) {{
+    if (cuda_stationary_binding(binding->profile) != binding ||
+        cuda_stationary_binding(binding->model) != binding) return 3;
+    auto model = binding->model;
+    model.functional += 10000;
+    if (cuda_stationary_binding(model)) return 4;
+    model = binding->model;
+    ++model.domain_version;
+    if (cuda_stationary_binding(model)) return 5;
+    model = binding->model;
+    ++model.partition_iterations;
+    if (cuda_stationary_binding(model)) return 6;
+    model = binding->model;
+    model.spin_blocks = 0;
+    if (cuda_stationary_binding(model)) return 7;
+    model = binding->model;
+    model.semilocal_exchange_scale += 0.125;
+    if (cuda_stationary_binding(model)) return 8;
+    model = binding->model;
+    model.semilocal_correlation_scale += 0.125;
+    if (cuda_stationary_binding(model)) return 9;
+    model = binding->model;
+    model.full_range_exchange += 0.125;
+    if (cuda_stationary_binding(model)) return 10;
+    model = binding->model;
+    model.full_range_exchange = std::numeric_limits<double>::quiet_NaN();
+    if (cuda_stationary_binding(model)) return 11;
+  }}
+}}
+"""
+    )
+    binary = tmp_path / "registry"
+    native_cxx.build_executable(
+        [source], binary, compile_args=["-std=c++20", f"-I{ROOT / 'src'}"]
+    )
+    subprocess.run([str(binary)], check=True, timeout=10)
+
+
+def test_native_registry_rejects_unknown_or_duplicate_profiles() -> None:
+    for invalid in (("pbe_rks", "pbe_rks"), ("unknown_rks",)):
         with pytest.raises(ValueError):
             emit_native_stationary_registry_cpp(invalid)
     with pytest.raises(ValueError):
-        emit_native_stationary_profile_cuda("b3lyp_rks")
+        emit_native_stationary_profile_cuda("unknown_rks")
+
+
+@pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
+def test_native_model_matches_independent_native_ks_lowering(profile: str) -> None:
+    """The existing SDK transport lowerer independently checks emitted point scales."""
+    from generativeqc.ks import (
+        _native_semilocal_code,
+        _scf_domain_for_ir,
+        ks_coefficients,
+    )
+    from generativeqc_compiler.dft._generated_native_semilocal import (
+        SCF_DOMAIN_BY_VERSION,
+    )
+
+    plan = _qualified_aot_profile(profile).plan
+    functional, domain, exchange_scale, correlation_scale = native_stationary_model(
+        profile
+    )
+    assert functional == _native_semilocal_code(plan.method)
+    assert SCF_DOMAIN_BY_VERSION[domain] == _scf_domain_for_ir(plan.method)
+    actual_exchange, actual_correlation, _ = ks_coefficients(plan.method)
+    assert float(exchange_scale) == actual_exchange
+    assert float(correlation_scale) == actual_correlation
 
 
 def test_complete_controller_uses_resident_providers_and_emitted_reduction() -> None:

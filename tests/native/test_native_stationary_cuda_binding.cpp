@@ -373,9 +373,7 @@ int main() {
     if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
     require(cudaSetDevice(0) == cudaSuccess, "device selection failed");
     bool available = false;
-    for (const auto* profile : {"pbe_rks", "pbe_uks", "pbe0_rks", "pbe0_uks"}) {
-      const auto* binding = generativeqc::dft::cuda_stationary_binding(profile);
-      if (!binding) continue;
+    for (const auto* binding : generativeqc::dft::cuda_stationary_bindings()) {
       available = true;
       profile_sources(*binding);
       controller_admission(*binding);

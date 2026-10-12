@@ -313,21 +313,25 @@ int generativeqc_ks_resource_inventory_version_v1() {
   return sizeof(void*) == 8 && sizeof(generativeqc::dft::ScfIteration) <= 128 ? 1 : 0;
 }
 
-/** Pure shape bridge to allocator-owned KS/XC and common #202 direct-J
- * layouts. The XC slot combines the borrowed-grid arena and its retained
- * MolecularGrid owner. It never constructs a grid, density or CUDA context. */
-int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
+/** Point-program-aware inventory, including tau-dependent work/feature panels.
+ * This shape-only query shares the allocator's actual layout and creates no
+ * CUDA context. XC includes the borrowed-grid arena and retained MolecularGrid;
+ * J/K uses the existing allocator-owned first-order provider storage.
+ * The legacy v1 boolean selector remains a compatible adapter. */
+int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::size_t shells,
                                      std::size_t primitives, std::size_t points,
-                                     std::size_t diis_history, std::size_t spins, std::size_t pbe,
-                                     std::size_t tile_points, std::uint64_t* output,
-                                     std::size_t count) {
-  if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) || pbe > 1) return 1;
+                                     std::size_t diis_history, std::size_t spins,
+                                     std::size_t functional, std::size_t tile_points,
+                                     std::uint64_t* output, std::size_t count) {
+  if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) ||
+      functional > std::numeric_limits<std::uint32_t>::max())
+    return 1;
 #if GENERATIVEQC_HAS_CUDA
   try {
     const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
     const auto xc = generativeqc::dft::cuda_xc_layout_shape(
-        atoms, primitives, nao, points, pbe != 0, spins == 2, tile_points, false,
-        generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+        atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
+        tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
     // The shared grid retains xyz, partition weights and atomic measures.
     // A nonborrowed XC arena owns only the first four arrays and cannot stand
     // in for this five-array lifetime, even when XC reads only points/weights.
@@ -348,6 +352,16 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
 #else
   return 2;
 #endif
+}
+
+int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
+                                     std::size_t primitives, std::size_t points,
+                                     std::size_t diis_history, std::size_t spins, std::size_t pbe,
+                                     std::size_t tile_points, std::uint64_t* output,
+                                     std::size_t count) {
+  if (pbe > 1) return 1;
+  return generativeqc_resource_ks_cuda_v2(nao, atoms, shells, primitives, points, diis_history,
+                                          spins, pbe, tile_points, output, count);
 }
 
 /** Shape-only opaque matrix-provider reservation, separate from explicit arenas.

@@ -78,6 +78,7 @@ def planning_library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         generativeqc_ks_resource_inventory_version_v1=lambda: 1,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_resource_ks_cuda_v1=state,
+        generativeqc_resource_ks_cuda_v2=state,
         generativeqc_resource_quadrature_cuda_v1=quadrature,
         generativeqc_resource_ks_matrix_provider_cuda_v1=matrix,
         generativeqc_resource_ks_stationary_cuda_v1=stationary,
@@ -89,7 +90,14 @@ def planning_library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     )
 
 
-@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks", "pbe-uks", "pbe0-uks"))
+@pytest.mark.parametrize(
+    "method",
+    tuple(
+        f"{functional}-{spin}"
+        for functional in ("lda", "pbe", "pbe0", "r2scan", "b3lyp")
+        for spin in ("rks", "uks")
+    ),
+)
 def test_native_fleet_candidates_reserve_all_consumers(
     planning_library: SimpleNamespace, method: str
 ) -> None:
@@ -98,7 +106,7 @@ def test_native_fleet_candidates_reserve_all_consumers(
         method=method,
         backend="cuda",
         library=planning_library,
-        ks_options=KsOptions(grid=GridSpec()) if "pbe0" in method else None,
+        ks_options=KsOptions(grid=GridSpec()),
     )
     assert not request.unsupported_reason
     cached = plan_resources([request], ResourceBudget()).require_feasible()
@@ -134,6 +142,18 @@ def test_native_fleet_candidates_reserve_all_consumers(
         options = descriptor.ks_options.contents
         assert options.spin_channels == (2 if method.endswith("uks") else 1)
         assert descriptor.precision_mode == _native.PRECISION_FP64
+
+
+def test_tau_planning_refuses_legacy_boolean_inventory(
+    planning_library: SimpleNamespace,
+) -> None:
+    """A GGA-sized legacy panel must never admit a larger tau-dependent owner."""
+    del planning_library.generativeqc_resource_ks_cuda_v2
+    request = resources_ks.ks_resource_request(
+        [H2], method="r2scan-rks", backend="cuda", library=planning_library
+    )
+    assert not request.candidates
+    assert "point-program allocation inventory v2" in request.unsupported_reason
 
 
 def test_mixed_admission_preserves_entire_legacy_fleet(

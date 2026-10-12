@@ -2,12 +2,22 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include "scf/cuda_derivative_sources.hpp"
 
 namespace generativeqc::dft {
 struct GridTaskView;
+
+/** Exact scientific execution key emitted from MethodIR and point metadata.
+ * Profile names are diagnostic/build labels only. Full-range exchange is the
+ * energy weight, independent of the restricted/unrestricted Fock convention. */
+struct CudaStationaryModel {
+  std::uint32_t functional{}, domain_version{}, spin_blocks{}, partition_iterations{};
+  double semilocal_exchange_scale{}, semilocal_correlation_scale{}, full_range_exchange{};
+  bool operator==(const CudaStationaryModel&) const = default;
+};
 
 /** Build-time binding to one compiler-owned stationary plan.
  * No runtime compiler, Python module, or unauthenticated artifact lookup is
@@ -40,9 +50,16 @@ struct CudaStationaryBinding {
   int (*source_span)(void*, std::size_t, std::size_t, double*, std::size_t, char*, std::size_t){};
   int (*metrics)(void*, std::uint64_t*, std::size_t){};
   void (*destroy)(void*){};
+  CudaStationaryModel model{};
 };
 
 /** Return only statically linked profiles, or nullptr for an unavailable one. */
 const CudaStationaryBinding* cuda_stationary_binding(std::string_view profile) noexcept;
+
+/** Match the complete point/spin/weight contract, never a functional name. */
+const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel& model) noexcept;
+
+/** Enumerate linked bindings without maintaining a second method inventory. */
+std::span<const CudaStationaryBinding* const> cuda_stationary_bindings() noexcept;
 
 }  // namespace generativeqc::dft

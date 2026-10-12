@@ -3,6 +3,9 @@
 Status: implemented, with broader cutover qualification still outstanding
 Date: 2026-10-12
 
+The original name-bound eligibility is superseded by
+[graph-matched admission](2026-10-12-graph-matched-native-cuda-forces.md).
+
 ## Problem
 
 The private complete stationary controller retains numeric arenas and an opaque

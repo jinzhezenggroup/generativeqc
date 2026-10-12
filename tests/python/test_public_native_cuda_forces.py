@@ -5,12 +5,14 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
 import pytest
 from generativeqc import Calculator, KsOptions, ResourceBudget, _native
 from generativeqc_compiler.common.resources import CpuResourceObservation
+from generativeqc_compiler.method import resolve_method
 from test_dft_complete_cpu import (
     ATOMS,
     GRID,
@@ -24,6 +26,16 @@ pytestmark = pytest.mark.skipif(
     reason="requires an explicitly allocated Slurm GPU job",
 )
 H2 = [(1, (0.12, -0.09, -0.71)), (1, (-0.08, 0.13, 0.79))]
+REFERENCE_XC = {
+    "lda": "LDA_X,LDA_C_PW",
+    "pbe": "PBE",
+    "pbe0": "PBE0",
+    "r2scan": "R2SCAN",
+    "b3lyp": "B3LYP",
+}
+REFERENCE_METHODS = tuple(
+    f"{functional}-{spin}" for functional in REFERENCE_XC for spin in ("rks", "uks")
+)
 
 
 def calculator(method: str, **options: Any) -> Calculator:
@@ -56,16 +68,18 @@ def forbid_python_force(batch: Any, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
-    "method,default_grid",
-    [(method, False) for method in ("pbe-rks", "pbe0-rks", "pbe-uks", "pbe0-uks")]
-    + [("pbe-rks", True), ("pbe-uks", True)],
+    "method,default_grid,empty_spin",
+    [(method, False, False) for method in REFERENCE_METHODS]
+    + [("pbe-rks", True, False), ("pbe-uks", True, False)]
+    + [(method, False, True) for method in REFERENCE_METHODS if method.endswith("uks")],
 )
 def test_public_native_force_matches_independent_grid_and_final_state(
-    method: str, default_grid: bool
+    method: str, default_grid: bool, empty_spin: bool
 ) -> None:
     """Accept both the explicit fixture grid and actual public v2 defaults."""
     pytest.importorskip("pyscf", reason="independent native CUDA acceptance")
     unrestricted = method.endswith("uks")
+    atoms = H2 if empty_spin else ATOMS
     charge, multiplicity = (1, 2) if unrestricted else (0, 1)
     options = {} if default_grid else {"ks_options": KsOptions(grid=GRID)}
     calc = calculator(method, **options)
@@ -73,15 +87,15 @@ def test_public_native_force_matches_independent_grid_and_final_state(
     # matrices. Compare identical cold trajectories instead of mistaking
     # pre-existing initial-guess work for a final D/W export by the force.
     with calc.prepare_batch(
-        [ATOMS], charges=[charge], multiplicities=[multiplicity]
+        [atoms], charges=[charge], multiplicities=[multiplicity]
     ) as energy_batch:
         baseline = energy_batch.execute(strict=True, properties=("energy",)).items[0]
         baseline_movement = energy_batch.ks_transport_diagnostics[0]
     with (
         calc.prepare_batch(
-            [ATOMS], charges=[charge], multiplicities=[multiplicity]
+            [atoms], charges=[charge], multiplicities=[multiplicity]
         ) as batch,
-        NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
+        NativeAO(atoms, charge=charge, multiplicity=multiplicity) as basis,
     ):
         assert batch._native_dft_force_eligible()
         with pytest.MonkeyPatch.context() as patch:
@@ -97,7 +111,7 @@ def test_public_native_force_matches_independent_grid_and_final_state(
             basis,
             state,
             method,
-            xc="PBE0" if "pbe0" in method else "PBE",
+            xc=REFERENCE_XC[method.rsplit("-", 1)[0]],
             return_mean_field=True,
         )
         assert result.energy == pytest.approx(energy, abs=2e-9)
@@ -137,7 +151,29 @@ def test_public_native_force_matches_independent_grid_and_final_state(
                 )
 
 
-@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks", "pbe-uks", "pbe0-uks"))
+@pytest.mark.parametrize(
+    "method,carrier", (("r2scan-rks", "r2scan-rks"), ("b3lyp-rks", "pbe-rks"))
+)
+def test_native_force_admission_uses_graph_not_method_label(
+    method: str, carrier: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A renamed graph retains its owner through an ingredient-compatible SDK carrier."""
+    canonical = calculator(method, ks_options=KsOptions(grid=GRID))
+    expected = canonical.singlepoint(H2, properties=("energy", "forces"))
+    graph = replace(
+        resolve_method(method.rsplit("-", 1)[0].upper(), spin="unpolarized"),
+        identifier="not-a-functional-dispatch-key",
+    )
+    renamed = calculator(carrier, ks_options=KsOptions(composition=graph, grid=GRID))
+    with renamed.prepare_batch([H2]) as batch:
+        assert batch._native_dft_force_eligible()
+        forbid_python_force(batch, monkeypatch)
+        actual = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+    assert actual.energy == pytest.approx(expected.energy, abs=2e-9)
+    np.testing.assert_allclose(actual.forces, expected.forces, atol=2e-7, rtol=0)
+
+
+@pytest.mark.parametrize("method", REFERENCE_METHODS)
 def test_native_minimum_fleet_budget_survives_cold_warm_move_and_rollback(
     method: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -153,8 +189,6 @@ def test_native_minimum_fleet_budget_survives_cold_warm_move_and_rollback(
     minimum = next(
         item for item in request.candidates if item.name.endswith("-minimum")
     )
-    from dataclasses import replace
-
     from generativeqc_compiler.common.resources import plan_resources
 
     minimum_plan = plan_resources(

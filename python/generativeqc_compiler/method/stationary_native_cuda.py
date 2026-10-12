@@ -9,18 +9,61 @@ from __future__ import annotations
 
 import json
 import re
+from fractions import Fraction
 
 from generativeqc_compiler.common.paths import asset_path
+from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 
+from .ks_execution import compile_ks_execution_plan
 from .stationary_cuda import (
+    QUALIFIED_PARTITION_ITERATIONS,
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     _qualified_aot_profile,
     emit_stationary_profile_aot_wrapper_cuda,
     qualified_sp_requests,
     stationary_runtime_sources,
 )
 
-NATIVE_STATIONARY_CUDA_PROFILES = ("pbe_rks", "pbe_uks", "pbe0_rks", "pbe0_uks")
+NATIVE_STATIONARY_CUDA_PROFILES = tuple(
+    profile
+    for profile in QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+    if (plan := _qualified_aot_profile(profile).plan).source_names
+    == stationary_runtime_sources(plan)
+)
+
+
+def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]:
+    """Derive native point identity/scales from the graph and generated metadata.
+
+    Descriptive method/profile names never decide scientific admission. Fixed
+    point programs require their exact component graph; scalable programs carry
+    the actual outer X/C weights, including nonstandard hybrid compositions.
+    """
+    plan = compile_ks_execution_plan(_qualified_aot_profile(profile).plan.method)
+    functional = plan.semilocal.functional
+    actual = dict(functional.components)
+    for record in SEMILOCAL_FAMILIES:
+        expected = {
+            name: Fraction(coefficient) for name, coefficient in record["components"]
+        }
+        if functional.range_omega != Fraction(record["range_omega"]):
+            continue
+        if record["coefficient_policy"] == "native-scales":
+            if not actual.keys() <= expected.keys():
+                continue
+            exchange, correlation = (
+                actual.get(name, Fraction(0)) / coefficient
+                for name, coefficient in expected.items()
+            )
+        elif actual == expected:
+            exchange = correlation = Fraction(1)
+        else:
+            continue
+        if exchange < 0 or correlation < 0:
+            raise ValueError("native stationary point scales must be nonnegative")
+        return record["code"], record["domain_version"], exchange, correlation
+    raise ValueError("stationary graph has no native semilocal execution metadata")
 
 
 def emit_native_stationary_profile_cuda(profile: str) -> str:
@@ -72,6 +115,11 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     )
     nuclear_kind = qualified_sp_requests().index(("nuclear", ()))
     exchange = exact_cuda_literal(plan.exchange.coefficient if plan.exchange else 0)
+    functional, domain, exchange_scale, correlation_scale = native_stationary_model(
+        profile
+    )
+    if functional != selected.functional:
+        raise ValueError("stationary profile and native point selector disagree")
     metadata = f"""
 namespace generativeqc_stationary_cuda {{
 constexpr size_t native_one_electron_slot = {slots["one_electron"]};
@@ -96,7 +144,11 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
       stationary_jets > 1 ? 11U : 1U,
       native_numeric_bytes, native_create, native_topology, native_reset_geometry, native_nuclear,
       native_consume_integrals, native_geometry, native_finish_gradient,
-      native_source_span, native_metrics, native_destroy}};
+      native_source_span, native_metrics, native_destroy,
+      {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
+       {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
+       {exchange}}}
+  }};
   return binding;
 }}
 }}
@@ -125,11 +177,32 @@ def emit_native_stationary_registry_cpp(profiles: tuple[str, ...]) -> str:
             f"const CudaStationaryBinding& native_stationary_profile_{profile}();"
         )
     lines.append(
-        "const CudaStationaryBinding* cuda_stationary_binding(std::string_view profile) noexcept {"
+        "std::span<const CudaStationaryBinding* const> cuda_stationary_bindings() noexcept {"
     )
-    for profile in sorted(profiles):
-        lines.append(
-            f'  if (profile == "{profile}") return &native_stationary_profile_{profile}();'
+    if profiles:
+        lines.append("  static const CudaStationaryBinding* const bindings[] = {")
+        lines.extend(
+            f"    &native_stationary_profile_{profile}(),"
+            for profile in sorted(profiles)
         )
-    lines.extend(("  return nullptr;", "}", "}", ""))
+        lines.extend(("  };", "  return bindings;"))
+    else:
+        lines.append("  return {};")
+    lines.extend(
+        (
+            "}",
+            "const CudaStationaryBinding* cuda_stationary_binding(std::string_view profile) noexcept {",
+            "  for (const auto* binding : cuda_stationary_bindings())",
+            "    if (profile == binding->profile) return binding;",
+            "  return nullptr;",
+            "}",
+            "const CudaStationaryBinding* cuda_stationary_binding(const CudaStationaryModel& model) noexcept {",
+            "  for (const auto* binding : cuda_stationary_bindings())",
+            "    if (model == binding->model) return binding;",
+            "  return nullptr;",
+            "}",
+            "}",
+            "",
+        )
+    )
     return "\n".join(lines)

@@ -176,7 +176,7 @@ consumers. Numeric arena checks alone do not establish complete endpoint RSS or
 library/context allocation bounds.
 
 The private `dft_cuda_native_stationary_gradient` qualification endpoint now
-composes the complete all-electron Direct PBE/PBE0 RKS/UKS source inventory in
+composes the complete all-electron Direct semilocal/global-hybrid source inventory in
 C++. Statically isolated bindings reuse the existing compiler-emitted profile
 and shared primitive objects; there is no runtime artifact loader or compiler.
 The native grid owner consumes the accepted resident spin density and lends
@@ -188,8 +188,13 @@ coverage, all integral/nuclear sources, finite device status and the unchanged
 final token. Failed requests leave the caller's previous output untouched.
 
 The prepared SDK/batch force consumer uses the same complete controller for
-compiled strict-FP64, all-electron s/p Direct PBE/PBE0 RKS/UKS contexts with
-full-range exact J/K and three partition iterations. Admission shares one native
+compiled strict-FP64, all-electron s/p Direct RKS/UKS contexts with a matching
+compiler-emitted point-program/spin/domain/X/C/exact-exchange contract,
+full-range exact J/K and three partition iterations. The native inventory is
+derived from the compiler's stationary AOT catalog and complete source coverage,
+not a second functional-name whitelist. A renamed equivalent MethodIR keeps the
+same admission; changed coefficients or point domains do not reuse another graph's
+binding. Admission shares one native
 rule with descriptor sizing, remains per prepared item, and does not add a
 method-global force bit. DF, ECP, wider angular momentum, other precision,
 range-separated/nonlocal/dispersion and unavailable compiled profiles do not
@@ -198,6 +203,11 @@ Python routes only fleets whose every prepared item advertises forces; remaining
 compositions keep their existing qualified consumer. The default SCF and
 initial-guess trajectories are unchanged, including their existing setup
 transfers; the native force itself does not export a final dense D/W frame.
+
+CUDA resource planning uses the point-program-aware allocation inventory v2, so
+tau-dependent methods charge the actual XC work/feature panels rather than a
+GGA-sized estimate. Legacy inventory v1 remains usable for non-tau layouts;
+tau-dependent planning with an older library fails closed before allocation.
 
 The controller device allowance
 includes the stationary/grid numeric arenas and the grid provider allowance,

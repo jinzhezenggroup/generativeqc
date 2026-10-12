@@ -3,6 +3,9 @@
 Status: implemented (private qualification endpoint; no public force promotion)
 Date: 2026-10-12
 
+The original name-bound inventory is superseded by
+[graph-matched admission](2026-10-12-graph-matched-native-cuda-forces.md).
+
 Retained numeric/provider admission is subsequently composed by the
 [shared ledger decision](2026-10-12-native-cuda-provider-admission.md); that
 follow-up does not promote this private controller to a public force capability.
