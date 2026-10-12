@@ -63,8 +63,8 @@ void one_atom_capacity() {
         generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu);
     const generativeqc::scf::PreparedFockPlan target(system, nullptr, strategy);
     const std::array<double, 1> density{1.8}, weighted{-0.4};
-    const auto result = generativeqc::scf::cpu_stationary_integral_gradient(
-        target, density, weighted, 1 << 20);
+    const auto result =
+        generativeqc::scf::cpu_stationary_integral_gradient(target, density, weighted, 1 << 20);
     require(result.sources.size() == 12 && result.shell_quartets == 1 &&
                 result.primitive_evaluations == 1,
             "one-atom source fabricated molecular storage or repeated J/K primitive work");
@@ -148,7 +148,8 @@ void unrestricted_sources() {
     require(rejected, "UKS below-limit capacity was admitted");
     rejected = false;
     try {
-      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha, 1 << 20);
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha,
+                                                                1 << 20);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }
@@ -157,7 +158,8 @@ void unrestricted_sources() {
     nonfinite[0] = std::numeric_limits<double>::quiet_NaN();
     rejected = false;
     try {
-      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha, 1 << 20, beta, nonfinite);
+      (void)generativeqc::scf::cpu_stationary_integral_gradient(target, alpha, weighted_alpha,
+                                                                1 << 20, beta, nonfinite);
     } catch (const std::invalid_argument&) {
       rejected = true;
     }

@@ -571,8 +571,8 @@ ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
       strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx;
   // The prepared spin-resolved Fock coefficient, not a named hybrid, owns a.
   const double exact_exchange_fraction = -strategy.spec.exchange.coefficient;
-  if (!pbe0_exchange || !std::isfinite(exact_exchange_fraction) ||
-      exact_exchange_fraction <= 0.0 || exact_exchange_fraction > 1.0 ||
+  if (!pbe0_exchange || !std::isfinite(exact_exchange_fraction) || exact_exchange_fraction <= 0.0 ||
+      exact_exchange_fraction > 1.0 ||
       options.semilocal_exchange_scale != 1.0 - exact_exchange_fraction ||
       options.semilocal_correlation_scale != 1.0)
     throw std::invalid_argument(

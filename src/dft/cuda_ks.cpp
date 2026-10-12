@@ -68,11 +68,11 @@ constexpr unsigned kCudaKsChunkCapacity = 2;
 
 // Bind native mathematical implementations once, outside the SCF hot path.
 // Execution uses the manifest-owned semilocal code rather than name branches.
-using HostRksXc = XcIntegral (*)(const AoBasis&, const MolecularGrid&,
-                                const std::vector<double>&, std::size_t, XcDensitySource);
+using HostRksXc = XcIntegral (*)(const AoBasis&, const MolecularGrid&, const std::vector<double>&,
+                                 std::size_t, XcDensitySource);
 using HostUksXc = SpinXcIntegral (*)(const AoBasis&, const MolecularGrid&,
-                                    const std::vector<double>&, const std::vector<double>&,
-                                    std::size_t);
+                                     const std::vector<double>&, const std::vector<double>&,
+                                     std::size_t);
 struct HostXcExecutors {
   HostRksXc rks;
   HostUksXc uks;
@@ -1909,8 +1909,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
     host_xc_totals.fill(0.0);
     if (spins == 1) {
-      const auto& executor = kHostXcExecutors.at(
-          semilocal_family_code(semilocal_family_from_code(functional)));
+      const auto& executor =
+          kHostXcExecutors.at(semilocal_family_code(semilocal_family_from_code(functional)));
       if (!executor.rks) throw std::runtime_error("no registered host RKS XC evaluator");
       const auto value = executor.rks(basis, grid, host_xc_density, xc_layout.tile_points, {});
       if (value.potential.size() != matrix)
@@ -1929,8 +1929,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else {
       std::copy_n(host_xc_density.begin(), matrix, host_xc_alpha.begin());
       std::copy_n(host_xc_density.begin() + matrix, matrix, host_xc_beta.begin());
-      const auto& executor = kHostXcExecutors.at(
-          semilocal_family_code(semilocal_family_from_code(functional)));
+      const auto& executor =
+          kHostXcExecutors.at(semilocal_family_code(semilocal_family_from_code(functional)));
       if (!executor.uks) throw std::runtime_error("no registered host UKS XC evaluator");
       const auto value =
           executor.uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);

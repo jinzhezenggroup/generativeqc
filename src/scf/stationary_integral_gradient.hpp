@@ -47,6 +47,5 @@ struct CpuStationaryIntegralGradient {
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
     std::span<const double> weighted_density, std::size_t maximum_numeric_bytes,
-    std::span<const double> beta_density = {},
-    std::span<const double> beta_weighted_density = {});
+    std::span<const double> beta_density = {}, std::span<const double> beta_weighted_density = {});
 }  // namespace generativeqc::scf
