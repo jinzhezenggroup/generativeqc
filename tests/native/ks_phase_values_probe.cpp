@@ -399,6 +399,90 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
             << ",\"source_bytes\":" << plan.transfers().phase_resident_value_bytes << "}\n";
 }
 
+/** Mixed epochs must not read strict values; refinement restores their bounded
+ * lease without admitting chunk scratch or changing warm/seed provenance. */
+void mixed_refinement(const Fixture& fixture, bool b3lyp, const std::string& state_base) {
+  const auto strategy = scf::resolve_fock_build(
+      scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, b3lyp ? 0.20 : 0.25),
+      scf::FockBackend::Cuda, 1e-12);
+  scf::PreparedFockPlan provider(fixture.system, nullptr, strategy, 0);
+  const dft::AoBasis basis(fixture.system);
+  dft::GridSpec grid_spec;
+  grid_spec.radial_points = 24;
+  grid_spec.angular_polar = 6;
+  grid_spec.angular_azimuth = 12;
+  const dft::MolecularGrid grid(fixture.system, grid_spec);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.max_iterations = 100;
+  options.energy_tolerance = 1e-11;
+  options.density_tolerance = 1e-10;
+  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  options.semilocal_exchange_scale = b3lyp ? 1.0 : 0.75;
+  const auto family = b3lyp ? dft::SemilocalFamily::B3lyp : dft::SemilocalFamily::Pbe;
+  setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "0", 1);
+  dft::CudaKsPlan strict(provider, basis, grid, options, family, 257);
+  const auto baseline = strict.run(nullptr, false);
+  require(baseline.converged, "mixed refinement strict baseline");
+  options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  setenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL", "1", 1);
+  setenv("GENERATIVEQC_KS_MIXED_MAX_ITERATIONS", "1", 1);
+  for (const auto* selection : {"0", "1"}) {
+    setenv("GENERATIVEQC_KS_RESIDENT_VALUES", selection, 1);
+    dft::CudaKsPlan plan(provider, basis, grid, options, family, 257);
+    const bool cached = std::string(selection) == "1";
+    plan.begin(nullptr, false);
+    require(plan.transfers().phase_resident_values_built == 0,
+            "mixed epoch prepared a strict value lease");
+    plan.enqueue_iteration();
+    require(plan.finish_iteration(), "mixed observation omitted strict refinement");
+    require((plan.transfers().phase_resident_values_built > 0) == cached,
+            "precision handoff lost strict resident admission");
+    while (plan.active()) {
+      plan.enqueue_iteration();
+      plan.finish_iteration();
+    }
+    const auto result = plan.result();
+    require(result.converged && std::abs(result.energy - baseline.energy) < 2e-9 &&
+                result.precision.mixed_stage_fock_builds == 1 &&
+                result.precision.strict_stage_fock_builds >= 2 &&
+                result.precision.strict_refinement_applied &&
+                result.precision.operator_work_counters_valid &&
+                (plan.transfers().phase_resident_fock_actions > 0) == cached,
+            "mixed resident/fallback scientific or provenance gate");
+    if (cached) {
+      std::ofstream state(state_base + (b3lyp ? ".b3lyp.json" : ".pbe0.json"));
+      state << std::setprecision(17) << "{\"energy\":" << result.energy;
+      for (const auto& pair :
+           {std::pair{"density", &result.density}, std::pair{"points", &grid.points()},
+            std::pair{"weights", &grid.weights()}}) {
+        state << ",\"" << pair.first << "\":[";
+        for (std::size_t index = 0; index < pair.second->size(); ++index)
+          state << (index ? "," : "") << (*pair.second)[index];
+        state << "]";
+      }
+      state << "}";
+      require(bool(state), "mixed independent energy snapshot");
+      const auto built = plan.transfers().phase_resident_values_built;
+      setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "auto", 1);
+      const auto warm = plan.run(nullptr, true);
+      require(warm.converged && std::abs(warm.energy - baseline.energy) < 2e-9 &&
+                  plan.transfers().phase_resident_values_built == built,
+              "mixed handoff relabeled a warm seed as cold");
+      const auto external = plan.run(&result.density, false);
+      require(external.converged && plan.transfers().phase_resident_values_built == built,
+              "mixed handoff relabeled an external density as cold");
+    }
+  }
+  setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "1", 1);
+  options.reference_memory_budget_bytes = 1;
+  dft::CudaKsPlan bounded(provider, basis, grid, options, family, 257);
+  const auto fallback = bounded.run(nullptr, false);
+  require(fallback.converged && std::abs(fallback.energy - baseline.energy) < 2e-9 &&
+              bounded.transfers().phase_resident_values_built == 0,
+          "mixed strict lease bypassed its budget or lost fallback");
+}
+
 /** Time a complete public cold endpoint, including provider preparation.
  * This legacy C-API owner rejects KS nuclear gradients. Complete E+F must use
  * the high-level compiled stationary endpoint, not this energy-only probe.
@@ -501,12 +585,16 @@ int main(int argc, char** argv) {
   try {
     require(argc == 2 || (argc == 3 && (std::string(argv[2]) == "capacity" ||
                                         std::string(argv[2]) == "endpoint" ||
-                                        std::string(argv[2]) == "endpoint-forces")),
-            "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces]");
-    const Fixture fixture(argv[1], argc == 2);
+                                        std::string(argv[2]) == "endpoint-forces" ||
+                                        std::string(argv[2]) == "mixed-refinement")),
+            "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces|mixed-refinement]");
+    const Fixture fixture(argv[1], argc == 2 || std::string(argv[2]) == "mixed-refinement");
     std::cout << std::setprecision(17);
     if (argc == 3 && std::string(argv[2]) == "capacity") {
       capacity(fixture);
+    } else if (argc == 3 && std::string(argv[2]) == "mixed-refinement") {
+      mixed_refinement(fixture, false, argv[1]);
+      mixed_refinement(fixture, true, argv[1]);
     } else if (argc == 3) {
       const bool compute_forces = std::string(argv[2]) == "endpoint-forces";
       endpoint(fixture, false, compute_forces);

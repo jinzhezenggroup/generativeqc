@@ -63,7 +63,7 @@ struct Family {
 const Family* semilocal_family_metadata_from_code(int) { return nullptr; }
 struct Owner {
   bool is_active = true, started = false, is_failed = true;
-  bool stabilize_occupations{}, final_closure{}, strict_refinement{};
+  bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
   struct { std::optional<int> precision_mode;
