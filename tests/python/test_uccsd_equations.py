@@ -249,6 +249,22 @@ def test_residuals_against_complete_determinant_space(
         )
 
 
+
+def _fixed_li_random_profile() -> tuple[UCCSDLayout, dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Read the authentic seed-37 profile and still exercise our amplitude layout."""
+    from _li_uhf_random_reference import SHAPES, load_reference
+
+    stored = load_reference()
+    arrays = {
+        name: np.asarray(values, dtype=np.float64).reshape(SHAPES[name])
+        for name, values in stored.items()
+    }
+    layout = UCCSDLayout(2, 1, 3, 4)
+    amplitudes = _amplitudes(layout)
+    for name, value in amplitudes.items():
+        np.testing.assert_array_equal(value, arrays[f"amplitudes.{name}"], err_msg=name)
+    return layout, amplitudes, arrays
+
 def _molecular_case(
     atom: str, spin: int, *, restricted: bool = False, broken: bool = False
 ) -> tuple[Any, Any, UCCSDLayout, np.ndarray, np.ndarray]:
@@ -321,30 +337,38 @@ def _molecular_case(
 def test_random_amplitudes_against_pyscf_uccsd(
     atom: str, spin: int, broken: bool
 ) -> None:
-    coupled_cluster, eris, layout, fock, integrals = _molecular_case(
-        atom, spin, broken=broken
-    )
-    amplitudes = _amplitudes(layout)
-    t1 = (amplitudes["t1a"], amplitudes["t1b"])
-    t2 = (amplitudes["t2aa"], amplitudes["t2ab"], amplitudes["t2bb"])
-    new_t1, new_t2 = coupled_cluster.update_amps(t1, t2, eris)
-    diagonal = np.diag(fock)
-    nocc = layout.oa + layout.ob
-    expected = {"correlation_energy": np.array(coupled_cluster.energy(t1, t2, eris))}
-    for block, new in zip(layout.blocks, (*new_t1, *new_t2), strict=True):
-        denominator = np.zeros(block.spec.shape)
-        for axis, index in enumerate(block.spec.indices):
-            start = {"oa": 0, "ob": layout.oa, "va": nocc, "vb": nocc + layout.va}[
-                index.space.name
-            ]
-            shape = [1] * len(block.spec.shape)
-            shape[axis] = index.extent
-            denominator += (1 if index.space.kind == "occupied" else -1) * diagonal[
-                start : start + index.extent
-            ].reshape(shape)
-        expected[block.name.replace("t", "r", 1)] = denominator * (
-            new - amplitudes[block.name]
+    if (atom, spin, broken) == ("Li 0 0 0", 1, False):
+        layout, amplitudes, reference = _fixed_li_random_profile()
+        fock, integrals = reference["fock_spin"], reference["antisymmetrized_eri"]
+        expected = {
+            "correlation_energy": reference["correlation_energy"],
+            **{name.replace("t", "r", 1): reference[f"residuals.{name}"] for name in amplitudes},
+        }
+    else:
+        coupled_cluster, eris, layout, fock, integrals = _molecular_case(
+            atom, spin, broken=broken
         )
+        amplitudes = _amplitudes(layout)
+        t1 = (amplitudes["t1a"], amplitudes["t1b"])
+        t2 = (amplitudes["t2aa"], amplitudes["t2ab"], amplitudes["t2bb"])
+        new_t1, new_t2 = coupled_cluster.update_amps(t1, t2, eris)
+        diagonal = np.diag(fock)
+        nocc = layout.oa + layout.ob
+        expected = {"correlation_energy": np.array(coupled_cluster.energy(t1, t2, eris))}
+        for block, new in zip(layout.blocks, (*new_t1, *new_t2), strict=True):
+            denominator = np.zeros(block.spec.shape)
+            for axis, index in enumerate(block.spec.indices):
+                start = {"oa": 0, "ob": layout.oa, "va": nocc, "vb": nocc + layout.va}[
+                    index.space.name
+                ]
+                shape = [1] * len(block.spec.shape)
+                shape[axis] = index.extent
+                denominator += (1 if index.space.kind == "occupied" else -1) * diagonal[
+                    start : start + index.extent
+                ].reshape(shape)
+            expected[block.name.replace("t", "r", 1)] = denominator * (
+                new - amplitudes[block.name]
+            )
     actual = execute(
         build_program(layout.oa, layout.ob, layout.va, layout.vb),
         _feeds(layout, fock, integrals, amplitudes),
