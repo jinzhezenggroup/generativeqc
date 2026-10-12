@@ -66,9 +66,9 @@ inline generativeqc_status generate_metric_panel(CudaDensityFittingJkPlan& plan,
                                      : plan.inverse_square_roots + system * plan.naux * plan.naux +
                                            begin * plan.naux + auxiliary_begin;
     const auto product = runtime::cuda_trace::trace_call("tile_metric_gemm", plan.stream, [&] {
-      return scf_matrix_product_view(
-          plan, eigen_basis, false, auxiliaries, pairs, count, factor, plan.naux, scratch, count,
-          output, auxiliaries, 1.0, begin ? 1.0 : 0.0, "transform bounded raw DF panel", detail);
+      return scf_matrix_product_view(plan, eigen_basis, false, auxiliaries, pairs, count, factor,
+                                     plan.naux, scratch, count, output, auxiliaries, 1.0,
+                                     begin ? 1.0 : 0.0, "transform bounded raw DF panel", detail);
     });
     if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
     if (eigen_basis) runtime::cuda_trace::trace_counter("streamed_whitening_factor_gemms", 1);

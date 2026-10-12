@@ -132,10 +132,10 @@ generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan& plan,
                                  state.d_alpha_factor);
   if (rank) {
     const auto product = trace_call("density_seed_reconstruction", plan.stream, [&] {
-      return scf_matrix_product_view(
-          plan, false, true, plan.nbf, plan.nbf, rank, state.d_alpha_factor, plan.nbf,
-          state.d_alpha_factor, plan.nbf, state.d_temporary, plan.nbf, 1.0, 0.0,
-          "reconstruct density seed", detail);
+      return scf_matrix_product_view(plan, false, true, plan.nbf, plan.nbf, rank,
+                                     state.d_alpha_factor, plan.nbf, state.d_alpha_factor, plan.nbf,
+                                     state.d_temporary, plan.nbf, 1.0, 0.0,
+                                     "reconstruct density seed", detail);
     });
     if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
   } else {

@@ -44,17 +44,17 @@ generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::siz
   const auto offset = system * plan.naux * plan.naux;
   auto status =
       runtime::cuda_trace::trace_call("resident_metric_eigen_projection", plan.stream, [&] {
-        return scf_matrix_product_view(
-            plan, true, false, plan.naux, pairs, plan.naux, eigenvectors + offset, plan.naux,
-            raw, plan.naux, plan.exchange_intermediate, plan.naux, 1.0, 0.0,
-            "project raw CUDA DF metric factors", detail);
+        return scf_matrix_product_view(plan, true, false, plan.naux, pairs, plan.naux,
+                                       eigenvectors + offset, plan.naux, raw, plan.naux,
+                                       plan.exchange_intermediate, plan.naux, 1.0, 0.0,
+                                       "project raw CUDA DF metric factors", detail);
       });
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = runtime::cuda_trace::trace_call("resident_metric_scaled_rotation", plan.stream, [&] {
-    return scf_matrix_product_view(
-        plan, false, false, plan.naux, pairs, plan.naux, scaled_eigenvectors + offset,
-        plan.naux, plan.exchange_intermediate, plan.naux, output, plan.naux, 1.0, 0.0,
-        "rotate scaled CUDA DF metric factors", detail);
+    return scf_matrix_product_view(plan, false, false, plan.naux, pairs, plan.naux,
+                                   scaled_eigenvectors + offset, plan.naux,
+                                   plan.exchange_intermediate, plan.naux, output, plan.naux, 1.0,
+                                   0.0, "rotate scaled CUDA DF metric factors", detail);
   });
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   runtime::cuda_trace::trace_counter("resident_whitening_factor_panels", 1);
@@ -156,8 +156,8 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
             return scf_matrix_product_view(
                 plan, false, false, plan.naux, plan.stored_pair_count, plan.naux,
                 inverse + system * plan.naux * plan.naux, plan.naux, raw, plan.naux,
-                plan.three_center + system * plan.stored_tensor_elements_per_system,
-                plan.naux, 1.0, 0.0, "whiten packed CUDA DF values", detail);
+                plan.three_center + system * plan.stored_tensor_elements_per_system, plan.naux, 1.0,
+                0.0, "whiten packed CUDA DF values", detail);
           });
       if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
     }
@@ -236,8 +236,8 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
                   inverse + system * plan.naux * plan.naux + begin * plan.naux, plan.naux,
                   plan.auxiliary_tile_values, count,
                   plan.three_center + system * plan.tensor_elements_per_system + pair * plan.naux,
-                  plan.naux, 1.0, begin ? 1.0 : 0.0,
-                  "materialize generated CUDA DF tensor", detail);
+                  plan.naux, 1.0, begin ? 1.0 : 0.0, "materialize generated CUDA DF tensor",
+                  detail);
             });
         if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
       }

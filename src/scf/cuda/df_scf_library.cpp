@@ -63,8 +63,8 @@ generativeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture
 generativeqc_status scf_matrix_product_view(
     CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,
     std::size_t columns, std::size_t reduction, const double* left, std::size_t left_ld,
-    const double* right, std::size_t right_ld, double* output, std::size_t output_ld,
-    double alpha, double beta, const char* failure_context, std::string& detail) {
+    const double* right, std::size_t right_ld, double* output, std::size_t output_ld, double alpha,
+    double beta, const char* failure_context, std::string& detail) {
   // Validate native dimensions before narrowing. Exact storage strides and
   // alpha/beta are preserved; no hidden transpose, packing or fallback occurs.
   constexpr auto limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
@@ -75,12 +75,12 @@ generativeqc_status scf_matrix_product_view(
     detail = "invalid prepared CUDA DF matrix product view";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  const cublasStatus_t status = cublasDgemm(
-      plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
-      transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, static_cast<int>(rows),
-      static_cast<int>(columns), static_cast<int>(reduction), &alpha, left,
-      static_cast<int>(left_ld), right, static_cast<int>(right_ld), &beta, output,
-      static_cast<int>(output_ld));
+  const cublasStatus_t status =
+      cublasDgemm(plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                  transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, static_cast<int>(rows),
+                  static_cast<int>(columns), static_cast<int>(reduction), &alpha, left,
+                  static_cast<int>(left_ld), right, static_cast<int>(right_ld), &beta, output,
+                  static_cast<int>(output_ld));
   return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
                                          : blas_failure(status, failure_context, detail);
 }

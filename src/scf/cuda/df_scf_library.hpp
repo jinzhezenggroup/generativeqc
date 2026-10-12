@@ -17,8 +17,8 @@ namespace generativeqc::scf::cuda_df {
 generativeqc_status scf_matrix_product_view(
     CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,
     std::size_t columns, std::size_t reduction, const double* left, std::size_t left_ld,
-    const double* right, std::size_t right_ld, double* output, std::size_t output_ld,
-    double alpha, double beta, const char* failure_context, std::string& detail);
+    const double* right, std::size_t right_ld, double* output, std::size_t output_ld, double alpha,
+    double beta, const char* failure_context, std::string& detail);
 
 /** Submit an explicit strided batched GEMM through the borrowed DF SCF BLAS provider.
  * Scientific callers own equation/order semantics; this boundary owns only
