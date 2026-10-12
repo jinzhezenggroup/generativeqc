@@ -25,6 +25,11 @@ weights pass through the shared point traversal and existing response jet;
 missing components are not evaluated, avoiding `0 * unused singular jet`.
 Full-range exchange uses the authenticated restricted Fock coefficient, not a
 named hybrid constant. Labels do not decide admission.
+Exchange and XC potential contributions reuse the same resident weighted-AXPY
+submission gateway. Do not expand the adapter's frozen vendor-call migration
+inventory for a new component; physical BLAS work counters still increment for
+each actual contribution. The public resident solve is classified in the shared
+Python contract inventory, including its backend and bounded failure semantics.
 
 The first real-device qualification exposed the inherited RHF engine's always-K
 output pointer on J-only requests. The common device seam requires absent output

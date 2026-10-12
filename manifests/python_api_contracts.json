@@ -6732,6 +6732,17 @@
         "values": "docs/reference/python_contracts.md#python-response-values"
       }
     },
+    "generativeqc/rks_response.py:NativeRKSResponse.solve_resident": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-response-backends",
+        "errors": "docs/reference/python_contracts.md#python-response-errors",
+        "ownership": "docs/reference/python_contracts.md#python-response-ownership",
+        "values": "docs/reference/python_contracts.md#python-response-values"
+      }
+    },
     "generativeqc/rks_response.py:NativeRKSResponse.validate_current": {
       "kind": "function",
       "profile": "execution",

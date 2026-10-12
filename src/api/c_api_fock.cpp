@@ -4,6 +4,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 #include "api/cuda_response.hpp"
 #include "api/error.hpp"
@@ -897,14 +898,16 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
     require(!owner->density_response || xc, "resident XC response returned no potential");
     resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density, 1));
     ++owner->blas_calls;
-    if (owner->exchange_coefficient != 0.0) {
-      resident_blas(cublasDaxpy(owner->blas, n * n, &owner->exchange_coefficient, owner->exchange,
-                                1, owner->density, 1));
-      ++owner->blas_calls;
-    }
-    if (xc) {
-      resident_blas(cublasDaxpy(owner->blas, n * n, &one, xc, 1, owner->density, 1));
-      ++owner->blas_calls;
+    // Reuse the resident potential-combination gateway for every admitted
+    // contribution; absent components do not submit vendor work.
+    const std::pair<double, const double*> contributions[]{
+        {owner->exchange_coefficient, owner->exchange}, {one, xc}};
+    for (const auto& [coefficient, potential] : contributions) {
+      if (coefficient != 0.0 && potential) {
+        resident_blas(
+            cublasDaxpy(owner->blas, n * n, &coefficient, potential, 1, owner->density, 1));
+        ++owner->blas_calls;
+      }
     }
     resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, n, &one, owner->density,
                               n, c_occ, n, &zero, owner->transform_two, n));
