@@ -6,6 +6,8 @@ are production-owned here. Repository tools retain compatibility re-exports.
 
 from __future__ import annotations
 
+import math
+import numbers
 import time
 import typing
 
@@ -41,14 +43,41 @@ def rhf_operator_identity(backend: typing.Any) -> typing.Any:
     )
 
 
-def cpks_operator_identity(backend: typing.Any, xc_kernel: typing.Any) -> typing.Any:
-    """Stable operator key for one CPKS semilocal kernel."""
+def _checked_cpks_exact_exchange_fraction(fraction: typing.Any) -> float:
+    """Check the physical full-range-exchange fraction before response binding."""
+    if isinstance(fraction, bool) or not isinstance(fraction, numbers.Real):
+        raise TypeError("CPKS exact-exchange fraction must be a real scalar")
+    value = float(fraction)
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError("CPKS exact-exchange fraction must be finite and in [0, 1]")
+    return value
+
+
+def _require_cpks_exchange_provider(backend: typing.Any, fraction: float) -> None:
+    """Never admit a hybrid using a semilocal J-only response backend."""
+    if fraction and getattr(backend, "supports_full_range_exchange", False) is not True:
+        raise ResponseUnsupported(
+            "hybrid CPKS requires an explicitly qualified full-range K provider"
+        )
+
+
+def cpks_operator_identity(
+    backend: typing.Any,
+    xc_kernel: typing.Any,
+    *,
+    exact_exchange_fraction: typing.Any = 0.0,
+) -> typing.Any:
+    """Bind both the live J/K/XC owner and physical hybrid mixing coefficient."""
+    fraction = _checked_cpks_exact_exchange_fraction(exact_exchange_fraction)
+    _require_cpks_exchange_provider(backend, fraction)
     return canonical_hash(
         {
             "method": "cpks",
             "backend": backend.identity,
             "xc_kernel": xc_kernel.identity,
-            "exchange_fraction": 0.0,
+            # Restricted D is spin-summed: Fock K action has coefficient -a/2.
+            # The semilocal a=0 identity remains byte-for-byte unchanged.
+            "exchange_fraction": 0.5 * fraction,
             "parameterization": "density-response-symmetric-ov",
         }
     )
@@ -284,20 +313,26 @@ class RHFResponseOperator(_BaseResponseOperator):
 
 
 class CPKSResponseOperator(_BaseResponseOperator):
-    """Matrix-free closed-shell CPKS action with a semilocal XC kernel.
+    """Matrix-free closed-shell J/K/XC response with explicit exchange admission.
 
-    The kernel must describe the same basis, grid, functional and reference
-    density as the converged KS snapshot.  Hybrid/exact-exchange and
-    unsupported meta-GGA modes fail closed rather than silently dropping a
-    derivative contribution.
+    The XC kernel must match the converged KS reference. Nonzero full-range
+    exchange is admitted only with a provider explicitly declaring raw exact K;
+    this algebra contract alone does not qualify a native hybrid Hessian.
     """
 
     exchange_fraction = 0.0
 
     def __init__(
-        self, problem: typing.Any, backend: typing.Any, xc_kernel: typing.Any
+        self,
+        problem: typing.Any,
+        backend: typing.Any,
+        xc_kernel: typing.Any,
+        *,
+        exact_exchange_fraction: typing.Any = 0.0,
     ) -> None:
-        """Bind a CPKS problem to its backend and reference-compatible XC kernel."""
+        """Bind a CPKS problem and the coefficient of its exact K response."""
+        fraction = _checked_cpks_exact_exchange_fraction(exact_exchange_fraction)
+        _require_cpks_exchange_provider(backend, fraction)
         super().__init__(problem, backend)
         if problem.method != "cpks":
             raise ResponseUnsupported("CPKSResponseOperator requires a CPKS problem")
@@ -318,7 +353,11 @@ class CPKSResponseOperator(_BaseResponseOperator):
             ):
                 raise ValueError("XC kernel/reference basis_identity mismatch")
         self.xc_kernel = xc_kernel
-        expected = cpks_operator_identity(backend, xc_kernel)
+        self.exact_exchange_fraction = fraction
+        self.exchange_fraction = 0.5 * fraction
+        expected = cpks_operator_identity(
+            backend, xc_kernel, exact_exchange_fraction=fraction
+        )
         if problem.operator_identity != expected:
             raise ValueError(
                 "problem operator_identity does not match its CPKS backend/kernel"
@@ -333,12 +372,15 @@ class CPKSResponseOperator(_BaseResponseOperator):
         *,
         rhs_layout: typing.Any = "ov-response-vector",
         perturbation_labels: typing.Any = (),
+        exact_exchange_fraction: typing.Any = 0.0,
     ) -> typing.Any:
-        """Create the exact CPKS problem snapshot used by this operator."""
+        """Create a method-bound CPKS problem with no implicit exchange fallback."""
         return ResponseProblem.from_reference(
             reference,
             method="cpks",
-            operator_identity=cpks_operator_identity(backend, xc_kernel),
+            operator_identity=cpks_operator_identity(
+                backend, xc_kernel, exact_exchange_fraction=exact_exchange_fraction
+            ),
             rhs_layout=rhs_layout,
             perturbation_labels=perturbation_labels,
         )
