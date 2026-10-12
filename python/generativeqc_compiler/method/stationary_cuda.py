@@ -40,6 +40,7 @@ from generativeqc_compiler.method.stationary_resources import (
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
+from ._generated_stationary_aot_profiles import STATIONARY_AOT_BUILD_PROFILES
 from .spec import SemilocalXCPrimitive, resolve_method
 from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
@@ -806,7 +807,7 @@ QUALIFIED_SP_COMPONENTS = ("", "x", "y", "z")
 QUALIFIED_SPD_COMPONENTS = ("", "x", "xx", "xy", "xz", "y", "yy", "yz", "z", "zz")
 QUALIFIED_SPD_AOT_SHARD_WIDTH = 16
 QUALIFIED_SPD_AOT_SHARDS = 23
-QUALIFIED_FUNCTIONALS = (0, 1, 2)
+QUALIFIED_FUNCTIONALS = tuple(sorted({code for _, code, _, legacy in STATIONARY_AOT_BUILD_PROFILES if legacy}))
 QUALIFIED_SPINS = ("unpolarized", "polarized")
 QUALIFIED_PARTITION_ITERATIONS = 3
 
@@ -819,6 +820,7 @@ class StationaryAotProfile:
     functional: int
     method: str
     spin: str
+    legacy: bool = False
 
     @property
     def plan(self) -> StationaryGradientPlan:
@@ -829,14 +831,8 @@ class StationaryAotProfile:
 
 
 QUALIFIED_STATIONARY_AOT_PROFILES = tuple(
-    StationaryAotProfile(name, functional, method, spin)
-    for name, functional, method in (
-        ("lda", 0, "LDA_XC_PW"),
-        ("pbe", 1, "PBE"),
-        ("r2scan", 2, "R2SCAN"),
-        ("pbe0", 1, "PBE0"),
-        ("b3lyp", 3, "B3LYP"),
-    )
+    StationaryAotProfile(name, functional, method, spin, legacy)
+    for name, functional, method, legacy in STATIONARY_AOT_BUILD_PROFILES
     for spin in QUALIFIED_SPINS
 )
 QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
@@ -990,8 +986,13 @@ def _legacy_profile(functional: int, spin: str) -> StationaryAotProfile:
         raise ValueError("AOT stationary functional must be 0, 1, or 2")
     if spin not in QUALIFIED_SPINS:
         raise ValueError("AOT stationary spin must be unpolarized or polarized")
-    name = ("lda", "pbe", "r2scan")[functional]
-    return _qualified_aot_profile(f"{name}_{'rks' if spin == 'unpolarized' else 'uks'}")
+    profiles = tuple(
+        p for p in QUALIFIED_STATIONARY_AOT_PROFILES
+        if p.functional == functional and p.spin == spin and p.legacy
+    )
+    if len(profiles) != 1:
+        raise ValueError("legacy stationary CUDA AOT inventory is missing or ambiguous")
+    return profiles[0]
 
 
 def _qualified_aot_plan(functional: int, spin: str) -> StationaryGradientPlan:
