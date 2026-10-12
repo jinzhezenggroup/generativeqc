@@ -219,12 +219,20 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
         ),
-        "core-a": ("test_cpu_hf_high_l.py",),
+        "core-a": (
+            "test_cpu_hf_high_l.py",
+            "test_cuda_xc_point_contract.py",
+            "test_uccsd_solver.py",
+            "test_cc_triples_tiles.py",
+        ),
         "core-b": (
             "test_uccsd_response.py",
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
             "test_df_lambda_matrix_audit.py",
+            "test_df_lambda_mixed_precision.py",
+            "test_direct_exchange_queue.py",
+            "test_df_occupied_triples.py",
         ),
         "core-c": (
             "test_uccsd_t_lambda.py",
@@ -250,6 +258,71 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
                 for shard, targets in selections.items()
                 if shard != owner
             )
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+@pytest.mark.parametrize("insertions", ((), ("test_000.py", "test_lambda_shift.py")))
+def test_post_force_split_hotspots_keep_stable_owners_and_ordinary_slots(
+    event: str, presence: str, insertions: tuple[str, ...], tmp_path: Path
+) -> None:
+    owners = {
+        "tests/python/test_cuda_xc_point_contract.py": "core-a",
+        "tests/python/test_uccsd_solver.py": "core-a",
+        "tests/python/test_cc_triples_tiles.py": "core-a",
+        "tests/python/test_df_lambda_mixed_precision.py": "core-b",
+        "tests/python/test_direct_exchange_queue.py": "core-b",
+        "tests/python/test_df_occupied_triples.py": "core-b",
+    }
+    probes = [
+        f"tests/python/{name}"
+        for name in (
+            "test_aaa.py",
+            "test_cc_triples_tiles_next.py",
+            "test_cuda_xc_point_contract_next.py",
+            "test_df_lambda_mixed_precision_next.py",
+            "test_df_occupied_triples_next.py",
+            "test_direct_exchange_queue_next.py",
+            "test_uccsd_solver_next.py",
+            "test_zzz.py",
+            *insertions,
+        )
+    ]
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*probes, *(owners if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    for relative in owners:
+        if presence == "untracked":
+            (tmp_path / relative).touch()
+        elif presence == "missing":
+            # Missing tracked tests stay selected so pytest can fail closed.
+            (tmp_path / relative).unlink()
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    for path, owner in owners.items():
+        actual = [
+            shard for shard, (_, targets, _) in selections.items() if path in targets
+        ]
+        assert actual == ([owner] if tracked else [])
+        assert not any(
+            path in argument
+            for _, _, arguments in selections.values()
+            for argument in arguments
+        )
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
+        distribution, targets, _ = selections[shard]
+        assert distribution == "worksteal"
+        assert targets == [
+            path
+            for index, path in enumerate(inventory)
+            if owners.get(path) == shard or (path not in owners and index % 3 == bucket)
+        ]
 
 
 @pytest.mark.parametrize(
