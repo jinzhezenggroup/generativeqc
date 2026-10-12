@@ -123,3 +123,115 @@ int main() {
         compile_timeout=60,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_recursive_mp2_companion_keeps_independent_controls(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the actual recursive call and publication against its signature."""
+    source = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
+    start = source.index("static DFCCSDTResult run_df_ccsdt_native_attempt(")
+    signature = source[start : source.index(") {", start) + 3]
+    start = source.index("\n  if (demand.companions & kMp2Component) {") + 1
+    end = source.index("  state.df_source = {};", start)
+    companion = source[start:end]
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\ntypedef struct CUstream_st* cudaStream_t;\n", encoding="utf-8"
+    )
+    unit = tmp_path / "recursive-companion.cpp"
+    unit.write_text(
+        r"""
+#include <cassert>
+#include "methods/df_ccsdt_force.hpp"
+#include "posthf/capacity.hpp"
+#include "runtime/execution_context.hpp"
+namespace generativeqc::methods::detail {
+using posthf::checked_add;
+std::size_t capacity(std::initializer_list<const std::vector<double>*> arrays) {
+  std::size_t total=0;
+  for (const auto* array : arrays) total=checked_add(total,array->capacity()*sizeof(double));
+  return total;
+}
+RccsdNativeState* expected_state{};
+double expected_residual{};
+bool expected_scratch{};
+std::size_t expected_reservation{};
+"""
+        + signature
+        + r"""
+  assert(forces && !with_triples && !request_triples_gap_cotangents);
+  assert(ccsd_mixed_precision.has_value() && !*ccsd_mixed_precision);
+  assert(!lambda_mixed_precision && !lambda_resident_krylov);
+  assert(ccsd_mixed_switch_residual == expected_residual);
+  assert(demand.mp2 && demand.companions == 0);
+  assert(lambda_serial_scratch_reuse == expected_scratch);
+  assert(replay_state == expected_state && retained_host_bytes == expected_reservation);
+  assert(retained_df_source_bytes == 0 && reference_experiment == nullptr);
+  // Model consumption of the borrowed state so the real caller must restore it.
+  replay_state->reference.reset();
+  replay_state->budget=1;
+  DFCCSDTResult output;
+  output.energy=-1.25;
+  output.forces={0.5,-0.75,0.25};
+  output.correlation.opposite_spin_energy=-0.125;
+  output.numeric_capacity_bytes=512;
+  return output;
+}
+int probe() {
+  core::ContextState context;
+  runtime::ExecutionContext execution(context);
+  core::System system,auxiliary;
+  generativeqc_method_descriptor descriptor{};
+  for (double ccsd_mixed_switch_residual :
+       {cc::SolverOptions{}.df_mixed_precision_switch_residual,1e-4})
+  for (bool lambda_serial_scratch_reuse : {false,true})
+  for (std::size_t old_peak : {std::size_t(256),std::size_t(1024)}) {
+    RccsdNativeState state;
+    state.reference=std::make_shared<hf::PhysicalReference>();
+    const auto saved_reference=state.reference;
+    state.budget=8192;
+    DFCCSDTResult result;
+    result.numeric_capacity_bytes=old_peak;
+    const std::vector<double> bar_f(3),bar_c(5),correlation_gradient(7);
+    hf::RHFFrameDFPreconditionerPreparation preconditioner;
+    hf::RHFFrameResponseOptions frame_options;
+    DFCorrelationDemand demand{false,kMp2Component};
+    const std::size_t retained_host_bytes=17;
+    bool df_auxiliary_reduction=true,df_matrix_gemm=true,lambda_matrix_gemm=true;
+    std::size_t lambda_batch_limit=7,ccsd_batch_limit=11,lambda_true_residual_interval=30;
+    bool derived_denominators=true,packed_diis=false,parallel_gap_reduction=true;
+    bool lambda_core_reuse=true,lambda_audit_matrix=true,lambda_primal_matrix=true;
+    expected_state=&state;
+    expected_residual=ccsd_mixed_switch_residual;
+    expected_scratch=lambda_serial_scratch_reuse;
+    expected_reservation=retained_host_bytes+capacity({&bar_f,&bar_c,&correlation_gradient});
+"""
+        + companion
+        + r"""
+    assert(state.reference == saved_reference && state.budget == 8192);
+    assert(result.method_result.mp2_component.has_value());
+    const auto& published=*result.method_result.mp2_component;
+    assert(published.energy == -1.25 && published.forces == std::vector<double>({0.5,-0.75,0.25}));
+    assert(published.correlation->opposite_spin_energy == -0.125);
+    assert(result.numeric_capacity_bytes == std::max(old_peak,std::size_t(512)));
+  }
+  return 0;
+}
+}
+int main() { return generativeqc::methods::detail::probe(); }
+""",
+        encoding="utf-8",
+    )
+    executable = tmp_path / "recursive-companion"
+    native_cxx.build_executable(
+        [unit],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-I" + str(tmp_path),
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
+        ),
+        compile_timeout=60,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)

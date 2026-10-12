@@ -561,7 +561,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
         derived_denominators, packed_diis, parallel_gap_reduction, false, &state,
         checked_add(retained_host_bytes, parent_bytes), 0, nullptr, nullptr, false, {},
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
-        nullptr, lambda_serial_scratch_reuse, false, false, false, {true, 0});
+        nullptr, lambda_serial_scratch_reuse, false, false, false, ccsd_mixed_switch_residual,
+        {true, 0});
     state.reference = reference;
     state.budget = original_budget;
     Result::Companion component;
