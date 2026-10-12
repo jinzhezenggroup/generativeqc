@@ -713,8 +713,10 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
     mp2_diagnostic = "".join(
         _statement(mp2, field)
         for field in (
-            "diagnostic.numeric_capacity_bytes = "
-            "std::max(reference_capacity, completed_phase_capacity)",
+            (
+                "diagnostic.numeric_capacity_bytes = "
+                "std::max(reference_capacity, completed_phase_capacity)"
+            ),
             "diagnostic.reference_execution_plan_reused =",
             "diagnostic.reference_execution_plan_owned_device_bytes =",
         )
