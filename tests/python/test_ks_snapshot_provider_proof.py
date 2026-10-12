@@ -1,5 +1,6 @@
 """Exercise the native provider proof without pretending to execute CUDA forces."""
 
+import ast
 import ctypes as ct
 import typing
 from pathlib import Path
@@ -135,17 +136,35 @@ def test_exact_only_legacy_proof_preserves_exchange_presence(exchange: float) ->
     )
 
 
-def test_capacity_audit_rejects_bypassed_native_provider_proof(tmp_path: Path) -> None:
+def test_capacity_audit_rejects_unreviewed_snapshot_decode_bypass(
+    tmp_path: Path,
+) -> None:
+    """The qualification owner hash is integrity evidence, not a call-count gate.
+
+    Construct a semantic bypass of the decoded provider check by inserting an
+    early return in the real owner method. This checks the retained upstream
+    source-integrity audit without coupling the test to how many times (or
+    under which local spelling) the provider-proof helper is called.
+    """
     from tools.dft_mp_v1 import qualify_capacity
 
     relative = "python/generativeqc/_ks_snapshot.py"
     source = (Path(__file__).resolve().parents[2] / relative).read_text()
-    assert source.count("self.fock_provider_proof()") == 2
+    tree = ast.parse(source)
+    owner = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "NativeKsSnapshot"
+    )
+    decode = next(
+        node
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "decode"
+    )
+    decode.body.insert(0, ast.Return(value=ast.Dict(keys=[], values=[])))
     target = tmp_path / relative
     target.parent.mkdir(parents=True)
-    target.write_text(
-        source.replace("self.fock_provider_proof()", '("exact", None, 0.0)')
-    )
+    target.write_text(ast.unparse(tree))
     with pytest.raises(RuntimeError, match="snapshot functional contract changed"):
         qualify_capacity._snapshot_functional_contract(tmp_path)
 
