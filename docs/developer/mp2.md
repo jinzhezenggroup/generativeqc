@@ -50,7 +50,7 @@ result = ri.singlepoint(
 )
 ```
 
-### CUDA E+F source reuse
+## CUDA E+F source reuse
 
 Conventional CUDA MP2 borrows the qualified exact RHF interaction source used
 by CC. When admitted, resident reference ERIs survive energy, adjoint, orbital
@@ -81,7 +81,7 @@ optional independent PySCF gradient oracle and untimed work journal. Source,
 library and input provenance accompany the results. This does not enable CUDA
 RI-MP2 forces or frozen-core/CBS workflows beyond the existing method contract.
 
-### Response and force contracts
+## Response and force contracts
 
 CPU RI-MP2 analytic forces complete C2 by composing the native MP2 adjoint and
 true-residual RHF response with the shared fixed-rank inverse-square-root VJP and
