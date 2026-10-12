@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/fock_build.hpp"
 
 namespace generativeqc::scf {
