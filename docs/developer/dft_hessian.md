@@ -86,6 +86,31 @@ all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS. Public calls retain
 explicit integral/output budgets and report the executed public endpoint in
 result diagnostics. Wider method/backend support remains separate.
 
+## Complete CPU endpoint benchmark and cold-JIT qualification
+
+Run the committed device-free driver through the *public* Calculator methods:
+
+```bash
+PYTHONPATH=python:. python tools/benchmark_cpu_hessian.py \\
+  --method pbe-rks --case h2 --repeats 3 \\
+  --output benchmarks/results/hessian-cpu-h2.json
+```
+
+The JSON retains every full-call first-in-process, same-geometry, and
+changed-geometry timing sample for both HVP and raw full-Hessian paths. Each
+full call includes fresh SCF and stationary response; the script also checks
+`H @ v` against the independently requested complete HVP and records *raw*
+full-matrix asymmetry without post-hoc symmetrization. No CUDA acceptance is
+required. The first-in-process sample **does not** establish a compiler-cold
+measurement if its persistent JIT cache already contains generated artifacts;
+use a fresh process *and* an independently empty cache directory for that claim.
+For large-domain compilation investigations, opt in with `--case he13`:
+this uses the 13-Cartesian-AO single-He `s+d+d` fixture from the existing
+resource-bound test. Its generated second-integral CPU C++ cold-JIT path has
+previously exceeded the 300-second compiler limit (#2272), so this is an
+explicit expensive diagnostic, not part of routine PR smoke tests. Do not infer
+that passing the smaller benchmark fixes that cold-compile blocker.
+
 ## Qualified execution boundary
 
 The documented public molecular endpoint is CPU direct all-electron
