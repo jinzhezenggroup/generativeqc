@@ -180,6 +180,91 @@ def test_native_cpu_ks_rejects_retained_output_before_work(
     assert not (tmp_path / ".artifacts").exists()
 
 
+@pytest.mark.parametrize("mode", ["mp2", "cbs"])
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_df_cbs_qm7_rejects_retained_output_before_input_or_gpu_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    destination_kind: str,
+) -> None:
+    """Protect prior evidence before dataset reads, oracle setup or native work."""
+    from benchmarks import _retention, df_cbs_qm7_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("invalid output reached dataset or scientific work")
+
+    monkeypatch.setenv("SLURM_JOB_ID", "test-output-admission")
+    for name in ("_load_qm7", "basis_snapshot", "Calculator", "CCSDTCBSCalculator"):
+        monkeypatch.setattr(df_cbs_qm7_endpoint, name, forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "df_cbs_qm7_endpoint",
+            "--qm7",
+            str(tmp_path / "missing.mat"),
+            "--index",
+            "0",
+            "--mode",
+            mode,
+            "--output",
+            str(destination / existing.name),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        df_cbs_qm7_endpoint.main()
+    assert error.value.code == 2
+    assert "argument --output:" in capsys.readouterr().err
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("destination", [".artifacts/run.json", "scratch/run.json"])
+def test_df_cbs_qm7_keeps_scratch_output_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination: str
+) -> None:
+    """Accepted destinations advance to input acquisition without creating output."""
+    from benchmarks import _retention, df_cbs_qm7_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setenv("SLURM_JOB_ID", "test-output-admission")
+
+    def input_boundary(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise RuntimeError("reached dataset boundary")
+
+    monkeypatch.setattr(df_cbs_qm7_endpoint, "_load_qm7", input_boundary)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "df_cbs_qm7_endpoint",
+            "--qm7",
+            str(tmp_path / "missing.mat"),
+            "--index",
+            "0",
+            "--output",
+            str(tmp_path / destination),
+        ],
+    )
+    with pytest.raises(RuntimeError, match="reached dataset boundary"):
+        df_cbs_qm7_endpoint.main()
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_prepared_lifecycle_cli_rejects_retained_output_before_qualification(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

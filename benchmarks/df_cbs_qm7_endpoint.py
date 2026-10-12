@@ -18,9 +18,13 @@ from pathlib import Path
 
 import numpy as np
 from generativeqc import Calculator, CBSBasis, CCSDTCBSCalculator
-from scipy.io import loadmat
 
 from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot, energies
+
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_FILES = (
@@ -58,6 +62,13 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _load_qm7(path: Path) -> dict:
+    """Load the optional dataset dependency only after output admission."""
+    from scipy.io import loadmat
+
+    return loadmat(path)
+
+
 def main() -> None:
     """Run one finite scheduler-owned molecular endpoint and retain raw evidence."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -69,11 +80,11 @@ def main() -> None:
     parser.add_argument("--high", default="cc-pvtz")
     parser.add_argument("--high-fit", default="cc-pvtz-ri")
     parser.add_argument("--budget-mib", type=int, default=4096)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("real-GPU qualification must run through srun")
-    data = loadmat(args.qm7)
+    data = _load_qm7(args.qm7)
     if not 0 <= args.index < len(data["Z"]) or args.budget_mib <= 0:
         parser.error("dataset index and positive memory budget are required")
     selected = data["Z"][args.index] > 0
