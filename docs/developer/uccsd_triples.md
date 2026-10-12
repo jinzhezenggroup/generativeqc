@@ -116,12 +116,48 @@ Corrected multipliers must not be passed through standard UCCSD Lambda
 qualification as if they were standard multipliers. See the
 [standard physical-response contract](uccsd_physical_response.md).
 
+## Corrected Lambda
+
+`PreparedUCCSDTLambda` borrows identity-matched standard adjoint and bounded
+triples-response owners. It solves
+`J* lambda = -U* grad(E_CCSD + E_T)` with the standard native J* action, physical
+dual lift and checked GMRES. The independent alpha/beta amplitude blocks and
+same-spin residual seeds retain their original conventions. The triples
+amplitude bars receive **no extra one-quarter factor** when pulled back with U*.
+
+`UCCSDTLambdaResult` is a distinct record, not a standard Lambda subtype.
+Both solving and qualification execute a fresh complete triples replay and
+actual corrected physical amplitude stationarity. Qualification verifies the
+parent, every correction bar, per-channel/total energies, equation/template,
+backend and state binding rather than trusting cached diagnostics or requiring
+bit-identical floating results across valid native replays. Aggregate work and
+logical numeric storage cover both borrowed consumers, retained corrections,
+Krylov/maps and publication. Parameter requests receive additional admission.
+Closing a corrected owner closes none of its borrowed owners/resources.
+
+`qualify_with_correction()` returns the immutable packed dual, freshly qualified
+triples response and diagnostics together, so a future physical consumer need
+not trust an earlier detached correction. `parameter_cotangent()` adds the
+corrected CC Lagrangian VJP to the explicit canonical-input triples bar. Its
+same-space Fock blocks currently contain the **diagonal denominator chain**,
+not complete covariant oo/vv response.
+
+Complete orbital/nuclear response additionally requires same-space off-diagonal
+Fock resolvent moments from `d D^-1 = -D^-1 (dD) D^-1`. A diagonal eps pullback
+alone does not supply these moments; dividing an occupied/virtual internal
+orbital gap is not a valid replacement at degeneracies. The shared restricted
+implementation describes this contract in
+`python/generativeqc_compiler/cc/triples_fock_response.py`. Until that full
+unrestricted chain is qualified, the standard physical-response owner
+intentionally rejects corrected owners/results. Its standard Lambda
+qualification is not disabled or relabelled.
+
 ## Qualification
 
 ```sh
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=python:. \
   python -m pytest tests/python/test_uccsd_triples.py \
-  tests/python/test_uccsd_triples_response.py -q
+  tests/python/test_uccsd_triples_response.py tests/python/test_uccsd_t_lambda.py -q
 ```
 
 Random-amplitude Li/OH/H6 and broken-symmetry H4 cases compare every channel with the
