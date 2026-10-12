@@ -97,6 +97,8 @@ function(generativeqc_add_posthf_cc_sources target)
     src/methods/mp2_method.cpp
     src/methods/ump2_method.cpp
     src/methods/rccsd_method.cpp
+    src/cc/uccsd_solver.cpp
+    src/methods/uccsd_method.cpp
     src/methods/rccsdt_method.cpp
     src/methods/df_rccsdt_method.cpp
     src/methods/df_hf_guess.cpp

@@ -1307,9 +1307,9 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_cc_performance_diagnostic ( const generativeqc_calculation * calculation , generativeqc_cc_performance_diagnostic * out ) ;
 ```
 
-Most recent RCCSD/RCCSD(T) phase/work record; NULL out probes availability.
+Most recent native coupled-cluster phase/work record; NULL out probes availability.
 
-**Behavior.** Read the latest RCCSD/RCCSD(T) phase and work evidence.
+**Behavior.** Read the latest native coupled-cluster phase and work evidence.
 
 **Inputs.** Initialize every supplied versioned descriptor with sizeof(its complete type) and
 GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
@@ -1907,7 +1907,7 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_cc_performance_diagn
 
 Input-ordered counterpart of generativeqc_calculation_get_cc_performance_diagnostic.
 
-**Behavior.** Read the latest RCCSD/RCCSD(T) phase and work evidence.
+**Behavior.** Read the latest native coupled-cluster phase and work evidence.
 
 **Inputs.** Initialize every supplied versioned descriptor with sizeof(its complete type) and
 GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out

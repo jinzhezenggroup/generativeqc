@@ -48,7 +48,13 @@ _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
 _COUPLED_CLUSTER_METHODS = frozenset(
-    (_native.METHOD_RCCSD, _native.METHOD_RCCSD_T, _native.METHOD_DF_RCCSD_T)
+    (
+        _native.METHOD_RCCSD,
+        _native.METHOD_RCCSD_T,
+        _native.METHOD_DF_RCCSD_T,
+        _native.METHOD_UCCSD,
+        _native.METHOD_UCCSD_T,
+    )
 )
 _CORRELATED_METHODS = frozenset(
     (_native.METHOD_MP2, _native.METHOD_UMP2, *_COUPLED_CLUSTER_METHODS)
