@@ -24,7 +24,14 @@ from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_FUNCTIONAL_CODE_BASE,
     automatic_functional_ingredients,
 )
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import (
+    LIBXC_WORK_DOMAIN,
+    LIBXC_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
@@ -86,10 +93,18 @@ def _scf_xc_points(
     gradient: typing.Any,
     tau: typing.Any = None,
     *,
+    spin: str = "polarized",
     scales: typing.Any = (1.0, 1.0),
     required_ingredients: tuple[str, ...] | None = None,
 ) -> typing.Any:
-    """Evaluate the exact native semilocal SCF point model."""
+    """Evaluate the SCF model for an explicit spin layout.
+
+    RKS retains equal half-feature channels for the stationary pullback, but
+    automatic density-work programs evaluate original total features through
+    the layout-aware native ABI. The default preserves legacy polarized calls.
+    """
+    if spin not in ("unpolarized", "polarized"):
+        raise ValueError("SCF point evaluator requires an explicit supported spin")
     if type(functional) is bool:
         functional = int(functional)
     automatic = type(functional) is int and functional >= AUTOMATIC_FUNCTIONAL_CODE_BASE
@@ -125,10 +140,21 @@ def _scf_xc_points(
     if np.iscomplexobj(raw_tau) or raw_tau.shape != rho.shape:
         raise ValueError("SCF point evaluator requires real tau[2,n]")
     tau = np.ascontiguousarray(raw_tau, dtype=np.float64)
+    if spin == "unpolarized" and not (
+        np.array_equal(rho[0], rho[1])
+        and np.array_equal(gradient[0], gradient[1])
+        and np.array_equal(tau[0], tau[1])
+    ):
+        raise ValueError(
+            "restricted SCF point transport requires equal half-feature channels"
+        )
+    restricted_bridge = automatic and spin == "unpolarized"
     output = np.empty((rho.shape[1], 11), dtype=np.float64)
     try:
         evaluate = (
-            library.generativeqc_xc_point_batch_v2
+            library.generativeqc_xc_point_batch_v4
+            if restricted_bridge
+            else library.generativeqc_xc_point_batch_v2
             if scales == (1.0, 1.0)
             else library.generativeqc_xc_point_batch_v3
         )
@@ -137,11 +163,19 @@ def _scf_xc_points(
             "native library lacks the required semilocal XC point bridge"
         ) from error
     prefix_types = (
-        [ct.c_uint32]
+        [ct.c_uint32, ct.c_uint32, ct.c_double, ct.c_double]
+        if restricted_bridge
+        else [ct.c_uint32]
         if scales == (1.0, 1.0)
         else [ct.c_uint32, ct.c_double, ct.c_double]
     )
-    prefix_values = [functional] if scales == (1.0, 1.0) else [functional, *scales]
+    prefix_values = (
+        [functional, 1, *scales]
+        if restricted_bridge
+        else [functional]
+        if scales == (1.0, 1.0)
+        else [functional, *scales]
+    )
     evaluate.argtypes = [
         *prefix_types,
         ct.POINTER(ct.c_double),
@@ -289,7 +323,10 @@ class NativeKsSnapshot:
             options = self._batch._calculator.ks_options
             functional_code = _native_semilocal_code(options.method_ir)
             if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:
-                expected_domain_version = LIBXC_WORK_DOMAIN_VERSION
+                expected_domain_version = {
+                    LIBXC_WORK_DOMAIN: LIBXC_WORK_DOMAIN_VERSION,
+                    DENSITY_WORK_DOMAIN: DENSITY_WORK_DOMAIN_VERSION,
+                }.get(options.scf_domain)
             else:
                 expected_domain = options.scf_domain
                 expected_domain_version = (
@@ -1248,6 +1285,7 @@ class NativeKsSnapshot:
             rho,
             gradient,
             tau,
+            spin=functional.spin,
             scales=self.coefficients[:2],
             required_ingredients=functional.ingredients,
         )

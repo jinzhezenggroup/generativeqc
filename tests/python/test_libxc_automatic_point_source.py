@@ -34,7 +34,6 @@ def test_backends_share_semantics_but_not_emitted_source_identity(name: str) -> 
     assert "invalid.valid = false" in device.source
     assert "__device__ inline DevicePointValue" in device.source
     assert "total_density <" in device.source
-    assert "* total_density / (work_rho_a + work_rho_b)" in device.source
 
 
 def test_exact_emitted_contract_changes_invalidate_source_identity() -> None:

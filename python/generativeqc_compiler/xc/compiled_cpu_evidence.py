@@ -51,7 +51,9 @@ def _compiler(value: Any) -> dict[str, Any] | None:
     }
 
 
-def _smoke(value: Any, *, required: bool) -> dict[str, Any] | None:
+def _smoke(
+    value: Any, *, required: bool, restricted: bool = False
+) -> dict[str, Any] | None:
     if value is None:
         if required:
             raise ValueError("passing compiled-CPU result requires runtime smoke")
@@ -65,7 +67,12 @@ def _smoke(value: Any, *, required: bool) -> dict[str, Any] | None:
         if status not in ("fail", "not-run"):
             raise ValueError("compiled-CPU smoke has invalid status")
     case_labels = value.get("case_labels")
-    if case_labels != ["interior", "vacuum"]:
+    expected_labels = ["interior", "vacuum"]
+    if restricted:
+        expected_labels.extend(
+            ["restricted-interior", "restricted-vacuum", "restricted-active-tail"]
+        )
+    if case_labels != expected_labels:
         raise ValueError(
             "compiled-CPU smoke must cover exact interior and vacuum cases"
         )
@@ -112,12 +119,16 @@ def _smoke(value: Any, *, required: bool) -> dict[str, Any] | None:
             raise ValueError("compiled-CPU smoke reported error is inconsistent")
         if actual_error > float(tolerance):
             raise ValueError("passing compiled-CPU smoke exceeds its tolerance")
-    if required and len(expected_values) != 22:
+    if required and len(expected_values) != (40 if restricted else 22):
         raise ValueError("passing compiled-CPU smoke must contain two native vectors")
     return {
-        "schema": "generativeqc.libxc-compiled-cpu-smoke/v2",
+        "schema": (
+            "generativeqc.libxc-compiled-cpu-smoke/v3"
+            if restricted
+            else "generativeqc.libxc-compiled-cpu-smoke/v2"
+        ),
         "status": status,
-        "case_labels": ["interior", "vacuum"],
+        "case_labels": expected_labels,
         "input_identity": _sha(value.get("input_identity"), "smoke input identity"),
         "expected": expected_values,
         "observed": observed_values,
@@ -155,7 +166,10 @@ def _binding_payload(
     capability_name: str,
     capability_identity: str,
 ) -> dict[str, Any]:
-    if value.get("schema") != POINT_PROGRAM_BINDING_SCHEMA:
+    if value.get("schema") not in (
+        POINT_PROGRAM_BINDING_SCHEMA,
+        "generativeqc.libxc-bulk-point-program-binding/v5",
+    ):
         raise ValueError("compiled-CPU binding has unsupported schema")
     if value.get("name") != capability_name:
         raise ValueError("compiled-CPU binding functional mismatch")
@@ -204,7 +218,7 @@ def _binding_payload(
         raise ValueError("compiled-CPU binding pinned density threshold mismatch")
 
     payload = {
-        "schema": POINT_PROGRAM_BINDING_SCHEMA,
+        "schema": value["schema"],
         "name": capability_name,
         "capability_identity": capability_identity,
         "point_expression_identity": _sha(
@@ -229,8 +243,15 @@ def _binding_payload(
         current = bind_runtime_semilocal_point_program(
             build_bulk_runtime_program(capability_name, domain=domain)
         )
-        if payload != current.to_payload():
+        payload["restricted_binding"] = value.get("restricted_binding")
+        payload["restricted_binding_identity"] = value.get(
+            "restricted_binding_identity"
+        )
+        if canonical_hash(payload) != current.identity:
             raise ValueError("compiled-CPU density work binding is stale")
+        payload = current.to_payload()
+    elif value["schema"] != POINT_PROGRAM_BINDING_SCHEMA:
+        raise ValueError("compiled-CPU binding schema disagrees with domain")
     return payload
 
 
@@ -288,7 +309,11 @@ def build_result(
             if executable_sha is not None
             else None
         )
-    smoke = _smoke(outcome.get("smoke"), required=required)
+    smoke = _smoke(
+        outcome.get("smoke"),
+        required=required,
+        restricted=binding.restricted is not None,
+    )
 
     payload = {
         "schema": RESULT_SCHEMA,
@@ -366,7 +391,11 @@ def validate_result(name: str, value: Mapping[str, Any]) -> dict[str, Any]:
             if executable_sha is not None
             else None
         )
-    smoke = _smoke(outcome["smoke"], required=required)
+    smoke = _smoke(
+        outcome["smoke"],
+        required=required,
+        restricted=binding_payload.get("restricted_binding") is not None,
+    )
 
     payload = {
         "schema": RESULT_SCHEMA,
@@ -412,7 +441,11 @@ def validate_qualification(
     compiler = _compiler(value.get("compiler"))
     if compiler is None:
         raise ValueError("compiled-CPU qualification requires compiler identity")
-    smoke = _smoke(value.get("smoke"), required=True)
+    smoke = _smoke(
+        value.get("smoke"),
+        required=True,
+        restricted=binding.get("restricted_binding") is not None,
+    )
     payload = {
         "schema": QUALIFICATION_SCHEMA,
         "result_identity": _sha(
