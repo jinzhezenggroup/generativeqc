@@ -23,6 +23,11 @@ from .bulk_runtime import (
     PRODUCTION_CANDIDATE_DOMAIN,
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
 )
+from .density_work import DENSITY_WORK_DOMAIN, DENSITY_WORK_DOMAIN_VERSION
+from .restricted_point_program import (
+    RestrictedSemilocalPointBinding,
+    bind_runtime_restricted_semilocal_point_program,
+)
 
 if TYPE_CHECKING:
     from .bulk_runtime import BulkRuntimeProgram
@@ -34,6 +39,7 @@ _NATIVE_DOMAIN_VERSIONS = {
     libxc_bulk.BULK_SEMANTICS: 1,
     PRODUCTION_CANDIDATE_DOMAIN: 2,
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN: 3,
+    DENSITY_WORK_DOMAIN: DENSITY_WORK_DOMAIN_VERSION,
 }
 
 _POINT_LAYOUTS = {
@@ -130,10 +136,19 @@ class SemilocalPointBinding:
     point_expression_identity: str
     domain_version: int
     density_threshold: float | None = None
+    restricted: RestrictedSemilocalPointBinding | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.variant, SourceVariant):
             raise TypeError("point binding requires SourceVariant")
+        if self.restricted is not None and (
+            not isinstance(self.restricted, RestrictedSemilocalPointBinding)
+            or self.variant.domain != DENSITY_WORK_DOMAIN
+            or self.restricted.variant.name != self.variant.name
+            or self.restricted.capability_identity != self.capability_identity
+            or self.restricted.density_threshold != self.density_threshold
+        ):
+            raise ValueError("restricted companion disagrees with polarized binding")
         for label, value in (
             ("capability_identity", self.capability_identity),
             ("point_expression_identity", self.point_expression_identity),
@@ -168,7 +183,10 @@ class SemilocalPointBinding:
             raise ValueError(
                 "domain_version disagrees with the compiler-owned runtime domain"
             )
-        if self.variant.domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
+        if self.variant.domain in (
+            PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+            DENSITY_WORK_DOMAIN,
+        ):
             if (
                 not isinstance(self.density_threshold, (int, float))
                 or not math.isfinite(float(self.density_threshold))
@@ -192,8 +210,12 @@ class SemilocalPointBinding:
         return canonical_hash(self.to_payload())
 
     def to_payload(self) -> dict[str, Any]:
-        return {
-            "schema": POINT_PROGRAM_BINDING_SCHEMA,
+        payload = {
+            "schema": (
+                POINT_PROGRAM_BINDING_SCHEMA
+                if self.restricted is None
+                else "generativeqc.libxc-bulk-point-program-binding/v5"
+            ),
             "name": self.variant.name,
             "capability_identity": self.capability_identity,
             "point_expression_identity": self.point_expression_identity,
@@ -206,6 +228,10 @@ class SemilocalPointBinding:
             "features": list(self.variant.features),
             "ingredient_mask": self.ingredient_mask,
         }
+        if self.restricted is not None:
+            payload["restricted_binding"] = self.restricted.to_payload()
+            payload["restricted_binding_identity"] = self.restricted.identity
+        return payload
 
     def emit_source(self) -> str:
         """Return one self-contained C++ point-program translation unit.
@@ -301,6 +327,7 @@ class SemilocalPointBinding:
             + f"    {q(self.variant.name)}, kPointExpressionIdentity, {self.ingredient_mask}U, "
             + f"{self.domain_version}U, evaluate_point}};\n"
             + "}  // namespace\n}  // namespace generativeqc::dft::bulk_generated\n"
+            + ("" if self.restricted is None else self.restricted.emit_source())
         )
 
 
@@ -319,12 +346,26 @@ def bind_runtime_semilocal_point_program(
             "native semilocal point binding requires the complete E/vxc output set"
         )
     variant = inspect_runtime_program(program, "cpu")
+    restricted = None
+    if program.spec.domain == DENSITY_WORK_DOMAIN:
+        from .bulk_runtime import build_bulk_runtime_program
+
+        restricted = bind_runtime_restricted_semilocal_point_program(
+            build_bulk_runtime_program(
+                program.spec.identifier,
+                spin="unpolarized",
+                order=1,
+                optimization=program.optimization,
+                domain=program.spec.domain,
+            )
+        )
     return SemilocalPointBinding(
         variant=variant,
         capability_identity=program.spec.capability_identity,
         point_expression_identity=program.expression_hash,
         domain_version=native_domain_version(program.spec.domain),
         density_threshold=program.spec.density_threshold,
+        restricted=restricted,
     )
 
 

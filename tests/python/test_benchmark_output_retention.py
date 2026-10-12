@@ -277,3 +277,83 @@ def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None
         Path("benchmarks/experiments/issue409-packed-values/run_endpoints.py"),
         ("--output",),
     ) in seen
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+@pytest.mark.parametrize("worker", [False, True])
+def test_rccsd_cpu_rejects_retained_output_before_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    destination_kind: str,
+    worker: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from benchmarks import _retention, rccsd_cpu_compiled_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("invalid output reached benchmark work")
+
+    monkeypatch.setattr(rccsd_cpu_compiled_endpoint, "_worker", forbidden)
+    monkeypatch.setattr(
+        rccsd_cpu_compiled_endpoint.tempfile, "TemporaryDirectory", forbidden
+    )
+    arguments = [
+        "rccsd_cpu_compiled_endpoint",
+        "--output",
+        str(destination / existing.name),
+    ]
+    if worker:
+        arguments += ["--worker", "--cache", str(tmp_path / "cache")]
+    monkeypatch.setattr(sys, "argv", arguments)
+    with pytest.raises(SystemExit) as error:
+        rccsd_cpu_compiled_endpoint.main()
+    assert error.value.code == 2
+    assert "argument --output:" in capsys.readouterr().err
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+    assert not (tmp_path / "cache").exists()
+
+
+def test_rccsd_cpu_accepts_scratch_output_without_changing_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+    from types import SimpleNamespace
+
+    from benchmarks import _retention, rccsd_cpu_compiled_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+
+    def fake_run(*args: typing.Any, **kwargs: typing.Any) -> SimpleNamespace:
+        return SimpleNamespace(returncode=0, stdout='{"energy": -1.0}', stderr="")
+
+    monkeypatch.setattr(rccsd_cpu_compiled_endpoint.subprocess, "run", fake_run)
+    destination = tmp_path / ".artifacts/benchmarks/rccsd.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["rccsd_cpu_compiled_endpoint", "--threads", "1", "--output", str(destination)],
+    )
+    rccsd_cpu_compiled_endpoint.main()
+    payload = destination.read_text(encoding="utf-8")
+    assert capsys.readouterr().out == payload
+    record = json.loads(payload)
+    assert record["schema"] == "generativeqc.rccsd.native-cpu-endpoint.v1"
+    assert [row["stage"] for row in record["observations"]] == [
+        "reference",
+        "native_cold",
+        "native_warm",
+    ]
+    assert all(row["blas_threads"] == 1 for row in record["observations"])

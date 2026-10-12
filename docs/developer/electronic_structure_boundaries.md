@@ -51,6 +51,26 @@ This cross-method gate complements, rather than replaces, the more detailed
 `tools/check_scf_structure.py` and `tools/check_compiler_structure.py`
 ownership checks.
 
+### CPU RCCSD reference-view handoff (#929)
+
+`cc::prepare_canonical_reference_input` consumes the existing immutable,
+borrowed `core::ElectronicReferenceView` contract. The RCCSD problem builder
+gets its occupied/virtual layout, reference energy, canonical orbital spectrum,
+and row-major `C^T F C` from this common view instead of independently reading
+`hf::PhysicalReference` fields. It rejects malformed matrices, nonfinite values
+and unsupported unrestricted occupations **before** generating transformed Fock
+data or requesting AO integral blocks.
+
+The producer owns the orbitals: `RccsdNativeState::reference` retains the HF
+reference through CC response and source retirement, while the synchronous
+adapter owns only its freshly transformed MO Fock matrix. Validated RKS final
+states can expose the same input shape without introducing an SCF-private
+dependency, but this contract check does **not** enable CCSD-on-KS or UCCSD.
+Conventional AO and CUDA DF providers still retain their existing HF-specific
+source binding; provider migration and persistent source/geometry/solve-epoch
+invalidation are separate #929/#930 follow-ups. No GPU performance or CUDA
+scientific acceptance is inferred from the CPU reference-view tests.
+
 ### HF reference ownership
 
 The first explicit HF owner is `src/hf/reference.hpp`. The canonical restricted

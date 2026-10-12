@@ -38,8 +38,8 @@ from generativeqc_compiler.xc.bulk_point_program import (
     bind_runtime_semilocal_point_program,
 )
 from generativeqc_compiler.xc.bulk_runtime import (
-    PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
+    production_candidate_domain,
 )
 from generativeqc_compiler.xc.molecular_scf_evidence import (
     build_result,
@@ -71,7 +71,24 @@ def _load_stage(path: Path, expected: str) -> dict[str, Any]:
     return _stage_payload(raw, expected)
 
 
-def _runner_source(binding_source: str, binding_identity: str) -> str:
+def _runner_source(
+    binding_source: str, binding_identity: str, *, restricted: bool = False
+) -> str:
+    restricted_program = "*registered_restricted" if restricted else "program"
+    registered_setup = ""
+    if restricted:
+        registered_setup = """
+  const auto& expected_restricted =
+      dft::bulk_generated::restricted_generated::kPointProgram;
+  const auto* registered_restricted = dft::generated::automatic_restricted_libxc_program(
+      expected_restricted.identifier);
+  if (!registered_restricted ||
+      std::string_view(registered_restricted->expression_identity) !=
+          expected_restricted.expression_identity ||
+      registered_restricted->domain_version != expected_restricted.domain_version ||
+      registered_restricted->ingredient_mask != expected_restricted.ingredient_mask)
+    throw std::runtime_error("registered restricted program disagrees with qualification binding");
+"""
     suffix = f"""
 #include <iomanip>
 #include <iostream>
@@ -150,19 +167,20 @@ void run_spin(std::string_view spin, bool unrestricted) {{
   options.density_tolerance = 1e-10;
 
   const auto& program = dft::bulk_generated::qualification_program();
+{registered_setup}
   const auto cold =
       unrestricted ? scf::run_semilocal_uks(cold_plan, cold_basis, cold_grid, options, program)
-                   : scf::run_semilocal_rks(cold_plan, cold_basis, cold_grid, options, program);
+                   : scf::run_semilocal_rks(cold_plan, cold_basis, cold_grid, options, {restricted_program});
   const auto warm = unrestricted
                         ? scf::run_semilocal_uks(cold_plan, cold_basis, cold_grid, options, program,
                                                  &cold.density)
-                        : scf::run_semilocal_rks(cold_plan, cold_basis, cold_grid, options, program,
+                        : scf::run_semilocal_rks(cold_plan, cold_basis, cold_grid, options, {restricted_program},
                                                  &cold.density);
   const auto moved = unrestricted
                          ? scf::run_semilocal_uks(moved_plan, moved_basis, moved_grid, options,
                                                   program, &cold.density)
                          : scf::run_semilocal_rks(moved_plan, moved_basis, moved_grid, options,
-                                                  program, &cold.density);
+                                                  {restricted_program}, &cold.density);
   print_row(spin, "cold", cold);
   print_row(spin, "warm-replay", warm);
   print_row(spin, "changed-geometry", moved);
@@ -191,7 +209,10 @@ int main() {{
   }}
 }}
 """
-    return binding_source + "\n" + suffix
+    registry_header = (
+        '#include "generated_libxc_semilocal_registry.hpp"\n' if restricted else ""
+    )
+    return binding_source + "\n" + registry_header + suffix
 
 
 def _find_library(build_dir: Path) -> Path:
@@ -255,6 +276,8 @@ def _compile_and_run(
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
+            "-I",
+            str(build_dir / "generated" / "libxc_semilocal_cpu"),
             "-pthread",
             "-c",
             str(source_path),
@@ -553,6 +576,7 @@ def qualify_molecular_scf(
             raise ValueError(f"{label} must be finite and nonnegative")
     if not isinstance(evidence, str) or not evidence.strip():
         raise ValueError("molecular-SCF qualification requires an evidence reference")
+    domain = production_candidate_domain(name)
 
     prerequisites = {
         "compiled-cpu": _stage_payload(compiled_cpu_evidence, "compiled-cpu"),
@@ -574,7 +598,7 @@ def qualify_molecular_scf(
         name,
         spin="polarized",
         order=1,
-        domain=PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+        domain=domain,
     )
     binding = bind_runtime_semilocal_point_program(program)
     for resolution in resolutions.values():
@@ -583,7 +607,11 @@ def qualify_molecular_scf(
                 "molecular-SCF point binding disagrees with compiled-CPU evidence"
             )
 
-    source = _runner_source(binding.emit_source(), binding.identity)
+    source = _runner_source(
+        binding.emit_source(),
+        binding.identity,
+        restricted=binding.restricted is not None,
+    )
     output, native_metadata = _compile_and_run(
         source,
         build_dir=build_dir,

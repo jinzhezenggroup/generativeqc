@@ -237,3 +237,56 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     assert "source .github/scripts/ci_select_python_shard.sh" in source
     assert 'pytest "${test_targets[@]}" -v' in source
     assert "-o faulthandler_timeout=900" in source
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
+def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
+    event: str, presence: str, tmp_path: Path
+) -> None:
+    owners = {
+        "tests/python/test_uccsd_lambda.py": "posthf",
+        "tests/python/test_uccsd_t_owner.py": "posthf",
+        "tests/python/test_uccsd_physical_response.py": "posthf",
+        "tests/python/test_uccsd_triples_response.py": "runtime-heavy",
+    }
+    probes = [
+        "tests/python/test_aaa.py",
+        "tests/python/test_uccsd_aaa.py",
+        "tests/python/test_uccsd_lambda_next.py",
+        "tests/python/test_uccsd_physical_response_next.py",
+        "tests/python/test_uccsd_t_owner_next.py",
+        "tests/python/test_uccsd_triples_response_next.py",
+        "tests/python/test_zzz.py",
+    ]
+    tracked = presence in {"tracked", "missing"}
+    inventory = sorted([*probes, *(owners if tracked else [])])
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    for relative in inventory:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
+    for relative in owners:
+        if presence == "untracked":
+            (tmp_path / relative).touch()
+        elif presence == "missing":
+            (tmp_path / relative).unlink()
+    selections = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
+    for path, owner in owners.items():
+        actual = [
+            shard for shard, (_, targets, _) in selections.items() if path in targets
+        ]
+        assert actual == ([owner] if tracked else [])
+        assert selections[owner][0] == "loadfile"
+        assert not any(
+            path in argument
+            for _, _, arguments in selections.values()
+            for argument in arguments
+        )
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
+        assert selections[shard][1] == [
+            path for path in inventory[bucket::3] if path not in owners
+        ]

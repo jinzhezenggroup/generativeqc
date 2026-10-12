@@ -1,5 +1,7 @@
 """Fault-inject the production shell derivative wrappers without CUDA hardware."""
 
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +15,71 @@ if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_canonical_storage_alone_does_not_admit_the_default_cross_schedule(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Exercise the real admission predicate, including screened/batched refusal."""
+    source = tmp_path / "cross_admission.cpp"
+    binary = tmp_path / "cross_admission"
+    body = _extract_function(
+        (ROOT / "src/scf/cuda/direct_jk.cpp").read_text(),
+        "bool cuda_direct_jk_bilinear_preferred(",
+    )
+    source.write_text(
+        "#include <cassert>\n#include <cstddef>\n"
+        "struct Exchange { bool force_capability{}; };\n"
+        "struct Diagnostic { std::size_t batch_size{1}; };\n"
+        "struct CudaDirectJkPlan {\n"
+        "  int* canonical_pairs{}; Exchange* generated_exchange{};\n"
+        "  int* numerical_failure{}; Diagnostic diagnostic;\n"
+        "  double screening_tolerance{};\n"
+        "};\n" + body + "\nint main() {\n"
+        "  int error = 0; Exchange exchange; CudaDirectJkPlan plan;\n"
+        "  assert(!cuda_direct_jk_bilinear_preferred(nullptr));\n"
+        "  plan.canonical_pairs = &error;\n"
+        "  assert(!cuda_direct_jk_bilinear_preferred(&plan));\n"
+        "  plan.generated_exchange = &exchange; plan.numerical_failure = &error;\n"
+        "  assert(!cuda_direct_jk_bilinear_preferred(&plan));\n"
+        "  exchange.force_capability = true;\n"
+        "  assert(cuda_direct_jk_bilinear_preferred(&plan));\n"
+        "  plan.screening_tolerance = 1e-8;\n"
+        "  assert(!cuda_direct_jk_bilinear_preferred(&plan));\n"
+        "  plan.screening_tolerance = 0; plan.diagnostic.batch_size = 2;\n"
+        "  assert(!cuda_direct_jk_bilinear_preferred(&plan));\n"
+        "  plan.diagnostic.batch_size = 1; plan.numerical_failure = nullptr;\n"
+        "  assert(!cuda_direct_jk_bilinear_preferred(&plan));\n"
+        "}\n"
+    )
+    native_cxx.build_executable([source], binary, compile_args=["-std=c++20", "-O0"])
+    subprocess.run([binary], check=True, timeout=10)
+
+
+def test_response_defaults_request_bounded_shell_reuse(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Compile the actual options contract without loading a CUDA runtime."""
+    source = tmp_path / "default_policy.cpp"
+    binary = tmp_path / "default_policy"
+    source.write_text(
+        '#include "hf/rhf_frame_response.hpp"\n'
+        "int main() {\n"
+        "  const generativeqc::hf::RHFFrameResponseOptions options;\n"
+        "  return options.bilinear_derivative && options.symmetric_polarization ? 0 : 1;\n"
+        "}\n"
+    )
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            "-I" + str(ROOT / "include"),
+            "-I" + str(ROOT / "src"),
+        ],
+        compile_timeout=60,
+    )
+    subprocess.run([binary], check=True, timeout=10)
 
 
 def _extract_function(source: str, symbol: str) -> str:
@@ -32,7 +99,7 @@ def _extract_function(source: str, symbol: str) -> str:
 
 @pytest.fixture(scope="module")
 def host_lifetime_probe(
-    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     bodies = []
@@ -76,6 +143,7 @@ def host_lifetime_probe(
         for route, count in (
             ("full_range", 8),
             ("full_range_combined", 8),
+            ("full_range_bilinear", 8),
             ("rsh", 8),
             ("rsh_split", 14),
             ("rsh_zero", 8),
@@ -166,6 +234,7 @@ def test_shell_derivatives_preserve_disabled_sources(
     [
         ("full_range", 2, 1, 48),
         ("full_range_combined", 1, 1, 24),
+        ("full_range_bilinear", 1, 1, 24),
         ("rsh", 3, 1, 72),
         ("rsh_split", 3, 2, 72),
         ("rsh_zero", 3, 1, 48),
@@ -188,6 +257,33 @@ def test_shell_derivative_output_channels_and_download_bytes(
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"{output_channels} {copy_count} {copy_bytes}"
+
+
+@pytest.mark.parametrize("refusal", range(1, 6))
+def test_bilinear_rejects_screened_batched_spin_and_split_contracts(
+    host_lifetime_probe: Path, refusal: int
+) -> None:
+    """Refuse unsupported contracts before projection, kernels or publication."""
+    result = subprocess.run(
+        [
+            str(host_lifetime_probe),
+            "0",
+            "0",
+            "full_range_bilinear",
+            "0",
+            "1",
+            "-0.5",
+            "0",
+            "0",
+            str(refusal),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "refused before submission"
 
 
 def test_preparation_staging_outlives_the_stream_draining_owner() -> None:
@@ -227,6 +323,7 @@ void* force_buffer=nullptr;
 bool tracking=false, pending=false, freed_pending=false;
 void* watched[32]{}; unsigned watched_count=0; bool split=false;
 bool density_fixture=false, angular_schedule=false, separate_sources=true;
+bool bilinear_route=false;
 unsigned full_calls=0, range_calls=0, fused_calls=0, angular_calls=0;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
@@ -289,7 +386,11 @@ void trace_counter(const char* name,std::uint64_t count) noexcept {
 namespace generativeqc::scf::cuda_execution {
 namespace detail { constexpr unsigned kDirectQuartetShellClassCount=1; }
 enum class DirectCoulombRange { Full, Short, Long };
-struct Batch { int total_atoms=1, batch_size=1, nbf=2; };
+struct Batch {
+  int total_atoms=1, batch_size=1, nbf=2, direct_nbf=2;
+  const double* direct_force_seed=nullptr;
+};
+std::size_t product(std::size_t first,std::size_t second) { return first*second; }
 using GeneratedShellPairStream = generativeqc::scf::detail::GeneratedShellPairStream;
 GeneratedShellPairStream borrowed_topology{};
 struct Shared {
@@ -311,19 +412,28 @@ struct GeneratedExchangePlan {
   DirectSpdForceSchedule spd_force_schedule{DirectSpdForceSchedule::Incumbent};
 };
 // PRODUCTION_DENSITY_COEFFICIENT
-int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const double* alpha,const double*) {
-  if(density_fixture) plan.direct_spin=const_cast<double*>(alpha);
+int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool unrestricted,
+                                       const double* alpha,const double* beta) {
+  if(bilinear_route && (!unrestricted || beta!=alpha+4))
+    throw std::runtime_error("cross operands lost the two-slot projection");
+  if(density_fixture || bilinear_route) plan.direct_spin=const_cast<double*>(alpha);
   return operation();
 }
 // Independent labelled source values expose both coefficient and force-sign
 // mistakes in the host decomposition, without evaluating any integral kernel.
 void full_sources(double* force,const double* density,double cj,double ck,
-                  bool separate,bool accumulate=false) {
+                  bool separate,bool accumulate=false,const double* seed=nullptr) {
   if(separate!=separate_sources) throw std::runtime_error("wrong full-range source layout");
-  const double j=density_fixture ? direct_force_density_coefficient_scaled<true>(
-      2,0,0,density,1,1,0,0,cj,0.0) : cj;
-  const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
-      2,0,0,density,1,1,0,0,0.0,ck) : ck;
+  if(bilinear_route && seed!=density+4)
+    throw std::runtime_error("shell consumer lost the Cartesian seed view");
+  const double j=bilinear_route ? direct_force_density_coefficient_scaled<false>(
+      2,0,0,density,1,1,0,0,cj,0.0,seed) :
+      (density_fixture ? direct_force_density_coefficient_scaled<true>(
+          2,0,0,density,1,1,0,0,cj,0.0) : cj);
+  const double k=bilinear_route ? direct_force_density_coefficient_scaled<false>(
+      2,0,0,density,1,1,0,0,0.0,ck,seed) :
+      (density_fixture ? direct_force_density_coefficient_scaled<true>(
+          2,0,0,density,1,1,0,0,0.0,ck) : ck);
   for(unsigned i=0;i<3;++i) {
     force[i]=(accumulate ? force[i] : 0.0)-j*(1+i);
     if(separate) force[3+i]=(accumulate ? force[3+i] : 0.0)-k*(10+i);
@@ -342,7 +452,8 @@ template<class... Args> cudaError_t launch_bounded_shell_energy_derivative(Args&
   if(std::get<20>(values)!=&borrowed_topology)
     throw std::runtime_error("full range lost borrowed topology");
   full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),
-               std::get<17>(values),std::get<19>(values));
+               std::get<17>(values),std::get<19>(values),false,
+               std::get<3>(values).direct_force_seed);
   return cudaGetLastError();
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
@@ -379,7 +490,8 @@ template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&
     if(error!=cudaSuccess) return error;
     if(range==DirectCoulombRange::Full)
       full_sources(std::get<14>(values),std::get<12>(values),
-                   std::get<18>(values)/13.0,std::get<19>(values)/13.0,separate,true);
+                   std::get<18>(values)/13.0,std::get<19>(values)/13.0,separate,true,
+                   std::get<3>(values).direct_force_seed);
     else
       range_source(std::get<14>(values),std::get<12>(values),std::get<19>(values)/13.0,true);
     error=cudaGetLastError();
@@ -406,7 +518,8 @@ int main(int argc,char** argv) {
   throw_error=argc>2 && std::atoi(argv[2]);
   const bool zero_exchange=argc>3 && std::strcmp(argv[3],"rsh_zero")==0;
   split=zero_exchange || (argc>3 && std::strcmp(argv[3],"rsh_split")==0);
-  separate_sources=!(argc>3 && std::strcmp(argv[3],"full_range_combined")==0);
+  bilinear_route=argc>3 && std::strcmp(argv[3],"full_range_bilinear")==0;
+  separate_sources=!(argc>3 && std::strcmp(argv[3],"full_range_combined")==0) && !bilinear_route;
   const bool full_range=!separate_sources ||
       !(argc>3 && std::strcmp(argv[3],"full_range")!=0);
   source_count=full_range ? (separate_sources ? 2U : 1U) : 3U;
@@ -416,6 +529,7 @@ int main(int argc,char** argv) {
       (zero_exchange ? 0.0 : (full_range ? -0.5 : -0.1));
   const double cl=argc>7 ? std::strtod(argv[7],nullptr) : (zero_exchange ? 0.0 : -0.5);
   density_fixture=argc>8 && std::atoi(argv[8]);
+  const int refusal=argc>9 ? std::atoi(argv[9]) : 0;
   const bool want_full=(full_range || split) && (cj!=0.0 || cs!=0.0);
   const bool want_range=split && (cs!=0.0 || cl!=0.0);
   const bool want_fused=source_count==3 && !split;
@@ -428,11 +542,25 @@ int main(int argc,char** argv) {
   };
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
+  if(refusal==1) shared.screening=1e-8;
+  if(refusal==2) shared.batch.batch_size=2;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
   double force[9]{}, bound=1, density=1;
   force_buffer=force;
   // The total density is small; the unused same-spin exchange squares overflow.
   double spin_density[]{1.0,1e200,1e200,1.0,1.0,-1e200,-1e200,1.0};
+  double cross_density[]{0.2,-0.3,0.1,0.4,-0.5,0.2,-0.1,0.3};
+  double plus[4]{},minus[4]{};
+  for(unsigned index=0;index<4;++index) {
+    plus[index]=cross_density[index]+cross_density[4+index];
+    minus[index]=cross_density[index]-cross_density[4+index];
+  }
+  const auto polarized = [&](double coulomb,double exchange) {
+    return 0.5*(direct_force_density_coefficient_scaled<false>(
+        2,0,0,plus,1,1,0,0,coulomb,exchange)-
+        direct_force_density_coefficient_scaled<false>(
+        2,0,0,minus,1,1,0,0,coulomb,exchange));
+  };
   if(density_fixture && (direct_force_density_coefficient_scaled<true>(
       2,0,0,spin_density,1,1,0,0,1.0,0.0)!=4.0 ||
       std::isfinite(direct_force_density_coefficient_scaled<true>(
@@ -443,9 +571,11 @@ int main(int argc,char** argv) {
   const auto result_matches = [&]() {
     if(output.size()!=3*source_count) return false;
     for(unsigned i=0;i<3;++i) {
-      const double j=cj*(density_fixture ? 4 : 1)*(1+i);
+      const double j=(bilinear_route ? polarized(cj,0.0) :
+                                     cj*(density_fixture ? 4 : 1))*(1+i);
+      const double exchange=bilinear_route ? polarized(0.0,cs) : cs;
       if(!std::isfinite(output[i]) ||
-         std::abs(output[i]-(j+(separate_sources ? 0.0 : cs*(10+i))))>1e-12)
+         std::abs(output[i]-(j+(separate_sources ? 0.0 : exchange*(10+i))))>1e-12)
         return false;
       if(!separate_sources) continue;
       if(!std::isfinite(output[3+i]) ||
@@ -460,18 +590,29 @@ int main(int argc,char** argv) {
     full_calls=0; range_calls=0; fused_calls=0; angular_calls=0;
     return full_range
         ? execute_generated_full_range_energy_derivatives(
-            plan,density_fixture,density_fixture ? spin_density : &density,
-            density_fixture ? spin_density+4 : nullptr,cj,cs,output,separate_sources)
+            plan,density_fixture || refusal==3,bilinear_route ? cross_density :
+                (density_fixture ? spin_density : &density),
+            bilinear_route ? (refusal==5 ? nullptr : cross_density+4) :
+                (density_fixture ? spin_density+4 : nullptr),
+            cj,cs,output,separate_sources || refusal==4,false,bilinear_route)
         : execute_generated_rsh_energy_derivatives(
             plan,density_fixture,density_fixture ? spin_density : &density,
             density_fixture ? spin_density+4 : nullptr,cj,cs,cl,split ? 0.3 : 0.4,output);
   };
+  if(refusal) {
+    if(execute()!=cudaErrorInvalidValue || step || syncs ||
+       output!=std::vector<double>{99.0} || plan.direct_spin || shared.batch.direct_force_seed)
+      return 12;
+    std::cout<<"refused before submission\n";
+    return 0;
+  }
   tracking=true;
   int status=0; bool threw=false;
   try { status=execute(); }
   catch(const std::exception&) { threw=true; }
   tracking=false;
   if(freed_pending) {std::cerr<<"result freed before queued D2H drained";return 2;}
+  if(shared.batch.direct_force_seed) {std::cerr<<"retained source identity changed";return 11;}
   if(pending) {std::cerr<<"D2H still pending at API return";return 3;}
   if(fail_step) {
     if(throw_error ? !threw : status!=7) {std::cerr<<"lost injected failure";return 4;}

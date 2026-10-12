@@ -18,6 +18,7 @@ MP2, RCCSD, UCCSD, triples, Lambda and correlated nuclear gradients. Read the sh
 ../rccsd_gpu
 ../rccsd_lambda
 ../uccsd_lambda
+../uccsd_physical_response
 ../rccsd_t
 ../rccsd_t_api
 ../ccsd_gradient

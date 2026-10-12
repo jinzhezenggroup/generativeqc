@@ -137,17 +137,19 @@ itself remains a pure, deterministic admission evaluator.
 
 `tools/qualify_libxc_compiled_cpu.py` produces the concrete
 `compiled-cpu` evidence used by the automatic semilocal path. It builds the
-polarized first-order `libxc-bulk-production-candidate/v2` Graph, binds it to
-the native `SemilocalPointProgram` ABI, derives native domain version 3 from
-that compiler-owned domain, compiles the same total-density screening into the
-point wrapper, then compiles and executes one C++ translation unit.
+polarized first-order Graph selected by the shared `production_candidate_domain`
+recipe and binds it to the native `SemilocalPointProgram` ABI. Density-only LDA
+uses `libxc-7.0/work-density-only-v1` (native domain version 5); other supported
+ingredients retain `libxc-bulk-production-candidate/v2` (version 3). The wrapper
+compiles the recipe's total-density screening before executing the Graph, then
+the tool compiles and executes one C++ translation unit.
 
 A pass binds all of the following into
 `generativeqc.libxc-compiled-cpu-result/v2`:
 
 - exact functional capability identity;
-- `generativeqc.libxc-bulk-point-program-binding/v4` identity and payload, including
-  the pinned density threshold;
+- exact point binding and pinned density threshold: binding v4 for legacy
+  domains, v5 with a separately identified restricted companion for density work;
 - point-expression and emitted-artifact identities;
 - compiler executable hash and version;
 - generated translation-unit hash;
@@ -252,7 +254,7 @@ stage; the current B1 campaign explicitly records the shared array-Graph
 executor rather than pretending that interpreted evidence is a compiled-CPU or
 CUDA result.
 
-The B1 campaign uses the explicit
+The unclipped candidate uses the explicit
 `libxc-bulk-production-candidate/v2` runtime domain. It keeps the v1
 zero-gradient expansion and additionally admits nonnegative rho/tau for
 qualification. Exact total-density rows below the pinned registration's Libxc
@@ -271,6 +273,57 @@ singularity remain blocked by their numerical matrix row.
 Ordinary bulk runtime consumers continue to default to the original interior
 domain; both qualification-candidate versions are explicit opt-ins and their
 domain/threshold semantics are part of the retained execution identity.
+
+Density-only LDA qualification now uses the separate, explicit
+`libxc-7.0/work-density-only-v1` domain. After constructing the imported interior
+derivative roots, it evaluates those roots at the pinned Libxc worker's floored
+density coordinates. It does **not** differentiate the clipping map. Energy is
+weighted by the original total density rather than the floored spin sum; the
+complete minority-spin potential is retained. Total-density screening runs
+before work evaluation in array, native point, and CUDA tile execution.
+The projection owner, worker policy, spin normalization, domain, and requested
+outputs enter the expression/binding identity. Stored work receipts are rebuilt
+against the current owner and rejected when stale. Prepared programs retain the
+owner identity captured at construction.
+
+The production-domain, compiled-CPU, molecular-SCF, and sharded-catalog producers
+share this structural recipe, not functional-name branches. Density-work CPU RKS
+uses a distinct `RestrictedSemilocalPointProgram` callback on original total
+density, gradient and tau; it does not fold total inputs into polarized spins.
+The existing polarized descriptor retains its binary layout. Its RKS overload
+rejects domain version 5, while legacy domains retain their existing spin-fold
+fallback. Automatic CPU method dispatch selects the registered restricted
+descriptor for density-only LDA and the polarized descriptor for UKS.
+Public KS plans and diagnostic readers select the density-work domain by the
+same ingredient-family policy and require exact native version 5; legacy
+automatic semilocal diagnostics still require version 4. Neither reader accepts
+the other's version merely because both belong to the automatic registry.
+The live stationary CPU point bridge also selects this layout explicitly from
+the verified functional spin. Its private v4 ABI reconstructs original total
+features from equal RKS half-feature channels and duplicates U1 coefficients
+for the existing half-channel pullback (including native `vtau/2`). The v2/v3
+ABIs remain polarized, including equal-spin UKS inputs; equality never selects
+RKS. Restricted calls reject unequal channels and fail explicitly when the
+native library lacks v4 or its matching restricted descriptor. Legacy work
+domains retain the same spin-fold continuation as their SCF. This point bridge
+does not qualify a complete molecular force endpoint or the automatic CUDA RKS
+provider.
+The compiled-CPU receipt includes restricted interior, vacuum and active
+`[floor, 2*floor)` smoke cases in addition to polarized E/vxc. The molecular
+producer verifies the actual native registry's restricted expression identity
+against that companion before running the unchanged both-spin lifecycle matrix.
+Ordinary geometry success cannot waive the total-density tail contract or
+establish physical empty-spin/birth qualification. The catalog campaign
+v2 records each registration's candidate domain and the shard's domain set.
+Older unclipped LDA failures remain diagnostic artifacts, but an unclipped
+receipt cannot provide new density-work compilation/admission evidence.
+Compiler-source changes conservatively invalidate old capability/expression
+identities even when old-domain emitted mathematics is unchanged. Unsupported work
+ingredients fail closed; GGA/MGGA keep their existing unclipped recipe and gates.
+Unpolarized total-density and polarized per-spin worker layouts remain distinct:
+the native RKS consumer's folded polarized layout is not silently substituted for
+the standalone unpolarized Graph. Work-coordinate Libxc parity is not physical
+particle-birth, analytic-force, public backend, or catalog-wide qualification.
 
 `generativeqc_compiler.xc.production_domain_cases` instantiates every numerical
 rho/sigma/tau row in the exact v3 cases-by-spin matrix from finite physical

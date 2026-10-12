@@ -17,13 +17,15 @@ def read_history(
     *,
     index: int | None = None,
     physical: tuple[str, float] | None = None,
+    native_version: int = 1,
+    expected_domain: str | None = None,
 ) -> KsDiagnostic:
     def query(*args: typing.Any) -> int:
         summary_pointer, rows, capacity = args[-3:]
         summary = ct.cast(
             summary_pointer, ct.POINTER(_native.KsDiagnosticDescriptor)
         ).contents
-        summary.scf_domain_version = 1
+        summary.scf_domain_version = native_version
         summary.history_count = len(changes)
         summary.fock_builds = len(changes) + 4
         if rows is not None:
@@ -47,7 +49,34 @@ def read_history(
         generativeqc_calculation_get_ks_diagnostic=query,
         generativeqc_batch_get_ks_diagnostic=query,
     )
-    return read_ks_diagnostic(library, None, index=index)
+    return read_ks_diagnostic(
+        library, None, index=index, expected_domain=expected_domain
+    )
+
+
+@pytest.mark.parametrize("index", (None, 0))
+def test_density_work_diagnostic_requires_its_exact_native_domain(
+    index: int | None,
+) -> None:
+    from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
+    from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
+
+    diagnostic = read_history(
+        [math.inf], index=index, native_version=5, expected_domain=DENSITY_WORK_DOMAIN
+    )
+    assert diagnostic.scf_domain == DENSITY_WORK_DOMAIN
+    with pytest.raises(
+        RuntimeError, match="density-work Libxc diagnostic domain mismatch"
+    ):
+        read_history(
+            [], index=index, native_version=4, expected_domain=DENSITY_WORK_DOMAIN
+        )
+    with pytest.raises(
+        RuntimeError, match="automatic Libxc diagnostic domain mismatch"
+    ):
+        read_history(
+            [], index=index, native_version=5, expected_domain=LIBXC_WORK_DOMAIN
+        )
 
 
 @pytest.mark.parametrize("index", (None, 0))

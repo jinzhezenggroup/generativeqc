@@ -25,8 +25,8 @@ from generativeqc_compiler.xc.bulk_point_program import (
     bind_runtime_semilocal_point_program,
 )
 from generativeqc_compiler.xc.bulk_runtime import (
-    PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
+    production_candidate_domain,
 )
 from generativeqc_compiler.xc.compiled_cpu_evidence import build_result, stage_evidence
 
@@ -102,6 +102,7 @@ def _translation_unit(
     binding_identity: str,
     domain_version: int,
     cases: tuple[tuple[str, np.ndarray, np.ndarray, np.ndarray], ...],
+    restricted_cases: tuple[tuple[str, float], ...] = (),
 ) -> str:
     lines = [
         binding_source,
@@ -139,6 +140,23 @@ def _translation_unit(
                 f"  for (const auto& spin : value_{index}.gradient)",
                 "    for (double item : spin) std::cout << ' ' << item;",
                 kinetic_line,
+            ]
+        )
+    for index, (_, rho) in enumerate(restricted_cases):
+        lines.extend(
+            [
+                f"  const double restricted_gradient_{index}[3]{{}};",
+                (
+                    f"  const auto restricted_{index} = "
+                    "generativeqc::dft::bulk_generated::restricted_generated::"
+                    f"evaluate_point({rho!r}, restricted_gradient_{index}, 0.0);"
+                ),
+                (
+                    f"  std::cout << std::setprecision(17) << restricted_{index}.energy "
+                    f"<< ' ' << restricted_{index}.rho;"
+                ),
+                f"  for (double value : restricted_{index}.gradient) std::cout << ' ' << value;",
+                f"  std::cout << ' ' << restricted_{index}.kinetic << '\\n';",
             ]
         )
     lines.extend(["}", ""])
@@ -180,7 +198,7 @@ def qualify_compiled_cpu(
         name,
         spin="polarized",
         order=1,
-        domain=PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+        domain=production_candidate_domain(name),
     )
     binding = bind_runtime_semilocal_point_program(program)
     cases = _smoke_inputs()
@@ -203,6 +221,25 @@ def qualify_compiled_cpu(
         "features": list(program.spec.features),
         "cases": input_cases,
     }
+    restricted_cases: tuple[tuple[str, float], ...] = ()
+    case_labels = list(SMOKE_CASE_LABELS)
+    if binding.restricted is not None:
+        restricted_program = build_bulk_runtime_program(
+            name, spin="unpolarized", order=1, domain=program.spec.domain
+        )
+        restricted_cases = (
+            ("restricted-interior", 0.62),
+            ("restricted-vacuum", 0.0),
+            ("restricted-active-tail", 1.1 * binding.restricted.density_threshold),
+        )
+        for label, rho in restricted_cases:
+            raw = restricted_program.evaluate(np.array([[rho]]))[:, 0]
+            expected.extend((float(raw[0]), float(raw[1]), 0.0, 0.0, 0.0, 0.0))
+            case_labels.append(label)
+        input_payload["schema"] = "generativeqc.libxc-compiled-cpu-smoke-input/v3"
+        input_payload["restricted_cases"] = [
+            {"label": label, "rho": rho} for label, rho in restricted_cases
+        ]
     input_identity = canonical_hash(input_payload)
 
     compiler = (
@@ -241,6 +278,7 @@ def qualify_compiled_cpu(
         binding.identity,
         binding.domain_version,
         cases,
+        restricted_cases,
     )
     translation_sha = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
@@ -319,7 +357,7 @@ def qualify_compiled_cpu(
                     and len(metadata) == 2
                     and metadata[0] == binding.identity
                     and metadata[1] == str(binding.domain_version)
-                    and len(lines) == 1 + len(SMOKE_CASE_LABELS)
+                    and len(lines) == 1 + len(case_labels)
                 )
                 try:
                     observed = [
@@ -349,7 +387,7 @@ def qualify_compiled_cpu(
             finite_error = max_error if np.isfinite(max_error) else 1.0e300
             smoke = {
                 "status": "pass" if smoke_pass else "fail",
-                "case_labels": list(SMOKE_CASE_LABELS),
+                "case_labels": case_labels,
                 "input_identity": input_identity,
                 "expected": expected,
                 "observed": observed if finite_observed else [],

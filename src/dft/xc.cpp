@@ -495,7 +495,8 @@ template <class Evaluator>
 XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
                                    const std::vector<double>& density, std::size_t tile_points,
                                    XcDensitySource source, unsigned ingredient_mask,
-                                   Evaluator&& evaluate, const char* method) {
+                                   Evaluator&& evaluate, const char* method,
+                                   RestrictedSemilocalPointEvaluator restricted = nullptr) {
   const std::size_t n = basis.nao;
   validate_density_matrix(basis, grid, density, tile_points);
   const bool need_first = (ingredient_mask & 14U) != 0;
@@ -521,22 +522,37 @@ XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& gr
       if (need_first)
         for (unsigned k = 0; k < 3; ++k) jets[k] = ao.data() + ((k + 1) * count + point) * n;
       const auto total = rks_features(phi, jets, n, density, factor, ingredient_mask);
-      const double rho[2]{0.5 * total[0], 0.5 * total[0]};
-      double gradient[2][3]{};
-      if (need_first)
-        for (unsigned k = 0; k < 3; ++k) gradient[0][k] = gradient[1][k] = 0.5 * total[k + 1];
-      const double tau[2]{need_tau ? 0.5 * total[4] : 0.0, need_tau ? 0.5 * total[4] : 0.0};
-      const auto xc = evaluate(rho, gradient, tau);
-      const double weight = grid.weights()[begin + point];
-      result.energy += weight * xc.energy;
-      result.electrons += weight * total[0];
-
-      const double rho_coefficient = 0.5 * (xc.rho[0] + xc.rho[1]);
-      const double kinetic_coefficient = need_tau ? 0.5 * (xc.kinetic[0] + xc.kinetic[1]) : 0.0;
+      double energy{};
+      double rho_coefficient{};
+      double kinetic_coefficient{};
       double gradient_coefficient[3]{};
-      if (need_first)
-        for (unsigned k = 0; k < 3; ++k)
-          gradient_coefficient[k] = 0.5 * (xc.gradient[0][k] + xc.gradient[1][k]);
+      if (restricted) {
+        const double gradient[3]{need_first ? total[1] : 0.0, need_first ? total[2] : 0.0,
+                                 need_first ? total[3] : 0.0};
+        const auto xc = restricted(total[0], gradient, need_tau ? total[4] : 0.0);
+        energy = xc.energy;
+        rho_coefficient = xc.rho;
+        kinetic_coefficient = need_tau ? xc.kinetic : 0.0;
+        if (need_first)
+          for (unsigned axis = 0; axis < 3; ++axis) gradient_coefficient[axis] = xc.gradient[axis];
+      } else {
+        const double rho[2]{0.5 * total[0], 0.5 * total[0]};
+        double gradient[2][3]{};
+        if (need_first)
+          for (unsigned axis = 0; axis < 3; ++axis)
+            gradient[0][axis] = gradient[1][axis] = 0.5 * total[axis + 1];
+        const double tau[2]{need_tau ? 0.5 * total[4] : 0.0, need_tau ? 0.5 * total[4] : 0.0};
+        const auto xc = evaluate(rho, gradient, tau);
+        energy = xc.energy;
+        rho_coefficient = 0.5 * (xc.rho[0] + xc.rho[1]);
+        kinetic_coefficient = need_tau ? 0.5 * (xc.kinetic[0] + xc.kinetic[1]) : 0.0;
+        if (need_first)
+          for (unsigned axis = 0; axis < 3; ++axis)
+            gradient_coefficient[axis] = 0.5 * (xc.gradient[0][axis] + xc.gradient[1][axis]);
+      }
+      const double weight = grid.weights()[begin + point];
+      result.energy += weight * energy;
+      result.electrons += weight * total[0];
 
       for (std::size_t mu = 0; mu < n; ++mu)
         for (std::size_t nu = 0; nu < n; ++nu) {
@@ -626,13 +642,37 @@ void validate_semilocal_point_program(const SemilocalPointProgram& program) {
     throw std::invalid_argument("semilocal point program requires a domain version");
 }
 
+void validate_semilocal_point_program(const RestrictedSemilocalPointProgram& program) {
+  if (!program.identifier || !*program.identifier || !program.expression_identity ||
+      !*program.expression_identity || !program.evaluate)
+    throw std::invalid_argument(
+        "restricted semilocal point program requires identity and evaluator");
+  if (program.ingredient_mask != 1U && program.ingredient_mask != 7U &&
+      program.ingredient_mask != 15U)
+    throw std::invalid_argument("restricted semilocal point program has unsupported ingredients");
+  if (program.domain_version == 0U)
+    throw std::invalid_argument("restricted semilocal point program requires a domain version");
+}
+
 XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
                                    const std::vector<double>& density,
                                    const SemilocalPointProgram& program, std::size_t tile_points,
                                    XcDensitySource source) {
   validate_semilocal_point_program(program);
+  if (program.domain_version == 5U)
+    throw std::invalid_argument("density-work RKS requires an explicit restricted point program");
   return integrate_semilocal_rks(basis, grid, density, tile_points, source, program.ingredient_mask,
                                  program.evaluate, program.identifier);
+}
+
+XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
+                                   const std::vector<double>& density,
+                                   const RestrictedSemilocalPointProgram& program,
+                                   std::size_t tile_points, XcDensitySource source) {
+  validate_semilocal_point_program(program);
+  return integrate_semilocal_rks(basis, grid, density, tile_points, source, program.ingredient_mask,
+                                 static_cast<SemilocalPointEvaluator>(nullptr), program.identifier,
+                                 program.evaluate);
 }
 
 SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid& grid,

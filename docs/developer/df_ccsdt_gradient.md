@@ -247,21 +247,28 @@ sources always use the original unscreened Hamiltonian. Positive thresholds
 are experimental solver controls, not promoted force approximations.
 
 The reference nuclear branch contracts AO hcore and Pulay weights with existing
-CUDA derivative providers. Its two-electron source `P:G'(D)` defaults to
-symmetric polarization `[E2'(D+P)-E2'(D-P)]/2`, with `E2(D)=D:G(D)/2`. This
-retains the admitted shell consumer and its primitive/component reuse in two
-bounded passes. The identity requires the same fixed unscreened linear source
-for both operands. Set `symmetric_polarization=false` to retain the original
-three-pass identity `E2'(D+P)-E2'(D)-E2'(P)` for matched validation.
-
-The separate `bilinear_derivative` opt-in uses compiler-owned direct weights,
-Cartesian projection, symmetry-unique angular buckets and translation
-reconstruction. It can replace generic or bounded through-f consumers when
-canonical storage is admitted; specialized SPD leases retain their existing
-consumer. This experimental route requires a measured crossover: a single
-canonical AO pass can lose reuse present in a shell consumer. Neither route
-materializes a derivative ERI tensor, and both retain explicit capacity
-fallbacks. All routes are independent of orbital-response dimension.
+CUDA derivative providers. Its two-electron source `P:G'(D)` requests a single
+retained-shell traversal by default. It first differentiates the shared
+compiler-owned quadratic Coulomb/exchange products along `P`, including every
+distinct canonical permutation. It projects `D` and `P` through the existing
+two density slots and contracts those cross weights in one retained shell
+traversal, preserving class scheduling, primitive caching, component reuse and
+translation reconstruction. The borrowed Cartesian seed belongs only to a
+local launch view; the retained source identity is unchanged. Signed cross
+weights require zero density screening. Canonical residency alone does not
+admit the default schedule: missing shell storage preserves bounded symmetric
+polarization `[E2'(D+P)-E2'(D-P)]/2`, with `E2(D)=D:G(D)/2`, rather than selecting
+the slower generic experiment solely to reduce traversal count. Numerical or
+submission errors do not trigger a retry. Shell and generic derivative passes
+are reported separately;
+the canonical quartet/jet census is not published for a shell launch.
+Set `bilinear_derivative=false` for a matched two-pass control. Also set
+`symmetric_polarization=false` to retain the original three-pass identity
+`E2'(D+P)-E2'(D)-E2'(P)`. The bounded canonical bilinear API remains available
+for explicit validation, not default admission. All identities require the same
+fixed unscreened linear source for both operands. No route materializes a
+derivative ERI tensor. All routes retain bounded resource admission and are independent of
+orbital-response dimension.
 The result is an
 **electronic gradient**: the final method must add the correlation-source and
 nuclear-repulsion gradients, then negate once to publish forces.
@@ -342,9 +349,11 @@ notation token in this position is rejected; it is never guessed to be a
 screening threshold. `CCSD_Q_BATCH_LIMIT` retains position nine. Both batch
 limits require complete unsigned integer tokens. Response controls follow at
 positions ten through twelve: `ORBITAL_SCHWARZ` defaults to
-zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
-`NUCLEAR=0` selects the legacy three-pass identity and `NUCLEAR=1` explicitly
-opts into the experimental canonical bilinear derivative.
+zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero,
+and `NUCLEAR` to `auto` (admitted retained-shell bilinear derivative with bounded
+symmetric fallback). Explicit `1` requests the retained-shell bilinear derivative,
+`2` selects symmetric two-pass polarization, and `0` selects the original
+three-pass validation schedule. Omitted/`auto` leaves the options defaults intact.
 `DERIVED_DENOMINATORS` follows all existing controls at argument thirteen and
 defaults to one. Zero retains the explicit CUDA denominator representation.
 It accepts only the complete token `0` or `1`; it does not change the meaning
