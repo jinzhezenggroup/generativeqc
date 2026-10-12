@@ -59,8 +59,17 @@ vector. This is an executable source-level algebra slice for both RKS and UKS;
 native shell/center recovery, shared CPKS execution, XC/grid/partition motion
 and molecular assembly remain owned by their qualified consumers. In particular,
 compiled PBE0/B3LYP exchange HVP weights do **not** qualify hybrid molecular
-Hessians: the mixed K/XC CPKS response, metric/Pulay relaxation and complete
-molecular source inventory still need independent numerical acceptance.
+Hessians: the native mixed K/XC CPKS provider, metric/Pulay relaxation and
+complete molecular source inventory still need independent numerical acceptance.
+
+The shared closed-shell CPKS operator now accepts an explicit physical
+full-range exact-exchange fraction for CPU-side algebraic composition. It binds
+the resulting restricted spin-summed \u2212a/2 raw K action into the response
+identity and **refuses nonzero exchange unless the backend explicitly declares
+raw full-range K support**. Semilocal a=0 keeps the same identity and behavior.
+This is a provider-checked, synthetic-oracle-tested response contract only;
+\u0060NativeRKSResponse\u0060 remains restricted to native LDA/PBE, and no native PBE0,
+B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is now `generativeqc.stationary_nuclear`: metric-density
