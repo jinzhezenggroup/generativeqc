@@ -250,11 +250,11 @@ def test_cpu_stationary_force_profiles_are_generated_admission_not_method_names(
     assert "semilocal_family_cpu_stationary_force_qualified" in gate
     assert "const bool pbe0" not in gate and "const bool b3lyp" not in gate
 
+
 def test_legacy_cpu_point_response_abi_slots_are_generated() -> None:
     records = generator.load_manifest()
     slots = {
-        record["code"]: record["legacy_cpu_point_response_slot"]
-        for record in records
+        record["code"]: record["legacy_cpu_point_response_slot"] for record in records
     }
     assert tuple(code for code, slot in slots.items() if slot is not None) == (0, 1)
     assert set(slot for slot in slots.values() if slot is not None) == {0, 1}
