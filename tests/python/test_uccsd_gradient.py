@@ -193,6 +193,7 @@ def closing_native_physical() -> Iterator[Any]:
     with _native_physical_context() as physical:
         yield physical
 
+
 def test_gradient_admission_precedes_any_response_or_derivative(
     native_physical: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -213,6 +214,7 @@ def test_gradient_admission_precedes_any_response_or_derivative(
     ):
         with pytest.raises(MemoryError):
             PreparedUCCSDGradient(native_physical, options=options)
+
 
 
 def test_late_derivative_failure_and_borrowed_lifetime_never_publish(
@@ -250,6 +252,7 @@ def test_late_derivative_failure_and_borrowed_lifetime_never_publish(
         owner.solve()
 
 
+
 def test_native_complete_gradient_matches_reconverged_molecular_finite_difference(
     native_physical: Any,
 ) -> None:
@@ -283,6 +286,7 @@ def test_native_complete_gradient_matches_reconverged_molecular_finite_differenc
     np.testing.assert_allclose(
         gradient[1, 2], (energies[1] - energies[0]) / 2e-4, atol=2e-7, rtol=0
     )
+
 
 
 def test_private_cpu_derivative_failures_leave_outputs_unchanged(
@@ -324,6 +328,7 @@ def test_private_cpu_derivative_failures_leave_outputs_unchanged(
             one.size,
         )
     np.testing.assert_array_equal(one, 83.0)
+
 
 
 def test_native_one_electron_binding_is_verified_before_eri_reads(
