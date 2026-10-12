@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 
-def invoke(executable, xyz, *args):
+def invoke(executable: str, xyz: str, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [executable, "optimize", xyz, *args],
         capture_output=True,
@@ -15,7 +15,7 @@ def invoke(executable, xyz, *args):
     )
 
 
-def main(executable, xyz):
+def main(executable: str, xyz: str) -> None:
     plan = invoke(
         executable,
         xyz,
