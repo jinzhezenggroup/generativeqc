@@ -392,9 +392,13 @@ three-partition-iteration domain. Matching uses the generated MethodIR graph,
 exact-exchange and XC coefficients, rather than a functional-name whitelist.
 The monolithic CUDA CLI includes the compiler-qualified graph inventory; CPU-only
 builds do not. CMake discovers that inventory at build time from MethodIR rather
-than maintaining a second ten-name list. Complete CUDA source wrappers are still
-compiled for distinct graphs pending numerical/performance qualification of a
-fully shared CUDA geometry/XC executor.
+than maintaining a second ten-name list. Native graph wrappers now share one
+CUDA source-transport kernel and one ordered unit-source gradient-reduction
+kernel, instead of compiling those device routines separately for every graph.
+The compiler validates that a MethodIR source reduction is a complete ordered
+unit-coefficient sum before selecting the shared implementation. XC evaluation,
+Becke derivatives and AO pullback are still graph-specialized pending numerical
+and performance qualification of a common CUDA geometry executor.
 A method listing alone never certifies forces: exact preparation and available
 resource capacity remain authoritative.
 

@@ -22,7 +22,7 @@ def fixtures() -> tuple[str, str, str]:
             f"00000000 T generativeqc::dft::native_stationary_profile_{profile}()"
             for profile in compiler_native_profiles()
         )
-        + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"
+        + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"\n        + "\n00000000 T generativeqc::dft::launch_native_stationary_source_transport(...)"\n        + "\n00000000 T generativeqc::dft::launch_native_stationary_source_reduction(...)"
     )
     return cache, registry, symbols
 
@@ -77,6 +77,15 @@ class StandaloneCudaForceTests(unittest.TestCase):
                     f"generativeqc::dft::native_stationary_profile_{compiler_native_profiles()[0]}()",
                     "discarded()",
                 ),
+            )
+
+    def test_missing_shared_cuda_kernel_fails(self) -> None:
+        cache, registry, symbols = fixtures()
+        with self.assertRaisesRegex(ValueError, "missing shared CUDA kernel launcher"):
+            verify_contract(
+                cache,
+                registry,
+                symbols.replace("launch_native_stationary_source_reduction(", "discarded("),
             )
 
     def test_missing_registry_entry_point_fails(self) -> None:

@@ -335,6 +335,8 @@ macro(generativeqc_configure_cuda_backend target)
     # Preserve hashed source/asset identity separately from generator imports.
     set(_generativeqc_stationary_contract_assets
       "src/dft/stationary_gradient_cuda.cuh"
+      "src/dft/native_stationary_shared_kernels.hpp"
+      "src/dft/native_stationary_shared_kernels.cu"
       "src/dft/becke_scaled_policy.hpp"
       "src/dft/grid_task_view.cuh"
       "src/dft/xc_point.hpp"

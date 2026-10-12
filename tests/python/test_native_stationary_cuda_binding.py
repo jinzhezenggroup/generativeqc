@@ -29,9 +29,18 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
 def test_native_binding_retains_scientific_wrapper(profile: str) -> None:
     """Token ownership changes cannot rewrite equations, literals or IR hashes."""
-    wrapper = emit_stationary_profile_aot_wrapper_cuda(profile)
+    wrapper = emit_stationary_profile_aot_wrapper_cuda(
+        profile, include_reduction=False
+    )
+    legacy = emit_stationary_profile_aot_wrapper_cuda(profile)
     native = emit_native_stationary_profile_cuda(profile)
+    # The XC/AO/Becke and source-weight science stays byte-identical.
+    # Only the original generated source-sum kernel is replaced by one
+    # shared native CUDA implementation.
+    assert legacy.startswith(wrapper)
     assert wrapper in native
+    assert "#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1" in native
+    assert "__global__ void source_reduce(" not in native
     aliases = dict(re.findall(r"^#define (\w+) (\w+)$", native, re.MULTILINE))
     assert "first_derivative" not in aliases
     for symbol in (

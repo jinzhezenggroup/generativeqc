@@ -5,6 +5,7 @@
 // XC/AO/Becke, nuclear derivatives and the terminal sum remain emitted
 // programs.
 #include "cuda_stationary_binding.hpp"
+#include "dft/native_stationary_shared_kernels.hpp"
 
 namespace generativeqc_stationary_cuda {
 struct NativeOwner {
@@ -28,20 +29,6 @@ void native_drain_integrals(NativeOwner& owner) {
   finished(*owner.scientific, stream);
   owner.integral_pending = false;
   owner.integral_stream = nullptr;
-}
-
-__global__ void native_source_transport(const double* input, size_t coordinates, size_t channels,
-                                        double sign, double* first, double* second, int* error) {
-  const auto coordinate = blockIdx.x * blockDim.x + threadIdx.x;
-  if (coordinate >= coordinates) return;
-  first[coordinate] = finite(sign * input[coordinate], error, 0);
-  if (channels == 2) {
-    const auto value = finite(sign * input[coordinates + coordinate], error, 0);
-    if (second)
-      second[coordinate] = value;
-    else if (value != 0.0)
-      atomicExch(error, 1);
-  }
 }
 
 /** Re-enter the outer guard without flattening typed inner executor failures.
@@ -151,10 +138,9 @@ int native_consume_integrals(void* pointer, const generativeqc::scf::CudaDerivat
     owner->integral_stream = stream;
     owner->integral_pending = true;
     const auto sign = view->convention == CudaDerivativeConvention::Force ? -1.0 : 1.0;
-    native_source_transport<<<blocks(view->coordinates, 64), 64, 0, stream>>>(
+    cuda_check(generativeqc::dft::launch_native_stationary_source_transport(
         view->values, view->coordinates, view->channels, sign,
-        scientific.sources + slot * view->coordinates, second, scientific.context.error);
-    cuda_check(cudaGetLastError());
+        scientific.sources + slot * view->coordinates, second, scientific.context.error, stream));
     ++scientific.launches;
     owner->integral_mask |= mask;
   });

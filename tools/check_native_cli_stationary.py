@@ -68,6 +68,12 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
         raise ValueError(
             "compiled CLI is missing its native stationary registry entry point"
         )
+    for shared in (
+        "launch_native_stationary_source_transport(",
+        "launch_native_stationary_source_reduction(",
+    ):
+        if shared not in symbol_listing:
+            raise ValueError(f"compiled CLI is missing shared CUDA kernel launcher {shared}")
 
 
 def main() -> int:
