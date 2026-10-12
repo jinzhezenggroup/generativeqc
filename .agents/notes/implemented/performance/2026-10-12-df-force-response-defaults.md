@@ -112,6 +112,18 @@ must be demonstrated by paired capacities and sampled peaks instead.
 No native DIIS/secant preconditioner, general Q-batch producer-consumer fusion,
 f-shell component tiling or multi-output parameter VJP is delivered here.
 
+## Evidence storage
+
+The full compact publication is retained in the PR's Git history and bound by
+`benchmarks/results/df-response-defaults-20261012/snapshot.json`. After the
+retained-shell dependency merged, current master had only 3060 bytes available
+under the unchanged aggregate evidence cap. The current tree therefore retains
+only the new bundle's verified recovery manifest and concise summary. Existing
+historical evidence is untouched; the shared offline recovery tool restores
+and checks every archived file without requiring a Release or external archive.
+Frozen measurements retain their original source identity after rebasing; they
+are not relabeled as timings of the newer integrated master.
+
 ## References
 
 - `docs/maintainer/performance_engineering.md`
