@@ -12,6 +12,9 @@ This API does not register a native Calculator method, implement DF, or supply
 unrestricted triples, Lambda or analytic forces. The separate
 [UCCSD(T) energy owner](uccsd_t_owner.md) consumes its qualified state and reuses
 its executor and retained feeds for the complete four-channel correction.
+The separate [native Lambda/parameter owner](uccsd_lambda.md) also borrows this
+qualified state and executor; its fixed-orbital input adjoints are not complete
+unrestricted nuclear forces.
 
 ## Reference and execution admission
 

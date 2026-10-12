@@ -30,13 +30,14 @@ from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.resources import MAX_BYTES, checked_bytes
 from generativeqc_compiler.tensor.cpu import emit_cpu
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
-from typing_extensions import Self
 
 from .native_tensor_cuda import CudaCCTensorExecutor
 from .uccsd_solver import PreparedUCCSD, UCCSDResult
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from typing_extensions import Self
 
 
 @dataclass(frozen=True)

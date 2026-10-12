@@ -5,7 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.generativeqc_cc import PreparedUCCSD, PreparedUCCSDT, SolverOptions
+from tools.generativeqc_cc import (
+    PreparedUCCSD,
+    PreparedUCCSDLambda,
+    PreparedUCCSDT,
+    SolverOptions,
+)
 from tools.generativeqc_posthf.export import export_uhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.sources import NativeSource
@@ -25,6 +30,10 @@ def test_native_producer_complete_uccsd_energy(atoms: list, spin: int) -> None:
     Named STO-3G tables differ in their rounded decimal coefficients. Sharing
     only the shell definitions avoids comparing different Hamiltonians; PySCF
     still computes every integral, reference and correlated result independently.
+    A symmetry-preserving AO core-Hamiltonian direction checks native response
+    without identifying MO phases or degenerate electronic-state orientations
+    between independently converged HF references. Both finite-difference CC
+    solves keep their own orbitals fixed and start from independent oracle CC.
     """
     pyscf = pytest.importorskip("pyscf")
     cc = pytest.importorskip("pyscf.cc")
@@ -63,6 +72,7 @@ def test_native_producer_complete_uccsd_energy(atoms: list, spin: int) -> None:
         triples = oracle.ccsd_t()
 
         snapshot, diagnostics = export_uhf(source, max_iterations=300, tolerance=1e-11)
+        ao_direction = snapshot.hcore / np.linalg.norm(snapshot.hcore)
         with (
             ConventionalProvider(snapshot, source) as provider,
             PreparedUCCSD(
@@ -85,6 +95,54 @@ def test_native_producer_complete_uccsd_energy(atoms: list, spin: int) -> None:
                 atol=3e-9,
                 rtol=0,
             )
+            with PreparedUCCSDLambda(prepared, result) as response_owner:
+                multipliers = response_owner.solve()
+                derivative = 0.0
+                for spin_name, suffix, coefficients in (
+                    ("alpha", "aa", snapshot.coefficients_alpha),
+                    ("beta", "bb", snapshot.coefficients_beta),
+                ):
+                    mo_direction = coefficients.T @ ao_direction @ coefficients
+                    occupied = snapshot.nocc(spin_name)
+                    for domain, selected in (
+                        ("oo", (slice(0, occupied), slice(0, occupied))),
+                        ("ov", (slice(0, occupied), slice(occupied, None))),
+                        ("vv", (slice(occupied, None), slice(occupied, None))),
+                    ):
+                        cotangent = response_owner.parameter_cotangent(
+                            multipliers, f"f{domain}_{suffix}"
+                        )
+                        derivative += cotangent.contract(mo_direction[selected].copy())
+                assert multipliers.provenance["tensor_backend"] == "native-cpu-tensorir"
+                assert multipliers.stationarity_norm <= 1e-9
+
+        independent_directions = [
+            coefficients.T @ ao_direction @ coefficients
+            for coefficients in reference.mo_coeff
+        ]
+        unperturbed_eris = oracle.ao2mo()
+        energies = []
+        for sign in (-1, 1):
+            perturbed = cc.UCCSD(reference)
+            perturbed.conv_tol, perturbed.conv_tol_normt, perturbed.max_cycle = (
+                1e-13,
+                1e-11,
+                400,
+            )
+            perturbed_eris = perturbed.ao2mo()
+            perturbed_eris.focka = (
+                unperturbed_eris.focka + sign * 1e-4 * independent_directions[0]
+            )
+            perturbed_eris.fockb = (
+                unperturbed_eris.fockb + sign * 1e-4 * independent_directions[1]
+            )
+            energies.append(
+                perturbed.kernel(t1=oracle.t1, t2=oracle.t2, eris=perturbed_eris)[0]
+            )
+            assert perturbed.converged
+        np.testing.assert_allclose(
+            derivative, (energies[1] - energies[0]) / 2e-4, atol=2e-7, rtol=0
+        )
         assert result.converged, result.history[-1]
         assert result.correlation_energy is not None and result.total_energy is not None
         assert snapshot.hf_backend == "native-cpu"

@@ -18,10 +18,14 @@ from tools.generativeqc_cc import (
     PreparedCUDALambda,
     CudaTriplesResponseTiles,
     PreparedUCCSD,
+    PreparedUCCSDLambda,
+    PreparedUCCSDT,
 )
 assert PreparedCUDALambda.__module__ == "tools.generativeqc_cc.lambda_cuda"
 assert CudaTriplesResponseTiles.__module__ == "tools.generativeqc_cc.triples_response_cuda"
 assert PreparedUCCSD.__module__ == "tools.generativeqc_cc.uccsd_solver"
+assert PreparedUCCSDLambda.__module__ == "tools.generativeqc_cc.uccsd_lambda"
+assert PreparedUCCSDT.__module__ == "tools.generativeqc_cc.uccsd_t"
 """
     result = subprocess.run(
         [sys.executable, "-I", "-c", code, str(ROOT)],
