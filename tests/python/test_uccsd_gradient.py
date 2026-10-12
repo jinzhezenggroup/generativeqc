@@ -29,6 +29,12 @@ from tools.generativeqc_posthf.sources import NativeSource
 
 _H2 = [("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4))]
 _OH = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.83))]
+_RESTRICTED_H4 = [
+    ("H", (0.0, 0.0, 0.0)),
+    ("H", (0.0, 0.0, 1.4)),
+    ("H", (4.0, 0.2, 0.1)),
+    ("H", (4.0, 0.2, 1.6)),
+]
 _NH2 = [("N", (0.0, 0.0, 0.0)), ("H", (0.0, -1.51, 1.13)), ("H", (0.0, 1.51, 1.13))]
 
 
@@ -89,6 +95,7 @@ def _native_oracle(source: NativeSource, *, broken: bool = False) -> Any:
     "atoms,spin,broken,representation,native_reference",
     [
         (_H2, 0, False, "cartesian", True),
+        (_RESTRICTED_H4, 0, False, "cartesian", True),
         (_OH, 1, False, "cartesian", True),
         (_NH2, 1, False, "spherical", False),
         (
@@ -154,6 +161,15 @@ def test_complete_cpu_native_gradient_matches_independent_oracle(
                     result.provenance["executed_generated_scalar_work"]
                     <= owner.planned_work
                 )
+                if atoms == _RESTRICTED_H4:
+                    from tools.generativeqc_cc.complete_gradient import (
+                        complete_gradient_validation,
+                    )
+
+                    restricted = complete_gradient_validation(source)
+                    np.testing.assert_allclose(
+                        result.gradient, restricted.gradient, atol=2e-8, rtol=0
+                    )
                 for value in (result.gradient, result.forces):
                     with pytest.raises(ValueError):
                         value.setflags(write=True)
@@ -315,6 +331,7 @@ def test_private_cpu_derivative_failures_leave_outputs_unchanged(
 @pytest.mark.parametrize(
     "atoms,spin,broken",
     [
+        (_H2, 0, False),
         (_NH2, 1, False),
         ([("H", (0.0, 0.0, 2.45665 * index)) for index in range(4)], 0, True),
     ],
@@ -327,6 +344,7 @@ def test_complete_cuda_gradient_matches_independent_oracle(
 
     from tools.generativeqc_cc.native_tensor_cuda import CudaCCTensorExecutor
     from tools.generativeqc_posthf.cuda import compile_cuda
+    from tools.generativeqc_response.backends import NativeJKBackend
     from tools.generativeqc_response.spin_cuda import CudaSpinJKBackend
 
     assert os.environ.get("SLURM_JOB_ID"), (
@@ -353,7 +371,7 @@ def test_complete_cuda_gradient_matches_independent_oracle(
         with (
             CudaSpinJKBackend(source) as orbital_backend,
             ConventionalProvider(
-                snapshot,
+                orbital_backend.export_reference() if atoms == _H2 else snapshot,
                 source,
                 backend="cuda",
                 cuda_artifact=artifact,
@@ -361,7 +379,7 @@ def test_complete_cuda_gradient_matches_independent_oracle(
                 cache_policy="lru",
             ) as provider,
             PreparedUCCSD(
-                snapshot,
+                provider.snapshot,
                 provider,
                 options=SolverOptions(max_iterations=400),
                 executor=executor,
@@ -402,3 +420,14 @@ def test_complete_cuda_gradient_matches_independent_oracle(
                     result.provenance["physical_response"]["tensor_backend"]
                     == "cuda-fp64-ordinary-stream"
                 )
+                with pytest.raises(ValueError, match="matching exact CUDA spin"):
+                    PreparedUCCSDPhysicalResponse(
+                        lambdas,
+                        physical.result,
+                        provider,
+                        response_backend=NativeJKBackend(source),
+                        options=UCCSDPhysicalResponseOptions(max_bytes=2 << 30),
+                    )
+                orbital_backend.close()
+                with pytest.raises(RuntimeError, match="closed"):
+                    owner.solve()
