@@ -333,6 +333,10 @@ core_hotspots_a=(
   tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
+  # The added restricted-CUDA test shifted this complete response file
+  # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
+  # and its original enumeration slot; all cases stay selected.
+  tests/python/test_uccsd_response.py
   # Keep complete corrected force cases parallel and separate from the
   # standard gradient on core-a. Fresh per-test owners stay unchanged.
   "${core_fresh_frontier_b[@]}"
