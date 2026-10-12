@@ -220,14 +220,10 @@ def test_package_installs_cuda_runtime_wrapper() -> None:
     assert getattr(_native.load_library, "_generativeqc_cuda_runtime_loader", False)
 
 
-def test_wheel_compiler_templates_include_local_dependencies(
-    tmp_path: typing.Any, monkeypatch: typing.Any
-) -> None:
-    """Exercise JIT source preparation using only the declared wheel payload."""
+def _compiler_wheel_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Materialize only the declared wheel inventory, without checkout fallback."""
     tomllib = pytest.importorskip("tomllib")
     from generativeqc_compiler.common import paths
-    from generativeqc_compiler.dft.ao_cuda import emit_grid_source
-    from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
 
     root = Path(__file__).resolve().parents[2]
     package = tmp_path / "generativeqc_compiler"
@@ -243,9 +239,22 @@ def test_wheel_compiler_templates_include_local_dependencies(
         else:
             shutil.copyfile(root / source, target)
     monkeypatch.setattr(paths, "PACKAGE", package)
+    return package / "assets"
+
+
+def test_wheel_compiler_templates_include_local_dependencies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise JIT source preparation using only the declared wheel payload."""
+    from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+    from generativeqc_compiler.tensor.cuda_execute import tensor_source_identity
+
+    assets = _compiler_wheel_payload(tmp_path, monkeypatch)
     assert tensor_source_identity()
-    assert all(header.is_file() for header in emit_grid_source()[2])
-    assets = package / "assets"
+    headers = emit_grid_source()[2]
+    assert all(
+        header.is_file() and header.is_relative_to(assets) for header in headers
+    )
     # Quoted native includes can resolve beside the template or through the
     # compiler's src/include roots; none may depend on a neighboring checkout.
     for source in (assets / "src").rglob("*"):
@@ -257,6 +266,53 @@ def test_wheel_compiler_templates_include_local_dependencies(
                     (base / name).is_file()
                     for base in (source.parent, assets / "src", assets / "include")
                 ), (source, name)
+
+
+def test_wheel_grid_compiler_links_without_checkout_or_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compile and link the production JIT grid from the wheel payload only."""
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.common.native_runtime import compile_runtime
+    from generativeqc_compiler.common.provenance import find_nvcc
+    from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+
+    compiler = find_nvcc()
+    if compiler is None:
+        pytest.skip("CUDA compiler required; no device is used")
+    assets = _compiler_wheel_payload(tmp_path, monkeypatch)
+    # Neither the compiler working directory nor ambient include flags may
+    # supply a header omitted from the installed payload.
+    monkeypatch.chdir(tmp_path)
+    for name in (
+        "CPATH",
+        "CPLUS_INCLUDE_PATH",
+        "C_INCLUDE_PATH",
+        "NVCC_PREPEND_FLAGS",
+        "NVCC_APPEND_FLAGS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    source, _, headers = emit_grid_source()
+    assert all(header.is_relative_to(assets) for header in headers)
+    path = tmp_path / "grid.cu"
+    path.write_text(source, encoding="utf-8")
+    artifact = compile_runtime(
+        CudaCompilerAdapter(compiler, cuda_target_info("sm_120")),
+        tmp_path / "compiled",
+        path,
+        headers=headers,
+        libraries=("cublas",),
+        options=(
+            "-std=c++20",
+            "--fmad=false",
+            f"-I{assets / 'src/dft'}",
+            f"-I{assets / 'src'}",
+            f"-I{assets / 'include'}",
+        ),
+    )
+    assert artifact.library.is_file() and artifact.library.stat().st_size > 0
 
 
 def test_project_metadata_declares_cuda_runtime_providers() -> None:

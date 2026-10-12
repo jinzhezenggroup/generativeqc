@@ -305,8 +305,11 @@ PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
 )
+# The additional native static wrappers reuse the existing primitive objects.
+# Packaged s/p/d targets, profile selection and scientific generation are unchanged;
+# retain the full wiring digest so mutations of either integration fail closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "e603c9db0e0fbe5d5963768bd8f8a6a553c11ee2b791a6a8cc806a9e3941e060"
+    "bc442b9076f4870a998d33908479e2f807b5686a88ff78b5f99538b8bd0eb0f5"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
