@@ -7,9 +7,10 @@ instead of swallowing it. Real-device numerical parity is a separate opt-in
 suite.
 """
 
-import inspect
 import typing
+from pathlib import Path
 
+import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import (
     Index,
@@ -25,6 +26,7 @@ from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 from generativeqc_compiler.tensor.cuda_resident import (
     DeviceTensor,
     _check_lease,
+    _resident_dependency_logical_name,
 )
 from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
 
@@ -256,15 +258,99 @@ def test_download_before_run_or_after_invalidation_is_rejected() -> None:
         _check_lease(owner, None)
 
 
-def test_compile_resident_source_identity_rejects_external_dependencies() -> None:
-    """The _logical_name helper must raise for paths outside the checkout
-    or installed-package roots — a silent fallback to a relative path with
-    `..` components would embed filesystem prefixes in the artifact identity
-    and violate the compiler determinism contract."""
-    from generativeqc_compiler.tensor import cuda_resident as m
+def test_resident_dependency_keys_agree_for_checkout_and_installed_wheel(
+    tmp_path: Path,
+) -> None:
+    """Actual owned paths get the same cache key regardless of install prefix."""
+    checkout = tmp_path / "checkout"
+    package = tmp_path / "wheel" / "generativeqc_compiler"
+    for checkout_name, installed_name, expected in (
+        (
+            "python/generativeqc_compiler/tensor/cuda_resident_emit.py",
+            "tensor/cuda_resident_emit.py",
+            "python/generativeqc_compiler/tensor/cuda_resident_emit.py",
+        ),
+        (
+            "src/tensor/cuda_resident.cuh",
+            "assets/src/tensor/cuda_resident.cuh",
+            "src/tensor/cuda_resident.cuh",
+        ),
+    ):
+        original = checkout / checkout_name
+        installed = package / installed_name
+        for path in (original, installed):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("owned dependency")
+        assert (
+            _resident_dependency_logical_name(
+                original, package_root=package, checkout_root=checkout
+            )
+            == expected
+        )
+        assert (
+            _resident_dependency_logical_name(
+                installed, package_root=package, checkout_root=checkout
+            )
+            == expected
+        )
 
-    # Locate the helper (it lives inside compile_resident).
-    src = inspect.getsource(m.compile_resident)
-    # Verify the installed fallback rejects escaped paths
-    assert ".." in src  # the check exists
-    assert "outside" in src
+
+def test_resident_dependency_names_match_real_checkout_or_wheel_assets() -> None:
+    """The identity test runs on a CPU host; no NVCC or GPU is needed."""
+    from generativeqc_compiler.common.paths import PACKAGE, asset_path
+
+    assert (
+        _resident_dependency_logical_name(PACKAGE / "tensor/cuda_resident.py")
+        == "python/generativeqc_compiler/tensor/cuda_resident.py"
+    )
+    assert (
+        _resident_dependency_logical_name(asset_path("src/tensor/cuda_resident.cuh"))
+        == "src/tensor/cuda_resident.cuh"
+    )
+
+
+def test_compile_resident_source_identity_rejects_external_dependencies(
+    tmp_path: Path,
+) -> None:
+    """Refuse paths outside either owner, including prefixes and symlinks.
+
+    Previously this test only inspected the spelling of compile_resident.
+    Invoke its actual key-building policy so accidental weakening is detected.
+    """
+    checkout = tmp_path / "checkout"
+    package = tmp_path / "wheel" / "generativeqc_compiler"
+    checkout.mkdir()
+    package.mkdir(parents=True)
+    external = tmp_path / "checkout-sibling" / "unowned.hpp"
+    external.parent.mkdir()
+    external.write_text("external")
+    kwargs = {"package_root": package, "checkout_root": checkout}
+    for path in (
+        external,
+        checkout / ".." / "checkout-sibling" / "unowned.hpp",
+    ):
+        with pytest.raises(ValueError, match="outside both"):
+            _resident_dependency_logical_name(path, **kwargs)
+
+    escape = checkout / "escape.hpp"
+    escape.symlink_to(external)
+    with pytest.raises(ValueError, match="outside both"):
+        _resident_dependency_logical_name(escape, **kwargs)
+
+
+def test_installed_resident_rejects_unowned_dependency_without_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc_compiler.common import paths
+
+    package = tmp_path / "wheel" / "generativeqc_compiler"
+    package.mkdir(parents=True)
+    external = tmp_path / "external.hpp"
+    external.write_text("external")
+
+    def unavailable() -> Path:
+        raise ValueError("no source checkout")
+
+    monkeypatch.setattr(paths, "source_root", unavailable)
+    with pytest.raises(ValueError, match="outside both"):
+        _resident_dependency_logical_name(external, package_root=package)

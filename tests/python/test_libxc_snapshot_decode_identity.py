@@ -176,3 +176,28 @@ def test_automatic_snapshot_decode_rejects_source_mismatch(mismatch: str) -> Non
     error = "grid source mismatch" if mismatch == "grid" else "composition mismatch"
     with pytest.raises(ValueError, match=error):
         NativeKsSnapshot.decode(source, basis, grid)
+
+
+@pytest.mark.parametrize(
+    "native_proof,requested_fitting,error",
+    (
+        (("density-fitted", None, 1e-10), False, "density fitting"),
+        (("exact", None, 0.0), True, "density fitting"),
+        (("exact", "exact", 0.0), False, "exchange presence"),
+    ),
+)
+def test_snapshot_decode_rejects_forged_native_provider_provenance(
+    native_proof: tuple[str, str | None, float],
+    requested_fitting: bool,
+    error: str,
+) -> None:
+    """Real decode must reject an inconsistent J/K provider before publication.
+
+    This host-only execution oracle complements the separately retained
+    qualification-owner hash without inspecting the decoder's source spelling.
+    """
+    _, source, basis, grid = _decode_fixture("pbe", "unpolarized", selection="default")
+    source.fock_provider_proof = lambda: native_proof
+    source._density_fitting_requested = requested_fitting
+    with pytest.raises(ValueError, match=error):
+        NativeKsSnapshot.decode(source, basis, grid)
