@@ -1349,8 +1349,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       // Native cold guesses arrive as a density too. Preserve their provenance
       // instead of treating every non-null pointer as a warm or external seed.
-      phase_source_cold =
-          (!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm;
+      phase_source_cold = (!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm;
       prepare_phase_source(phase_source_cold);
       // The bounded device-control prototype is qualified only for strict-FP64
       // direct all-electron RKS. AUTO must stay on the legacy host-controlled

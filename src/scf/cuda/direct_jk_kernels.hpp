@@ -143,8 +143,8 @@ void launch_materialized_canonical_mixed_j_kernel(
     cudaStream_t stream, DeviceBatch batch, unsigned angular_order, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, double screening, const double* bounds,
-    const double* density, const std::uint8_t* active, double* coulomb,
-    std::uint64_t* work_count, std::uint64_t* mixed_work);
+    const double* density, const std::uint8_t* active, double* coulomb, std::uint64_t* work_count,
+    std::uint64_t* mixed_work);
 
 /** Angular-bucketed recurrence-only FP32 J with FP64 density/scatter/projection. */
 void launch_canonical_mixed_j_kernel(

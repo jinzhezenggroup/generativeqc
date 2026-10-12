@@ -1595,14 +1595,14 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                     mixed_coulomb_work_count);
               } else
                 launch_canonical_mixed_j_kernel(
-                  plan->stream, plan->canonical_batch, plan->canonical_cartesian,
-                  static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
-                  direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
-                  offsets[first + 1U] - offsets[first], offsets[second],
-                  offsets[second + 1U] - offsets[second], first == second, unrestricted,
-                  plan->screening_tolerance, plan->canonical_bounds, plan->canonical_density,
-                  plan->canonical_coulomb, census ? census : plan->canonical_work_count,
-                  mixed_coulomb_work_count, correction);
+                    plan->stream, plan->canonical_batch, plan->canonical_cartesian,
+                    static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
+                    direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
+                    offsets[first + 1U] - offsets[first], offsets[second],
+                    offsets[second + 1U] - offsets[second], first == second, unrestricted,
+                    plan->screening_tolerance, plan->canonical_bounds, plan->canonical_density,
+                    plan->canonical_coulomb, census ? census : plan->canonical_work_count,
+                    mixed_coulomb_work_count, correction);
               direct_jk_check(cudaGetLastError());
             }
             if (!canonical_strict_j && !dispatch.canonical_exchange) continue;
@@ -1615,10 +1615,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
                   plan->canonical_pairs, direct_jk_pair_rows(plan, second, offsets[first]),
                   offsets[first], offsets[first + 1U] - offsets[first], offsets[second],
-                  offsets[second + 1U] - offsets[second], first == second,
-                  canonical_strict_j, dispatch.canonical_exchange, unrestricted,
-                  plan->resident_values + cached_offset, plan->canonical_density,
-                  plan->canonical_coulomb, plan->canonical_exchange,
+                  offsets[second + 1U] - offsets[second], first == second, canonical_strict_j,
+                  dispatch.canonical_exchange, unrestricted, plan->resident_values + cached_offset,
+                  plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
@@ -1642,8 +1641,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                               : DirectCoulombRange::Full,
                   dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
                   plan->screening_tolerance, plan->materialized_bounds, plan->canonical_density,
-                  plan->canonical_active,
-                  canonical_strict_j ? plan->canonical_coulomb : nullptr,
+                  plan->canonical_active, canonical_strict_j ? plan->canonical_coulomb : nullptr,
                   dispatch.canonical_exchange ? plan->canonical_exchange : nullptr,
                   census ? census : plan->canonical_work_count);
             } else
@@ -1652,9 +1650,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
                   direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
                   offsets[first + 1U] - offsets[first], offsets[second],
-                  offsets[second + 1U] - offsets[second], first == second,
-                  canonical_strict_j, dispatch.canonical_exchange, unrestricted,
-                  direct_exchange_range(spec.exchange),
+                  offsets[second + 1U] - offsets[second], first == second, canonical_strict_j,
+                  dispatch.canonical_exchange, unrestricted, direct_exchange_range(spec.exchange),
                   dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange,

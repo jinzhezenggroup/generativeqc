@@ -254,8 +254,8 @@ __global__ void canonical_jk_kernel(
         screening)
       continue;
     if constexpr (MixedJ) {
-      if (!direct_coulomb_density_active<Unrestricted>(
-              dimension, physical_offset, spin_offset, density, first, second, third, fourth))
+      if (!direct_coulomb_density_active<Unrestricted>(dimension, physical_offset, spin_offset,
+                                                       density, first, second, third, fourth))
         continue;
     }
     if constexpr (PairedRanges) {
@@ -906,26 +906,26 @@ void launch_materialized_canonical_mixed_j_kernel(
     cudaStream_t stream, DeviceBatch batch, unsigned angular_order, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, double screening, const double* bounds,
-    const double* density, const std::uint8_t* active, double* coulomb,
-    std::uint64_t* work_count, std::uint64_t* mixed_work) {
+    const double* density, const std::uint8_t* active, double* coulomb, std::uint64_t* work_count,
+    std::uint64_t* mixed_work) {
   if (!first_count || !second_count) return;
   constexpr std::size_t maximum_blocks = 4096;
   const auto dense_upper_bound =
       std::min(first_count, maximum_blocks) * std::min(second_count, maximum_blocks);
   const auto blocks = static_cast<unsigned>(std::min(dense_upper_bound, maximum_blocks));
   const unsigned threads = canonical_materialized_component_lanes(angular_order);
-#define GENERATIVEQC_MATERIALIZED_MIXED_ORDER(order)                                         \
-  case order:                                                                              \
-    if (unrestricted)                                                                      \
-      materialized_canonical_jk_kernel<true, order, true><<<blocks, threads, 0, stream>>>(    \
-          batch, rows, first_begin, first_count, second_begin, second_count,                 \
+#define GENERATIVEQC_MATERIALIZED_MIXED_ORDER(order)                                            \
+  case order:                                                                                   \
+    if (unrestricted)                                                                           \
+      materialized_canonical_jk_kernel<true, order, true><<<blocks, threads, 0, stream>>>(      \
+          batch, rows, first_begin, first_count, second_begin, second_count,                    \
           generativeqc::integrals::CoulombRange::Full, 0.0, screening, bounds, density, active, \
-          coulomb, nullptr, work_count, mixed_work);                                        \
-    else                                                                                   \
-      materialized_canonical_jk_kernel<false, order, true><<<blocks, threads, 0, stream>>>(   \
-          batch, rows, first_begin, first_count, second_begin, second_count,                 \
+          coulomb, nullptr, work_count, mixed_work);                                            \
+    else                                                                                        \
+      materialized_canonical_jk_kernel<false, order, true><<<blocks, threads, 0, stream>>>(     \
+          batch, rows, first_begin, first_count, second_begin, second_count,                    \
           generativeqc::integrals::CoulombRange::Full, 0.0, screening, bounds, density, active, \
-          coulomb, nullptr, work_count, mixed_work);                                        \
+          coulomb, nullptr, work_count, mixed_work);                                            \
     break
   switch (angular_order) {
     GENERATIVEQC_MATERIALIZED_MIXED_ORDER(0);
@@ -1024,20 +1024,24 @@ void launch_canonical_jk_source(
   constexpr unsigned threads = 64U;
   const auto blocks =
       static_cast<unsigned>(std::min<std::size_t>((work_count + threads - 1U) / threads, 4096U));
-#define GENERATIVEQC_CANONICAL_JK_ORDER(order)                                                     \
-  case order:                                                                                      \
-    if (unrestricted)                                                                              \
-      canonical_jk_kernel<order, true, Cartesian, PairedRanges, MixedJ><<<blocks, threads, 0, stream>>>( \
-          batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,        \
-          same_bucket, work_count, want_j, want_k, integral_range(exchange_range), exchange_omega, \
-          screening, bounds, density, coulomb, exchange, work_census, range_exchange,              \
-          source_values, coulomb_correction, exchange_correction, mixed_coulomb_work_count);        \
-    else                                                                                           \
-      canonical_jk_kernel<order, false, Cartesian, PairedRanges, MixedJ><<<blocks, threads, 0, stream>>>( \
-          batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,        \
-          same_bucket, work_count, want_j, want_k, integral_range(exchange_range), exchange_omega, \
-          screening, bounds, density, coulomb, exchange, work_census, range_exchange,              \
-          source_values, coulomb_correction, exchange_correction, mixed_coulomb_work_count);        \
+#define GENERATIVEQC_CANONICAL_JK_ORDER(order)                                                  \
+  case order:                                                                                   \
+    if (unrestricted)                                                                           \
+      canonical_jk_kernel<order, true, Cartesian, PairedRanges, MixedJ>                         \
+          <<<blocks, threads, 0, stream>>>(                                                     \
+              batch, system, pairs, rows, first_begin, first_count, second_begin, second_count, \
+              same_bucket, work_count, want_j, want_k, integral_range(exchange_range),          \
+              exchange_omega, screening, bounds, density, coulomb, exchange, work_census,       \
+              range_exchange, source_values, coulomb_correction, exchange_correction,           \
+              mixed_coulomb_work_count);                                                        \
+    else                                                                                        \
+      canonical_jk_kernel<order, false, Cartesian, PairedRanges, MixedJ>                        \
+          <<<blocks, threads, 0, stream>>>(                                                     \
+              batch, system, pairs, rows, first_begin, first_count, second_begin, second_count, \
+              same_bucket, work_count, want_j, want_k, integral_range(exchange_range),          \
+              exchange_omega, screening, bounds, density, coulomb, exchange, work_census,       \
+              range_exchange, source_values, coulomb_correction, exchange_correction,           \
+              mixed_coulomb_work_count);                                                        \
     break
   switch (angular_order) {
     GENERATIVEQC_CANONICAL_JK_ORDER(0);

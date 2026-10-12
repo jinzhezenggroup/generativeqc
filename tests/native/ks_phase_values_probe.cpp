@@ -583,11 +583,12 @@ void endpoint(const Fixture& fixture, bool b3lyp, bool compute_forces) {
 
 int main(int argc, char** argv) {
   try {
-    require(argc == 2 || (argc == 3 && (std::string(argv[2]) == "capacity" ||
-                                        std::string(argv[2]) == "endpoint" ||
-                                        std::string(argv[2]) == "endpoint-forces" ||
-                                        std::string(argv[2]) == "mixed-refinement")),
-            "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces|mixed-refinement]");
+    require(
+        argc == 2 || (argc == 3 &&
+                      (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "endpoint" ||
+                       std::string(argv[2]) == "endpoint-forces" ||
+                       std::string(argv[2]) == "mixed-refinement")),
+        "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces|mixed-refinement]");
     const Fixture fixture(argv[1], argc == 2 || std::string(argv[2]) == "mixed-refinement");
     std::cout << std::setprecision(17);
     if (argc == 3 && std::string(argv[2]) == "capacity") {

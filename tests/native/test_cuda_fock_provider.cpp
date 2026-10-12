@@ -113,12 +113,12 @@ struct DirectValueCensus {
   CudaDirectJkPlan& plan;
   unsigned long long* device{};
   explicit DirectValueCensus(CudaDirectJkPlan& owner) : plan(owner) {
-    require(!plan.canonical_work_count &&
-                (!plan.generated_exchange ||
-                 (plan.generated_exchange->shared &&
-                  !plan.generated_exchange->admitted_shell_counts &&
-                  !plan.generated_exchange->shared->admitted_shell_counts)),
-            "census requires unobserved generated/canonical value owners");
+    require(
+        !plan.canonical_work_count &&
+            (!plan.generated_exchange ||
+             (plan.generated_exchange->shared && !plan.generated_exchange->admitted_shell_counts &&
+              !plan.generated_exchange->shared->admitted_shell_counts)),
+        "census requires unobserved generated/canonical value owners");
     check(generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&device),
                                                       (2 * classes + 2) * sizeof(*device)));
     if (plan.generated_exchange) {
@@ -364,8 +364,8 @@ void mixed_coulomb_work_census(bool through_f = false, bool canonical = true,
   require(density.size() == matrix, "mixed-work fixture density shape changed");
   std::size_t primitive_count = 0;
   for (const auto& shell : system.shells) primitive_count += shell.primitives.size();
-  const auto minimum_budget =
-      cuda_direct_jk_device_bytes(1, n, system.atoms.size(), system.shells.size(), primitive_count, 0);
+  const auto minimum_budget = cuda_direct_jk_device_bytes(1, n, system.atoms.size(),
+                                                          system.shells.size(), primitive_count, 0);
 
   const auto make_plan = [&](double screening) {
     CudaDirectJkPlan* raw{};
@@ -447,8 +447,8 @@ void mixed_coulomb_work_census(bool through_f = false, bool canonical = true,
   count.set(999);
   require(enqueue_cuda_direct_jk_device_mixed_j(
               plan.get(), unrestricted_spec, device_density.pointer, cancelling_beta.pointer,
-              matrix, instrumented.pointer, nullptr, nullptr, failure, detail, count.pointer) ==
-              GENERATIVEQC_STATUS_SUCCESS,
+              matrix, instrumented.pointer, nullptr, nullptr, failure, detail,
+              count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
   require(count.get() == 0, "spin-cancelling density admitted mixed Coulomb recurrences");
@@ -616,14 +616,13 @@ void mixed_coulomb_preserves_strict_exchange() {
                 "mixed-J request changed its recurrence-only arithmetic route");
         const bool generated_k = direct_jk_generated_exchange_value_available(*plan, spec);
         const bool strict_k_route = generated_k ? (work[1] > 0 && work[2] == count.get())
-                                               : (work[1] == 0 && work[2] > count.get());
-        require(strict_k_route,
-                ("mixed J displaced strict K: angular=" + std::to_string(angular) +
-                 " generated=" + std::to_string(generated_k) +
-                 " shell_work=" + std::to_string(work[1]) +
-                 " canonical_work=" + std::to_string(work[2]) +
-                 " mixed_work=" + std::to_string(count.get()))
-                    .c_str());
+                                                : (work[1] == 0 && work[2] > count.get());
+        require(strict_k_route, ("mixed J displaced strict K: angular=" + std::to_string(angular) +
+                                 " generated=" + std::to_string(generated_k) +
+                                 " shell_work=" + std::to_string(work[1]) +
+                                 " canonical_work=" + std::to_string(work[2]) +
+                                 " mixed_work=" + std::to_string(count.get()))
+                                    .c_str());
         ka.verify(expected.exchange_alpha);
         if (unrestricted) kb.verify(expected.exchange_beta);
         std::vector<double> actual_j(matrix);
