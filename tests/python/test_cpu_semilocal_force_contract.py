@@ -219,7 +219,8 @@ def test_automatic_guess_uses_supported_native_schema(
     )
     options = {} if selection == "omitted" else {"initial_guess": "auto"}
     automatic = Calculator(method=method, **options)
-    assert automatic.initial_guess == InitialGuessSpec("huckel")
+    # These older SDKs advertise MINAO, but no Huckel provider/domain bits.
+    assert automatic.initial_guess == InitialGuessSpec("minao")
     assert (
         automatic._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 3
     )
@@ -229,6 +230,45 @@ def test_automatic_guess_uses_supported_native_schema(
     assert Calculator(method=method, initial_guess=None).initial_guess is None
     explicit = Calculator(method=method, initial_guess=InitialGuessSpec("minao"))
     assert automatic._resource_request([WATER]) == explicit._resource_request([WATER])
+
+
+@pytest.mark.parametrize("method", ["rhf", "pbe-rks"])
+@pytest.mark.parametrize("selection", ["omitted", "auto"])
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("native_kind", [0, 5])
+def test_supported_huckel_bits_obey_native_policy(
+    fake_native: typing.Any,
+    method: str,
+    selection: str,
+    fitted: bool,
+    native_kind: int,
+) -> None:
+    fake_native.library.generativeqc_initial_guess_options_version = Mock(
+        return_value=1
+    )
+    capabilities = _native.INITIAL_GUESS_CAPABILITY_HUCKEL
+    if fitted:
+        capabilities |= _native.INITIAL_GUESS_CAPABILITY_HUCKEL_DF
+    fake_native.library.generativeqc_initial_guess_capabilities_v1 = Mock(
+        return_value=capabilities
+    )
+
+    def policy(request: object, output: object) -> int:
+        output._obj.value = native_kind
+        return 0
+
+    fake_native.library.generativeqc_initial_guess_auto_kind_v2 = policy
+    options = {} if selection == "omitted" else {"initial_guess": "auto"}
+    automatic = Calculator(
+        method=method, density_fitting="cpu" if fitted else "none", **options
+    )
+    expected = InitialGuessSpec("huckel") if native_kind else None
+    assert automatic.initial_guess == expected
+    descriptor = automatic._method_descriptor(systems=[WATER])
+    if native_kind:
+        assert descriptor.initial_guess.contents.kind == 5
+    else:
+        assert not descriptor.initial_guess
 
 
 @pytest.mark.parametrize(
@@ -254,7 +294,7 @@ def test_positive_capability_does_not_expand_automatic_domains(
     core = Calculator(method=method, initial_guess=None, **options)
     assert automatic.initial_guess is None
     assert automatic.capabilities == core.capabilities
-    fake_native.library.generativeqc_initial_guess_capabilities_v1.assert_not_called()
+    assert not automatic._method_descriptor(systems=[WATER]).initial_guess
 
 
 @pytest.mark.parametrize("query", ["options_version", "capabilities_v1"])
