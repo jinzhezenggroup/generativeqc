@@ -269,3 +269,139 @@ def recover_uhf_stability(
         "options": vars(options),
     })
     return UHFRecoveryResult("RECOVERED", initial, evidence, recovered, operator, r0.reference_energy - recovered.problem.reference.reference_energy, spin, attempted, len(roots) + equivalent, equivalent, len(roots), identity)
+
+
+def native_uhf_operator_from_scf(
+    previous: UHFResponseOperator,
+    scf_result: object,
+    *,
+    residual_tolerance: float = 1e-8,
+) -> UHFResponseOperator:
+    """Export a native FockPlan UHF result into a fresh canonical response state.
+
+    Independently recomputes the source-owned Focks and generalized MO frames;
+    it does not accept a raw density as a converged or canonical snapshot.
+    """
+    from dataclasses import replace
+
+    from generativeqc.fock import FockScfResult
+    from scipy.linalg import eigh
+
+    if type(previous) is not UHFResponseOperator or not isinstance(scf_result, FockScfResult):
+        raise RecoveryUnqualified("expected native FockScfResult and UHF operator")
+    if not math.isfinite(residual_tolerance) or not 0 < residual_tolerance <= 1e-7:
+        raise ValueError("invalid native UHF export residual tolerance")
+    r0 = previous.problem.reference
+    n = r0.nbf
+    d = np.asarray(scf_result.density)
+    if d.shape != (2, n, n) or np.iscomplexobj(d) or not np.isfinite(d).all():
+        raise RecoveryUnqualified("invalid native spin-resolved density")
+    if not scf_result.initial_density_used or not math.isfinite(scf_result.energy):
+        raise RecoveryUnqualified("native SCF did not consume the supplied spin seed")
+    if not math.isfinite(scf_result.density_rms) or scf_result.density_rms > residual_tolerance:
+        raise RecoveryUnqualified("native SCF reported inadequate convergence")
+    previous.validate_current()
+    # Check native density's physical metric and spin electron counts.
+    overlap = r0.overlap
+    for i, spin in enumerate(("alpha", "beta")):
+        if (
+            np.max(np.abs(d[i] - d[i].T)) > residual_tolerance
+            or abs(np.trace(d[i] @ overlap) - r0.nocc(spin)) > residual_tolerance
+            or np.max(np.abs(d[i] @ overlap @ d[i] - d[i])) > residual_tolerance
+        ):
+            raise RecoveryUnqualified(f"native {spin} density is not an occupied projector")
+    a, b = previous._fock_response(d[0], d[1])
+    focks = []
+    frames = []
+    energies = []
+    mismatch = 0.0
+    for spin, correction, density in zip(("alpha", "beta"), (a, b), d, strict=True):
+        fock = r0.hcore + np.asarray(correction)
+        if fock.shape != (n, n) or np.iscomplexobj(fock) or not np.isfinite(fock).all():
+            raise RecoveryUnqualified("invalid native source Fock")
+        eigvals, coefficients = eigh(fock, overlap, check_finite=True)
+        occupied = coefficients[:, : r0.nocc(spin)]
+        projector = occupied @ occupied.T
+        mismatch = max(mismatch, float(np.max(np.abs(projector - density))))
+        focks.append(fock)
+        frames.append(coefficients)
+        energies.append(eigvals)
+    if mismatch > residual_tolerance:
+        raise RecoveryUnqualified("native final density is not canonical self-consistent")
+    generation = canonical_hash({
+        "kind": "native-uhf-scf-export-v1",
+        "prior": r0.identity,
+        "native": scf_result.identity,
+        "density": sha256(np.ascontiguousarray(d).tobytes()).hexdigest(),
+    })
+    result_reference = replace(
+        r0,
+        fock_alpha=focks[0],
+        fock_beta=focks[1],
+        coefficients_alpha=frames[0],
+        coefficients_beta=frames[1],
+        orbital_energies_alpha=energies[0],
+        orbital_energies_beta=energies[1],
+        reference_energy=float(scf_result.energy),
+        scf_residual=max(float(scf_result.density_rms), mismatch),
+        generation_id=generation,
+    )
+    previous.validate_current()
+    return UHFResponseOperator(
+        UHFResponseOperator.build_problem(result_reference, previous.backend),
+        previous.backend,
+    )
+
+
+def recover_uhf_with_native_fock_plan(
+    operator: UHFResponseOperator,
+    plan: object,
+    *,
+    options: RecoveryOptions | None = None,
+    stability_options: StabilityOptions | None = None,
+    max_iterations: int = 200,
+) -> UHFRecoveryResult:
+    """Run bounded recovery through an already prepared native CPU UHF plan.
+
+    Reject a mismatched basis/source and non-HF/fitted/device plan rather than
+    silently adapting to a different Coulomb/exchange Hamiltonian.
+    """
+    from generativeqc.fock import FockBuildSpec, FockPlan
+
+    from .backends import NativeJKBackend
+
+    if type(operator) is not UHFResponseOperator or not isinstance(plan, FockPlan):
+        raise RecoveryUnqualified("native recovery requires UHF operator and FockPlan")
+    if type(operator.backend) is not NativeJKBackend:
+        raise RecoveryUnqualified("native CPU J/K provider is required")
+    if plan._device_id is not None or plan.spec not in (
+        FockBuildSpec.hf("unrestricted", derivative_order=0),
+        FockBuildSpec.hf("unrestricted", derivative_order=1),
+    ) or plan.diagnostics["screening_tolerance"] != 0.0:
+        raise RecoveryUnqualified("only unscreened exact unrestricted CPU HF is admitted")
+    source = operator.backend.source
+    if (
+        plan.basis.nao != operator.problem.reference.nbf
+        or plan.basis.representation != source.representation
+        or plan.basis.atoms != source.atoms
+        or plan.basis.shells != source.shells
+        or plan.basis.charge != source.charge
+        or plan.basis.multiplicity != source.multiplicity
+    ):
+        raise RecoveryUnqualified("native SCF plan and response source do not match")
+    if type(max_iterations) is not int or not 0 < max_iterations <= 500:
+        raise ValueError("max_iterations must be in [1, 500]")
+
+    def solve(seed: np.ndarray) -> UHFResponseOperator:
+        result = plan.solve(
+            initial_density=seed,
+            compute_forces=False,
+            max_iterations=max_iterations,
+            energy_tolerance=1e-11,
+            density_tolerance=1e-10,
+        )
+        return native_uhf_operator_from_scf(operator, result)
+
+    return recover_uhf_stability(
+        operator, solve, options=options, stability_options=stability_options
+    )
