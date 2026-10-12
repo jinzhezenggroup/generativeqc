@@ -1,0 +1,8 @@
+id: cuda-review-discarded-graph-launch
+language: Cpp
+severity: warning
+message: "cudaGraphLaunch status is explicitly discarded; verify a later error check handles device-tail launch failure."
+rule:
+  pattern:
+    context: "void f() { (void)cudaGraphLaunch($EXEC, $STREAM); }"
+    selector: expression_statement

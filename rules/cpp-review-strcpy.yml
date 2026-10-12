@@ -1,0 +1,18 @@
+id: cpp-review-strcpy
+language: Cpp
+severity: warning
+message: "Review strcpy/strcat: these calls do not check destination capacity."
+rule:
+  any:
+    - pattern:
+        context: "void f() { strcpy($DEST, $SOURCE); }"
+        selector: call_expression
+    - pattern:
+        context: "void f() { std::strcpy($DEST, $SOURCE); }"
+        selector: call_expression
+    - pattern:
+        context: "void f() { strcat($DEST, $SOURCE); }"
+        selector: call_expression
+    - pattern:
+        context: "void f() { std::strcat($DEST, $SOURCE); }"
+        selector: call_expression
