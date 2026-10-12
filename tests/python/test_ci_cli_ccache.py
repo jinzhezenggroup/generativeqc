@@ -52,6 +52,7 @@ def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
         "CALLS": str(tmp_path / "calls.jsonl"),
         "FAIL_STAGE": failure,
+        "GITHUB_OUTPUT": str(tmp_path / "outputs.txt"),
     }
 
 
@@ -124,17 +125,21 @@ def test_cli_verbose_statistics_include_uncacheable_reasons(tmp_path: Path) -> N
 
 
 @pytest.mark.parametrize("tier", ["skip", "fast", "release"])
-def test_cli_verbose_statistics_respect_skipped_builds(tier: str) -> None:
+@pytest.mark.parametrize("reset", ["", "false", "true"])
+def test_cli_verbose_statistics_respect_skipped_builds(tier: str, reset: str) -> None:
     step = _step("Show detailed CLI compiler cache statistics")
     expression = step.split("        if: ", 1)[1].splitlines()[0]
     expression = expression.replace("always()", "true")
     expression = expression.replace("steps.cli_scope.outputs.tier", '"$TIER"')
+    expression = expression.replace(
+        "steps.native_cli_build.outputs.cache_stats_reset", '"$RESET"'
+    )
     result = subprocess.run(
         ["bash", "-c", f"if [[ {expression} ]]; then printf run; else printf skip; fi"],
-        env={**os.environ, "TIER": tier},
+        env={**os.environ, "TIER": tier, "RESET": reset},
         capture_output=True,
         text=True,
         check=True,
         timeout=10,
     )
-    assert result.stdout == ("skip" if tier == "skip" else "run")
+    assert result.stdout == ("run" if tier != "skip" and reset == "true" else "skip")
