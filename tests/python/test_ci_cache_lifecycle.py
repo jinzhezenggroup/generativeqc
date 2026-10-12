@@ -89,11 +89,15 @@ def test_master_cpu_seed_executes_consumer_compiler_and_coverage_modes(
     assert [compiler for compiler, _ in configures] == ["g++", "g++", "clang++"]
     assert len(records) == 6
     assert [args[args.index("-B") + 1] for _, args in configures] == [
-        "build", "build", "build"
+        "build",
+        "build",
+        "build",
     ]
     builds = [args for _, args in records if "--build" in args]
     assert [args[args.index("--build") + 1] for args in builds] == [
-        "build", "build", "build"
+        "build",
+        "build",
+        "build",
     ]
     for _, args in configures:
         assert "-DGENERATIVEQC_ENABLE_CUDA=OFF" in args
