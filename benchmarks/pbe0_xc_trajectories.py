@@ -20,7 +20,11 @@ from typing import Any
 import numpy as np
 from generativeqc import Calculator, GridSpec, KsOptions
 
-from benchmarks._support import cuda_accelerator_metadata, environment_metadata
+from benchmarks._support import (
+    cuda_accelerator_metadata,
+    environment_metadata,
+    raw_output_path,
+)
 from benchmarks.df_component_ledger import aggregate, read_trace
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_omol25 import check_record, load_comparison_basis, protocol
@@ -111,14 +115,11 @@ def main(strategy: str = "ragged") -> None:
     """Save complete endpoint vectors, original gates and actual work counts."""
     if strategy != "ragged":
         raise ValueError("unsupported SCF/XC strategy experiment")
-    import cupy as cp
-    from generativeqc import _native
-
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--atoms", type=int, choices=(12, 48, 96), required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
     parser.add_argument("--reference", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--feasibility", action="store_true")
     args = parser.parse_args()
@@ -128,6 +129,9 @@ def main(strategy: str = "ragged") -> None:
         parser.error("at least five repeats required, or --feasibility --repeats 1")
     if args.output.exists():
         parser.error("output already exists; choose a fresh evidence path")
+    import cupy as cp
+    from generativeqc import _native
+
     opener = gzip.open if args.reference.suffix == ".gz" else open
     with opener(args.reference, "rt") as source:
         reference = json.load(source)
