@@ -93,9 +93,13 @@ def test_pure_semilocal_family_does_not_admit_new_nonlocal_contributions(
 
 
 def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
+    root = Path(__file__).resolve().parents[2]
+    # Admission moved, while prepared CUDA provider eligibility stays with the owner.
     source = (
-        Path(__file__).resolve().parents[2] / "src" / "methods" / "dft_method.cpp"
-    ).read_text()
+        (root / "src/methods/dft_method_preparation.cpp").read_text()
+        + "\n"
+        + (root / "src/methods/dft_method.cpp").read_text()
+    )
     options_begin = source.index("scf::ScfOptions dft_options(")
     options_end = source.index("/** Copy every pointee", options_begin)
     options = source[options_begin:options_end]
