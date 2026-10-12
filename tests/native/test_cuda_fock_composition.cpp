@@ -1,5 +1,3 @@
-#include "scf/cuda/direct_coulomb.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -9,6 +7,7 @@
 
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
+#include "scf/cuda/direct_coulomb.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_fock_provider.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
@@ -21,12 +20,12 @@ using namespace generativeqc::scf;
 using generativeqc::core::System;
 // The private provider header must stand alone while declaring exactly the
 // callback type exposed by the public transport contract.
-using ResidentDerivativeEntry = cudaError_t (*)(
-    cuda_execution::GeneratedExchangePlan&, bool, const double*, const double*, double, double,
-    const CudaDerivativeSourceConsumer&, bool);
-static_assert(std::is_same_v<
-              decltype(&cuda_execution::consume_generated_full_range_energy_derivatives),
-              ResidentDerivativeEntry>);
+using ResidentDerivativeEntry = cudaError_t (*)(cuda_execution::GeneratedExchangePlan&, bool,
+                                                const double*, const double*, double, double,
+                                                const CudaDerivativeSourceConsumer&, bool);
+static_assert(
+    std::is_same_v<decltype(&cuda_execution::consume_generated_full_range_energy_derivatives),
+                   ResidentDerivativeEntry>);
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -575,17 +574,17 @@ void resident_derivative_sources() {
               "resident J/K consumer failure lost its status");
       require(cudaStreamQuery(binding.stream) == cudaSuccess,
               "failed resident J/K callback returned before its copies drained");
-      require(consume_prepared_cuda_stationary_one_electron_pair(
-                  plan.cuda_direct_source(), alpha, weight, elements, fail, detail) ==
-                  one_electron_status,
+      require(consume_prepared_cuda_stationary_one_electron_pair(plan.cuda_direct_source(), alpha,
+                                                                 weight, elements, fail,
+                                                                 detail) == one_electron_status,
               "resident one-electron consumer failure lost its status");
       require(cudaStreamQuery(binding.stream) == cudaSuccess,
               "failed resident one-electron callback returned before its copies drained");
       submit();
     };
-    for (const auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
-                              GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
-                              GENERATIVEQC_STATUS_INVALID_ARGUMENT}) {
+    for (const auto status :
+         {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+          GENERATIVEQC_STATUS_NUMERICAL_FAILURE, GENERATIVEQC_STATUS_INVALID_ARGUMENT}) {
       const CudaDerivativeSourceConsumer typed_failure = [&](const auto& view) {
         consume(view);
         throw generativeqc::Error(status, "injected typed resident source consumer failure");
