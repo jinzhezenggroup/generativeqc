@@ -84,5 +84,5 @@ allocation. Preserve Slurm's `CUDA_VISIBLE_DEVICES`. See
 provenance, capability and future higher-l/ECP integration requirements.
 
 Routine log/XML files named in this historical account are now represented in
-[the retention audit](../retention-238/migration.json), with extracted measurements,
+[the retention audit](../retention-238/migration.json.gz), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
