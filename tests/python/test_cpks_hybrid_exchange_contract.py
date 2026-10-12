@@ -143,6 +143,13 @@ def test_hybrid_cpks_fraction_is_part_of_problem_identity():
         CPKSResponseOperator(
             pbe0, backend, kernel, exact_exchange_fraction=Fraction(1, 5)
         )
+    # An admitted provider cannot withdraw K mid-solve without failing closed.
+    live = CPKSResponseOperator(
+        pbe0, backend, kernel, exact_exchange_fraction=Fraction(1, 4)
+    )
+    backend.supports_full_range_exchange = False
+    with pytest.raises(ResponseUnsupported, match="full-range K provider"):
+        live.induced_fock(np.eye(reference.nmo))
 
 
 @pytest.mark.parametrize("invalid", [True, "0.25", float("nan"), -0.1, 1.1])
