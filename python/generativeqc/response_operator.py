@@ -385,6 +385,13 @@ class CPKSResponseOperator(_BaseResponseOperator):
             perturbation_labels=perturbation_labels,
         )
 
+    def induced_fock(
+        self, delta_density: typing.Any, *, transpose: typing.Any = False
+    ) -> typing.Any:
+        """Reject loss of the declared full-range K capability during a solve."""
+        _require_cpks_exchange_provider(self.backend, self.exact_exchange_fraction)
+        return super().induced_fock(delta_density, transpose=transpose)
+
     def _xc_response(
         self, delta_ao: typing.Any, *, transpose: typing.Any = False
     ) -> typing.Any:
