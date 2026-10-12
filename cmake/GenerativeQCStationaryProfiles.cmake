@@ -10,13 +10,22 @@ function(generativeqc_select_stationary_aot_profiles output)
   if(NOT Python3_EXECUTABLE)
     message(FATAL_ERROR "Stationary CUDA profile discovery requires build-time Python")
   endif()
+  set(_generativeqc_stationary_discovery_inputs
+      "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/generativeqc_stationary_profile_inputs.txt")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
             --list-aot-profiles
+            --cmake-dependencies "${_generativeqc_stationary_discovery_inputs}"
     OUTPUT_VARIABLE _generativeqc_stationary_profile_catalog
     OUTPUT_STRIP_TRAILING_WHITESPACE
     COMMAND_ERROR_IS_FATAL ANY)
+  # Discovery determines target/output membership, so ordinary content changes
+  # to its compiler inputs must regenerate CMake, not just generated CUDA.
+  file(STRINGS "${_generativeqc_stationary_discovery_inputs}"
+       _generativeqc_stationary_configure_dependencies)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+               ${_generativeqc_stationary_configure_dependencies})
   if(GENERATIVEQC_STATIONARY_AOT_PROFILES STREQUAL "auto")
     set(selected ${_generativeqc_stationary_profile_catalog})
   else()

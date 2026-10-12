@@ -27,6 +27,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument(
+        "--cmake-dependencies",
+        type=Path,
+        help="write configure-time compiler inputs alongside profile discovery",
+    )
+    parser.add_argument(
         "--profiles", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
     selection = parser.add_mutually_exclusive_group(required=True)
@@ -50,8 +55,26 @@ def main() -> None:
             if args.list_aot_profiles
             else NATIVE_STATIONARY_CUDA_PROFILES
         )
+        if args.cmake_dependencies is not None:
+            from generativeqc_compiler.xc.libxc_bulk import CATALOG_PATH
+
+            from tools.run_codegen import _local_python_dependencies
+
+            # XC component admission parses this catalog during compiler
+            # import; changes must revalidate discovery even without .py edits.
+            dependencies = {
+                *_local_python_dependencies(ROOT),
+                Path(__file__).resolve(),
+                CATALOG_PATH.resolve(),
+            }
+            write_if_changed(
+                args.cmake_dependencies,
+                "".join(f"{path.as_posix()}\n" for path in sorted(dependencies)),
+            )
         print(";".join(names))
         return
+    if args.cmake_dependencies is not None:
+        parser.error("--cmake-dependencies applies only to profile discovery")
     if args.all_profiles:
         if args.output is not None or args.output_dir is None:
             parser.error("--all-profiles requires --output-dir and forbids --output")

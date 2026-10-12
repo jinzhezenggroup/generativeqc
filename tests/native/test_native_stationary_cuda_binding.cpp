@@ -218,8 +218,8 @@ void controller_admission(const generativeqc::dft::CudaStationaryBinding& bindin
   const dft::AoBasis basis(system);
   const auto grid = dft::MolecularGrid::from_cuda(system, {1, 24, 12, 24, 3, 1e-12}, 0);
   const auto prepare = [&](std::size_t capacity) {
-    return std::make_unique<dft::CudaStationaryController>(system, basis, grid, binding.profile, 0,
-                                                           64, capacity);
+    return std::make_unique<dft::CudaStationaryController>(system, basis, grid, binding, 0, 64,
+                                                           capacity);
   };
   auto prototype = prepare(128U << 20);
   const auto sizing = prototype->resources();
