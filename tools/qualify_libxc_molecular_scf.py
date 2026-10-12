@@ -27,6 +27,11 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
+from generativeqc_compiler.common.compiler_cache import (
+    resolve_compiler_cache,
+    run_cached_compiler,
+)
+from generativeqc_compiler.common.compiler_process import run_compiler
 from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks_candidate
 from generativeqc_compiler.xc.bulk_point_program import (
@@ -43,7 +48,7 @@ from generativeqc_compiler.xc.molecular_scf_evidence import (
 
 from tools.generate_validation_references import pyscf_molecule
 
-CAMPAIGN_SCHEMA = "generativeqc.libxc-molecular-scf-campaign/v1"
+CAMPAIGN_SCHEMA = "generativeqc.libxc-molecular-scf-campaign/v2"
 FIXTURE_SCHEMA = "generativeqc.libxc-molecular-scf-fixture/v1"
 REFERENCE_SCHEMA = "generativeqc.libxc-molecular-scf-reference/v1"
 SPINS = ("polarized", "unpolarized")
@@ -111,10 +116,13 @@ void print_grid(std::string_view label, const dft::MolecularGrid& grid) {{
 }}
 
 void print_row(std::string_view spin, std::string_view phase, const scf::ScfResult& result) {{
+  const auto& work = result.dft_diagnostic.coulomb_exchange_work;
   std::cout << "ROW " << spin << ' ' << phase << ' ' << (result.converged ? 1 : 0)
             << ' ' << result.iterations << ' ' << std::setprecision(17) << result.energy
             << ' ' << result.physical_residual_rms
-            << ' ' << (result.initial_density_used ? 1 : 0) << '\\n';
+            << ' ' << (result.initial_density_used ? 1 : 0)
+            << ' ' << (work.complete ? 1 : 0)
+            << ' ' << work.coulomb_applications << ' ' << work.exchange_applications << '\\n';
 }}
 
 void run_spin(std::string_view spin, bool unrestricted) {{
@@ -236,6 +244,7 @@ def _compile_and_run(
     with tempfile.TemporaryDirectory(prefix="generativeqc-libxc-scf-") as directory:
         root = Path(directory)
         source_path = root / "molecular_scf.cpp"
+        object_path = root / "molecular_scf.o"
         executable = root / "molecular_scf"
         source_path.write_text(source, encoding="utf-8")
         command = [
@@ -246,26 +255,43 @@ def _compile_and_run(
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
-            str(source_path),
-            "-L",
-            str(library.parent),
-            "-lgenerativeqc",
             "-pthread",
-            f"-Wl,-rpath,{library.parent}",
+            "-c",
+            str(source_path),
             "-o",
-            str(executable),
+            str(object_path),
         ]
-        compiled = subprocess.run(
+        launcher = resolve_compiler_cache(timeout)
+        compiled = run_cached_compiler(
             command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            timeout,
+            label="Libxc molecular-SCF qualification",
+            launcher=launcher,
         )
-        if compiled.returncode != 0:
+        if compiled.timed_out or compiled.returncode != 0:
             raise RuntimeError(
                 "molecular-SCF qualification compilation failed: "
                 + (compiled.stdout + compiled.stderr).strip()
+            )
+        linked = run_compiler(
+            [
+                str(compiler),
+                str(object_path),
+                "-L",
+                str(library.parent),
+                "-lgenerativeqc",
+                "-pthread",
+                f"-Wl,-rpath,{library.parent}",
+                "-o",
+                str(executable),
+            ],
+            timeout,
+            label="Libxc molecular-SCF qualification link",
+        )
+        if linked.timed_out or linked.returncode != 0:
+            raise RuntimeError(
+                "molecular-SCF qualification link failed: "
+                + (linked.stdout + linked.stderr).strip()
             )
         executed = subprocess.run(
             [str(executable)],
@@ -281,6 +307,7 @@ def _compile_and_run(
             )
     metadata = {
         "compiler": str(compiler),
+        "compiler_cache": {"name": launcher.name, "version": launcher.version},
         "library": str(library),
         "translation_unit_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
         "stdout_sha256": hashlib.sha256(executed.stdout.encode("utf-8")).hexdigest(),
@@ -324,8 +351,13 @@ def _parse_native(
                 raise ValueError("native molecular-SCF grid record has wrong size")
             grids[label] = (values[: 3 * count].reshape(count, 3), values[3 * count :])
         elif fields[0] == "ROW":
-            if len(fields) != 8:
+            if len(fields) != 11 or any(
+                fields[index] not in {"0", "1"} for index in (3, 7, 8)
+            ):
                 raise ValueError("native molecular-SCF row is malformed")
+            counts = tuple(int(field) for field in fields[9:11])
+            if any(not 0 <= count < 2**64 for count in counts):
+                raise ValueError("native molecular-SCF work count is not uint64")
             spin, phase = fields[1], fields[2]
             if spin not in SPINS or phase not in PHASES:
                 raise ValueError("native molecular-SCF row has unsupported spin/phase")
@@ -340,6 +372,11 @@ def _parse_native(
                 "energy_hartree": float(fields[5]),
                 "physical_residual_rms": float(fields[6]),
                 "initial_density_used": fields[7] == "1",
+                "coulomb_exchange_work": {
+                    "complete": fields[8] == "1",
+                    "coulomb_applications": counts[0] if fields[8] == "1" else None,
+                    "exchange_applications": counts[1] if fields[8] == "1" else None,
+                },
             }
         else:
             raise ValueError(
@@ -620,6 +657,13 @@ def qualify_molecular_scf(
                 failures.append(
                     "native lifecycle phase did not consume its warm density"
                 )
+            work = native["coulomb_exchange_work"]
+            if not work["complete"]:
+                failures.append("native Coulomb/exchange work census is incomplete")
+            elif (
+                work["coulomb_applications"] <= 0 or work["exchange_applications"] != 0
+            ):
+                failures.append("native pure semilocal endpoint work is not J-only")
             status = "pass" if not failures else "fail"
             reason = None if not failures else "; ".join(failures)
             rows.append(
@@ -639,6 +683,7 @@ def qualify_molecular_scf(
                     "energy_tolerance_hartree": float(energy_tolerance),
                     "physical_residual_rms": float(native["physical_residual_rms"]),
                     "residual_tolerance": float(residual_tolerance),
+                    "coulomb_exchange_work": work,
                 }
             )
             details.append(
