@@ -16,6 +16,7 @@ from generativeqc_compiler.xc.molecular_scf_evidence import (
     required_matrix,
     stage_evidence,
     validate_result,
+    validate_stage_qualification,
 )
 
 NAME = "GGA_X_PBE_SOL"
@@ -83,6 +84,11 @@ def _rows() -> list[dict]:
                 "energy_tolerance_hartree": 1.0e-8,
                 "physical_residual_rms": 2.0e-11,
                 "residual_tolerance": 1.0e-9,
+                "coulomb_exchange_work": {
+                    "complete": True,
+                    "coulomb_applications": 12 if phase == "cold" else 5,
+                    "exchange_applications": 0,
+                },
             }
         )
     return rows
@@ -244,3 +250,96 @@ def test_boolean_numeric_gate_is_not_a_physical_tolerance() -> None:
     rows[0]["residual_tolerance"] = True
     with pytest.raises(ValueError, match="must be finite"):
         build_result(NAME, _resolutions(), rows, evidence="test://boolean")
+
+
+@pytest.mark.parametrize(
+    "work",
+    [
+        None,
+        {},
+        {
+            "complete": False,
+            "coulomb_applications": None,
+            "exchange_applications": None,
+        },
+        {"complete": True, "coulomb_applications": 0, "exchange_applications": 0},
+        {"complete": True, "coulomb_applications": 12, "exchange_applications": 1},
+        {"complete": 1, "coulomb_applications": 12, "exchange_applications": 0},
+        {"complete": False, "coulomb_applications": 0, "exchange_applications": 0},
+        {"complete": True, "coulomb_applications": 12, "exchange_applications": False},
+    ],
+)
+def test_missing_unknown_or_unused_work_cannot_promote(work: object) -> None:
+    rows = _rows()
+    rows[0]["coulomb_exchange_work"] = work
+    with pytest.raises(ValueError):
+        build_result(NAME, _resolutions(), rows, evidence="test://unobserved-work")
+
+
+@pytest.mark.parametrize("count", [-1, 2**64, True, 2.5, "12", None])
+@pytest.mark.parametrize("field", ["coulomb_applications", "exchange_applications"])
+def test_work_counts_require_native_uint64_values(field: str, count: object) -> None:
+    rows = _rows()
+    rows[0]["coulomb_exchange_work"][field] = count
+    with pytest.raises(ValueError, match="uint64 count"):
+        build_result(NAME, _resolutions(), rows, evidence="test://invalid-work-count")
+
+
+def test_rehashed_work_cannot_bypass_pure_semilocal_gate() -> None:
+    result = build_result(
+        NAME, _resolutions(), _rows(), evidence="test://observed-work"
+    )
+    result["rows"][0]["coulomb_exchange_work"]["exchange_applications"] = 1
+    result["identity"] = canonical_hash(
+        {key: value for key, value in result.items() if key != "identity"}
+    )
+    with pytest.raises(ValueError, match="unused exchange"):
+        stage_evidence(NAME, result)
+
+
+@pytest.mark.parametrize(
+    "work",
+    [
+        None,
+        {
+            "complete": False,
+            "coulomb_applications": None,
+            "exchange_applications": None,
+        },
+        {"complete": True, "coulomb_applications": 12, "exchange_applications": 3},
+    ],
+)
+def test_failed_receipt_preserves_unknown_or_incorrect_work(work: object) -> None:
+    rows = _rows()
+    rows[0].update(
+        status="fail", reason="target work unqualified", coulomb_exchange_work=work
+    )
+    result = build_result(
+        NAME, _resolutions(), rows, evidence="test://retained-work-failure"
+    )
+    assert result["rows"][0]["coulomb_exchange_work"] == work
+    assert stage_evidence(NAME, result)["status"] == "fail"
+
+
+def test_legacy_scf_receipt_without_work_is_stale() -> None:
+    result = build_result(NAME, _resolutions(), _rows(), evidence="test://legacy-work")
+    result["schema"] = "generativeqc.libxc-molecular-scf-result/v1"
+    with pytest.raises(ValueError, match="schema"):
+        validate_result(NAME, result)
+
+
+@pytest.mark.parametrize(
+    ("field", "legacy_schema"),
+    [
+        ("result_schema", "generativeqc.libxc-molecular-scf-result/v1"),
+        ("qualification_schema", "generativeqc.libxc-molecular-scf-qualification/v1"),
+    ],
+)
+def test_legacy_workless_stage_cannot_satisfy_public_admission(
+    field: str, legacy_schema: str
+) -> None:
+    result = build_result(NAME, _resolutions(), _rows(), evidence="test://stale-stage")
+    stage = stage_evidence(NAME, result)
+    stage["qualification"][field] = legacy_schema
+    with pytest.raises(ValueError, match="schema mismatch"):
+        validate_stage_qualification(stage["qualification"], stage["evidence"])

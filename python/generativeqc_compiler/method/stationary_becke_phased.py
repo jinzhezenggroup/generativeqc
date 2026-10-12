@@ -14,6 +14,7 @@ from generativeqc_compiler.xc.becke_normalized_adjoint import (
 from generativeqc_compiler.xc.becke_partition import (
     recognize_becke_partition_domain_graph,
 )
+from generativeqc_compiler.xc.becke_scaled_products import emit_binary_scaled_becke
 from generativeqc_compiler.xc.grid_partition_ir import grid_partition_domain_program
 
 _KERNELS = r"""
@@ -31,6 +32,7 @@ struct PhasedBeckeInput {
   double* partial;
   int* error;
   bool normalized_adjoints{};
+  bool binary_scaled_products{};
   bool zero_seed_elision{};
   unsigned long long* zero_seed_points{};
   __device__ size_t owner(size_t point) const {
@@ -55,7 +57,7 @@ __global__ void phased_becke_indices(size_t atoms, uint2* indices) {
         make_uint2(first, second);
 }
 
-template <int Phase, bool Primitive = false>
+template <int Phase, bool Primitive = false, bool BinaryScaled = false>
 __global__ void phased_becke_atom(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   const size_t atom = blockIdx.y;
@@ -74,7 +76,11 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   }
   if constexpr (Phase == 0)
     valid = distance_phase(input.work, point, atom, input.points, input.centers, local_norm);
-  if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom);
+  if constexpr (Phase == 1) {
+    if constexpr (BinaryScaled)
+      valid = generativeqc_grid_scaled::scaled_atom_products_phase<true>(input.work, point, atom);
+    else atom_logs_phase(input.work, point, atom);
+  }
   if constexpr (Phase == 2) {
     if constexpr (Primitive)
       generativeqc_grid_coefficients::atom_gather_coefficient_phase(
@@ -92,8 +98,10 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   if (!valid) atomicExch(input.error, 1);
 }
 
-template <bool Reverse, bool Primitive = false, bool Normalized = false>
+template <bool Reverse, bool Primitive = false, bool Normalized = false,
+          bool BinaryScaled = false>
 __global__ void phased_becke_pair(PhasedBeckeInput input) {
+  static_assert(!BinaryScaled || (!Primitive && !Normalized));
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   if (point >= input.work.points || input.failed()) return;
   // These rows have no pair-panel consumer: logs/normalization/reverse skip
@@ -112,12 +120,20 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
     else if constexpr (Primitive)
       valid = generativeqc_grid_coefficients::pair_coefficient_reverse_phase(
           input.work, point, indices.x, indices.y, geometry, local_log);
+    else if constexpr (BinaryScaled)
+      valid = generativeqc_grid_scaled::scaled_pair_reverse_phase(
+          input.work, point, indices.x, indices.y, geometry, local_log);
     else valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
-  } else
-    valid = pair_primal_phase(input.work, point, indices.x, indices.y, geometry, local_log, local_becke);
+  } else {
+    if constexpr (BinaryScaled)
+      valid = generativeqc_grid_scaled::scaled_pair_primal_phase(
+          input.work, point, indices.x, indices.y, geometry, local_log, local_becke);
+    else valid = pair_primal_phase(input.work, point, indices.x, indices.y, geometry, local_log, local_becke);
+  }
   if (!valid) atomicExch(input.error, 1);
 }
 
+template <bool BinaryScaled = false>
 __global__ void phased_becke_normalize(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   if (point >= input.work.points || input.failed()) return;
@@ -126,8 +142,16 @@ __global__ void phased_becke_normalize(PhasedBeckeInput input) {
     else atomicAdd(input.zero_seed_points, 1ULL);
     return;
   }
-  if (!generativeqc_grid_phased::point_normalize_phase(input.work, point,
-          input.owner(point), input.seeds[point], local_ratio)) atomicExch(input.error, 1);
+  if (BinaryScaled && input.normalized_adjoints) {
+    atomicExch(input.error, 1);
+    return;
+  }
+  const bool valid = BinaryScaled
+      ? generativeqc_grid_scaled::scaled_point_normalize_phase(input.work, point,
+          input.owner(point), input.seeds[point], local_ratio)
+      : generativeqc_grid_phased::point_normalize_phase(input.work, point,
+          input.owner(point), input.seeds[point], local_ratio);
+  if (!valid) atomicExch(input.error, 1);
   if (input.normalized_adjoints)
     for (size_t atom = 0; atom < input.work.atoms; ++atom)
       generativeqc_grid_normalized::prepare_atom_weight(input.work, point, atom);
@@ -136,6 +160,7 @@ __global__ void phased_becke_normalize(PhasedBeckeInput input) {
 // Point lanes are contiguous in every global panel. Sixteen atom lanes share
 // only the frozen maximum, products and ratio AD result; no scientific sum is
 // reassociated and no point or atom scatter uses floating-point atomics.
+template <bool BinaryScaled = false>
 __device__ void normalize_cooperative(PhasedBeckeInput input) {
   constexpr size_t point_lanes = stationary_becke_normalize_point_lanes;
   constexpr size_t atom_lanes = 128 / point_lanes;
@@ -148,6 +173,12 @@ __device__ void normalize_cooperative(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * point_lanes + lane;
   if (atom_lane == 0) {
     bool active = point < input.work.points && !input.failed();
+    if (active && BinaryScaled &&
+        (input.normalized_adjoints ||
+         input.work.atoms > generativeqc_grid_scaled::maximum_scaled_atoms)) {
+      atomicExch(input.error, 1);
+      active = false;
+    }
     skipped_points[lane] = 0;
     if (active && input.zero_seed(point)) {
       if (input.owner(point) >= input.work.atoms) atomicExch(input.error, 1);
@@ -176,7 +207,8 @@ __device__ void normalize_cooperative(PhasedBeckeInput input) {
   if (active)
     for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes)
       if (!input.work.zero_counts(point)[atom])
-        maximum = std::max(maximum, input.work.field(4, point)[atom]);
+        maximum = std::max(maximum,
+            input.work.field(BinaryScaled ? 7 : 4, point)[atom]);
   maxima[atom_lane * point_lanes + lane] = maximum;
   __syncthreads();
   if (atom_lane == 0) {
@@ -194,8 +226,13 @@ __device__ void normalize_cooperative(PhasedBeckeInput input) {
   if (active_points[lane]) {
     maximum = maxima[lane];
     for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes) {
-      const double product = normalized_product_value(input.work.field(4, point)[atom],
-          input.work.zero_counts(point)[atom], maximum);
+      const double product = BinaryScaled
+          ? generativeqc_grid_scaled::atom_product(input.work, point, atom)
+                .scaled_value(static_cast<int>(maximum))
+          : normalized_product_value(input.work.field(4, point)[atom],
+                input.work.zero_counts(point)[atom], maximum);
+      if constexpr (BinaryScaled)
+        generativeqc_grid_scaled::store_relative_exponent(input.work, point, atom, maximum);
       products[atom * point_lanes + lane] = product;
       input.work.field(5, point)[atom] = product;
     }
@@ -221,8 +258,9 @@ __device__ void normalize_cooperative(PhasedBeckeInput input) {
     }
   }
 }
+template <bool BinaryScaled = false>
 __global__ void phased_becke_normalize_cooperative(PhasedBeckeInput input) {
-  normalize_cooperative(input);
+  normalize_cooperative<BinaryScaled>(input);
 }
 } // namespace generativeqc_stationary_cuda
 """
@@ -237,6 +275,9 @@ def emit_stationary_phased_becke_cuda(
     Recognition is finite source-generation work. The native owner selects
     either ordinary phases or the qualification-only coefficient primitive;
     neither selection constructs graphs or recognizes them at force execution.
+    Representation selection specializes kernels at compile time: the host
+    launches the requested variant without adding scaled arithmetic to the
+    incumbent kernel's register-allocation domain.
     The emitted bound is part of native admission, not just an annotation.
     """
     if type(cooperative_normalize) is not bool:
@@ -251,6 +292,7 @@ def emit_stationary_phased_becke_cuda(
     return (
         emit_becke_pair_coefficients(operation)
         + emit_becke_normalized_adjoint(operation)
+        + emit_binary_scaled_becke()
         + "namespace generativeqc_stationary_cuda {\n"
         + f"constexpr size_t stationary_becke_primitive_max_atoms = {atom_limit};\n"
         + f"constexpr size_t stationary_becke_normalize_max_atoms = {min(atom_limit, 128)};\n"

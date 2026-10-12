@@ -76,16 +76,20 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
 
 
 @pytest.mark.parametrize(
-    "asset", ("residency_boundaries.hpp", "residency_observer.hpp")
+    "relative",
+    (
+        "src/runtime/residency_boundaries.hpp",
+        "src/runtime/residency_observer.hpp",
+        "src/dft/becke_scaled_policy.hpp",
+    ),
 )
-def test_residency_asset_changes_regenerate_aot_identity(
-    asset: str, tmp_path: Path
+def test_contract_asset_changes_regenerate_aot_identity(
+    relative: str, tmp_path: Path
 ) -> None:
     """Real CMake dependencies must rebuild the contract after a header edit."""
     cmake = shutil.which("cmake")
     if cmake is None:
         pytest.skip("CMake is required for dependency evaluation")
-    relative = f"src/runtime/{asset}"
     header = tmp_path / relative
     header.parent.mkdir(parents=True)
     shutil.copyfile(ROOT / relative, header)

@@ -184,6 +184,13 @@ def test_automatic_cpu_complete_final_state_lifecycle(name: str, spins: int) -> 
             assert diagnostic is not None
             assert diagnostic.physical_residual_max < 2e-9
             assert diagnostic.fock_builds >= result.iterations
+            observed = diagnostic.coulomb_exchange_work
+            assert observed is not None and observed["complete"]
+            assert observed["exchange_applications"] == 0
+            if result.warm_start_fallback:
+                assert observed["coulomb_applications"] > diagnostic.fock_builds
+            else:
+                assert observed["coulomb_applications"] == diagnostic.fock_builds
             assert tuple(row.iteration for row in diagnostic.history) == tuple(
                 range(1, result.iterations + 1)
             )
@@ -238,6 +245,7 @@ def test_automatic_cpu_complete_final_state_lifecycle(name: str, spins: int) -> 
                     "directional_error": expected["directional_error"],
                     "iterations": result.iterations,
                     "fock_builds": diagnostic.fock_builds,
+                    "coulomb_exchange_work": diagnostic.coulomb_exchange_work,
                     "operator_inventory_complete": work["operator_inventory_complete"],
                     "precision_complete": work["complete"],
                     "operator_counts": {
@@ -287,5 +295,10 @@ def test_automatic_cpu_exhausted_budget_does_not_publish_warm_state(
             assert not result.succeeded and not result.converged
             assert result.iterations <= maximum
             assert not result.warm_start_used
+            assert result.ks_diagnostic.coulomb_exchange_work == {
+                "complete": True,
+                "coulomb_applications": result.ks_diagnostic.fock_builds,
+                "exchange_applications": 0,
+            }
             with pytest.raises((RuntimeError, ValueError)):
                 NativeKsSnapshot(batch, 0)

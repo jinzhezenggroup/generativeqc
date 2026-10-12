@@ -23,6 +23,7 @@ from .bulk_runtime import (
     PRODUCTION_CANDIDATE_DOMAIN,
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
 )
+from .density_work import DENSITY_WORK_DOMAIN, DENSITY_WORK_DOMAIN_VERSION
 
 if TYPE_CHECKING:
     from .bulk_runtime import BulkRuntimeProgram
@@ -34,6 +35,7 @@ _NATIVE_DOMAIN_VERSIONS = {
     libxc_bulk.BULK_SEMANTICS: 1,
     PRODUCTION_CANDIDATE_DOMAIN: 2,
     PRODUCTION_DENSITY_CANDIDATE_DOMAIN: 3,
+    DENSITY_WORK_DOMAIN: DENSITY_WORK_DOMAIN_VERSION,
 }
 
 _POINT_LAYOUTS = {
@@ -168,7 +170,10 @@ class SemilocalPointBinding:
             raise ValueError(
                 "domain_version disagrees with the compiler-owned runtime domain"
             )
-        if self.variant.domain == PRODUCTION_DENSITY_CANDIDATE_DOMAIN:
+        if self.variant.domain in (
+            PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+            DENSITY_WORK_DOMAIN,
+        ):
             if (
                 not isinstance(self.density_threshold, (int, float))
                 or not math.isfinite(float(self.density_threshold))

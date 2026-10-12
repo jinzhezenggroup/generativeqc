@@ -25,8 +25,8 @@ from generativeqc_compiler.xc.bulk_point_program import (
     bind_runtime_semilocal_point_program,
 )
 from generativeqc_compiler.xc.bulk_runtime import (
-    PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
+    production_candidate_domain,
 )
 from generativeqc_compiler.xc.compiled_cpu_evidence import build_result, stage_evidence
 
@@ -180,7 +180,7 @@ def qualify_compiled_cpu(
         name,
         spin="polarized",
         order=1,
-        domain=PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+        domain=production_candidate_domain(name),
     )
     binding = bind_runtime_semilocal_point_program(program)
     cases = _smoke_inputs()

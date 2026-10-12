@@ -856,8 +856,10 @@ def test_new_cc_default_off_option_must_be_registered(
     assert any(control in error and "unregistered" in error for error in errors)
 
 
-@pytest.mark.parametrize("initializer", ["{}", "{false}", " = false"])
-def test_new_response_default_off_option_must_be_registered(
+@pytest.mark.parametrize(
+    "initializer", ["{}", "{false}", " = false", "{true}", " = true"]
+)
+def test_new_response_option_must_be_registered(
     tmp_path: Path, initializer: str
 ) -> None:
     payload = _payload()
@@ -866,14 +868,14 @@ def test_new_response_default_off_option_must_be_registered(
     original = source.read_text()
     changed = original.replace(
         "struct RHFFrameResponseOptions {",
-        f"struct RHFFrameResponseOptions {{\n  bool new_default_off_path{initializer};",
+        f"struct RHFFrameResponseOptions {{\n  bool new_response_path{initializer};",
         1,
     )
     assert changed != original
     source.write_text(changed)
     errors = validate_inventory(payload, root=tmp_path)
     assert any(
-        "response-option:new_default_off_path" in error and "unregistered" in error
+        "response-option:new_response_path" in error and "unregistered" in error
         for error in errors
     )
 

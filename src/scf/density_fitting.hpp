@@ -90,6 +90,7 @@ struct DensityFittingRhfJk {
   std::size_t nbf{};
   std::vector<double> coulomb;
   std::vector<double> exchange;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 /**
@@ -110,6 +111,7 @@ struct DensityFittingUhfJk {
   std::vector<double> coulomb;
   std::vector<double> alpha_exchange;
   std::vector<double> beta_exchange;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 /**

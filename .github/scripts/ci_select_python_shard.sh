@@ -310,19 +310,24 @@ core_hotspots_a=(
   # Keep this measured long tail parallel on the lighter core-a workers;
   # its >1751 worker-seconds must not become one serial loadfile task.
   tests/python/test_uccsd_gradient.py
-  # PR #2347 / run 38205701393 left two corrected-Lambda cases at timeout.
-  # Fresh per-test owners need parallel worksteal, not serial loadfile.
-  tests/python/test_uccsd_t_lambda.py
+  # Make room for corrected Lambda on core-c without serializing either
+  # UCCSD owner. These complete files retain parallel worksteal and their
+  # original core inventory slots; see the 2026-10-12 tail-balance note.
+  tests/python/test_cc_native_tensor_cpu.py
+  tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
+  # Keep the independent full-Fock matrix on its measured parallel owner.
+  tests/python/test_uccsd_triples_fock_response.py
   tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
   tests/python/test_df_lambda_matrix_audit.py
 )
 core_hotspots_c=(
-  tests/python/test_cc_native_tensor_cpu.py
-  tests/python/test_cpu_hf_high_l.py
+  # The gradient and corrected-Lambda families must not share one late tail.
+  # Fresh function-scoped owners remain parallel, with every case retained.
+  tests/python/test_uccsd_t_lambda.py
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
 )

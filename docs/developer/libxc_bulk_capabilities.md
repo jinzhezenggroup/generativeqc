@@ -137,10 +137,12 @@ itself remains a pure, deterministic admission evaluator.
 
 `tools/qualify_libxc_compiled_cpu.py` produces the concrete
 `compiled-cpu` evidence used by the automatic semilocal path. It builds the
-polarized first-order `libxc-bulk-production-candidate/v2` Graph, binds it to
-the native `SemilocalPointProgram` ABI, derives native domain version 3 from
-that compiler-owned domain, compiles the same total-density screening into the
-point wrapper, then compiles and executes one C++ translation unit.
+polarized first-order Graph selected by the shared `production_candidate_domain`
+recipe and binds it to the native `SemilocalPointProgram` ABI. Density-only LDA
+uses `libxc-7.0/work-density-only-v1` (native domain version 5); other supported
+ingredients retain `libxc-bulk-production-candidate/v2` (version 3). The wrapper
+compiles the recipe's total-density screening before executing the Graph, then
+the tool compiles and executes one C++ translation unit.
 
 A pass binds all of the following into
 `generativeqc.libxc-compiled-cpu-result/v2`:
@@ -182,7 +184,14 @@ cold, warm-replay, and changed-geometry rows for each. Passing rows bind fixture
 geometry, independent-reference and exact KS-resolution identities, require
 convergence plus independent energy and physical-residual gates, and reject a
 warm replay that changes geometry or a changed-geometry row that reuses the cold
-geometry. Only an all-pass dual-spin receipt emits CPU energy endpoint coverage;
+geometry. Version-2 receipts additionally require a complete native value-provider
+work census in every passing row: positive observed Coulomb applications and zero
+exchange applications for these pure semilocal endpoints. Counts come from the
+executed providers, not iterations or the requested MethodIR. Unknown work stays
+unavailable; failed receipts retain incorrect or unavailable work without promoting
+it. Legacy version-1 receipts do not satisfy the current public-admission producer.
+This narrow census does not certify precision, preparation, or derivative work.
+Only an all-pass dual-spin receipt emits CPU energy endpoint coverage;
 forces, response and public admission remain separate stages.
 
 ## Bulk inventory queries
@@ -245,7 +254,7 @@ stage; the current B1 campaign explicitly records the shared array-Graph
 executor rather than pretending that interpreted evidence is a compiled-CPU or
 CUDA result.
 
-The B1 campaign uses the explicit
+The unclipped candidate uses the explicit
 `libxc-bulk-production-candidate/v2` runtime domain. It keeps the v1
 zero-gradient expansion and additionally admits nonnegative rho/tau for
 qualification. Exact total-density rows below the pinned registration's Libxc
@@ -264,6 +273,35 @@ singularity remain blocked by their numerical matrix row.
 Ordinary bulk runtime consumers continue to default to the original interior
 domain; both qualification-candidate versions are explicit opt-ins and their
 domain/threshold semantics are part of the retained execution identity.
+
+Density-only LDA qualification now uses the separate, explicit
+`libxc-7.0/work-density-only-v1` domain. After constructing the imported interior
+derivative roots, it evaluates those roots at the pinned Libxc worker's floored
+density coordinates. It does **not** differentiate the clipping map. Energy is
+weighted by the original total density rather than the floored spin sum; the
+complete minority-spin potential is retained. Total-density screening runs
+before work evaluation in array, native point, and CUDA tile execution.
+The projection owner, worker policy, spin normalization, domain, and requested
+outputs enter the expression/binding identity. Stored work receipts are rebuilt
+against the current owner and rejected when stale. Prepared programs retain the
+owner identity captured at construction.
+
+The production-domain, compiled-CPU, molecular-SCF, and sharded-catalog producers
+share this structural recipe, not functional-name branches. The molecular-SCF
+producer currently blocks this work domain before native execution: a polarized
+callback alone does not qualify restricted normalization in the active
+`[floor, 2*floor)` tail. Both-spin molecular evidence remains required; ordinary
+geometry success cannot waive this missing contract. The catalog campaign
+v2 records each registration's candidate domain and the shard's domain set.
+Older unclipped LDA failures remain diagnostic artifacts, but an unclipped
+receipt cannot provide new density-work compilation/admission evidence.
+Compiler-source changes conservatively invalidate old capability/expression
+identities even when old-domain emitted mathematics is unchanged. Unsupported work
+ingredients fail closed; GGA/MGGA keep their existing unclipped recipe and gates.
+Unpolarized total-density and polarized per-spin worker layouts remain distinct:
+the native RKS consumer's folded polarized layout is not silently substituted for
+the standalone unpolarized Graph. Work-coordinate Libxc parity is not physical
+particle-birth, analytic-force, public backend, or catalog-wide qualification.
 
 `generativeqc_compiler.xc.production_domain_cases` instantiates every numerical
 rho/sigma/tau row in the exact v3 cases-by-spin matrix from finite physical

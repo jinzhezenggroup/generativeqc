@@ -1,5 +1,8 @@
 """Link real and synthetic pkg-config providers through the production CMake owner."""
 
+import ctypes
+import importlib.util
+import json
 import os
 import re
 import shutil
@@ -235,30 +238,69 @@ def test_pkgconfig_preserves_wrong_archive_order(
     assert "undefined reference" in result.stdout + result.stderr
 
 
+def _scipy_openblas_metadata() -> tuple[str, tuple[bool, ...]]:
+    # Importing this build-input package loads its OpenBLAS with RTLD_GLOBAL.
+    # Keep that process-wide side effect out of the persistent pytest worker:
+    # PySCF may later load another OpenBLAS with overlapping internal symbols.
+    if importlib.util.find_spec("scipy_openblas32") is None:
+        pytest.skip("scipy_openblas32 is required")
+    probe = _run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import scipy_openblas32 as scipy
+
+library = scipy.dll
+capabilities = (
+    hasattr(library, "scipy_openblas_set_num_threads_local"),
+    all(
+        hasattr(library, name)
+        for name in (
+            "scipy_openblas_get_num_threads",
+            "scipy_openblas_set_num_threads",
+        )
+    ),
+    all(
+        hasattr(library, name)
+        for name in ("scipy_LAPACKE_dpotrf", "scipy_LAPACKE_dsyevd")
+    ),
+)
+print(json.dumps({"pkg_config": scipy.get_pkg_config(), "capabilities": capabilities}))
+""",
+        ],
+        env=dict(os.environ),
+    )
+    metadata = json.loads(probe.stdout)
+    return metadata["pkg_config"], tuple(metadata["capabilities"])
+
+
+def test_real_scipy_pkgconfig_preserves_process_blas_namespace() -> None:
+    def bindings() -> dict[str, int | None]:
+        process = ctypes.CDLL(None)
+        symbols = ("gotoblas", "dgemm_nn", "scipy_openblas_get_config")
+        return {
+            name: ctypes.cast(getattr(process, name), ctypes.c_void_p).value
+            if hasattr(process, name)
+            else None
+            for name in symbols
+        }
+
+    before = bindings()
+    _scipy_openblas_metadata()
+    assert bindings() == before
+
+
 def test_real_scipy_pkgconfig_links_native_owner(
     tmp_path: Path, native_cxx: object
 ) -> None:
-    scipy = pytest.importorskip("scipy_openblas32")
+    pkg_config, expected = _scipy_openblas_metadata()
     pcdir = tmp_path / "metadata"
     pcdir.mkdir()
-    (pcdir / "scipy-openblas.pc").write_text(scipy.get_pkg_config())
+    (pcdir / "scipy-openblas.pc").write_text(pkg_config)
     build, env = _configure(tmp_path, pcdir, native_cxx, real=True)
     # Symbol availability comes from the actual loaded library, not a version label.
-    library = scipy.dll
-    expected = (
-        hasattr(library, "scipy_openblas_set_num_threads_local"),
-        all(
-            hasattr(library, name)
-            for name in (
-                "scipy_openblas_get_num_threads",
-                "scipy_openblas_set_num_threads",
-            )
-        ),
-        all(
-            hasattr(library, name)
-            for name in ("scipy_LAPACKE_dpotrf", "scipy_LAPACKE_dsyevd")
-        ),
-    )
     assert _capabilities(build) == expected
     result = _run(["cmake", "--build", str(build), "--verbose"], env=env)
     (tmp_path / "build.log").write_text(result.stdout + result.stderr)
