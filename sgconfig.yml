@@ -1,0 +1,14 @@
+# Apply the C++ tree-sitter parser to CUDA sources (syntax-only, not nvcc).
+# Reuse the same patterns for maintained C source as well.
+ruleDirs:
+  - rules
+testConfigs:
+  - testDir: rule-tests
+languageGlobs:
+  cpp:
+    - "*.c"
+    - "**/*.c"
+    - "*.cu"
+    - "**/*.cu"
+    - "*.cuh"
+    - "**/*.cuh"
