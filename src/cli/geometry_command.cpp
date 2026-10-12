@@ -150,7 +150,7 @@ std::vector<Stage> build_stages(const RunOptions& target) {
     }
     if (is_xtb(stage.inputs)) {
       // GFN2 has an intrinsic basis and may preoptimize on CPU before CUDA.
-      stage.inputs.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+      if (!last) stage.inputs.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
       stage.inputs.precision = GENERATIVEQC_PRECISION_FP64;
       stage.inputs.basis_explicit = false;
       stage.inputs.representation_explicit = false;
