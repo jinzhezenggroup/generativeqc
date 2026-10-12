@@ -1449,9 +1449,16 @@ jobs:
           CLI_FAST_COMPILE: ${{ steps.cli_scope.outputs.tier == 'fast' && 'ON' || 'OFF' }}
         run: |
           ccache --zero-stats
+          # PCH calls bypass strict ccache. Disable only this CI preset use;
+          # retain normal header/macro validation instead of cache sloppiness.
           cmake --preset cuda-release-cli-sm120 \
+            -DGENERATIVEQC_ENABLE_CXX_PCH=OFF \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
+      - name: Show detailed CLI compiler cache statistics
+        if: always() && steps.cli_scope.outputs.tier != 'skip'
+        continue-on-error: true
+        run: ccache --show-stats --verbose
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
