@@ -16,6 +16,7 @@ SHARDS = (
     "core-a",
     "core-b",
     "core-c",
+    "uccsd-forces",
     "runtime-heavy",
     "posthf",
     "ecp-forces",
@@ -146,7 +147,9 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     distribution, _, arguments = _selection(event, shard)
     assert "--deselect" not in arguments
     assert distribution == (
-        "worksteal" if shard in {"core-a", "core-b", "core-c"} else "loadfile"
+        "worksteal"
+        if shard in {"core-a", "core-b", "core-c", "uccsd-forces"}
+        else "loadfile"
     )
 
 
@@ -212,13 +215,13 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_native.py",
             "test_uccsd_triples_fock_response.py",
         ),
-        "core-a": (
+        "uccsd-forces": (
             "test_uccsd_gradient.py",
-            "test_cpu_hf_high_l.py",
+            "test_uccsd_t_gradient.py",
         ),
+        "core-a": ("test_cpu_hf_high_l.py",),
         "core-b": (
             "test_uccsd_response.py",
-            "test_uccsd_t_gradient.py",
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
             "test_df_lambda_matrix_audit.py",
@@ -257,6 +260,34 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             )
 
 
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_complete_uccsd_forces_are_one_worksteal_owner_with_prioritized_cases(
+    event: str,
+) -> None:
+    distribution, targets, arguments = _selection(event, "uccsd-forces")
+    expected = [
+        "tests/python/test_uccsd_gradient.py",
+        "tests/python/test_uccsd_t_gradient.py",
+    ]
+    assert distribution == "worksteal"
+    assert targets == expected
+    assert "-p" in arguments
+    assert "tools.pytest_ci_fresh_frontier" in arguments
+    assert [
+        item.split("=", 1)[1]
+        for item in arguments
+        if item.startswith("--ci-fresh-priority=")
+    ] == expected
+    # Neither the ordinary PR exclusions nor nightly qualification removes
+    # any complete molecular oracle or alters existing failure checks.
+    assert not any(
+        any(path in arg for path in expected) and arg.startswith("--deselect")
+        for arg in arguments
+    )
+
+
 def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert '--junitxml=".artifacts/pytest-${{ matrix.shard }}.xml"' in source
@@ -275,13 +306,13 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
 ) -> None:
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
-        "tests/python/test_uccsd_gradient.py": "core-a",
-        "tests/python/test_uccsd_t_gradient.py": "core-b",
         "tests/python/test_cpu_hf_high_l.py": "core-a",
         "tests/python/test_uccsd_t_lambda.py": "core-c",
     }
     owners = {
         **parallel,
+        "tests/python/test_uccsd_gradient.py": "uccsd-forces",
+        "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
         "tests/python/test_uccsd_native.py": "compiler-heavy",
         "tests/python/test_uccsd_triples_fock_response.py": "compiler-heavy",
@@ -326,7 +357,9 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         ]
         assert actual == ([owner] if tracked else [])
         assert selections[owner][0] == (
-            "worksteal" if owner.startswith("core-") else "loadfile"
+            "worksteal"
+            if owner.startswith("core-") or owner == "uccsd-forces"
+            else "loadfile"
         )
         assert not any(
             path in argument
@@ -335,8 +368,8 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
             if not argument.startswith("--ci-fresh-priority=")
         )
         priority = {
-            "tests/python/test_uccsd_gradient.py": "core-a",
-            "tests/python/test_uccsd_t_gradient.py": "core-b",
+            "tests/python/test_uccsd_gradient.py": "uccsd-forces",
+            "tests/python/test_uccsd_t_gradient.py": "uccsd-forces",
             "tests/python/test_uccsd_t_lambda.py": "core-c",
         }
         for shard, (_, _, arguments) in selections.items():

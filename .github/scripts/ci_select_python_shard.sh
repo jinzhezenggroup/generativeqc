@@ -294,6 +294,11 @@ rebalance_paths=(
   # Keep the full-Fock file's original core slot before its bounded
   # complete-file transfer to the existing compiler lane.
   tests/python/test_uccsd_triples_fock_response.py
+  # The observed complete UCCSD / corrected UCCSD(T) gradient suites took
+  # 150-309s per numerical case on PR #2362. Preserve their historical core
+  # modulo slots while routing both full files to one parallel worksteal job.
+  tests/python/test_uccsd_gradient.py
+  tests/python/test_uccsd_t_gradient.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -313,21 +318,13 @@ nightly_hessian_paths=(
 # originally totaled about 0.7k observed worker-seconds per group. Later
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
-core_fresh_frontier_a=(
-  tests/python/test_uccsd_gradient.py
-)
-core_fresh_frontier_b=(
-  tests/python/test_uccsd_t_gradient.py
-)
+# Dedicated UCCSD force tests no longer occupy the broad core queues;
+# corrected Lambda stays an independent prioritized core-c owner.
 core_fresh_frontier_c=(
   tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_a=(
   tests/python/test_mixed_rsh_df_forces.py
-  # PR #2329 / run 38202660731 left only two gradient cases at timeout.
-  # Keep this measured long tail parallel on the lighter core-a workers;
-  # its >1751 worker-seconds must not become one serial loadfile task.
-  "${core_fresh_frontier_a[@]}"
   # Keep complete high-angular HF parallel with its original core slot;
   # the native TensorIR CPU file now has a dedicated compiler transfer.
   tests/python/test_cpu_hf_high_l.py
@@ -337,9 +334,6 @@ core_hotspots_b=(
   # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
   # and its original enumeration slot; all cases stay selected.
   tests/python/test_uccsd_response.py
-  # Keep complete corrected force cases parallel and separate from the
-  # standard gradient on core-a. Fresh per-test owners stay unchanged.
-  "${core_fresh_frontier_b[@]}"
   tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
@@ -388,8 +382,8 @@ case "${GENERATIVEQC_CI_SHARD}" in
       pinned_core_owner["${path}"]=2
     done
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a) target_bucket=0; fresh_frontier_paths=("${core_fresh_frontier_a[@]}") ;;
-      core-b) target_bucket=1; fresh_frontier_paths=("${core_fresh_frontier_b[@]}") ;;
+      core-a) target_bucket=0; fresh_frontier_paths=() ;;
+      core-b) target_bucket=1; fresh_frontier_paths=() ;;
       core-c) target_bucket=2; fresh_frontier_paths=("${core_fresh_frontier_c[@]}") ;;
     esac
     test_targets=()
@@ -428,6 +422,31 @@ case "${GENERATIVEQC_CI_SHARD}" in
     done
     if (( ${#fresh_frontier_args[@]} > 0 )); then
       extra_args+=(-p tools.pytest_ci_fresh_frontier "${fresh_frontier_args[@]}")
+    fi
+    ;;
+  uccsd-forces)
+    # One additional runner, not two: move the two measured 21-29 minute
+    # force/gradient tails out of the broad core queues without removing a
+    # single molecular oracle, independent finite difference, or failure gate.
+    # Each test is function-scoped, so worksteal (not loadfile) parallelizes
+    # these multi-minute complete-oracle parameterizations across four workers.
+    # Seed both frontiers across workers; naive collection order would cluster
+    # the first several expensive cases on one worker instead.
+    dist_mode=worksteal
+    test_targets=()
+    force_priorities=()
+    for path in \
+      tests/python/test_uccsd_gradient.py \
+      tests/python/test_uccsd_t_gradient.py; do
+      # Select tracked files even when missing on disk, to fail closed; avoid
+      # inventing future files on pre-merge branches or synthetic inventories.
+      if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+        test_targets+=("$path")
+        force_priorities+=("--ci-fresh-priority=$path")
+      fi
+    done
+    if (( ${#force_priorities[@]} > 0 )); then
+      extra_args+=(-p tools.pytest_ci_fresh_frontier "${force_priorities[@]}")
     fi
     ;;
   runtime-heavy)
