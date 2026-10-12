@@ -117,5 +117,32 @@ def main(executable: str, xyz: str) -> None:
     assert len(value["coordinates_bohr"]) == 2
 
 
+    # Exercise the real native CPU CCSD(T) analytic-gradient owner, rather
+    # than only asserting that it appears in the proposed stage plan.
+    ccsdt = invoke(
+        executable,
+        xyz,
+        "--method",
+        "ccsd(t)",
+        "--basis",
+        "sto-3g",
+        "--backend",
+        "cpu",
+        "--units",
+        "bohr",
+        "--stages",
+        "ccsd(t)",
+        "--opt-fmax",
+        "0.05",
+        "--json",
+    )
+    assert ccsdt.returncode == 0, ccsdt.stderr
+    ccsdt_value = json.loads(ccsdt.stdout)
+    assert ccsdt_value["status"] == "converged"
+    assert ccsdt_value["method"] == "rccsd(t)"
+    assert ccsdt_value["stages"][-1]["method"] == "rccsd(t)"
+    assert ccsdt_value["max_force_hartree_per_bohr"] <= 0.05
+
+
 if __name__ == "__main__":
     main(*sys.argv[1:])
