@@ -166,6 +166,15 @@ def main() -> None:
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "environment": environment_metadata(),
         "budget_bytes": arguments.budget,
+        "controls": {
+            name: os.environ.get(name)
+            for name in (
+                "GENERATIVEQC_MP2_REFERENCE_SOURCE",
+                "GENERATIVEQC_MP2_ENERGY_SOURCE_TILING",
+                "GENERATIVEQC_MP2_FORCE_SOURCE_TILING",
+                "GENERATIVEQC_MP2_FORCE_MO_CACHE",
+            )
+        },
         "cold_seconds": results[0]["endpoint_seconds"],
         "replay_seconds": [result["endpoint_seconds"] for result in results[1:]],
         "median_replay_seconds": statistics.median(

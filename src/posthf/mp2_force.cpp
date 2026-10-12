@@ -256,8 +256,17 @@ ConventionalForceResult reference_force(const hf::PhysicalReference& reference,
   const auto coordinates = posthf::checked_mul(source.orbital().atoms.size(), 3);
   response::GmresPlan conservative_response;
   conservative_response.dimension = posthf::checked_mul(occupied, orbitals - occupied);
-  const auto retained =
-      posthf::checked_add(reference.numeric_capacity_bytes, source.retained_numeric_bytes());
+  // numeric_capacity_bytes is the completed SCF/export phase peak, not the
+  // detached reference's live payload. The source or outer phase already
+  // reserves any retained executable; charging that peak again can retire an
+  // otherwise admitted device source before the primary MP2 consumers run.
+  std::size_t reference_bytes = 0;
+  for (const auto* values :
+       {&reference.overlap, &reference.hcore, &reference.fock, &reference.coefficients,
+        &reference.orbital_energies, &reference.density, &reference.weighted_density})
+    reference_bytes = posthf::checked_add(reference_bytes,
+                                          posthf::checked_mul(values->capacity(), sizeof(double)));
+  const auto retained = posthf::checked_add(reference_bytes, source.retained_numeric_bytes());
   const auto resources = conventional_gradient_plan(
       orbitals, occupied, retained, conservative_response, maximum_shell, coordinates,
       posthf::checked_mul(coordinates, sizeof(double)), budget_bytes);

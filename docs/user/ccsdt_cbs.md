@@ -100,6 +100,14 @@ reads borrow a complete six-block CC ERI symmetry cover when admitted, rather
 than repeating AO-to-MO transformations. Equal method/basis identities still
 contribute only once per call.
 
+The other CUDA MP2 E+F groups can build the same six-block symmetry cover once
+from their own exact device-readable RHF source. This optional cache is admitted
+only when it uses at most one quarter of the remaining correlation phase budget,
+its construction fits, and the full force consumer fits alongside it. Otherwise
+the existing bounded force path reconstructs tiles. Only memory failures trigger
+that fallback; numerical errors propagate. Cache production runs on CUDA, but
+its returned MO blocks and some response orchestration retain host storage.
+
 Coordinates use Bohr, energy Hartree, and force Hartree/Bohr with shape
 `(natoms, 3)` and sign `force = -gradient`. `CBSResult` exposes the three energy
 and force contributions, fixed weights, actual completed native components,
@@ -172,7 +180,9 @@ when CUDA is requested. `executed_backend` retains the native backend spelling
 inherited from each actual native component, not broadened by composition.
 In particular, CUDA RI-MP2 forces remain unsupported, and the small CCSD(T)
 force calculation must fit its native qualified domain. This orchestration
-does not remove remaining host staging or improve asymptotic MP2 response work.
+does not remove remaining host staging or improve the asymptotic MP2 response
+algorithm. Optional MO caching reduces repeated transformations, not the
+method-specific response work or its domain limits.
 
 Independent reference data live under `tests/reference_data/cbs/`. H2 uses the
 physical spherical cc-pVDZ/cc-pVTZ sequence. A separate water **synthetic pair**

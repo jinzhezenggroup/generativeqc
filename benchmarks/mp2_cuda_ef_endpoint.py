@@ -316,6 +316,7 @@ def main() -> None:
                 "GENERATIVEQC_MP2_REFERENCE_SOURCE",
                 "GENERATIVEQC_MP2_ENERGY_SOURCE_TILING",
                 "GENERATIVEQC_MP2_FORCE_SOURCE_TILING",
+                "GENERATIVEQC_MP2_FORCE_MO_CACHE",
             )
         },
         "requested_cases": cases,

@@ -51,8 +51,64 @@ def workflow(cbs_device: str, cbs_case: dict) -> CCSDTCBSCalculator:
 
 
 @pytest.fixture(scope="module")
-def complete_result(workflow: CCSDTCBSCalculator, cbs_case: dict) -> CBSResult:
-    return workflow.singlepoint(cbs_case["atoms"])
+def completed_work_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("cbs-completed-work") / "progress.jsonl"
+
+
+@pytest.fixture(scope="module")
+def complete_result(
+    workflow: CCSDTCBSCalculator, cbs_case: dict, completed_work_path: Path
+) -> CBSResult:
+    completed_work_path.unlink(missing_ok=True)
+    previous = os.environ.get("GENERATIVEQC_DF_PROGRESS_TRACE")
+    os.environ["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(completed_work_path)
+    try:
+        return workflow.singlepoint(cbs_case["atoms"])
+    finally:
+        if previous is None:
+            os.environ.pop("GENERATIVEQC_DF_PROGRESS_TRACE", None)
+        else:
+            os.environ["GENERATIVEQC_DF_PROGRESS_TRACE"] = previous
+
+
+def test_complete_endpoint_reuses_reference_and_mo_blocks(
+    cbs_device: str, complete_result: CBSResult, completed_work_path: Path
+) -> None:
+    """Require real consumer reuse, not just optional cache allocation."""
+    assert complete_result.converged
+    records = [
+        json.loads(line) for line in completed_work_path.read_text().splitlines()
+    ]
+    values = {
+        record["key"]: record["value"]
+        for record in records
+        if record["event"] == "VALUE"
+        and record["name"] in ("ccsdt_endpoint", "mp2_endpoint")
+    }
+    assert values["mp2_companion_energy_source_reads"] == 0
+    assert values["mp2_companion_energy_transform_fmas"] == 0
+    assert values["mp2_companion_ovov_reused"] == 1
+    assert values["mp2_companion_force_blocks_reused"] == 1
+    if cbs_device == "cuda":
+        assert values["mp2_energy_device_source"] == 1
+        assert values["mp2_force_device_source"] == 1
+        assert values["mp2_force_mo_cache_bytes"] > 0
+        primary_ids = {
+            record["id"]
+            for record in records
+            if record["event"] == "BEGIN" and record["name"] == "mp2_endpoint"
+        }
+        assert (
+            sum(
+                record["value"]
+                for record in records
+                if record["event"] == "VALUE"
+                and record["name"] == "borrowed_mo_blocks"
+                and record["key"] == "mo_block_reuses"
+                and record["parent"] in primary_ids
+            )
+            > 0
+        )
 
 
 def test_complete_components_and_composite_against_independent_oracle(
