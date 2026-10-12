@@ -182,7 +182,14 @@ cold, warm-replay, and changed-geometry rows for each. Passing rows bind fixture
 geometry, independent-reference and exact KS-resolution identities, require
 convergence plus independent energy and physical-residual gates, and reject a
 warm replay that changes geometry or a changed-geometry row that reuses the cold
-geometry. Only an all-pass dual-spin receipt emits CPU energy endpoint coverage;
+geometry. Version-2 receipts additionally require a complete native value-provider
+work census in every passing row: positive observed Coulomb applications and zero
+exchange applications for these pure semilocal endpoints. Counts come from the
+executed providers, not iterations or the requested MethodIR. Unknown work stays
+unavailable; failed receipts retain incorrect or unavailable work without promoting
+it. Legacy version-1 receipts do not satisfy the current public-admission producer.
+This narrow census does not certify precision, preparation, or derivative work.
+Only an all-pass dual-spin receipt emits CPU energy endpoint coverage;
 forces, response and public admission remain separate stages.
 
 ## Bulk inventory queries
