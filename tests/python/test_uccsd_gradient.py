@@ -91,7 +91,6 @@ def _native_oracle(source: NativeSource, *, broken: bool = False) -> Any:
     return oracle
 
 
-
 @pytest.mark.parametrize(
     "atoms,spin,broken,representation,native_reference",
     [
@@ -165,7 +164,6 @@ def test_complete_cpu_native_gradient_matches_independent_oracle(
                         value.setflags(write=True)
 
 
-
 @contextmanager
 def _native_physical_context() -> Iterator[Any]:
     with NativeSource(_H2) as source:
@@ -181,14 +179,12 @@ def _native_physical_context() -> Iterator[Any]:
             yield physical
 
 
-
 @pytest.fixture(scope="module")
 def native_physical() -> Iterator[Any]:
     # The native CC/Lambda setup is expensive but each solve requalifies state.
     # Test monkeypatches are function-local; non-closing tests share one owner.
     with _native_physical_context() as physical:
         yield physical
-
 
 
 @pytest.fixture
