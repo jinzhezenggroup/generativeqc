@@ -120,7 +120,7 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cc = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     mp2_setup = mp2.split("      std::unique_ptr<posthf::RawSource> raw_source;", 1)[
         1
-    ].split("      const auto corr =", 1)[0]
+    ].split("      const auto run_phase =", 1)[0]
     force_prefix = mp2.split("      if (compute_forces) {", 1)[1].split(
         "        response::GmresOptions response_options;", 1
     )[0]
@@ -139,7 +139,8 @@ int mp2_case(bool prepared,bool compute_forces) {
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
   if (prepared) cpu_exact_plan_=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=cpu_exact_plan_.get();
-  const bool density_fitted_=false;
+  const bool density_fitted_=false, cuda=false;
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_source;
   int system_=0;
   std::optional<int> auxiliary_;
   std::unique_ptr<posthf::RawSource> raw_source;
@@ -153,6 +154,7 @@ int mp2_case(bool prepared,bool compute_forces) {
 """
         + force_prefix
         + r"""
+    prepare_source();
     if (plan_live || view_live || raw_live != 1 || !raw_source) return 3;
   } else if (prepared && (!plan_live || raw_live)) return 4;
   return 0;
