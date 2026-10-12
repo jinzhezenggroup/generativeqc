@@ -314,5 +314,20 @@ the existing campaign budget. `fix-summary.json.xz` retains every intermediate
 policy outcome and artifact identity, including the invalid prefix prototype
 and force-artifact mismatch. It identifies a content-addressed ignored local
 archive containing **all** intermediate raw captures. No attempt is discarded
-or relabeled as valid; the original water/larger archives remain unchanged.
+or relabeled as valid; historical payload bytes are preserved unchanged.
 Profiler times are diagnostics only, never complete endpoint benchmarks.
+
+### Historical payload recovery
+
+After integration with master `ef225164173b3b20a5f5666370ad81a314a707da`,
+the repository-wide evidence total would exceed its unchanged 64-MiB cap.
+Only this campaign's historical water raw archive is retired from checkout;
+`history.json` identifies its exact existing commit, path, size and SHA-256.
+The original summary, larger captures and all final repair raw records stay
+checked out. No unrelated evidence or numerical/safety test is removed.
+Recover the original bytes locally, without publishing an archive or Release:
+
+```bash
+git show b0cf631e9d72982314365703718a4c1f785d1997:benchmarks/results/dft-mixed-warmup-20261012/captures.json.xz > .cache/dft-mixed-water-captures.json.xz
+sha256sum .cache/dft-mixed-water-captures.json.xz
+```

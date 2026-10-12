@@ -1,11 +1,7 @@
 {
   "README.md": {
-    "sha256": "af9fe1b8eb92c2b2ee89de98abe2a8a7644a23463b1f455487c3f6e077904109",
-    "bytes": 18743
-  },
-  "captures.json.xz": {
-    "sha256": "d057537d121da67bce31eb1003f3b173bc910452f06377247a56bcc4524e35af",
-    "bytes": 104648
+    "sha256": "d42b6beeaae5a500b6ed0139444ec88b08a6feb978909a49450a216a4745ab3e",
+    "bytes": 19518
   },
   "fix-captures.json.xz": {
     "sha256": "1be979d12b053aba5062470bc5dffd5565d5ac6402354d4f1eedcf80b1566e66",
@@ -14,6 +10,10 @@
   "fix-summary.json.xz": {
     "sha256": "784f616d0f43ae11c910a244bdde89dbde65319354016311a4c0b613295655da",
     "bytes": 3912
+  },
+  "history.json": {
+    "sha256": "f51851165b400ef2aa96fbed100a5495262262f1ec0b21be6d75a6d5822fddce",
+    "bytes": 594
   },
   "large-captures.json.xz": {
     "sha256": "bf1163e770c3b256a5902e483ca39059d5386a490a9256f232880a3f04dde57e",
