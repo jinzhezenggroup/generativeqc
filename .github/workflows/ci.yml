@@ -1268,52 +1268,71 @@ jobs:
           retention-days: 7
 
   upload-coverage:
+    name: upload-coverage (${{ matrix.batch }})
     timeout-minutes: 8
     needs: [cpu, python]
     if: ${{ github.event_name != 'merge_group' && github.event_name != 'push' && !cancelled() && needs.cpu.result == 'success' && needs.python.result == 'success' }}
     # Coverage reporting is observability rather than a correctness gate. A
     # Codecov or artifact-service outage must not fail the workflow.
     continue-on-error: true
+    # Three reports share each runner to reduce queue admissions. All seven
+    # action steps are individually bounded to one minute, leaving one minute
+    # of the job budget for runner/action cleanup even if every step times out.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - artifact: coverage-report-cpp
-            file: coverage/coverage-cpp.info
-            flag: cpp
-            name: code-coverage/cpp
-          - artifact: coverage-report-python-core-a
-            file: coverage/coverage-python-core-a.xml
-            flag: python
-            name: code-coverage/python-core-a
-          - artifact: coverage-report-python-core-b
-            file: coverage/coverage-python-core-b.xml
-            flag: python
-            name: code-coverage/python-core-b
-          - artifact: coverage-report-python-core-c
-            file: coverage/coverage-python-core-c.xml
-            flag: python
-            name: code-coverage/python-core-c
-          - artifact: coverage-report-python-uccsd-forces
-            file: coverage/coverage-python-uccsd-forces.xml
-            flag: python
-            name: code-coverage/python-uccsd-forces
-          - artifact: coverage-report-python-runtime-heavy
-            file: coverage/coverage-python-runtime-heavy.xml
-            flag: python
-            name: code-coverage/python-runtime-heavy
-          - artifact: coverage-report-python-posthf
-            file: coverage/coverage-python-posthf.xml
-            flag: python
-            name: code-coverage/python-posthf
-          - artifact: coverage-report-python-compiler-heavy
-            file: coverage/coverage-python-compiler-heavy.xml
-            flag: python
-            name: code-coverage/python-compiler-heavy
-          - artifact: coverage-report-python-ecp-forces
-            file: coverage/coverage-python-ecp-forces.xml
-            flag: python
-            name: code-coverage/python-ecp-forces
+          - batch: cpp-core
+            reports:
+              - artifact: coverage-report-cpp
+                file: coverage/cpp/coverage-cpp.info
+                directory: coverage/cpp
+                flag: cpp
+                name: code-coverage/cpp
+              - artifact: coverage-report-python-core-a
+                file: coverage/python-core-a/coverage-python-core-a.xml
+                directory: coverage/python-core-a
+                flag: python
+                name: code-coverage/python-core-a
+              - artifact: coverage-report-python-core-b
+                file: coverage/python-core-b/coverage-python-core-b.xml
+                directory: coverage/python-core-b
+                flag: python
+                name: code-coverage/python-core-b
+          - batch: core-forces
+            reports:
+              - artifact: coverage-report-python-core-c
+                file: coverage/python-core-c/coverage-python-core-c.xml
+                directory: coverage/python-core-c
+                flag: python
+                name: code-coverage/python-core-c
+              - artifact: coverage-report-python-uccsd-forces
+                file: coverage/python-uccsd-forces/coverage-python-uccsd-forces.xml
+                directory: coverage/python-uccsd-forces
+                flag: python
+                name: code-coverage/python-uccsd-forces
+              - artifact: coverage-report-python-runtime-heavy
+                file: coverage/python-runtime-heavy/coverage-python-runtime-heavy.xml
+                directory: coverage/python-runtime-heavy
+                flag: python
+                name: code-coverage/python-runtime-heavy
+          - batch: heavy
+            reports:
+              - artifact: coverage-report-python-posthf
+                file: coverage/python-posthf/coverage-python-posthf.xml
+                directory: coverage/python-posthf
+                flag: python
+                name: code-coverage/python-posthf
+              - artifact: coverage-report-python-compiler-heavy
+                file: coverage/python-compiler-heavy/coverage-python-compiler-heavy.xml
+                directory: coverage/python-compiler-heavy
+                flag: python
+                name: code-coverage/python-compiler-heavy
+              - artifact: coverage-report-python-ecp-forces
+                file: coverage/python-ecp-forces/coverage-python-ecp-forces.xml
+                directory: coverage/python-ecp-forces
+                flag: python
+                name: code-coverage/python-ecp-forces
     runs-on: ubuntu-24.04
     # Keep OIDC away from jobs that build or execute pull-request code. This
     # job checks out source metadata and consumes coverage artifacts only.
@@ -1322,23 +1341,75 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Download coverage report
+      - name: Download coverage report 1
+        id: download_1
+        timeout-minutes: 1
+        # One missing artifact must not suppress the remaining reports.
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: ${{ matrix.artifact }}
-          path: coverage
-      - name: Upload coverage to Codecov
-        # fail_ci_if_error covers CLI upload errors; continue-on-error also
-        # covers action setup, integrity-check, and OIDC failures.
+          name: ${{ matrix.reports[0].artifact }}
+          path: ${{ matrix.reports[0].directory }}
+      - name: Upload coverage report 1 to Codecov
+        if: ${{ !cancelled() && steps.download_1.outcome == 'success' }}
+        timeout-minutes: 1
+        # Also cover action setup, integrity-check, and OIDC failures.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
-          files: ${{ matrix.file }}
-          flags: ${{ matrix.flag }}
-          name: ${{ matrix.name }}
+          files: ${{ matrix.reports[0].file }}
+          flags: ${{ matrix.reports[0].flag }}
+          name: ${{ matrix.reports[0].name }}
+          disable_search: true
+          fail_ci_if_error: false
+          use_oidc: true
+          version: v11.3.1
+      - name: Download coverage report 2
+        id: download_2
+        timeout-minutes: 1
+        # One missing artifact must not suppress the remaining reports.
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ matrix.reports[1].artifact }}
+          path: ${{ matrix.reports[1].directory }}
+      - name: Upload coverage report 2 to Codecov
+        if: ${{ !cancelled() && steps.download_2.outcome == 'success' }}
+        timeout-minutes: 1
+        # Also cover action setup, integrity-check, and OIDC failures.
+        continue-on-error: true
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: ${{ matrix.reports[1].file }}
+          flags: ${{ matrix.reports[1].flag }}
+          name: ${{ matrix.reports[1].name }}
+          disable_search: true
+          fail_ci_if_error: false
+          use_oidc: true
+          version: v11.3.1
+      - name: Download coverage report 3
+        id: download_3
+        timeout-minutes: 1
+        # One missing artifact must not suppress the remaining reports.
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ matrix.reports[2].artifact }}
+          path: ${{ matrix.reports[2].directory }}
+      - name: Upload coverage report 3 to Codecov
+        if: ${{ !cancelled() && steps.download_3.outcome == 'success' }}
+        timeout-minutes: 1
+        # Also cover action setup, integrity-check, and OIDC failures.
+        continue-on-error: true
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: ${{ matrix.reports[2].file }}
+          flags: ${{ matrix.reports[2].flag }}
+          name: ${{ matrix.reports[2].name }}
           disable_search: true
           fail_ci_if_error: false
           use_oidc: true
