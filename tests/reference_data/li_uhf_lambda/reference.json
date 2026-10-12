@@ -1,0 +1,1102 @@
+{
+  "arrays": {
+    "amplitudes.t1a": {
+      "bytes": 48,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "amplitudes.t1b": {
+      "bytes": 32,
+      "data": "UuGcjXD8Qj8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "9e3b4b72935572eddee1da7bb9397d84eb83e1dbad50f17183480bd1c8802d69",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "amplitudes.t2aa": {
+      "bytes": 288,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "2d5565fb483d8ea4525a7a9229677d1038ad34b6e22c8d5152e1d7f7b9817597",
+      "shape": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    "amplitudes.t2ab": {
+      "bytes": 192,
+      "data": "AAAAAAAAAABGCgzdDQ1gvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARgoM3Q0NYL8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEYKDN0NDWC/AAAAAAAAAACkAcHbECh5vwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAApAHB2xAoeb8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKUBwdsQKHm/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "796a8d6bad28227cb356c7472caa00d239f7ffcbcb654b3343346dd347d0943b",
+      "shape": [
+        2,
+        1,
+        3,
+        4
+      ]
+    },
+    "amplitudes.t2bb": {
+      "bytes": 128,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "38723a2e5e8a17aa7950dc008209944e898f69a7bd10a23c839d341e935fd5ca",
+      "shape": [
+        1,
+        1,
+        4,
+        4
+      ]
+    },
+    "ao_eri": {
+      "bytes": 5000,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "4810f1675a730bc8afc6371d82a7ba9a44cc22b1316b2f43ad12d64de396df03",
+      "shape": [
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    "coefficients_alpha": {
+      "bytes": 200,
+      "data": "p/T+ksnC7z+vj+oMTbfRvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAALiB1nJTA54/c/if5NV68D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAPA/AAAAAAAAAAAAAAAAAAAAgAEAAAAAAPA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAEAAAAAAPA/AAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "c1f4cd4846d44d1497fbd0b2d7b8f627f842a83ec1577775d2e969d23ab772ce",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "coefficients_beta": {
+      "bytes": 200,
+      "data": "A+Up9A247z+4eqZXkwPSvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgINgxk5De6E/kSOgvzl68D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAPA/AAAAAAAAAIAAAAAAAAAAgAEAAAAAAPA/AAAAAAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAAAEAAAAAAPA/AAAAAAAAAIA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "952f73cbaf6b15503c5ee1de3fd11a703df9c07d7462c6d497c34101a48f90ef",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "correlation_energy": {
+      "bytes": 8,
+      "data": "mtXEu4ZaNL8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "c7c54ff22f4c8b3cbfb7f65bfaf9e4faf7800d747270ca5e2f3865516ba55f8f",
+      "shape": []
+    },
+    "denominators.t1a": {
+      "bytes": 48,
+      "data": "59vYw4/+A8Dn29jDj/4DwOfb2MOP/gPAGhUuyiPb078aFS7KI9vTvxoVLsoj29O/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "3116b131eb269d34ae8031ad26f7ff29523989bbf741a5c39b3ade6bcf5f6586",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "denominators.t1b": {
+      "bytes": 32,
+      "data": "yVRgzliFA8BEE34W7joEwEQTfhbuOgTARBN+Fu46BMA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "dab38aef1433f469dc85fae355a59addbecfa2a5f9efb79f8f2fed6da6284580",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "denominators.t2aa": {
+      "bytes": 288,
+      "data": "59vYw4/+E8Dn29jDj/4TwOfb2MOP/hPA59vYw4/+E8Dn29jDj/4TwOfb2MOP/hPA59vYw4/+E8Dn29jDj/4TwOfb2MOP/hPAip4ePfR5BsCKnh499HkGwIqeHj30eQbAip4ePfR5BsCKnh499HkGwIqeHj30eQbAip4ePfR5BsCKnh499HkGwIqeHj30eQbAip4ePfR5BsCKnh499HkGwIqeHj30eQbAip4ePfR5BsCKnh499HkGwIqeHj30eQbAip4ePfR5BsCKnh499HkGwIqeHj30eQbAGhUuyiPb478aFS7KI9vjvxoVLsoj2+O/GhUuyiPb478aFS7KI9vjvxoVLsoj2+O/GhUuyiPb478aFS7KI9vjvxoVLsoj2+O/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "14c75cbce9c48f8864f04b7f045ac1c15a2e801815f8482d685a17c5306397d8",
+      "shape": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    "denominators.t2ab": {
+      "bytes": 192,
+      "data": "WJgcSfTBE8CWdyvtvhwUwJZ3K+2+HBTAlncr7b4cFMBYmBxJ9METwJZ3K+2+HBTAlncr7b4cFMCWdyvtvhwUwFiYHEn0wRPAlncr7b4cFMCWdyvtvhwUwJZ3K+2+HBTAbBemR70ABsDn1cOPUrYGwOfVw49StgbA59XDj1K2BsBsF6ZHvQAGwOfVw49StgbA59XDj1K2BsDn1cOPUrYGwGwXpke9AAbA59XDj1K2BsDn1cOPUrYGwOfVw49StgbA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "960ef82ae8a7e0fdce5bbb0ba45f9ab1ced008d8e31186146b3218698e34aa80",
+      "shape": [
+        2,
+        1,
+        3,
+        4
+      ]
+    },
+    "denominators.t2bb": {
+      "bytes": 128,
+      "data": "yVRgzliFE8AGNG9yI+ATwAY0b3Ij4BPABjRvciPgE8AGNG9yI+ATwEQTfhbuOhTARBN+Fu46FMBEE34W7joUwAY0b3Ij4BPARBN+Fu46FMBEE34W7joUwEQTfhbuOhTABjRvciPgE8BEE34W7joUwEQTfhbuOhTARBN+Fu46FMA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "ae7fc00c227e8ef8d2736fc6a7bb742abfbb3fdcca849e8ab0897ecf32a953af",
+      "shape": [
+        1,
+        1,
+        4,
+        4
+      ]
+    },
+    "density_alpha": {
+      "bytes": 200,
+      "data": "hNbjmd/88D9HS8XssGLQvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEdLxeywYtC/hNbjmd/88D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "82877e674afbd2f2d8c6bc0528bb1d325c318211ee3c816ad56ca77b3b1b8063",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "density_beta": {
+      "bytes": 200,
+      "data": "KCOPqb1w7z9tPsuW9VOhPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG0+y5b1U6E/Y9xbo6QZUz8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "dce1d2655824783ae2628eadd0e972eedd3cc967edfb1f5625c05d37fa6a22db",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "eris_energies_alpha": {
+      "bytes": 40,
+      "data": "BymqHxD0AsAv/HBRTQ7HvwYu60L6p8A/Bi7rQvqnwD8GLutC+qfAPw==",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "537f32210ab38a776a54fba6f598e5759130339c804ec76e42ab035ccc9bfba6",
+      "shape": [
+        5
+      ]
+    },
+    "eris_energies_beta": {
+      "bytes": 40,
+      "data": "7Sch9u6zAsCMm+UHOy26P3i1zgXyb8g/eLXOBfJvyD94tc4F8m/IPw==",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "69fd6e00ed6ce8b59cb0238e7dcbc3124730c603e7cfa1ad5e766ad8625eae09",
+      "shape": [
+        5
+      ]
+    },
+    "fock_ao_alpha": {
+      "bytes": 200,
+      "data": "KHgEh2/wAsAevEr5YDPkvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB68SvlgM+S/Dt/g54uj1b8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABC7rQvqnwD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABC7rQvqnwD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABC7rQvqnwD8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "46ea50bfdc683c2c9868e89d9221958937b6a727e6d3ddfb20cbfbe37719da96",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "fock_ao_beta": {
+      "bytes": 200,
+      "data": "eaf6RXKuAsAXimG8XIfkvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABeKYbxch+S/sHtm5kRvtL8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdLXOBfJvyD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdLXOBfJvyD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdLXOBfJvyD8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "dccec6762e93c46477010348385b2c53c24996dbb551fdec4fbb57100c37c946",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "fock_mo_alpha": {
+      "bytes": 200,
+      "data": "BymqHxD0AsBlOpdoKD3CvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACnbBL4uMS8L/xwUU0Ox78AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABi7rQvqnwD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABi7rQvqnwD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABi7rQvqnwD8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "b2a9193a3c51fec3fb59ae35d2381ead434d5b6a54d56665afe11e72a883b948",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "fock_mo_beta": {
+      "bytes": 200,
+      "data": "7Sch9u6zAsAaOhYG1wbHvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH7RVeauxse8jJvlBzstuj8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeLXOBfJvyD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeLXOBfJvyD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeLXOBfJvyD8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "f845923666e995eca01d6e163c58d009b37e14e788ab2e19c9765a18d53bfbcd",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "hcore": {
+      "bytes": 200,
+      "data": "bs4dW9efEcBR0KoOr4HvvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFHQqg6vge+/EroXIBit8b8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG+EC2iAV7L8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG+EC2iAV7L8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG+EC2iAV7L8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "7a466131fc9884ff454f8ccba13ba4c6796a85883ff77c597731c7aa611be7bf",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "hf_energy": {
+      "bytes": 8,
+      "data": "9Y8qPhlDHcA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "e036842356848cee89eb99811aa1114f497d121458e72da941764e59b28578bf",
+      "shape": []
+    },
+    "multipliers.t1a": {
+      "bytes": 48,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "multipliers.t1b": {
+      "bytes": 32,
+      "data": "rOnHAtX7Qj8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "c4b9d18410658bca65d703b2faa555c56ed79b8f63823206bb0d860192abc081",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "multipliers.t2aa": {
+      "bytes": 288,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "2d5565fb483d8ea4525a7a9229677d1038ad34b6e22c8d5152e1d7f7b9817597",
+      "shape": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    "multipliers.t2ab": {
+      "bytes": 192,
+      "data": "AAAAAAAAAACJgERgigxgvwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiYBEYIoMYL8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAImARGCKDGC/AAAAAAAAAABS9zfHQid5vwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUvc3x0Ineb8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFL3N8dCJ3m/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "0a87d9c8a81d799ebb9e7424b1a4a95d2a7aa90f5c24a3adad3d6ccc898d7962",
+      "shape": [
+        2,
+        1,
+        3,
+        4
+      ]
+    },
+    "multipliers.t2bb": {
+      "bytes": 128,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "38723a2e5e8a17aa7950dc008209944e898f69a7bd10a23c839d341e935fd5ca",
+      "shape": [
+        1,
+        1,
+        4,
+        4
+      ]
+    },
+    "occupations_alpha": {
+      "bytes": 40,
+      "data": "AAAAAAAA8D8AAAAAAADwPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "2a29779b3324d9f0a3a904d690c74705479dafe270e06686de774edb1ea05198",
+      "shape": [
+        5
+      ]
+    },
+    "occupations_beta": {
+      "bytes": 40,
+      "data": "AAAAAAAA8D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "dfa15abd36e7b5ba1997acbae4d98d2b99e543644a2170cd711144508d03e772",
+      "shape": [
+        5
+      ]
+    },
+    "orbital_energies_alpha": {
+      "bytes": 40,
+      "data": "AymqHxD0AsAr/HBRTQ7HvwYu60L6p8A/Bi7rQvqnwD8ILutC+qfAPw==",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "4a536f098c66a0034af44d0a7c923c5cd94d85751770c1a7fb895b4dd9d6fb8d",
+      "shape": [
+        5
+      ]
+    },
+    "orbital_energies_beta": {
+      "bytes": 40,
+      "data": "6ych9u6zAsB7m+UHOy26P3i1zgXyb8g/eLXOBfJvyD94tc4F8m/IPw==",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "6ed1c0e40f12cfd0e8756662a97364f3b19d53b7012af9dd395fada5e9df2082",
+      "shape": [
+        5
+      ]
+    },
+    "overlap": {
+      "bytes": 200,
+      "data": "AAAAAAAA8D/J11nXkN3OPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMnXWdeQ3c4/AAAAAAAA8D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/v//////7z8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/v//////7z8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/v//////7z8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "01a2de4712b934ac1a5c2bf5622d3ab490874d91bd7a180b41bb23b36d7f53a7",
+      "shape": [
+        5,
+        5
+      ]
+    },
+    "residuals.t1a": {
+      "bytes": 48,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "17b0761f87b081d5cf10757ccc89f12be355c70e2e29df288b65b30710dcbcd1",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "residuals.t1b": {
+      "bytes": 32,
+      "data": "UIrh0ACmrz0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "6a8d41c99474050e9eabe2b86b981125de70f2e9f15cb378f3e4d9694e1cf0ba",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "residuals.t2aa": {
+      "bytes": 288,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "2d5565fb483d8ea4525a7a9229677d1038ad34b6e22c8d5152e1d7f7b9817597",
+      "shape": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    "residuals.t2ab": {
+      "bytes": 192,
+      "data": "AAAAAAAAAAB0xhdfQ4OzPQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdMYXX0ODsz0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHTGF19Dg7M9AAAAAAAAAACe/ob+WUGXPQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnv6G/llBlz0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAByTObRaQZc9",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "d5fb01589170e35b085f9b8a85b3dc56206c387fd967402a89d67e9f6df0e957",
+      "shape": [
+        2,
+        1,
+        3,
+        4
+      ]
+    },
+    "residuals.t2bb": {
+      "bytes": 128,
+      "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "38723a2e5e8a17aa7950dc008209944e898f69a7bd10a23c839d341e935fd5ca",
+      "shape": [
+        1,
+        1,
+        4,
+        4
+      ]
+    },
+    "scf_gradient_norm": {
+      "bytes": 8,
+      "data": "AAAAAAAAyDw=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "cc528ee13391f69395da7d0d3bc289a2f978aad1d68aa7dce9ca3cf3f6cf3fcb",
+      "shape": []
+    },
+    "updated_amplitudes.t1a": {
+      "bytes": 48,
+      "data": "AAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "2a550d9a95c0c03abf7f6ccf7fb90498582da06c6a5d6bf1ceff02a13d7c1999",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "updated_amplitudes.t1b": {
+      "bytes": 32,
+      "data": "acteinD8Qj8AAAAAAAAAgAAAAAAAAACAAAAAAAAAAIA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "b29d64976a0e7b3a2b673ba3a0ee0425d311aee30116d728f8b8f64f82bdbb57",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "updated_amplitudes.t2aa": {
+      "bytes": 288,
+      "data": "AAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "8f620169591d15be13f4d551eb410bd8ffe0153d6c41cd21f990994ade89a517",
+      "shape": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    "updated_amplitudes.t2ab": {
+      "bytes": 192,
+      "data": "AAAAAAAAAIB4OYjdDQ1gvwAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAeDmI3Q0NYL8AAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgHg5iN0NDWC/AAAAAAAAAICGxeHbECh5vwAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAhsXh2xAoeb8AAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgIjF4dsQKHm/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "c3dc81377a0ca7832795234085375dae2c4a9358a12839a7b0e797383022e7e1",
+      "shape": [
+        2,
+        1,
+        3,
+        4
+      ]
+    },
+    "updated_amplitudes.t2bb": {
+      "bytes": 128,
+      "data": "AAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "7948f80b6721bf3a76a95a434e43a561f84bcf58ee246fe1c355cfb52e27bf59",
+      "shape": [
+        1,
+        1,
+        4,
+        4
+      ]
+    },
+    "updated_multipliers.t1a": {
+      "bytes": 48,
+      "data": "AAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "2a550d9a95c0c03abf7f6ccf7fb90498582da06c6a5d6bf1ceff02a13d7c1999",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "updated_multipliers.t1b": {
+      "bytes": 32,
+      "data": "qqSoAdX7Qj8AAAAAAAAAgAAAAAAAAACAAAAAAAAAAIA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "b837818e2610c13bfd8006c67ca45f7e3f8b51745b5a94ec492d8d0d4b304b94",
+      "shape": [
+        1,
+        4
+      ]
+    },
+    "updated_multipliers.t2aa": {
+      "bytes": 288,
+      "data": "AAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACA",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "8f620169591d15be13f4d551eb410bd8ffe0153d6c41cd21f990994ade89a517",
+      "shape": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    "updated_multipliers.t2ab": {
+      "bytes": 192,
+      "data": "AAAAAAAAAIByQj1gigxgvwAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAckI9YIoMYL8AAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgHJCPWCKDGC/AAAAAAAAAICqFRjHQid5vwAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAqhUYx0Ineb8AAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgKoVGMdCJ3m/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "88a25328fdc996e4e38658c05121bdd4239a3521e32b7bffc599d8df03355a71",
+      "shape": [
+        2,
+        1,
+        3,
+        4
+      ]
+    },
+    "updated_multipliers.t2bb": {
+      "bytes": 128,
+      "data": "AAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAAIA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "7948f80b6721bf3a76a95a434e43a561f84bcf58ee246fe1c355cfb52e27bf59",
+      "shape": [
+        1,
+        1,
+        4,
+        4
+      ]
+    }
+  },
+  "inputs": {
+    "ao_identity": {
+      "labels": [
+        [
+          0,
+          "Li",
+          "1s",
+          ""
+        ],
+        [
+          0,
+          "Li",
+          "2s",
+          ""
+        ],
+        [
+          0,
+          "Li",
+          "2p",
+          "x"
+        ],
+        [
+          0,
+          "Li",
+          "2p",
+          "y"
+        ],
+        [
+          0,
+          "Li",
+          "2p",
+          "z"
+        ]
+      ],
+      "locations": [
+        0,
+        1,
+        2,
+        5
+      ]
+    },
+    "array_encoding": "base64 little-endian C-order FP64",
+    "atoms": [
+      [
+        "Li",
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    ],
+    "basis_data": {
+      "path": "pyscf/gto/basis/sto-3g.dat",
+      "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+    },
+    "basis_name": "sto-3g",
+    "block_order": [
+      "t1a",
+      "t1b",
+      "t2aa",
+      "t2ab",
+      "t2bb"
+    ],
+    "cart": false,
+    "charge": 0,
+    "coupled_cluster": {
+      "conv_tol": 1e-13,
+      "conv_tol_normt": 1e-11,
+      "lambda": "solve_lambda(eris=eris)",
+      "max_cycle": 400,
+      "method": "UCCSD"
+    },
+    "packages": {
+      "h5py": "3.16.0",
+      "numpy": "2.3.5",
+      "pyscf": "2.14.0",
+      "scipy": "1.17.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "populations": {
+      "oa": 2,
+      "ob": 1,
+      "va": 3,
+      "vb": 4
+    },
+    "precision": "float64",
+    "preserved_gates": {
+      "lambda_atol": 2e-07,
+      "lambda_rtol": 0
+    },
+    "python": "3.12.12",
+    "resolved_basis": {
+      "Li": [
+        [
+          0,
+          [
+            16.119575,
+            0.15432897
+          ],
+          [
+            2.9362007,
+            0.53532814
+          ],
+          [
+            0.7946505,
+            0.44463454
+          ]
+        ],
+        [
+          0,
+          [
+            0.6362897,
+            -0.09996723
+          ],
+          [
+            0.1478601,
+            0.39951283
+          ],
+          [
+            0.0480887,
+            0.70011547
+          ]
+        ],
+        [
+          1,
+          [
+            0.6362897,
+            0.15591627
+          ],
+          [
+            0.1478601,
+            0.60768372
+          ],
+          [
+            0.0480887,
+            0.39195739
+          ]
+        ]
+      ]
+    },
+    "scf": {
+      "conv_tol": 1e-13,
+      "initial_guess": "minao",
+      "method": "UHF",
+      "polish": {
+        "conv_tol_grad": 1e-10,
+        "direct_scf": false,
+        "dm0": "converged initial density",
+        "max_cycle": 300,
+        "newton_fallback": true
+      }
+    },
+    "schema": "generativeqc.li-uhf-lambda.inputs.v1",
+    "source_commit": "c7bf888361f57685b6c21cf7922c2f95df6c7bf8",
+    "source_repository": "jinzhezenggroup/generativeqc",
+    "sources": [
+      {
+        "git_blob": "15d8e042c04b54d61f0e8468f29114f4c5ca8637",
+        "path": "tests/python/test_uccsd_equations.py",
+        "sha256": "4a0cfa84dc54335933f3f36d75ab14307c9b3e1e705dfe48894e834f4e5e4024"
+      },
+      {
+        "git_blob": "fbd74427a776826011406bb278843c12992822bf",
+        "path": "tests/python/test_uccsd_lambda.py",
+        "sha256": "f66c869b9ed0fad3cfecc9140d6cebde777b96a428577cb136b075cf04d850b6"
+      },
+      {
+        "git_blob": "fdb8a9b0cb9eb62a99d0bad4740bbe2af99917cd",
+        "path": "tests/python/test_uccsd_solver.py",
+        "sha256": "064a3f0c26ca6470cdf0381f918be9b35506da1dcb8faa235d5ac74bd719638a"
+      },
+      {
+        "git_blob": "2732b0c821e1031a9bd43b0e6aa108b54265dd5c",
+        "path": "tools/generate_cpu_hf_high_l_reference.py",
+        "sha256": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+      }
+    ],
+    "spin": 1,
+    "unit": "Angstrom",
+    "upstream_lambda": {
+      "files": [
+        {
+          "path": "pyscf/cc/uccsd.py",
+          "sha256": "a06f2b0383d890eb388b9f689f6b3376784aaf0f0452e0ad82451ce9d5e362ad",
+          "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/uccsd.py"
+        },
+        {
+          "path": "pyscf/cc/uccsd_lambda.py",
+          "sha256": "150c3e53b7eb1661c1e833dc0641a72ce212b92d6bb838f5231c81f529d777eb",
+          "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/uccsd_lambda.py"
+        },
+        {
+          "path": "pyscf/cc/ccsd_lambda.py",
+          "sha256": "40ffde4e0c121469d65ce068fe8ef0d0538f2e7c486305e9b688464172348fcf",
+          "url": "https://raw.githubusercontent.com/pyscf/pyscf/v2.14.0/pyscf/cc/ccsd_lambda.py"
+        }
+      ],
+      "license": "Apache-2.0",
+      "version": "2.14.0"
+    }
+  },
+  "molecule": {
+    "ao_labels": [
+      "0 Li 1s    ",
+      "0 Li 2s    ",
+      "0 Li 2px   ",
+      "0 Li 2py   ",
+      "0 Li 2pz   "
+    ],
+    "ao_labels_structured": [
+      [
+        0,
+        "Li",
+        "1s",
+        ""
+      ],
+      [
+        0,
+        "Li",
+        "2s",
+        ""
+      ],
+      [
+        0,
+        "Li",
+        "2p",
+        "x"
+      ],
+      [
+        0,
+        "Li",
+        "2p",
+        "y"
+      ],
+      [
+        0,
+        "Li",
+        "2p",
+        "z"
+      ]
+    ],
+    "ao_locations": [
+      0,
+      1,
+      2,
+      5
+    ],
+    "atoms_bohr": [
+      [
+        "Li",
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ]
+    ],
+    "basis": {
+      "Li": [
+        [
+          0,
+          [
+            16.119575,
+            0.15432897
+          ],
+          [
+            2.9362007,
+            0.53532814
+          ],
+          [
+            0.7946505,
+            0.44463454
+          ]
+        ],
+        [
+          0,
+          [
+            0.6362897,
+            -0.09996723
+          ],
+          [
+            0.1478601,
+            0.39951283
+          ],
+          [
+            0.0480887,
+            0.70011547
+          ]
+        ],
+        [
+          1,
+          [
+            0.6362897,
+            0.15591627
+          ],
+          [
+            0.1478601,
+            0.60768372
+          ],
+          [
+            0.0480887,
+            0.39195739
+          ]
+        ]
+      ]
+    },
+    "cart": false,
+    "cc_converged": true,
+    "charge": 0,
+    "lambda_converged": true,
+    "nao": 5,
+    "nelec": [
+      2,
+      1
+    ],
+    "newton_fallback_used": false,
+    "resolved_cc": {
+      "conv_tol": 1e-13,
+      "conv_tol_normt": 1e-11,
+      "diis_space": 6,
+      "level_shift": 0,
+      "max_cycle": 400
+    },
+    "resolved_scf": {
+      "conv_tol": 1e-13,
+      "conv_tol_grad": 1e-10,
+      "damp": 0,
+      "diis_space": 8,
+      "direct_scf": false,
+      "direct_scf_tol": 1e-13,
+      "init_guess": "minao",
+      "level_shift": 0,
+      "max_cycle": 300
+    },
+    "scf_converged": true,
+    "spin": 1
+  },
+  "process_id": 2581,
+  "provenance": {
+    "configuration": {
+      "policy": "explicit-empty-regular-file",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "execution": {
+      "checkout_sha": "8edcf95601c8296bd260ed3c09eb2417da0d63f3",
+      "github_repository": "njzjz-bot/vibeqc",
+      "github_run_attempt": "1",
+      "github_run_id": "38285625548",
+      "github_sha": "8edcf95601c8296bd260ed3c09eb2417da0d63f3"
+    },
+    "generator_sha256": "d97ba385f3179d334212a664dad2a911662caa2a3de417612236b1e6c0cab7aa",
+    "inputs_sha256": "f5e4644851821a84279f8f9c2dd8b4e143a72cbfa17efe25b623f545121b3302",
+    "installed_scientific_inputs": {
+      "pyscf/cc/ccsd_lambda.py": {
+        "bytes": 17716,
+        "sha256": "40ffde4e0c121469d65ce068fe8ef0d0538f2e7c486305e9b688464172348fcf"
+      },
+      "pyscf/cc/uccsd.py": {
+        "bytes": 58816,
+        "sha256": "a06f2b0383d890eb388b9f689f6b3376784aaf0f0452e0ad82451ce9d5e362ad"
+      },
+      "pyscf/cc/uccsd_lambda.py": {
+        "bytes": 23359,
+        "sha256": "150c3e53b7eb1661c1e833dc0641a72ce212b92d6bb838f5231c81f529d777eb"
+      },
+      "pyscf/gto/basis/sto-3g.dat": {
+        "bytes": 49513,
+        "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+      }
+    },
+    "machine": "x86_64",
+    "packages": {
+      "h5py": {
+        "installed_source_native_bytes": 17002725,
+        "installed_source_native_files": 89,
+        "installed_source_native_sha256": "ae8661606706915d759b7ca9c98c62b5cb49c5694540a7a2521b1e057c5c3c92",
+        "version": "3.16.0",
+        "wheel_record_sha256": "8174662e95b98828bdba183450be57baefb69b24c06e68639ed049c233e96c21"
+      },
+      "numpy": {
+        "installed_source_native_bytes": 53844146,
+        "installed_source_native_files": 431,
+        "installed_source_native_sha256": "c2282e1c9a05825819078287341058d942ffe98daaceed79a5431c7b6e05171c",
+        "version": "2.3.5",
+        "wheel_record_sha256": "48e12b082951654ee5ab9c495e3bc22a8bee994e05f900a36516bc82f6a27252"
+      },
+      "pyscf": {
+        "installed_source_native_bytes": 135849985,
+        "installed_source_native_files": 717,
+        "installed_source_native_sha256": "801f6d902222f1ba7ae34eca875ac3dd43e91aa485702ba166836a2dfcbe87a8",
+        "version": "2.14.0",
+        "wheel_record_sha256": "4233e4225034532142c1eb9a47b8b806a9f12db9b6d4eef3c644d7c492f25296"
+      },
+      "scipy": {
+        "installed_source_native_bytes": 103245183,
+        "installed_source_native_files": 1087,
+        "installed_source_native_sha256": "9c4925b9a7e18be9fcf3bcfebc2b21ddfc0df7aaff75a443be12d541c0d7c21c",
+        "version": "1.17.0",
+        "wheel_record_sha256": "d67cb70e9ff3bdb86c788d39649247c6bcba22ab6d74f9a1389b816f81c81e59"
+      },
+      "threadpoolctl": {
+        "installed_source_native_bytes": 50722,
+        "installed_source_native_files": 1,
+        "installed_source_native_sha256": "889df0cc67247507dbe2c94c3177412cd250d1df7d365bd4dc2f9b805d3f2521",
+        "version": "3.6.0",
+        "wheel_record_sha256": "21fd60a7b59ad0785db0d87b7f45a58b9c6961097749168c577efa5b1619e95e"
+      }
+    },
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "source_sha256": {
+      "tests/python/test_uccsd_equations.py": "4a0cfa84dc54335933f3f36d75ab14307c9b3e1e705dfe48894e834f4e5e4024",
+      "tests/python/test_uccsd_lambda.py": "f66c869b9ed0fad3cfecc9140d6cebde777b96a428577cb136b075cf04d850b6",
+      "tests/python/test_uccsd_solver.py": "064a3f0c26ca6470cdf0381f918be9b35506da1dcb8faa235d5ac74bd719638a",
+      "tools/generate_cpu_hf_high_l_reference.py": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+    },
+    "threadpools": [
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas64_-fdde5778.so",
+        "num_threads": 1,
+        "sha256": "ee2039cf13a45e1e89f04d0cea9585657d93ffaa425594e1935161013fdf4e12",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas-6cdc3b4a.so",
+        "num_threads": 1,
+        "sha256": "8fb864c29cac4b25f6e2c139491ea96f2724dde42d51394f84e9c4a622e34790",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": "Barcelona",
+        "internal_api": "openblas",
+        "library": "libopenblas-r0-f650aae0.3.3.so",
+        "num_threads": 1,
+        "sha256": "79ec02b53f573cd7116a89f04c397473018e7fda05720b354d43505c19d47958",
+        "user_api": "blas",
+        "version": null
+      },
+      {
+        "architecture": null,
+        "internal_api": "openmp",
+        "library": "libgomp-a34b3233.so.1.0.0",
+        "num_threads": 1,
+        "sha256": "3a7eaece7231911be2fbb1b3e7cb4cb5c2e0f84e0c2bb73739472b5a1feec8c1",
+        "user_api": "openmp",
+        "version": null
+      }
+    ]
+  },
+  "replay": {
+    "absolute_tolerance": 1e-13,
+    "max_absolute_difference": 0.0,
+    "process_ids": [
+      2581,
+      2674
+    ],
+    "receipt_sha256": [
+      "cfe408d549120926a813aa1341b85586af3b5947877abeb2543e940dcae98e8b",
+      "6df42d071e01ecabef927f20e32198c78594102178ccbb83aaef022bfd0ee212"
+    ],
+    "replicas": [
+      "first",
+      "second"
+    ],
+    "schema": "generativeqc.independent-process-replay.v1"
+  },
+  "replica": "first",
+  "schema": "generativeqc.li-uhf-lambda.receipt.v1"
+}
