@@ -99,6 +99,10 @@ struct DeviceBatch {
   /** Restricted exported-reference Fock only. Null keeps legacy accumulation;
    * the owner resets and folds this canonical plane on its captured stream. */
   double* reference_fock_correction{};
+  /** Optional Cartesian RHF force direction, borrowed for one unscreened
+   * single-item derivative launch. Null preserves quadratic RHF/UHF weights.
+   * Set only on a local batch view; never mutate the retained source identity. */
+  const double* direct_force_seed{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

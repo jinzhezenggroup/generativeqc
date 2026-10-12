@@ -2107,12 +2107,52 @@ bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept {
 }
 
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept {
-  // Keep the specialized SPD derivative consumer until its crossover is
-  // qualified. A through-f owner may retain a bounded shell fallback after
-  // canonical preparation; that lease is distinct from specialized coverage.
-  return plan && plan->canonical_pairs &&
-         (!(plan->generated_exchange && plan->generated_exchange->force_capability) ||
-          plan->generated_exchange->bounded_value_capability);
+  // Only the reuse-preserving shell consumer is a qualified default. Generic
+  // canonical residency alone must not displace the bounded quadratic path.
+  return plan && plan->generated_exchange && plan->generated_exchange->force_capability &&
+         plan->numerical_failure && plan->diagnostic.batch_size == 1 &&
+         plan->screening_tolerance == 0.0;
+}
+
+generativeqc_status execute_cuda_direct_shell_bilinear_derivative_device(
+    CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t matrix_elements,
+    std::vector<double>& gradient, std::string& detail) {
+  if (!plan || !plan->generated_exchange || !plan->generated_exchange->force_capability ||
+      !plan->numerical_failure) {
+    detail = "prepared Direct owner has no retained shell bilinear derivative lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan->diagnostic.batch_size == 1 && plan->diagnostic.derivative_order >= 1 &&
+                          plan->screening_tolerance == 0.0 &&
+                          matrix_elements == plan->matrix_elements,
+                      "shell bilinear derivative requires one unscreened derivative item");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    for (const auto* input : {density, seed}) {
+      direct_jk_require(input != nullptr, "null shell bilinear derivative input");
+      cudaPointerAttributes attributes{};
+      direct_jk_check(cudaPointerGetAttributes(&attributes, input));
+      direct_jk_require(
+          attributes.type == cudaMemoryTypeDevice && attributes.device == plan->device_id,
+          "shell bilinear derivative requires prepared-device buffers");
+    }
+    int failure = 0;
+    DirectJkDownloadFence fence{plan->stream};
+    direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    for (const auto* input : {density, seed})
+      launch_independent_jk_finite_kernel(plan->stream, input, matrix_elements,
+                                          plan->numerical_failure);
+    direct_jk_check(cudaGetLastError());
+    direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
+                                    cudaMemcpyDeviceToHost, plan->stream));
+    fence.complete();
+    direct_jk_require(failure == 0, "nonfinite shell bilinear derivative input");
+    std::vector<double> result;
+    direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
+        *plan->generated_exchange, false, density, seed, 1.0, -0.5, result, false, false, true));
+    direct_jk_finite_result(result);
+    gradient = std::move(result);
+  });
 }
 
 generativeqc_status execute_cuda_direct_bilinear_derivative_device(

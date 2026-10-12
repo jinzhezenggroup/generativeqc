@@ -103,11 +103,13 @@ struct RHFFrameResponseOptions {
     const auto ceiling = resident_jk_maximum_bytes.value_or(automatic ? 8ULL << 30 : 0);
     return std::min(ceiling, remaining_bytes);
   }
-  // Experimental canonical P:G'(D). Fewer passes can lose shell-level reuse,
-  // so this consumer requires an explicit opt-in and a measured crossover.
-  bool bilinear_derivative{false};
+  // Request one retained-shell P:G'(D) traversal when its exact lease is admitted.
+  // Missing shell storage preserves bounded polarization instead of selecting
+  // the slower canonical experiment solely because it needs fewer passes.
+  bool bilinear_derivative{true};
   // Preserve the admitted shell consumer and contract the cross term as
-  // [E2'(D+P)-E2'(D-P)]/2. Both false retains legacy three-pass polarization.
+  // [E2'(D+P)-E2'(D-P)]/2 when bilinear is disabled or its lease is unavailable.
+  // Both false retains legacy three-pass polarization.
   bool symmetric_polarization{true};
   // Opt-in while complete endpoint qualification is pending. The physical
   // exact J/K operator and all final acceptance gates remain unchanged.

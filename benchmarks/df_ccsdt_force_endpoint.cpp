@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
           "[CCSD_Q_BATCH_LIMIT_OR_AUTO_0 "
           "[ORBITAL_SCHWARZ "
-          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
+          "[PROFILE_JK_0_OR_1 [NUCLEAR_AUTO_OR_0_LEGACY_1_BILINEAR_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
           "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO "
           "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO "
@@ -83,12 +83,15 @@ int main(int argc, char** argv) {
         frame_options.orbital_screening_tolerance < 0.0)
       throw std::invalid_argument("invalid orbital screening threshold");
     frame_options.profile_jk = argc > 11 && selector(11);
-    const std::string nuclear_selector = argc > 12 ? argv[12] : "2";
-    if (nuclear_selector != "0" && nuclear_selector != "1" && nuclear_selector != "2")
+    const std::string nuclear_selector = argc > 12 ? argv[12] : "auto";
+    if (nuclear_selector != "auto" && nuclear_selector != "0" && nuclear_selector != "1" &&
+        nuclear_selector != "2")
       throw std::invalid_argument("invalid nuclear response selector");
-    const auto nuclear_schedule = nuclear_selector[0] - '0';
-    frame_options.bilinear_derivative = nuclear_schedule == 1;
-    frame_options.symmetric_polarization = nuclear_schedule == 2;
+    if (nuclear_selector != "auto") {
+      const auto nuclear_schedule = nuclear_selector[0] - '0';
+      frame_options.bilinear_derivative = nuclear_schedule == 1;
+      frame_options.symmetric_polarization = nuclear_schedule == 2;
+    }
     const bool derived_denominators = selector(13);
     if (argc > 14) frame_options.gmres.true_residual_every = unsigned_argument(14, 0);
     if (argc > 15) frame_options.df_preconditioning = selector(15);

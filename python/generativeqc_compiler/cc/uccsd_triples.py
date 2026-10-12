@@ -31,6 +31,7 @@ from generativeqc_compiler.tensor import (
     divide,
     einsum,
     input_tensor,
+    transpose_program,
 )
 
 from .uccsd_layout import UCCSDLayout
@@ -271,6 +272,49 @@ def build_tile_program(
             for binding, node in nodes.items()
             if node.attrs["name"] in live_inputs
         ),
+        channel,
+        shape,
+    )
+
+
+def build_tile_response_program(
+    layout: UCCSDLayout,
+    channel: str,
+    shape: tuple[int, ...],
+    *,
+    max_elements: int = 1_000_000,
+) -> TriplesTileProgram:
+    """Differentiate the actual bounded (T) tile with respect to every input.
+
+    Seed ``bar_triples_energy`` with FP64 one. Each ``bar_<operand.name>``
+    is a full-Frobenius cotangent of the explicitly gathered operand, not a
+    packed excitation dual or symmetry-folded integral weight. The caller
+    reverses the same transpose/coordinate bindings and sums overlapping
+    contributions. Orbital-energy bars are explicit: they must eventually
+    chain to the appropriate spin Fock diagonal, not be discarded or treated
+    as fixed parameters when forming physical response.
+    """
+    tile = build_tile_program(layout, channel, shape)
+    derivative = transpose_program(
+        tile.program,
+        ("triples_energy",),
+        inputs=tuple(operand.name for operand in tile.operands),
+        max_elements=max_elements,
+    )
+    return TriplesTileProgram(
+        Program(
+            {
+                "triples_energy": tile.program.outputs["triples_energy"],
+                **derivative.program.outputs,
+            },
+            provenance={
+                **tile.program.provenance,
+                "response_primal_hash": tile.program.logical_hash,
+                "response_derivative_hash": derivative.derivative_hash,
+                "response_contract": "all tile input bars, including physical denominators",
+            },
+        ),
+        tile.operands,
         channel,
         shape,
     )

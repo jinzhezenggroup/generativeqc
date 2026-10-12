@@ -294,6 +294,9 @@ jobs:
 
       - name: Show ccache statistics
         run: ccache --show-stats
+      - name: Summarize compiler cache
+        if: always()
+        run: python3 tools/report_ci_ccache.py --label "CuMetal native C++/CUDA"
 
       # CuMetal's fake-nvcc CMake path currently links a normal CUDA executable
       # but does not embed the metallib needed by its runtime registration. Use

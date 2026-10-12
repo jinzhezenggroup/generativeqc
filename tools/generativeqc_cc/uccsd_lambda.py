@@ -87,6 +87,39 @@ class UCCSDLambdaOptions:
             raise TypeError("UCCSD Lambda requires GMRESOptions")
 
 
+def _validate_physical_multipliers(
+    packed_multipliers: np.ndarray, multipliers: Mapping[str, np.ndarray]
+) -> np.ndarray:
+    """Validate the shared unweighted excitation dual, without method qualification."""
+    names = ("l1a", "l1b", "l2aa", "l2ab", "l2bb")
+    if set(multipliers) != set(names):
+        raise ValueError("UCCSD Lambda requires exactly five multiplier blocks")
+    singles_alpha, singles_beta = multipliers["l1a"], multipliers["l1b"]
+    if (
+        type(singles_alpha) is not np.ndarray
+        or type(singles_beta) is not np.ndarray
+        or singles_alpha.ndim != 2
+        or singles_beta.ndim != 2
+    ):
+        raise ValueError("UCCSD Lambda singles must have rank two")
+    layout = UCCSDLayout(
+        singles_alpha.shape[0],
+        singles_beta.shape[0],
+        singles_alpha.shape[1],
+        singles_beta.shape[1],
+    )
+    packed = layout.pack(
+        {name.replace("l", "t", 1): multipliers[name] for name in names}
+    )
+    if (
+        type(packed_multipliers) is not np.ndarray
+        or packed_multipliers.dtype != np.float64
+        or not np.array_equal(packed, packed_multipliers)
+    ):
+        raise ValueError("UCCSD Lambda full and packed multipliers disagree")
+    return packed
+
+
 @dataclass(frozen=True)
 class UCCSDLambdaResult:
     """Immutable physical excitation dual, published only after stationarity.
@@ -115,32 +148,9 @@ class UCCSDLambdaResult:
         self, _endpoint_started: float | None, _preparation_seconds: float
     ) -> None:
         """Own immutable, non-aliasing arrays even for explicitly constructed records."""
-        names = ("l1a", "l1b", "l2aa", "l2ab", "l2bb")
-        if set(self.multipliers) != set(names):
-            raise ValueError("UCCSD Lambda requires exactly five multiplier blocks")
-        singles_alpha, singles_beta = self.multipliers["l1a"], self.multipliers["l1b"]
-        if (
-            type(singles_alpha) is not np.ndarray
-            or type(singles_beta) is not np.ndarray
-            or singles_alpha.ndim != 2
-            or singles_beta.ndim != 2
-        ):
-            raise ValueError("UCCSD Lambda singles must have rank two")
-        layout = UCCSDLayout(
-            singles_alpha.shape[0],
-            singles_beta.shape[0],
-            singles_alpha.shape[1],
-            singles_beta.shape[1],
+        packed = _validate_physical_multipliers(
+            self.packed_multipliers, self.multipliers
         )
-        packed = layout.pack(
-            {name.replace("l", "t", 1): self.multipliers[name] for name in names}
-        )
-        if (
-            type(self.packed_multipliers) is not np.ndarray
-            or self.packed_multipliers.dtype != np.float64
-            or not np.array_equal(packed, self.packed_multipliers)
-        ):
-            raise ValueError("UCCSD Lambda full and packed multipliers disagree")
         for name in (
             "primal_residual_max",
             "energy_drift",
@@ -437,6 +447,17 @@ class PreparedUCCSDLambda:
                 raise MemoryError("UCCSD derivative exceeds CPU executor capacity")
         return _Resource(native_bytes, resources["scalar_work"])
 
+    @property
+    def qualification_scalar_work(self) -> int:
+        """Complete fresh parent plus standard Lambda stationarity replay work."""
+        return checked_bytes(
+            self._resources[self.prepared.program.logical_hash].scalar_work
+            + self._resources[
+                self.programs.stationarity_vjp.derivative_hash
+            ].scalar_work,
+            "UCCSD Lambda qualification work",
+        )
+
     def _check_open(self) -> None:
         if self._closed:
             raise RuntimeError("prepared UCCSD Lambda is closed")
@@ -663,12 +684,8 @@ class PreparedUCCSDLambda:
             _preparation_seconds=self.preparation_seconds,
         )
 
-    def parameter_cotangent(
-        self, result: UCCSDLambdaResult, parameter: str
-    ) -> UCCSDParameterCotangent:
-        """Requalify Lambda and return one bounded canonical MO-input cotangent."""
-        self._check_open()
-        started = time.perf_counter()
+    def _packed_result(self, result: UCCSDLambdaResult) -> np.ndarray:
+        """Validate physical arrays and identities without trusting diagnostics."""
         if (
             not isinstance(result, UCCSDLambdaResult)
             or result.state_identity != self.state_identity
@@ -687,6 +704,42 @@ class PreparedUCCSDLambda:
             or self._lambda_identity(packed) != result.lambda_identity
         ):
             raise ValueError("UCCSD Lambda packed/full or identity disagreement")
+        return immutable(packed)
+
+    def qualify(
+        self, result: UCCSDLambdaResult
+    ) -> tuple[np.ndarray, Mapping[str, Any]]:
+        """Freshly qualify standard CCSD Lambda for a composed physical consumer.
+
+        Returned packed duals own immutable storage. Parent and actual amplitude
+        stationarity are replayed through this owner's native executor, with
+        the same admitted numeric/work bounds as per-input requests. This is
+        not a bypass for corrected-(T) or forged multipliers.
+        """
+        self._check_open()
+        packed = self._packed_result(result)
+        counter = _Counter()
+        primal_residual, energy_drift = self._qualify_parent(counter)
+        norm, maximum = self._stationarity(packed, counter)
+        self._check_open()
+        return packed, _freeze(
+            {
+                "primal_residual_max": primal_residual,
+                "energy_drift": energy_drift,
+                "stationarity_norm": norm,
+                "stationarity_max": maximum,
+                "executed_semantic_scalar_work": counter.scalar_work,
+                "native_calls": counter.native_calls,
+            }
+        )
+
+    def parameter_cotangent(
+        self, result: UCCSDLambdaResult, parameter: str
+    ) -> UCCSDParameterCotangent:
+        """Requalify Lambda and return one bounded canonical MO-input cotangent."""
+        self._check_open()
+        started = time.perf_counter()
+        packed = self._packed_result(result)
         action = self._parameter_programs.get(parameter)
         if action is None:
             action = build_parameter_vjp(

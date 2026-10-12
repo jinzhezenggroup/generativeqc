@@ -74,11 +74,90 @@ the complete tile enumeration must still receive separate owner admission.
 Tiling is a memory policy, not a claim of reduced algorithmic work or resident
 GPU execution.
 
+## Complete Fixed-Amplitude Response
+
+`build_tile_response_program` applies the shared generic TensorIR transpose to
+the actual tile energy. Its outputs include that energy and every gathered
+operand's full-Frobenius cotangent. The scalar seed `bar_triples_energy` is one;
+the orbital-energy operands are differentiated along with amplitudes, Fock and
+integrals. There is no separate handwritten triples derivative inventory.
+
+`PreparedUCCSDTriplesResponse` borrows the live converged UCCSD parent and its
+matching native CPU/CUDA executor. It reuses `PreparedUCCSDT`'s denominator
+admission, full/edge template planning, deterministic tile fallback, fresh
+physical CCSD replay and complete ordered grid. Admission counts the derivative
+graph's actual scalar-loop work and backend execution storage, as well as full
+canonical source bars, FP64 compensated accumulation, immutable publication
+and bounded scatter scratch. The bound is logical numeric storage, not RSS,
+compiler-cache storage or arbitrary caller-owned provider storage. Smaller tiles
+do not bypass the complete tile/work caps.
+
+Each binding is reversed by its explicit transpose and coordinate scatter;
+overlapping contributions from independent tiles, permutations and all four
+channels are compensated and added, without mixed-spin symmetry folding.
+The returned `UCCSDTriplesResponseResult` owns immutable bars for every parent
+source, the five amplitude blocks, and `eps_o_a/eps_v_a/eps_o_b/eps_v_b`. Unused
+sources have exact zero bars. Its packed amplitude cotangent is the transpose
+of the physical amplitude expansion (`U*`), not representative packing or a
+same-spin division by four. Calling `hamiltonian_cotangents()` explicitly adds
+each occupied/virtual eps bar to the corresponding spin Fock diagonal and
+returns immutable Fock/integral weights without amplitude/eps inputs. This
+canonical coordinate pullback is not orbital relaxation. State, template and
+response identities retain
+the exact physical/execution binding. Late native failures, malformed outputs
+or nonfinite tile/scatter results publish neither partial energies nor bars.
+
+These are **fixed-amplitude (T) cotangents**, not corrected Lambda, relaxed
+densities or nuclear forces. A physical UCCSD(T) consumer must solve and freshly
+qualify the **corrected** amplitude stationarity equations, retain a distinct
+corrected-state identity, explicitly chain orbital-energy bars to each spin's
+Fock diagonal, and bind all Hamiltonian/orbital/nuclear derivative chains.
+Corrected multipliers must not be passed through standard UCCSD Lambda
+qualification as if they were standard multipliers. See the
+[standard physical-response contract](uccsd_physical_response.md).
+
+## Corrected Lambda
+
+`PreparedUCCSDTLambda` borrows identity-matched standard adjoint and bounded
+triples-response owners. It solves
+`J* lambda = -U* grad(E_CCSD + E_T)` with the standard native J* action, physical
+dual lift and checked GMRES. The independent alpha/beta amplitude blocks and
+same-spin residual seeds retain their original conventions. The triples
+amplitude bars receive **no extra one-quarter factor** when pulled back with U*.
+
+`UCCSDTLambdaResult` is a distinct record, not a standard Lambda subtype.
+Both solving and qualification execute a fresh complete triples replay and
+actual corrected physical amplitude stationarity. Qualification verifies the
+parent, every correction bar, per-channel/total energies, equation/template,
+backend and state binding rather than trusting cached diagnostics or requiring
+bit-identical floating results across valid native replays. Aggregate work and
+logical numeric storage cover both borrowed consumers, retained corrections,
+Krylov/maps and publication. Parameter requests receive additional admission.
+Closing a corrected owner closes none of its borrowed owners/resources.
+
+`qualify_with_correction()` returns the immutable packed dual, freshly qualified
+triples response and diagnostics together, so a future physical consumer need
+not trust an earlier detached correction. `parameter_cotangent()` adds the
+corrected CC Lagrangian VJP to the explicit canonical-input triples bar. Its
+same-space Fock blocks currently contain the **diagonal denominator chain**,
+not complete covariant oo/vv response.
+
+Complete orbital/nuclear response additionally requires same-space off-diagonal
+Fock resolvent moments from `d D^-1 = -D^-1 (dD) D^-1`. A diagonal eps pullback
+alone does not supply these moments; dividing an occupied/virtual internal
+orbital gap is not a valid replacement at degeneracies. The shared restricted
+implementation describes this contract in
+`python/generativeqc_compiler/cc/triples_fock_response.py`. Until that full
+unrestricted chain is qualified, the standard physical-response owner
+intentionally rejects corrected owners/results. Its standard Lambda
+qualification is not disabled or relabelled.
+
 ## Qualification
 
 ```sh
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=python:. \
-  python -m pytest tests/python/test_uccsd_triples.py -q
+  python -m pytest tests/python/test_uccsd_triples.py \
+  tests/python/test_uccsd_triples_response.py tests/python/test_uccsd_t_lambda.py -q
 ```
 
 Random-amplitude Li/OH/H6 and broken-symmetry H4 cases compare every channel with the

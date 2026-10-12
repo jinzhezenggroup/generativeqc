@@ -269,10 +269,29 @@ def build_fock_small_weight_program(
     )
 
 
-def build_ao_weight_program(n: int) -> Program:
-    """Generate staged MO -> AO cotangent transforms (no new AD formula)."""
-    if type(n) is not int or not 2 <= n <= 12:
-        raise ValueError("dense AO weight transform supports 2 to 12 orbitals")
+def _admit_ao_weight_dimensions(n: int, max_elements: int | None) -> None:
+    """Retain the historical oracle frontier unless an explicit bound is given."""
+    if max_elements is None:
+        if type(n) is not int or not 2 <= n <= 12:
+            raise ValueError("AO weight transform supports 2 to 12 orbitals by default")
+    elif (
+        type(n) is not int
+        or n < 1
+        or type(max_elements) is not int
+        or max_elements < 1
+        or n**4 > max_elements
+    ):
+        raise ValueError("AO weight transform exceeds explicit element admission")
+
+
+def build_ao_weight_program(n: int, *, max_elements: int | None = None) -> Program:
+    """Generate staged ordered transforms with an optional larger-size admission.
+
+    The legacy small-oracle callers retain their 2--12 MO frontier. Production
+    shell consumers may explicitly admit the full MO input and every partial
+    transform; this does not establish an AO rank-four production allocation.
+    """
+    _admit_ao_weight_dimensions(n, max_elements)
     mo = IndexSpace("complete_mo", "orbital", n)
     ao = IndexSpace("basis_ao", "ao", n)
     p, q, r, s = (Index(c, mo) for c in "pqrs")
@@ -299,9 +318,11 @@ def build_ao_weight_program(n: int) -> Program:
     )
 
 
-def build_ao_one_electron_weight_program(n: int) -> Program:
+def build_ao_one_electron_weight_program(
+    n: int, *, max_elements: int | None = None
+) -> Program:
     """Generate only O(N^2) MO -> AO h/overlap cotangent transforms."""
-    dense = build_ao_weight_program(n)
+    dense = build_ao_weight_program(n, max_elements=max_elements)
     return Program(
         {name: dense.outputs[name] for name in ("hcore", "overlap")},
         provenance={
@@ -312,7 +333,7 @@ def build_ao_one_electron_weight_program(n: int) -> Program:
 
 
 def build_ao_eri_weight_block_program(
-    n: int, shape: tuple[int, int, int, int]
+    n: int, shape: tuple[int, int, int, int], *, max_elements: int | None = None
 ) -> Program:
     """Transform one public-AO shell quartet from a dense MO ERI cotangent.
 
@@ -321,8 +342,7 @@ def build_ao_eri_weight_block_program(
     cotangent is materialized. This is the same ordered C^4 dual transform as
     :func:`build_ao_weight_program`, not a symmetry-folded RDM convention.
     """
-    if type(n) is not int or not 2 <= n <= 12:
-        raise ValueError("blocked AO weight transform supports 2 to 12 orbitals")
+    _admit_ao_weight_dimensions(n, max_elements)
     if (
         not isinstance(shape, tuple)
         or len(shape) != 4

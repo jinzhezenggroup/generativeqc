@@ -596,7 +596,8 @@ def _discover_response_options(root: Path) -> dict[str, str]:
         raise ValueError("missing audited RHFFrameResponseOptions")
     body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
     names = re.findall(
-        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+        r"\bbool\s+([A-Za-z0-9_]+)\s*"
+        r"(?:\{\s*(?:false|true)?\s*\}|=\s*(?:false|true))\s*;",
         body,
     )
     result = {f"response-option:{name}": relative.as_posix() for name in names}

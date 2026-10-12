@@ -237,11 +237,19 @@ def audit(contract: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
     try:
         contract = _object(contract, "contract")
         receipt = _object(receipt, "receipt")
-        if contract.get("schema") != SCHEMA or contract.get("version") != 1:
+        if (
+            contract.get("schema") != SCHEMA
+            or type(contract.get("version")) is not int
+            or contract.get("version") != 1
+        ):
             raise ValueError("unsupported contract schema/version")
         identity = _identity(contract.get("identity"))
         regions = _regions(contract)
-        if receipt.get("schema") != SCHEMA or receipt.get("version") != 1:
+        if (
+            receipt.get("schema") != SCHEMA
+            or type(receipt.get("version")) is not int
+            or receipt.get("version") != 1
+        ):
             raise ValueError("unsupported receipt schema/version")
         if _identity(receipt.get("identity")) != identity:
             raise ValueError(
@@ -316,7 +324,11 @@ def audit_df_trace(
         contract = _object(contract, "contract")
         manifest = _object(manifest, "manifest")
         identity = _identity(contract.get("identity"))
-        if contract.get("schema") != SCHEMA or contract.get("version") != 1:
+        if (
+            contract.get("schema") != SCHEMA
+            or type(contract.get("version")) is not int
+            or contract.get("version") != 1
+        ):
             raise ValueError("unsupported contract schema/version")
         _regions(contract)
         selection = _object(contract.get("historical_trace"), "historical_trace")

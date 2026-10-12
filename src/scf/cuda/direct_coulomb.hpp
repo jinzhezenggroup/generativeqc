@@ -152,11 +152,13 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unres
  * containing 3*atom_count energy-gradient values. The public AO density stays
  * resident; this routine transforms it to the owner's Cartesian basis once.
  * separate_sources=false publishes one J+K block after precontracting the
- * cotangents, using the same scientific weights and screened shell domain. */
+ * cotangents, using the same scientific weights and screened shell domain.
+ * bilinear=true treats alpha/beta as D/P for one unscreened restricted item,
+ * and differentiates the shared quadratic weights in the same shell consumer. */
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources = true, bool allow_spatial_default = false);
+    bool separate_sources = true, bool allow_spatial_default = false, bool bilinear = false);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

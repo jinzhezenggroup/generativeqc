@@ -81,12 +81,24 @@ def test_master_cpu_seed_executes_consumer_compiler_and_coverage_modes(
         check=True,
         capture_output=True,
         text=True,
+        cwd=tmp_path,  # The seed resets "build"; never delete the test runner's build.
         timeout=10,
     )
     records = [json.loads(line) for line in calls.read_text().splitlines()]
     configures = [(compiler, args) for compiler, args in records if "-S" in args]
     assert [compiler for compiler, _ in configures] == ["g++", "g++", "clang++"]
     assert len(records) == 6
+    assert [args[args.index("-B") + 1] for _, args in configures] == [
+        "build",
+        "build",
+        "build",
+    ]
+    builds = [args for _, args in records if "--build" in args]
+    assert [args[args.index("--build") + 1] for args in builds] == [
+        "build",
+        "build",
+        "build",
+    ]
     for _, args in configures:
         assert "-DGENERATIVEQC_ENABLE_CUDA=OFF" in args
         assert "-DCMAKE_BUILD_TYPE=Release" in args
@@ -102,6 +114,50 @@ def test_master_cpu_seed_executes_consumer_compiler_and_coverage_modes(
     consumer_directory = re.search(r"-B (\S+)", _step("cpu", "Configure")).group(1)
     assert coverage[coverage.index("-B") + 1] == consumer_directory
     assert "ctest" not in _job("master-cpu-cache")
+
+
+def test_master_python_seed_matches_python_shard_compilation_paths(
+    tmp_path: Path,
+) -> None:
+    """Exercise the seed with a fake CMake, without deleting the active build."""
+    seed = _step("master-cpu-cache", "Build Python native cache seed")
+    consumer = _step("python", "Build the CPU native library")
+    script = textwrap.dedent(seed.split("        run: |\n", 1)[1])
+    calls = tmp_path / "calls.jsonl"
+    cmake = tmp_path / "cmake"
+    cmake.write_text(
+        "#!" + os.sys.executable + "\n"
+        "import json, os, sys\n"
+        "with open(os.environ['CALLS'], 'a') as stream:\n"
+        "    stream.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+    )
+    cmake.chmod(0o755)
+    ccache = tmp_path / "ccache"
+    ccache.write_text("#!/bin/sh\nexit 0\n")
+    ccache.chmod(0o755)
+    subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", script],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "CALLS": str(calls),
+            "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY": str(tmp_path / "openblas.so"),
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    records = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert len(records) == 2
+    assert records[0][records[0].index("-B") + 1] == "build"
+    assert records[1] == ["--build", "build", "--parallel"]
+    assert "-DGENERATIVEQC_BUILD_TESTS=OFF" in records[0]
+    assert "-DGENERATIVEQC_PYTHON_WHEEL=ON" in records[0]
+    assert "-DGENERATIVEQC_COMPILER_CACHE=ccache" in records[0]
+    # The real consumer uses the same path; compiler identity remains CMake's.
+    assert "cmake -S . -B build -G Ninja" in consumer
 
 
 def test_python_test_timeout_leaves_finite_setup_headroom() -> None:

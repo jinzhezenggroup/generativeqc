@@ -415,31 +415,23 @@ class Owner {
     fence.stream = nullptr;
     return result;
   }
-  std::vector<double> bilinear_derivative(std::span<const double> seed) {
+  bool bilinear_derivative(std::span<const double> seed, std::vector<double>& result) {
     FailureDrain fence{stream};
     upload(scratch, seed);
-    std::vector<double> result;
     std::string detail;
-    status(
-        scf::execute_cuda_direct_bilinear_derivative_device(
-            direct.get(), density, scratch, nn, result, profile ? census.get() : nullptr, detail),
-        detail);
-    if (profile) {
-      std::array<std::uint64_t, 2> counts{};
-      // Keep the host destination alive if either enqueue or synchronization fails.
-      FailureDrain download_fence{stream};
-      cuda_resource_check(cudaMemcpyAsync(counts.data(), census.get(), sizeof(counts),
-                                          cudaMemcpyDeviceToHost, stream));
+    const auto shell_code = scf::execute_cuda_direct_shell_bilinear_derivative_device(
+        direct.get(), density, scratch, nn, result, detail);
+    if (shell_code == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
       drain();
-      download_fence.stream = nullptr;
-      stats.derivative_quartet_visits = counts[0];
-      stats.derivative_jet_evaluations = counts[1];
-      stats.derivative_census_measured = true;
+      fence.stream = nullptr;
+      return false;
     }
+    status(shell_code, detail);
+    ++stats.shell_derivative_passes;
     ++stats.derivative_passes;
     stats.bilinear_derivative_used = true;
     fence.stream = nullptr;
-    return result;
+    return true;
   }
   std::size_t n, o, v, nn;
   int device;
@@ -816,10 +808,13 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
           "RHF one-electron derivative exceeded admitted inventory");
   result.one_electron_seconds = seconds(phase);
   phase = Clock::now();
-  if (options.bilinear_derivative && scf::cuda_direct_jk_bilinear_preferred(owner.direct.get())) {
-    auto cross = owner.bilinear_derivative(result.fock_ao_weights);
-    require(cross.size() == result.gradient.size(), "RHF bilinear derivative dimensions differ");
-    for (std::size_t i = 0; i < cross.size(); ++i) result.gradient[i] += cross[i];
+  std::vector<double> bilinear_gradient;
+  if (options.bilinear_derivative && scf::cuda_direct_jk_bilinear_preferred(owner.direct.get()) &&
+      owner.bilinear_derivative(result.fock_ao_weights, bilinear_gradient)) {
+    require(bilinear_gradient.size() == result.gradient.size(),
+            "RHF bilinear derivative dimensions differ");
+    for (std::size_t i = 0; i < bilinear_gradient.size(); ++i)
+      result.gradient[i] += bilinear_gradient[i];
   } else {
     // G is the fixed unscreened linear provider, so E2 is homogeneous quadratic.
     // Symmetric polarization removes one source traversal while retaining the

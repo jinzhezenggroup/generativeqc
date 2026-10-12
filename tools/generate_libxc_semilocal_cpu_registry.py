@@ -19,7 +19,18 @@ from generativeqc_compiler.xc.automatic_semilocal import (
 from generativeqc_compiler.xc.automatic_semilocal import (
     automatic_registry_entries as registry_entries,
 )
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import (
+    LIBXC_WORK_DOMAIN_VERSION,
+    automatic_work_policy,
+)
+from generativeqc_compiler.xc.restricted_point_program import (
+    bind_runtime_restricted_semilocal_point_program,
+)
 
 SHARD_COUNT = 8
 
@@ -28,13 +39,28 @@ def _point_program_source(entry: RegistryEntry) -> str:
     """Bind the common point lowering to the existing CPU registry descriptor."""
     point = emit_automatic_point(entry.name)
     stem = entry.stem
+    density_only = automatic_work_policy(entry.name).family == "lda"
+    domain_version = (
+        DENSITY_WORK_DOMAIN_VERSION if density_only else LIBXC_WORK_DOMAIN_VERSION
+    )
+    restricted = ""
+    if density_only:
+        binding = bind_runtime_restricted_semilocal_point_program(
+            build_bulk_runtime_program(
+                entry.name, spin="unpolarized", order=1, domain=DENSITY_WORK_DOMAIN
+            )
+        )
+        restricted = (
+            f"namespace restricted_{stem} {{\n" + binding.emit_declarations() + "}\n"
+        )
     return "\n".join(
         [
             point.source,
             f'inline constexpr const char* kAutomatic_{stem}_ExpressionIdentity = "{point.expression_identity}";',
             f"const SemilocalPointProgram kAutomatic_{stem}_Program{{",
             f'    "{entry.name}", kAutomatic_{stem}_ExpressionIdentity, {point.ingredient_mask}U,',
-            f"    {LIBXC_WORK_DOMAIN_VERSION}U, {point.function_name}}};",
+            f"    {domain_version}U, {point.function_name}}};",
+            restricted,
             "",
         ]
     )
@@ -50,6 +76,8 @@ def emit_header() -> str:
 namespace generativeqc::dft::generated {{
 inline constexpr const char* kAutomaticLibxcScfDomain =
     "{AUTOMATIC_SCF_DOMAIN}";
+inline constexpr const char* kAutomaticDensityLibxcScfDomain =
+    "{DENSITY_WORK_DOMAIN}";
 struct AutomaticLibxcEntry {{
   const SemilocalPointProgram* program{{}};
   std::uint32_t functional_code{{}};
@@ -57,6 +85,8 @@ struct AutomaticLibxcEntry {{
 }};
 AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept;
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept;
+const RestrictedSemilocalPointProgram* automatic_restricted_libxc_program(
+    std::string_view name) noexcept;
 }}  // namespace generativeqc::dft::generated
 """
 
@@ -69,6 +99,11 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
             f'  if (name == "{entry.name}") return {{&kAutomatic_{entry.stem}_Program, 0x{entry.code:x}U}};'
             for entry in selected
         ]
+    )
+    restricted_cases = "\n".join(
+        f'  if (name == "{entry.name}") return &restricted_{entry.stem}::kPointProgram;'
+        for entry in selected
+        if automatic_work_policy(entry.name).family == "lda"
     )
     return "\n".join(
         [
@@ -89,6 +124,11 @@ def emit_shard(index: int, entries: tuple[RegistryEntry, ...]) -> str:
             "    return {};",
             "  }",
             "  return {};",
+            "}",
+            f"const RestrictedSemilocalPointProgram* automatic_restricted_libxc_program_shard_{index}(std::string_view name) noexcept {{",
+            "  (void)name;",
+            restricted_cases,
+            "  return nullptr;",
             "}",
             "}  // namespace generativeqc::dft::generated",
             "",
@@ -113,6 +153,14 @@ def emit_registry() -> str:
             for index in range(SHARD_COUNT)
         ]
     )
+    restricted_declarations = "\n".join(
+        f"const RestrictedSemilocalPointProgram* automatic_restricted_libxc_program_shard_{index}(std::string_view) noexcept;"
+        for index in range(SHARD_COUNT)
+    )
+    restricted_calls = "\n".join(
+        f"  if (const auto* program = automatic_restricted_libxc_program_shard_{index}(name)) return program;"
+        for index in range(SHARD_COUNT)
+    )
     return "\n".join(  # noqa: FLY002
         [
             "// Generated automatic Libxc CPU registry dispatcher; do not edit.",
@@ -120,10 +168,15 @@ def emit_registry() -> str:
             "",
             "namespace generativeqc::dft::generated {",
             declarations,
+            restricted_declarations,
             "",
             "AutomaticLibxcEntry automatic_libxc_entry(std::string_view name) noexcept {",
             calls,
             "  return {};",
+            "}",
+            "const RestrictedSemilocalPointProgram* automatic_restricted_libxc_program(std::string_view name) noexcept {",
+            restricted_calls,
+            "  return nullptr;",
             "}",
             "",
             "AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t functional_code) noexcept {",

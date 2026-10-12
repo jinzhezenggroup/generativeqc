@@ -443,7 +443,7 @@ if(GENERATIVEQC_BUILD_CLI)
   find_package(OpenSSL REQUIRED COMPONENTS Crypto)
   find_package(LibArchive REQUIRED)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
-                 src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
+                 src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
   set(GENERATIVEQC_CLI_BASIS_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
   generativeqc_register_generated_sources(
@@ -539,6 +539,12 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
                          PASS_REGULAR_EXPRESSION "gfn2-xtb")
+    add_test(NAME generativeqc_cli_geometry
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_geometry.py"
+                     $<TARGET_FILE:generativeqc_cli>
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz")
+    set_tests_properties(generativeqc_cli_geometry PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cli_basis_list
              COMMAND generativeqc_cli basis list --json)
     set_tests_properties(generativeqc_cli_basis_list PROPERTIES

@@ -96,7 +96,7 @@ def run(
     budget: int = 1 << 30,
     iterations: int = 200,
     screening: float = 0.0,
-    bilinear: bool = True,
+    bilinear: bool | None = True,
     symmetric: bool = False,
 ) -> tuple:
     n = len(arrays[0])
@@ -109,7 +109,7 @@ def run(
     dp = ct.POINTER(ct.c_double)
     feeds = (dp * 8)(*(a.ctypes.data_as(dp) for a in [*arrays, *sources]))
     destinations = (dp * 6)(*(a.ctypes.data_as(dp) for a in output))
-    counts, values = np.zeros(20, dtype=np.uintp), np.zeros(5)
+    counts, values = np.zeros(22, dtype=np.uintp), np.zeros(5)
     error = ct.create_string_buffer(1024)
     with NativeSource(**source_arguments(metadata)) as source:
         status = probe(
@@ -121,7 +121,7 @@ def run(
             budget,
             iterations,
             screening,
-            2 if symmetric else int(bilinear),
+            2 if symmetric else 3 if bilinear is None else int(bilinear),
             destinations,
             counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
             values.ctypes.data_as(dp),
@@ -133,7 +133,10 @@ def run(
 
 @pytest.mark.parametrize("name", ["h2", "water", "lih", "h2_f"])
 @pytest.mark.parametrize("blas", [False, True])
-def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
+@pytest.mark.parametrize("schedule", ["explicit", "default"])
+def test_complete_hf_limit(
+    probe: typing.Any, name: str, blas: bool, schedule: str
+) -> None:
     metadata, _ = load_fixture("h2" if name == "h2_f" else name)
     if name == "h2_f":
         metadata["inputs"]["shells"].append(
@@ -143,7 +146,12 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     n, o = len(arrays[0]), mf.mol.nelectron // 2
     sources, _ = seeds(arrays, o, 0.0)
     status, error, output, counts, values = run(
-        probe, metadata, arrays, sources, blas=blas
+        probe,
+        metadata,
+        arrays,
+        sources,
+        blas=blas,
+        bilinear=None if schedule == "default" else True,
     )
     assert status == 0, error
     independent = mf.nuc_grad_method()
@@ -153,12 +161,13 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     np.testing.assert_allclose(output[1], arrays[4], atol=3e-10, rtol=3e-10)
     expected_pulay = -2 * (arrays[0][:, :o] * arrays[5][:o]) @ arrays[0][:, :o].T
     np.testing.assert_allclose(output[2], expected_pulay, atol=3e-9, rtol=3e-10)
-    # Specialized SPD leases are build/admission dependent. Without one, the
-    # same canonical bilinear consumer is valid for these small bases too.
-    assert counts[2] in (1, 3)
+    # Default refusal preserves symmetric polarization; explicit schedule one
+    # retains its requested legacy fallback when a shell lease is unavailable.
+    assert counts[2] in ((1, 2) if schedule == "default" else (1, 3))
+    if schedule == "default" and counts[2] == 1:
+        assert counts[20] == 1 and counts[21] == 0
     assert counts[9] == 0 and counts[11] == 0
     if name == "h2_f":
-        assert counts[2] == 1
         fallback = run(probe, metadata, arrays, sources, blas=blas, bilinear=False)
         assert fallback[0] == 0, fallback[1]
         assert fallback[3][2] == 3
@@ -629,8 +638,9 @@ def test_resident_quartic_inventory_cliff_refuses_without_allocating_values(
 @pytest.mark.parametrize("through_f", [False, True])
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
 @pytest.mark.parametrize("centers", [2, 4])
+@pytest.mark.parametrize("route", ["canonical", "shell"])
 def test_bilinear_derivative_signed_density_oracle(
-    through_f: bool, representation: str, centers: int
+    through_f: bool, representation: str, centers: int, route: str
 ) -> None:
     """Independent libcint nuclear derivatives and FD of signed P:G(D)."""
     metadata, _ = load_fixture("h2")
@@ -673,9 +683,13 @@ def test_bilinear_derivative_signed_density_oracle(
                 "xijkl,ijkl->x", tensor, weight * normalization * mask.reshape(shape)
             )
     dp = ct.POINTER(ct.c_double)
-    call = ct.CDLL(
-        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
-    ).rhf_bilinear_derivative_probe
+    library = ct.CDLL(str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve()))
+    call = getattr(
+        library,
+        "rhf_shell_bilinear_derivative_probe"
+        if route == "shell"
+        else "rhf_bilinear_derivative_probe",
+    )
     call.argtypes = [
         ct.c_void_p,
         dp,
@@ -709,7 +723,10 @@ def test_bilinear_derivative_signed_density_oracle(
             assert code == 0, error.value.decode()
             np.testing.assert_allclose(output, oracle, atol=2e-11, rtol=2e-10)
             np.testing.assert_allclose(output.sum(axis=0), 0, atol=2e-12)
-            assert 0 < counts[1] <= (centers - 1) * counts[0]
+            if route == "canonical":
+                assert 0 < counts[1] <= (centers - 1) * counts[0]
+            else:
+                np.testing.assert_array_equal(counts, 0)
     for step in (1e-4, 3e-5):
         energies = []
         for sign in (-1, 1):

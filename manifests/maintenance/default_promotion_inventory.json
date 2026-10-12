@@ -1208,8 +1208,8 @@
       ]
     },
     {
-      "id": "response.canonical-bilinear-derivative",
-      "classification": "negative-evidence",
+      "id": "response.retained-shell-bilinear-derivative",
+      "classification": "already-default",
       "controls": [
         "response-option:bilinear_derivative"
       ],
@@ -1218,14 +1218,42 @@
       ],
       "sources": [
         "src/hf/rhf_frame_response.hpp",
-        "benchmarks/results/rhf-orbital-response-20261004/README.md"
+        "src/scf/cuda/direct_jk.cpp",
+        "docs/developer/df_ccsdt_gradient.md"
       ],
-      "rationale": "The one-pass canonical P:G'(D) experiment is numerically qualified at the retained endpoint but loses shell-level reuse: the measured nuclear two-electron phase regresses from 155.771 s to 258.643 s. The qualified two-pass shell schedule remains the default.",
-      "revisit_condition": "Do not retune or promote the unchanged canonical traversal. Revisit only after a materially different source/work decomposition restores shell/component reuse and demonstrates a complete-endpoint win.",
+      "rationale": "The default requests one retained-shell P:G'(D) traversal using the compiler-owned product rule without losing shell/component reuse. Admission requires one unscreened derivative item, the generated shell force lease and numerical audit storage. Missing admission preserves bounded symmetric two-pass polarization; canonical residency alone never selects the slower historical generic experiment. Explicit opt-out and legacy validation schedules remain available.",
+      "revisit_condition": "Retain source-matched complete-endpoint, independent force/residual and real-device lifetime gates for changes to the shell schedule or its admission. Do not automatically promote the unchanged generic canonical traversal, whose retained historical endpoint regressed.",
       "evidence": [
         "issue:#1972",
+        ".agents/notes/implemented/performance/2026-10-12-rhf-shell-bilinear-default.md",
+        "tests/python/test_rhf_frame_response_cuda.py",
+        "tests/python/test_direct_shell_derivative_host_lifetime.py",
         "benchmarks:benchmarks/results/rhf-orbital-response-20261004/README.md"
       ]
+    },
+    {
+      "id": "response.stationary-orbital-relaxation",
+      "classification": "scientific-choice",
+      "controls": [
+        "response-option:relax_orbitals"
+      ],
+      "owner_issues": [1972],
+      "sources": ["src/hf/rhf_frame_response.hpp"],
+      "rationale": "Orbital relaxation is required for stationary molecular forces. Explicitly disabling it exposes fixed-frame nuclear and metric weights for validation, not a faster scientifically interchangeable molecular-force method.",
+      "revisit_condition": "Preserve the distinction between stationary forces and fixed-frame validation; do not promote an omitted physical response as a performance optimization.",
+      "evidence": ["tests/python/test_rhf_frame_response_cuda.py"]
+    },
+    {
+      "id": "response.bounded-symmetric-polarization",
+      "classification": "already-default",
+      "controls": [
+        "response-option:symmetric_polarization"
+      ],
+      "owner_issues": [1972],
+      "sources": ["src/hf/rhf_frame_response.hpp"],
+      "rationale": "Symmetric two-pass polarization remains the bounded default fallback when the retained-shell cross derivative is disabled or unavailable. Explicitly disabling both controls preserves the legacy three-pass validation schedule.",
+      "revisit_condition": "Retain independent cross-weight and complete-force parity before changing fallback polarization or its numerical reduction order.",
+      "evidence": ["tests/python/test_rhf_frame_response_cuda.py"]
     },
     {
       "id": "response.df-preconditioning",

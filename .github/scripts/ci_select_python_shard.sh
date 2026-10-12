@@ -278,6 +278,13 @@ rebalance_paths=(
   # in runs 38121450095/38121385355. Keep its core parity slot while
   # moving the whole matrix to the existing force workers.
   tests/python/test_mixed_rsh_df_forces.py
+  # PR #2329 / run 38196621228 timed out after 30 minutes with a
+  # late UCCSD tail. Keep every case, but preserve these files' core
+  # parity slots while moving complete owners to file-locality shards.
+  tests/python/test_uccsd_lambda.py
+  tests/python/test_uccsd_t_owner.py
+  tests/python/test_uccsd_physical_response.py
+  tests/python/test_uccsd_triples_response.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -299,16 +306,28 @@ nightly_hessian_paths=(
 # Keep all scientific tests and all existing nightly-only qualifications.
 core_hotspots_a=(
   tests/python/test_mixed_rsh_df_forces.py
+  # PR #2329 / run 38202660731 left only two gradient cases at timeout.
+  # Keep this measured long tail parallel on the lighter core-a workers;
+  # its >1751 worker-seconds must not become one serial loadfile task.
+  tests/python/test_uccsd_gradient.py
+  # Make room for corrected Lambda on core-c without serializing either
+  # UCCSD owner. These complete files retain parallel worksteal and their
+  # original core inventory slots; see the 2026-10-12 tail-balance note.
+  tests/python/test_cc_native_tensor_cpu.py
+  tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
+  # Keep the independent full-Fock matrix on its measured parallel owner.
+  tests/python/test_uccsd_triples_fock_response.py
   tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
   tests/python/test_df_lambda_matrix_audit.py
 )
 core_hotspots_c=(
-  tests/python/test_cc_native_tensor_cpu.py
-  tests/python/test_cpu_hf_high_l.py
+  # The gradient and corrected-Lambda families must not share one late tail.
+  # Fresh function-scoped owners remain parallel, with every case retained.
+  tests/python/test_uccsd_t_lambda.py
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
 )
@@ -395,6 +414,12 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_df_lambda_matrix.py
       tests/python/test_df_lambda_reduction.py
     )
+    # The dependent unrestricted triples-response slice has its own
+    # bounded owner and full/edge/fault matrix. Reserve a stable worker
+    # group without adding a nonexistent target on the earlier tree.
+    if git ls-files --error-unmatch -- tests/python/test_uccsd_triples_response.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_uccsd_triples_response.py)
+    fi
     ;;
   posthf)
     test_targets=(
@@ -415,6 +440,17 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_hessian_reference.py
       tests/python/test_hessian_hvp.py
     )
+    # Same-run posthf completed in 726 s; core-c exceeded 1800 s.
+    # These measured complete UCCSD owners keep all numerical/failure
+    # gates and module-local oracle caches under the existing loadfile.
+    for path in \
+      tests/python/test_uccsd_lambda.py \
+      tests/python/test_uccsd_t_owner.py \
+      tests/python/test_uccsd_physical_response.py; do
+      if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+        test_targets+=("$path")
+      fi
+    done
     ;;
   ecp-forces)
     # Full d-force qualification exceeded the 20-minute job cap when

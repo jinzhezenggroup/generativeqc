@@ -271,7 +271,7 @@ __device__ inline __noinline__ void contract_two_electron_force_psps_task_scaled
     }
     const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
         n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
-        coulomb_coefficient, exchange_coefficient);
+        coulomb_coefficient, exchange_coefficient, batch.direct_force_seed);
     if (density_coefficient == 0.0) continue;
     const unsigned first_axis =
         static_cast<unsigned>(raw_ao[canonical_raw_slot[0]] - first_p_ao_begin);
@@ -382,7 +382,7 @@ __device__ inline __noinline__ void contract_two_electron_force_pair_order2_task
     }
     const double density_coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
         n, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
-        coulomb_coefficient, exchange_coefficient);
+        coulomb_coefficient, exchange_coefficient, batch.direct_force_seed);
     if (density_coefficient == 0.0) continue;
     const unsigned first_component =
         static_cast<unsigned>(raw_ao[canonical_raw_slot[0]] - first_component_begin);
