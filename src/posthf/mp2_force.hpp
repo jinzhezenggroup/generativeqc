@@ -8,6 +8,9 @@
 namespace generativeqc::posthf {
 class RawSource;
 }
+namespace generativeqc::integrals {
+class ElectronInteractionSource;
+}
 namespace generativeqc::hf {
 struct PhysicalReference;
 }
@@ -30,15 +33,18 @@ struct ConventionalForceResult {
  * copying it only after the full energy/force endpoint succeeds.
  */
 ConventionalForceResult conventional_force_cpu(const hf::PhysicalReference& reference,
-                                               const posthf::RawSource& source,
+                                               const integrals::ElectronInteractionSource& source,
                                                std::size_t budget_bytes,
                                                double denominator_threshold,
                                                double same_space_threshold,
                                                const response::GmresOptions& response_options);
 
-/** Complete conventional canonical RHF-MP2 analytic force on CUDA. */
+/** Complete conventional canonical RHF-MP2 analytic force on CUDA.
+ * The source may borrow the exact RHF device integrals or generate bounded
+ * device tiles. Its owner must survive all response and derivative consumers.
+ */
 ConventionalForceResult conventional_force_cuda(
-    const hf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const integrals::ElectronInteractionSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, int device_id);
 

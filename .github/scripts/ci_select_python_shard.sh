@@ -285,6 +285,10 @@ rebalance_paths=(
   tests/python/test_uccsd_t_owner.py
   tests/python/test_uccsd_physical_response.py
   tests/python/test_uccsd_triples_response.py
+  # Make room for complete corrected forces on parallel core-b workers.
+  # Keep the full-Fock file's original core slot before its bounded
+  # complete-file transfer to the existing compiler lane.
+  tests/python/test_uccsd_triples_fock_response.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -310,8 +314,6 @@ core_hotspots_a=(
   # Keep this measured long tail parallel on the lighter core-a workers;
   # its >1751 worker-seconds must not become one serial loadfile task.
   tests/python/test_uccsd_gradient.py
-  # Complete corrected force cases retain fresh owners on parallel worksteal.
-  tests/python/test_uccsd_t_gradient.py
   # Make room for corrected Lambda on core-c without serializing either
   # UCCSD owner. These complete files retain parallel worksteal and their
   # original core inventory slots; see the 2026-10-12 tail-balance note.
@@ -319,8 +321,9 @@ core_hotspots_a=(
   tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
-  # Keep the independent full-Fock matrix on its measured parallel owner.
-  tests/python/test_uccsd_triples_fock_response.py
+  # Keep complete corrected force cases parallel and separate from the
+  # standard gradient on core-a. Fresh per-test owners stay unchanged.
+  tests/python/test_uccsd_t_gradient.py
   tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
@@ -516,6 +519,11 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
+    # The bounded full-Fock matrix retains every numerical/fault case.
+    # Select tracked missing paths too, so incomplete checkouts fail closed.
+    if git ls-files --error-unmatch -- tests/python/test_uccsd_triples_fock_response.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_uccsd_triples_fock_response.py)
+    fi
     if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
       test_targets+=(tests/python/test_wb97mv_complete.py)
     fi
