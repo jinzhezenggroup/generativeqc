@@ -1,10 +1,9 @@
 """Ordinary force mask admission, identity, and replay remain caller-owned."""
 
-import ast
-import inspect
 import sys
 import typing
 import weakref
+from contextlib import contextmanager
 from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
 
@@ -305,28 +304,76 @@ def test_default_and_public_forwarding_do_not_enable_screening(
     assert calls[-1]["resident_ao_cache_bytes"] == 0
 
 
-def test_actual_resident_loop_uses_owner_for_selected_geometry_lease() -> None:
-    """Only the no-map branch may construct a dense device-point feature lease."""
-    source = ast.parse(
-        inspect.getsource(runtime._complete_rks_cuda_gradient_diagnostic)
+@pytest.mark.parametrize("mapped", [False, True])
+@pytest.mark.parametrize("begin,end", [(0, 7), (17, 20), (255, 256)])
+@pytest.mark.parametrize("failure", [None, "create", "consume"])
+def test_resident_geometry_feature_lease_contract(
+    mapped: bool, begin: int, end: int, failure: str | None
+) -> None:
+    """The selected provider owns the tile's inputs, errors, and lease lifetime."""
+    events = []
+    request = {}
+    task = object()
+    domain = object()
+    ingredients = ("rho", "sigma", "tau")
+    resident = SimpleNamespace(points=4096)
+
+    @contextmanager
+    def lease() -> typing.Iterator[object]:
+        events.append("enter")
+        try:
+            yield task
+        finally:
+            events.append("release")
+
+    def create(*args: typing.Any) -> typing.Any:
+        request["args"] = args
+        if failure == "create":
+            raise MemoryError("selected provider allocation failed")
+        return lease()
+
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        raise AssertionError("the unselected provider must not allocate a lease")
+
+    ao = SimpleNamespace(feature_task_device_points=forbidden if mapped else create)
+
+    class Maps:
+        """A present map can be falsy; only absence permits dense allocation."""
+
+        def __bool__(self) -> bool:
+            return False
+
+    maps = Maps()
+    maps.domain = domain
+    maps.feature_task = create if mapped else forbidden
+    expected = (
+        (ao, domain, begin, end - begin, ingredients)
+        if mapped
+        else (4096 + begin * 24, end - begin, None, ingredients)
     )
-    leases = [
-        node
-        for node in ast.walk(source)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "feature_task_device_points"
-    ]
-    assert len(leases) == 1
-    assert ast.unparse(leases[0].args[2]) == "None"
-    selection = next(
-        node
-        for node in ast.walk(source)
-        if isinstance(node, ast.IfExp) and node.body is leases[0]
-    )
-    assert ast.unparse(selection.test) == "ao_maps is None"
-    assert ast.unparse(selection.orelse.func) == "ao_maps.feature_task"
-    assert [ast.unparse(value) for value in selection.orelse.args[:2]] == [
-        "ao",
-        "ao_maps.domain",
-    ]
+
+    def consume() -> None:
+        selected = runtime._stationary_resident_feature_task(
+            ao, resident, maps if mapped else None, begin, end, ingredients
+        )
+        # Creation must not enter or eagerly close the provider's lease.
+        assert events == []
+        with selected as current:
+            assert current is task
+            assert request["args"] == expected
+            assert events == ["enter"]
+            if failure == "consume":
+                raise RuntimeError("geometry consumer failed")
+
+    if failure == "create":
+        with pytest.raises(MemoryError, match="selected provider allocation"):
+            consume()
+        assert events == []
+    elif failure == "consume":
+        with pytest.raises(RuntimeError, match="geometry consumer failed"):
+            consume()
+        assert events == ["enter", "release"]
+    else:
+        consume()
+        assert events == ["enter", "release"]
+    assert request["args"] == expected
