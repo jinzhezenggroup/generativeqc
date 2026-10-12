@@ -7,6 +7,7 @@ from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
+
 from tools import benchmark_cpu_hessian as benchmark
 
 
