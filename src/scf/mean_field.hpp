@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "dft/semilocal_family.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
