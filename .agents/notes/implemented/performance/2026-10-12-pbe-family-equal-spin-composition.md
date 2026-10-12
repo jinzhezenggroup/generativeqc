@@ -50,6 +50,17 @@ invalid domains and incompatible policy/launcher rejection. CUDA scheduling is
 stubbed; unrelated generated mathematical providers reject if reached. This
 does not qualify GPU arithmetic, performance or dynamic traffic.
 
+The 97-point independent gate applies to ordinary and equal-spin consumers.
+The wider 87-point subnormal corpus independently qualifies the separate
+`evaluate_pbe0_restricted_bound` consumer at the original strict tolerance for
+all nine components. Ordinary and equal-spin consumers retain full 87-point
+cross-policy parity, but their independent errors are reported separately and
+are not an ordinary numerical PASS. The first composed test incorrectly applied
+the bound consumer's oracle gate to ordinary arithmetic. Host reproduction
+retained ordinary failures at rows 8, 9, 65, 66, 67 and 68; the bound consumer
+passed all rows. No production arithmetic, reference inputs or tolerance changed.
+See [the retained subnormal diagnosis](../../proposed/2026-10-10-pbe0-bound-subnormal-exchange.md).
+
 This replaces affected implementation-string and exact internal-call-count
 guards. Independent reference, resource admission and runtime-selection cache
 integrity coverage remains. Compilation requires a verified native compiler

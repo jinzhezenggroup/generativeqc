@@ -186,6 +186,13 @@ consumer. Disabling equal-spin exposes the ordinary generic versus specialized
 PBE comparison; UKS and supported response keep their separate family policy.
 No duplicate equal-spin kernel is introduced by the PBE switch.
 
+The compiled host policy contract applies the independent 97-point SCF gate to
+ordinary consumers. The wider 87-point subnormal gate qualifies
+`evaluate_pbe0_restricted_bound` separately at the original strict tolerance.
+Ordinary consumers retain full cross-policy parity on that wider corpus and
+report their independent errors; parity does not establish independent accuracy.
+The retained report is `.artifacts/pbe-point-policy-contract-report.txt`.
+
 The point-family campaign uses schema v2 and fixes `--equal-spin` identically
 for both RKS arms. Its default `0` is an explicit opt-out diagnostic, while `1`
 records that the physical family difference is superseded. Both retain the same

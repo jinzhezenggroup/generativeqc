@@ -47,12 +47,18 @@ def test_compiled_family_equal_spin_point_contract(
             f"-I{ROOT / 'src'}",
         ),
     )
-    subprocess.run(
+    completed = subprocess.run(
         [
             str(binary),
             str(ROOT / "tests/data/xc/scf_domain.tsv"),
             str(ROOT / "tests/data/xc/pbe0_restricted_point.tsv"),
         ],
-        check=True,
+        check=False,
+        capture_output=True,
+        text=True,
         timeout=60,
     )
+    report = ROOT / ".artifacts/pbe-point-policy-contract-report.txt"
+    report.parent.mkdir(exist_ok=True)
+    report.write_text(completed.stdout + completed.stderr, encoding="utf-8")
+    assert completed.returncode == 0, completed.stdout + completed.stderr

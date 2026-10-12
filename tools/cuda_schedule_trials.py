@@ -444,11 +444,11 @@ def prepare_trial(
         destination = output / path
         if destination.is_symlink() or output not in destination.resolve().parents:
             raise ValueError(f"source file escapes the detached worktree: {path}")
-        destination.write_text(text, encoding="utf-8")
+        destination.write_bytes(text.encode("utf-8"))
     patch = _git(output, "diff", "--no-ext-diff", "--binary", "--")
     metadata = output / ".artifacts" / "cuda-schedule-trial"
     metadata.mkdir(parents=True, exist_ok=False)
-    (metadata / "source.patch").write_text(patch, encoding="utf-8")
+    (metadata / "source.patch").write_bytes(patch.encode("utf-8"))
 
     def digest(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()

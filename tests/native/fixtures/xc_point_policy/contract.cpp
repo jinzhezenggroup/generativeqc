@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -27,11 +28,14 @@ using Kernel = void (*)(const double*, const double*, long long, long long, doub
                         long long, double, double, const double*, long long);
 Kernel observed_kernel{};
 std::size_t observed_threads{};
+bool execute_kernels = true;
+std::vector<std::uint32_t> probe_split_codes, probe_split_mgga;
 template <class Fn>
 auto host_launch(Fn kernel, std::size_t grid, std::size_t threads, std::size_t, cudaStream_t) {
   observed_kernel = kernel;
   observed_threads = threads;
   return [=](auto... args) {
+    if (!execute_kernels) return;  // Geometry-only probes do not claim point arithmetic.
     blockDim.x = threads;
     gridDim.x = grid;
     for (std::size_t block = 0; block < grid; ++block) {
@@ -100,8 +104,14 @@ UnusedValue evaluate_split_hybrid(Args... args) {
 constexpr double kWb97mvDeviceDensityThreshold = 1e-14;
 constexpr double kWb97mvDeviceSigmaThreshold = 1e-14;
 constexpr double kWb97mvDeviceTauThreshold = 1e-14;
-bool split_hybrid_registered(std::uint32_t) { return false; }
-bool split_hybrid_is_mgga(std::uint32_t) { return false; }
+bool split_hybrid_registered(std::uint32_t code) {
+  return std::find(probe_split_codes.begin(), probe_split_codes.end(), code) !=
+         probe_split_codes.end();
+}
+bool split_hybrid_is_mgga(std::uint32_t code) {
+  return std::find(probe_split_mgga.begin(), probe_split_mgga.end(), code) !=
+         probe_split_mgga.end();
+}
 const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
 }  // namespace generativeqc::dft::generated
 namespace generativeqc::dft::cuda_xc_detail {
@@ -176,6 +186,7 @@ void fixtures(const char* filename, bool restricted) {
   require(bool(input), "independent point fixture is missing");
   std::string line;
   std::size_t rows = 0;
+  std::size_t ordinary_original_formula_failures = 0;
   while (std::getline(input, line)) {
     if (line.empty() || line[0] == '#') continue;
     std::istringstream row(line);
@@ -198,6 +209,47 @@ void fixtures(const char* filename, bool restricted) {
       for (double& value : spin) value = number();
     for (double& value : expected) value = number();
     require(bool(row), "malformed independent point fixture");
+    double comparison[9];
+    std::copy_n(expected, 9, comparison);
+    if (restricted) {
+      require(rho[0] == rho[1], "restricted fixture lacks paired density");
+      for (unsigned axis = 0; axis < 3; ++axis)
+        require(gradient[0][axis] == gradient[1][axis], "restricted fixture lacks paired gradient");
+      // This wider corpus qualifies the separately bound stable-subnormal
+      // lowering. Ordinary/family/equal-spin entries keep their original
+      // arithmetic, including retained independent tail failures.
+      const auto bound = point::evaluate_pbe0_restricted_bound(rho[0], gradient[0]);
+      require(bound.valid, "qualified bound fixture domain was rejected");
+      const double bound_values[]{bound.energy,         bound.rho[0],         bound.rho[1],
+                                  bound.gradient[0][0], bound.gradient[0][1], bound.gradient[0][2],
+                                  bound.gradient[1][0], bound.gradient[1][1], bound.gradient[1][2]};
+      for (unsigned component = 0; component < 9; ++component)
+        near(bound_values[component], expected[component]);
+      const auto original = point::evaluate(true, rho, gradient, .75, 1);
+      require(original.valid, "ordinary fixture domain was rejected");
+      const double original_values[]{
+          original.energy,         original.rho[0],         original.rho[1],
+          original.gradient[0][0], original.gradient[0][1], original.gradient[0][2],
+          original.gradient[1][0], original.gradient[1][1], original.gradient[1][2]};
+      bool independent_failure = false;
+      for (unsigned component = 0; component < 9; ++component) {
+        comparison[component] = original_values[component];
+        const double tolerance = 5e-10 * std::abs(expected[component]) + 1e-322;
+        if (!std::isfinite(original_values[component]) ||
+            std::abs(original_values[component] - expected[component]) > tolerance)
+          independent_failure = true;
+        std::cout << std::setprecision(17) << "supplemental ordinary row=" << rows
+                  << " component=" << component << " actual=" << original_values[component]
+                  << " reference=" << expected[component] << " absolute_error="
+                  << std::abs(original_values[component] - expected[component])
+                  << " tolerance=" << tolerance << " bound=" << bound_values[component] << "\n";
+      }
+      if (independent_failure) {
+        ++ordinary_original_formula_failures;
+        std::cout << "ordinary supplemental original-formula qualification failed at row " << rows
+                  << " (retained negative result; not ordinary numerical PASS)\n";
+      }
+    }
     const unsigned spins = restricted ? 1 : 2;
     const unsigned terms = family == 0 ? 1 : 4;
     std::vector<double> features(terms * spins);
@@ -216,13 +268,14 @@ void fixtures(const char* filename, bool restricted) {
               execute(family, spins, features, false, batched, restricted ? .75 : 1);
           require(!result.error, "independent physical domain was rejected");
           require(result.threads == (family == 0 ? 128U : 32U), "physical launch width changed");
-          near(result.totals[0], expected[0]);
+          near(result.totals[0], comparison[0]);
           for (unsigned spin = 0; spin < spins; ++spin) {
             near(result.coefficients[spin * terms],
-                 restricted ? .5 * (expected[1] + expected[2]) : expected[1 + spin]);
+                 restricted ? .5 * (comparison[1] + comparison[2]) : comparison[1 + spin]);
             for (unsigned axis = 0; axis + 1 < terms; ++axis) {
-              const double reference = restricted ? .5 * (expected[3 + axis] + expected[6 + axis])
-                                                  : expected[3 + 3 * spin + axis];
+              const double reference = restricted
+                                           ? .5 * (comparison[3 + axis] + comparison[6 + axis])
+                                           : comparison[3 + 3 * spin + axis];
               near(result.coefficients[spin * terms + 1 + axis], reference);
             }
           }
@@ -231,6 +284,10 @@ void fixtures(const char* filename, bool restricted) {
     ++rows;
   }
   require(rows == (restricted ? 87U : 97U), "independent fixture corpus was shortened");
+  if (restricted)
+    std::cout << "bound PBE0 independent fixture PASS: " << rows
+              << "; ordinary supplemental original-formula failed rows: "
+              << ordinary_original_formula_failures << "\n";
 }
 std::vector<double> pack(const std::vector<double>& serial, unsigned spins, bool batched) {
   if (!batched) return serial;
@@ -386,8 +443,9 @@ int main(int argc, char** argv) {
     replay_and_response();
     consumer_identity();
     invalid_domains_and_policy();
-    std::cout << "independent E/V, policy composition, response, ragged capacity and rejection "
-                 "contracts passed\n";
+    std::cout
+        << "scoped independent E/V, policy equivalence, response, ragged capacity and rejection "
+           "contracts passed\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
