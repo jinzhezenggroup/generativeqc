@@ -709,7 +709,8 @@
       "id": "dft.xc-compact-batches",
       "classification": "already-default",
       "controls": [
-        "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH"
+        "dft-policy:GENERATIVEQC_CUDA_XC_COMPACT_BATCH",
+        "dft-policy:GENERATIVEQC_CUDA_XC_RAGGED_BATCH"
       ],
       "owner_issues": [
         2073,
@@ -720,11 +721,12 @@
         "src/dft/cuda_xc.cpp",
         "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
       ],
-      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Independent native E/V, sanitizers and complete 12-atom PBE0 cold/warm/moved E+F populations pass; large-system warm populations remain within timing noise. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback; an explicit zero control disables compact batching.",
+      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32–1024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
       "revisit_condition": "Refine the bounded scatter and residency domain with additional devices, methods and complete endpoints rather than molecule/device whitelists. Do not infer large-system or universal profitability from the small-domain positive population; retain zero opt-out, original selected work, numerical gates and resource fallback.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-08-xc-compact-contraction-batches.md",
         "note:.agents/notes/implemented/performance/2026-10-08-xc-compact-batch-default.md",
+        "note:.agents/notes/implemented/performance/2026-10-12-ragged-xc-default.md",
         "docs:docs/developer/xc_native_cuda.md"
       ]
     },
