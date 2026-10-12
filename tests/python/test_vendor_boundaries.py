@@ -68,6 +68,11 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     provider = manifest["files"]["src/scf/cuda/df_scf_library.cpp"]
     assert provider["classification"] == "provider"
     assert "cublasDgemm" in provider["references"]
+    # Setup still owns prepared-handle lifetime and one batched GEMM;
+    # only its six ordinary GEMMs have moved behind the shared adapter.
+    setup = "src/scf/cuda/df_plan_setup.cpp"
+    assert "cublasDgemm" not in inventory.get(setup, {})
+    assert "scf_matrix_product_view(" in (ROOT / setup).read_text()
 
 
 @pytest.mark.parametrize(

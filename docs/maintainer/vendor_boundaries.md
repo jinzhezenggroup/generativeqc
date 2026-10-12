@@ -32,6 +32,11 @@ Gram reconstruction and split-panel accumulation. The adapter borrows the
 prepared BLAS context/stream, introduces no allocations or provider choice,
 and maps library failure to the same `generativeqc_status` and context.
 Both former direct-vendor source entries are retired from the manifest.
+The same semantic adapter now owns the six ordinary GEMM submissions in
+`df_plan_setup.cpp` (two full-rank rotations, packed and generated value
+materialization, and the final truncated-rank tensor transform). Its one
+batched library submission and prepared-handle setup remain separately
+classified migration debt.
 
 Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation
