@@ -542,11 +542,20 @@ def _run(
     arrays: dict[str, np.ndarray],
     *,
     diis_input_residual: bool = False,
+    mixed_switch_residual: float | None = None,
     **kwargs: typing.Any,
 ) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
     executable, cuda = probe
     process = subprocess.run(
-        [str(executable), *(["--input-residual"] if diis_input_residual else [])],
+        [
+            str(executable),
+            *(["--input-residual"] if diis_input_residual else []),
+            *(
+                ["--mixed-switch-residual", str(mixed_switch_residual)]
+                if mixed_switch_residual is not None
+                else []
+            ),
+        ],
         input=_stream(arrays, cuda, **kwargs),
         capture_output=True,
         check=True,
