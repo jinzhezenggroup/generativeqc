@@ -69,3 +69,5 @@ evidence in [the original owner-balance note](2026-10-12-uccsd-ci-owner-balance.
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38212023906
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38213658670
 - tests/python/test_ci_shard_ownership.py
+- [Later per-worker frontier ordering](2026-10-12-ci-fresh-worksteal-frontiers.md)
+  complements these owners without blindly frontloading a whole heavy file.

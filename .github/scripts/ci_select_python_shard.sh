@@ -290,6 +290,10 @@ rebalance_paths=(
   # keep their core slots so every unrelated file retains its owner.
   tests/python/test_cc_native_tensor_cpu.py
   tests/python/test_uccsd_native.py
+  # Make room for complete corrected forces on parallel core-b workers.
+  # Keep the full-Fock file's original core slot before its bounded
+  # complete-file transfer to the existing compiler lane.
+  tests/python/test_uccsd_triples_fock_response.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -312,6 +316,9 @@ nightly_hessian_paths=(
 core_fresh_frontier_a=(
   tests/python/test_uccsd_gradient.py
 )
+core_fresh_frontier_b=(
+  tests/python/test_uccsd_t_gradient.py
+)
 core_fresh_frontier_c=(
   tests/python/test_uccsd_t_lambda.py
 )
@@ -330,8 +337,9 @@ core_hotspots_b=(
   # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
   # and its original enumeration slot; all cases stay selected.
   tests/python/test_uccsd_response.py
-  # Keep the independent full-Fock matrix on its measured parallel owner.
-  tests/python/test_uccsd_triples_fock_response.py
+  # Keep complete corrected force cases parallel and separate from the
+  # standard gradient on core-a. Fresh per-test owners stay unchanged.
+  "${core_fresh_frontier_b[@]}"
   tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
@@ -370,7 +378,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
     done
     case "${GENERATIVEQC_CI_SHARD}" in
       core-a) target_bucket=0; fresh_frontier_paths=("${core_fresh_frontier_a[@]}") ;;
-      core-b) target_bucket=1; fresh_frontier_paths=() ;;
+      core-b) target_bucket=1; fresh_frontier_paths=("${core_fresh_frontier_b[@]}") ;;
       core-c) target_bucket=2; fresh_frontier_paths=("${core_fresh_frontier_c[@]}") ;;
     esac
     test_targets=()
@@ -541,11 +549,12 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
-    # Both complete native files have bounded serial cost and fresh
-    # function-local owners. Do not admit absent or untracked paths.
+    # Complete native and full-Fock files retain every numerical/fault case.
+    # Select tracked missing paths too, so incomplete checkouts fail closed.
     for path in \
       tests/python/test_cc_native_tensor_cpu.py \
-      tests/python/test_uccsd_native.py; do
+      tests/python/test_uccsd_native.py \
+      tests/python/test_uccsd_triples_fock_response.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi

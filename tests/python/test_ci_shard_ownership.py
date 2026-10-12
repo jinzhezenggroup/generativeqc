@@ -210,6 +210,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_df_lambda_frontier.py",
             "test_cc_native_tensor_cpu.py",
             "test_uccsd_native.py",
+            "test_uccsd_triples_fock_response.py",
         ),
         "core-a": (
             "test_uccsd_gradient.py",
@@ -217,7 +218,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "core-b": (
             "test_uccsd_response.py",
-            "test_uccsd_triples_fock_response.py",
+            "test_uccsd_t_gradient.py",
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
             "test_df_lambda_matrix_audit.py",
@@ -267,14 +268,15 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
     parallel = {
         "tests/python/test_uccsd_response.py": "core-b",
         "tests/python/test_uccsd_gradient.py": "core-a",
+        "tests/python/test_uccsd_t_gradient.py": "core-b",
         "tests/python/test_cpu_hf_high_l.py": "core-a",
         "tests/python/test_uccsd_t_lambda.py": "core-c",
-        "tests/python/test_uccsd_triples_fock_response.py": "core-b",
     }
     owners = {
         **parallel,
         "tests/python/test_cc_native_tensor_cpu.py": "compiler-heavy",
         "tests/python/test_uccsd_native.py": "compiler-heavy",
+        "tests/python/test_uccsd_triples_fock_response.py": "compiler-heavy",
         "tests/python/test_uccsd_lambda.py": "posthf",
         "tests/python/test_uccsd_t_owner.py": "posthf",
         "tests/python/test_uccsd_physical_response.py": "posthf",
@@ -289,6 +291,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         "tests/python/test_uccsd_native_next.py",
         "tests/python/test_uccsd_physical_response_next.py",
         "tests/python/test_uccsd_response_next.py",
+        "tests/python/test_uccsd_t_gradient_next.py",
         "tests/python/test_uccsd_t_lambda_next.py",
         "tests/python/test_uccsd_t_owner_next.py",
         "tests/python/test_uccsd_triples_fock_response_next.py",
@@ -325,6 +328,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         )
         priority = {
             "tests/python/test_uccsd_gradient.py": "core-a",
+            "tests/python/test_uccsd_t_gradient.py": "core-b",
             "tests/python/test_uccsd_t_lambda.py": "core-c",
         }
         for shard, (_, _, arguments) in selections.items():
