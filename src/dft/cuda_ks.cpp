@@ -1743,14 +1743,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
       return active;
     } catch (...) {
+      // Preparation at the mixed-to-strict handoff may throw before a
+      // lower-level iteration guard owns the failure. Every completion error
+      // must end the trajectory, including a partially published source lease.
+      (void)cudaStreamSynchronize(stream);
+      is_pending = is_active = false;
+      is_failed = true;
+      output.converged = final_state_ready = false;
       retire_phase_source(false);
-      if (auditing_phase) {
-        (void)cudaStreamSynchronize(stream);
-        is_pending = is_active = false;
-        is_failed = true;
-        output.converged = final_state_ready = false;
-        clear_warm_state();
-      }
+      if (auditing_phase) clear_warm_state();
       occupied_fitted_factor_ready = false;
       pending_fitted_occupied = false;
       final_fitted_projection_ready = false;
