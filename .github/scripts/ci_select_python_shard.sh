@@ -351,6 +351,17 @@ core_hotspots_c=(
   "${core_fresh_frontier_c[@]}"
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
+  # PR #2362 (run 38251932879): observed core Python worker-time
+  # projected onto the current master inventory is ~79/82/58 min.
+  # These whole files cost ~8 min on core-a and ~8.4 min on core-b;
+  # pin them to the available core-c capacity, keeping every test,
+  # worksteal, and unrelated modulo-three file owners unchanged.
+  tests/python/test_cuda_xc_point_contract.py
+  tests/python/test_uccsd_solver.py
+  tests/python/test_cc_triples_tiles.py
+  tests/python/test_df_lambda_mixed_precision.py
+  tests/python/test_direct_exchange_queue.py
+  tests/python/test_df_occupied_triples.py
 )
 case "${GENERATIVEQC_CI_SHARD}" in
   core-a|core-b|core-c)
