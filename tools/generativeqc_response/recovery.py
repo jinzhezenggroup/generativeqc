@@ -250,10 +250,25 @@ def recover_uhf_stability(
             if certificate.status != "STABLE":
                 continue
             spin = _metrics(r1, new_density)
-            if any(_same_root(new_density, old[2], r0.overlap, options.root_tolerance, spin_flip=r0.nocc("alpha") == r0.nocc("beta")) for old in roots):
-                equivalent += 1
-            else:
+            duplicate = next(
+                (
+                    index
+                    for index, old in enumerate(roots)
+                    if _same_root(
+                        new_density, old[2], r0.overlap, options.root_tolerance,
+                        spin_flip=r0.nocc("alpha") == r0.nocc("beta"),
+                    )
+                ),
+                None,
+            )
+            if duplicate is None:
                 roots.append((candidate, certificate, new_density, spin))
+            else:
+                equivalent += 1
+                # Preserve the energetically best member of each physical
+                # equivalence class, not whichever SCF seed was tried first.
+                if r1.reference_energy < roots[duplicate][0].problem.reference.reference_energy:
+                    roots[duplicate] = (candidate, certificate, new_density, spin)
     initial.assert_current(operator)
     if not roots:
         raise RecoveryUnqualified("no lower-energy, fully stable, converged UHF root after bounded restarts")
