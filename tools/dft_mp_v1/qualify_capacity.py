@@ -391,6 +391,9 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Exact maps reserve only their finite numeric owner, including both offset
 # mirrors and compact AO scratch; bind the helper and endpoint independently.
 # Entering the original prepared lease preserves all admission and work bounds.
+# Resident AO selection is tested through the production-loop execution probe.
+# This legacy capacity audit still binds endpoint/call wiring; its remaining
+# whole-owner fingerprints are separate migration debt under #2296.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
     "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
 )
