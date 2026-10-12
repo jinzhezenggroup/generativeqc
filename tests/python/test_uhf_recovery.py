@@ -21,7 +21,10 @@ from tools.generativeqc_response.recovery import (
     RecoveryUnqualified,
     recover_uhf_stability,
 )
-from tools.generativeqc_response.stability import diagnose_uhf_stability
+from tools.generativeqc_response.stability import (
+    StabilityOptions,
+    diagnose_uhf_stability,
+)
 
 T, U = 0.2, 1.2
 HCORE = np.array([[0.0, -T], [-T, 0.0]])
@@ -166,6 +169,9 @@ def test_source_lifecycle_and_reported_energy_are_fail_closed() -> None:
     [
         RecoveryOptions(max_nbf=1),
         RecoveryOptions(budget_bytes=16),
+        RecoveryOptions(budget_bytes=1800),
+        RecoveryOptions(budget_bytes=6528),
+        RecoveryOptions(budget_bytes=7000),
     ],
 )
 def test_budget_rejects_before_diagnostic_and_callback(
@@ -173,11 +179,135 @@ def test_budget_rejects_before_diagnostic_and_callback(
 ) -> None:
     origin = _symmetric()
     origin.apply = Mock(side_effect=AssertionError("response action forbidden"))
+    origin.backend.coulomb_exchange = Mock(
+        side_effect=AssertionError("source evaluation forbidden")
+    )
     solver = Mock(side_effect=AssertionError("solver forbidden"))
     with pytest.raises(RecoveryUnqualified, match="budget rejected"):
         recover_uhf_stability(origin, solver, options=options)
     origin.apply.assert_not_called()
+    origin.backend.coulomb_exchange.assert_not_called()
     solver.assert_not_called()
+
+
+def test_stricter_stability_budget_is_preserved() -> None:
+    origin = _symmetric()
+    origin.backend.coulomb_exchange = Mock(
+        side_effect=AssertionError("source evaluation forbidden")
+    )
+    with pytest.raises(RecoveryUnqualified, match="budget rejected"):
+        recover_uhf_stability(
+            origin, _solve, stability_options=StabilityOptions(budget_bytes=1)
+        )
+    origin.backend.coulomb_exchange.assert_not_called()
+
+
+def test_diagnostic_workspace_is_part_of_recovery_budget() -> None:
+    origin = _symmetric()
+    result = recover_uhf_stability(
+        origin, _solve, options=RecoveryOptions(budget_bytes=12288)
+    )
+    assert result.initial.accounted_bytes <= result.initial.options.budget_bytes
+    assert result.recovered.accounted_bytes <= result.recovered.options.budget_bytes
+    assert result.initial.options.budget_bytes < 12288
+    result.assert_current()
+
+
+@pytest.mark.parametrize("target", ["candidate", "original", "retained"])
+def test_provider_growth_exceeds_reserved_budget(target: str) -> None:
+    origin = _symmetric()
+    candidates = []
+
+    def larger_provider(seed: np.ndarray) -> UHFResponseOperator:
+        candidate = _solve(seed)
+        if target == "candidate":
+            candidate.backend.host_workspace_bytes += 1
+        elif target == "original":
+            origin.backend.host_workspace_bytes += 1
+        elif candidates:
+            candidates[0].backend.host_workspace_bytes += 1
+        candidates.append(candidate)
+        return candidate
+
+    with pytest.raises(RecoveryUnqualified, match="provider budget"):
+        recover_uhf_stability(origin, larger_provider)
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_closed_native_owner_invalidates_recovery_evidence(recover: bool) -> None:
+    """Exercise native-owner lifetime without loading a native library."""
+    model = (
+        _symmetric()
+        if recover
+        else _solve(np.array([[[1.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 1.0]]]))
+    )
+    operator, check_open = _native_owner_operator(model)
+
+    def solve(seed: np.ndarray) -> UHFResponseOperator:
+        candidate = _solve(seed)
+        return UHFResponseOperator(
+            UHFResponseOperator.build_problem(
+                candidate.problem.reference, operator.backend
+            ),
+            operator.backend,
+        )
+
+    result = recover_uhf_stability(operator, solve if recover else Mock())
+    assert result.status == ("RECOVERED" if recover else "UNCHANGED")
+    result.assert_current()
+    check_open.side_effect = RuntimeError("source closed")
+    with pytest.raises(RecoveryUnqualified, match="source"):
+        result.assert_current()
+
+
+def _native_owner_operator(
+    model: UHFResponseOperator,
+) -> tuple[UHFResponseOperator, Mock]:
+    from types import SimpleNamespace
+
+    from tools.generativeqc_response.backends import NativeJKBackend
+
+    reference = model.problem.reference
+    check_open = Mock()
+    source = SimpleNamespace(
+        nbf=reference.nbf,
+        identity="finite-dimer-source-owner",
+        geometry_hash=reference.geometry_hash,
+        basis_hash=reference.basis_hash,
+        representation=reference.representation,
+        _check_open=check_open,
+    )
+    backend = NativeJKBackend(source)
+    # Only the integral action is supplied by the independent finite model;
+    # metadata validation and source ownership use the real native backend.
+    backend.coulomb_exchange = model.backend.coulomb_exchange
+    operator = UHFResponseOperator(
+        UHFResponseOperator.build_problem(reference, backend), backend
+    )
+    return operator, check_open
+
+
+def test_source_closed_after_one_root_prevents_partial_success() -> None:
+    origin, check_open = _native_owner_operator(_symmetric())
+    calls = 0
+
+    def closes_after_root(seed: np.ndarray) -> UHFResponseOperator:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            check_open.side_effect = RuntimeError("source closed")
+            raise RuntimeError("SCF failed after closing its source")
+        candidate = _solve(seed)
+        return UHFResponseOperator(
+            UHFResponseOperator.build_problem(
+                candidate.problem.reference, origin.backend
+            ),
+            origin.backend,
+        )
+
+    with pytest.raises(RecoveryUnqualified, match="source"):
+        recover_uhf_stability(origin, closes_after_root)
+    assert calls == 2
 
 
 @pytest.mark.parametrize(

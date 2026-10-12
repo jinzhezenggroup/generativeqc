@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import math
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -20,17 +21,47 @@ from scipy.linalg import expm
 from tools.generativeqc_posthf.reference import immutable
 
 from .stability import (
+    StabilityOptions,
     StabilityUnqualified,
     diagnose_uhf_stability,
 )
 from .uhf import UHFResponseOperator
 
 if typing.TYPE_CHECKING:
-    from .stability import StabilityOptions, UHFStabilityCertificate
+    from .stability import UHFStabilityCertificate
 
 
 class RecoveryUnqualified(StabilityUnqualified):
     """A trustworthy recovered energy/force/root is not available."""
+
+
+def _assert_source_current(operator: UHFResponseOperator) -> None:
+    """Check the live source owner as well as immutable scientific metadata."""
+    try:
+        operator.validate_current()
+        source = getattr(operator.backend, "source", None)
+        check_open = getattr(source, "_check_open", None)
+        if check_open is not None:
+            check_open()
+    except Exception as error:
+        raise RecoveryUnqualified("stale or closed recovery source") from error
+
+
+def _assert_current(
+    certificate: UHFStabilityCertificate, operator: UHFResponseOperator
+) -> None:
+    try:
+        certificate.assert_current(operator)
+    except Exception as error:
+        raise RecoveryUnqualified("stale recovery certificate or source") from error
+    _assert_source_current(operator)
+
+
+def _provider_bytes(operator: UHFResponseOperator) -> int:
+    value = getattr(operator.backend, "host_workspace_bytes", None)
+    if type(value) is not int or value < 0:
+        raise RecoveryUnqualified("provider must declare host workspace bytes")
+    return value
 
 
 @dataclass(frozen=True)
@@ -51,7 +82,7 @@ class RecoveryOptions:
             or len(angles) > 6
             or any(type(x) not in (float, int) or not math.isfinite(x) for x in angles)
             or any(not 0 < a < math.pi / 2 for a in angles)
-            or any(a >= b for a, b in zip(angles, angles[1:]))
+            or any(a >= b for a, b in pairwise(angles))
         ):
             raise ValueError(
                 "angles require 1-6 strictly increasing finite rotations (0, pi/2)"
@@ -196,8 +227,8 @@ class UHFRecoveryResult:
     identity: str
 
     def assert_current(self) -> None:
-        self.initial.assert_current(self.initial_operator)
-        self.recovered.assert_current(self.operator)
+        _assert_current(self.initial, self.initial_operator)
+        _assert_current(self.recovered, self.operator)
         if (
             self.status not in ("RECOVERED", "UNCHANGED")
             or self.recovered.status != "STABLE"
@@ -228,14 +259,44 @@ def recover_uhf_stability(
         raise RecoveryUnqualified("only real internal UHF recovery is qualified")
     r0 = operator.problem.reference
     n = r0.nbf
-    # Charge the certificate budget, all AO seeds and all basis-rotation scratch
-    # before applying the source or asking the callback to allocate a solver.
-    estimated = r0.numeric_bytes + 8 * (
-        36 * n * n + 8 * operator.dimension + 2 * len(options.angles) * n * n
+    stability_options = stability_options or StabilityOptions()
+    if not isinstance(stability_options, StabilityOptions):
+        raise TypeError("expected StabilityOptions")
+    provider_bytes = _provider_bytes(operator)
+    max_roots = 2 * len(options.angles)
+    # Reserve all simultaneously retained reference/provider declarations,
+    # spin densities, populations and certificate eigenvalues. The remaining
+    # allowance belongs to the shared diagnostic, which owns admission for
+    # its full Hessian/eigensolver/AO workspace. Callback-private SCF scratch
+    # remains the callback's responsibility.
+    retained_bytes = (max_roots + 1) * (r0.numeric_bytes + provider_bytes) + 8 * (
+        36 * n * n
+        + 8 * operator.dimension
+        + max_roots * (2 * n * n + 2 * n + 2 * operator.dimension)
     )
-    if n > options.max_nbf or estimated > options.budget_bytes:
+    if n > options.max_nbf or retained_bytes >= options.budget_bytes:
         raise RecoveryUnqualified("recovery numeric budget rejected before execution")
-    initial = diagnose_uhf_stability(operator, options=stability_options)
+    diagnostic_options = replace(
+        stability_options,
+        budget_bytes=min(
+            stability_options.budget_bytes, options.budget_bytes - retained_bytes
+        ),
+    )
+
+    def diagnose(candidate: UHFResponseOperator) -> UHFStabilityCertificate:
+        _assert_source_current(candidate)
+        if _provider_bytes(candidate) > provider_bytes:
+            raise RecoveryUnqualified("SCF result exceeds reserved provider budget")
+        try:
+            certificate = diagnose_uhf_stability(candidate, options=diagnostic_options)
+        except StabilityUnqualified as error:
+            raise RecoveryUnqualified(str(error)) from error
+        _assert_current(certificate, candidate)
+        if _provider_bytes(candidate) > provider_bytes:
+            raise RecoveryUnqualified("SCF result exceeds reserved provider budget")
+        return certificate
+
+    initial = diagnose(operator)
     if initial.status in ("EMPTY", "NEAR_SINGULAR"):
         raise RecoveryUnqualified(
             f"cannot publish unresolved {initial.status} reference"
@@ -259,32 +320,42 @@ def recover_uhf_stability(
         )
     if initial.direction is None:
         raise RecoveryUnqualified("negative direction absent from unstable certificate")
-    initial.assert_current(operator)
+    _assert_current(initial, operator)
     base_energy = _electronic_energy(operator, original)
     roots: list[
         tuple[
             UHFResponseOperator, UHFStabilityCertificate, np.ndarray, UHFSpinDiagnostics
         ]
     ] = []
+
+    def check_current() -> None:
+        _assert_current(initial, operator)
+        # A failed callback can mutate a previously retained provider too.
+        # Recheck every declaration before further source work/publication.
+        for retained in (operator, *(item[0] for item in roots)):
+            if _provider_bytes(retained) > provider_bytes:
+                raise RecoveryUnqualified("retained source exceeds provider budget")
+
     attempted = 0
     equivalent = 0
     for angle in options.angles:
         for sign in (1.0, -1.0):
-            initial.assert_current(operator)
+            check_current()
             proposal = _rotate_density(operator, initial.direction, sign * angle)
             trial_energy = _electronic_energy(operator, proposal)
-            initial.assert_current(operator)
+            check_current()
             if trial_energy >= base_energy - options.downhill_tolerance:
                 continue
             attempted += 1
             try:
                 candidate = solve(proposal)
-            except Exception:
+            except Exception:  # noqa: BLE001
+                # The callback can raise backend-specific SCF errors.
                 # Non-convergence of one seed does not disqualify another. A
                 # mutated provider, however, invalidates every pending seed.
-                initial.assert_current(operator)
+                check_current()
                 continue
-            initial.assert_current(operator)
+            check_current()
             if type(candidate) is not UHFResponseOperator:
                 raise RecoveryUnqualified("SCF callback did not return a UHF operator")
             r1 = candidate.problem.reference
@@ -309,6 +380,16 @@ def recover_uhf_stability(
                 raise RecoveryUnqualified(
                     "SCF result changes geometry, Hamiltonian or spin occupation"
                 )
+            if (
+                r1.numeric_bytes > r0.numeric_bytes
+                or _provider_bytes(candidate) > provider_bytes
+            ):
+                raise RecoveryUnqualified(
+                    "SCF result exceeds reserved reference/provider budget"
+                )
+            # Matching AO/spin dimensions and capped provider storage keep
+            # candidate work within the initial diagnostic's admitted bound.
+            _assert_source_current(candidate)
             new_density = _densities(r1)
             if _same_root(
                 new_density,
@@ -331,7 +412,7 @@ def recover_uhf_stability(
                 )
             if r1.reference_energy >= r0.reference_energy - options.downhill_tolerance:
                 continue
-            certificate = diagnose_uhf_stability(candidate, options=stability_options)
+            certificate = diagnose(candidate)
             if certificate.status != "STABLE":
                 continue
             spin = _metrics(r1, new_density)
@@ -360,14 +441,14 @@ def recover_uhf_stability(
                     < roots[duplicate][0].problem.reference.reference_energy
                 ):
                     roots[duplicate] = (candidate, certificate, new_density, spin)
-    initial.assert_current(operator)
+    check_current()
     if not roots:
         raise RecoveryUnqualified(
             "no lower-energy, fully stable, converged UHF root after bounded restarts"
         )
     winner = min(roots, key=lambda item: item[0].problem.reference.reference_energy)
     recovered, evidence, _, spin = winner
-    evidence.assert_current(recovered)
+    _assert_current(evidence, recovered)
     identity = canonical_hash(
         {
             "kind": "bounded-real-uhf-recovery-v1",
@@ -407,8 +488,6 @@ def native_uhf_operator_from_scf(
     Independently recomputes the source-owned Focks and generalized MO frames;
     it does not accept a raw density as a converged or canonical snapshot.
     """
-    from dataclasses import replace
-
     from generativeqc.fock import FockScfResult
     from scipy.linalg import eigh
 
@@ -430,7 +509,7 @@ def native_uhf_operator_from_scf(
         or scf_result.density_rms > residual_tolerance
     ):
         raise RecoveryUnqualified("native SCF reported inadequate convergence")
-    previous.validate_current()
+    _assert_source_current(previous)
     # Check native density's physical metric and spin electron counts.
     overlap = r0.overlap
     for i, spin in enumerate(("alpha", "beta")):
@@ -482,7 +561,7 @@ def native_uhf_operator_from_scf(
         scf_residual=max(float(scf_result.density_rms), mismatch),
         generation_id=generation,
     )
-    previous.validate_current()
+    _assert_source_current(previous)
     return UHFResponseOperator(
         UHFResponseOperator.build_problem(result_reference, previous.backend),
         previous.backend,
