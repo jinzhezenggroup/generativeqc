@@ -3,8 +3,10 @@
 #include <iostream>
 #include <new>
 #include <stdexcept>
+#include <utility>
 
 #include "methods/method.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "molecule/basis.hpp"
 
 // Inject only inside reset. Ordinary numerical tests keep allocation enabled.
@@ -142,11 +144,80 @@ void cpu_consumers() {
     }
   }
 }
+
+void optional_batch_capabilities() {
+  using namespace generativeqc::methods;
+  // A new batch method only implements the execution contract; it need not
+  // carry any CUDA or warm-start diagnostics to be instantiated and reset.
+  class PlainBatch final : public PreparedBatch {
+   public:
+    std::size_t size() const noexcept override { return 1; }
+
+   protected:
+    std::vector<BatchItemResult> execute_impl(const Coordinates&, bool) override {
+      return std::vector<BatchItemResult>(1);
+    }
+  };
+  PlainBatch plain;
+  require(dynamic_cast<BatchWarmStarts*>(&plain) == nullptr, "seed capability is mandatory");
+  require(dynamic_cast<BatchDirectQueueProfiles*>(&plain) == nullptr,
+          "direct-profile capability is mandatory");
+  require(dynamic_cast<BatchEigensolverProfiles*>(&plain) == nullptr,
+          "eigensolver-profile capability is mandatory");
+  require(dynamic_cast<BatchDfMetricDiagnostics*>(&plain) == nullptr,
+          "DF metric capability is mandatory");
+  require(dynamic_cast<BatchKsTransportDiagnostics*>(&plain) == nullptr,
+          "KS transport capability is mandatory");
+  require(dynamic_cast<BatchCorrelationDiagnostics*>(&plain) == nullptr,
+          "correlation capability is mandatory");
+  require(dynamic_cast<BatchCcPerformanceDiagnostics*>(&plain) == nullptr,
+          "CC performance capability is mandatory");
+  require(plain.execute({}, false).size() == 1, "plain batch execution failed");
+  plain.reset_execution();
+  require(!plain.execution_lifecycle().warmed(), "plain reset retained replay eligibility");
+
+  class WarmBatch final : public PreparedBatch, public BatchWarmStarts {
+   public:
+    std::size_t size() const noexcept override { return 1; }
+    void clear_warm_starts() override {
+      ++clears;
+      state.reset();
+    }
+    std::size_t warm_density_size(std::size_t) const override { return 0; }
+    const std::optional<generativeqc::scf::HfWarmState>& warm_state(
+        std::size_t) const override {
+      return state;
+    }
+    void restore_warm_states(
+        std::vector<std::optional<generativeqc::scf::HfWarmState>> values) override {
+      if (values.size() != 1) throw std::invalid_argument("seed fleet size");
+      state = std::move(values[0]);
+    }
+    void set_warm_start_updates(bool enabled) override { updates = enabled; }
+    int clears{};
+    bool updates{true};
+    std::optional<generativeqc::scf::HfWarmState> state;
+
+   protected:
+    std::vector<BatchItemResult> execute_impl(const Coordinates&, bool) override {
+      return std::vector<BatchItemResult>(1);
+    }
+  };
+  WarmBatch warm;
+  require(dynamic_cast<BatchWarmStarts*>(&warm) != nullptr, "missing seed capability");
+  warm.set_warm_start_updates(false);
+  require(!warm.updates, "seed update control was ignored");
+  warm.restore_warm_states({generativeqc::scf::HfWarmState{}});
+  require(warm.warm_state(0).has_value(), "seed was not retained");
+  warm.reset_execution();
+  require(warm.clears == 1 && !warm.warm_state(0), "reset did not clear opt-in seeds");
+}
 }  // namespace
 
 int main() {
   try {
     transitions();
+    optional_batch_capabilities();
     cpu_consumers();
     return 0;
   } catch (const std::exception& error) {

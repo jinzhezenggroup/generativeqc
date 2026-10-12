@@ -42,6 +42,16 @@ because that ID still selects the separately qualified native D4 correction
 owner. System validation, SCF option translation, backend selection and retained
 execution state remain private to the adapter.
 
+Batch features beyond execution, lifecycle and resource high waters are opt-in
+interfaces in `src/methods/batch_capabilities.hpp`: warm checkpointing,
+direct-J/K queues, CUDA eigensolver and inactive-lane profiles, DF metric
+records, KS transport, correlation and CC performance. New batch providers
+should not implement empty profile methods merely to satisfy the base class.
+The C ABI retains its existing entry points: unsupported capabilities or
+unavailable measurements return `NOT_IMPLEMENTED`. Reset only clears SCF
+seeds when the batch implements the warm-start capability. Result invalidation
+and the execution lifecycle remain method-neutral.
+
 The ABI registry reports method family, executable properties, and batch support.
 Unimplemented identifiers remain discoverable without inflating executable
 properties. Native DFT carrier metadata remains backend-neutral and conservative.

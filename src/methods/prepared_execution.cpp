@@ -1,4 +1,5 @@
 #include "methods/method.hpp"
+#include "methods/batch_capabilities.hpp"
 
 namespace generativeqc::methods {
 namespace {
@@ -99,7 +100,7 @@ void PreparedBatch::reset_execution() {
   if (lifecycle_.running() || lifecycle_.closed())
     throw std::logic_error("cannot reset a running or closed prepared batch");
   invalidate_result();
-  clear_warm_starts();
+  if (auto* seeds = dynamic_cast<BatchWarmStarts*>(this)) seeds->clear_warm_starts();
   if (lifecycle_.failed())
     lifecycle_.recover();
   else {
