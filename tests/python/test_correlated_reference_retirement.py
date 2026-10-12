@@ -1044,7 +1044,9 @@ def test_actual_mp2_optional_force_cache_retires_before_bounded_replay(
     cache_and_force = _between(
         method, "        struct ForceCache {", "        result.forces ="
     )
-    code = MP2_CACHE_STANDINS + r"""
+    code = (
+        MP2_CACHE_STANDINS
+        + r"""
 void probe(int stage, int failure, std::size_t budget = 1000, bool readable = true,
            bool legacy = false) {
   assert(live_blocks() == 0 && live_force_calls == 0);
@@ -1072,6 +1074,7 @@ void probe(int stage, int failure, std::size_t budget = 1000, bool readable = tr
   bool rejected = false;
   try {
 """
+    )
     code += cache_and_force
     code += r"""
     assert(force_diagnostic && force_diagnostic->forces == std::vector<double>{5});

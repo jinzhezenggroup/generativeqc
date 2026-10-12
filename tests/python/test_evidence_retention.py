@@ -362,8 +362,7 @@ def test_cbs_receipt_exceptions_admit_only_the_reviewed_bytes(filename: str) -> 
     }
     assert check({path: data}, scoped) == []
     assert any(
-        "stale exception" in error
-        for error in check({path: data + b"changed"}, scoped)
+        "stale exception" in error for error in check({path: data + b"changed"}, scoped)
     )
     assert any("stale exception" in error for error in check({}, scoped))
     future = prefix + "unreviewed-run.log.gz"
