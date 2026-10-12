@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate independent mixed-spdf PySCF receipts; never import GenerativeQC.
 
 Run twice in separate interpreters, then use --verify FIRST SECOND to validate
@@ -47,7 +46,7 @@ def read_json(path: Path) -> dict[str, Any]:
     result = json.loads(raw)
     canonical(result)  # Reject nonfinite constants accepted by the JSON decoder.
     if not isinstance(result, dict):
-        raise ValueError("expected a JSON object")
+        raise TypeError("expected a JSON object")
     return result
 
 
@@ -86,7 +85,7 @@ def array_record(values: Any, shape: list[int]) -> dict[str, Any]:
         if isinstance(value, list):
             return [number for item in value for number in flatten(item)]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError("expected real float64 data")
+            raise TypeError("expected real float64 data")
         number = float(value)
         if not math.isfinite(number):
             raise ValueError("nonfinite scientific output")

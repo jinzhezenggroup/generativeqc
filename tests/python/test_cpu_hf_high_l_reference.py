@@ -6,14 +6,16 @@ import builtins
 import copy
 import hashlib
 import json
-from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
 from _cpu_hf_high_l_reference import REFERENCE_DIR, load_reference
 from test_cpu_hf_high_l import _assert_results_match_reference
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _arguments() -> dict[str, Any]:
@@ -69,6 +71,14 @@ def test_missing_fixed_reference_fails_closed(tmp_path: Path, name: str) -> None
         if existing != name:
             (tmp_path / existing).write_bytes((REFERENCE_DIR / existing).read_bytes())
     with pytest.raises(FileNotFoundError):
+        load_reference(**_arguments(), root=tmp_path)
+
+
+@pytest.mark.parametrize("name", ("manifest.json", "inputs.json", "reference.json"))
+def test_nonobject_fixed_reference_fails_closed(tmp_path: Path, name: str) -> None:
+    _copy_reference(tmp_path)
+    (tmp_path / name).write_text("[]\n")
+    with pytest.raises(TypeError, match="JSON object"):
         load_reference(**_arguments(), root=tmp_path)
 
 

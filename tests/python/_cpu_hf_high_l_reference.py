@@ -24,7 +24,7 @@ def _read(path: Path) -> tuple[bytes, dict[str, Any]]:
         raise ValueError("fixed high-l reference exceeds its byte limit")
     value = json.loads(raw)
     if not isinstance(value, dict):
-        raise ValueError("fixed high-l reference must be a JSON object")
+        raise TypeError("fixed high-l reference must be a JSON object")
     return raw, value
 
 

@@ -25,7 +25,7 @@ expected value.
   commit/job, generator hash, two raw-replica hashes and the bounded ZIP artifact.
   The receipt additionally records actual installed package/native-library
   identities, AO ordering/counts, electron counts and resolved SCF settings.
-- Both original process receipts are retained unchanged under \`replicas/\`.
+- Both original process receipts are retained unchanged under `replicas/`.
   Their SHA-256s match the validated replay record and authenticated archive.
 
 The initial workflow attempt stopped before dependency installation or numerical
