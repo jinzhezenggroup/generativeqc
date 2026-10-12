@@ -64,11 +64,11 @@ complete molecular source inventory still need independent numerical acceptance.
 
 The shared closed-shell CPKS operator now accepts an explicit physical
 full-range exact-exchange fraction for CPU-side algebraic composition. It binds
-the resulting restricted spin-summed \u2212a/2 raw K action into the response
+the resulting restricted spin-summed -a/2 raw K action into the response
 identity and **refuses nonzero exchange unless the backend explicitly declares
 raw full-range K support**. Semilocal a=0 keeps the same identity and behavior.
 This is a provider-checked, synthetic-oracle-tested response contract only;
-\u0060NativeRKSResponse\u0060 remains restricted to native LDA/PBE, and no native PBE0,
+`NativeRKSResponse` remains restricted to native LDA/PBE, and no native PBE0,
 B3LYP, user-composed or CUDA hybrid molecular Hessian endpoint is promoted.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
