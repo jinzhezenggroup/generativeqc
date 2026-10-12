@@ -419,9 +419,10 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
 # Bind the existing capacity audit to semantic MethodIR/KSOptions identity.
-# Token, metadata-domain, coefficient/spin and exact-grid gates are unchanged.
+# Density-only automatic snapshots now require exact domain 5; legacy automatic
+# and curated domain, token, coefficient/spin and exact-grid gates are retained.
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
+    "985187cc57507421e9c7990c022e50b32b9a0d6d0a39a0507ae9e2df3d7e6573"
 )
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.

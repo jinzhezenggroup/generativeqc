@@ -78,6 +78,7 @@ projections, or a versioned native ABI replaces the legacy descriptors.
 
 ## References
 
+- Stationary consumer follow-up: `2026-10-12-stationary-point-layout.md`.
 - #1118, #1119, #1120, #1121, #1124.
 - Supersedes the restricted blocker rationale in
   `2026-10-12-explicit-density-work-qualification.md` without reinterpreting its

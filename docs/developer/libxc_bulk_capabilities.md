@@ -298,6 +298,16 @@ Public KS plans and diagnostic readers select the density-work domain by the
 same ingredient-family policy and require exact native version 5; legacy
 automatic semilocal diagnostics still require version 4. Neither reader accepts
 the other's version merely because both belong to the automatic registry.
+The live stationary CPU point bridge also selects this layout explicitly from
+the verified functional spin. Its private v4 ABI reconstructs original total
+features from equal RKS half-feature channels and duplicates U1 coefficients
+for the existing half-channel pullback (including native `vtau/2`). The v2/v3
+ABIs remain polarized, including equal-spin UKS inputs; equality never selects
+RKS. Restricted calls reject unequal channels and fail explicitly when the
+native library lacks v4 or its matching restricted descriptor. Legacy work
+domains retain the same spin-fold continuation as their SCF. This point bridge
+does not qualify a complete molecular force endpoint or the automatic CUDA RKS
+provider.
 The compiled-CPU receipt includes restricted interior, vacuum and active
 `[floor, 2*floor)` smoke cases in addition to polarized E/vxc. The molecular
 producer verifies the actual native registry's restricted expression identity
