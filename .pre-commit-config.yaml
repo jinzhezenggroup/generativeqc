@@ -128,17 +128,21 @@ repos:
         types_or: [c++, c, cuda]
   - repo: local
     hooks:
-      # Reuse the uv/prek stack already configured in the pre-commit workflow.
-      # All rules share one fast parse-only scan; no compiler or CUDA GPU needed.
+      # Pin ast-grep in a managed Python hook environment.  GitHub Actions
+      # uses prek + uv, while external pre-commit.ci runs plain pre-commit
+      # without uvx on PATH; both install additional_dependencies themselves.
+      # No native compilation, CUDA toolkit, or GPU is required to scan.
       - id: ast-grep-native
         name: Structural lint for maintained C++/CUDA
-        entry: uvx --from ast-grep-cli==0.50.0 ast-grep scan --config sgconfig.yml --report-style short
-        language: system
+        entry: ast-grep scan --config sgconfig.yml --report-style short
+        language: python
+        additional_dependencies: [ast-grep-cli==0.50.0]
         types: [file]
         files: ^(?:src|include)/.*\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx|cu|cuh)$
       - id: ast-grep-rule-tests
         name: Test structural lint rules
-        entry: uvx --from ast-grep-cli==0.50.0 ast-grep test --config sgconfig.yml --skip-snapshot-tests
-        language: system
+        entry: ast-grep test --config sgconfig.yml --skip-snapshot-tests
+        language: python
+        additional_dependencies: [ast-grep-cli==0.50.0]
         pass_filenames: false
         files: ^(?:sgconfig\.yml|rules/|rule-tests/)
