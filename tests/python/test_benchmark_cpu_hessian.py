@@ -8,7 +8,7 @@ import pytest
 from tools import benchmark_cpu_hessian as benchmark
 
 
-def test_cpu_hessian_receipt_preserves_every_timing_sample():
+def test_cpu_hessian_receipt_preserves_every_timing_sample() -> None:
     values = [1.3, 7.2, 0.8]
     result = benchmark._summary(values)
     assert result["seconds"] == values
@@ -21,7 +21,7 @@ def test_cpu_hessian_receipt_preserves_every_timing_sample():
         benchmark._summary([])
 
 
-def test_cpu_hessian_moved_geometry_does_not_change_source():
+def test_cpu_hessian_moved_geometry_does_not_change_source() -> None:
     atoms, _, direction = benchmark._fixture("h2")
     original = tuple(atoms)
     moved = benchmark._moved(atoms, direction, 0.02)
@@ -36,7 +36,7 @@ def test_cpu_hessian_moved_geometry_does_not_change_source():
         benchmark._moved(atoms, direction, 0.0)
 
 
-def test_cpu_hessian_raw_matrix_is_not_symmetrized():
+def test_cpu_hessian_raw_matrix_is_not_symmetrized() -> None:
     direction = np.asarray([[0.25, -0.5, 0.75]])
     # Intentionally asymmetric to confirm that the driver records RAW symmetry.
     matrix = np.asarray(
