@@ -10,7 +10,6 @@
 #include <stdexcept>
 #include <utility>
 
-#include "api/handles.hpp"
 #include "methods/scf_common_options.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fleet.hpp"
@@ -34,9 +33,12 @@ std::size_t density_fitting_memory_budget(const generativeqc_method_descriptor& 
 }
 
 std::optional<core::System> density_fitting_auxiliary_template(
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* native_auxiliary) {
   if (descriptor.density_fitting_auxiliary_basis == nullptr) return std::nullopt;
-  return descriptor.density_fitting_auxiliary_basis->data;
+  if (native_auxiliary == nullptr)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "auxiliary basis must be resolved at the API boundary");
+  return *native_auxiliary;
 }
 
 scf::ScfOptions scf_options(const generativeqc_method_descriptor& descriptor) {
@@ -413,10 +415,10 @@ generativeqc_status validate_hf_system(generativeqc_method method, const core::S
 
 std::unique_ptr<PreparedCalculation> prepare_hf_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
   runtime::ExecutionContext execution(context);
   scf::ScfOptions options = scf_options(descriptor);
-  const auto auxiliary = density_fitting_auxiliary_template(descriptor);
+  const auto auxiliary = density_fitting_auxiliary_template(descriptor, auxiliary_basis);
   if (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA &&
       !execution.cuda_requested()) {
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -438,7 +440,8 @@ std::unique_ptr<PreparedBatch> prepare_hf_batch(const Capabilities& capabilities
                                                 core::ContextState& context,
                                                 std::vector<core::System> systems,
                                                 const generativeqc_method_descriptor& descriptor,
-                                                generativeqc_batch_flags flags) {
+                                                generativeqc_batch_flags flags,
+                                                const core::System* auxiliary_basis) {
   constexpr generativeqc_batch_flags supported_flags =
       GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |
       GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING;
@@ -447,7 +450,7 @@ std::unique_ptr<PreparedBatch> prepare_hf_batch(const Capabilities& capabilities
   }
   runtime::ExecutionContext execution(context);
   scf::ScfOptions options = scf_options(descriptor);
-  const auto auxiliary = density_fitting_auxiliary_template(descriptor);
+  const auto auxiliary = density_fitting_auxiliary_template(descriptor, auxiliary_basis);
   if (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA &&
       !execution.cuda_requested()) {
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
