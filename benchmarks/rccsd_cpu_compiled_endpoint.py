@@ -20,6 +20,11 @@ import tempfile
 import time
 from pathlib import Path
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 
 def _worker(*, fixture: str, backend: str, cache: Path) -> dict[str, object]:
     import resource
@@ -99,7 +104,7 @@ def main() -> None:
         "--fixture", choices=["h2", "he", "h2o", "nh3", "ch4"], default="h2o"
     )
     parser.add_argument("--threads", type=int, nargs="+", default=[1, 4])
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--backend", choices=["cpu", "cpu-native"], default="cpu")
     parser.add_argument("--cache", type=Path)
@@ -166,8 +171,9 @@ def main() -> None:
     }
     payload = json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n"
     if args.output is not None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(payload)
+        destination = raw_output_path(args.output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(payload)
     print(payload, end="")
 
 
