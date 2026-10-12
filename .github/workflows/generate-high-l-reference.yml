@@ -1,14 +1,8 @@
 name: Generate fixed high-l PySCF reference
 
-# One-time acquisition on the user-requested fork branch only.
-# Remove this push trigger after retaining the validated authentic receipt.
+# Explicit regeneration only. The one-time automatic acquisition is complete.
 on:
-  push:
-    branches: [oracle/cpu-hf-high-l-reference-20261012]
-    paths:
-      - .github/workflows/generate-high-l-reference.yml
-      - tools/generate_cpu_hf_high_l_reference.py
-      - tests/reference_data/cpu_hf_high_l/inputs.json
+  workflow_dispatch:
 
 permissions:
   contents: read
