@@ -2170,9 +2170,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     try {
-      const auto candidate = dft::cuda_stationary_capacity(
-          *binding, basis_.natom, basis_.nao, basis_.nprimitive,
-          grid_.point_count(), options_.xc_tile_points);
+      const auto candidate =
+          dft::cuda_stationary_capacity(*binding, basis_.natom, basis_.nao, basis_.nprimitive,
+                                        grid_.point_count(), options_.xc_tile_points);
       capacity = candidate;
       detail.clear();
       return GENERATIVEQC_STATUS_SUCCESS;
@@ -3417,15 +3417,15 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
     NativeKsExecutionPlan execution_plan;
     auto options = dft_options(descriptor, GENERATIVEQC_BACKEND_CUDA, execution_plan);
     const auto grid = ks_grid_options(descriptor, options, execution_plan);
-    const auto* binding = native_cuda_stationary_binding(
-        execution_plan, options, grid, shape[5] == 0 && shape[6] == 0, shape[4]);
+    const auto* binding = native_cuda_stationary_binding(execution_plan, options, grid,
+                                                         shape[5] == 0 && shape[6] == 0, shape[4]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const auto points = runtime::size_mul(
         shape[0], runtime::size_mul(grid.radial_points,
                                     runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto candidate = dft::cuda_stationary_capacity(
-        *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points);
+    const auto candidate = dft::cuda_stationary_capacity(*binding, shape[0], shape[1], shape[2],
+                                                         shape[3], options.xc_tile_points);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

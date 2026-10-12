@@ -14,7 +14,8 @@ def fixtures() -> tuple[str, str, str]:
         "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=OFF"
     )
     registry = "\n".join(
-        f"    &native_stationary_profile_{profile}()," for profile in compiler_native_profiles()
+        f"    &native_stationary_profile_{profile}(),"
+        for profile in compiler_native_profiles()
     )
     symbols = (
         "\n".join(
@@ -60,7 +61,8 @@ class StandaloneCudaForceTests(unittest.TestCase):
             verify_contract(
                 cache,
                 registry.replace(
-                    f"&native_stationary_profile_{compiler_native_profiles()[-1]}(),", ""
+                    f"&native_stationary_profile_{compiler_native_profiles()[-1]}(),",
+                    "",
                 ),
                 symbols,
             )

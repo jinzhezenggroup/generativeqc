@@ -90,6 +90,5 @@ def test_prepared_cpp_admits_graph_without_label_round_trip() -> None:
     cmake = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
     assert "NAME generativeqc_native_stationary_codegen" in cmake
     assert (
-        'NAME "generativeqc_native_stationary_${_native_profile}_codegen"'
-        not in cmake
+        'NAME "generativeqc_native_stationary_${_native_profile}_codegen"' not in cmake
     )

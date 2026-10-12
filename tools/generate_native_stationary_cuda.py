@@ -9,7 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from generativeqc_compiler.method.stationary_cuda import QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
+from generativeqc_compiler.method.stationary_cuda import (
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
+)
 from generativeqc_compiler.method.stationary_native_cuda import (
     NATIVE_STATIONARY_CUDA_PROFILES,
     emit_native_stationary_profile_cuda,
