@@ -41,7 +41,9 @@ class LinearXCKernel:
         return self.apply(density)
 
 
-def synthetic_problem() -> tuple[typing.Any, DenseAOResponseBackend, LinearXCKernel, np.ndarray]:
+def synthetic_problem() -> tuple[
+    typing.Any, DenseAOResponseBackend, LinearXCKernel, np.ndarray
+]:
     """Return a restricted KS fixture and a tiny *raw* J/K oracle provider."""
     meta, arrays = load_fixture("h2")
     rhf = fixture_snapshot(meta, arrays)
