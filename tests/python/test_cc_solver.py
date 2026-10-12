@@ -402,3 +402,149 @@ def test_fresh_native_HF_to_converged_CCSD(name: typing.Any) -> None:
         )
         np.testing.assert_allclose(result.t1, t1, atol=1e-8, rtol=1e-8)
         np.testing.assert_allclose(result.t2, t2, atol=1e-8, rtol=1e-8)
+
+
+@pytest.mark.parametrize("name", ["h2", "h2o"])
+def test_native_cpu_ccsd_full_endpoint_matches_pinned_and_oracle(
+    name: str, tmp_path: typing.Any, monkeypatch: typing.Any
+) -> None:
+    """The iterative physical residual must not hit the NumPy TensorIR executor."""
+    import importlib
+    import shutil
+
+    if shutil.which("c++") is None:
+        pytest.skip("a native C++ compiler is required for the explicit CPU route")
+    from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
+
+    module = importlib.import_module("tools.generativeqc_cc.solver")
+    s, p, meta, a = fixture_problem(name)
+    options = SolverOptions(residual_tolerance=1e-10, energy_tolerance=1e-12)
+    reference = solve(s, p, options=options)
+    native = NativeCCTensorExecutor(max_bytes=options.max_bytes, cache=tmp_path)
+    primal, expanded = module._ccsd_programs(s.nocc, s.nmo - s.nocc)
+    interpreter = module.execute
+    checked_expanded = 0
+
+    def only_independent_oracle(
+        program: typing.Any, *args: typing.Any, **kw: typing.Any
+    ) -> typing.Any:
+        nonlocal checked_expanded
+        assert program.logical_hash != primal.logical_hash, (
+            "native iterative RCCSD executed the NumPy TensorIR interpreter"
+        )
+        if program.logical_hash == expanded.logical_hash:
+            checked_expanded += 1
+        return interpreter(program, *args, **kw)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "execute", only_independent_oracle)
+        result = solve(s, p, options=options, executor=native)
+    assert result.converged, (result.reason, result.history[-1])
+    assert checked_expanded >= 1
+    assert result.provenance["equation_backend"] == "native-cpu-tensorir"
+    assert result.provenance["native_program_required_bytes"] > 0
+    assert native.compiled_program_count == 1
+    assert native.artifact_count == 1
+    assert abs(result.total_energy - meta["total_energy"]) <= 1e-8
+    assert abs(result.total_energy - reference.total_energy) <= 1e-9
+    np.testing.assert_allclose(result.t1, a["t1"], rtol=1e-8, atol=1e-8)
+    np.testing.assert_allclose(result.t2, a["t2"], rtol=1e-8, atol=1e-8)
+    np.testing.assert_allclose(result.t1, reference.t1, rtol=1e-8, atol=1e-8)
+    np.testing.assert_allclose(result.t2, reference.t2, rtol=1e-8, atol=1e-8)
+
+    # A repeated prepared-state evaluation must reuse the compiled artifact.
+    prepared = PreparedCCSD(s, p, options=options, executor=native)
+    first = prepared.evaluate(result.t1, result.t2)
+    second = prepared.evaluate(result.t1, result.t2)
+    for output in primal.outputs:
+        np.testing.assert_array_equal(first[output], second[output])
+    assert native.artifact_count == 1
+    assert (
+        max(
+            float(np.max(np.abs(first[k])))
+            for k in ("singles_residual", "doubles_residual")
+        )
+        <= options.residual_tolerance
+    )
+
+
+def test_native_cpu_ccsd_resource_rejections_precede_integral_reads(
+    tmp_path: typing.Any,
+) -> None:
+    from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
+
+    s, p, _meta, _a = fixture_problem()
+    with pytest.raises(TypeError, match="native CPU TensorIR executor"):
+        PreparedCCSD(s, p, executor=object())
+    assert p.calls == 0
+    tiny = NativeCCTensorExecutor(max_bytes=128, cache=tmp_path)
+    with pytest.raises(ValueError, match="byte/work budget"):
+        PreparedCCSD(s, p, executor=tiny)
+    assert p.calls == 0
+
+
+def test_native_cpu_ccsd_facade_and_numeric_failure(
+    tmp_path: typing.Any,
+) -> None:
+    import shutil
+
+    if shutil.which("c++") is None:
+        pytest.skip("a native C++ compiler is required for the explicit CPU route")
+    from tools.generativeqc_cc import energy
+    from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
+
+    s, p, meta, a = fixture_problem()
+    actual = energy(s, p, backend="cpu-native", cache=tmp_path)
+    assert actual.backend == "cpu-native"
+    assert actual.converged
+    assert abs(actual.total_energy - meta["total_energy"]) <= 1e-8
+    assert actual.state.provenance["equation_backend"] == "native-cpu-tensorir"
+
+    # Compiled programs reject invalid/broken scientific evaluation without
+    # pretending that a finite energy or a successful endpoint was obtained.
+    executor = NativeCCTensorExecutor(max_bytes=256 << 20, cache=tmp_path)
+    broken = solve(
+        s,
+        p,
+        t1=np.full_like(a["t1"], 1e150),
+        t2=np.full_like(a["t2"], 1e150),
+        executor=executor,
+    )
+    assert broken.status == "nonfinite" and not broken.converged
+    assert broken.correlation_energy is None
+    with pytest.raises(TypeError, match="compiler"):
+        energy(s, p, backend="cpu-native", compiler=object())
+    with pytest.raises(TypeError, match="cache"):
+        energy(s, p, backend="cpu-native", cache="not-a-Path")
+
+
+@pytest.mark.parametrize("independent", [False, True])
+@pytest.mark.parametrize("change", ["clear", "budget", "cache"])
+def test_native_cpu_ccsd_configuration_changes_never_fall_back(
+    change: str, independent: bool, tmp_path: typing.Any, monkeypatch: typing.Any
+) -> None:
+    import importlib
+    import shutil
+
+    if shutil.which("c++") is None:
+        pytest.skip("a native C++ compiler is required for the explicit CPU route")
+    from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
+
+    module = importlib.import_module("tools.generativeqc_cc.solver")
+    s, p, _meta, _a = fixture_problem()
+    native = NativeCCTensorExecutor(max_bytes=256 << 20, cache=tmp_path)
+    prepared = PreparedCCSD(s, p, executor=native)
+    if change == "clear":
+        prepared.executor = None
+    elif change == "budget":
+        native.max_bytes *= 2
+    else:
+        native.cache = tmp_path / "changed"
+
+    def forbidden_evaluation(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        pytest.fail("changed native configuration reached an equation executor")
+
+    monkeypatch.setattr(module, "execute", forbidden_evaluation)
+    monkeypatch.setattr(native, "execute", forbidden_evaluation)
+    with pytest.raises(RuntimeError, match="executor configuration changed"):
+        prepared.evaluate(*prepared.initial, independent=independent)
