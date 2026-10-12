@@ -410,13 +410,13 @@ void resident_cuda(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
     throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
-                                              cudaGetErrorString(status));
+                                             cudaGetErrorString(status));
 }
 void resident_blas(cublasStatus_t status) {
   if (status == CUBLAS_STATUS_ALLOC_FAILED) throw std::bad_alloc();
   if (status != CUBLAS_STATUS_SUCCESS)
     throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
-                                              "resident response cuBLAS failure");
+                                             "resident response cuBLAS failure");
 }
 std::size_t resident_product(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a) throw std::bad_alloc();

@@ -30,9 +30,7 @@ def _definition(source: str, start: str) -> str:
     return source[begin:end]
 
 
-@pytest.mark.parametrize(
-    "mutant", ("none", "cuda", "blas", "handoff", "missing_drain")
-)
+@pytest.mark.parametrize("mutant", ("none", "cuda", "blas", "handoff", "missing_drain"))
 def test_resident_cpks_fault_status_and_cleanup(
     tmp_path: Path, native_cxx: NativeCxx, mutant: str
 ) -> None:
@@ -58,14 +56,14 @@ def test_resident_cpks_fault_status_and_cleanup(
         policy = policy.replace(
             _definition(fock, "void resident_cuda("),
             "void resident_cuda(cudaError_t status) { "
-            "if (status != cudaSuccess) throw std::runtime_error(\"old CUDA flattening\"); }",
+            'if (status != cudaSuccess) throw std::runtime_error("old CUDA flattening"); }',
         )
     if mutant == "blas":
         policy = policy.replace(
             _definition(fock, "void resident_blas("),
             "void resident_blas(cublasStatus_t status) { "
             "if (status != CUBLAS_STATUS_SUCCESS) "
-            "throw std::runtime_error(\"old BLAS flattening\"); }",
+            'throw std::runtime_error("old BLAS flattening"); }',
         )
     handoff_policy = _definition(snapshot, "void check_cpks_cuda(")
     if mutant == "handoff":
@@ -100,7 +98,8 @@ def test_resident_cpks_fault_status_and_cleanup(
         )
         + "\n"
         + _definition(
-            fock, 'extern "C" generativeqc_status generativeqc_rhf_response_resident_norm('
+            fock,
+            'extern "C" generativeqc_status generativeqc_rhf_response_resident_norm(',
         )
         + "\nnamespace generativeqc::runtime {\n"
         + _definition(resources, "inline void cuda_resource_check(")

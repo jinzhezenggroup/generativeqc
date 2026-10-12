@@ -84,7 +84,7 @@ void check_cpks_cuda(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
     throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
-                                              cudaGetErrorString(status));
+                                             cudaGetErrorString(status));
 }
 
 /** Adapt the shared orbital/vector engine, not a second CPKS algebra. Its
@@ -606,7 +606,7 @@ generativeqc_status generativeqc_ks_response_solve_v1(
       throw std::invalid_argument("CPKS snapshot orbital payload is incomplete");
     generativeqc::runtime::CudaDeviceScope device(response->device, check_cpks_cuda);
     generativeqc::runtime::OwnedCudaEvent ready(response->device, cudaEventDisableTiming,
-                                               check_cpks_cuda);
+                                                check_cpks_cuda);
     const auto xc_before = response->plan->transfers();
     const auto density_response = [&](const double* direction, void* stream) {
       const auto current = check_current(*batch, response->index, response->token);
