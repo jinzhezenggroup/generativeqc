@@ -568,12 +568,15 @@ ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
       strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
       strategy.spec.coulomb.coefficient == 1.0 && strategy.spec.exchange.present &&
       strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
-      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx &&
-      strategy.spec.exchange.coefficient == -0.25;
-  if (!pbe0_exchange || options.semilocal_exchange_scale != 0.75 ||
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx;
+  // The prepared spin-resolved Fock coefficient, not a named hybrid, owns a.
+  const double exact_exchange_fraction = -strategy.spec.exchange.coefficient;
+  if (!pbe0_exchange || !std::isfinite(exact_exchange_fraction) || exact_exchange_fraction <= 0.0 ||
+      exact_exchange_fraction > 1.0 ||
+      options.semilocal_exchange_scale != 1.0 - exact_exchange_fraction ||
       options.semilocal_correlation_scale != 1.0)
     throw std::invalid_argument(
-        "PBE0 COSX UKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
+        "COSX UKS requires physical full-range exchange and complementary PBE scales");
   return run_uks_impl(plan, nullptr, basis, grid, options,
                       SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe), "PBE0-COSX",
                       initial_density, nullptr);

@@ -12,6 +12,7 @@
 
 #include "dft/ao_grid.hpp"
 #include "dft/grid.hpp"
+#include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
 #include "molecule/basis.hpp"
@@ -69,6 +70,10 @@ void stationary_pbe_xc_nuclear_finite_difference() {
       const generativeqc::dft::MolecularGrid grid(reference, grid_spec);
       const auto response =
           generativeqc::dft::stationary_pbe_xc_derivative(basis, grid, blocks, 17, exchange_scale);
+      const auto bound = generativeqc::dft::stationary_curated_xc_derivative(
+          basis, grid, blocks, 17, generativeqc::dft::SemilocalFamily::Pbe, exchange_scale, 1.0);
+      require(bound.energy == response.energy && bound.gradient == response.gradient,
+              "curated PBE XC registry changed the exact stationary energy/gradient");
       const auto energy = [&](const generativeqc::core::System& system) {
         const generativeqc::dft::AoBasis displaced_basis(system);
         const generativeqc::dft::MolecularGrid displaced_grid(system, grid_spec);
@@ -119,6 +124,10 @@ void stationary_b3lyp_xc_nuclear_finite_difference() {
     const generativeqc::dft::MolecularGrid grid(reference, grid_spec);
     const auto response =
         generativeqc::dft::stationary_b3lyp_xc_derivative(basis, grid, blocks, 17);
+    const auto bound = generativeqc::dft::stationary_curated_xc_derivative(
+        basis, grid, blocks, 17, generativeqc::dft::SemilocalFamily::B3lyp, 1.0, 1.0);
+    require(bound.energy == response.energy && bound.gradient == response.gradient,
+            "curated B3LYP XC registry changed the exact stationary energy/gradient");
     const auto energy = [&](const generativeqc::core::System& system) {
       const generativeqc::dft::AoBasis displaced_basis(system);
       const generativeqc::dft::MolecularGrid displaced_grid(system, grid_spec);
