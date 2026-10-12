@@ -2,10 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <optional>
@@ -149,9 +150,12 @@ std::vector<Stage> build_stages(const RunOptions& target) {
       stage.inputs.grid = KsGrid{};
     }
     if (is_xtb(stage.inputs)) {
-      // GFN2 has an intrinsic basis and may preoptimize on CPU before CUDA.
-      if (!last) stage.inputs.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
-      stage.inputs.precision = GENERATIVEQC_PRECISION_FP64;
+      // Preliminary GFN2 uses CPU/FP64; the final target keeps the user's
+      // backend and precision so unsupported requests fail in native admission.
+      if (!last) {
+        stage.inputs.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+        stage.inputs.precision = GENERATIVEQC_PRECISION_FP64;
+      }
       stage.inputs.basis_explicit = false;
       stage.inputs.representation_explicit = false;
       stage.inputs.auxiliary_basis_explicit = false;
@@ -267,8 +271,11 @@ class Objective {
                   "analytic forces are unavailable in this prepared geometry stage");
     auto result = calculation.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
     if (!result.forces) throw std::runtime_error("native force owner returned no analytic forces");
+    executed_backend_ = result.executed_backend;
     return {result.energy, std::move(*result.forces)};
   }
+
+  generativeqc_backend executed_backend() const { return executed_backend_; }
 
  private:
   generativeqc_system_descriptor make_system_descriptor(
@@ -290,6 +297,7 @@ class Objective {
   std::vector<generativeqc_atom> atoms_;
   Context context_;
   NativeBasisData orbital_, auxiliary_;
+  generativeqc_backend executed_backend_{GENATIVEQC_BACKEND_CPU_REFERENCE};
 };
 
 void print_plan(const std::vector<Stage>& stages) {
@@ -298,7 +306,9 @@ void print_plan(const std::vector<Stage>& stages) {
     if (i) std::cout << ',';
     const auto& s = stages[i];
     std::cout << "{\"method\":\"" << json_escape(s.inputs.method_name) << "\",\"backend\":\""
-              << backend_name(s.inputs.backend) << "\",\"basis\":\""
+              << backend_name(s.inputs.backend) << "\",\"precision\":\""
+              << (s.inputs.precision == GENERATIVEQC_PRECISION_AUTO ? "auto" : "fp64")
+              << "\",\"basis\":\""
               << (is_xtb(s.inputs) ? "intrinsic" : json_escape(s.inputs.basis_name))
               << "\",\"force_tolerance\":" << s.optimizer.force_tolerance
               << ",\"max_steps\":" << s.optimizer.max_steps
@@ -309,20 +319,33 @@ void print_plan(const std::vector<Stage>& stages) {
 
 void write_xyz(const std::filesystem::path& path, const std::vector<generativeqc_atom>& atoms,
                std::span<const double> coords, double energy) {
-  if (std::filesystem::exists(path))
-    throw UsageError("optimized XYZ output already exists (refusing to overwrite): " +
-                     path.string());
-  // Atomic numbers in XYZ are supported by the native CLI's own reader.
-  std::ofstream stream(path, std::ios::out | std::ios::trunc);
-  if (!stream) throw std::runtime_error("cannot create optimized XYZ: " + path.string());
-  stream << atoms.size() << "\noptimized with GenerativeQC; E=" << std::setprecision(17) << energy
-         << " Hartree; units=angstrom\n";
+  // Format before creating the file: allocation errors cannot leave an output.
+  std::ostringstream buffer;
+  buffer << atoms.size() << "\noptimized with GenerativeQC; E=" << std::setprecision(17)
+         << energy << " Hartree; units=angstrom\n";
   for (std::size_t i = 0; i < atoms.size(); ++i) {
-    stream << atoms[i].atomic_number << ' ' << coords[i * 3] / 1.8897261254578281 << ' '
+    buffer << atoms[i].atomic_number << ' ' << coords[i * 3] / 1.8897261254578281 << ' '
            << coords[i * 3 + 1] / 1.8897261254578281 << ' '
            << coords[i * 3 + 2] / 1.8897261254578281 << '\n';
   }
-  if (!stream) throw std::runtime_error("cannot finish optimized XYZ: " + path.string());
+  if (!buffer) throw std::runtime_error("cannot format optimized XYZ: " + path.string());
+  const auto contents = buffer.str();
+  // Exclusive creation also rejects dangling symlinks and concurrent writers.
+#if defined(_WIN32)
+  std::FILE* stream = _wfopen(path.c_str(), L"wx");
+#else
+  std::FILE* stream = std::fopen(path.c_str(), "wx");
+#endif
+  if (!stream) {
+    if (errno == EEXIST)
+      throw UsageError("optimized XYZ output already exists (refusing to overwrite): " +
+                       path.string());
+    throw std::runtime_error("cannot create optimized XYZ: " + path.string());
+  }
+  const auto written = std::fwrite(contents.data(), 1, contents.size(), stream);
+  const int close_status = std::fclose(stream);
+  if (written != contents.size() || close_status != 0)
+    throw std::runtime_error("cannot finish optimized XYZ: " + path.string());
 }
 
 }  // namespace
@@ -370,6 +393,7 @@ int geometry_command(const RunOptions& options, std::vector<generativeqc_atom> a
         }
         return objective(position);
       });
+      record.backend = objective.executed_backend();
     } catch (const std::exception& error) {
       throw std::runtime_error("optimization stage '" + stage.inputs.method_name +
                                "': " + error.what());
