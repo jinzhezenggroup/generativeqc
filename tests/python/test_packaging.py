@@ -252,9 +252,7 @@ def test_wheel_compiler_templates_include_local_dependencies(
     assets = _compiler_wheel_payload(tmp_path, monkeypatch)
     assert tensor_source_identity()
     headers = emit_grid_source()[2]
-    assert all(
-        header.is_file() and header.is_relative_to(assets) for header in headers
-    )
+    assert all(header.is_file() and header.is_relative_to(assets) for header in headers)
     # Quoted native includes can resolve beside the template or through the
     # compiler's src/include roots; none may depend on a neighboring checkout.
     for source in (assets / "src").rglob("*"):
