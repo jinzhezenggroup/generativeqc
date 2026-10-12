@@ -141,10 +141,10 @@ class ExecutionContext {
   explicit ExecutionContext(const core::ContextState& state) noexcept
       : backend_(state.requested_backend), device_id_(state.device_id) {}
 
-  [[nodiscard]] generativeqc_backend backend() const noexcept { return backend_; }
+  [[nodiscard]] core::Backend backend() const noexcept { return backend_; }
   [[nodiscard]] int device_id() const noexcept { return device_id_; }
   [[nodiscard]] bool cuda_requested() const noexcept {
-    return backend_ == GENERATIVEQC_BACKEND_CUDA;
+    return backend_ == core::kCudaBackend;
   }
 
   void observe_resource_peak(ExecutionResourceKind kind, ExecutionMemorySpace space,
@@ -167,7 +167,7 @@ class ExecutionContext {
   void reset_resources() noexcept { resources_.reset(); }
 
  private:
-  generativeqc_backend backend_{GENERATIVEQC_BACKEND_CPU_REFERENCE};
+  core::Backend backend_{core::kCpuReferenceBackend};
   int device_id_{};
   ExecutionResourceTracker resources_{};
 };
