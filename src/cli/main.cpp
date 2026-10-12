@@ -447,7 +447,9 @@ RunOptions parse_run(int argc, char** argv) {
     };
 
     if (option == "--method") {
-      const std::string selected = lower(std::string(value()));
+      std::string selected = lower(std::string(value()));
+      if (selected == "ccsd(t)") selected = "rccsd(t)";
+      if (selected == "df-ccsd(t)") selected = "df-rccsd(t)";
       options.composition = nullptr;
       if (selected == "gfn2-xtb" || selected == "gfn2") {
         options.method_name = "gfn2-xtb";
