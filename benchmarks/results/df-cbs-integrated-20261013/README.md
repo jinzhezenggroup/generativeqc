@@ -80,8 +80,17 @@ preliminary guesses and host orchestration are still real endpoint work.
 Actual CUDA library SHA256:
 `b15f41470aef63e45e0f1a71f0a9d6119d39bea12296481bba5092a0c695403a`.
 Each JSON retains 26 source/qualification file hashes, checked against the
-integrated file bytes, including the changed upstream owners. It does not use
-the exported remote checkout's stale Git HEAD as scientific provenance.
+integrated qualification commit `45def9923edc720cab44416fcb88bcc7ce3c770c`,
+including the changed upstream owners. It does not use the exported remote
+checkout's stale Git HEAD as scientific provenance.
+
+The subsequent DF-MP2 host-lifetime repair moves transfer destinations before
+stream-dependent owners so asynchronous copies drain before host storage is
+released on exceptions. It preserves equations, source demand, admission and
+successful numerical operations. These unchanged receipts qualify the pinned
+pre-repair source, not a new GPU execution of the repair. The repair is covered
+separately by an executable delayed-copy/AddressSanitizer regression and original
+source negative controls; no receipt hashes have been refreshed or relabelled.
 
 Runs use `node4` (`n4` SSH alias), Slurm `main`, one `gpu:5090:1`, CUDA 12.9.86,
 SM120 and finite limits: 20 minutes for the GPU suite, 30 for the two QM7

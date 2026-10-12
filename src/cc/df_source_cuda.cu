@@ -372,13 +372,31 @@ DFMP2Result evaluate_df_mp2_cuda(std::size_t o, std::size_t v, std::size_t q,
       checked_add(sizeof(int),
                   bytes(checked_add(checked_add(input_values, arena_values), output_values))));
   admit(peak, budget);
+  // Host transfer sources/destinations must outlive every stream-dependent
+  // owner, including on allocation, copy, and synchronization failure.
+  DFMP2Result result;
+  result.minimum_absolute_denominator = minimum_denominator;
+  result.equation_hash = gen::mp2_energy_equation_hash;
+  result.numeric_capacity_bytes = peak;
+  std::vector<double> repeated(response ? spectrum : 0);
+  int failed = 0;
+  const double unit = 1.0;
+  if (response) {
+    result.factors.source_identity = identity;
+    result.factors.boo.assign(checked_mul(q, checked_mul(o, o)), 0.0);
+    result.factors.bov.resize(qov);
+    result.factors.bvv.assign(checked_mul(q, checked_mul(v, v)), 0.0);
+    result.eps_o.resize(o);
+    result.eps_v.resize(v);
+    result.foo.resize(checked_mul(o, o));
+    result.fvv.resize(checked_mul(v, v));
+  }
   runtime::CudaDeviceScope scope(device);
   runtime::OwnedCudaStream stream(device);
   runtime::OwnedCudaBuffer<double> storage(device, input_values, stream.get());
   runtime::OwnedCudaBuffer<double> arena(device, arena_values, stream.get());
   runtime::OwnedCudaBuffer<int> error(device, 1, stream.get());
   runtime::cuda_resource_check(cudaMemsetAsync(error.get(), 0, sizeof(int), stream.get()));
-  const double unit = 1.0;
   for (const auto item : {std::pair{bov, std::size_t{0}}, std::pair{eps_o, qov},
                           std::pair{eps_v, checked_add(qov, o)}})
     runtime::cuda_resource_check(cudaMemcpyAsync(storage.get() + item.second, item.first.data(),
@@ -400,31 +418,18 @@ DFMP2Result evaluate_df_mp2_cuda(std::size_t o, std::size_t v, std::size_t q,
                           error.get(),
                           stream.get()};
   const auto outputs = response ? gen::mp2_response_cuda(state) : gen::mp2_energy_cuda(state);
-  DFMP2Result result;
-  result.minimum_absolute_denominator = minimum_denominator;
-  result.equation_hash = gen::mp2_energy_equation_hash;
-  result.numeric_capacity_bytes = peak;
   runtime::cuda_resource_check(cudaMemcpyAsync(&result.opposite_spin, outputs.opposite_spin,
                                                sizeof(double), cudaMemcpyDeviceToHost,
                                                stream.get()));
   runtime::cuda_resource_check(cudaMemcpyAsync(&result.same_spin, outputs.same_spin, sizeof(double),
                                                cudaMemcpyDeviceToHost, stream.get()));
   if (response) {
-    result.factors.source_identity = identity;
-    result.factors.boo.assign(checked_mul(q, checked_mul(o, o)), 0.0);
-    result.factors.bov.resize(qov);
-    result.factors.bvv.assign(checked_mul(q, checked_mul(v, v)), 0.0);
-    result.eps_o.resize(o);
-    result.eps_v.resize(v);
-    result.foo.resize(checked_mul(o, o));
-    result.fvv.resize(checked_mul(v, v));
     runtime::cuda_resource_check(cudaMemcpyAsync(result.foo.data(), outputs.bar_foo,
                                                  bytes(result.foo.size()), cudaMemcpyDeviceToHost,
                                                  stream.get()));
     runtime::cuda_resource_check(cudaMemcpyAsync(result.fvv.data(), outputs.bar_fvv,
                                                  bytes(result.fvv.size()), cudaMemcpyDeviceToHost,
                                                  stream.get()));
-    std::vector<double> repeated(spectrum);
     runtime::cuda_resource_check(cudaMemcpyAsync(result.factors.bov.data(), outputs.bar_bov,
                                                  bytes(qov), cudaMemcpyDeviceToHost, stream.get()));
     for (const auto item : {std::pair{result.eps_o.data(), outputs.bar_ei},
@@ -446,7 +451,6 @@ DFMP2Result evaluate_df_mp2_cuda(std::size_t o, std::size_t v, std::size_t q,
                        [](double value) { return std::isfinite(value); }))
         throw std::runtime_error("nonfinite combined DF-MP2 cotangent");
   }
-  int failed = 0;
   runtime::cuda_resource_check(
       cudaMemcpyAsync(&failed, error.get(), sizeof(int), cudaMemcpyDeviceToHost, stream.get()));
   runtime::cuda_resource_check(cudaStreamSynchronize(stream.get()));

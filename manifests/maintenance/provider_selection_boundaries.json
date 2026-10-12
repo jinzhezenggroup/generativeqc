@@ -55,10 +55,10 @@
     "src/methods/df_ccsdt_force.cu": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "DF-CCSD(T) force execution still threads DF/Lambda GEMM implementation selectors through method ownership.",
+      "reason": "DF-CCSD(T) force execution still threads DF/Lambda GEMM implementation selectors through method ownership. The same-source MP2 companion forwards these existing selections to the shared native owner; it introduces no selector or provider choice and skips CC/Lambda consumers.",
       "selectors": {
-        "df_matrix_gemm": 5,
-        "lambda_matrix_gemm": 4
+        "df_matrix_gemm": 6,
+        "lambda_matrix_gemm": 5
       }
     },
     "src/methods/df_ccsdt_force.hpp": {
