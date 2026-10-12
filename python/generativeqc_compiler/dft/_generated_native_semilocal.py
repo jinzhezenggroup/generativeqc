@@ -26,6 +26,7 @@ class _SemilocalFamilyFields(TypedDict):
     molecular_nonlocal_domain: bool
     incremental_xc: bool
     stationary_second_order: bool
+    legacy_cpu_point_response_slot: int | None
     aliases: tuple[str, ...]
     cuda_fast_paths: dict[str, str]
     components: tuple[tuple[str, str], ...]
@@ -59,6 +60,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": True,
+        "legacy_cpu_point_response_slot": 0,
         "aliases": ("LDA_XC_PW",),
         "cuda_fast_paths": {
             "component_scaling": "qualification-required",
@@ -93,6 +95,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": True,
         "stationary_second_order": True,
+        "legacy_cpu_point_response_slot": 1,
         "aliases": (),
         "cuda_fast_paths": {
             "component_scaling": "qualified",
@@ -127,6 +130,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": False,
+        "legacy_cpu_point_response_slot": None,
         "aliases": (),
         "cuda_fast_paths": {
             "component_scaling": "unavailable",
@@ -161,6 +165,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": False,
+        "legacy_cpu_point_response_slot": None,
         "aliases": (),
         "cuda_fast_paths": {
             "component_scaling": "unavailable",
@@ -197,6 +202,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": True,
         "incremental_xc": False,
         "stationary_second_order": False,
+        "legacy_cpu_point_response_slot": None,
         "aliases": (),
         "cuda_fast_paths": {
             "component_scaling": "unavailable",

@@ -180,7 +180,7 @@ def test_native_global_hybrid_admission_combines_direct_auto_and_strict_df(
     tmp_path: Path,
     native_cxx: object,
 ) -> None:
-    source = (ROOT / "src/methods/dft_method.cpp").read_text()
+    source = (ROOT / "src/methods/dft_method_preparation.cpp").read_text()
     admission = _span(
         source, "  const bool cuda_global_hybrid", "  bool cuda_split_hybrid"
     )

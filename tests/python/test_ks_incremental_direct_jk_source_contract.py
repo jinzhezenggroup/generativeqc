@@ -8,7 +8,7 @@ def _source(path: str) -> str:
 
 
 def test_cuda_ks_incremental_direct_jk_is_capability_based() -> None:
-    method = _source("src/methods/dft_method.cpp")
+    method = _source("src/methods/dft_method_preparation.cpp")
     ks = _source("src/dft/cuda_ks.cpp")
 
     assert "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK" in method

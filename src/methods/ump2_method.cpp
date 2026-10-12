@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 
+#include "methods/batch_capabilities.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -160,7 +161,9 @@ generativeqc_status ump2_item_exception_status() {
   }
 }
 
-class Ump2PreparedBatch final : public PreparedBatch {
+class Ump2PreparedBatch final : public PreparedBatch,
+                                public BatchWarmStarts,
+                                public BatchCorrelationDiagnostics {
  public:
   Ump2PreparedBatch(Capabilities capabilities, core::ContextState& context,
                     std::vector<core::System> systems,
@@ -252,21 +255,6 @@ class Ump2PreparedBatch final : public PreparedBatch {
       if (states[index]) warm_states_[index].swap(states[index]);
   }
   void set_warm_start_updates(bool enabled) override { warm_updates_ = enabled; }
-  std::optional<std::vector<DirectShellClassProfileEntry>> last_direct_shell_class_profile()
-      const override {
-    return std::nullopt;
-  }
-  std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile() const override {
-    return std::nullopt;
-  }
-  std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const override { return {}; }
-  std::vector<scf::CudaDensityFittingMetricDiagnostic> last_density_fitting_metric_diagnostics()
-      const override {
-    return {};
-  }
-  std::vector<InactiveEigensolverProfileEntry> last_inactive_eigensolver_profile() const override {
-    return {};
-  }
 
  private:
   Capabilities capabilities_;

@@ -24,6 +24,7 @@ methods
 :caption: Run and reuse calculations
 
 geometry_optimization
+unrestricted_cc
 batched_hf
 checkpoint
 basis_projection

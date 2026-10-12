@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -79,7 +81,7 @@ class NativeCliScopeTests(unittest.TestCase):
             "run",
             return_value=subprocess.CompletedProcess([], 0, stdout=paths, stderr=b""),
         ) as command:
-            self.assertEqual(scope.select_tier("merge_group", BASE, HEAD), "fast")
+            self.assertEqual(scope.select_tier("pull_request", BASE, HEAD), "fast")
             self.assertIn("-z", command.call_args.args[0])
             self.assertNotIn("--diff-filter=ACMRT", command.call_args.args[0])
 
@@ -107,6 +109,8 @@ class NativeCliScopeTests(unittest.TestCase):
                 "native source",
             )
             base = git("rev-parse", "HEAD")
+            git("branch", "target", base)
+            git("remote", "add", "origin", str(root))
             (root / "docs").mkdir()
             git("mv", "src/cli/old source.cpp", "docs/renamed.md")
             git(
@@ -130,6 +134,7 @@ class NativeCliScopeTests(unittest.TestCase):
                 "remove moved source",
             )
             for head in (renamed, git("rev-parse", "HEAD")):
+                git("checkout", "--detach", "-q", head)
                 for event in ("pull_request", "merge_group"):
                     with self.subTest(head=head, event=event):
                         result = subprocess.check_output(
@@ -142,6 +147,7 @@ class NativeCliScopeTests(unittest.TestCase):
                                 base,
                                 "--head-sha",
                                 head,
+                                "--target-ref=refs/heads/target",
                             ],
                             cwd=root,
                             text=True,
@@ -182,6 +188,8 @@ class NativeCliScopeTests(unittest.TestCase):
             (root / "src/core.cpp").write_text("int value = 2;\n")
             git("commit", "-qam", "concurrent native base change")
             base = git("rev-parse", "HEAD")
+            git("branch", "target", base)
+            git("remote", "add", "origin", str(root))
             git("merge", "--no-ff", "-qm", "synthetic merge", "docs")
             head = git("rev-parse", "HEAD")
             for event in ("pull_request", "merge_group"):
@@ -195,12 +203,251 @@ class NativeCliScopeTests(unittest.TestCase):
                         base,
                         "--head-sha",
                         head,
+                        "--target-ref",
+                        "refs/heads/target",
                     ],
                     cwd=root,
                     text=True,
                     timeout=10,
                 )
                 self.assertEqual(result.strip(), "skip")
+
+
+class MergeQueueScopeTests(unittest.TestCase):
+    """Exercise real stacked Git history and the exact workflow entry point."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.git("init", "-q", "-b", "target")
+        self.base = self.commit("CMakeLists.txt", "initial configuration\n")
+        self.git("remote", "add", "origin", str(self.root))
+        self.git("checkout", "-qb", "queue")
+
+    def git(self, *args: str) -> str:
+        return subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(self.root),
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.com",
+                *args,
+            ],
+            text=True,
+            timeout=10,
+        ).strip()
+
+    def commit(self, path: str, contents: str) -> str:
+        destination = self.root / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(contents)
+        self.git("add", ".")
+        self.git("commit", "-qm", path)
+        return self.git("rev-parse", "HEAD")
+
+    def tier(
+        self,
+        base: str | None = None,
+        head: str | None = None,
+        target: str = "refs/heads/target",
+        event: str = "merge_group",
+    ) -> str:
+        return subprocess.check_output(
+            [
+                sys.executable,
+                str(MODULE),
+                "--event",
+                event,
+                "--base-sha",
+                base or self.base,
+                "--head-sha",
+                head or self.git("rev-parse", "HEAD"),
+                f"--target-ref={target}",
+            ],
+            cwd=self.root,
+            text=True,
+            timeout=15,
+        ).strip()
+
+    def test_earlier_release_survives_latest_fast_or_docs_queue_node(self) -> None:
+        self.git("checkout", "-qb", "release-pr", self.base)
+        self.commit("CMakeLists.txt", "changed configuration\n")
+        self.git("checkout", "-q", "queue")
+        self.git("merge", "--no-ff", "-qm", "first queue node", "release-pr")
+        prefix = self.git("rev-parse", "HEAD")
+        self.git("checkout", "-qb", "fast-pr", self.base)
+        self.commit("src/latest.cpp", "int value = 1;\n")
+        self.git("checkout", "-q", "queue")
+        self.git("merge", "--no-ff", "-qm", "second queue node", "fast-pr")
+        # The former immediate-predecessor comparison loses the release tier.
+        self.assertEqual(self.tier(base=prefix, event="pull_request"), "fast")
+        self.assertEqual(self.tier(base=prefix), "release")
+        prefix = self.git("rev-parse", "HEAD")
+        self.git("checkout", "-qb", "docs-pr", self.base)
+        self.commit("README.md", "latest docs\n")
+        self.git("checkout", "-q", "queue")
+        self.git("merge", "--no-ff", "-qm", "third queue node", "docs-pr")
+        self.assertEqual(self.tier(base=prefix, event="pull_request"), "skip")
+        self.assertEqual(self.tier(base=prefix), "release")
+
+    def test_all_fast_queue_and_latest_docs_keep_fast_tier(self) -> None:
+        prefix = self.commit("src/first.cpp", "int first;\n")
+        self.commit("include/second.h", "int second;\n")
+        self.assertEqual(self.tier(base=prefix), "fast")
+        prefix = self.git("rev-parse", "HEAD")
+        self.commit("README.md", "latest docs\n")
+        self.assertEqual(self.tier(base=prefix), "fast")
+
+    def test_all_docs_queue_can_skip(self) -> None:
+        prefix = self.commit("README.md", "first docs\n")
+        self.commit("docs/next.md", "latest docs\n")
+        self.assertEqual(self.tier(base=prefix), "skip")
+
+    def test_target_advanced_through_queue_prefix_excludes_landed_changes(self) -> None:
+        prefix = self.commit("CMakeLists.txt", "landed configuration\n")
+        self.commit("src/latest.cpp", "int latest;\n")
+        self.assertEqual(self.tier(base=prefix), "release")
+        self.git("update-ref", "refs/heads/target", prefix)
+        self.assertEqual(self.tier(base=prefix), "fast")
+
+    def test_target_advanced_to_head_or_beyond_never_skips(self) -> None:
+        head = self.commit("README.md", "docs\n")
+        self.git("update-ref", "refs/heads/target", head)
+        self.assertEqual(self.tier(), "release")
+        self.git("checkout", "-q", "target")
+        self.commit("docs/later.md", "later target\n")
+        self.git("checkout", "-q", "queue")
+        self.assertEqual(self.tier(), "release")
+
+    def test_divergent_target_cannot_hide_reintroduced_release_change(self) -> None:
+        prefix = self.commit("CMakeLists.txt", "queued configuration\n")
+        head = self.commit("README.md", "latest docs\n")
+        self.git("checkout", "-q", "target")
+        self.git("merge", "--no-ff", "-s", "ours", "-qm", "reject config", prefix)
+        target = self.git("rev-parse", "HEAD")
+        self.assertEqual(self.git("merge-base", target, head), prefix)
+        self.git("checkout", "-q", "queue")
+        self.assertEqual(self.tier(base=prefix), "release")
+
+    def test_unrelated_target_advance_fails_closed(self) -> None:
+        self.commit("README.md", "queue docs\n")
+        self.git("checkout", "-q", "target")
+        self.commit("docs/target.md", "target docs\n")
+        self.git("checkout", "-q", "queue")
+        self.assertEqual(self.tier(), "release")
+
+    def test_missing_or_invalid_target_ref_requires_release(self) -> None:
+        self.commit("README.md", "queue docs\n")
+        for target in (
+            "",
+            "master",
+            "--upload-pack=bad",
+            "refs/tags/target",
+            "refs/heads/../target",
+            "refs/heads/target:other",
+            "refs/heads/target\nother",
+            "refs/heads/*",
+            "refs/heads/missing",
+        ):
+            with self.subTest(target=target):
+                self.assertEqual(self.tier(target=target), "release")
+
+    def test_failed_fetch_never_uses_stale_target_ref(self) -> None:
+        self.commit("README.md", "queue docs\n")
+        self.assertEqual(self.tier(), "skip")
+        self.git("remote", "set-url", "origin", str(self.root / "missing-origin"))
+        self.assertEqual(self.tier(), "release")
+
+    def test_target_with_no_common_ancestor_requires_release(self) -> None:
+        self.commit("README.md", "queue docs\n")
+        tree = self.git("rev-parse", "HEAD^{tree}")
+        unrelated = self.git("commit-tree", tree, "-m", "unrelated target")
+        self.git("update-ref", "refs/heads/target", unrelated)
+        self.assertEqual(self.tier(), "release")
+
+    def test_criss_cross_multiple_merge_bases_require_release(self) -> None:
+        first = self.commit("README.md", "first side\n")
+        self.git("checkout", "-q", "target")
+        second = self.commit("docs/side.md", "second side\n")
+        tree = self.git("rev-parse", "HEAD^{tree}")
+        target = self.git(
+            "commit-tree", tree, "-p", first, "-p", second, "-m", "target"
+        )
+        head = self.git("commit-tree", tree, "-p", second, "-p", first, "-m", "queue")
+        self.git("update-ref", "refs/heads/target", target)
+        self.git("checkout", "--detach", "-q", head)
+        self.assertEqual(
+            len(self.git("merge-base", "--all", target, head).splitlines()), 2
+        )
+        self.assertEqual(self.tier(), "release")
+
+    def test_invalid_or_mismatched_head_and_nonancestor_event_base_require_release(
+        self,
+    ) -> None:
+        head = self.commit("README.md", "queue docs\n")
+        for candidate in ("invalid", "f" * 40, self.base):
+            with self.subTest(head=candidate):
+                self.assertEqual(self.tier(head=candidate), "release")
+        tree = self.git("rev-parse", "HEAD^{tree}")
+        unrelated = self.git("commit-tree", tree, "-m", "unrelated event base")
+        self.assertEqual(self.tier(base=unrelated, head=head), "release")
+
+    def test_git_timeout_requires_release(self) -> None:
+        with patch.object(
+            scope.subprocess, "run", side_effect=subprocess.TimeoutExpired("git", 60)
+        ):
+            self.assertEqual(
+                scope.select_tier("merge_group", BASE, HEAD, "refs/heads/target"),
+                "release",
+            )
+
+    def test_workflow_passes_ref_as_data_and_preserves_classification_output(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        step = workflow.split(
+            "      - name: Classify native CLI packaging impact\n", 1
+        )[1].split("\n      - name:", 1)[0]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        self.assertIn(
+            "CLI_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}", step
+        )
+        self.assertNotIn("${{", script)
+        prefix = self.commit("CMakeLists.txt", "queued config\n")
+        head = self.commit("README.md", "latest docs\n")
+        (self.root / "tools").mkdir()
+        (self.root / "tools/native_cli_ci_scope.py").write_bytes(MODULE.read_bytes())
+        for target in (
+            "refs/heads/target",
+            "refs/heads/$(touch injected)",
+            "--upload-pack=bad",
+        ):
+            with self.subTest(target=target):
+                output = self.root / "workflow-output"
+                output.write_text("")
+                result = subprocess.run(
+                    ["bash", "-c", script],
+                    cwd=self.root,
+                    env={
+                        **os.environ,
+                        "GITHUB_EVENT_NAME": "merge_group",
+                        "CLI_BASE_SHA": prefix,
+                        "GITHUB_SHA": head,
+                        "CLI_TARGET_REF": target,
+                        "GITHUB_OUTPUT": str(output),
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output.read_text(), "tier=release\n")
+                self.assertFalse((self.root / "injected").exists())
 
 
 if __name__ == "__main__":

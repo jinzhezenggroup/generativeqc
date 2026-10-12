@@ -58,7 +58,7 @@ formaldehyde pooled warm median is still **3.72× PySCF's** on this campaign.
 `summary.json` is the readable reduction, including ranges, iteration/energy/work
 inventories, and every process pair. `paired-process-confidence.json` retains all
 ratios and intervals. The full original summaries and every process output/log
-are retained in the gzip capsules; `confidence.py` recomputes the intervals from
+are retained in the compressed capsules; `confidence.py` recomputes the intervals from
 the underlying per-process calls rather than trusting the summary.
 
 ## Scientific contract and bytecode control
@@ -256,7 +256,7 @@ path-default ambiguity for the main runner. The restored historical setup README
 describes preparation before these runs and is not the current result summary;
 this README and the timestamped campaign records take precedence.
 
-The capsules use deterministic gzip (`mtime=0`) around JSON with per-member
+The capsules use deterministic gzip (`mtime=0`) or XZ around JSON with per-member
 SHA256 and byte counts. Canonical JSON members are compactly stored and restore
 their original indentation/newline bytes exactly. All observations, outliers,
 failures, scientific settings, provenance, and original scripts are retained.
@@ -271,3 +271,13 @@ is changed. The dependency record distinguishes initial Ruff 0.16.10 setup from
 Ruff 0.16.9 used for final qualification. `manifest.json` binds the compact
 publication. No native binary, object/build tree, full generated scientific header,
 or reconstruction patch is included; no Release/tag is needed.
+
+## Lossless storage update (2026-10-12)
+
+The normalized campaign now uses `normalized-campaign.json.xz` (XZ preset 6),
+reducing stored bytes from 597,414 to 260,076. Its 16,289,226 decoded bytes are
+identical to the former gzip member, including every original record, observation,
+outlier, failure, source identity and numerical value. `manifest.json` records
+the decoded byte count and SHA256; stored identities and reader links are updated.
+The offline verifier and confidence reconstruction above read both gzip and XZ.
+This is storage-only; no experiment was rerun or reclassified.

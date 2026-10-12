@@ -18,6 +18,7 @@
 #include "scf/cuda/df_metric_kernels.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
+#include "scf/cuda/df_scf_library.hpp"
 #include "scf/cuda/df_setup_internal.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
@@ -40,23 +41,22 @@ generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::siz
                                         std::size_t pairs, const double* raw, double* output,
                                         const double* eigenvectors,
                                         const double* scaled_eigenvectors, std::string& detail) {
-  const auto a = static_cast<int>(plan.naux), rows = static_cast<int>(pairs);
   const auto offset = system * plan.naux * plan.naux;
-  const double one = 1, zero = 0;
   auto status =
       runtime::cuda_trace::trace_call("resident_metric_eigen_projection", plan.stream, [&] {
-        return cublasDgemm(plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, a, rows, a, &one,
-                           eigenvectors + offset, a, raw, a, &zero, plan.exchange_intermediate, a);
+        return scf_matrix_product_view(plan, true, false, plan.naux, pairs, plan.naux,
+                                       eigenvectors + offset, plan.naux, raw, plan.naux,
+                                       plan.exchange_intermediate, plan.naux, 1.0, 0.0,
+                                       "project raw CUDA DF metric factors", detail);
       });
-  if (status != CUBLAS_STATUS_SUCCESS)
-    return blas_failure(status, "project raw CUDA DF metric factors", detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = runtime::cuda_trace::trace_call("resident_metric_scaled_rotation", plan.stream, [&] {
-    return cublasDgemm(plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, a, rows, a, &one,
-                       scaled_eigenvectors + offset, a, plan.exchange_intermediate, a, &zero,
-                       output, a);
+    return scf_matrix_product_view(plan, false, false, plan.naux, pairs, plan.naux,
+                                   scaled_eigenvectors + offset, plan.naux,
+                                   plan.exchange_intermediate, plan.naux, output, plan.naux, 1.0,
+                                   0.0, "rotate scaled CUDA DF metric factors", detail);
   });
-  if (status != CUBLAS_STATUS_SUCCESS)
-    return blas_failure(status, "rotate scaled CUDA DF metric factors", detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   runtime::cuda_trace::trace_counter("resident_whitening_factor_panels", 1);
   runtime::cuda_trace::trace_counter("resident_whitening_factor_gemms", 2);
   runtime::cuda_trace::trace_counter("resident_whitening_factor_flops",
@@ -79,7 +79,6 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
                                                  std::string& detail) {
   runtime::cuda_trace::TraceOperation trace("resident_three_center_materialization", plan.stream,
                                             {plan.batch_size, plan.nbf, plan.naux, true, false});
-  const double one = 1.0, zero = 0.0;
   if (df_packed_pairs(plan.value_storage.pairs)) {
     // Source ranges use dense AO-pair indices, but single-owner scratch and B
     // use contiguous lower-pair order. Fill across row boundaries before each
@@ -124,17 +123,15 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
                   : GENERATIVEQC_STATUS_SUCCESS;
           if (transform != GENERATIVEQC_STATUS_SUCCESS) return transform;
           if (!plan.metric_full_rank[system]) {
-            const auto blas_status =
+            const auto product =
                 runtime::cuda_trace::trace_call("resident_metric_transform", plan.stream, [&] {
-                  return cublasDgemm(
-                      plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(plan.naux),
-                      static_cast<int>(buffered_pairs), static_cast<int>(plan.naux), &one,
-                      inverse + system * plan.naux * plan.naux, static_cast<int>(plan.naux),
-                      plan.auxiliary_tile_values, static_cast<int>(plan.naux), &zero, output,
-                      static_cast<int>(plan.naux));
+                  return scf_matrix_product_view(
+                      plan, false, false, plan.naux, buffered_pairs, plan.naux,
+                      inverse + system * plan.naux * plan.naux, plan.naux,
+                      plan.auxiliary_tile_values, plan.naux, output, plan.naux, 1.0, 0.0,
+                      "whiten single packed DF values", detail);
                 });
-            if (blas_status != CUBLAS_STATUS_SUCCESS)
-              return blas_failure(blas_status, "whiten single packed DF values", detail);
+            if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
           }
           materialized_pairs += buffered_pairs;
           buffered_pairs = 0;
@@ -154,18 +151,15 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
         }
         continue;
       }
-      const auto status =
+      const auto product =
           runtime::cuda_trace::trace_call("resident_metric_transform", plan.stream, [&] {
-            return cublasDgemm(plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(plan.naux),
-                               static_cast<int>(plan.stored_pair_count),
-                               static_cast<int>(plan.naux), &one,
-                               inverse + system * plan.naux * plan.naux,
-                               static_cast<int>(plan.naux), raw, static_cast<int>(plan.naux), &zero,
-                               plan.three_center + system * plan.stored_tensor_elements_per_system,
-                               static_cast<int>(plan.naux));
+            return scf_matrix_product_view(
+                plan, false, false, plan.naux, plan.stored_pair_count, plan.naux,
+                inverse + system * plan.naux * plan.naux, plan.naux, raw, plan.naux,
+                plan.three_center + system * plan.stored_tensor_elements_per_system, plan.naux, 1.0,
+                0.0, "whiten packed CUDA DF values", detail);
           });
-      if (status != CUBLAS_STATUS_SUCCESS)
-        return blas_failure(status, "whiten packed CUDA DF values", detail);
+      if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
     }
     plan.resident_raw_valid = plan.packed_raw != nullptr;
     runtime::cuda_trace::trace_counter("value_packed_pairs", plan.stored_pair_count);
@@ -235,19 +229,17 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
           if (cuda_error != cudaSuccess)
             return cuda_failure(cuda_error, "retain generated raw DF tensor", detail);
         }
-        const auto blas_status =
+        const auto product =
             runtime::cuda_trace::trace_call("resident_metric_transform", plan.stream, [&] {
-              return cublasDgemm(
-                  plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(plan.naux),
-                  static_cast<int>(pairs), static_cast<int>(count), &one,
-                  inverse + system * plan.naux * plan.naux + begin * plan.naux,
-                  static_cast<int>(plan.naux), plan.auxiliary_tile_values, static_cast<int>(count),
-                  begin ? &one : &zero,
+              return scf_matrix_product_view(
+                  plan, false, false, plan.naux, pairs, count,
+                  inverse + system * plan.naux * plan.naux + begin * plan.naux, plan.naux,
+                  plan.auxiliary_tile_values, count,
                   plan.three_center + system * plan.tensor_elements_per_system + pair * plan.naux,
-                  static_cast<int>(plan.naux));
+                  plan.naux, 1.0, begin ? 1.0 : 0.0, "materialize generated CUDA DF tensor",
+                  detail);
             });
-        if (blas_status != CUBLAS_STATUS_SUCCESS)
-          return blas_failure(blas_status, "materialize generated CUDA DF tensor", detail);
+        if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
       }
       runtime::cuda_trace::trace_tile(system, pair, pairs, 0, plan.naux, -1, true);
     }
@@ -851,15 +843,13 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
           if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
         } else {
           // Preserve the original truncated-space preparation and its response.
-          blas_status = cublasDgemm(
-              candidate->blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(naux),
-              static_cast<int>(matrix_elements), static_cast<int>(naux), &one,
-              setup.inverse_square_roots + system * metric_elements, static_cast<int>(naux),
-              setup.raw_three_center + system * tensor_elements_per_system, static_cast<int>(naux),
-              &zero, candidate->three_center + system * tensor_elements_per_system,
-              static_cast<int>(naux));
-          if (blas_status != CUBLAS_STATUS_SUCCESS)
-            return blas_failure(blas_status, "transform CUDA DF three-center tensor", detail);
+          const auto product = scf_matrix_product_view(
+              *candidate, false, false, naux, matrix_elements, naux,
+              setup.inverse_square_roots + system * metric_elements, naux,
+              setup.raw_three_center + system * tensor_elements_per_system, naux,
+              candidate->three_center + system * tensor_elements_per_system, naux, 1.0, 0.0,
+              "transform CUDA DF three-center tensor", detail);
+          if (product != GENERATIVEQC_STATUS_SUCCESS) return product;
         }
       }
       if (candidate->resident_exchange_enabled && batch_size == 1 && candidate->row_tile == nbf &&

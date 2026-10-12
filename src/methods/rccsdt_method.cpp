@@ -18,6 +18,7 @@
 #include "cc/rccsdt_force.hpp"
 #include "cc/triples_cuda.hpp"
 #include "generated_rccsdt_cpu.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/rccsd_method.hpp"
@@ -110,10 +111,6 @@ class RccsdtPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     last_performance_.reset();
-    if (compute_forces && molecule::ao_count(system_) > cc::kRccsdtForceMaxAOs)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "native RCCSD(T) force AO dimension exceeds its qualified domain");
-
     const auto warm_capacity =
         warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     auto state = run_rccsd_native_state(
@@ -344,7 +341,10 @@ class RccsdtPrepared final : public PreparedCalculation {
   mutable std::mutex mutex_;
 };
 
-class RccsdtPreparedBatch final : public PreparedBatch {
+class RccsdtPreparedBatch final : public PreparedBatch,
+                                  public BatchWarmStarts,
+                                  public BatchCorrelationDiagnostics,
+                                  public BatchCcPerformanceDiagnostics {
  public:
   RccsdtPreparedBatch(Capabilities capabilities, core::ContextState& context,
                       std::vector<core::System> systems,
@@ -464,21 +464,6 @@ class RccsdtPreparedBatch final : public PreparedBatch {
       std::size_t index) const noexcept override {
     if (index >= owners_.size() || !owners_[index]) return {};
     return owners_[index]->execution_resources();
-  }
-  std::optional<std::vector<DirectShellClassProfileEntry>> last_direct_shell_class_profile()
-      const override {
-    return std::nullopt;
-  }
-  std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile() const override {
-    return std::nullopt;
-  }
-  std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const override { return {}; }
-  std::vector<scf::CudaDensityFittingMetricDiagnostic> last_density_fitting_metric_diagnostics()
-      const override {
-    return {};
-  }
-  std::vector<InactiveEigensolverProfileEntry> last_inactive_eigensolver_profile() const override {
-    return {};
   }
 
  private:

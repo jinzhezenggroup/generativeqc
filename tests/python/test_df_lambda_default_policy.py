@@ -48,7 +48,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
         "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
-        "reference_experiment,lambda_serial_scratch_reuse,ccsd_mixed_precision,lambda_mixed_precision,lambda_resident_krylov}; }\n"
+        "reference_experiment,lambda_serial_scratch_reuse,ccsd_mixed_precision,lambda_mixed_precision,lambda_resident_krylov,ccsd_mixed_switch_residual}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -57,7 +57,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     )
     argument_bounds = re.search(r"if \(argc < (\d+) \|\| argc > (\d+)\)", selectors)
     assert argument_bounds is not None
-    assert tuple(map(int, argument_bounds.groups())) == (4, 32)
+    assert tuple(map(int, argument_bounds.groups())) == (4, 33)
     maximum_argc = int(argument_bounds.group(2))
     descriptor_controls = "\n".join(
         line
@@ -101,6 +101,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <optional>
+#include "cc/solver.hpp"
 #include "cc/lambda_response.hpp"
 #include "hf/rhf_frame_response.hpp"
 #include "runtime/execution_precision.hpp"
@@ -125,8 +127,10 @@ struct DFCCSDTResult {
   bool replay_matrix;
   DFCCSDTReferenceExperiment* reference_experiment;
   bool serial_scratch_reuse;
-  bool ccsd_mixed, lambda_mixed;
+  std::optional<bool> ccsd_mixed;
+  bool lambda_mixed;
   bool resident_krylov;
+  double ccsd_switch;
 };
 """
         + declaration
@@ -188,7 +192,7 @@ void check_complete_probe() {
     const auto requested=cap?std::stoull(cap):8U;
     if(result.ccsd_batch_limit!=(requested?requested:32U) ||
        result.resident_krylov!=resident || result.forces!=forces ||
-       !result.serial_scratch_reuse || result.ccsd_mixed || result.lambda_mixed)
+       !result.serial_scratch_reuse || result.ccsd_mixed != false || result.lambda_mixed)
       throw std::runtime_error("complete probe cap and residency selectors aliased");
   }
   unsetenv("GENERATIVEQC_TEST_CCSD_Q_CAP");
@@ -561,6 +565,23 @@ int main() {
     bad[index]=token;
     try { (void)select(32,bad);return 49; } catch(const std::invalid_argument&) {}
   }
+  for(const char* ccsd : {"auto","0","1"}) for(const char* target : {"1e-7","1e-4"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1","0","0",ccsd,"0",target};
+    const auto result=select(33,selected);
+    const std::optional<bool> expected=std::string(ccsd)=="auto"
+        ? std::nullopt : std::optional<bool>{ccsd[0]=='1'};
+    if(result.ccsd_mixed!=expected || result.ccsd_switch!=std::stod(target) ||
+       select(32,selected).ccsd_switch!=generativeqc::cc::SolverOptions{}.df_mixed_precision_switch_residual)
+      return 55;
+  }
+  for(const char* target : {"","nan","inf","1e-4x"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1","0","0","auto","0",target};
+    try { (void)select(33,selected);return 56; } catch(const std::invalid_argument&) {}
+  }
   for(int argc : {0,1,2,3,generativeqc::methods::detail::maximum_endpoint_argc+1}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
@@ -615,7 +636,7 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
         "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis,"
-        "external_reservation_bytes,initial_density,warm_start_fallback,df_mixed_precision}; }\n"
+        "external_reservation_bytes,initial_density,warm_start_fallback,df_mixed_precision,df_mixed_precision_switch_residual}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
@@ -625,6 +646,8 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
 #include <memory>
 #include <vector>
 #include <cstddef>
+#include <optional>
+#include "cc/solver.hpp"
 struct generativeqc_method_descriptor {};
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
@@ -640,7 +663,8 @@ struct RccsdNativeState {
   std::size_t reserved;
   const std::vector<double>* seed;
   bool* seed_fallback;
-  bool mixed;
+  std::optional<bool> mixed;
+  double switch_residual;
 };
 struct DFPhysicalResponseComparison { std::size_t output_bytes; };
 std::size_t checked_add(std::size_t left, std::size_t right) { return left + right; }
@@ -663,7 +687,9 @@ int probe() {
   for(bool derived_denominators : {false,true})
   for(bool forces : {false,true})
   for(bool df_matrix_gemm : {false,true})
-  for(bool ccsd_mixed_precision : {false,true})
+  for(std::optional<bool> ccsd_mixed_precision :
+      {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}})
+  for(double ccsd_mixed_switch_residual : {100.0 * 1e-9, 1e-4})
   for(std::size_t ccsd_batch_limit : {1,3,8}) {
   for(bool seeded : {false,true}) {
     const auto* reference_seed=seeded ? &seed : nullptr;
@@ -678,13 +704,15 @@ int probe() {
        state.reserved!=seed_bytes+recycle_bytes+(physical_replay ? physical_replay->output_bytes : 0) ||
        state.seed!=reference_seed ||
        state.seed_fallback!=(seeded ? &experiment.seed_fallback : nullptr) ||
-       state.mixed!=ccsd_mixed_precision) return 1;
+       state.mixed!=ccsd_mixed_precision ||
+       state.switch_residual!=ccsd_mixed_switch_residual) return 1;
   }
   }
   const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
   if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||
      ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed ||
-     ordinary.reserved || ordinary.mixed) return 2;
+     ordinary.reserved || ordinary.mixed ||
+     ordinary.switch_residual!=cc::SolverOptions{}.df_mixed_precision_switch_residual) return 2;
   scf::CudaRhfBucketPlan resident;
   auto* reference=&resident;
   const auto explicit_state=run_rccsd_native_state(execution,system,descriptor,
@@ -699,7 +727,15 @@ int main() { return generativeqc::methods::detail::probe(); }
     )
     executable = tmp_path / "forward"
     subprocess.run(
-        [cache, compiler, "-std=c++20", str(source), "-o", str(executable)],
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-I" + str(ROOT / "src"),
+            str(source),
+            "-o",
+            str(executable),
+        ],
         check=True,
         capture_output=True,
         timeout=60,

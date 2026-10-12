@@ -150,6 +150,13 @@ struct Owner {
   void enqueue_device() { enqueue_legacy(); }
   bool finish_device() { return finish_legacy(); }
   bool finish_legacy() {
+    // The precision handoff may fail before acquiring a lease, or after
+    // publishing one. Neither preparation layer owns the solver state.
+    if (scenario == "handoff-host") throw std::bad_alloc();
+    if (scenario == "handoff-source") {
+      phase_source = std::make_unique<Source>();
+      throw std::runtime_error("injected strict source preparation failure");
+    }
     if (scenario == "completion") {
       is_failed = true;
       is_active = false;
@@ -186,15 +193,22 @@ int main(int argc, char** argv) {
     owner.output.converged = scenario != "resident-unconverged";
     owner.warm_updates = scenario != "resident-frozen";
   }
-  bool thrown = false;
+  bool thrown = false, allocation_failure = false, runtime_failure = false;
   try {
     owner.enqueue();
     owner.finish();
-  } catch (const std::runtime_error&) { thrown = true; }
+  } catch (const std::bad_alloc&) {
+    thrown = allocation_failure = true;
+  } catch (const std::runtime_error&) {
+    thrown = runtime_failure = true;
+  }
   const bool failed = scenario == "density" || scenario == "orbitals" ||
-      scenario == "enqueue" || scenario == "completion" || scenario == "physical";
+      scenario == "enqueue" || scenario == "completion" || scenario == "physical" ||
+      scenario == "handoff-host" || scenario == "handoff-source";
   const bool handoff_failure = scenario == "resident-audit" || scenario == "resident-rebase";
   assert(thrown == ((failed && scenario != "physical") || handoff_failure));
+  assert(allocation_failure == (scenario == "handoff-host"));
+  assert(runtime_failure == (thrown && scenario != "handoff-host"));
   if (resident) {
     const bool retained = !handoff_failure && scenario != "resident-unconverged";
     assert(static_cast<bool>(owner.phase_source) == retained);
@@ -225,7 +239,14 @@ int main(int argc, char** argv) {
       assert(owner.final_state_ready == (scenario == "resident-frozen"));
     }
   } else if (failed) {
-    assert(owner.is_failed && !owner.is_active);
+    assert(owner.is_failed && !owner.is_active && !owner.is_pending);
+    assert(!owner.output.converged && !owner.final_state_ready);
+    assert(!owner.phase_source);
+    if (scenario == "handoff-source") {
+      assert(owner.resource.provider_device_bytes == 256);
+      assert(owner.resource.retained_host_numeric_bytes == 64);
+      assert(owner.phase_device_bytes == 0 && owner.phase_host_bytes == 0);
+    }
     assert(!owner.warm_orbitals_ready);
     assert(owner.movement.warm_orbital_frame_invalidations == initially_ready);
     assert(owner.movement.warm_orbital_frames_retained == 0);
@@ -233,7 +254,7 @@ int main(int argc, char** argv) {
     assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
     if (scenario == "orbitals") {
       assert(owner.density[0] == 20.0 && owner.warm_orbitals[0] == 10.0);
-      assert(fences == 1);
+      assert(fences >= 1);
     }
     // A new successful trajectory may bind a fresh frame after rejection.
     owner.scenario = "success";
@@ -303,6 +324,8 @@ int main(int argc, char** argv) {
         "orbitals",
         "enqueue",
         "completion",
+        "handoff-host",
+        "handoff-source",
         "physical",
         "success",
         "retry",

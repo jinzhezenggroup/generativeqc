@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 597414,
-      "sha256": "871bf7a8f09c92fb08ab413e7048445c92c2f9ff9fbf676a74c7de4b079cbc16",
+      "bytes": 260076,
+      "sha256": "db62aeb3120ef84b8986101e83063104cf1b5e95d0c792929833379c215745d1",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete primary normalized 960-endpoint numerical/timing observations, individual process outputs and logs, all-repeat errors, provenance and frozen inputs; only the byte-exact reconstructible duplicate observations aggregate is omitted."
     },
