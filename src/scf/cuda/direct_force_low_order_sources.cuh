@@ -166,7 +166,7 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
       if (coulomb == 0.0 && exchange == 0.0) continue;
       const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
           dimension, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2],
-          raw_ao[3], coulomb, exchange);
+          raw_ao[3], coulomb, exchange, batch.direct_force_seed);
       if constexpr (ShellClass != kPsssShellClass) {
         if (coefficient == 0.0) continue;
       }
