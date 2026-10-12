@@ -12,7 +12,8 @@
 namespace generativeqc::cc {
 
 /** One synchronous, borrowed restricted-reference input to the RCCSD problem
- * builder. The producing method owner must remain alive until this call returns.
+ * builder. The producing method owner must outlive any use of the returned
+ * orbital-energy span (the in-tree RCCSD consumer uses it synchronously).
  * No orbital arrays, source handles or SCF-private solver objects are retained.
  * This adapter does not authorize correlated KS or unrestricted RCCSD methods. */
 struct CanonicalReferenceInput {
