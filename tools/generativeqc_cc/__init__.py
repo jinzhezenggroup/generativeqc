@@ -161,6 +161,16 @@ from .uccsd_physical_response import (
 )
 from .uccsd_solver import PreparedUCCSD, UCCSDIteration, UCCSDResult
 from .uccsd_t import PreparedUCCSDT, UCCSDTOptions, UCCSDTResult
+from .uccsd_t_lambda import (
+    PreparedUCCSDTLambda,
+    UCCSDTLambdaOptions,
+    UCCSDTLambdaResult,
+)
+from .uccsd_triples_fock_response import (
+    PreparedUCCSDTriplesFockResponse,
+    UCCSDTriplesFockOptions,
+    UCCSDTriplesFockResponseResult,
+)
 from .uccsd_triples_response import (
     PreparedUCCSDTriplesResponse,
     UCCSDTriplesResponseResult,
@@ -211,6 +221,8 @@ __all__ = [
     "PreparedUCCSDLambda",
     "PreparedUCCSDPhysicalResponse",
     "PreparedUCCSDT",
+    "PreparedUCCSDTLambda",
+    "PreparedUCCSDTriplesFockResponse",
     "PreparedUCCSDTriplesResponse",
     "RCCSDResult",
     "RCCSDTBatchItemResult",
@@ -235,8 +247,12 @@ __all__ = [
     "UCCSDPhysicalResponseOptions",
     "UCCSDRelaxedCotangents",
     "UCCSDResult",
+    "UCCSDTLambdaOptions",
+    "UCCSDTLambdaResult",
     "UCCSDTOptions",
     "UCCSDTResult",
+    "UCCSDTriplesFockOptions",
+    "UCCSDTriplesFockResponseResult",
     "UCCSDTriplesResponseResult",
     "accumulate_tile_triples_vjp",
     "amplitude_layouts",

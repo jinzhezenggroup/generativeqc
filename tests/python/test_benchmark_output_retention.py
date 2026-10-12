@@ -211,6 +211,48 @@ def test_prepared_lifecycle_cli_rejects_retained_output_before_qualification(
     assert not (tmp_path / "benchmarks").exists()
 
 
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_xc_trajectory_rejects_retained_output_before_gpu_or_input_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination_kind: str
+) -> None:
+    """No GPU import, Slurm check or input read may precede output protection."""
+    from benchmarks import pbe0_xc_trajectories
+
+    monkeypatch.setattr(_support, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.setitem(sys.modules, "cupy", None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pbe0_xc_trajectories",
+            "--atoms",
+            "48",
+            "--basis-file",
+            str(tmp_path / "missing-basis.json"),
+            "--reference",
+            str(tmp_path / "missing-reference.json"),
+            "--output",
+            str(destination / existing.name),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        pbe0_xc_trajectories.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
 def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None:
     seen = []
     for path, node, options in active_runner_output_arguments():
