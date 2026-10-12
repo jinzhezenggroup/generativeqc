@@ -329,3 +329,52 @@ def test_migration_keeps_exported_profiler_evidence_and_xc_manifest() -> None:
     directory = ROOT / "benchmarks/results/xc-expressions-161"
     for path, expected in json.loads((directory / "manifest.json").read_text()).items():
         assert digest((directory / path).read_bytes()) == expected
+
+
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "integrated-cbs-smoke.log.gz",
+        "integrated-host-portability.log.gz",
+        "integrated-host-smoke.log.gz",
+        "reuse-live-capacity-native.log.gz",
+        "reuse-qualified-contracts.log.gz",
+        "reuse-qualified-cpu.log.gz",
+        "reuse-qualified-gpu-focused.log.gz",
+        "reuse-qualified-gpu-legacy-timeout.log.gz",
+        "reuse-tight-budget-gpu.log.gz",
+    ),
+)
+def test_cbs_receipt_exceptions_admit_only_the_reviewed_bytes(filename: str) -> None:
+    """Frozen receipts cannot silently admit changed or future run logs."""
+    committed = json.loads((ROOT / "benchmarks/evidence-policy.json").read_text())
+    prefix = "benchmarks/results/ccsdt-cbs-native-reuse-20261012/"
+    path = prefix + filename
+    data = (ROOT / path).read_bytes()
+    assert gzip.decompress(data)
+    exception = committed["exceptions"][path]
+    scoped = {
+        "schema": committed["schema"],
+        "review_size_bytes": committed["review_size_bytes"],
+        "benchmark_results_max_bytes": committed["benchmark_results_max_bytes"],
+        "change_review_max_bytes": committed["change_review_max_bytes"],
+        "exceptions": {path: exception},
+    }
+    assert check({path: data}, scoped) == []
+    assert any(
+        "stale exception" in error
+        for error in check({path: data + b"changed"}, scoped)
+    )
+    assert any("stale exception" in error for error in check({}, scoped))
+    future = prefix + "unreviewed-run.log.gz"
+    assert any(
+        future in error and "transient" in error
+        for error in check({path: data, future: data}, scoped)
+    )
+    assert any(
+        "aggregate budget" in error
+        for error in check(
+            {path: data},
+            {**scoped, "benchmark_results_max_bytes": len(data) - 1},
+        )
+    )
