@@ -309,12 +309,18 @@ nightly_hessian_paths=(
 # originally totaled about 0.7k observed worker-seconds per group. Later
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
+core_fresh_frontier_a=(
+  tests/python/test_uccsd_gradient.py
+)
+core_fresh_frontier_c=(
+  tests/python/test_uccsd_t_lambda.py
+)
 core_hotspots_a=(
   tests/python/test_mixed_rsh_df_forces.py
   # PR #2329 / run 38202660731 left only two gradient cases at timeout.
   # Keep this measured long tail parallel on the lighter core-a workers;
   # its >1751 worker-seconds must not become one serial loadfile task.
-  tests/python/test_uccsd_gradient.py
+  "${core_fresh_frontier_a[@]}"
   # Keep complete high-angular HF parallel with its original core slot;
   # the native TensorIR CPU file now has a dedicated compiler transfer.
   tests/python/test_cpu_hf_high_l.py
@@ -330,7 +336,7 @@ core_hotspots_b=(
 core_hotspots_c=(
   # The gradient and corrected-Lambda families must not share one late tail.
   # Fresh function-scoped owners remain parallel, with every case retained.
-  tests/python/test_uccsd_t_lambda.py
+  "${core_fresh_frontier_c[@]}"
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
 )
@@ -359,11 +365,12 @@ case "${GENERATIVEQC_CI_SHARD}" in
       pinned_core_owner["${path}"]=2
     done
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a) target_bucket=0 ;;
-      core-b) target_bucket=1 ;;
-      core-c) target_bucket=2 ;;
+      core-a) target_bucket=0; fresh_frontier_paths=("${core_fresh_frontier_a[@]}") ;;
+      core-b) target_bucket=1; fresh_frontier_paths=() ;;
+      core-c) target_bucket=2; fresh_frontier_paths=("${core_fresh_frontier_c[@]}") ;;
     esac
     test_targets=()
+    declare -A selected_core=()
     core_index=0
     while IFS= read -r path; do
       if [[ -n "${slow_lookup[${path}]:-}" ]]; then
@@ -380,11 +387,24 @@ case "${GENERATIVEQC_CI_SHARD}" in
       fi
       if (( owner == target_bucket )); then
         test_targets+=("${path}")
+        selected_core["${path}"]=1
       fi
     done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)
     if (( ${#test_targets[@]} == 0 )); then
       echo "::error::core shard selected no tests"
       exit 2
+    fi
+    # Metadata changes only the final collection order. Seed fresh cases in
+    # each contiguous worksteal queue instead of concentrating them in one
+    # frontloaded file; never admit an unselected/absent future suite.
+    fresh_frontier_args=()
+    for path in "${fresh_frontier_paths[@]}"; do
+      if [[ -n "${selected_core[${path}]:-}" ]]; then
+        fresh_frontier_args+=("--ci-fresh-priority=${path}")
+      fi
+    done
+    if (( ${#fresh_frontier_args[@]} > 0 )); then
+      extra_args+=(-p tools.pytest_ci_fresh_frontier "${fresh_frontier_args[@]}")
     fi
     ;;
   runtime-heavy)
