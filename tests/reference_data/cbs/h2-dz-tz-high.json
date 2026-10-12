@@ -1,0 +1,102 @@
+{
+  "checksum": "f91d52aa3bb11f3a371ceccee7b19a50dde6987272a25729e3a58281bc21af32",
+  "elements": [
+    {
+      "atomic_number": 1,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 1,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "6068E-6",
+              "45308E-6",
+              "202822E-6"
+            ]
+          ],
+          "exponents": [
+            "3387E-2",
+            "5095E-3",
+            "1159E-3"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3258E-4"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1027E-4"
+          ],
+          "source_group": 2
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1407E-3"
+          ],
+          "source_group": 3
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "388E-3"
+          ],
+          "source_group": 4
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1057E-3"
+          ],
+          "source_group": 5
+        }
+      ]
+    }
+  ],
+  "exponent_units": "bohr^-2",
+  "name": "cc-pvtz",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "provenance": {
+    "checksum": "d70fdddd82adfed76169234de638a3dd9cc0a4d57aa5d1d6121733b531e7eea2",
+    "license": "Apache-2.0",
+    "source": "PySCF packaged Dunning basis tables",
+    "version": "2.14.0"
+  },
+  "representation": "spherical",
+  "schema": "generativeqc.basis",
+  "schema_version": 1
+}

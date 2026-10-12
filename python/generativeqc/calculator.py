@@ -561,13 +561,25 @@ class Calculator:
             "cpu_reference": _native.DENSITY_FITTING_CPU_REFERENCE,
             "cuda": _native.DENSITY_FITTING_CUDA,
             "auto": _native.DENSITY_FITTING_AUTO,
+            "correlation_cuda": _native.DENSITY_FITTING_CORRELATION_CUDA,
         }
         try:
             density_fitting_mode = density_fitting_modes[str(density_fitting).lower()]
         except KeyError as error:
             raise ValueError(
-                "density_fitting must be 'none', 'cpu', 'cuda', or 'auto'"
+                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', or 'correlation_cuda'"
             ) from error
+        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+            if method_id != _native.METHOD_MP2:
+                raise ValueError(
+                    "correlation_cuda density fitting is an MP2 reference contract"
+                )
+            if device != "cuda":
+                raise NotImplementedError("correlation-only DF-MP2 requires CUDA")
+            if auxiliary_basis is None:
+                raise ValueError(
+                    "correlation-only DF-MP2 requires an explicit auxiliary basis"
+                )
         if intrinsic_df_rccsdt and density_fitting_mode not in (
             _native.DENSITY_FITTING_CUDA,
             _native.DENSITY_FITTING_AUTO,
@@ -837,6 +849,8 @@ class Calculator:
                 f"method {method!r} is reserved but not implemented"
             )
         self._capabilities = method_capabilities(self._method_name)
+        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+            self._capabilities = replace(self._capabilities, supports_batch=False)
         from ._cpu_force_resources import (
             qualified_basis,
             qualified_direct_semilocal_context,
@@ -1395,16 +1409,20 @@ class Calculator:
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
         auxiliary = basis is not None
+        selected_operator = operator or ("df_metric" if auxiliary else "eri")
         require_basis(
             selected_basis,
             atoms,
             backend=self._density_fitting_backend() if auxiliary else self._device_name,
-            operator=operator or ("df_metric" if auxiliary else "eri"),
+            operator=selected_operator,
             derivative_order=derivative_order,
             role="auxiliary" if auxiliary else "orbital",
             representation=selected_basis.representation
             if isinstance(selected_basis, BasisSet)
             else self._representation_name,
+            consumer=self._auxiliary_basis_consumer(selected_operator)
+            if auxiliary
+            else None,
         )
         return (
             selected_basis.shells_for(atoms)
@@ -1418,6 +1436,25 @@ class Calculator:
         if self._density_fitting_mode == _native.DENSITY_FITTING_CUDA:
             return "cuda"
         return self._device_name
+
+    def _auxiliary_basis_consumer(self, operator: str) -> str | None:
+        """Select the correlation source's domain, not generic DF-HF exports.
+
+        The physical correlation source and its nuclear pullback support
+        auxiliary g shells. Both preflight and native shell expansion must
+        use that same scoped policy; other DF consumers retain their limits.
+        """
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and self._density_fitting_backend() == "cuda"
+            and (
+                self._method == _native.METHOD_DF_RCCSD_T
+                or self._density_fitting_mode
+                == _native.DENSITY_FITTING_CORRELATION_CUDA
+            )
+        ):
+            return "correlation_df"
+        return None
 
     def _model_signature(self) -> typing.Any:
         """Detect replacement of scientific input snapshots before prepared reuse."""
@@ -1660,6 +1697,9 @@ class Calculator:
                         representation=basis.representation
                         if isinstance(basis, BasisSet)
                         else self._representation_name,
+                        consumer=self._auxiliary_basis_consumer(operator)
+                        if role == "auxiliary"
+                        else None,
                     )
 
     def _create_native_system(
@@ -1790,11 +1830,20 @@ class Calculator:
                 ),
             )
             return system
+        create_system = self._library.generativeqc_system_create
+        if basis is not None and self._auxiliary_basis_consumer("df_metric"):
+            create_system = getattr(
+                self._library,
+                "generativeqc_correlation_auxiliary_system_create_v1",
+                None,
+            )
+            if create_system is None:
+                raise NotImplementedError(
+                    "native library lacks correlation-only DF auxiliary admission"
+                )
         _native.check(
             self._library,
-            self._library.generativeqc_system_create(
-                context, ctypes.byref(descriptor), ctypes.byref(system)
-            ),
+            create_system(context, ctypes.byref(descriptor), ctypes.byref(system)),
             context=context,
         )
         return system
@@ -2320,6 +2369,46 @@ class Calculator:
                 atoms, charge=charge, multiplicity=multiplicity, properties=properties
             )
 
+    def singlepoint_components(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        companions: Iterable[str] = ("rhf",),
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+    ) -> dict[str, Result]:
+        """Execute a conventional MP2/CCSD(T) group with one RHF reference.
+
+        MP2 can supply ``rhf``; CCSD(T) can supply ``rhf`` and ``mp2``.
+        Coordinates and outputs have the same units as :meth:`singlepoint`.
+        All requested analytic forces must complete before any group is returned.
+        Method-specific response solves remain separate, while the reference,
+        exact integral source and compatible correction-basis OVOV block are shared.
+        """
+        names = tuple(companions)
+        allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
+        if self._method_name not in ("mp2", "ccsd(t)", "df-rccsd(t)", "df-ccsd(t)"):
+            raise NotImplementedError("companions require MP2 or CCSD(T)")
+        if not names or len(set(names)) != len(names) or not set(names) <= allowed:
+            raise ValueError("unsupported or duplicate companion methods")
+        if not hasattr(self._library, "generativeqc_calculation_execute_components_v1"):
+            raise RuntimeError(
+                "native library lacks same-reference component execution"
+            )
+        outputs: dict[str, Result] = {}
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            result = self._singlepoint(
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                component_methods=names,
+                component_outputs=outputs,
+            )
+        return {self._method_name: result, **outputs}
+
     def clear_cache(self) -> None:
         """Release retained singlepoint workspaces after in-flight calls finish.
 
@@ -2336,6 +2425,8 @@ class Calculator:
         charge: int = 0,
         multiplicity: int = 1,
         properties: Iterable[str] | None = None,
+        component_methods: tuple[str, ...] = (),
+        component_outputs: dict[str, Result] | None = None,
     ) -> Result:
         """Execute under the retained context's transaction lock, when present."""
         if properties is None:
@@ -2500,18 +2591,52 @@ class Calculator:
                 0,
                 _native.BACKEND_CPU_REFERENCE,
             )
-            if resource_plan is None:
-                status = self._library.generativeqc_calculation_execute(
-                    calculation, ctypes.byref(result_descriptor)
+            component_buffers = {
+                method: (ctypes.c_double * (3 * len(native_atoms)))()
+                if compute_forces
+                else None
+                for method in component_methods
+            }
+            component_descriptors = {
+                method: _native.ResultDescriptor(
+                    ctypes.sizeof(_native.ResultDescriptor),
+                    _native.ABI_VERSION,
+                    0.0,
+                    buffer,
+                    len(buffer) if buffer is not None else 0,
+                    0,
+                    0.0,
+                    0.0,
+                    0,
+                    _native.BACKEND_CPU_REFERENCE,
                 )
+                for method, buffer in component_buffers.items()
+            }
+
+            def execute() -> int:
+                if not component_methods:
+                    return self._library.generativeqc_calculation_execute(
+                        calculation, ctypes.byref(result_descriptor)
+                    )
+                return self._library.generativeqc_calculation_execute_components_v1(
+                    calculation,
+                    ctypes.byref(result_descriptor),
+                    ctypes.byref(component_descriptors["rhf"])
+                    if "rhf" in component_descriptors
+                    else None,
+                    ctypes.byref(component_descriptors["mp2"])
+                    if "mp2" in component_descriptors
+                    else None,
+                )
+
+            if resource_plan is None:
+                status = execute()
             else:
                 status, resource_diagnostics = observe_method_call(
                     self._library,
                     resource_plan,
                     ledger,
-                    lambda: self._library.generativeqc_calculation_execute(
-                        calculation, ctypes.byref(result_descriptor)
-                    ),
+                    execute,
                     owner=resource_plan.requests[0].name,
                     previous=resource_diagnostics,
                 )
@@ -2575,7 +2700,7 @@ class Calculator:
                 ks_transport_diagnostic = read_ks_transport_diagnostic(
                     self._library, calculation
                 )
-            return Result(
+            native_result = Result(
                 energy=result_descriptor.energy,
                 forces=forces,
                 converged=bool(result_descriptor.converged),
@@ -2604,6 +2729,33 @@ class Calculator:
                 initial_guess=read_initial_guess_diagnostic(self._library, calculation),
                 ks_transport_diagnostic=ks_transport_diagnostic,
             )
+            if component_outputs is not None:
+                for method, descriptor in component_descriptors.items():
+                    buffer = component_buffers[method]
+                    component_outputs[method] = Result(
+                        energy=descriptor.energy,
+                        forces=np.ctypeslib.as_array(buffer)
+                        .reshape(len(native_atoms), 3)
+                        .copy()
+                        if buffer is not None
+                        else None,
+                        converged=bool(descriptor.converged),
+                        iterations=descriptor.iterations,
+                        energy_change=descriptor.energy_change,
+                        density_rms=descriptor.density_rms,
+                        executed_backend="cuda"
+                        if descriptor.executed_backend == _native.BACKEND_CUDA
+                        else "cpu_reference",
+                        correlation=_read_correlation_result(
+                            self._library,
+                            calculation,
+                            context=context,
+                            mp2_component=True,
+                        )
+                        if method == "mp2"
+                        else None,
+                    )
+            return native_result
         finally:
             if calculation.value:
                 self._library.generativeqc_calculation_destroy(calculation)

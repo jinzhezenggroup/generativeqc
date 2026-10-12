@@ -47,9 +47,10 @@ const char* generativeqc_context_last_error(const generativeqc_context* context)
   return generativeqc_context_get_last_detail(context);
 }
 
-generativeqc_status generativeqc_system_create(generativeqc_context* context,
-                                               const generativeqc_system_descriptor* descriptor,
-                                               generativeqc_system** system) {
+static generativeqc_status create_system_impl(generativeqc_context* context,
+                                              const generativeqc_system_descriptor* descriptor,
+                                              generativeqc_system** system,
+                                              bool correlation_auxiliary) {
   if (context == nullptr || system == nullptr || descriptor == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -73,6 +74,7 @@ generativeqc_status generativeqc_system_create(generativeqc_context* context,
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
   try {
     auto candidate = std::make_unique<generativeqc_system>();
+    candidate->correlation_auxiliary = correlation_auxiliary;
     candidate->data.charge = descriptor->charge;
     candidate->data.multiplicity = descriptor->multiplicity;
     candidate->data.basis_representation =
@@ -88,8 +90,11 @@ generativeqc_status generativeqc_system_create(generativeqc_context* context,
     for (std::uint32_t i = 0; i < descriptor->shell_count; ++i) {
       const generativeqc_shell& shell = descriptor->shells[i];
       if (context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
-          shell.angular_momentum > 3) {
-        context->last_detail = "CUDA basis execution supports l<=3; g shells require CPU reference";
+          shell.angular_momentum > (correlation_auxiliary ? 4U : 3U)) {
+        context->last_detail =
+            correlation_auxiliary
+                ? "CUDA correlation auxiliary shells support l<=4"
+                : "CUDA basis execution supports l<=3; g shells require CPU reference";
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       }
       if (shell.primitive_count == 0 || shell.primitive_offset > descriptor->primitive_count ||
@@ -115,6 +120,22 @@ generativeqc_status generativeqc_system_create(generativeqc_context* context,
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_system_create(generativeqc_context* context,
+                                               const generativeqc_system_descriptor* descriptor,
+                                               generativeqc_system** system) {
+  return create_system_impl(context, descriptor, system, false);
+}
+
+/** Private Python bridge for the correlation source's auxiliary-through-g domain.
+ * Normalization remains host metadata work; this does not create a CPU reference
+ * context or evaluate integrals. Preparation enforces source-only handle roles.
+ * Public system_create and generic CUDA orbital/DF-HF admission are unchanged. */
+GENERATIVEQC_API generativeqc_status generativeqc_correlation_auxiliary_system_create_v1(
+    generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
+    generativeqc_system** system) {
+  return create_system_impl(context, descriptor, system, true);
 }
 
 void generativeqc_system_destroy(generativeqc_system* system) { delete system; }

@@ -16,6 +16,55 @@
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::posthf {
+void NativeBlockProvider::bind_borrowed_blocks(std::span<const BorrowedMOBlock> blocks) {
+  const auto occupied = reference().nocc;
+  const auto virtuals = nbf_ - occupied;
+  if (!occupied || !virtuals || blocks.empty())
+    throw std::invalid_argument("borrowed MO blocks require a complete restricted frame");
+  for (const auto& block : blocks) {
+    std::size_t elements = 1;
+    for (bool axis : block.virtual_axes)
+      elements = checked_mul(elements, axis ? virtuals : occupied);
+    if (block.values.size() != elements ||
+        !std::all_of(block.values.begin(), block.values.end(),
+                     [](double value) { return std::isfinite(value); }))
+      throw std::invalid_argument("borrowed MO block shape or values are invalid");
+  }
+  constexpr std::array<std::array<unsigned, 4>, 8> permutations{{
+      {0, 1, 2, 3},
+      {1, 0, 2, 3},
+      {0, 1, 3, 2},
+      {1, 0, 3, 2},
+      {2, 3, 0, 1},
+      {3, 2, 0, 1},
+      {2, 3, 1, 0},
+      {3, 2, 1, 0},
+  }};
+  std::array<BorrowedRoute, 16> routes{};
+  for (unsigned mask = 0; mask < routes.size(); ++mask) {
+    bool found = false;
+    for (const auto& block : blocks) {
+      for (const auto& permutation : permutations) {
+        bool match = true;
+        for (unsigned axis = 0; axis < 4; ++axis)
+          match = match && block.virtual_axes[axis] == bool((mask >> permutation[axis]) & 1);
+        if (!match) continue;
+        auto& route = routes[mask];
+        route.values = block.values;
+        route.permutation = permutation;
+        for (unsigned axis = 0; axis < 4; ++axis)
+          route.shape[axis] = block.virtual_axes[axis] ? virtuals : occupied;
+        found = true;
+        break;
+      }
+      if (found) break;
+    }
+    if (!found) throw std::invalid_argument("borrowed MO blocks do not cover ERI symmetry");
+  }
+  borrowed_routes_ = routes;
+  borrowed_blocks_bound_ = true;
+}
+
 NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
                                          const hf::PhysicalReference& reference, std::size_t budget,
                                          unsigned axis_tile, AOTileDomain tile_domain)
@@ -508,6 +557,53 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
 std::vector<double> NativeBlockProvider::get(const MOSlots& slots, bool cuda, int device,
                                              generativeqc_tensor::Metrics* metrics,
                                              ProviderWork* work) const {
+  if (borrowed_blocks_bound_) {
+    if (cuda && device < 0) throw std::invalid_argument("invalid borrowed MO CUDA device");
+#if !GENERATIVEQC_HAS_CUDA
+    if (cuda) throw std::runtime_error("CUDA MO provider is not compiled");
+#endif
+    std::array<std::size_t, 4> shape{};
+    std::size_t elements = 1;
+    for (unsigned axis = 0; axis < 4; ++axis) {
+      shape[axis] = slots[axis].size();
+      elements = checked_mul(elements, shape[axis]);
+      for (const auto orbital : slots[axis])
+        if (orbital != padded_mo && orbital >= nbf_)
+          throw std::invalid_argument("borrowed MO slot is out of bounds");
+    }
+    (void)plan(shape, cuda);
+    runtime::df_progress::Scope trace("borrowed_mo_blocks");
+    std::vector<double> output(elements);
+    const auto occupied = reference().nocc;
+    for (std::size_t element = 0; element < elements; ++element) {
+      auto remaining = element;
+      std::array<std::size_t, 4> orbitals{};
+      unsigned mask = 0;
+      bool padded = false;
+      for (unsigned reverse = 4; reverse > 0; --reverse) {
+        const auto axis = reverse - 1;
+        orbitals[axis] = slots[axis][remaining % shape[axis]];
+        remaining /= shape[axis];
+        padded = padded || orbitals[axis] == padded_mo;
+        if (orbitals[axis] >= occupied) mask |= 1U << axis;
+      }
+      if (padded) continue;
+      const auto& route = borrowed_routes_[mask];
+      std::size_t offset = 0;
+      for (unsigned axis = 0; axis < 4; ++axis) {
+        const auto orbital = orbitals[route.permutation[axis]];
+        const auto local = orbital >= occupied ? orbital - occupied : orbital;
+        offset = checked_add(checked_mul(offset, route.shape[axis]), local);
+      }
+      output[element] = route.values[offset];
+    }
+    if (work) work->mo_blocks = checked_add(work->mo_blocks, 1);
+    if (metrics)
+      metrics->provider_retained_bytes =
+          std::max(metrics->provider_retained_bytes, static_cast<std::uint64_t>(provider_bytes()));
+    runtime::df_progress::Scope::number("mo_block_reuses", 1);
+    return output;
+  }
   std::vector<MOSlots> requests{slots};
   auto outputs = get_many(requests, cuda, device, metrics, work);
   return std::move(outputs.front());

@@ -272,12 +272,19 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     assert result["basis"]["basis_shell_expansion_contract_sha256"] == (
         "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
     )
-    assert result["basis"]["calculator_shell_forwarding_contract_sha256"] == (
-        "af7bd2da7d571fb6d92dee7f984bf8de95f32b263c8b75fe69555772d60a44b6"
-    )
-    assert result["basis"]["native_system_basis_forwarding_contract_sha256"] == (
-        "120936d57b90062a8a888892ce4d514ca8a62a0b2ced671afe3fce660b0414d5"
-    )
+    calculator_source = (ROOT / "python/generativeqc/calculator.py").read_text()
+    calculator_functions = {
+        node.name: node
+        for node in ast.walk(ast.parse(calculator_source))
+        if isinstance(node, ast.FunctionDef)
+    }
+    for field, owner in (
+        ("calculator_shell_forwarding_contract_sha256", "_shells_for_atoms"),
+        ("native_system_basis_forwarding_contract_sha256", "_create_native_system"),
+    ):
+        assert result["basis"][field] == qualify_capacity._source_node_sha256(
+            calculator_source, calculator_functions[owner]
+        )
     assert result["basis"]["production_shell_expansion"] == (
         "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
     )
@@ -1741,13 +1748,13 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
         (
             "python/generativeqc/calculator.py",
             "return (\n            selected_basis.shells_for(atoms)",
-            "return (\n            tuple(selected_basis.shells_for(atoms))",
+            "return (\n            selected_basis.shells_for(atoms)[:1]",
             "_shells_for_atoms basis lowering contract changed",
         ),
         (
             "python/generativeqc/calculator.py",
             "shells = self._shells_for_atoms(atoms, basis)",
-            "shells = tuple(self._shells_for_atoms(atoms, basis))",
+            "shells = self._shells_for_atoms(atoms, basis)[:1]",
             "_create_native_system basis lowering contract changed",
         ),
     ],
@@ -1775,6 +1782,141 @@ def test_basis_counts_fail_closed_when_production_lowering_moves(
 
     with pytest.raises(RuntimeError, match=message):
         qualify_capacity._basis_layout_contract(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("owner", "old", "new"),
+    [
+        (
+            "_shells_for_atoms",
+            "selected_basis.shells_for(atoms)",
+            "selected_basis.shells_for(atoms)[:1]",
+        ),
+        ("_shells_for_atoms", "self._representation_name)", "'cartesian')"),
+        (
+            "_shells_for_atoms",
+            "if auxiliary else self._device_name",
+            "if auxiliary else 'cpu'",
+        ),
+        (
+            "_shells_for_atoms",
+            "self._density_fitting_backend() if auxiliary",
+            "self._device_name if auxiliary",
+        ),
+        ("_shells_for_atoms", "operator=selected_operator", "operator='overlap'"),
+        (
+            "_shells_for_atoms",
+            "derivative_order=derivative_order",
+            "derivative_order=0",
+        ),
+        (
+            "_shells_for_atoms",
+            'role="auxiliary" if auxiliary else "orbital"',
+            'role="orbital"',
+        ),
+        (
+            "_shells_for_atoms",
+            "consumer=self._auxiliary_basis_consumer(selected_operator)",
+            "consumer=None",
+        ),
+        ("_shells_for_atoms", "require_basis(", "(lambda *args, **kwargs: None)("),
+        (
+            "_create_native_system",
+            "shells = self._shells_for_atoms(atoms, basis)",
+            "shells = self._shells_for_atoms(atoms, basis)[:1]",
+        ),
+        ("_create_native_system", "shell.atom_index,", "0,"),
+        ("_create_native_system", "shell.angular_momentum,", "0,"),
+        (
+            "_create_native_system",
+            "                    offset,",
+            "                    0,",
+        ),
+        (
+            "_create_native_system",
+            "flattened_primitives.extend(shell.primitives)",
+            "flattened_primitives.extend(shell.primitives[:1])",
+        ),
+        (
+            "_create_native_system",
+            "p.exponent, p.coefficient",
+            "p.exponent, -p.coefficient",
+        ),
+        ("_create_native_system", "_native.BASIS_SPHERICAL", "_native.BASIS_CARTESIAN"),
+        (
+            "_create_native_system",
+            'checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)',
+            "None",
+        ),
+        (
+            "_create_native_system",
+            'checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)',
+            "None",
+        ),
+        ("_create_native_system", "if ecp_terms:", "if False:"),
+        (
+            "_create_native_system",
+            "!= _native.DENSITY_FITTING_NONE",
+            "== _native.DENSITY_FITTING_NONE",
+        ),
+        ("_create_native_system", "(*cores)", "(*(0 for _ in cores))"),
+        (
+            "_create_native_system",
+            'if basis is not None and self._auxiliary_basis_consumer("df_metric"):',
+            "if False:",
+        ),
+        ("_create_native_system", "_native.check(", "(lambda *args, **kwargs: None)("),
+    ],
+)
+def test_calculator_basis_semantics_reject_changed_admission_and_descriptors(
+    tmp_path: Path, owner: str, old: str, new: str
+) -> None:
+    relative = "python/generativeqc/calculator.py"
+    copy_contract_files(tmp_path, (relative,))
+    target = tmp_path / relative
+    source = target.read_text()
+    node = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef) and node.name == owner
+    )
+    segment = ast.get_source_segment(source, node)
+    assert segment is not None and old in segment
+    target.write_text(source.replace(segment, segment.replace(old, new), 1))
+    with pytest.raises(RuntimeError, match="basis lowering contract changed"):
+        qualify_capacity._calculator_basis_contract(tmp_path)
+
+
+def test_calculator_basis_semantics_accept_refactors_without_native_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ctypes
+
+    from generativeqc import _native
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("capacity contract must not load a native library")
+
+    monkeypatch.setattr(_native, "load_library", forbidden)
+    monkeypatch.setattr(ctypes, "CDLL", forbidden)
+    relative = "python/generativeqc/calculator.py"
+    copy_contract_files(tmp_path, (relative,))
+    original = qualify_capacity._calculator_basis_contract(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text()
+    source = source.replace(
+        "return (\n            selected_basis.shells_for(atoms)",
+        "return (\n            tuple(selected_basis.shells_for(atoms))",
+        1,
+    ).replace(
+        "shells = self._shells_for_atoms(atoms, basis)",
+        "shells = tuple(self._shells_for_atoms(atoms, basis))",
+        1,
+    )
+    target.write_text(source)
+    observed = qualify_capacity._calculator_basis_contract(tmp_path)
+    assert observed[0] != original[0]
+    assert observed[1] != original[1]
 
 
 def test_grid_memory_fails_closed_when_production_plan_inputs_move(

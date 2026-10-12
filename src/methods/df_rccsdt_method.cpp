@@ -26,7 +26,10 @@ void validate_descriptor(const generativeqc_method_descriptor& descriptor,
   if (descriptor.density_fitting_auxiliary_basis == nullptr)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "DF-RCCSD(T) requires an explicit auxiliary basis");
-  if (descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
+  const bool correlation_mp2 =
+      descriptor.method == GENERATIVEQC_METHOD_MP2 &&
+      descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA;
+  if (!correlation_mp2 && descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
       descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DF-RCCSD(T) requires density_fitting='cuda' or 'auto'");
@@ -73,6 +76,7 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     descriptor_.density_fitting_memory_budget_bytes = 0;
     descriptor_.ks_options = nullptr;
     descriptor_.initial_guess = nullptr;
+    if (descriptor_.method == GENERATIVEQC_METHOD_MP2) capabilities_.supports_batch = false;
   }
 
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
@@ -96,12 +100,26 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
   }
 
-  Result execute_impl(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override { return execute_group(compute_forces, 0); }
+  Result execute_components_impl(bool compute_forces, unsigned companions) override {
+    const auto allowed =
+        descriptor_.method == GENERATIVEQC_METHOD_MP2 ? kHfComponent : kHfComponent | kMp2Component;
+    if (companions & ~allowed)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "unsupported DF correlation companions");
+    return execute_group(compute_forces, companions);
+  }
+  Result execute_group(bool compute_forces, unsigned companions) {
     std::lock_guard<std::mutex> lock(mutex_);
     last_correlation_.reset();
     last_performance_.reset();
 #if GENERATIVEQC_HAS_CUDA
-    auto native = run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces);
+    auto native =
+        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2
+            ? run_df_correlation_group_native(
+                  execution_, system_, auxiliary_, descriptor_, compute_forces,
+                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions})
+            : run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces);
     native.primal.triples_seconds = native.triples_seconds;
     last_correlation_ = native.correlation;
     last_performance_ = native.primal;

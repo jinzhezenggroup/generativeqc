@@ -13,6 +13,7 @@
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_derivative_common.hpp"
+#include "posthf/mp2_force.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
@@ -254,6 +255,39 @@ generativeqc::core::System h2() {
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "H2 setup failed");
   return system;
+}
+
+void reference_force_charges_live_payload_not_historical_peak() {
+  const auto system = h2();
+  generativeqc::scf::ScfOptions options;
+  options.export_physical_reference = true;
+  options.compute_forces = true;
+  options.screening_tolerance = 0.0;
+  options.energy_tolerance = options.density_tolerance = 1e-11;
+  options.reference_memory_budget_bytes = 256ULL << 20;
+  const auto exported = generativeqc::scf::run_rhf(system, options);
+  require(exported.converged && exported.reference, "stationary H2 reference did not converge");
+  options.export_physical_reference = false;
+  const auto hf = generativeqc::scf::run_rhf(system, options);
+  require(hf.converged && !hf.forces.empty(), "independent H2 forces did not converge");
+  auto reference = *exported.reference;
+  reference.numeric_capacity_bytes = 1ULL << 30;
+  const std::size_t budget = 1ULL << 20;
+  generativeqc::posthf::RawSource source(system);
+  const auto force = generativeqc::mp2::reference_force(reference, source, budget);
+  require(force.planned_endpoint_peak_bytes <= budget,
+          "stationary HF companion charged a completed SCF peak");
+  require(force.forces.size() == hf.forces.size(), "stationary HF companion force shape changed");
+  for (std::size_t coordinate = 0; coordinate < hf.forces.size(); ++coordinate)
+    require(std::abs(force.forces[coordinate] - hf.forces[coordinate]) < 1e-10,
+            "stationary HF companion disagrees with independent SCF forces");
+  bool rejected = false;
+  try {
+    (void)generativeqc::mp2::reference_force(reference, source, 1);
+  } catch (const std::length_error&) {
+    rejected = true;
+  }
+  require(rejected, "stationary HF companion failed to charge live numeric payload");
 }
 
 void streamed_provider_matches_dense_oracle() {
@@ -792,6 +826,7 @@ int main() {
     factorized_comparison_rejects_nonfinite_oracles();
     energy_adjoint_matches_independent_finite_difference();
     orbital_rhs_and_relaxed_weights_match_independent_oracles();
+    reference_force_charges_live_payload_not_historical_peak();
     streamed_provider_matches_dense_oracle();
     density_fitted_provider_matches_dense_ri_oracle();
     factorized_consumer_population_guards();
