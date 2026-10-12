@@ -13,6 +13,11 @@ namespace {
 constexpr unsigned kSourceCandidates = 128;
 constexpr unsigned kSourceWorkers = 4096;
 
+// Let direct_jk_guard translate and report a CUDA error while draining its stream.
+inline void check_md_j_cuda(cudaError_t error) {
+  if (error != cudaSuccess) throw error;
+}
+
 /** One tiny contracted source uses eight lanes, not an otherwise idle block.
  * Higher orders retain a whole warp and their shared recurrence workspace. */
 template <unsigned BraAngular, unsigned KetAngular>
@@ -334,7 +339,7 @@ void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
   if (!candidates) return;
   const unsigned workers = static_cast<unsigned>(std::min<unsigned long long>(
       kSourceWorkers, (candidates + kSourceCandidates - 1) / kSourceCandidates));
-  cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream);
+  check_md_j_cuda(cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream));
   if (md.work_counts && !want_k)
     consume_source_tasks<BraAngular, KetAngular, true>
         <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
@@ -345,6 +350,7 @@ void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
         <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
             batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
             screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
+  check_md_j_cuda(cudaGetLastError());
 }
 
 }  // namespace
@@ -356,10 +362,12 @@ void launch_md_source_jk(cudaStream_t stream, DeviceBatch batch, MdJView md,
                          double* alpha_exchange, double* beta_exchange) {
   const auto begin = system_begin * batch.nbf * batch.nbf;
   const auto elements = system_count * batch.nbf * batch.nbf;
-  if (want_j) cudaMemsetAsync(coulomb + begin, 0, elements * sizeof(double), stream);
+  if (want_j)
+    check_md_j_cuda(cudaMemsetAsync(coulomb + begin, 0, elements * sizeof(double), stream));
   if (want_k) {
-    cudaMemsetAsync(alpha_exchange + begin, 0, elements * sizeof(double), stream);
-    if (unrestricted) cudaMemsetAsync(beta_exchange + begin, 0, elements * sizeof(double), stream);
+    check_md_j_cuda(cudaMemsetAsync(alpha_exchange + begin, 0, elements * sizeof(double), stream));
+    if (unrestricted)
+      check_md_j_cuda(cudaMemsetAsync(beta_exchange + begin, 0, elements * sizeof(double), stream));
   }
   if (!want_k && !md.residual_candidate_count) return;
 #define MD_SOURCE_CLASS(bra, ket)                                                              \

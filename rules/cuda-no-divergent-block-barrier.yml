@@ -1,0 +1,26 @@
+id: cuda-no-divergent-block-barrier
+language: Cpp
+severity: error
+message: "A threadIdx.x lane-only branch contains __syncthreads(); the barrier requires uniform CTA participation."
+rule:
+  all:
+    - pattern:
+        context: "void f() { __syncthreads(); }"
+        selector: call_expression
+    - inside:
+        all:
+          - kind: if_statement
+          - has:
+              field: condition
+              # Match the complete condition structurally. A substring may be
+              # inside a uniform block vote, sizeof, comment, or tautology.
+              any:
+                - pattern:
+                    context: "void f() { if (threadIdx.x == 0) {} }"
+                    selector: condition_clause
+                - pattern:
+                    context: "void f() { if (threadIdx.x != 0) {} }"
+                    selector: condition_clause
+        # Defining a lambda inside a branch does not execute its body there.
+        stopBy:
+          kind: lambda_expression

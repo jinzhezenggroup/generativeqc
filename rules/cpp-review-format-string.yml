@@ -1,0 +1,16 @@
+# Adapted from the ast-grep C++ catalog's format-string example.
+# Only two-argument fprintf/sprintf shapes are matched by this pilot.
+id: cpp-review-format-string
+language: Cpp
+severity: warning
+message: "Review a nonliteral fprintf/sprintf format argument for injection risk."
+rule:
+  pattern: $PRINTF($DEST, $FORMAT)
+constraints:
+  PRINTF:
+    regex: "^(?:fprintf|sprintf)$"
+  FORMAT:
+    not:
+      any:
+        - kind: string_literal
+        - kind: concatenated_string
