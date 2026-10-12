@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from dataclasses import replace
@@ -344,12 +345,151 @@ def _expand_canonical(source: str, *, ordinary: bool) -> str:
     return expanded
 
 
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_AUDIT_GENERALIZED_EIGEN_MIGRATION") != "1",
+    reason="historical source-preservation audit; live host contracts remain mandatory",
+)
 @pytest.mark.parametrize("name", ("df_eigensystem", "df_rhf_scf", "df_uhf_scf"))
-def test_full_canonical_consumer_orchestration_tokens(name: str) -> None:
+def test_historical_canonical_consumer_orchestration_tokens(name: str) -> None:
+    """Keep the original migration receipt, not a permanent source freeze.
+
+    The mandatory compiled traces above check live transform orchestration.
+    The detached-frame probe below checks the subsequently added pair ordering
+    and publication gate against an analytic physical frame.
+    """
     manifest = json.loads(BASELINE.with_suffix(".json").read_text())
     source = (ROOT / "src/scf/cuda" / (name + ".cpp")).read_text()
     expanded = _expand_canonical(source, ordinary=name == "df_eigensystem")
     assert _token_digest(expanded) == manifest["canonical_consumers"][name]
+
+
+@pytest.fixture(scope="module")
+def detached_frame_probe(
+    tmp_path_factory: pytest.TempPathFactory,
+    required_native_cxx: NativeCxx,
+) -> Path:
+    """Compile the real post-download owner with native analytic validation.
+
+    Device download is the boundary: inputs are prescribed column-major provider
+    frames. The real layout conversion, pair ordering and publication code run;
+    the device validation callback uses the actual host physical-frame validator.
+    This is not a GPU-kernel qualification or a replacement for device tests.
+    """
+    source = (ROOT / "src/scf/cuda/df_eigensystem.cpp").read_text()
+    body = _definition(source, "generativeqc_status solve_cuda_density_fitting_eigen(")
+    start = body.index("    auto vectors = column_major(packed, n);")
+    end = body.index("  } catch (const std::bad_alloc&)", start)
+    tail = body[start:end]
+    conversion = _definition(source, "std::vector<double> column_major(")
+    folder = tmp_path_factory.mktemp("detached-eigenframe")
+    probe = folder / "probe.cpp"
+    probe.write_text(
+        r"""
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+#include "generativeqc/generativeqc.h"
+#include "scf/solver/eigen_frame.hpp"
+namespace solver = generativeqc::scf::solver;
+using Matrix = std::vector<double>;
+struct Plan { std::size_t nbf; };
+namespace host { struct Region { Region(const char*, std::size_t) {} }; }
+bool validate_cuda_density_fitting_eigen_frame(
+    Plan* plan, const Matrix& f, const Matrix* s, const Matrix& values,
+    const Matrix& c, solver::EigenFrameDiagnostic& diagnostic, std::string& detail) {
+  return solver::validate_eigen_frame(f, s, values, c, plan->nbf, diagnostic, detail);
+}
+"""
+        + conversion
+        + r"""
+generativeqc_status publish(const Matrix& matrix, const Matrix* overlap,
+    Matrix values, const Matrix& packed, int info, Matrix& eigenvalues,
+    Matrix& coefficients) {
+  Plan owner{2}; auto* plan = &owner; const auto n = plan->nbf;
+  solver::EigenFrameDiagnostic diagnostic; diagnostic.solver_info = info;
+  std::string detail;
+"""
+        + tail
+        + r"""
+}
+int main(int argc, char** argv) {
+  if (argc != 2) return 2;
+  const std::string scenario = argv[1];
+  Matrix f{1, 0, 0, 3}, s{2, 0, 0, 4}, values{3, 1}, packed{0, 1, 1, 0};
+  const Matrix* overlap = nullptr;
+  Matrix expected{1, 0, 0, 1};
+  int info = 0;
+  bool accepted = scenario == "ordinary" || scenario == "generalized";
+  if (scenario == "generalized") {
+    f = {2, 0, 0, 12}; overlap = &s;
+    packed = {0, .5, 1 / std::sqrt(2.0), 0};
+    expected = {1 / std::sqrt(2.0), 0, 0, .5};
+  } else if (scenario == "wrong-columns") {
+    packed = {1, 0, 0, 1};
+  } else if (scenario == "wrong-values") {
+    values[0] += 1e-6;
+  } else if (scenario == "nonorthogonal") {
+    packed[1] *= 1.01;
+  } else if (scenario == "nonfinite") {
+    values[0] = std::numeric_limits<double>::infinity();
+  } else if (scenario == "positive-info") {
+    info = 1;
+  } else if (scenario == "negative-info") {
+    info = -1;
+  } else if (!accepted) {
+    return 2;
+  }
+  Matrix output_values{42}, output_coefficients{43};
+  const auto status = publish(f, overlap, values, packed, info,
+                              output_values, output_coefficients);
+  if (accepted) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS || output_values != Matrix{1, 3}) return 3;
+    if (output_coefficients.size() != expected.size()) return 4;
+    for (std::size_t i = 0; i < expected.size(); ++i)
+      if (std::abs(output_coefficients[i] - expected[i]) > 1e-14) return 5;
+  } else if (status != GENERATIVEQC_STATUS_NUMERICAL_FAILURE ||
+             output_values != Matrix{42} || output_coefficients != Matrix{43}) {
+    return 6;
+  }
+}
+"""
+    )
+    return required_native_cxx.build_executable(
+        [
+            probe,
+            ROOT / "src/scf/solver/eigen_frame.cpp",
+            ROOT / "src/scf/reference/linalg.cpp",
+        ],
+        folder / "probe",
+        compile_args=[
+            "-std=c++17",
+            "-O2",
+            "-I" + str(ROOT / "include"),
+            "-I" + str(ROOT / "src"),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    (
+        "ordinary",
+        "generalized",
+        "wrong-columns",
+        "wrong-values",
+        "nonorthogonal",
+        "nonfinite",
+        "positive-info",
+        "negative-info",
+    ),
+)
+def test_detached_eigenframe_publication(
+    detached_frame_probe: Path, scenario: str
+) -> None:
+    subprocess.run([str(detached_frame_probe), scenario], check=True, timeout=30)
 
 
 def _canonical_regions() -> str:
