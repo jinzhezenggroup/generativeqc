@@ -216,6 +216,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_cpu_hf_high_l.py",
         ),
         "core-b": (
+            "test_uccsd_response.py",
             "test_uccsd_triples_fock_response.py",
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
@@ -264,6 +265,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
     event: str, presence: str, tmp_path: Path
 ) -> None:
     parallel = {
+        "tests/python/test_uccsd_response.py": "core-b",
         "tests/python/test_uccsd_gradient.py": "core-a",
         "tests/python/test_cpu_hf_high_l.py": "core-a",
         "tests/python/test_uccsd_t_lambda.py": "core-c",
@@ -286,6 +288,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         "tests/python/test_uccsd_lambda_next.py",
         "tests/python/test_uccsd_native_next.py",
         "tests/python/test_uccsd_physical_response_next.py",
+        "tests/python/test_uccsd_response_next.py",
         "tests/python/test_uccsd_t_lambda_next.py",
         "tests/python/test_uccsd_t_owner_next.py",
         "tests/python/test_uccsd_triples_fock_response_next.py",

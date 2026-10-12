@@ -42,7 +42,9 @@ from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
     automatic_functional_code,
+    automatic_scf_domain,
 )
+from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 from generativeqc_compiler.xc.spec import (
     CATALOG,
     FunctionalSpec,
@@ -59,6 +61,7 @@ _NATIVE_SCF_DOMAINS = frozenset(
         *SCF_DOMAIN_BY_VERSION.values(),
         SPLIT_HYBRID_SCF_DOMAIN,
         AUTOMATIC_SCF_DOMAIN,
+        DENSITY_WORK_DOMAIN,
     )
 )
 
@@ -833,8 +836,9 @@ def _scf_domain_for_ir(method_ir: typing.Any) -> str:
     d4_electronic = _d4_electronic_projection(method_ir)
     if d4_electronic is not None:
         method_ir = d4_electronic
-    if _automatic_semilocal_name(method_ir) is not None:
-        return AUTOMATIC_SCF_DOMAIN
+    automatic_name = _automatic_semilocal_name(method_ir)
+    if automatic_name is not None:
+        return automatic_scf_domain(automatic_name)
     if not _is_pbe_d4_composition(method_ir):
         split = _split_hybrid_record(method_ir)
         if split is not None:
@@ -843,9 +847,12 @@ def _scf_domain_for_ir(method_ir: typing.Any) -> str:
 
 
 def scf_domain_for_method(method: typing.Any) -> str:
-    """Return the exact native point-domain identity for one public KS method."""
-    if parse_automatic_libxc_selector(method) is not None:
-        return AUTOMATIC_SCF_DOMAIN
+    """Return the exact native point domain for a public selector or resolved IR."""
+    if isinstance(method, MethodIR):
+        return _scf_domain_for_ir(method)
+    automatic = parse_automatic_libxc_selector(method)
+    if automatic is not None:
+        return automatic_scf_domain(automatic[0])
     method_ir, _ = resolve_ks_method(method)
     return _scf_domain_for_ir(method_ir)
 

@@ -627,9 +627,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "stationary_integral_device_reserve_sha256": (
             "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
         ),
-        "init_sha256": (
-            "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
-        ),
+        "init_sha256": qualify_capacity.NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256,
         "decode_sha256": (
             "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
         ),

@@ -6,10 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from _cc_cuda_test_support import response_gradient_compiler
 from generativeqc.calculator import Atom, Primitive, Shell
-from generativeqc.profiles import find_nvcc
-from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
-from generativeqc_compiler.common.cuda_target import cuda_target_info
 
 from tools.cc_gradient_fixtures import inputs, load, source_arguments
 from tools.generativeqc_cc import (
@@ -135,18 +133,7 @@ def test_complete_ccsdt_cuda_derivative_endpoint_matches_pinned_pyscf() -> None:
 def test_complete_ccsdt_cuda_response_gradient_matches_pinned_pyscf(
     tmp_path: Path,
 ) -> None:
-    assert os.environ.get("SLURM_JOB_ID"), (
-        "CUDA RCCSD(T) response-gradient qualification requires Slurm"
-    )
-    architecture = os.environ.get("GENERATIVEQC_TENSOR_ARCH", "").strip()
-    if not architecture:
-        pytest.fail(
-            "set GENERATIVEQC_TENSOR_ARCH to the allocated GPU architecture; "
-            "CUDA RCCSD(T) qualification must not assume a device target"
-        )
-    nvcc = find_nvcc()
-    assert nvcc is not None
-    compiler = CudaCompilerAdapter(nvcc, cuda_target_info(architecture))
+    compiler = response_gradient_compiler()
     expected = np.asarray(analytic_oracle("h2o")["analytic"]["gradient"])
     with _source("h2o") as source:
         result = complete_ccsdt_cuda_response_gradient_validation(

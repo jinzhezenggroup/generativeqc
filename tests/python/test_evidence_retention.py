@@ -1,5 +1,6 @@
 """Storage policy cannot discard references or manufacture scientific passes."""
 
+import gzip
 import json
 import subprocess
 import typing
@@ -305,9 +306,20 @@ def test_publication_rejects_false_numerical_pass_or_lost_measurements(
 
 
 def test_migration_keeps_exported_profiler_evidence_and_xc_manifest() -> None:
-    audit = json.loads(
-        (ROOT / "benchmarks/results/retention-238/migration.json").read_text()
+    audit_directory = ROOT / "benchmarks/results/retention-238"
+    storage = json.loads((audit_directory / "migration.storage.json").read_text())
+    assert storage["schema"] == "generativeqc.lossless-evidence-storage.v1"
+    assert storage["original_path"] == "benchmarks/results/retention-238/migration.json"
+    assert (
+        storage["stored_path"] == "benchmarks/results/retention-238/migration.json.gz"
     )
+    stored = (ROOT / storage["stored_path"]).read_bytes()
+    assert len(stored) == storage["stored_bytes"]
+    assert digest(stored) == storage["stored_sha256"]
+    decoded = gzip.decompress(stored)
+    assert len(decoded) == storage["original_bytes"]
+    assert digest(decoded) == storage["original_sha256"]
+    audit = json.loads(decoded)
     assert audit["removed_files"] == len(audit["files"])
     assert audit["removed_bytes"] == sum(row["bytes"] for row in audit["files"])
     for family in audit["summaries"].values():

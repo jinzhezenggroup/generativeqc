@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -16,7 +17,6 @@ from generativeqc_compiler.xc.bulk_runtime import (
     build_bulk_runtime_program,
     production_candidate_domain,
 )
-from generativeqc_compiler.xc.capability_resolution import CapabilityNotQualified
 from generativeqc_compiler.xc.compiled_cpu_evidence import (
     build_result as build_compiled_result,
 )
@@ -30,14 +30,26 @@ from generativeqc_compiler.xc.density_work import (
 from generativeqc_compiler.xc.production_domain_evidence import build_execution_binding
 from generativeqc_compiler.xc.spec import UnsupportedXC
 
-from tools.qualify_libxc_molecular_scf import qualify_molecular_scf
-
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from generativeqc_compiler.xc.bulk_runtime import BulkRuntimeProgram
 
 NAME = "LDA_C_CHACHIYO"
+
+
+@pytest.mark.parametrize("name", [NAME, "LDA_C_VWN_4", "LDA_C_PZ_MOD"])
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_public_automatic_density_domain_matches_the_native_worker(
+    name: str, spin: str
+) -> None:
+    from generativeqc.ks import scf_domain_for_method
+    from generativeqc_compiler.method import resolve_bulk_ks
+    from generativeqc_compiler.xc.automatic_semilocal import automatic_scf_domain
+
+    resolution = resolve_bulk_ks(name, spin=spin, backend="cpu")
+    selector = f"libxc-uks:{name}" if spin == "polarized" else f"libxc-rks:{name}"
+    assert automatic_scf_domain(name) == DENSITY_WORK_DOMAIN
+    assert scf_domain_for_method(selector) == DENSITY_WORK_DOMAIN
+    assert scf_domain_for_method(resolution.method) == DENSITY_WORK_DOMAIN
 
 
 def _program(
@@ -206,17 +218,81 @@ def test_work_owner_change_invalidates_receipt_but_not_prepared_program(
 
 
 @pytest.mark.parametrize("name", [NAME, "LDA_C_VWN_4", "LDA_C_PZ_MOD"])
-def test_incomplete_restricted_work_contract_blocks_the_full_molecular_matrix(
-    name: str, tmp_path: Path
+def test_restricted_binding_preserves_distinct_total_density_contract(
+    name: str,
 ) -> None:
-    with pytest.raises(CapabilityNotQualified, match="native restricted normalization"):
-        qualify_molecular_scf(
-            name,
-            compiled_cpu_evidence={},
-            production_domain_evidence={},
-            build_dir=tmp_path / "unqualified-native-backend",
-            evidence="test://density-work/restricted-blocker",
+    polarized = build_bulk_runtime_program(name, domain=DENSITY_WORK_DOMAIN)
+    total = build_bulk_runtime_program(
+        name, spin="unpolarized", domain=DENSITY_WORK_DOMAIN
+    )
+    binding = bind_runtime_semilocal_point_program(polarized)
+    assert binding.restricted is not None
+    payload = binding.restricted.to_payload()
+    assert payload["normalization"] == "original-total-density-no-spin-fold"
+    assert payload["point_expression_identity"] == total.expression_hash
+    assert payload["outputs"] == [[], [0]]
+    assert binding.to_payload()["schema"].endswith("/v5")
+    rho = np.array([[1.1 * binding.density_threshold]])
+    folded = polarized.evaluate(np.vstack((0.5 * rho, 0.5 * rho)))
+    assert abs(total.evaluate(rho)[1, 0] - folded[1:, 0].mean()) > 1e-6
+
+
+@pytest.mark.parametrize("name", [NAME, "LDA_C_VWN_4", "LDA_C_PZ_MOD"])
+def test_restricted_work_requires_native_total_density_smoke(name: str) -> None:
+    from test_compiled_cpu_evidence import _outcome
+
+    binding = bind_runtime_semilocal_point_program(
+        build_bulk_runtime_program(name, domain=DENSITY_WORK_DOMAIN)
+    )
+    with pytest.raises(ValueError, match="exact interior and vacuum cases"):
+        build_compiled_result(
+            name, binding, _outcome(), evidence="test://density-work/missing-tail"
         )
+
+
+def _restricted_compiled_result() -> dict:
+    from test_compiled_cpu_evidence import _outcome
+
+    outcome = _outcome()
+    smoke = outcome["smoke"]
+    smoke["case_labels"].extend(
+        ["restricted-interior", "restricted-vacuum", "restricted-active-tail"]
+    )
+    for key in ("expected", "observed"):
+        smoke[key].extend([float(index) for index in range(18)])
+    return build_compiled_result(
+        NAME,
+        bind_runtime_semilocal_point_program(_program()),
+        outcome,
+        evidence="test://density-work/complete-native-contract",
+    )
+
+
+def test_restricted_binding_receipt_rejects_missing_or_changed_normalization() -> None:
+    result = _restricted_compiled_result()
+    assert validate_compiled_result(NAME, result) == result
+    for key, replacement in (
+        ("normalization", "polarized-spin-fold"),
+        ("point_expression_identity", "0" * 64),
+        ("artifact_source_sha256", "0" * 64),
+        ("domain_version", True),
+        ("features", ["rho_a", "rho_b"]),
+    ):
+        changed = deepcopy(result)
+        changed["binding"]["restricted_binding"][key] = replacement
+        with pytest.raises(ValueError, match="density work binding is stale"):
+            validate_compiled_result(NAME, changed)
+    changed = deepcopy(result)
+    del changed["binding"]["restricted_binding"]
+    with pytest.raises(ValueError, match="density work binding is stale"):
+        validate_compiled_result(NAME, changed)
+
+
+def test_restricted_binding_receipt_is_detached_from_caller_payload() -> None:
+    result = _restricted_compiled_result()
+    normalized = validate_compiled_result(NAME, result)
+    result["binding"]["restricted_binding"]["features"].append("not-an-input")
+    assert normalized["binding"]["restricted_binding"]["features"] == ["rho"]
 
 
 def test_old_unclipped_binding_cannot_supply_work_compilation_evidence() -> None:
