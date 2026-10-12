@@ -306,6 +306,7 @@ def closing_small_response() -> Any:
     with _small_response_context() as owners:
         yield owners
 
+
 def test_standard_and_corrected_type_boundaries_remain_distinct(
     small_response: tuple,
 ) -> None:
@@ -327,6 +328,7 @@ def test_standard_and_corrected_type_boundaries_remain_distinct(
     result = physical.solve()
     assert result.total_energy == physical.reference.reference_energy
     assert result.triples_energy == 0.0
+
 
 
 def test_corrected_admission_precedes_raw_producer_reads(
@@ -354,6 +356,7 @@ def test_corrected_admission_precedes_raw_producer_reads(
             )
 
 
+
 def test_corrected_requires_the_same_live_triples_owner(small_response: tuple) -> None:
     physical, corrected, _ = small_response
     parent = corrected.prepared
@@ -369,6 +372,7 @@ def test_corrected_requires_the_same_live_triples_owner(small_response: tuple) -
             physical.provider,
             nuclear_repulsion=0.0,
         )
+
 
 
 def test_complete_second_replay_is_admitted_before_raw_reads(
@@ -395,6 +399,7 @@ def test_complete_second_replay_is_admitted_before_raw_reads(
         )
 
 
+
 def test_late_correction_transport_failure_never_publishes(
     small_response: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -411,6 +416,7 @@ def test_late_correction_transport_failure_never_publishes(
     monkeypatch.setattr(executor, "execute", nonfinite)
     with pytest.raises(FloatingPointError, match="nonfinite"):
         physical.solve()
+
 
 
 def test_fresh_correction_comparison_rejects_detached_bar_drift(
@@ -439,6 +445,7 @@ def test_fresh_correction_comparison_rejects_detached_bar_drift(
         physical.solve()
 
 
+
 def test_final_same_occupancy_stationarity_is_not_an_ov_only_gate(
     small_response: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -458,6 +465,7 @@ def test_final_same_occupancy_stationarity_is_not_an_ov_only_gate(
     monkeypatch.setattr(physical, "_run", changed)
     with pytest.raises(ImplicitSolveError, match="full orbital stationarity"):
         physical.solve()
+
 
 
 def test_closed_full_fock_owner_never_publishes(closing_small_response: tuple) -> None:
