@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "dft/ao_grid.hpp"
@@ -10,6 +11,8 @@
 #include "dft/grid.hpp"
 
 namespace generativeqc::dft {
+
+enum class SemilocalFamily : std::uint32_t;
 
 /** LDA tail-v1: exact positive-density formula, analytic zero-density limit,
  * and explicit rejection of negative or non-finite density. No clipping or
@@ -325,6 +328,15 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
 PbeStationaryXcDerivative stationary_b3lyp_xc_derivative(
     const AoBasis& basis, const MolecularGrid& grid,
     const std::vector<std::vector<double>>& density, std::size_t tile_points);
+
+/** Dispatch the mathematically bound stationary XC geometry source by the
+ * generated native family code. Missing or unqualified implementations reject
+ * explicitly; the prepared calculation independently admits scientific force
+ * capabilities and authenticates its final-state token. */
+PbeStationaryXcDerivative stationary_curated_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    SemilocalFamily family, double exchange_scale, double correlation_scale);
 
 }  // namespace generativeqc::dft
 

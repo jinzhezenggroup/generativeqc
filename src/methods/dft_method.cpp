@@ -2052,13 +2052,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
     runtime::CpuRetainedCapacity retained_integrals(runtime::vector_bytes(integrals));
 
-    const auto xc = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
-                        ? dft::stationary_b3lyp_xc_derivative(basis_, grid_, frame.density,
-                                                              options_.xc_tile_points)
-                        : dft::stationary_pbe_xc_derivative(basis_, grid_, frame.density,
-                                                            options_.xc_tile_points,
-                                                            options_.semilocal_exchange_scale,
-                                                            options_.semilocal_correlation_scale);
+    const auto xc = dft::stationary_curated_xc_derivative(
+        basis_, grid_, frame.density, options_.xc_tile_points, execution_plan_.semilocal_family,
+        options_.semilocal_exchange_scale, options_.semilocal_correlation_scale);
     const std::size_t ncoord = 3 * system_.atoms.size();
     if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
       throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
