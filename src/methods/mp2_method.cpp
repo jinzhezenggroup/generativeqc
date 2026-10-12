@@ -14,6 +14,7 @@
 #include "api/handles.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/df_rccsdt_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
@@ -751,6 +752,8 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& d) {
   const auto density_fitting_mode = d.density_fitting_mode;
+  if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA)
+    return prepare_df_rccsdt_calculation(caps, context, system, d);
   if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&

@@ -15,6 +15,30 @@ Neither method includes ROHF-MP2, frozen core, ECP, complex orbitals, screened o
 correlation, Hessians, or mixed precision. No performance replacement is implied
 by the numerical qualification.
 
+The explicit `density_fitting="correlation_cuda"` MP2 mode is a separate
+reference contract: conventional exact RHF, with density fitting only in the
+correlation Hamiltonian. It provides CUDA energy and analytic forces, and
+shares the physical DF source/metric and RHF-frame response owners with
+DF-RCCSD(T). See [DF-CBS](../user/ccsdt_cbs.md#correlation-only-df-cbs-on-cuda)
+for the composite method and auxiliary-identity requirements. It does not
+change the legacy DF-HF RI-MP2 selector, or introduce a reference-package
+production consumer.
+
+The compiler reuses the ordered spatial MP2 energy algebra, contracts the
+Q-major `Bov` Gram tensor and differentiates the energy with respect to factors
+and all four epsilon positions. The runtime sums repeated occupied/virtual
+epsilon cotangents for fixed-canonical audits. Molecular response instead uses
+full occupied/virtual Fock cotangents from the noncanonical MP2 amplitude
+equation; their diagonals match those combined epsilon seeds, but their
+off-diagonals preserve same-space stationarity without inverse same-space gaps.
+It never adds both sources. The runtime embeds the compressed factor VJP through the original
+physical pair projection, and consumes the original source token. The nuclear
+sink differentiates three-center integrals and the metric; conventional RHF
+orbital/nuclear response closes the total derivative. The MP2-only source
+demand omits all CC four-index core blocks, amplitudes and Lambda iterations.
+The current generated scratch still scales as `O(nocc² nvir²)`; it is not a
+streamed arbitrary-size MP2 response implementation.
+
 ```python
 from generativeqc import Calculator
 

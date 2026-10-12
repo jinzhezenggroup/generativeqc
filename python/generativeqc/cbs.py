@@ -12,6 +12,7 @@ import threading
 import time
 import typing
 from dataclasses import dataclass
+from types import MappingProxyType
 
 import numpy as np
 
@@ -129,12 +130,12 @@ class CCSDTCBSCalculator:
     selecting ``hf_extrapolation="highest"``. Exponents are model inputs and
     are never fitted to the current geometry.
 
-    All components use the same FP64, exact-integral, all-electron RHF
-    Hamiltonian and occupations. Open-shell, ECP, frozen-core and density-
-    fitted variants are not silently substituted. Native backend/basis/force
-    domain checks still apply, including the small-basis RCCSD(T) force limit.
+    All components use conventional FP64, all-electron RHF references. Explicit
+    auxiliary bases select correlation-only DF-MP2 and DF-CCSD(T), not DF-HF.
+    Open-shell, ECP and frozen-core variants are not silently substituted.
+    Native backend/basis/force and complete memory-admission checks still apply.
 
-    Same-basis components share one native RHF reference and exact source.
+    Same-basis components share one native RHF reference and correlation source.
     Native retained storage is released after each basis group, even on failure.
     Thus the workflow does not retain several basis-dependent CUDA owners at
     once. ``calculator_options`` supplies common SCF/CC/resource controls;
@@ -147,6 +148,8 @@ class CCSDTCBSCalculator:
         mp2_bases: Sequence[CBSBasis],
         *,
         correction_basis: BasisSet | str | Path | None = None,
+        auxiliary_bases: Sequence[BasisSet | str | Path] | None = None,
+        correction_auxiliary_basis: BasisSet | str | Path | None = None,
         device: str = "cpu",
         device_id: int = 0,
         correlation_exponent: float = 3.0,
@@ -154,7 +157,13 @@ class CCSDTCBSCalculator:
         hf_exponent: float = 1.63,
         calculator_options: Mapping[str, typing.Any] | None = None,
     ) -> None:
-        """Bind two extrapolation bases, one correction basis and common controls."""
+        """Bind basis/cardinal snapshots and the shared correlation Hamiltonian.
+
+        Supplying two auxiliary bases selects CUDA correlation-only DF for
+        both MP2 and CCSD(T), retaining conventional RHF references. A distinct
+        correction basis requires its own explicit auxiliary basis. Equal
+        orbital bases must use the same auxiliary snapshot within this model.
+        """
         bases = tuple(mp2_bases)
         if len(bases) != 2 or not all(isinstance(item, CBSBasis) for item in bases):
             raise ValueError("mp2_bases must contain two CBSBasis records")
@@ -179,6 +188,37 @@ class CCSDTCBSCalculator:
             raise ValueError("all CBS bases must use the same AO representation")
         if device not in ("cpu", "cuda"):
             raise ValueError("CBS device must be 'cpu' or 'cuda'")
+        auxiliaries = {}
+        if auxiliary_bases is not None:
+            fitted = tuple(_basis_snapshot(basis) for basis in auxiliary_bases)
+            if len(fitted) != 2:
+                raise ValueError("DF-CBS requires two explicit auxiliary bases")
+            if device != "cuda":
+                raise NotImplementedError(
+                    "DF-CBS analytic endpoints currently require CUDA"
+                )
+            auxiliaries = {
+                low.basis.identity: fitted[0],
+                high.basis.identity: fitted[1],
+            }
+            if correction_auxiliary_basis is not None:
+                correction_auxiliary = _basis_snapshot(correction_auxiliary_basis)
+                if (
+                    small.identity in auxiliaries
+                    and auxiliaries[small.identity].identity
+                    != correction_auxiliary.identity
+                ):
+                    raise ValueError(
+                        "equal CBS orbital bases must share their auxiliary basis"
+                    )
+                auxiliaries[small.identity] = correction_auxiliary
+            if small.identity not in auxiliaries:
+                raise ValueError(
+                    "a distinct DF correction basis requires correction_auxiliary_basis"
+                )
+        elif correction_auxiliary_basis is not None:
+            raise ValueError("correction_auxiliary_basis requires auxiliary_bases")
+        self._auxiliary_bases = MappingProxyType(auxiliaries)
         checked_integer(device_id, "CBS device ID", high=2**31 - 1)
         if hf_extrapolation not in ("exponential", "highest"):
             raise ValueError("hf_extrapolation must be 'exponential' or 'highest'")
@@ -294,7 +334,12 @@ class CCSDTCBSCalculator:
                 ),
                 ("mp2_low", "mp2", low.basis, self.mp2_weights[0]),
                 ("mp2_high", "mp2", high.basis, self.mp2_weights[1]),
-                ("correction_ccsdt", "ccsd(t)", self.correction_basis, 1.0),
+                (
+                    "correction_ccsdt",
+                    "df-ccsd(t)" if self._auxiliary_bases else "ccsd(t)",
+                    self.correction_basis,
+                    1.0,
+                ),
                 ("correction_mp2", "mp2", self.correction_basis, -1.0),
             )
             completed: dict[tuple[str, str], tuple[Result, float]] = {}
@@ -304,7 +349,9 @@ class CCSDTCBSCalculator:
             for identity, basis in groups.items():
                 component_started = time.perf_counter()
                 primary = (
-                    "ccsd(t)" if identity == self.correction_basis.identity else "mp2"
+                    ("df-ccsd(t)" if self._auxiliary_bases else "ccsd(t)")
+                    if identity == self.correction_basis.identity
+                    else "mp2"
                 )
                 requested = {
                     method
@@ -318,6 +365,16 @@ class CCSDTCBSCalculator:
                     device=self.device,
                     device_id=self.device_id,
                     precision="fp64",
+                    **(
+                        {
+                            "density_fitting": "cuda"
+                            if primary == "df-ccsd(t)"
+                            else "correlation_cuda",
+                            "auxiliary_basis": self._auxiliary_bases[identity],
+                        }
+                        if self._auxiliary_bases
+                        else {}
+                    ),
                     **self._options,
                 )
                 try:
@@ -463,7 +520,11 @@ class CCSDTCBSCalculator:
                     "hf_exponent": self.hf_exponent,
                     "correlation_exponent": self.correlation_exponent,
                     "frozen_core": 0,
-                    "density_fitting": False,
+                    "density_fitting": bool(self._auxiliary_bases),
+                    "auxiliary_basis_identities": {
+                        identity: basis.identity
+                        for identity, basis in self._auxiliary_bases.items()
+                    },
                 },
                 time.perf_counter() - started,
                 tuple(execution_groups),

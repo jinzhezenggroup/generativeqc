@@ -75,7 +75,9 @@ enum {
   /** Require the accelerator-native density-fitting path. */
   GENERATIVEQC_DENSITY_FITTING_CUDA = 2,
   /** Select CUDA when requested by the context, otherwise use CPU reference. */
-  GENERATIVEQC_DENSITY_FITTING_AUTO = 3
+  GENERATIVEQC_DENSITY_FITTING_AUTO = 3,
+  /** MP2 only: conventional RHF with accelerator-native correlation DF. */
+  GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA = 4
 };
 
 /**

@@ -73,6 +73,11 @@ cc::SolverOptions cc_options(const generativeqc_method_descriptor& d, std::size_
   if (d.ccsd_energy_tolerance) options.energy_tolerance = d.ccsd_energy_tolerance;
   if (d.ccsd_residual_tolerance) options.residual_tolerance = d.ccsd_residual_tolerance;
   if (d.ccsd_denominator_threshold) options.denominator_threshold = d.ccsd_denominator_threshold;
+  if (d.method == GENERATIVEQC_METHOD_MP2) {
+    options.denominator_threshold =
+        d.mp2_denominator_threshold ? d.mp2_denominator_threshold : 1e-10;
+    options.level_shift = 0;
+  }
   options.damping = d.ccsd_damping;
   options.level_shift = d.ccsd_level_shift;
   cc::validate_options(options);
@@ -154,7 +159,7 @@ void attach_df_source(cc::Problem& problem, cc::DFSourceResult&& fitted, posthf:
   work.source_values += fitted.source_values;
   work.transform_fmas += fitted.transform_summands + fitted.block_summands;
   work.transform_stages += fitted.transform_gemms + fitted.block_gemms;
-  work.mo_blocks += 5;
+  work.mo_blocks += fitted.block_gemms;
   ++work.cuda_transform_calls;
   work.h2d_bytes += fitted.coefficient_h2d_bytes;
   work.d2h_bytes += fitted.factor_block_d2h_bytes;
@@ -179,7 +184,8 @@ cc::Problem build_problem(
     posthf::ProviderWork& provider_work, generativeqc_tensor::Metrics& provider_metrics,
     const core::System* correlation_auxiliary = nullptr,
     cc::DFSourceResult* retained_df_response = nullptr,
-    const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr) {
+    const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr,
+    bool df_mp2_mode = false) {
   // A failed optional source may already have performed real work. Preserve
   // cumulative diagnostics, but validate the compiler schedule for this attempt.
   const auto initial_work = provider_work;
@@ -205,8 +211,19 @@ cc::Problem build_problem(
     for (std::size_t b = 0; b < v; ++b) p.fvv[a * v + b] = fmo[(o + a) * n + o + b];
 
   const auto n2 = o * o * v * v;
-  cc::initialize_canonical_denominators(p, canonical.orbital_energies, options,
-                                        cuda && options.derived_denominators);
+  if (df_mp2_mode) {
+    // MP2 differentiates the physical spectrum, not CC preconditioners or
+    // initial amplitudes. No doubles-sized denominator is retained here.
+    p.canonical_eps.assign(canonical.orbital_energies.begin(), canonical.orbital_energies.end());
+    p.minimum_absolute_denominator =
+        2 * (*std::min_element(p.canonical_eps.begin() + o, p.canonical_eps.end()) -
+             *std::max_element(p.canonical_eps.begin(), p.canonical_eps.begin() + o));
+    if (p.minimum_absolute_denominator < options.denominator_threshold)
+      throw std::runtime_error("DF-MP2 occupied/virtual denominator gap is too small");
+  } else {
+    cc::initialize_canonical_denominators(p, canonical.orbital_energies, options,
+                                          cuda && options.derived_denominators);
+  }
   if (correlation_auxiliary) {
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda) throw std::invalid_argument("native molecular DF-CC source requires CUDA");
@@ -218,9 +235,9 @@ cc::Problem build_problem(
     // The DF builder already charges the caller's original orbital/auxiliary
     // systems. No compatibility RawSource or duplicate AO expansion is needed.
     const auto caller_bytes = posthf::checked_mul(caller_elements, sizeof(double));
-    auto fitted = cc::build_df_source_cuda(system, *correlation_auxiliary, ref, options.max_bytes,
-                                           1e-10, device, caller_bytes,
-                                           retained_df_response != nullptr, correlation_policy);
+    auto fitted = cc::build_df_source_cuda(
+        system, *correlation_auxiliary, ref, options.max_bytes, 1e-10, device, caller_bytes,
+        retained_df_response != nullptr, correlation_policy, df_mp2_mode);
     attach_df_source(p, std::move(fitted), provider_work, provider_metrics);
     if (retained_df_response) {
       p.reference_retained_bytes =
@@ -339,6 +356,7 @@ cc::Problem build_problem(
     p.provider_host_bytes = retained;
   }
 
+  if (df_mp2_mode) return p;
   p.initial_t1.assign(o * v, 0.0);
   p.initial_t2.resize(n2);
   for (std::size_t i = 0; i < o; ++i)
@@ -362,7 +380,7 @@ RccsdNativeState execute_rccsd_prepared(
     std::unique_ptr<scf::PreparedFockPlan>* cuda_source_cache,
     const core::System* correlation_auxiliary = nullptr, bool retain_df_response = false,
     const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr,
-    scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr) {
+    scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr, bool df_mp2_mode = false) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
@@ -486,7 +504,7 @@ RccsdNativeState execute_rccsd_prepared(
         return build_problem(system, source, *reference, correlation_options, cuda,
                              execution.device_id(), provider_work, provider_metrics,
                              correlation_auxiliary, retain_df_response ? &state.df_source : nullptr,
-                             correlation_policy);
+                             correlation_policy, df_mp2_mode);
       } catch (...) {
         // A failed provider may have published its response owner before a
         // later capacity check. Drop only that unsuccessful output before the
@@ -532,27 +550,53 @@ RccsdNativeState execute_rccsd_prepared(
           posthf::checked_add(state.problem.reference_retained_bytes, exact_source_retained);
     prepared_source.reset();
     raw_source.reset();
-    allocation_stage = "CC resident solve";
+    allocation_stage = df_mp2_mode ? "DF-MP2 energy/adjoint" : "CC resident solve";
     const auto solver_started = std::chrono::steady_clock::now();
-    run_with_cuda_reference_budget(
-        cuda_reference_plan, solver_options.max_bytes, [&](std::size_t budget) {
-          correlation_options.max_bytes = budget;
-          try {
-            state.solved =
-                cuda ? cc::solve_cuda(state.problem, correlation_options, execution.device_id())
-                     : cc::solve_cpu(state.problem, correlation_options);
-          } catch (const std::length_error&) {
-            if (!retire_optional_source()) throw;
-            state.problem.reference_retained_bytes -= exact_source_retained;
-            state.solved =
-                cc::solve_cuda(state.problem, correlation_options, execution.device_id());
-          } catch (const std::bad_alloc&) {
-            if (!retire_optional_source()) throw;
-            state.problem.reference_retained_bytes -= exact_source_retained;
-            state.solved =
-                cc::solve_cuda(state.problem, correlation_options, execution.device_id());
-          }
-        });
+    if (df_mp2_mode) {
+#if GENERATIVEQC_HAS_CUDA
+      if (!cuda || !correlation_auxiliary)
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                          "correlation-only DF-MP2 requires CUDA");
+      state.df_mp2_mode = true;
+      state.df_mp2 = cc::evaluate_df_mp2_cuda(
+          state.problem.nocc, state.problem.nvir, state.problem.naux, state.problem.df_bov,
+          state.eps_o, state.eps_v, state.problem.df_source_identity, retain_df_response,
+          correlation_options.max_bytes, execution.device_id(),
+          posthf::checked_add(state.problem.reference_retained_bytes,
+                              posthf::checked_add(cc::problem_host_bytes(state.problem),
+                                                  posthf::checked_mul(state.eps_o.capacity() +
+                                                                          state.eps_v.capacity(),
+                                                                      sizeof(double)))),
+          correlation_options.denominator_threshold);
+      state.solved.status = cc::SolveStatus::Converged;
+      state.solved.correlation_energy = state.df_mp2.opposite_spin + state.df_mp2.same_spin;
+      state.solved.total_energy = reference->energy + state.solved.correlation_energy;
+      state.solved.diagnostic.numeric_capacity_bytes = state.df_mp2.numeric_capacity_bytes;
+#else
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "DF-MP2 requires a CUDA-enabled build");
+#endif
+    } else {
+      run_with_cuda_reference_budget(
+          cuda_reference_plan, solver_options.max_bytes, [&](std::size_t budget) {
+            correlation_options.max_bytes = budget;
+            try {
+              state.solved =
+                  cuda ? cc::solve_cuda(state.problem, correlation_options, execution.device_id())
+                       : cc::solve_cpu(state.problem, correlation_options);
+            } catch (const std::length_error&) {
+              if (!retire_optional_source()) throw;
+              state.problem.reference_retained_bytes -= exact_source_retained;
+              state.solved =
+                  cc::solve_cuda(state.problem, correlation_options, execution.device_id());
+            } catch (const std::bad_alloc&) {
+              if (!retire_optional_source()) throw;
+              state.problem.reference_retained_bytes -= exact_source_retained;
+              state.solved =
+                  cc::solve_cuda(state.problem, correlation_options, execution.device_id());
+            }
+          });
+    }
     const double solver_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - solver_started).count();
     state.budget = correlation_options.max_bytes;
@@ -564,6 +608,10 @@ RccsdNativeState execute_rccsd_prepared(
     diagnostic.struct_size = sizeof(diagnostic);
     diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
     diagnostic.reference_energy = reference->energy;
+    if (df_mp2_mode) {
+      diagnostic.opposite_spin_energy = state.df_mp2.opposite_spin;
+      diagnostic.same_spin_energy = state.df_mp2.same_spin;
+    }
     diagnostic.reference_residual = reference->commutator_residual;
     diagnostic.minimum_absolute_denominator = state.problem.minimum_absolute_denominator;
     diagnostic.numeric_capacity_bytes =
@@ -587,12 +635,13 @@ RccsdNativeState execute_rccsd_prepared(
     diagnostic.device_to_host_ms = provider_metrics.output_ms;
     diagnostic.transform_library_ms = provider_metrics.library_ms;
     diagnostic.tensor_kernel_ms = provider_metrics.kernel_ms;
-    std::copy_n(cc::generated::iteration_equation_hash,
-                std::min<std::size_t>(64, std::strlen(cc::generated::iteration_equation_hash)),
+    const auto* equation_hash =
+        df_mp2_mode ? state.df_mp2.equation_hash : cc::generated::iteration_equation_hash;
+    std::copy_n(equation_hash, std::min<std::size_t>(64, std::strlen(equation_hash)),
                 diagnostic.equation_hash);
     diagnostic.ccsd_iterations = state.solved.diagnostic.iterations;
     diagnostic.ccsd_diis_restarts = state.solved.diagnostic.diis_restarts;
-    diagnostic.ccsd_correlation_energy = state.solved.correlation_energy;
+    diagnostic.ccsd_correlation_energy = df_mp2_mode ? 0 : state.solved.correlation_energy;
     diagnostic.ccsd_energy_change = state.solved.diagnostic.energy_change;
     diagnostic.ccsd_singles_residual_max = state.solved.diagnostic.r1_max;
     diagnostic.ccsd_doubles_residual_max = state.solved.diagnostic.r2_max;
@@ -636,15 +685,19 @@ RccsdNativeState execute_rccsd_prepared(
       execution.observe_numeric_peak(runtime::ExecutionMemorySpace::Host,
                                      static_cast<std::size_t>(diagnostic.numeric_capacity_bytes));
     }
-    std::copy_n(cc::generated::replay_equation_hash,
-                std::min<std::size_t>(64, std::strlen(cc::generated::replay_equation_hash)),
-                diagnostic.ccsd_replay_equation_hash);
+    if (!df_mp2_mode)
+      std::copy_n(cc::generated::replay_equation_hash,
+                  std::min<std::size_t>(64, std::strlen(cc::generated::replay_equation_hash)),
+                  diagnostic.ccsd_replay_equation_hash);
 
     state.result.energy = state.solved.total_energy;
     state.result.convergence = {
         state.solved.diagnostic.iterations, state.solved.diagnostic.energy_change,
         std::max(state.solved.diagnostic.r1_max, state.solved.diagnostic.r2_max),
         state.solved.converged()};
+    if (df_mp2_mode)
+      state.result.convergence = {static_cast<unsigned>(state.reference_iterations),
+                                  state.reference_energy_change, state.reference_density_rms, true};
     state.result.executed_backend =
         cuda ? GENERATIVEQC_BACKEND_CUDA : GENERATIVEQC_BACKEND_CPU_REFERENCE;
     return state;
@@ -1023,7 +1076,7 @@ RccsdNativeState run_rccsd_native_state(
     std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
     bool retain_df_response, bool df_matrix_gemm, scf::CudaRhfBucketPlan** cuda_reference_plan,
     std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis,
-    bool df_mixed_precision) {
+    bool df_mixed_precision, bool df_mp2_mode) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -1091,7 +1144,7 @@ RccsdNativeState run_rccsd_native_state(
       execution, system, reference, solver_options, reference_capacity, prepared_exact,
       initial_density, warm_start_fallback, prepared_exact_cache, correlation_auxiliary,
       retain_df_response, correlation_auxiliary ? &correlation_policy : nullptr,
-      cuda_reference_plan);
+      cuda_reference_plan, df_mp2_mode);
   state.external_reservation_bytes = external_reservation_bytes;
   state.diagnostic.numeric_capacity_bytes =
       posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);

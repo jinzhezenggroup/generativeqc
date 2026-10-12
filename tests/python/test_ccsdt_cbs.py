@@ -18,6 +18,72 @@ if TYPE_CHECKING:
 ATOMS = (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4)))
 
 
+def test_df_cbs_same_reference_groups_and_force_weights(
+    bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+) -> None:
+    workflow = CCSDTCBSCalculator(
+        bases, device="cuda", auxiliary_bases=("sto-3g", "def2-svp")
+    )
+    result = workflow.singlepoint(ATOMS)
+    assert len(fake_native) == len(result.execution_groups) == 2
+    assert fake_native[0]["method"] == "df-ccsd(t)"
+    assert fake_native[0]["options"]["density_fitting"] == "cuda"
+    assert fake_native[1]["method"] == "mp2"
+    assert fake_native[1]["options"]["density_fitting"] == "correlation_cuda"
+    assert all(event["closed"] for event in fake_native)
+    assert result.energy == pytest.approx(
+        sum(
+            component.coefficient * component.result.energy
+            for component in result.components
+        )
+    )
+    np.testing.assert_allclose(
+        result.forces,
+        sum(
+            component.coefficient * component.result.forces
+            for component in result.components
+        ),
+    )
+    correction_mp2 = next(
+        component
+        for component in result.components
+        if "correction_mp2" in component.roles
+    )
+    assert correction_mp2.roles == ("mp2_low", "correction_mp2")
+
+
+@pytest.mark.parametrize(
+    "options,error,match",
+    (
+        ({"auxiliary_bases": ("sto-3g", "def2-svp")}, NotImplementedError, "CUDA"),
+        (
+            {"device": "cuda", "auxiliary_bases": ("sto-3g",)},
+            ValueError,
+            "two explicit",
+        ),
+        (
+            {
+                "device": "cuda",
+                "auxiliary_bases": ("sto-3g", "def2-svp"),
+                "correction_auxiliary_basis": "def2-svp",
+            },
+            ValueError,
+            "share their auxiliary",
+        ),
+        (
+            {"device": "cuda", "correction_auxiliary_basis": "sto-3g"},
+            ValueError,
+            "requires auxiliary_bases",
+        ),
+    ),
+)
+def test_df_cbs_auxiliary_contract(
+    bases: tuple[CBSBasis, CBSBasis], options: dict, error: type[Exception], match: str
+) -> None:
+    with pytest.raises(error, match=match):
+        CCSDTCBSCalculator(bases, **options)
+
+
 @pytest.fixture
 def bases() -> tuple[CBSBasis, CBSBasis]:
     """Named bases here test orchestration, not a physical CBS basis sequence."""
@@ -43,10 +109,13 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
             if self.method == "ccsd(t)" and kwargs.get("charge") == 2:
                 raise RuntimeError("injected CC failure")
             basis_scale = 1.0 if self.basis.name == "sto-3g" else 2.0
-            method_scale = {"rhf": 1.0, "mp2": 1.2, "ccsd(t)": 1.3}[self.method]
+            method_scale = {"rhf": 1.0, "mp2": 1.2, "ccsd(t)": 1.3, "df-ccsd(t)": 1.3}[
+                self.method
+            ]
             scale = basis_scale * method_scale
             coordinates = np.asarray([atom.position for atom in atoms])
             self.event["properties"] = properties
+            self.event["options"] = self.options
             return Result(
                 energy=float(-scale + scale * np.sum(coordinates**2)),
                 forces=-2.0 * scale * coordinates if "forces" in properties else None,

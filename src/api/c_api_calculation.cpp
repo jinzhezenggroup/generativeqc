@@ -33,7 +33,8 @@ generativeqc_status generativeqc_initial_guess_auto_kind_v1(
       (request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
-       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO) ||
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO &&
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA) ||
       request->restricted > 1 || request->has_ecp > 1 ||
       (request->atomic_numbers == nullptr) != (request->atom_count == 0))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -92,6 +93,10 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
+  if (!generativeqc::api::valid_system_roles(*system, *descriptor)) {
+    context->last_detail = "correlation auxiliary handles require a correlation-only DF consumer";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   try {
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
@@ -177,9 +182,11 @@ generativeqc_status generativeqc_calculation_execute_components_v1(
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
-  if ((hf || mp2) && (method != GENERATIVEQC_METHOD_MP2 && method != GENERATIVEQC_METHOD_RCCSD_T))
+  const bool ccsdt =
+      method == GENERATIVEQC_METHOD_RCCSD_T || method == GENERATIVEQC_METHOD_DF_RCCSD_T;
+  if ((hf || mp2) && method != GENERATIVEQC_METHOD_MP2 && !ccsdt)
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  if (mp2 && method != GENERATIVEQC_METHOD_RCCSD_T) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (mp2 && !ccsdt) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 
   try {
     // NULL/zero is an execution request, not merely a copy-out choice: the

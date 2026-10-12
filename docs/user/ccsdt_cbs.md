@@ -43,6 +43,58 @@ Set `properties=("energy",)` to omit all analytic forces. The default requests
 both energy and forces. Ionic charge is passed identically to every component;
 only a closed-shell singlet is currently admitted.
 
+## Correlation-only DF-CBS on CUDA
+
+Supply `auxiliary_bases=(low_fit, high_fit)` to select **DF-MP2 correlation**
+extrapolation and a **DF-CCSD(T)−DF-MP2** correction. The reference is still
+conventional exact RHF in every orbital basis; this is not a DF-HF composite.
+For a distinct correction orbital basis, also supply
+`correction_auxiliary_basis`. For example, with checked local records:
+
+```python
+workflow = CCSDTCBSCalculator(
+    (CBSBasis(load_basis("cc-pvdz.json"), 2),
+     CBSBasis(load_basis("cc-pvtz.json"), 3)),
+    auxiliary_bases=(load_basis("cc-pvdz-ri.json"),
+                     load_basis("cc-pvtz-ri.json")),
+    device="cuda",
+    calculator_options={"correlation_memory_budget_bytes": 2 << 30},
+)
+result = workflow.singlepoint(atoms, properties=("energy", "forces"))
+```
+
+The lower basis is the default correction basis, so this example executes two
+native groups, not six standalone calculations. Each group owns one converged
+RHF reference. The correction group retains one original whitened DF source,
+metric and MO frame through both correlation consumers. Its MP2 companion
+does not repeat SCF, three-center integrals, metric factorization or MO source
+construction, and does not solve CC or Lambda. HF forces use the same stationary
+reference. Method-specific orbital response solves remain separate.
+
+Equal orbital basis identities must share the same auxiliary identity. These
+identities are snapshots, not mutable file names. Different orbital bases do
+not share orbitals or integral factors. Native DF source, metric-rank,
+derivative, convergence and budget checks still apply. Analytic forces include
+auxiliary-center and metric derivatives as well as the exact RHF response.
+This correlation source/nuclear sink admits orbital shells through f and
+auxiliary shells through g, including spherical fitting bases used with TZ.
+This scoped admission does not widen generic CUDA DF exports or orbital g.
+There is no inherited conventional 12/56-AO force cutoff on this DF owner, but
+this is not an unlimited-size admission promise: the source retains
+`O(nAO² naux)` values and MP2's generated energy/response scratch is
+`O(nocc² nvir²)`. A representative QM7 molecule needs actual basis/auxiliary
+counts and endpoint qualification; atom count alone does not establish fit.
+
+Standalone same-reference DF-MP2 is selected with
+`Calculator(method="mp2", density_fitting="correlation_cuda", device="cuda",
+auxiliary_basis=..., correlation_memory_budget_bytes=2 << 30)` and an explicit
+`singlepoint(..., properties=("energy", "forces"))` request. This DF owner
+requires a positive explicit correlation budget; standalone DF-MP2 defaults
+to energy-only. The older `density_fitting="cuda"` RI-MP2 selector
+keeps its DF-HF reference and energy-only CUDA contract; it is not silently
+reinterpreted. Correlation-only DF-MP2 currently supports single-point/groups,
+not prepared batches or CPU fallback.
+
 (python-cbs-values)=
 ## Scientific model and values
 
@@ -74,8 +126,9 @@ see Helgaker et al., *J. Chem. Phys.* **106**, 9639 (1997), and the
 [Psi4 CBS scheme definitions](https://psicode.org/psi4manual/master/cbs.html).
 
 Every component uses the same geometry, charge, spin, nonrelativistic
-all-electron Coulomb Hamiltonian, exact integrals and full correlated occupied
-space. The workflow is FP64. Frozen-core, ECP, density-fitting and unrestricted
+all-electron reference and full correlated occupied space. The default uses
+exact correlation integrals; explicit auxiliaries select the correlation-only
+DF model described above. The workflow is FP64. Frozen-core, ECP and unrestricted
 variants are not admitted. Cardinals must be increasing integers, the larger
 bases must have distinct identities, and all bases must have the same AO
 representation. Cardinal numbers are explicit declarations; an arbitrary
@@ -93,14 +146,15 @@ Do not use extrapolated energy with only the larger MP2 force. Do not refit
 exponents at each geometry without their derivatives. Same-basis components
 execute as one native group: MP2 supplies an HF companion, and CCSD(T) supplies
 MP2 and, when needed, HF companions. Each group shares its converged canonical
-RHF reference, orbitals and exact AO interaction owner. The correction-basis
+RHF reference and orbitals. In the conventional model they also share the exact
+AO interaction owner. The correction-basis
 MP2 energy and initial force adjoint also borrow the already transformed CC
 OVOV block. Its remaining orbital-RHS, relaxed-weight and response-operator
 reads borrow a complete six-block CC ERI symmetry cover when admitted, rather
 than repeating AO-to-MO transformations. Equal method/basis identities still
 contribute only once per call.
 
-The other CUDA MP2 E+F groups can build the same six-block symmetry cover once
+The other conventional CUDA MP2 E+F groups can build the same six-block symmetry cover once
 from their own exact device-readable RHF source. This optional cache is admitted
 only when it uses at most one quarter of the remaining correlation phase budget,
 its construction fits, and the full force consumer fits alongside it. Otherwise
@@ -138,7 +192,8 @@ density tolerances to `1e-12`/`1e-10`, CC energy/residual tolerances to
 `1e-12`/`1e-10`, with 200 SCF and 150 CC iterations. It cannot override component
 methods/bases, precision, frozen core or density fitting. Native admissibility
 checks still apply to these controls. `Calculator.singlepoint_components` also
-exposes same-reference groups directly for conventional MP2 and CCSD(T).
+exposes same-reference groups directly for conventional and correlation-only
+DF MP2/CCSD(T).
 
 (python-cbs-ownership)=
 ## Ownership and concurrency
@@ -178,8 +233,9 @@ Select `device="cpu"` or `device="cuda"` explicitly; there is no CPU fallback
 when CUDA is requested. `executed_backend` retains the native backend spelling
 (`cpu_reference` or `cuda`). Chemistry, force-domain and resource support are
 inherited from each actual native component, not broadened by composition.
-In particular, CUDA RI-MP2 forces remain unsupported, and the small CCSD(T)
-force calculation must fit its native qualified domain. This orchestration
+In particular, legacy DF-HF CUDA RI-MP2 forces remain unsupported, and the small
+CCSD(T) force calculation must fit its actual native domain. The explicit
+correlation-only DF owner is separate from conventional force admission. This orchestration
 does not remove remaining host staging or improve the asymptotic MP2 response
 algorithm. Optional MO caching reduces repeated transformations, not the
 method-specific response work or its domain limits.

@@ -24,6 +24,9 @@ struct RccsdNativeState {
   cc::SolverResult solved;
   // Opt-in immutable DF source/frame owner, retained across CC response.
   cc::DFSourceResult df_source;
+  // Correlation-only MP2 bypasses CC iteration and retains only its demanded VJP.
+  cc::DFMP2Result df_mp2;
+  bool df_mp2_mode{};
   std::vector<double> eps_o, eps_v;
   generativeqc_correlation_diagnostic diagnostic{};
   CcPerformanceDiagnostic performance{};
@@ -52,7 +55,7 @@ RccsdNativeState run_rccsd_native_state(
     bool retain_df_response = false, bool df_matrix_gemm = true,
     scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr,
     std::size_t df_auxiliary_batch_limit = 8, bool derived_denominators = true,
-    bool packed_diis = false, bool df_mixed_precision = false);
+    bool packed_diis = false, bool df_mixed_precision = false, bool df_mp2_mode = false);
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities&, core::ContextState&, const core::System&,

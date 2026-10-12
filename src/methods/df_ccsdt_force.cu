@@ -4,6 +4,7 @@
 #include <cmath>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include "integrals/electron_interaction_source.hpp"
@@ -95,6 +96,26 @@ void publish_force_diagnostic(DFCCSDTResult& result) {
       std::min(sizeof(diagnostic.response_operator_hash) - 1, result.orbital.operator_hash.size()),
       diagnostic.response_operator_hash);
 }
+
+generativeqc_correlation_diagnostic mp2_diagnostic(
+    const generativeqc_correlation_diagnostic& reference, const cc::DFMP2Result& mp2) {
+  // CC convergence and triples fields must never leak into a successful MP2
+  // companion merely because it borrows a converged CC source owner.
+  generativeqc_correlation_diagnostic diagnostic{};
+  diagnostic.struct_size = sizeof(diagnostic);
+  diagnostic.abi_version = GENERATIVEQC_ABI_VERSION;
+  diagnostic.reference_energy = reference.reference_energy;
+  diagnostic.reference_residual = reference.reference_residual;
+  diagnostic.opposite_spin_energy = mp2.opposite_spin;
+  diagnostic.same_spin_energy = mp2.same_spin;
+  diagnostic.minimum_absolute_denominator = mp2.minimum_absolute_denominator;
+  diagnostic.numeric_capacity_bytes =
+      std::max(reference.numeric_capacity_bytes, mp2.numeric_capacity_bytes);
+  diagnostic.mo_host_staging = 1;
+  const std::string_view hash(mp2.equation_hash);
+  std::copy_n(hash.begin(), std::min<std::size_t>(64, hash.size()), diagnostic.equation_hash);
+  return diagnostic;
+}
 }  // namespace
 
 static DFCCSDTResult run_df_ccsdt_native_attempt(
@@ -112,7 +133,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
     bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
-    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false) {
+    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false,
+    DFCorrelationDemand demand = {}) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
@@ -145,7 +167,32 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                             checked_add(recycle_bytes,
                                         physical_replay ? physical_replay->output_bytes : 0)),
                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
-                packed_diis, ccsd_mixed_precision);
+                packed_diis, ccsd_mixed_precision, demand.mp2);
+  if (retained_host_bytes >= state.budget)
+    throw std::length_error("DF correlation retained caller state exhausts complete budget");
+  if (demand.mp2 && !state.df_mp2_mode) {
+    // The companion borrows the original whitened factors and spectrum. CC
+    // amplitudes and four-index core blocks are dead, not MP2 prerequisites.
+    state.solved = {};
+    for (auto* values : {&state.problem.ovov, &state.problem.ovvo, &state.problem.oovv,
+                         &state.problem.ovoo, &state.problem.oooo, &state.problem.d1,
+                         &state.problem.d2, &state.problem.initial_t1, &state.problem.initial_t2})
+      std::vector<double>().swap(*values);
+    state.df_mp2 = cc::evaluate_df_mp2_cuda(
+        state.problem.nocc, state.problem.nvir, state.problem.naux, state.problem.df_bov,
+        state.eps_o, state.eps_v, state.problem.df_source_identity, forces,
+        state.budget - retained_host_bytes, execution.device_id(),
+        checked_add(state.problem.reference_retained_bytes,
+                    checked_add(cc::problem_host_bytes(state.problem),
+                                capacity({&state.eps_o, &state.eps_v}))),
+        descriptor.mp2_denominator_threshold ? descriptor.mp2_denominator_threshold : 1e-10);
+    state.df_mp2_mode = true;
+    state.solved.status = cc::SolveStatus::Converged;
+    state.solved.correlation_energy = state.df_mp2.opposite_spin + state.df_mp2.same_spin;
+    state.solved.total_energy = state.reference->energy + state.solved.correlation_energy;
+    state.result.energy = state.solved.total_energy;
+    state.diagnostic = mp2_diagnostic(state.diagnostic, state.df_mp2);
+  }
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   if (reference_experiment) {
     reference_experiment->reference = state.reference;
@@ -176,7 +223,21 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   auto base = checked_add(
       p.reference_retained_bytes,
       checked_add(cc::problem_host_bytes(p), capacity({&state.solved.t1, &state.solved.t2})));
-  if (replay_state) result.numeric_capacity_bytes = base;
+  const auto mp2_response_bytes =
+      capacity({&state.df_mp2.factors.boo, &state.df_mp2.factors.bov, &state.df_mp2.factors.bvv,
+                &state.df_mp2.eps_o, &state.df_mp2.eps_v, &state.df_mp2.foo, &state.df_mp2.fvv});
+  base = checked_add(base, mp2_response_bytes);
+  if (trace.enabled()) {
+    Trace::number("df_source_identity", p.df_source_identity);
+    Trace::number("df_source_builds", replay_state ? 0 : 1);
+  }
+  if (trace.enabled() && demand.mp2) {
+    Trace::number("df_mp2_reference_reused", replay_state ? 1 : 0);
+    Trace::number("df_mp2_source_reused", replay_state ? 1 : 0);
+    Trace::number("df_mp2_source_identity", p.df_source_identity);
+  }
+  if (replay_state)
+    result.numeric_capacity_bytes = std::max(base, state.df_mp2.numeric_capacity_bytes);
   const auto borrowed = bytes(p.df_bov.size() + p.df_bvv.size() + p.ovoo.size() + p.ovov.size() +
                               p.fov.size() + state.solved.t1.size() + state.solved.t2.size() +
                               state.eps_o.size() + state.eps_v.size());
@@ -228,6 +289,23 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
         std::min(result.correlation.minimum_absolute_denominator,
                  result.triples.minimum_absolute_denominator);
   if (!forces) {
+    if (demand.companions & kHfComponent) {
+      Result::Companion component;
+      component.energy = result.reference_energy;
+      result.method_result.hf_component = std::move(component);
+    }
+    if (demand.companions & kMp2Component) {
+      const auto companion = cc::evaluate_df_mp2_cuda(
+          o, v, q, p.df_bov, state.eps_o, state.eps_v, p.df_source_identity, false, budget, device,
+          checked_add(base, capacity({&state.eps_o, &state.eps_v})),
+          descriptor.mp2_denominator_threshold ? descriptor.mp2_denominator_threshold : 1e-10);
+      Result::Companion component;
+      component.energy = result.reference_energy + companion.opposite_spin + companion.same_spin;
+      component.correlation = mp2_diagnostic(result.correlation, companion);
+      result.method_result.mp2_component = std::move(component);
+      result.numeric_capacity_bytes =
+          std::max(result.numeric_capacity_bytes, companion.numeric_capacity_bytes);
+    }
     result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, external_bytes);
     // The public diagnostic includes the caller-owned reservation restored at
     // this boundary, just like the complete native endpoint allowance.
@@ -238,99 +316,124 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   if (!state.df_source.response_state || state.df_source.source_identity != p.df_source_identity)
     throw std::logic_error("DF force lost its original molecular source/frame");
   phase = Clock::now();
-  if (trace.enabled()) Trace::label("phase", "corrected_lambda");
-  cc::LambdaOptions lambda_options;
-  lambda_options.cuda_resident_krylov = lambda_resident_krylov;
-  lambda_options.serial_scratch_reuse = lambda_serial_scratch_reuse;
-  lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
-  lambda_options.df_matrix_gemm = lambda_matrix_gemm;
-  lambda_options.df_core_reuse = lambda_core_reuse;
-  lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
-  lambda_options.df_primal_matrix_gemm = lambda_primal_matrix;
-  lambda_options.df_mixed_precision = lambda_mixed_precision;
-  lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
-  lambda_options.cc_tolerance = 1e-9;
-  lambda_options.lambda_tolerance = 1e-9;
-  const auto lambda_external = checked_add(tbytes, fbytes);
-  lambda_options.max_bytes = difference(budget, lambda_external);
-  lambda_options.gmres.max_workspace_bytes = lambda_options.max_bytes;
-  lambda_options.gmres.absolute_tolerance = 1e-12;
-  // Acceptance still uses a freshly evaluated FP64 residual and the separate
-  // independent equation. Only redundant intermediate operator replays change.
-  lambda_options.gmres.true_residual_every = lambda_true_residual_interval;
-  auto parameters = with_triples ? cc::solve_lambda_parameter_response_cuda_with_energy_source(
-                                       p, state.solved, t.t1, t.t2, device, lambda_options)
-                                 : cc::solve_lambda_parameter_response_cuda(p, state.solved, device,
-                                                                            lambda_options);
-  if (!parameters.lambda.converged())
-    throw std::runtime_error("DF force corrected Lambda did not converge");
-  result.lambda = parameters.lambda.diagnostic;
-  result.numeric_capacity_bytes =
-      std::max(result.numeric_capacity_bytes,
-               checked_add(lambda_external, result.lambda.numeric_capacity_bytes));
-  if (fingerprints)
-    record_fingerprints(*fingerprints, 9, {parameters.lambda.lambda1, parameters.lambda.lambda2});
-  if (with_triples) {
-    add(parameters.foo, result.triples_fock.foo);
-    add(parameters.fvv, result.triples_fock.fvv);
-    add(parameters.fov, t.fov);
-    add(parameters.ovov, t.ovov);
-    add(parameters.ovoo, t.ovoo);
-    add(parameters.df_bov, t.bov);
-    add(parameters.df_bvv, t.bvv);
-    // Full Fock matrices replace epsilon sources; never add t.eps_o/v.
-    t = {};
-    std::vector<double>().swap(result.triples_fock.foo);
-    std::vector<double>().swap(result.triples_fock.fvv);
+  std::vector<double> bar_f, bar_c;
+  cc::DFFactorResponseResult factors;
+  if (demand.mp2) {
+    const auto frame_peak = checked_add(base, bytes(checked_mul(2, nn)));
+    if (frame_peak > budget)
+      throw std::length_error("DF-MP2 frame exceeds complete numeric budget");
+    bar_f.assign(nn, 0.0);
+    bar_c.resize(nn);
+    for (std::size_t occupied = 0; occupied < o; ++occupied)
+      for (std::size_t partner = 0; partner < o; ++partner)
+        bar_f[occupied * n + partner] = state.df_mp2.foo[occupied * o + partner];
+    for (std::size_t virtual_orbital = 0; virtual_orbital < v; ++virtual_orbital)
+      for (std::size_t partner = 0; partner < v; ++partner)
+        bar_f[(o + virtual_orbital) * n + o + partner] =
+            state.df_mp2.fvv[virtual_orbital * v + partner];
+    factors = std::move(state.df_mp2.factors);
+    std::vector<double>().swap(state.df_mp2.eps_o);
+    std::vector<double>().swap(state.df_mp2.eps_v);
+    std::vector<double>().swap(state.df_mp2.foo);
+    std::vector<double>().swap(state.df_mp2.fvv);
+    base = difference(base, mp2_response_bytes);
+    result.numeric_capacity_bytes = std::max(result.numeric_capacity_bytes, frame_peak);
+  } else {
+    if (trace.enabled()) Trace::label("phase", "corrected_lambda");
+    cc::LambdaOptions lambda_options;
+    lambda_options.cuda_resident_krylov = lambda_resident_krylov;
+    lambda_options.serial_scratch_reuse = lambda_serial_scratch_reuse;
+    lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
+    lambda_options.df_matrix_gemm = lambda_matrix_gemm;
+    lambda_options.df_core_reuse = lambda_core_reuse;
+    lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
+    lambda_options.df_primal_matrix_gemm = lambda_primal_matrix;
+    lambda_options.df_mixed_precision = lambda_mixed_precision;
+    lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
+    lambda_options.cc_tolerance = 1e-9;
+    lambda_options.lambda_tolerance = 1e-9;
+    const auto lambda_external = checked_add(tbytes, fbytes);
+    lambda_options.max_bytes = difference(budget, lambda_external);
+    lambda_options.gmres.max_workspace_bytes = lambda_options.max_bytes;
+    lambda_options.gmres.absolute_tolerance = 1e-12;
+    // Acceptance still uses a freshly evaluated FP64 residual and the separate
+    // independent equation. Only redundant intermediate operator replays change.
+    lambda_options.gmres.true_residual_every = lambda_true_residual_interval;
+    auto parameters = with_triples ? cc::solve_lambda_parameter_response_cuda_with_energy_source(
+                                         p, state.solved, t.t1, t.t2, device, lambda_options)
+                                   : cc::solve_lambda_parameter_response_cuda(
+                                         p, state.solved, device, lambda_options);
+    if (!parameters.lambda.converged())
+      throw std::runtime_error("DF force corrected Lambda did not converge");
+    result.lambda = parameters.lambda.diagnostic;
+    result.numeric_capacity_bytes =
+        std::max(result.numeric_capacity_bytes,
+                 checked_add(lambda_external, result.lambda.numeric_capacity_bytes));
+    if (fingerprints)
+      record_fingerprints(*fingerprints, 9, {parameters.lambda.lambda1, parameters.lambda.lambda2});
+    if (with_triples) {
+      add(parameters.foo, result.triples_fock.foo);
+      add(parameters.fvv, result.triples_fock.fvv);
+      add(parameters.fov, t.fov);
+      add(parameters.ovov, t.ovov);
+      add(parameters.ovoo, t.ovoo);
+      add(parameters.df_bov, t.bov);
+      add(parameters.df_bvv, t.bvv);
+      // Full Fock matrices replace epsilon sources; never add t.eps_o/v.
+      t = {};
+      std::vector<double>().swap(result.triples_fock.foo);
+      std::vector<double>().swap(result.triples_fock.fvv);
+    }
+    if (fingerprints)
+      record_fingerprints(*fingerprints, 11,
+                          {parameters.foo, parameters.fov, parameters.fvv, parameters.ovov,
+                           parameters.ovvo, parameters.oovv, parameters.ovoo, parameters.oooo,
+                           parameters.df_bov, parameters.df_bvv});
+    // Lambda vectors are no longer needed once their parameter VJPs are detached.
+    parameters.lambda = {};
+    result.lambda_seconds = elapsed(phase);
+    phase = Clock::now();
+    if (trace.enabled()) Trace::label("phase", "factor_and_nuclear_source");
+    const auto parameter_bytes =
+        capacity({&parameters.foo, &parameters.fov, &parameters.fvv, &parameters.ovov,
+                  &parameters.ovvo, &parameters.oovv, &parameters.ovoo, &parameters.oooo,
+                  &parameters.df_bov, &parameters.df_bvv});
+    const auto frame_phase =
+        checked_add(base, checked_add(parameter_bytes, bytes(checked_mul(2, nn))));
+    if (frame_phase > budget)
+      throw std::length_error("DF force frame buffers exceed complete numeric budget");
+    bar_f.assign(nn, 0.0);
+    bar_c.resize(nn);
+    for (std::size_t i = 0; i < o; ++i) {
+      for (std::size_t j = 0; j < o; ++j) bar_f[i * n + j] = parameters.foo[i * o + j];
+      for (std::size_t a = 0; a < v; ++a) bar_f[i * n + o + a] = parameters.fov[i * v + a];
+    }
+    for (std::size_t a = 0; a < v; ++a)
+      for (std::size_t b = 0; b < v; ++b) bar_f[(o + a) * n + o + b] = parameters.fvv[a * v + b];
+    auto live = checked_add(base, checked_add(parameter_bytes, capacity({&bar_f, &bar_c})));
+    const cc::DFFactorResponseView view{p.df_boo,
+                                        p.df_bov,
+                                        p.df_bvv,
+                                        parameters.ovov,
+                                        parameters.ovvo,
+                                        parameters.oovv,
+                                        parameters.ovoo,
+                                        parameters.oooo,
+                                        parameters.df_bov,
+                                        parameters.df_bvv,
+                                        p.df_source_identity};
+    std::size_t factor_inputs = 0;
+    for (auto span : {view.boo, view.bov, view.bvv, view.bar_ovov, view.bar_ovvo, view.bar_oovv,
+                      view.bar_ovoo, view.bar_oooo, view.bar_bov, view.bar_bvv})
+      factor_inputs = checked_add(factor_inputs, span.size_bytes());
+    factors = cc::pullback_df_factors_cuda(o, v, q, view, budget, device,
+                                           difference(live, factor_inputs));
+    result.numeric_capacity_bytes =
+        std::max(result.numeric_capacity_bytes, factors.numeric_capacity_bytes);
+    if (fingerprints)
+      record_fingerprints(*fingerprints, 21, {factors.boo, factors.bov, factors.bvv, bar_f});
+    parameters = {};
   }
-  if (fingerprints)
-    record_fingerprints(
-        *fingerprints, 11,
-        {parameters.foo, parameters.fov, parameters.fvv, parameters.ovov, parameters.ovvo,
-         parameters.oovv, parameters.ovoo, parameters.oooo, parameters.df_bov, parameters.df_bvv});
-  // Lambda vectors are no longer needed once their parameter VJPs are detached.
-  parameters.lambda = {};
-  result.lambda_seconds = elapsed(phase);
-  phase = Clock::now();
-  if (trace.enabled()) Trace::label("phase", "factor_and_nuclear_source");
-  const auto parameter_bytes =
-      capacity({&parameters.foo, &parameters.fov, &parameters.fvv, &parameters.ovov,
-                &parameters.ovvo, &parameters.oovv, &parameters.ovoo, &parameters.oooo,
-                &parameters.df_bov, &parameters.df_bvv});
-  const auto frame_phase =
-      checked_add(base, checked_add(parameter_bytes, bytes(checked_mul(2, nn))));
-  if (frame_phase > budget)
-    throw std::length_error("DF force frame buffers exceed complete numeric budget");
-  std::vector<double> bar_f(nn, 0.0), bar_c(nn);
-  for (std::size_t i = 0; i < o; ++i) {
-    for (std::size_t j = 0; j < o; ++j) bar_f[i * n + j] = parameters.foo[i * o + j];
-    for (std::size_t a = 0; a < v; ++a) bar_f[i * n + o + a] = parameters.fov[i * v + a];
-  }
-  for (std::size_t a = 0; a < v; ++a)
-    for (std::size_t b = 0; b < v; ++b) bar_f[(o + a) * n + o + b] = parameters.fvv[a * v + b];
-  auto live = checked_add(base, checked_add(parameter_bytes, capacity({&bar_f, &bar_c})));
-  const cc::DFFactorResponseView view{p.df_boo,
-                                      p.df_bov,
-                                      p.df_bvv,
-                                      parameters.ovov,
-                                      parameters.ovvo,
-                                      parameters.oovv,
-                                      parameters.ovoo,
-                                      parameters.oooo,
-                                      parameters.df_bov,
-                                      parameters.df_bvv,
-                                      p.df_source_identity};
-  std::size_t factor_inputs = 0;
-  for (auto span : {view.boo, view.bov, view.bvv, view.bar_ovov, view.bar_ovvo, view.bar_oovv,
-                    view.bar_ovoo, view.bar_oooo, view.bar_bov, view.bar_bvv})
-    factor_inputs = checked_add(factor_inputs, span.size_bytes());
-  auto factors =
-      cc::pullback_df_factors_cuda(o, v, q, view, budget, device, difference(live, factor_inputs));
-  result.numeric_capacity_bytes =
-      std::max(result.numeric_capacity_bytes, factors.numeric_capacity_bytes);
-  if (fingerprints)
-    record_fingerprints(*fingerprints, 21, {factors.boo, factors.bov, factors.bvv, bar_f});
-  parameters = {};
   if (physical_replay) {
     physical_replay->nocc = o;
     physical_replay->nvir = v;
@@ -442,6 +545,31 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   }
   // The source stream is drained and its sink has died. Release all completed
   // CC/source numeric owners before allocating the exact-reference response.
+  if (demand.companions & kMp2Component) {
+    // Complete the second correlation consumer before retiring the single
+    // source. Parent cotangents/preconditioner stay charged through its replay.
+    const auto reference = state.reference;
+    const auto original_budget = state.budget;
+    const auto parent_bytes =
+        checked_add(capacity({&bar_f, &bar_c, &correlation_gradient}),
+                    preconditioner.data ? preconditioner.data->storage_bytes() : 0);
+    auto companion = run_df_ccsdt_native_attempt(
+        execution, system, auxiliary, descriptor, true, false, df_auxiliary_reduction,
+        df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
+        derived_denominators, packed_diis, parallel_gap_reduction, false, &state,
+        checked_add(retained_host_bytes, parent_bytes), 0, nullptr, nullptr, false, {},
+        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
+        nullptr, lambda_serial_scratch_reuse, false, false, false, {true, 0});
+    state.reference = reference;
+    state.budget = original_budget;
+    Result::Companion component;
+    component.energy = companion.energy;
+    component.forces = std::move(companion.forces);
+    component.correlation = companion.correlation;
+    result.method_result.mp2_component = std::move(component);
+    result.numeric_capacity_bytes =
+        std::max(result.numeric_capacity_bytes, companion.numeric_capacity_bytes);
+  }
   state.df_source = {};
   state.problem = {};
   state.solved = {};
@@ -462,6 +590,32 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
           checked_add(exact_source_bytes,
                       checked_add(posthf::source_capacity(auxiliary),
                                   checked_add(capacity({&correlation_gradient}), bytes(coords))))));
+  if (result.method_result.mp2_component)
+    orbital_options.caller_bytes = checked_add(
+        orbital_options.caller_bytes, capacity({&result.method_result.mp2_component->forces}));
+  if (demand.companions & kHfComponent) {
+    auto hf_options = orbital_options;
+    hf_options.caller_bytes = checked_add(
+        hf_options.caller_bytes,
+        checked_add(bytes(nn),
+                    checked_add(capacity({&bar_f, &bar_c}),
+                                preconditioner.data ? preconditioner.data->storage_bytes() : 0)));
+    hf_options.recycling = nullptr;
+    hf_options.df_preconditioning = false;
+    std::vector<double> zero(nn, 0.0);
+    auto stationary =
+        hf::rhf_frame_response_cuda(system, *state.reference, zero, zero, device, hf_options);
+    Result::Companion component;
+    component.energy = result.reference_energy;
+    component.forces = std::move(stationary.gradient);
+    molecule::add_nuclear_repulsion_gradient(system, component.forces);
+    for (auto& force : component.forces) force = -force;
+    result.method_result.hf_component = std::move(component);
+    result.numeric_capacity_bytes =
+        std::max(result.numeric_capacity_bytes, stationary.numeric_capacity_bytes);
+    orbital_options.caller_bytes = checked_add(
+        orbital_options.caller_bytes, capacity({&result.method_result.hf_component->forces}));
+  }
   if (physical_replay) physical_replay->orbital_seed_identity = numeric_identity({bar_f, bar_c});
   for (std::size_t index = 0; index < physical_cases; ++index) {
     const auto orbital_started = Clock::now();
@@ -516,8 +670,17 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
   if (fingerprints) record_fingerprints(*fingerprints, 34, {result.forces});
+  if (demand.mp2 || demand.companions) {
+    // The detached native result and its public publication copy coexist.
+    // Charge the extra force vector before allocating it, never as a measured peak.
+    const auto publication_peak = checked_add(result.orbital.numeric_capacity_bytes, bytes(coords));
+    if (publication_peak > orbital_options.maximum_bytes)
+      throw std::length_error("DF correlation force publication exceeds complete numeric budget");
+    result.numeric_capacity_bytes = std::max(result.numeric_capacity_bytes, publication_peak);
+  }
   result.method_result.forces = result.forces;
   publish_force_diagnostic(result);
+  if (demand.mp2) result.correlation.force_provenance_flags &= 0x7;
   result.total_seconds = elapsed(started);
   return result;
 }
@@ -682,7 +845,8 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
     bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
     bool lambda_serial_scratch_reuse, bool ccsd_mixed_precision, bool lambda_mixed_precision,
-    bool lambda_resident_krylov) {
+    bool lambda_resident_krylov, DFCorrelationDemand demand) {
+  if (demand.mp2 && with_triples) throw std::invalid_argument("DF-MP2 cannot request CC triples");
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
   // Resolve endpoint policy before passing a positive limit to the solver.
@@ -722,7 +886,7 @@ DFCCSDTResult run_df_ccsdt_native(
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
         diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision,
-        lambda_resident_krylov);
+        lambda_resident_krylov, demand);
   };
   try {
     return finish(attempt());
@@ -744,5 +908,14 @@ DFCCSDTResult run_df_ccsdt_native(
   result.recycling_discarded_primal_attempt = true;
   result.total_seconds = elapsed(started);
   return finish(std::move(result));
+}
+DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext& execution,
+                                              const core::System& system,
+                                              const core::System& auxiliary,
+                                              const generativeqc_method_descriptor& descriptor,
+                                              bool forces, DFCorrelationDemand demand) {
+  return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
+                             true, true, 32, 0, {}, true, false, true, false, false, {}, 30, true,
+                             true, true, nullptr, false, false, false, false, demand);
 }
 }  // namespace generativeqc::methods::detail

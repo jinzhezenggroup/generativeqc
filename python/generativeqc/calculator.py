@@ -555,13 +555,25 @@ class Calculator:
             "cpu_reference": _native.DENSITY_FITTING_CPU_REFERENCE,
             "cuda": _native.DENSITY_FITTING_CUDA,
             "auto": _native.DENSITY_FITTING_AUTO,
+            "correlation_cuda": _native.DENSITY_FITTING_CORRELATION_CUDA,
         }
         try:
             density_fitting_mode = density_fitting_modes[str(density_fitting).lower()]
         except KeyError as error:
             raise ValueError(
-                "density_fitting must be 'none', 'cpu', 'cuda', or 'auto'"
+                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', or 'correlation_cuda'"
             ) from error
+        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+            if method_id != _native.METHOD_MP2:
+                raise ValueError(
+                    "correlation_cuda density fitting is an MP2 reference contract"
+                )
+            if device != "cuda":
+                raise NotImplementedError("correlation-only DF-MP2 requires CUDA")
+            if auxiliary_basis is None:
+                raise ValueError(
+                    "correlation-only DF-MP2 requires an explicit auxiliary basis"
+                )
         if intrinsic_df_rccsdt and density_fitting_mode not in (
             _native.DENSITY_FITTING_CUDA,
             _native.DENSITY_FITTING_AUTO,
@@ -831,6 +843,8 @@ class Calculator:
                 f"method {method!r} is reserved but not implemented"
             )
         self._capabilities = method_capabilities(self._method_name)
+        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+            self._capabilities = replace(self._capabilities, supports_batch=False)
         from ._cpu_force_resources import (
             qualified_basis,
             qualified_direct_semilocal_context,
@@ -1389,16 +1403,20 @@ class Calculator:
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
         auxiliary = basis is not None
+        selected_operator = operator or ("df_metric" if auxiliary else "eri")
         require_basis(
             selected_basis,
             atoms,
             backend=self._density_fitting_backend() if auxiliary else self._device_name,
-            operator=operator or ("df_metric" if auxiliary else "eri"),
+            operator=selected_operator,
             derivative_order=derivative_order,
             role="auxiliary" if auxiliary else "orbital",
             representation=selected_basis.representation
             if isinstance(selected_basis, BasisSet)
             else self._representation_name,
+            consumer=self._auxiliary_basis_consumer(selected_operator)
+            if auxiliary
+            else None,
         )
         return (
             selected_basis.shells_for(atoms)
@@ -1412,6 +1430,25 @@ class Calculator:
         if self._density_fitting_mode == _native.DENSITY_FITTING_CUDA:
             return "cuda"
         return self._device_name
+
+    def _auxiliary_basis_consumer(self, operator: str) -> str | None:
+        """Select the correlation source's domain, not generic DF-HF exports.
+
+        The physical correlation source and its nuclear pullback support
+        auxiliary g shells. Both preflight and native shell expansion must
+        use that same scoped policy; other DF consumers retain their limits.
+        """
+        if (
+            operator in {"df_metric", "df_three_center"}
+            and self._density_fitting_backend() == "cuda"
+            and (
+                self._method == _native.METHOD_DF_RCCSD_T
+                or self._density_fitting_mode
+                == _native.DENSITY_FITTING_CORRELATION_CUDA
+            )
+        ):
+            return "correlation_df"
+        return None
 
     def _model_signature(self) -> typing.Any:
         """Detect replacement of scientific input snapshots before prepared reuse."""
@@ -1654,6 +1691,9 @@ class Calculator:
                         representation=basis.representation
                         if isinstance(basis, BasisSet)
                         else self._representation_name,
+                        consumer=self._auxiliary_basis_consumer(operator)
+                        if role == "auxiliary"
+                        else None,
                     )
 
     def _create_native_system(
@@ -1784,11 +1824,20 @@ class Calculator:
                 ),
             )
             return system
+        create_system = self._library.generativeqc_system_create
+        if basis is not None and self._auxiliary_basis_consumer("df_metric"):
+            create_system = getattr(
+                self._library,
+                "generativeqc_correlation_auxiliary_system_create_v1",
+                None,
+            )
+            if create_system is None:
+                raise NotImplementedError(
+                    "native library lacks correlation-only DF auxiliary admission"
+                )
         _native.check(
             self._library,
-            self._library.generativeqc_system_create(
-                context, ctypes.byref(descriptor), ctypes.byref(system)
-            ),
+            create_system(context, ctypes.byref(descriptor), ctypes.byref(system)),
             context=context,
         )
         return system
@@ -2333,8 +2382,8 @@ class Calculator:
         """
         names = tuple(companions)
         allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
-        if self._method_name not in ("mp2", "ccsd(t)"):
-            raise NotImplementedError("companions require conventional MP2 or CCSD(T)")
+        if self._method_name not in ("mp2", "ccsd(t)", "df-rccsd(t)", "df-ccsd(t)"):
+            raise NotImplementedError("companions require MP2 or CCSD(T)")
         if not names or len(set(names)) != len(names) or not set(names) <= allowed:
             raise ValueError("unsupported or duplicate companion methods")
         if not hasattr(self._library, "generativeqc_calculation_execute_components_v1"):
