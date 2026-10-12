@@ -4,6 +4,7 @@ The two-site model has a real UHF broken-symmetry singlet when U > 2*t.
 The test SCF solver is separate from the production recovery controller.
 """
 
+import typing
 from dataclasses import replace
 from unittest.mock import Mock
 
@@ -157,7 +158,9 @@ def test_invalid_angle_admission(angles: tuple[float, ...]) -> None:
         RecoveryOptions(angles=angles)
 
 
-def test_native_h2_broken_root_matches_independent_pyscf_214(record_property) -> None:
+def test_native_h2_broken_root_matches_independent_pyscf_214(
+    record_property: typing.Any,
+) -> None:
     """Real native SCF reconvergence; PySCF is used only as a test oracle."""
     import os
 
