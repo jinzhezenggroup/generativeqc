@@ -87,6 +87,39 @@ class UCCSDLambdaOptions:
             raise TypeError("UCCSD Lambda requires GMRESOptions")
 
 
+def _validate_physical_multipliers(
+    packed_multipliers: np.ndarray, multipliers: Mapping[str, np.ndarray]
+) -> np.ndarray:
+    """Validate the shared unweighted excitation dual, without method qualification."""
+    names = ("l1a", "l1b", "l2aa", "l2ab", "l2bb")
+    if set(multipliers) != set(names):
+        raise ValueError("UCCSD Lambda requires exactly five multiplier blocks")
+    singles_alpha, singles_beta = multipliers["l1a"], multipliers["l1b"]
+    if (
+        type(singles_alpha) is not np.ndarray
+        or type(singles_beta) is not np.ndarray
+        or singles_alpha.ndim != 2
+        or singles_beta.ndim != 2
+    ):
+        raise ValueError("UCCSD Lambda singles must have rank two")
+    layout = UCCSDLayout(
+        singles_alpha.shape[0],
+        singles_beta.shape[0],
+        singles_alpha.shape[1],
+        singles_beta.shape[1],
+    )
+    packed = layout.pack(
+        {name.replace("l", "t", 1): multipliers[name] for name in names}
+    )
+    if (
+        type(packed_multipliers) is not np.ndarray
+        or packed_multipliers.dtype != np.float64
+        or not np.array_equal(packed, packed_multipliers)
+    ):
+        raise ValueError("UCCSD Lambda full and packed multipliers disagree")
+    return packed
+
+
 @dataclass(frozen=True)
 class UCCSDLambdaResult:
     """Immutable physical excitation dual, published only after stationarity.
@@ -115,32 +148,9 @@ class UCCSDLambdaResult:
         self, _endpoint_started: float | None, _preparation_seconds: float
     ) -> None:
         """Own immutable, non-aliasing arrays even for explicitly constructed records."""
-        names = ("l1a", "l1b", "l2aa", "l2ab", "l2bb")
-        if set(self.multipliers) != set(names):
-            raise ValueError("UCCSD Lambda requires exactly five multiplier blocks")
-        singles_alpha, singles_beta = self.multipliers["l1a"], self.multipliers["l1b"]
-        if (
-            type(singles_alpha) is not np.ndarray
-            or type(singles_beta) is not np.ndarray
-            or singles_alpha.ndim != 2
-            or singles_beta.ndim != 2
-        ):
-            raise ValueError("UCCSD Lambda singles must have rank two")
-        layout = UCCSDLayout(
-            singles_alpha.shape[0],
-            singles_beta.shape[0],
-            singles_alpha.shape[1],
-            singles_beta.shape[1],
+        packed = _validate_physical_multipliers(
+            self.packed_multipliers, self.multipliers
         )
-        packed = layout.pack(
-            {name.replace("l", "t", 1): self.multipliers[name] for name in names}
-        )
-        if (
-            type(self.packed_multipliers) is not np.ndarray
-            or self.packed_multipliers.dtype != np.float64
-            or not np.array_equal(packed, self.packed_multipliers)
-        ):
-            raise ValueError("UCCSD Lambda full and packed multipliers disagree")
         for name in (
             "primal_residual_max",
             "energy_drift",
@@ -436,6 +446,17 @@ class PreparedUCCSDLambda:
             ):
                 raise MemoryError("UCCSD derivative exceeds CPU executor capacity")
         return _Resource(native_bytes, resources["scalar_work"])
+
+    @property
+    def qualification_scalar_work(self) -> int:
+        """Complete fresh parent plus standard Lambda stationarity replay work."""
+        return checked_bytes(
+            self._resources[self.prepared.program.logical_hash].scalar_work
+            + self._resources[
+                self.programs.stationarity_vjp.derivative_hash
+            ].scalar_work,
+            "UCCSD Lambda qualification work",
+        )
 
     def _check_open(self) -> None:
         if self._closed:
