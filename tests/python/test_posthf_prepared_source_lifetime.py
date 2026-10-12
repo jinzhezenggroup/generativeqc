@@ -120,8 +120,11 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cc = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     mp2_setup = mp2.split("      std::unique_ptr<posthf::RawSource> raw_source;", 1)[
         1
-    ].split("      const auto run_phase =", 1)[0]
-    force_prefix = mp2.split("      if (compute_forces) {", 1)[1].split(
+    ].split("      Result result;", 1)[0]
+    # This probe owns the primary MP2 force transition. HF companions have
+    # their own force branch and are exercised by the native CBS tests.
+    primary_force = mp2[mp2.index("      std::optional<mp2::ConventionalForceResult>") :]
+    force_prefix = primary_force.split("      if (compute_forces) {", 1)[1].split(
         "        response::GmresOptions response_options;", 1
     )[0]
     cc_handoff = cc.split("    std::unique_ptr<posthf::RawSource> raw_source;", 1)[

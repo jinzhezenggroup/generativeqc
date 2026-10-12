@@ -39,6 +39,14 @@ struct Convergence {
   bool converged{};
 };
 
+/** Complete before optional instantiation, including on Clang/libstdc++ where
+ * a nested aggregate's default-construction trait can be queried too early. */
+struct ResultCompanion {
+  double energy{};
+  std::vector<double> forces;
+  std::optional<generativeqc_correlation_diagnostic> correlation;
+};
+
 /** Common calculation result. Method-specific retained state stays in the plan. */
 struct Result {
   double energy{};
@@ -64,11 +72,7 @@ struct Result {
   scf::initial_guess::PreliminaryDiagnostic preliminary_guess;
   /** Optional synchronous CBS companions, evaluated from this exact reference.
    * They are absent unless requested and never survive a failed transaction. */
-  struct Companion {
-    double energy{};
-    std::vector<double> forces;
-    std::optional<generativeqc_correlation_diagnostic> correlation;
-  };
+  using Companion = ResultCompanion;
   std::optional<Companion> hf_component, mp2_component;
 };
 

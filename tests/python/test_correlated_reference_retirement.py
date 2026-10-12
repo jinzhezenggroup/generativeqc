@@ -681,6 +681,15 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
         "      std::unique_ptr<posthf::RawSource> raw_source;",
         "      Result result;",
     )
+    # Model the ordinary endpoint with no companion outputs. Keep the real
+    # admission callback and energy peak accounting in the executable probe.
+    mp2_energy += "const std::size_t component_capacity = 0, component_peak = 0;\n"
+    mp2_energy += _between(
+        mp2, "      const auto run_phase =", "      if (components & kHfComponent)"
+    )
+    mp2_energy += _between(
+        mp2, "      const auto corr = run_phase(", "      result.energy ="
+    )
     mp2_force = _between(
         mp2,
         "        response::GmresOptions response_options;",
