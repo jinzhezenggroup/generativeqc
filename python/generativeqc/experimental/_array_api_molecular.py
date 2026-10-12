@@ -25,8 +25,9 @@ from typing_extensions import Self
 from . import _array_api_eager as eager
 
 if TYPE_CHECKING:
-    from generativeqc.ks import KsOptions
     from generativeqc_compiler.method import MethodIR
+
+    from generativeqc.ks import KsOptions
 
 
 _PREFIX = "__gqc_molecular_"

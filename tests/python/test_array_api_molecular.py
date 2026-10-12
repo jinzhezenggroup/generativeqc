@@ -91,7 +91,8 @@ def test_composed_xc_methodir_identity_and_compiled_chain_rule(
 
     def composed(label: str) -> Any:
         functional = xc.compose(
-            label, {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
+            label,
+            {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
             exact_exchange="1/2",
         )
         return method.compose(label, xc=functional)
@@ -104,7 +105,8 @@ def test_composed_xc_methodir_identity_and_compiled_chain_rule(
     first = xp.MolecularModel(("H", "H"), method=first_ir, ks_options=options)
     alias = xp.MolecularModel(("H", "H"), method=alias_ir, ks_options=options)
     different_grid = xp.MolecularModel(
-        ("H", "H"), method=alias_ir,
+        ("H", "H"),
+        method=alias_ir,
         ks_options=KsOptions(
             grid=GridSpec(radial_points=25, angular_polar=8, angular_azimuth=16),
             tile_points=32,
@@ -113,7 +115,9 @@ def test_composed_xc_methodir_identity_and_compiled_chain_rule(
     assert first._payload() == alias._payload()
     assert first._payload() != different_grid._payload()
     different_xc = xp.MolecularModel(
-        ("H", "H"), method=method.named("PBE0"), ks_options=options,
+        ("H", "H"),
+        method=method.named("PBE0"),
+        ks_options=options,
     )
     assert first._payload() != different_xc._payload()
     assert first._payload()["method_ir_identity"] == first_ir.identity
@@ -147,13 +151,18 @@ def test_molecular_method_ir_and_ks_options_forward_to_calculator(
     from generativeqc.extensions import method, xc
 
     graph = method.compose(
-        "scaled-pbe", xc=xc.compose(
-            "scaled-pbe", {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
+        "scaled-pbe",
+        xc=xc.compose(
+            "scaled-pbe",
+            {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
         ),
     )
     options = KsOptions(grid=GridSpec(radial_points=12), tile_points=48)
     source = xp.MolecularModel(
-        ("H", "H"), method=graph, ks_options=options, backend="cpu",
+        ("H", "H"),
+        method=graph,
+        ks_options=options,
+        backend="cpu",
     )
     captured: dict[str, Any] = {}
 
@@ -175,8 +184,10 @@ def test_molecular_composed_xc_configuration_fails_closed() -> None:
     from generativeqc.extensions import method, xc
 
     graph = method.compose(
-        "user-pbe", xc=xc.compose(
-            "user-pbe", {"GGA_X_PBE": 1, "GGA_C_PBE": 1},
+        "user-pbe",
+        xc=xc.compose(
+            "user-pbe",
+            {"GGA_X_PBE": 1, "GGA_C_PBE": 1},
         ),
     )
     with pytest.raises(TypeError, match="MethodIR"):
@@ -185,7 +196,8 @@ def test_molecular_composed_xc_configuration_fails_closed() -> None:
         xp.MolecularModel(("H", "H"), method=graph, ks_options={"grid": "fake"})
     with pytest.raises(ValueError, match="XC belongs to method"):
         xp.MolecularModel(
-            ("H", "H"), method=graph,
+            ("H", "H"),
+            method=graph,
             ks_options=KsOptions(grid=GridSpec(), composition=graph),
         )
 
@@ -217,8 +229,11 @@ def test_native_composed_xc_methodir_reuses_existing_scf(
         grid=GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
     )
     source = xp.MolecularModel(
-        ("H", "H"), method=graph, basis="sto-3g",
-        ks_options=options, backend="cpu",
+        ("H", "H"),
+        method=graph,
+        basis="sto-3g",
+        ks_options=options,
+        backend="cpu",
     )
     compute = (
         xp.value_and_grad(lambda coordinates: source(coordinates), cache=tmp_path)
@@ -226,8 +241,12 @@ def test_native_composed_xc_methodir_reuses_existing_scf(
         else xp.compile(lambda coordinates: source(coordinates), cache=tmp_path)
     )
     original = Calculator(
-        method=graph, basis="sto-3g", device="cpu",
-        ks_options=options, initial_guess=None, **dict(source._controls)
+        method=graph,
+        basis="sto-3g",
+        device="cpu",
+        ks_options=options,
+        initial_guess=None,
+        **dict(source._controls),
     )
     try:
         property_names = ("energy", "forces") if analytic_gradient else ("energy",)
