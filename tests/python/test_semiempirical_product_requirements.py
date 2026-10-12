@@ -3,7 +3,6 @@
 from dataclasses import replace
 
 import pytest
-
 from generativeqc_compiler.method.semiempirical import (
     InvalidSemiempiricalMethod,
     ParameterResource,
@@ -77,9 +76,7 @@ def _generic_method(family: str = "dftb") -> SemiempiricalMethodIR:
 
 @pytest.mark.parametrize("name", ["GFN1-xTB", "GFN2-xTB"])
 def test_real_gfn_graph_binds_parameter_and_state_requirements(name: str) -> None:
-    legacy = resolve_xtb_method(
-        name, requested_products=("energy", "nuclear-gradient")
-    )
+    legacy = resolve_xtb_method(name, requested_products=("energy", "nuclear-gradient"))
     common = semiempirical_from_xtb(legacy)
     energy = semiempirical_product_requirements(common, ProductSpec("energy", 0))
     gradient = semiempirical_product_requirements(
@@ -109,9 +106,7 @@ def test_real_gfn_graph_binds_parameter_and_state_requirements(name: str) -> Non
         assert bound.state_writes == tuple(states[k] for k in primitive.state_writes)
         assert bound.fixed_point == primitive.fixed_point
         if "integral-adjoint" in primitive.derivative_capabilities:
-            assert DerivativeMechanism.INTEGRAL_ADJOINT in (
-                bound.derivative_mechanisms
-            )
+            assert DerivativeMechanism.INTEGRAL_ADJOINT in (bound.derivative_mechanisms)
     assert (
         gradient.supported_atomic_numbers
         == legacy.parameter_set.supported_atomic_numbers
@@ -128,22 +123,25 @@ def test_gfn_alias_identity_and_parameter_revision_do_not_drift() -> None:
     )
     product = ProductSpec("energy", 0)
     assert left.identity == right.identity
-    assert semiempirical_product_requirements(
-        left, product
-    ).identity == semiempirical_product_requirements(right, product).identity
+    assert (
+        semiempirical_product_requirements(left, product).identity
+        == semiempirical_product_requirements(right, product).identity
+    )
 
     changed = semiempirical_from_xtb(
         resolve_xtb_method(
             XtbMethodSpec(
-                "alias-a", "gfn2",
+                "alias-a",
+                "gfn2",
                 replace(GFN2_PARAMETER_SET, revision="new-audited-content"),
             )
         )
     )
     assert left.identity != changed.identity
-    assert semiempirical_product_requirements(
-        left, product
-    ).identity != semiempirical_product_requirements(changed, product).identity
+    assert (
+        semiempirical_product_requirements(left, product).identity
+        != semiempirical_product_requirements(changed, product).identity
+    )
 
 
 @pytest.mark.parametrize("family", ["dftb", "nddo"])
@@ -183,12 +181,14 @@ def test_semantic_resource_and_state_changes_invalidate_requirement_identity() -
         method,
         state_fields=(replace(method.state_fields[0], scope="shell"),),
     )
-    assert baseline.identity != semiempirical_product_requirements(
-        changed_parameters, product
-    ).identity
-    assert baseline.identity != semiempirical_product_requirements(
-        changed_state, product
-    ).identity
+    assert (
+        baseline.identity
+        != semiempirical_product_requirements(changed_parameters, product).identity
+    )
+    assert (
+        baseline.identity
+        != semiempirical_product_requirements(changed_state, product).identity
+    )
 
 
 def test_product_request_and_derivative_semantics_fail_closed() -> None:
@@ -196,9 +196,7 @@ def test_product_request_and_derivative_semantics_fail_closed() -> None:
     with pytest.raises(InvalidSemiempiricalMethod, match="not requested"):
         semiempirical_product_requirements(method, ProductSpec("dipole", 0))
 
-    unsupported = replace(
-        method, requested_products=(ProductSpec("hessian", 2),)
-    )
+    unsupported = replace(method, requested_products=(ProductSpec("hessian", 2),))
     with pytest.raises(InvalidSemiempiricalMethod, match="unsupported"):
         semiempirical_product_requirements(unsupported, ProductSpec("hessian", 2))
 

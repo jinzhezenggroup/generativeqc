@@ -107,8 +107,7 @@ class SemiempiricalProductRequirements:
     def has_closed_derivative_contract(self) -> bool:
         """Static obligations only; never implies public/runtime qualification."""
         return not (
-            self.unresolved_local_derivative_nodes
-            or self.unresolved_global_obligations
+            self.unresolved_local_derivative_nodes or self.unresolved_global_obligations
         )
 
     def require_closed_derivative_contract(self) -> None:
