@@ -198,6 +198,28 @@ PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \\
   python -m pytest tests/python/test_cc_solver.py -k native_cpu_ccsd -q
 ```
 
+### Reproducible CPU endpoint evidence
+
+`benchmarks.rccsd_cpu_compiled_endpoint` measures the **complete supplied-MO
+RCCSD solver call**, rather than an isolated tensor kernel. It runs NumPy
+reference, native cold compilation and native cached replay in separate
+processes; each process reports its own wall clock, peak RSS, energy/residual
+and resource budgets. It repeats at one and four BLAS threads, with the same
+scientific inputs. This scope excludes upstream HF and AO generation.
+
+```bash
+PYTHONPATH=.:python python -m benchmarks.rccsd_cpu_compiled_endpoint \
+  --fixture h2o --threads 1 4 --output /tmp/rccsd-cpu.json
+```
+
+| CPU scientific call | Owner after this PR | Role / retirement rule |
+| --- | --- | --- |
+| RCCSD iterative E/R1/R2, native-selected | Optimized TensorIR -> native CPU compiler | New explicit compiled endpoint; qualify before default promotion |
+| RCCSD expanded E/R1/R2 | Separate TensorIR NumPy interpreter | Independent final convergence oracle; deliberately retained |
+| RCCSD default reference iterations | TensorIR NumPy interpreter | Compatibility/performance exception until complete CPU endpoint qualification |
+| Restricted/unrestricted iteration control, DIIS and AO/MO providers | Native/Python runtime and shared providers | Not compiler-science debt; avoid generating solver control |
+| UCCSD iterative E/R | Shared native CPU TensorIR compiler | Existing compiler-first endpoint; not modified here |
+
 **Promotion status:** the native CPU route is an explicit, independently
 qualified endpoint, not a claim of whole-endpoint speedup or a default-path
 change. Profile compile cold/warm, complete single-/multi-thread CPU
