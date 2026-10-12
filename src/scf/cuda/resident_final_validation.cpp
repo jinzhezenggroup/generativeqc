@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <new>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 #include "tensor/cuda_square_linalg.hpp"
@@ -12,9 +14,15 @@
 namespace generativeqc::scf::cuda_execution {
 namespace {
 void check(cudaError_t status) {
+  if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
-    throw std::runtime_error(std::string("resident final validation: ") +
-                             cudaGetErrorString(status));
+    throw Error(GENERATIVEQC_STATUS_CUDA_ERROR,
+                std::string("resident final validation: ") + cudaGetErrorString(status));
+}
+void check_blas(cublasStatus_t status) {
+  if (status == CUBLAS_STATUS_ALLOC_FAILED) throw std::bad_alloc();
+  if (status != CUBLAS_STATUS_SUCCESS)
+    throw Error(GENERATIVEQC_STATUS_CUDA_ERROR, "resident final-validation cuBLAS product failed");
 }
 
 struct Drain {
@@ -134,8 +142,7 @@ bool resident_final_state_products(MatrixLibraryResources resources,
     const auto status =
         tensor::cuda::square_panel_product(resources.blas_, extent, rank < 0 ? extent : rank, left,
                                            transpose_left, right, transpose_right, output);
-    if (status != CUBLAS_STATUS_SUCCESS)
-      throw std::runtime_error("resident final-validation cuBLAS product failed");
+    check_blas(status);
     runtime::cuda_trace::trace_counter("validation_gemms", 1);
   };
   const auto [first, second, third, fourth] = workspace.matrices;
