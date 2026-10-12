@@ -534,6 +534,8 @@ macro(generativeqc_configure_cuda_backend target)
       target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
     endif()
 
+    else()
+      target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
     endif()  # GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
 
     if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)

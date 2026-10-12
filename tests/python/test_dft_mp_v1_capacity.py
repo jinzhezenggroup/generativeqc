@@ -789,7 +789,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
-            "ecd65e075929ef3f01fabab0b40af432dfff8cb26ba8be5f51c90b88b2e128cd"
+            "c85807f20004717e97327677fb91b939b150a6c97b0bed150c9eb57d228f1f2e"
         ),
         "profiles": [
             "lda_rks",

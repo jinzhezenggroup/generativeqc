@@ -309,7 +309,7 @@ NATIVE_GRID_ABI_CONTRACT_SHA256 = (
 # Packaged s/p/d targets, profile selection and scientific generation are unchanged;
 # retain the full wiring digest so mutations of either integration fail closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "ecd65e075929ef3f01fabab0b40af432dfff8cb26ba8be5f51c90b88b2e128cd"
+    "c85807f20004717e97327677fb91b939b150a6c97b0bed150c9eb57d228f1f2e"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
