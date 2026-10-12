@@ -194,7 +194,7 @@ generated: the compiled graph is the original TensorIR science identity.
 For a CPU-only numerical check:
 
 ```bash
-PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \\
+PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   python -m pytest tests/python/test_cc_solver.py -k native_cpu_ccsd -q
 ```
 
