@@ -135,6 +135,7 @@ struct RksEvaluation {
   double energy{};
   dft::EnergyComponents components;
   dft::XcDensityDiagnostic density_diagnostic;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 struct RksXcEvaluator {
@@ -509,12 +510,14 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(density);
   RksEvaluation result;
+  result.coulomb_exchange_work = jk.coulomb_exchange_work;
   result.fock = assemble_fock(strategy, ints.hcore, jk).alpha;
   const auto primary_energy = contract_fock_energy_components(strategy, jk, density);
   double exact_exchange = primary_energy.exchange;
   DirectJkMatrices correction_jk;
   if (long_range_correction) {
     correction_jk = long_range_correction->build(density);
+    result.coulomb_exchange_work.add(correction_jk.coulomb_exchange_work);
     const auto& correction_strategy = long_range_correction->strategy();
     if (correction_jk.exchange_alpha.size() != result.fock.size())
       throw std::runtime_error("RSH correction exchange dimensions do not match the Fock matrix");
@@ -665,6 +668,7 @@ ScfResult run_rks(
   }
   Diis diis(options.diis_history, true);
   ScfResult result;
+  result.dft_diagnostic.coulomb_exchange_work = CoulombExchangeWork::empty();
   result.initial_density_used = initial_density != nullptr;
   auto& ks = result.dft_diagnostic;
   ks.occupations = {occupied, occupied};
@@ -791,6 +795,7 @@ ScfResult run_rks(
                      options.xc_tile_points, options.semilocal_exchange_scale,
                      options.semilocal_correlation_scale, nonlocal_correlation, nonlocal_domain,
                      ao_cache ? &*ao_cache : nullptr, std::move(xc_override));
+    result.dft_diagnostic.coulomb_exchange_work.add(physical.coulomb_exchange_work);
     const auto& record = physical.density_diagnostic;
     if (record.executed == dft::XcDensityRoute::OccupiedOrbitals)
       ++diagnostic.orbital_calls;
