@@ -126,12 +126,17 @@ def run_cached_compiler(
     *,
     label: str,
     launcher: CompilerCacheLauncher | None = None,
+    preserve_source_paths: bool = False,
 ) -> CompileResult:
     """Cache compilation while owning every local compiler's finite lifetime.
 
     sccache's ordinary shared daemon is outside the client's process group.
     Use a private foreground server and an exclusively leased persistent JIT
     cache slot. Never connect to or shut down the user's shared server.
+
+    ``preserve_source_paths`` prevents ccache from rewriting input filenames via
+    its base directory setting. This preserves path macros when converting an
+    uncached combined driver call to cacheable object compilation.
     """
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("compiler timeout must be finite and positive")
@@ -159,7 +164,15 @@ def run_cached_compiler(
     try:
         selected = launcher or resolve_compiler_cache(timeout)
         if selected.name != "sccache":
-            result = run_compiler(selected.wrap(command), remaining(), label=label)
+            if preserve_source_paths and selected.name == "ccache":
+                result = run_compiler(
+                    selected.wrap(command),
+                    remaining(),
+                    label=label,
+                    environment={**os.environ, "CCACHE_BASEDIR": ""},
+                )
+            else:
+                result = run_compiler(selected.wrap(command), remaining(), label=label)
             return outcome(result)
         result = _run_sccache(selected, command, deadline, label=label)
         return outcome(result)
