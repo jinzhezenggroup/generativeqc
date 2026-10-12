@@ -10,11 +10,12 @@ class KsSingleOwnerPort {
  public:
   virtual ~KsSingleOwnerPort() = default;
   virtual generativeqc_status final_state_token(dft::CudaKsFinalStateToken& token,
-                                        std::string& detail) const = 0;
+                                                std::string& detail) const = 0;
 
   virtual generativeqc_status read_final_state(const dft::CudaKsFinalStateToken& expected,
-                                       bool compute_weighted_density,
-                                       dft::VerifiedKsFinalState& state, std::string& detail) = 0;
+                                               bool compute_weighted_density,
+                                               dft::VerifiedKsFinalState& state,
+                                               std::string& detail) = 0;
 
   virtual generativeqc_status prepared_integral_gradient(
       const dft::CudaKsFinalStateToken& expected,
@@ -26,13 +27,15 @@ class KsSingleOwnerPort {
 class KsBatchOwnerPort {
  public:
   virtual ~KsBatchOwnerPort() = default;
-  virtual generativeqc_status final_state_token(std::size_t index, dft::CudaKsFinalStateToken& token,
-                                        std::string& detail) const = 0;
+  virtual generativeqc_status final_state_token(std::size_t index,
+                                                dft::CudaKsFinalStateToken& token,
+                                                std::string& detail) const = 0;
 
   virtual generativeqc_status read_final_state(std::size_t index,
-                                       const dft::CudaKsFinalStateToken& expected,
-                                       bool compute_weighted_density,
-                                       dft::VerifiedKsFinalState& state, std::string& detail) = 0;
+                                               const dft::CudaKsFinalStateToken& expected,
+                                               bool compute_weighted_density,
+                                               dft::VerifiedKsFinalState& state,
+                                               std::string& detail) = 0;
 
   virtual generativeqc_status cuda_full_range_integral_derivatives(
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
@@ -63,33 +66,37 @@ class KsBatchOwnerPort {
       std::array<std::uint64_t, 9>& work, std::string& detail) = 0;
 
   virtual generativeqc_status resident_density(std::size_t index,
-                                       const dft::CudaKsFinalStateToken& expected, int& device,
-                                       const double*& alpha, const double*& beta,
-                                       std::size_t& matrix_elements, unsigned& spins,
-                                       void*& source_stream, std::string& detail) = 0;
+                                               const dft::CudaKsFinalStateToken& expected,
+                                               int& device, const double*& alpha,
+                                               const double*& beta, std::size_t& matrix_elements,
+                                               unsigned& spins, void*& source_stream,
+                                               std::string& detail) = 0;
 
   virtual generativeqc_status fixed_density_profile(std::size_t index,
-                                            const dft::CudaKsFinalStateToken& expected,
-                                            KsFixedDensityProfile& profile, std::string& detail) = 0;
+                                                    const dft::CudaKsFinalStateToken& expected,
+                                                    KsFixedDensityProfile& profile,
+                                                    std::string& detail) = 0;
 
-  virtual generativeqc_status resident_grid(std::size_t index, const dft::CudaKsFinalStateToken& expected,
-                                    int& device, const double*& points, const double*& weights,
-                                    const double*& atomic_weights, std::size_t& point_count,
-                                    std::string& detail) = 0;
+  virtual generativeqc_status resident_grid(std::size_t index,
+                                            const dft::CudaKsFinalStateToken& expected, int& device,
+                                            const double*& points, const double*& weights,
+                                            const double*& atomic_weights, std::size_t& point_count,
+                                            std::string& detail) = 0;
 
-  virtual generativeqc_status resident_nonlocal_features(std::size_t index,
-                                                 const dft::CudaKsFinalStateToken& expected,
-                                                 int& device, const double*& density,
-                                                 const double*& gradient, std::size_t& point_count,
-                                                 void*& source_stream, std::string& detail) = 0;
+  virtual generativeqc_status resident_nonlocal_features(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected, int& device,
+      const double*& density, const double*& gradient, std::size_t& point_count,
+      void*& source_stream, std::string& detail) = 0;
 
   virtual generativeqc_status read_derivative_state(std::size_t index,
-                                            const dft::CudaKsFinalStateToken& expected,
-                                            KsDerivativeSnapshot& output, std::string& detail) = 0;
+                                                    const dft::CudaKsFinalStateToken& expected,
+                                                    KsDerivativeSnapshot& output,
+                                                    std::string& detail) = 0;
 
   virtual generativeqc_status read_derivative_sources(std::size_t index,
-                                              const dft::CudaKsFinalStateToken& expected,
-                                              KsDerivativeSnapshot& output, std::string& detail) = 0;
+                                                      const dft::CudaKsFinalStateToken& expected,
+                                                      KsDerivativeSnapshot& output,
+                                                      std::string& detail) = 0;
 };
 
 }  // namespace generativeqc::methods::detail

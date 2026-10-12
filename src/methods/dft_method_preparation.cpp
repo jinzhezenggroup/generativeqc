@@ -154,7 +154,7 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
   if (plan.automatic_program)
     return ks_scf_domain_version(plan) == 5U ? dft::generated::kAutomaticDensityLibxcScfDomain
-                                          : dft::generated::kAutomaticLibxcScfDomain;
+                                             : dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
@@ -172,7 +172,9 @@ std::optional<double> incremental_direct_jk_benchmark_density_rms_threshold(cons
 }
 }  // namespace
 
-bool ks_is_unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
+bool ks_is_unrestricted(const NativeKsExecutionPlan& plan) noexcept {
+  return plan.spin_channels == 2;
+}
 
 std::uint32_t ks_scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
   if (!ks_is_unrestricted(plan) && plan.automatic_restricted_program)

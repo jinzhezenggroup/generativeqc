@@ -15,7 +15,7 @@ struct System;
 namespace generativeqc::dft {
 struct SemilocalPointProgram;
 struct RestrictedSemilocalPointProgram;
-}
+}  // namespace generativeqc::dft
 
 namespace generativeqc::methods::detail {
 

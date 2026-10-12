@@ -1,6 +1,4 @@
 #include "methods/dft_method.hpp"
-#include "methods/dft_method_preparation.hpp"
-#include "methods/dft_method_owner_port.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -24,6 +22,8 @@
 #include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "methods/dft_method_owner_port.hpp"
+#include "methods/dft_method_preparation.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/resource_usage.hpp"
@@ -54,7 +54,6 @@ std::uint64_t next_cpu_ks_owner() {
   } while (!next.compare_exchange_weak(value, value + 1, std::memory_order_relaxed));
   return value;
 }
-
 
 Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   Result result;
@@ -533,7 +532,8 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
 
   generativeqc_status read_final_state(const dft::CudaKsFinalStateToken& expected,
                                        bool compute_weighted_density,
-                                       dft::VerifiedKsFinalState& state, std::string& detail) override {
+                                       dft::VerifiedKsFinalState& state,
+                                       std::string& detail) override {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->read_final_state(expected, compute_weighted_density, state, detail);
 #endif
@@ -1793,8 +1793,8 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
 
  private:
   void prepare_range_exchange(int device) {
-    const auto spin =
-        ks_is_unrestricted(execution_plan_) ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
+    const auto spin = ks_is_unrestricted(execution_plan_) ? scf::FockSpin::Unrestricted
+                                                          : scf::FockSpin::Restricted;
     const auto fock_backend =
         backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
     range_strategy_ = scf::resolve_fock_build(
@@ -2211,7 +2211,8 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
       // still determine S, including changed-geometry checkpoints. The shared
       // validator preserves its legacy near-symmetric input fallback.
       scf::validate_hf_warm_density(
-          source, ks_is_unrestricted(execution_plan_) ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF,
+          source,
+          ks_is_unrestricted(execution_plan_) ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF,
           state.density, eigen);
     }
     // All source-metric validation precedes the no-throw commit. Missing
@@ -2251,7 +2252,8 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
   generativeqc_status read_final_state(std::size_t index,
                                        const dft::CudaKsFinalStateToken& expected,
                                        bool compute_weighted_density,
-                                       dft::VerifiedKsFinalState& state, std::string& detail) override {
+                                       dft::VerifiedKsFinalState& state,
+                                       std::string& detail) override {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_final_state(expected, compute_weighted_density, state,
                                                   detail);
@@ -2280,7 +2282,8 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
 
   generativeqc_status fixed_density_profile(std::size_t index,
                                             const dft::CudaKsFinalStateToken& expected,
-                                            KsFixedDensityProfile& profile, std::string& detail) override {
+                                            KsFixedDensityProfile& profile,
+                                            std::string& detail) override {
     profile = {};
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->fixed_density_profile(expected, profile, detail);
@@ -2308,7 +2311,8 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
                                                  const dft::CudaKsFinalStateToken& expected,
                                                  int& device, const double*& density,
                                                  const double*& gradient, std::size_t& point_count,
-                                                 void*& source_stream, std::string& detail) override {
+                                                 void*& source_stream,
+                                                 std::string& detail) override {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->resident_nonlocal_features(expected, device, density, gradient,
                                                             point_count, source_stream, detail);
@@ -2323,7 +2327,8 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
 
   generativeqc_status read_derivative_state(std::size_t index,
                                             const dft::CudaKsFinalStateToken& expected,
-                                            KsDerivativeSnapshot& output, std::string& detail) override {
+                                            KsDerivativeSnapshot& output,
+                                            std::string& detail) override {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_derivative_state(expected, output, detail);
     output = {};
@@ -2333,7 +2338,8 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
 
   generativeqc_status read_derivative_sources(std::size_t index,
                                               const dft::CudaKsFinalStateToken& expected,
-                                              KsDerivativeSnapshot& output, std::string& detail) override {
+                                              KsDerivativeSnapshot& output,
+                                              std::string& detail) override {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_derivative_sources(expected, output, detail);
     output = {};
@@ -2489,8 +2495,6 @@ class KsPreparedBatch final : public PreparedBatch, public KsBatchOwnerPort {
 Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend) {
   return adapt_result(std::move(native), backend);
 }
-
-
 
 std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
