@@ -323,6 +323,16 @@ class Mp2Prepared final : public PreparedCalculation {
           std::size_t bytes{}, peak{};
         };
         ForceCache cache;
+        const auto clear_force_cache_allocation_error = [] {
+#if GENERATIVEQC_HAS_CUDA
+          // A refused optional CUDA allocation leaves the runtime's last-error
+          // slot set. Consume only that expected status before bounded replay;
+          // an unrelated asynchronous/backend error must still propagate.
+          const auto error = cudaGetLastError();
+          if (error != cudaSuccess && error != cudaErrorMemoryAllocation)
+            throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(error));
+#endif
+        };
         const auto* cache_override = std::getenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
         const auto* force_tiling_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
         if (cuda && !density_fitted_ &&
@@ -403,8 +413,10 @@ class Mp2Prepared final : public PreparedCalculation {
               }
               return candidate;
             } catch (const std::length_error&) {
+              clear_force_cache_allocation_error();
               return ForceCache{};
             } catch (const std::bad_alloc&) {
+              clear_force_cache_allocation_error();
               return ForceCache{};
             }
           });
@@ -447,8 +459,10 @@ class Mp2Prepared final : public PreparedCalculation {
               return force;
             } catch (const std::length_error&) {
               cache = {};
+              clear_force_cache_allocation_error();
             } catch (const std::bad_alloc&) {
               cache = {};
+              clear_force_cache_allocation_error();
             }
           }
           runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", 0);
