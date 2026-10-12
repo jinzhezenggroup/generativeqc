@@ -134,19 +134,21 @@ int main() {{
     std::size_t bytes{{}};
     std::size_t retained_numeric_bytes() const {{ return bytes; }}
   }} cuda_reference_plan_;
-  const auto update = [&](std::size_t next, std::size_t warm_capacity, std::size_t retained) {{
+  const auto update = [&](std::size_t next, std::size_t warm_capacity, std::size_t retained,
+                          std::size_t component_capacity = 0) {{
     force.planned_endpoint_peak_bytes = next;
     cuda_reference_plan_.bytes = retained;
     {statement.group(0)}
   }};
   for (std::uint64_t old : {{0ULL, 0x100000010ULL}})
     for (std::size_t next : {{std::size_t(0), std::size_t(0x100000020ULL)}})
-      for (std::size_t retained : {{std::size_t(0), std::size_t(0x100000030ULL)}}) {{
-        diagnostic.numeric_capacity_bytes = old;
-        update(next, 31, retained);
-        const auto combined = next + 31 + retained;
-        if (diagnostic.planned_endpoint_peak_bytes != (old > combined ? old : combined)) return 1;
-      }}
+      for (std::size_t retained : {{std::size_t(0), std::size_t(0x100000030ULL)}})
+        for (std::size_t component : {{std::size_t(0), std::size_t(0x100000040ULL)}}) {{
+          diagnostic.numeric_capacity_bytes = old;
+          update(next, 31, retained, component);
+          const auto combined = next + 31 + retained + component;
+          if (diagnostic.planned_endpoint_peak_bytes != (old > combined ? old : combined)) return 1;
+        }}
   diagnostic.planned_endpoint_peak_bytes = 17;
   try {{
     update(std::numeric_limits<std::int64_t>::max(), 1, 0);

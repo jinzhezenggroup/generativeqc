@@ -230,7 +230,7 @@ def test_automatic_cuda_fixed_density_energy_fock_and_replay(
     assert completed.returncode == 0, completed.stderr
     record = json.loads(completed.stdout)
     provider = emit_automatic_cuda_provider(name)
-    assert record["expression_identity"] == provider.point.expression_identity
+    assert record["expression_identity"] == provider.expression_identity
     assert record["source_identity"] == provider.source_identity
     assert record["point_count"] % record["tile_points"] != 0
     actual_potential = np.asarray(record["potential"])
@@ -266,7 +266,7 @@ def test_automatic_cuda_fixed_density_energy_fock_and_replay(
                 "displacement": displacement,
                 "slurm_job_id": os.environ["SLURM_JOB_ID"],
                 "binary_sha256": file_hash(native_xc_driver),
-                "expression_identity": provider.point.expression_identity,
+                "expression_identity": provider.expression_identity,
                 "source_identity": provider.source_identity,
                 "device_bytes": record["device_bytes"],
                 "evaluations": record["evaluations"],

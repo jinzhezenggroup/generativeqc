@@ -16,6 +16,22 @@ time limits. Hardware is NVIDIA GeForce RTX 5090; driver 580.95.05, CUDA toolkit
 whole-process/device memory guarantee. Measured whole-endpoint allocation peaks
 remain unavailable; do not substitute planned capacities for measurements.
 
+## Integrated host smoke
+
+After integrating remote PR head `0103a7fcba9acccefb491495a45af47d4442d0c0`,
+the pre-log tree is `933cd35d94e13b3549139d4c27ef0e08eb4aca20`.
+`src/methods/mp2_method.cpp` and `src/posthf/mp2_force.cpp` remain byte-identical
+to the qualified snapshot. The host companion type gains the parallel
+Clang/libstdc++ construction fix; the force header gains namespace formatting.
+
+The CPU library/native MP2 gradient contract rebuild uses ccache 4.5.1 and
+passes. Host portability and CBS output-retention smoke: **4 passed, 1 skipped**
+(Clang is unavailable locally). The integrated CPU water-algebra complete E+F
+passes both independent constituent/composite oracle and real reuse checks:
+**2 passed**. Native API contracts and public API docstrings also pass. The
+three `integrated-*.log.gz` files retain this host evidence; no additional GPU
+benchmark or integrated-head GPU qualification is implied.
+
 ## Complete endpoints
 
 All times include construction, SCF, correlation, response, analytic forces,

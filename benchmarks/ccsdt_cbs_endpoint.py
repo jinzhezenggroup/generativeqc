@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from _support import environment_metadata, write_result
+from _support import environment_metadata, raw_output_path, write_result
 from generativeqc import CBSBasis, CCSDTCBSCalculator, load_basis
 from mp2_cuda_ef_endpoint import work_journal
 
@@ -98,7 +98,7 @@ def main() -> None:
     parser.add_argument("--oracle", action="store_true")
     parser.add_argument("--work", action="store_true")
     parser.add_argument("--revision")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     arguments = parser.parse_args()
     if arguments.repeats < 1 or arguments.budget < 1:
         parser.error("repeats and budget must be positive")

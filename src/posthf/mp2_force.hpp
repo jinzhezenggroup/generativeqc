@@ -9,7 +9,7 @@
 namespace generativeqc::posthf {
 class RawSource;
 struct BorrowedMOBlock;
-}
+}  // namespace generativeqc::posthf
 namespace generativeqc::integrals {
 class ElectronInteractionSource;
 }
