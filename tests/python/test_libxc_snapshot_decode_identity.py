@@ -196,9 +196,7 @@ def test_snapshot_decode_rejects_forged_native_provider_provenance(
     This host-only execution oracle complements the separately retained
     qualification-owner hash without inspecting the decoder's source spelling.
     """
-    _, source, basis, grid = _decode_fixture(
-        "pbe", "unpolarized", selection="default"
-    )
+    _, source, basis, grid = _decode_fixture("pbe", "unpolarized", selection="default")
     source.fock_provider_proof = lambda: native_proof
     source._density_fitting_requested = requested_fitting
     with pytest.raises(ValueError, match=error):
