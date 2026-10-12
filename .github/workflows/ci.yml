@@ -1540,10 +1540,12 @@ jobs:
         shell: bash
         env:
           CLI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          CLI_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
         run: |
           set -euo pipefail
           tier="$(python3 tools/native_cli_ci_scope.py \
-            --event "$GITHUB_EVENT_NAME" --base-sha "$CLI_BASE_SHA" --head-sha "$GITHUB_SHA")"
+            --event "$GITHUB_EVENT_NAME" --base-sha "$CLI_BASE_SHA" --head-sha "$GITHUB_SHA" \
+            --target-ref="$CLI_TARGET_REF")"
           echo "tier=$tier" >> "$GITHUB_OUTPUT"
           echo "Native CLI build tier: $tier"
       - name: Validate semantic version tag before building
