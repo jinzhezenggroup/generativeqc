@@ -9,12 +9,12 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-
 from generativeqc.response_operator import (
     CPKSResponseOperator,
     cpks_operator_identity,
 )
 from generativeqc.response_problem import ResponseUnsupported
+
 from tools.generativeqc_posthf.fixtures import (
     fixture_snapshot,
     load_fixture,
@@ -108,12 +108,12 @@ def test_hybrid_cpks_raw_k_coefficient_and_directional_differences(fraction):
     fock_mo = c.T @ independent_fock(delta_ao) @ c
     occ = problem.layout.occupied
     vir = problem.layout.virtual
-    gaps = reference.orbital_energies[list(vir)][None, :] - (
-        reference.orbital_energies[list(occ)][:, None]
+    gaps = (
+        reference.orbital_energies[list(vir)][None, :]
+        - (reference.orbital_energies[list(occ)][:, None])
     )
     expected_action = (
-        gaps * x.reshape(len(occ), len(vir))
-        + fock_mo[np.ix_(vir, occ)].T
+        gaps * x.reshape(len(occ), len(vir)) + fock_mo[np.ix_(vir, occ)].T
     ).reshape(-1)
     np.testing.assert_allclose(operator.apply(vector), expected_action, atol=1e-12)
 
@@ -126,9 +126,7 @@ def test_hybrid_cpks_refuses_j_only_or_unqualified_provider():
         )
     semilocal = CPKSResponseOperator.build_problem(reference, backend, kernel)
     assert semilocal.operator_identity == cpks_operator_identity(backend, kernel)
-    assert CPKSResponseOperator(
-        semilocal, backend, kernel
-    ).exchange_fraction == 0.0
+    assert CPKSResponseOperator(semilocal, backend, kernel).exchange_fraction == 0.0
 
 
 def test_hybrid_cpks_fraction_is_part_of_problem_identity():
