@@ -191,7 +191,7 @@ std::uint32_t ks_xc_functional_code(const NativeKsExecutionPlan& plan) noexcept 
 const char* ks_semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept {
   if (plan.automatic_program) return plan.automatic_program->identifier;
   return plan.generated_split_hybrid ? "generated split global hybrid"
-                                     : dft::ks_semilocal_family_name(plan.semilocal_family);
+                                     : dft::semilocal_family_name(plan.semilocal_family);
 }
 
 scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
