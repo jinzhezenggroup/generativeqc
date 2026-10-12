@@ -101,12 +101,27 @@ int main() {
     )
     executable = tmp_path / "reference_input"
     subprocess.run(
-        [compiler, "-std=c++20", "-Wall", "-Wextra", "-Werror",
-         "-I" + str(ROOT / "src"), str(source), "-o", str(executable)],
-        check=True, capture_output=True, text=True, timeout=30,
+        [
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I" + str(ROOT / "src"),
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     result = subprocess.run(
-        [str(executable)], capture_output=True, text=True, timeout=10,
+        [str(executable)],
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert result.returncode == 0, (
         result.stdout + result.stderr + f"exit status {result.returncode}"

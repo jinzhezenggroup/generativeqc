@@ -35,14 +35,12 @@ struct CanonicalReferenceInput {
   if (!orbital.occupied || orbital.occupied >= n)
     throw std::invalid_argument("RCCSD canonical input requires occupied and virtual orbitals");
   const auto finite = [](std::span<const double> values) {
-    return std::all_of(values.begin(), values.end(), [](double value) {
-      return std::isfinite(value);
-    });
+    return std::all_of(values.begin(), values.end(),
+                       [](double value) { return std::isfinite(value); });
   };
-  if (!std::isfinite(reference.energy) || !finite(reference.overlap) ||
-      !finite(reference.hcore) || !finite(orbital.coefficients) ||
-      !finite(orbital.orbital_energies) || !finite(orbital.density) ||
-      !finite(orbital.fock) || !finite(orbital.weighted_density))
+  if (!std::isfinite(reference.energy) || !finite(reference.overlap) || !finite(reference.hcore) ||
+      !finite(orbital.coefficients) || !finite(orbital.orbital_energies) ||
+      !finite(orbital.density) || !finite(orbital.fock) || !finite(orbital.weighted_density))
     throw std::invalid_argument("nonfinite RCCSD canonical reference input");
 
   CanonicalReferenceInput input;
@@ -66,8 +64,7 @@ struct CanonicalReferenceInput {
       double value = 0.0;
       for (std::size_t mu = 0; mu < n; ++mu)
         value += orbital.coefficients[mu * n + p] * scratch[mu * n + q];
-      if (!std::isfinite(value))
-        throw std::runtime_error("nonfinite RCCSD MO Fock matrix");
+      if (!std::isfinite(value)) throw std::runtime_error("nonfinite RCCSD MO Fock matrix");
       input.fock_mo[p * n + q] = value;
     }
   return input;

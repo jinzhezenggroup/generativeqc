@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "cc/df_source.hpp"
-#include "cc/reference_input.hpp"
 #include "cc/rccsdt_force.hpp"
+#include "cc/reference_input.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "methods/correlated_cuda_reference.hpp"
