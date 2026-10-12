@@ -157,6 +157,8 @@ def test_common_requirements_have_no_gfn_specific_branches(family: str) -> None:
     assert first.nodes[0].derivative_mechanisms == (
         DerivativeMechanism.INTEGRAL_ADJOINT,
     )
+    # A state-adjoint alone does not supply the explicit coordinate VJP.
+    assert first.unresolved_local_derivative_nodes == ("interaction",)
     assert not first.has_closed_derivative_contract
     assert first.unresolved_global_obligations == (
         "stationary-state-response",
