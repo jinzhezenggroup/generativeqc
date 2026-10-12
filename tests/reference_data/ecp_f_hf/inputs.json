@@ -1,0 +1,347 @@
+{
+  "schema": "generativeqc.ecp-f-hf.inputs.v1",
+  "source_repository": "jinzhezenggroup/generativeqc",
+  "source_commit": "44d8c91d80c5c341cd9ce98e86b52b512ce1d444",
+  "sources": [
+    {
+      "path": "tests/python/test_ecp.py",
+      "git_blob": "1f6d0fb391d2f4d8d94496d89cdd23fc4ba6529f",
+      "sha256": "25d8588e549f7866de7d534ae93c33fa72d552fe95f6635fa7d820dc333ec85b"
+    },
+    {
+      "path": "tests/python/test_ecp_f.py",
+      "git_blob": "fe5091e83c924787d3ea11efbc6af16d8904ee3e",
+      "sha256": "f9279f71db35a8a0c13d70966bf2da89dd2cbbb0ef38ec2836f24507b3996c1f"
+    },
+    {
+      "path": "tools/generate_cpu_hf_high_l_reference.py",
+      "git_blob": "2732b0c821e1031a9bd43b0e6aa108b54265dd5c",
+      "sha256": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+    },
+    {
+      "path": "tools/generate_ecp_raw_matrix_reference.py",
+      "git_blob": "600336f1528831bc9b2e155e4c3fa181a4d577ee",
+      "sha256": "374d0b18107c8e66dba3dd7292b1641772483f962e8681e5a9d71a1a44499ac6"
+    }
+  ],
+  "atoms": [
+    [
+      "Na",
+      [
+        0.13,
+        -0.21,
+        0.17
+      ]
+    ],
+    [
+      "H",
+      [
+        0.43,
+        0.19,
+        3.2
+      ]
+    ]
+  ],
+  "unit": "Bohr",
+  "basis_libraries": {
+    "Na": "lanl2dz",
+    "H": "sto-3g"
+  },
+  "ecp_libraries": {
+    "Na": "lanl2dz"
+  },
+  "extra_f_shell": [
+    3,
+    [
+      0.55,
+      0.81
+    ],
+    [
+      0.17,
+      0.23
+    ]
+  ],
+  "resolved_basis": {
+    "H": [
+      [
+        0,
+        [
+          3.42525091,
+          0.15432897
+        ],
+        [
+          0.62391373,
+          0.53532814
+        ],
+        [
+          0.1688554,
+          0.44463454
+        ]
+      ]
+    ],
+    "Na": [
+      [
+        0,
+        [
+          0.4972,
+          -0.2753574
+        ],
+        [
+          0.056,
+          1.0989969
+        ]
+      ],
+      [
+        0,
+        [
+          0.0221,
+          1.0
+        ]
+      ],
+      [
+        1,
+        [
+          0.6697,
+          -0.0683845
+        ],
+        [
+          0.0636,
+          1.014055
+        ]
+      ],
+      [
+        1,
+        [
+          0.0204,
+          1.0
+        ]
+      ],
+      [
+        3,
+        [
+          0.55,
+          0.81
+        ],
+        [
+          0.17,
+          0.23
+        ]
+      ]
+    ]
+  },
+  "resolved_ecp": {
+    "Na": [
+      10,
+      [
+        [
+          -1,
+          [
+            [],
+            [
+              [
+                175.550259,
+                -10.0
+              ]
+            ],
+            [
+              [
+                35.0516791,
+                -47.4902024
+              ],
+              [
+                7.906027,
+                -17.2283007
+              ],
+              [
+                2.3365719,
+                -6.0637782
+              ],
+              [
+                0.7799867,
+                -0.7299393
+              ]
+            ],
+            [],
+            [],
+            [],
+            []
+          ]
+        ],
+        [
+          0,
+          [
+            [
+              [
+                243.3605846,
+                3.0
+              ]
+            ],
+            [
+              [
+                41.5764759,
+                36.2847626
+              ]
+            ],
+            [
+              [
+                13.2649167,
+                72.930488
+              ],
+              [
+                3.6797165,
+                23.8401151
+              ],
+              [
+                0.9764209,
+                6.0123861
+              ]
+            ],
+            [],
+            [],
+            [],
+            []
+          ]
+        ],
+        [
+          1,
+          [
+            [
+              [
+                1257.2650682,
+                5.0
+              ]
+            ],
+            [
+              [
+                189.624881,
+                117.4495683
+              ]
+            ],
+            [
+              [
+                54.5247759,
+                423.3986704
+              ],
+              [
+                13.7449955,
+                109.3247297
+              ],
+              [
+                3.6813579,
+                31.3701656
+              ],
+              [
+                0.9461106,
+                7.1241813
+              ]
+            ],
+            [],
+            [],
+            [],
+            []
+          ]
+        ]
+      ]
+    ]
+  },
+  "basis_data_sources": [
+    {
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0",
+      "path": "pyscf/gto/basis/lanl2dz.dat",
+      "git_blob": "299e6de553243acc2a8909dce2cfc863840c64c6",
+      "sha256": "8271af43b895a6b2d2b47f2c958fe86c3c990f76e982a54ac03cc3c6dd196b64"
+    },
+    {
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0",
+      "path": "pyscf/gto/basis/sto-3g.dat",
+      "git_blob": "3872f2b96504636679a6f3ad79bb15697ec6dbae",
+      "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+    }
+  ],
+  "states": [
+    {
+      "method": "RHF",
+      "charge": 0,
+      "spin": 0,
+      "nelec": [
+        1,
+        1
+      ]
+    },
+    {
+      "method": "UHF",
+      "charge": 1,
+      "spin": 1,
+      "nelec": [
+        1,
+        0
+      ]
+    }
+  ],
+  "representations": [
+    "cartesian",
+    "spherical"
+  ],
+  "scf": {
+    "call": "(scf.UHF(mol) if spin else scf.RHF(mol)).run(conv_tol=1e-12)",
+    "conv_tol": 1e-12,
+    "initial_guess": "minao",
+    "other_settings": "pinned PySCF defaults; no override, polish, or fallback",
+    "one_electron_dispatch": "UHF factory selects HF1e; initial guess is not used; zero SCF cycles"
+  },
+  "python": "3.12.12",
+  "packages": {
+    "pyscf": "2.14.0",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "h5py": "3.16.0",
+    "threadpoolctl": "3.6.0",
+    "setuptools": "83.0.0"
+  },
+  "precision": "float64",
+  "array_encoding": "base64 little-endian C-order FP64",
+  "preserved_gates": {
+    "energy_atol": 2e-08,
+    "energy_rtol": 0,
+    "force_atol": 2e-06,
+    "force_rtol": 0,
+    "net_force_atol": 2e-07
+  },
+  "acquisition": {
+    "repository": "njzjz-bot/vibeqc",
+    "branch": "oracle/ecp-f-hf-reference-20261012",
+    "profiles": 4,
+    "fresh_processes_per_profile": 2,
+    "replay_atol": 1e-13,
+    "device": "CPU",
+    "native_threads": 1
+  },
+  "upstream_scf_sources": [
+    {
+      "path": "pyscf/scf/__init__.py",
+      "sha256": "42754aaf7518664076082bab3e4854a954cda79afe10c8cf7f48e7aa23c16e42",
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0"
+    },
+    {
+      "path": "pyscf/scf/hf.py",
+      "sha256": "34ea1a9057da3a2d5aa37fe51d4e7305580bcb8e0118a5f17ba95ba5bb36c22f",
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0"
+    },
+    {
+      "path": "pyscf/scf/uhf.py",
+      "sha256": "b3ee3e679ab64d51ad610f04d02f4ac332c3f9238aeede7ba6bd80ad962a8fee",
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0"
+    },
+    {
+      "path": "pyscf/grad/uhf.py",
+      "sha256": "cdcbe1afce1ab5447fcc2976b58b0ab8b8a0a6d039b1d902416ebabe2e6487c1",
+      "repository": "pyscf/pyscf",
+      "ref": "v2.14.0"
+    }
+  ]
+}
