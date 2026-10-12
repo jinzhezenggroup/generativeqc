@@ -361,7 +361,8 @@ void launch_md_source_jk(cudaStream_t stream, DeviceBatch batch, MdJView md,
                          double* alpha_exchange, double* beta_exchange) {
   const auto begin = system_begin * batch.nbf * batch.nbf;
   const auto elements = system_count * batch.nbf * batch.nbf;
-  if (want_j) check_md_j_cuda(cudaMemsetAsync(coulomb + begin, 0, elements * sizeof(double), stream));
+  if (want_j)
+    check_md_j_cuda(cudaMemsetAsync(coulomb + begin, 0, elements * sizeof(double), stream));
   if (want_k) {
     check_md_j_cuda(cudaMemsetAsync(alpha_exchange + begin, 0, elements * sizeof(double), stream));
     if (unrestricted)
