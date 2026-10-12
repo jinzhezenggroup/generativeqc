@@ -37,6 +37,8 @@ struct generativeqc_calculation {
   std::optional<generativeqc_scf_diagnostic> scf_diagnostic;
   std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
   std::optional<generativeqc::scf::initial_guess::PreliminaryDiagnostic> initial_guess;
+  /** Same-transaction MP2 companion; absent on legacy/rejected/failed replay. */
+  std::optional<generativeqc_correlation_diagnostic> mp2_component_diagnostic;
 };
 
 struct generativeqc_batch {

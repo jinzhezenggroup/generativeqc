@@ -62,7 +62,18 @@ struct Result {
    * single exported history owner preserves the method resource bound. */
   std::optional<dft::ScfDiagnostic> ks_diagnostic;
   scf::initial_guess::PreliminaryDiagnostic preliminary_guess;
+  /** Optional synchronous CBS companions, evaluated from this exact reference.
+   * They are absent unless requested and never survive a failed transaction. */
+  struct Companion {
+    double energy{};
+    std::vector<double> forces;
+    std::optional<generativeqc_correlation_diagnostic> correlation;
+  };
+  std::optional<Companion> hf_component, mp2_component;
 };
+
+inline constexpr unsigned kHfComponent = 1;
+inline constexpr unsigned kMp2Component = 2;
 
 /** Method-neutral copy of the cumulative native CUDA KS movement ledger. */
 struct CcPerformanceDiagnostic {
@@ -237,7 +248,7 @@ class PreparedCalculation {
   }
   /** Execute only the requested output work. Energy and convergence
    * diagnostics are always produced; forces are opt-in per execution. */
-  Result execute(bool compute_forces);
+  Result execute(bool compute_forces, unsigned components = 0);
   /** The original owner supplies scientific identity/leases and budget admission.
    * This gate reports the endpoint transaction, not buffer/cache hit counts. */
   [[nodiscard]] const runtime::CompiledExecutionRegion& execution_lifecycle() const noexcept {
@@ -262,6 +273,10 @@ class PreparedCalculation {
   }
 
  protected:
+  virtual Result execute_components_impl(bool compute_forces, unsigned components) {
+    if (components) throw std::invalid_argument("method does not support correlated companions");
+    return execute_impl(compute_forces);
+  }
   virtual Result execute_impl(bool compute_forces) = 0;
   virtual void reset_execution_impl() {}
 

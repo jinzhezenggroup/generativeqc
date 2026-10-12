@@ -1,6 +1,6 @@
 """Complete native MP2-assisted CCSD(T)/CBS E+F timing and qualification.
 
-Caches are released between components. Repeated samples are complete replay
+Caches are released between basis groups. Repeated samples are complete replay
 endpoints, not retained prepared-batch warm timings. Pinned independent oracle
 comparison and an optional semantic-work replay are outside the timing samples.
 """
@@ -60,6 +60,7 @@ def result_record(result: CBSResult) -> dict[str, Any]:
         "mp2_weights": result.mp2_weights,
         "executed_backend": result.executed_backend,
         "endpoint_seconds": result.endpoint_seconds,
+        "execution_groups": result.execution_groups,
         "basis_metadata": result.basis_metadata,
         "components": [
             {
@@ -149,6 +150,12 @@ def main() -> None:
             str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (
                 ROOT / "python/generativeqc/cbs.py",
+                ROOT / "python/generativeqc/calculator.py",
+                ROOT / "src/api/c_api_calculation.cpp",
+                ROOT / "src/methods/mp2_method.cpp",
+                ROOT / "src/methods/rccsdt_method.cpp",
+                ROOT / "src/posthf/mp2_energy.cpp",
+                ROOT / "src/posthf/mp2_force.cpp",
                 Path(__file__),
                 REFERENCES / f"{arguments.case}.json",
             )

@@ -1189,6 +1189,21 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         ctypes.POINTER(ResultDescriptor),
     ]
     library.generativeqc_calculation_execute.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_calculation_execute_components_v1"):
+        library.generativeqc_calculation_execute_components_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ResultDescriptor),
+            ctypes.POINTER(ResultDescriptor),
+            ctypes.POINTER(ResultDescriptor),
+        ]
+        library.generativeqc_calculation_execute_components_v1.restype = ctypes.c_int
+        library.generativeqc_calculation_get_mp2_component_diagnostic_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(CorrelationDiagnostic),
+        ]
+        library.generativeqc_calculation_get_mp2_component_diagnostic_v1.restype = (
+            ctypes.c_int
+        )
     library.generativeqc_calculation_get_scf_diagnostic.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(ScfDiagnostic),

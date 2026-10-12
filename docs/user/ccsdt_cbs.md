@@ -90,16 +90,25 @@ Because the weights are geometry independent, the analytic force is
 ```
 
 Do not use extrapolated energy with only the larger MP2 force. Do not refit
-exponents at each geometry without their derivatives. Separate HF E+F endpoints
-are currently required because native MP2 publishes total rather than resolved
-HF/correlation forces. Equal method/basis identities execute only once per call.
+exponents at each geometry without their derivatives. Same-basis components
+execute as one native group: MP2 supplies an HF companion, and CCSD(T) supplies
+MP2 and, when needed, HF companions. Each group shares its converged canonical
+RHF reference, orbitals and exact AO interaction owner. The correction-basis
+MP2 energy and initial force adjoint also borrow the already transformed CC
+OVOV block. Its remaining orbital-RHS, relaxed-weight and response-operator
+reads borrow a complete six-block CC ERI symmetry cover when admitted, rather
+than repeating AO-to-MO transformations. Equal method/basis identities still
+contribute only once per call.
 
 Coordinates use Bohr, energy Hartree, and force Hartree/Bohr with shape
 `(natoms, 3)` and sign `force = -gradient`. `CBSResult` exposes the three energy
 and force contributions, fixed weights, actual completed native components,
-basis identities/cardinals and endpoint timing. Each component records its
+basis identities/cardinals, native `execution_groups` and endpoint timing. Each component records its
 combined coefficient and native diagnostics; the weighted total components
 equal the composite. All force fields are `None` for energy-only calls.
+Component timings identify their containing group and are **not additive**;
+use `execution_groups` for non-overlapping group times. Companion convergence
+fields describe the completed group, not an additional standalone method solve.
 Convergence of every component is necessary but does not certify CBS model
 accuracy. No basis-error certificate is manufactured from SCF convergence.
 
@@ -120,7 +129,8 @@ initial-guess and workspace/resource controls. Defaults tighten SCF energy and
 density tolerances to `1e-12`/`1e-10`, CC energy/residual tolerances to
 `1e-12`/`1e-10`, with 200 SCF and 150 CC iterations. It cannot override component
 methods/bases, precision, frozen core or density fitting. Native admissibility
-checks still apply to these controls.
+checks still apply to these controls. `Calculator.singlepoint_components` also
+exposes same-reference groups directly for conventional MP2 and CCSD(T).
 
 (python-cbs-ownership)=
 ## Ownership and concurrency
@@ -130,14 +140,23 @@ caller-owned options dictionary does not change an existing workflow. Keep the
 workflow's configuration fixed during use. One workflow serializes its calls;
 use separate instances for concurrent execution.
 
-Native components execute sequentially and release their retained single-point
+Native basis groups execute sequentially and release their retained single-point
 storage in `finally`, including failed calls. Only one native endpoint owner is
 retained at a time. The Python workflow retains owned basis data and completed
 result/force diagnostics, not the several bases' CUDA executables. Published
 arrays outlive cleanup and are separate from the composite force storage.
 Frozen dataclasses do not recursively freeze their NumPy arrays or mappings.
 
-Native budgets apply independently to each endpoint, not to total process RSS,
+Within a group, CC-only blocks/amplitudes are retired after its complete E+F
+replay. Only an admitted six-block MO cache, reference/source and published primary outputs stay
+live beside the companions. Every companion admission charges these live
+reservations. A memory-only fallback can release optional MO/source/plan
+residency and reconstruct bounded tiles; numerical failures are never retried
+through a different scientific model. Different-basis orbitals/integrals are
+not interchangeable. MP2 and CC retain separate method-specific adjoint/Lambda
+and orbital-response solves; this is not a shared multi-RHS response solver.
+
+Native budgets apply independently to each **group**, not to total process RSS,
 Python storage or a scheduler-wide device reservation. Planned/measured peaks
 are available in each native result and must not be added or confused with a
 measured whole-workflow allocation peak. This policy trades retained prepared-

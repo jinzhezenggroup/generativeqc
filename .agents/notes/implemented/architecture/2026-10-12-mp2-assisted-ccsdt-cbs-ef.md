@@ -3,6 +3,9 @@
 Status: implemented
 Date: 2026-10-12
 
+Execution/ownership policy superseded by
+[native same-reference component groups](2026-10-12-cbs-native-reference-groups.md).
+
 ## Problem
 
 The GPU MP2 E+F source-reuse optimization (PR #2352) enables efficient finite-

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 
@@ -15,7 +17,7 @@ struct Energy {
 Energy conventional_energy(const hf::PhysicalReference& reference,
                            const integrals::ElectronInteractionSource& source, std::size_t budget,
                            double denominator_threshold, unsigned virtual_tile = 8,
-                           bool cuda = false, int device = 0);
+                           bool cuda = false, int device = 0, std::span<const double> ovov = {});
 Energy density_fitted_energy(const hf::PhysicalReference& reference,
                              const posthf::RawSource& source, std::size_t budget,
                              double denominator_threshold, double metric_relative_threshold,

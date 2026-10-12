@@ -67,6 +67,12 @@ class Mp2Prepared final : public PreparedCalculation {
   Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
+  Result execute_components_impl(bool compute_forces, unsigned components) override {
+    if ((components && density_fitted_) || (components & ~kHfComponent))
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "MP2 companions require conventional RHF-MP2");
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr, components);
+  }
 
   void transfer_cuda_reference_plan_to(Mp2Prepared& target) noexcept {
     target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
@@ -74,7 +80,8 @@ class Mp2Prepared final : public PreparedCalculation {
 
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
                                      bool* warm_start_fallback,
-                                     std::optional<scf::HfWarmState>* retained_warm_state) {
+                                     std::optional<scf::HfWarmState>* retained_warm_state,
+                                     unsigned components = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
     runtime::df_progress::Scope trace("mp2_endpoint");
     last_.reset();
@@ -224,9 +231,15 @@ class Mp2Prepared final : public PreparedCalculation {
               std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
         if (raw_source) conventional_source = raw_source.get();
       };
+      Result result;
+      std::size_t component_capacity = 0;
+      std::size_t component_peak = 0;
       const auto run_phase = [&](auto&& operation) {
         return run_with_cuda_reference_budget(
             reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+              if (component_capacity >= correlation_budget)
+                throw std::length_error("MP2 companion outputs exhaust the memory budget");
+              correlation_budget -= component_capacity;
               try {
                 return operation(correlation_budget);
               } catch (const std::length_error&) {
@@ -243,6 +256,23 @@ class Mp2Prepared final : public PreparedCalculation {
               return operation(correlation_budget);
             });
       };
+      if (components & kHfComponent) {
+        result.hf_component.emplace();
+        result.hf_component->energy = ref.energy;
+        if (compute_forces) {
+          auto force = run_phase([&](std::size_t correlation_budget) {
+            prepare_source();
+            return mp2::reference_force(ref, *conventional_source, correlation_budget, cuda,
+                                        context_.device_id);
+          });
+          component_peak = posthf::checked_add(
+              force.planned_endpoint_peak_bytes,
+              posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes()));
+          result.hf_component->forces = std::move(force.forces);
+          component_capacity =
+              posthf::checked_mul(result.hf_component->forces.capacity(), sizeof(double));
+        }
+      }
       const auto corr = run_phase([&](std::size_t correlation_budget) {
         prepare_source();
         runtime::df_progress::Scope::number(
@@ -259,10 +289,11 @@ class Mp2Prepared final : public PreparedCalculation {
       });
       // Preserve this completed phase's simultaneous peak if force admission
       // subsequently retires the optional reference executable.
-      const auto energy_capacity =
-          posthf::checked_add(posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity),
-                              cuda_reference_plan_.retained_numeric_bytes());
-      Result result;
+      const auto energy_capacity = std::max(
+          component_peak,
+          posthf::checked_add(
+              posthf::checked_add(corr.numeric_capacity_bytes, component_capacity),
+              posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes())));
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
@@ -343,7 +374,8 @@ class Mp2Prepared final : public PreparedCalculation {
         last_->planned_endpoint_peak_bytes = std::max<std::uint64_t>(
             last_->numeric_capacity_bytes,
             posthf::checked_add(
-                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity),
+                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes,
+                                    posthf::checked_add(warm_capacity, component_capacity)),
                 cuda_reference_plan_.retained_numeric_bytes()));
         // External warm/plan reservations are not part of the force allocator
         // telemetry. Keep the whole-endpoint measurement unknown when either

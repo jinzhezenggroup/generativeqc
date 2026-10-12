@@ -62,6 +62,19 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
         def clear_cache(self) -> None:
             self.event["closed"] = True
 
+        def singlepoint_components(
+            self, atoms: tuple, *, companions: tuple[str, ...], **kwargs: object
+        ) -> dict[str, Result]:
+            primary = self.method
+            results = {}
+            try:
+                for method in (primary, *companions):
+                    self.method = method
+                    results[method] = self.singlepoint(atoms, **kwargs)
+            finally:
+                self.method = primary
+            return results
+
     monkeypatch.setattr(cbs_module, "Calculator", FakeCalculator)
     return events
 
@@ -104,7 +117,8 @@ def test_complete_energy_and_force_use_same_weights(
         result.hf_forces + result.mp2_correlation_forces + result.delta_ccsdt_forces,
     )
     assert result.executed_backend == "cuda" and result.converged
-    assert len(result.components) == len(fake_native) == 5
+    assert len(result.components) == 5
+    assert len(fake_native) == len(result.execution_groups) == 2
     assert all(event["closed"] for event in fake_native)
     reused = next(
         component
@@ -113,7 +127,7 @@ def test_complete_energy_and_force_use_same_weights(
     )
     assert reused.roles == ("mp2_low", "correction_mp2")
     assert result.endpoint_seconds >= sum(
-        component.elapsed_seconds for component in result.components
+        group["elapsed_seconds"] for group in result.execution_groups
     )
     assert result.basis_metadata["frozen_core"] == 0
 

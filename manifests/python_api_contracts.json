@@ -1425,6 +1425,17 @@
         "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
       }
     },
+    "generativeqc/calculator.py:Calculator.singlepoint_components": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/ccsdt_cbs.md#python-cbs-backends",
+        "errors": "docs/user/ccsdt_cbs.md#python-cbs-errors",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values"
+      }
+    },
     "generativeqc/calculator.py:method_capabilities": {
       "kind": "function",
       "profile": "execution",

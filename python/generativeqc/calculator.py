@@ -2314,6 +2314,46 @@ class Calculator:
                 atoms, charge=charge, multiplicity=multiplicity, properties=properties
             )
 
+    def singlepoint_components(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        companions: Iterable[str] = ("rhf",),
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+    ) -> dict[str, Result]:
+        """Execute a conventional MP2/CCSD(T) group with one RHF reference.
+
+        MP2 can supply ``rhf``; CCSD(T) can supply ``rhf`` and ``mp2``.
+        Coordinates and outputs have the same units as :meth:`singlepoint`.
+        All requested analytic forces must complete before any group is returned.
+        Method-specific response solves remain separate, while the reference,
+        exact integral source and compatible correction-basis OVOV block are shared.
+        """
+        names = tuple(companions)
+        allowed = {"rhf"} if self._method_name == "mp2" else {"rhf", "mp2"}
+        if self._method_name not in ("mp2", "ccsd(t)"):
+            raise NotImplementedError("companions require conventional MP2 or CCSD(T)")
+        if not names or len(set(names)) != len(names) or not set(names) <= allowed:
+            raise ValueError("unsupported or duplicate companion methods")
+        if not hasattr(self._library, "generativeqc_calculation_execute_components_v1"):
+            raise RuntimeError(
+                "native library lacks same-reference component execution"
+            )
+        outputs: dict[str, Result] = {}
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            result = self._singlepoint(
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=properties,
+                component_methods=names,
+                component_outputs=outputs,
+            )
+        return {self._method_name: result, **outputs}
+
     def clear_cache(self) -> None:
         """Release retained singlepoint workspaces after in-flight calls finish.
 
@@ -2330,6 +2370,8 @@ class Calculator:
         charge: int = 0,
         multiplicity: int = 1,
         properties: Iterable[str] | None = None,
+        component_methods: tuple[str, ...] = (),
+        component_outputs: dict[str, Result] | None = None,
     ) -> Result:
         """Execute under the retained context's transaction lock, when present."""
         if properties is None:
@@ -2494,18 +2536,52 @@ class Calculator:
                 0,
                 _native.BACKEND_CPU_REFERENCE,
             )
-            if resource_plan is None:
-                status = self._library.generativeqc_calculation_execute(
-                    calculation, ctypes.byref(result_descriptor)
+            component_buffers = {
+                method: (ctypes.c_double * (3 * len(native_atoms)))()
+                if compute_forces
+                else None
+                for method in component_methods
+            }
+            component_descriptors = {
+                method: _native.ResultDescriptor(
+                    ctypes.sizeof(_native.ResultDescriptor),
+                    _native.ABI_VERSION,
+                    0.0,
+                    buffer,
+                    len(buffer) if buffer is not None else 0,
+                    0,
+                    0.0,
+                    0.0,
+                    0,
+                    _native.BACKEND_CPU_REFERENCE,
                 )
+                for method, buffer in component_buffers.items()
+            }
+
+            def execute() -> int:
+                if not component_methods:
+                    return self._library.generativeqc_calculation_execute(
+                        calculation, ctypes.byref(result_descriptor)
+                    )
+                return self._library.generativeqc_calculation_execute_components_v1(
+                    calculation,
+                    ctypes.byref(result_descriptor),
+                    ctypes.byref(component_descriptors["rhf"])
+                    if "rhf" in component_descriptors
+                    else None,
+                    ctypes.byref(component_descriptors["mp2"])
+                    if "mp2" in component_descriptors
+                    else None,
+                )
+
+            if resource_plan is None:
+                status = execute()
             else:
                 status, resource_diagnostics = observe_method_call(
                     self._library,
                     resource_plan,
                     ledger,
-                    lambda: self._library.generativeqc_calculation_execute(
-                        calculation, ctypes.byref(result_descriptor)
-                    ),
+                    execute,
                     owner=resource_plan.requests[0].name,
                     previous=resource_diagnostics,
                 )
@@ -2569,7 +2645,7 @@ class Calculator:
                 ks_transport_diagnostic = read_ks_transport_diagnostic(
                     self._library, calculation
                 )
-            return Result(
+            native_result = Result(
                 energy=result_descriptor.energy,
                 forces=forces,
                 converged=bool(result_descriptor.converged),
@@ -2598,6 +2674,33 @@ class Calculator:
                 initial_guess=read_initial_guess_diagnostic(self._library, calculation),
                 ks_transport_diagnostic=ks_transport_diagnostic,
             )
+            if component_outputs is not None:
+                for method, descriptor in component_descriptors.items():
+                    buffer = component_buffers[method]
+                    component_outputs[method] = Result(
+                        energy=descriptor.energy,
+                        forces=np.ctypeslib.as_array(buffer)
+                        .reshape(len(native_atoms), 3)
+                        .copy()
+                        if buffer is not None
+                        else None,
+                        converged=bool(descriptor.converged),
+                        iterations=descriptor.iterations,
+                        energy_change=descriptor.energy_change,
+                        density_rms=descriptor.density_rms,
+                        executed_backend="cuda"
+                        if descriptor.executed_backend == _native.BACKEND_CUDA
+                        else "cpu_reference",
+                        correlation=_read_correlation_result(
+                            self._library,
+                            calculation,
+                            context=context,
+                            mp2_component=True,
+                        )
+                        if method == "mp2"
+                        else None,
+                    )
+            return native_result
         finally:
             if calculation.value:
                 self._library.generativeqc_calculation_destroy(calculation)

@@ -105,6 +105,7 @@ class CBSResult:
     executed_backend: str
     basis_metadata: dict[str, typing.Any]
     endpoint_seconds: float
+    execution_groups: tuple[dict[str, typing.Any], ...]
 
 
 def _limit_weights(log_ratio: float) -> tuple[float, float]:
@@ -120,7 +121,7 @@ def _limit_weights(log_ratio: float) -> tuple[float, float]:
 
 
 class CCSDTCBSCalculator:
-    """Sequential native MP2-assisted CCSD(T)/CBS E+F workflow.
+    """Basis-grouped native MP2-assisted CCSD(T)/CBS E+F workflow.
 
     The model is HF(limit) + MP2-correlation(limit) + [CCSD(T)-MP2](small).
     MP2 correlation uses ``X**(-correlation_exponent)``. HF uses a fixed
@@ -133,7 +134,8 @@ class CCSDTCBSCalculator:
     fitted variants are not silently substituted. Native backend/basis/force
     domain checks still apply, including the small-basis RCCSD(T) force limit.
 
-    Native retained storage is released after each component, even on failure.
+    Same-basis components share one native RHF reference and exact source.
+    Native retained storage is released after each basis group, even on failure.
     Thus the workflow does not retain several basis-dependent CUDA owners at
     once. ``calculator_options`` supplies common SCF/CC/resource controls;
     budgets remain native endpoint budgets, not a total process-RSS bound.
@@ -249,8 +251,8 @@ class CCSDTCBSCalculator:
 
         Coordinates are Bohr. Energy is always computed; explicit energy-only
         requests omit every analytic-force endpoint and all returned forces.
-        HF force endpoints are needed separately because native MP2 currently
-        publishes total, not separately resolved HF/correlation forces.
+        HF and correction-basis MP2 companions are produced by the same native
+        reference owner, without independent same-basis SCF endpoints.
         """
         with self._lock:
             started = time.perf_counter()
@@ -297,24 +299,44 @@ class CCSDTCBSCalculator:
             )
             completed: dict[tuple[str, str], tuple[Result, float]] = {}
             by_role: dict[str, Result] = {}
-            for role, method, basis, _ in terms:
-                key = (method, basis.identity)
-                if key not in completed:
-                    component_started = time.perf_counter()
-                    calculator = Calculator(
-                        method=method,
-                        basis=basis,
-                        device=self.device,
-                        device_id=self.device_id,
-                        precision="fp64",
-                        **self._options,
+            groups = {basis.identity: basis for _, _, basis, _ in terms}
+            execution_groups = []
+            for identity, basis in groups.items():
+                component_started = time.perf_counter()
+                primary = (
+                    "ccsd(t)" if identity == self.correction_basis.identity else "mp2"
+                )
+                requested = {
+                    method
+                    for _, method, record, _ in terms
+                    if record.identity == identity
+                }
+                companions = tuple(sorted(requested - {primary}))
+                calculator = Calculator(
+                    method=primary,
+                    basis=basis,
+                    device=self.device,
+                    device_id=self.device_id,
+                    precision="fp64",
+                    **self._options,
+                )
+                try:
+                    results = calculator.singlepoint_components(
+                        geometry,
+                        companions=companions,
+                        charge=charge,
+                        multiplicity=multiplicity,
+                        properties=native_properties,
                     )
-                    try:
-                        result = calculator.singlepoint(
-                            geometry,
-                            charge=charge,
-                            multiplicity=multiplicity,
-                            properties=native_properties,
+                    if set(results) != requested:
+                        raise RuntimeError(
+                            "CBS native group returned incomplete components"
+                        )
+                    for method, result in results.items():
+                        role = next(
+                            role
+                            for role, candidate, record, _ in terms
+                            if candidate == method and record.identity == identity
                         )
                         if (
                             not result.converged
@@ -335,10 +357,21 @@ class CCSDTCBSCalculator:
                             raise RuntimeError(
                                 f"CBS {role} returned invalid analytic forces"
                             )
-                    finally:
-                        calculator.clear_cache()
-                    completed[key] = result, time.perf_counter() - component_started
-                by_role[role] = completed[key][0]
+                finally:
+                    calculator.clear_cache()
+                elapsed = time.perf_counter() - component_started
+                execution_groups.append(
+                    {
+                        "basis_identity": identity,
+                        "primary": primary,
+                        "methods": tuple(sorted(requested)),
+                        "elapsed_seconds": elapsed,
+                    }
+                )
+                for method, result in results.items():
+                    completed[(method, identity)] = result, elapsed
+            for role, method, basis, _ in terms:
+                by_role[role] = completed[(method, basis.identity)][0]
 
             components = tuple(
                 CBSComponent(
@@ -433,6 +466,7 @@ class CCSDTCBSCalculator:
                     "density_fitting": False,
                 },
                 time.perf_counter() - started,
+                tuple(execution_groups),
             )
 
 

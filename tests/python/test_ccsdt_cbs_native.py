@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from generativeqc import CBSBasis, CCSDTCBSCalculator, load_basis
+from generativeqc import Calculator, CBSBasis, CCSDTCBSCalculator, _native, load_basis
 
 if TYPE_CHECKING:
     from generativeqc import CBSResult
@@ -68,6 +69,7 @@ def test_complete_components_and_composite_against_independent_oracle(
     for field in ("hf_energy", "mp2_correlation_energy", "delta_ccsdt_energy"):
         assert getattr(result, field) == pytest.approx(oracle[field], abs=1e-9)
     assert len(result.components) == 5
+    assert len(result.execution_groups) == 2
     for component in result.components:
         reference = oracle["components"][component.roles[0]]
         assert component.result.energy == pytest.approx(reference["energy"], abs=1e-9)
@@ -86,6 +88,72 @@ def test_complete_components_and_composite_against_independent_oracle(
     np.testing.assert_allclose(result.forces.sum(axis=0), 0, atol=2e-7, rtol=0)
 
 
+def test_native_component_rejection_revokes_diagnostic_and_recovers(
+    cbs_device: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the real ABI's group publication and stale-record boundary."""
+    atoms = (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4)))
+    calculator = Calculator(
+        method="ccsd(t)",
+        basis="sto-3g",
+        device=cbs_device,
+        precision="fp64",
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+    library = calculator._library
+    native_execute = library.generativeqc_calculation_execute_components_v1
+    native_getter = library.generativeqc_calculation_get_mp2_component_diagnostic_v1
+    observed = []
+
+    def execute(owner: object, primary: object, hf: object, mp2: object) -> int:
+        status = native_execute(owner, primary, hf, mp2)
+        assert status == _native.STATUS_SUCCESS
+        diagnostic = _native.CorrelationDiagnostic()
+        diagnostic.struct_size = ctypes.sizeof(diagnostic)
+        diagnostic.abi_version = _native.ABI_VERSION
+        assert native_getter(owner, ctypes.byref(diagnostic)) == _native.STATUS_SUCCESS
+        descriptors = [
+            ctypes.cast(value, ctypes.POINTER(_native.ResultDescriptor)).contents
+            for value in (primary, hf, mp2)
+        ]
+        saved = [
+            (record.energy, np.ctypeslib.as_array(record.forces, shape=(6,)).copy())
+            for record in descriptors
+        ]
+        hf_descriptor = descriptors[1]
+        capacity = hf_descriptor.force_count
+        hf_descriptor.force_count = 1
+        assert (
+            native_execute(owner, primary, hf, mp2) == _native.STATUS_INVALID_ARGUMENT
+        )
+        assert (
+            native_getter(owner, ctypes.byref(diagnostic))
+            == _native.STATUS_NOT_IMPLEMENTED
+        )
+        for descriptor, (energy, forces) in zip(descriptors, saved, strict=True):
+            assert descriptor.energy == energy
+            np.testing.assert_array_equal(
+                np.ctypeslib.as_array(descriptor.forces, shape=(6,)), forces
+            )
+        hf_descriptor.force_count = capacity
+        status = native_execute(owner, primary, hf, mp2)
+        assert status == _native.STATUS_SUCCESS
+        assert native_getter(owner, ctypes.byref(diagnostic)) == _native.STATUS_SUCCESS
+        observed.append(diagnostic.force_provenance_flags)
+        return status
+
+    monkeypatch.setattr(
+        library, "generativeqc_calculation_execute_components_v1", execute
+    )
+    result = calculator.singlepoint_components(atoms, companions=("rhf", "mp2"))
+    assert set(result) == {"ccsd(t)", "rhf", "mp2"}
+    assert observed and observed[0] & 7 == 7
+    assert result["mp2"].correlation.reference_energy == result["rhf"].energy
+    calculator.clear_cache()
+
+
 def test_energy_only_parity(
     workflow: CCSDTCBSCalculator, cbs_case: dict, complete_result: CBSResult
 ) -> None:
@@ -93,6 +161,65 @@ def test_energy_only_parity(
     assert result.forces is None
     assert all(component.result.forces is None for component in result.components)
     assert result.energy == pytest.approx(complete_result.energy, abs=1e-10)
+
+
+@pytest.mark.parametrize("properties", (("energy",), ("energy", "forces")))
+def test_nonconverged_native_group_publishes_no_components(
+    cbs_device: str,
+    properties: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real CC nonconvergence must not expose its successful RHF subset."""
+    calculator = Calculator(
+        method="ccsd(t)",
+        basis="sto-3g",
+        device=cbs_device,
+        precision="fp64",
+        ccsd_max_iterations=1,
+    )
+    library = calculator._library
+    native_execute = library.generativeqc_calculation_execute_components_v1
+    observed = []
+
+    def execute(owner: object, *outputs: object) -> int:
+        descriptors = [
+            ctypes.cast(value, ctypes.POINTER(_native.ResultDescriptor)).contents
+            for value in outputs
+        ]
+        for descriptor in descriptors:
+            descriptor.energy = 123.0
+            if descriptor.forces:
+                np.ctypeslib.as_array(descriptor.forces, shape=(6,)).fill(456.0)
+        status = native_execute(owner, *outputs)
+        assert status == _native.STATUS_NOT_CONVERGED
+        for descriptor in descriptors:
+            assert descriptor.energy == 123.0
+            if descriptor.forces:
+                np.testing.assert_array_equal(
+                    np.ctypeslib.as_array(descriptor.forces, shape=(6,)), 456.0
+                )
+        assert (
+            library.generativeqc_calculation_get_mp2_component_diagnostic_v1(
+                owner, None
+            )
+            == _native.STATUS_NOT_IMPLEMENTED
+        )
+        observed.append(status)
+        return status
+
+    monkeypatch.setattr(
+        library, "generativeqc_calculation_execute_components_v1", execute
+    )
+    try:
+        with pytest.raises(RuntimeError):
+            calculator.singlepoint_components(
+                (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4))),
+                companions=("rhf", "mp2"),
+                properties=properties,
+            )
+        assert observed
+    finally:
+        calculator.clear_cache()
 
 
 def test_reconverged_complete_energy_derivative(

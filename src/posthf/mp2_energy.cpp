@@ -53,12 +53,16 @@ unsigned resolved_tile(std::size_t virtuals, unsigned requested) {
 
 Energy conventional_energy(const hf::PhysicalReference& ref,
                            const integrals::ElectronInteractionSource& source, std::size_t budget,
-                           double threshold, unsigned requested_tile, bool cuda, int device) {
+                           double threshold, unsigned requested_tile, bool cuda, int device,
+                           std::span<const double> ovov) {
   validate_reference(ref, threshold, requested_tile);
   const auto& eps = ref.orbital_energies;
   const auto [minimum_denominator, maximum_denominator] = denominator_bounds(ref, threshold);
   (void)maximum_denominator;
   const auto nv = ref.nbf - ref.nocc;
+  if (!ovov.empty() && ovov.size() != posthf::checked_mul(posthf::checked_mul(ref.nocc, ref.nocc),
+                                                          posthf::checked_mul(nv, nv)))
+    throw std::invalid_argument("borrowed MP2 OVOV block has the wrong shape");
   const unsigned tile = resolved_tile(nv, requested_tile);
   const auto cpu = generated::cpu_plan(tile);
   generated::CudaPlan gpu{};
@@ -191,7 +195,22 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
 
   auto flush = [&]() {
     if (jobs.empty()) return;
-    if (shared_scan) {
+    if (!ovov.empty()) {
+      for (const auto& job : jobs) {
+        std::vector<double> direct(static_cast<std::size_t>(tile) * tile), exchange(direct.size());
+        for (unsigned first = 0; first < tile; ++first)
+          for (unsigned second = 0; second < tile; ++second) {
+            if (job.va[first] == posthf::padded_mo || job.vb[second] == posthf::padded_mo) continue;
+            const auto virtual_a = job.va[first] - ref.nocc;
+            const auto virtual_b = job.vb[second] - ref.nocc;
+            direct[first * tile + second] =
+                ovov[((job.i * nv + virtual_a) * ref.nocc + job.j) * nv + virtual_b];
+            exchange[second * tile + first] =
+                ovov[((job.i * nv + virtual_b) * ref.nocc + job.j) * nv + virtual_a];
+          }
+        consume(job, direct, exchange);
+      }
+    } else if (shared_scan) {
       std::vector<posthf::MOSlots> requests;
       requests.reserve(2 * jobs.size());
       for (const auto& job : jobs) {
@@ -244,8 +263,10 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
         }
   flush();
 
-  if (result.provider_work.source_scans != source_tile_plan.source_scans ||
-      result.provider_work.source_reads != source_tile_plan.source_reads)
+  const auto expected_scans = ovov.empty() ? source_tile_plan.source_scans : 0;
+  const auto expected_reads = ovov.empty() ? source_tile_plan.source_reads : 0;
+  if (result.provider_work.source_scans != expected_scans ||
+      result.provider_work.source_reads != expected_reads)
     throw std::logic_error("MP2 source execution disagrees with compiler tile schedule");
   const auto ao2 = posthf::checked_mul(ref.nbf, ref.nbf);
   const auto ao4 = posthf::checked_mul(ao2, ao2);
