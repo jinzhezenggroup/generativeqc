@@ -68,6 +68,7 @@ class PrimitiveRequirements:
     fixed_point: bool
 
     def to_payload(self) -> dict[str, object]:
+        """Serialize bound node requirements deterministically."""
         return {
             "node_id": self.node_id,
             "equation_identity": self.equation_identity,
@@ -120,6 +121,7 @@ class SemiempiricalProductRequirements:
             )
 
     def to_payload(self) -> dict[str, object]:
+        """Serialize this derived obligation receipt; not runtime proof."""
         return {
             "version": self.version,
             "method_identity": self.method_identity,
@@ -132,6 +134,7 @@ class SemiempiricalProductRequirements:
 
     @property
     def identity(self) -> str:
+        """Hash the immutable bound requirements and method provenance."""
         return canonical_hash(self.to_payload())
 
 
@@ -179,7 +182,10 @@ def semiempirical_product_requirements(
         try:
             mechanisms = tuple(
                 sorted(
-                    {_KNOWN_DECLARATIONS[name] for name in node.derivative_capabilities},
+                    {
+                        _KNOWN_DECLARATIONS[name]
+                        for name in node.derivative_capabilities
+                    },
                     key=lambda mechanism: mechanism.value,
                 )
             )
@@ -194,7 +200,9 @@ def semiempirical_product_requirements(
                 equation_identity=node.equation_identity,
                 depends_on=node.requires,
                 produces=node.produces,
-                parameter_resources=tuple(resources[name] for name in node.parameter_resources),
+                parameter_resources=tuple(
+                    resources[name] for name in node.parameter_resources
+                ),
                 state_reads=tuple(states[name] for name in node.state_reads),
                 state_writes=tuple(states[name] for name in node.state_writes),
                 derivative_mechanisms=mechanisms,
