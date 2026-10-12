@@ -321,8 +321,8 @@ void write_xyz(const std::filesystem::path& path, const std::vector<generativeqc
                std::span<const double> coords, double energy) {
   // Format before creating the file: allocation errors cannot leave an output.
   std::ostringstream buffer;
-  buffer << atoms.size() << "\noptimized with GenerativeQC; E=" << std::setprecision(17)
-         << energy << " Hartree; units=angstrom\n";
+  buffer << atoms.size() << "\noptimized with GenerativeQC; E=" << std::setprecision(17) << energy
+         << " Hartree; units=angstrom\n";
   for (std::size_t i = 0; i < atoms.size(); ++i) {
     buffer << atoms[i].atomic_number << ' ' << coords[i * 3] / 1.8897261254578281 << ' '
            << coords[i * 3 + 1] / 1.8897261254578281 << ' '
