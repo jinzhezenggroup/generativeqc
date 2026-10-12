@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from generativeqc.ks import KsOptions
     from generativeqc_compiler.method import MethodIR
 
+
 _PREFIX = "__gqc_molecular_"
 _CAPTURE: ContextVar[_MolecularCapture | None] = ContextVar(
     "generativeqc_molecular_capture", default=None
@@ -181,7 +182,7 @@ class MolecularModel:
                 or ks_options._method_ir is not None
             ):
                 raise ValueError(
-                    "molecular ks_options controls grid/schedule only; XC belongs to method"
+                    "ks_options controls grid/schedule; XC belongs to method"
                 )
         object.__setattr__(self, "_numbers", numbers)
         object.__setattr__(self, "_method", method)

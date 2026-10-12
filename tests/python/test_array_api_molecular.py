@@ -82,7 +82,6 @@ def polynomial_source(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     return owners
 
 
-
 def test_composed_xc_methodir_identity_and_compiled_chain_rule(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:
@@ -113,6 +112,10 @@ def test_composed_xc_methodir_identity_and_compiled_chain_rule(
     )
     assert first._payload() == alias._payload()
     assert first._payload() != different_grid._payload()
+    different_xc = xp.MolecularModel(
+        ("H", "H"), method=method.named("PBE0"), ks_options=options,
+    )
+    assert first._payload() != different_xc._payload()
     assert first._payload()["method_ir_identity"] == first_ir.identity
     assert first._payload()["native_method"] == f"methodir:{first_ir.identity}"
 
@@ -241,6 +244,7 @@ def test_native_composed_xc_methodir_reuses_existing_scf(
     finally:
         compute.close()
         original.clear_cache()
+
 
 def test_lowering_is_native_free_and_configuration_is_immutable(
     tmp_path: Path, polynomial_source: list[Any]

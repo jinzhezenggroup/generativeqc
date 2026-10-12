@@ -198,7 +198,6 @@ nuclear gradients. Energy-only calls are allowed for energy-capable methods;
 The initial public method-neutral source remains host-staged FP64 and first
 order; higher-order implicit/response gradients are not inferred.
 
-
 ### User-composed XC methods inside Array API
 
 A user may combine **already audited** XC components through the public
