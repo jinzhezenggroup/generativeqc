@@ -96,8 +96,10 @@ RccsdNativeState execute_rccsd_prepared(
     runtime::ExecutionContext&, const core::System& orbital, Reference, SolverOptions options, std::size_t,
     scf::PreparedFockPlan*, const std::vector<double>*, bool* warm_fallback,
     std::unique_ptr<scf::PreparedFockPlan>*, const core::System* auxiliary, bool retain_df_response,
-    const scf::cuda_execution::CudaDfSourcePolicy* policy, scf::CudaRhfBucketPlan** plan) {
+    const scf::cuda_execution::CudaDfSourcePolicy* policy, scf::CudaRhfBucketPlan** plan,
+    bool df_mp2_mode) {
   assert(plan == nullptr);
+  assert(!df_mp2_mode);
   ++rhf_calls;
   assert(auxiliary && policy && retain_df_response && !options.df_matrix_gemm);
   // A mid-RHF diagnostic change must not alter the already admitted source.

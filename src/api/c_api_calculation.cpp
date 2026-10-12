@@ -34,7 +34,8 @@ generativeqc_status generativeqc_initial_guess_auto_kind_v1(
       (request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
-       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO) ||
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO &&
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA) ||
       request->restricted > 1 || request->has_ecp > 1 ||
       (request->atomic_numbers == nullptr) != (request->atom_count == 0))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -93,6 +94,10 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
+  if (!generativeqc::api::valid_system_roles(*system, *descriptor)) {
+    context->last_detail = "correlation auxiliary handles require a correlation-only DF consumer";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   try {
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
@@ -121,6 +126,12 @@ generativeqc_status generativeqc_calculation_get_supported_properties_v1(
 
 generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* calculation,
                                                      generativeqc_result_descriptor* output) {
+  return generativeqc_calculation_execute_components_v1(calculation, output, nullptr, nullptr);
+}
+
+generativeqc_status generativeqc_calculation_execute_components_v1(
+    generativeqc_calculation* calculation, generativeqc_result_descriptor* output,
+    generativeqc_result_descriptor* hf, generativeqc_result_descriptor* mp2) {
   generativeqc::runtime::host_trace::Region trace("calculation_execute");
   if (calculation == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -129,6 +140,7 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
   generativeqc::api::PreparedPublication publication(*calculation->plan);
   calculation->precision_work.reset();
   calculation->initial_guess.reset();
+  calculation->mp2_component_diagnostic.reset();
   calculation->precision = {};
   calculation->incremental_direct_jk = {};
   calculation->precision_available = false;
@@ -152,11 +164,48 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
   if (!omit_forces && output->force_count < calculation->plan->atom_count() * 3) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  for (auto* companion : {hf, mp2}) {
+    if (!companion) continue;
+    if (!generativeqc::api::valid_descriptor(companion)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+    const bool companion_omits = !companion->forces && companion->force_count == 0;
+    if (companion == output || (hf && mp2 && hf == mp2) || companion_omits != omit_forces ||
+        (!omit_forces &&
+         (!companion->forces || companion->force_count < calculation->plan->atom_count() * 3)))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto method = calculation->plan->capabilities().method;
+  if (!omit_forces) {
+    const auto bytes = calculation->plan->atom_count() * 3 * sizeof(double);
+    for (const auto& pair : {std::pair{output, hf}, std::pair{output, mp2}, std::pair{hf, mp2}}) {
+      if (!pair.first || !pair.second) continue;
+      const auto first = reinterpret_cast<std::uintptr_t>(pair.first->forces);
+      const auto second = reinterpret_cast<std::uintptr_t>(pair.second->forces);
+      if ((first < second ? second - first : first - second) < bytes)
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+  }
+  const bool ccsdt =
+      method == GENERATIVEQC_METHOD_RCCSD_T || method == GENERATIVEQC_METHOD_DF_RCCSD_T;
+  if ((hf || mp2) && method != GENERATIVEQC_METHOD_MP2 && !ccsdt)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (mp2 && !ccsdt) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 
   try {
     // NULL/zero is an execution request, not merely a copy-out choice: the
     // backend must not launch or assemble analytic-force work in this mode.
-    generativeqc::methods::Result native = calculation->plan->execute(!omit_forces);
+    generativeqc::methods::Result native = calculation->plan->execute(
+        !omit_forces, (hf ? generativeqc::methods::kHfComponent : 0) |
+                          (mp2 ? generativeqc::methods::kMp2Component : 0));
+    if ((hf || mp2) && !native.convergence.converged) return GENERATIVEQC_STATUS_NOT_CONVERGED;
+    if ((hf || mp2) && !omit_forces && native.forces.size() != calculation->plan->atom_count() * 3)
+      throw std::runtime_error("native endpoint returned incomplete primary forces");
+    for (const auto& pair :
+         {std::pair{hf, &native.hf_component}, std::pair{mp2, &native.mp2_component}}) {
+      if (pair.first &&
+          (!*pair.second ||
+           (!omit_forces && (*pair.second)->forces.size() != calculation->plan->atom_count() * 3)))
+        throw std::runtime_error("native endpoint returned an incomplete companion");
+    }
     // A normal return (converged or not) is a completed run: record what ran.
     calculation->precision = native.precision;
     calculation->incremental_direct_jk = native.incremental_direct_jk;
@@ -190,12 +239,37 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
       }
       std::copy(native.forces.begin(), native.forces.end(), output->forces);
     }
+    for (const auto& pair :
+         {std::pair{hf, &native.hf_component}, std::pair{mp2, &native.mp2_component}}) {
+      if (!pair.first) continue;
+      auto& target = *pair.first;
+      auto* force_buffer = target.forces;
+      const auto capacity = target.force_count;
+      target = *output;
+      target.forces = force_buffer;
+      target.force_count = capacity;
+      target.energy = (*pair.second)->energy;
+      if (!omit_forces)
+        std::copy((*pair.second)->forces.begin(), (*pair.second)->forces.end(), target.forces);
+    }
+    if (native.mp2_component)
+      calculation->mp2_component_diagnostic = native.mp2_component->correlation;
     calculation->precision_work = std::move(native.precision_work);
     publication.commit();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&calculation->context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_calculation_get_mp2_component_diagnostic_v1(
+    const generativeqc_calculation* calculation, generativeqc_correlation_diagnostic* out) {
+  if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (out && !generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  if (!calculation->mp2_component_diagnostic) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (out) *out = *calculation->mp2_component_diagnostic;
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 generativeqc_status generativeqc_calculation_get_scf_diagnostic(

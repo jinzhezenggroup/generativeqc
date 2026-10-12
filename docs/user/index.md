@@ -29,6 +29,7 @@ batched_hf
 checkpoint
 basis_projection
 progressive_hf
+ccsdt_cbs
 initial_guesses
 ```
 

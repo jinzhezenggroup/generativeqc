@@ -21,7 +21,23 @@ struct generativeqc_context {
 
 struct generativeqc_system {
   generativeqc::core::System data;
+  /** A source-only fit handle must never become an orbital or generic DF-HF system. */
+  bool correlation_auxiliary{false};
 };
+
+namespace generativeqc::api {
+
+inline bool valid_system_roles(const generativeqc_system& orbital,
+                               const generativeqc_method_descriptor& descriptor) {
+  if (orbital.correlation_auxiliary) return false;
+  const auto* auxiliary = descriptor.density_fitting_auxiliary_basis;
+  if (!auxiliary || !auxiliary->correlation_auxiliary) return true;
+  return descriptor.method == GENERATIVEQC_METHOD_DF_RCCSD_T ||
+         (descriptor.method == GENERATIVEQC_METHOD_MP2 &&
+          descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA);
+}
+
+}  // namespace generativeqc::api
 
 struct generativeqc_calculation {
   generativeqc_context* context{};
@@ -37,6 +53,8 @@ struct generativeqc_calculation {
   std::optional<generativeqc_scf_diagnostic> scf_diagnostic;
   std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
   std::optional<generativeqc::scf::initial_guess::PreliminaryDiagnostic> initial_guess;
+  /** Same-transaction MP2 companion; absent on legacy/rejected/failed replay. */
+  std::optional<generativeqc_correlation_diagnostic> mp2_component_diagnostic;
 };
 
 struct generativeqc_batch {

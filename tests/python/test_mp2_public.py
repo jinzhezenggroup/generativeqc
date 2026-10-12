@@ -483,14 +483,15 @@ def test_public_conventional_mp2_force_cuda_matches_cpu() -> None:
 def test_cuda_mp2_shared_reference_source_complete_endpoint(
     name: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Protect complete forces, device source routing, and the disable fallback."""
+    """Protect E+F and independent source/cache diagnostic disable routes."""
     assert os.environ.get("SLURM_JOB_ID"), "run real-GPU checks through srun"
     metadata, _ = load_fixture(name)
     arguments = source_arguments(metadata)
     results = []
-    for selection in ("0", "1"):
-        journal = tmp_path / f"{name}-{selection}.jsonl"
+    for selection, cache in (("0", "0"), ("1", "0"), ("1", "1")):
+        journal = tmp_path / f"{name}-{selection}-{cache}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_MP2_REFERENCE_SOURCE", selection)
+        monkeypatch.setenv("GENERATIVEQC_MP2_FORCE_MO_CACHE", cache)
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
         calc = Calculator(
             method="mp2",
@@ -515,6 +516,15 @@ def test_cuda_mp2_shared_reference_source_complete_endpoint(
         }
         assert routing["mp2_energy_device_source"] == int(selection)
         assert routing["mp2_force_device_source"] == int(selection)
+        cache_bytes = routing["mp2_force_mo_cache_bytes"]
+        borrowed_reads = sum(
+            record["value"]
+            for record in records
+            if record.get("key") == "mo_block_reuses"
+            and record["name"] == "borrowed_mo_blocks"
+        )
+        assert (cache_bytes > 0) == (selection == "1" and cache == "1")
+        assert (borrowed_reads > 0) == (selection == "1" and cache == "1")
         source_reads = sum(
             record["value"]
             for record in records
@@ -536,8 +546,9 @@ def test_cuda_mp2_shared_reference_source_complete_endpoint(
         )
         np.testing.assert_allclose(result.forces.sum(axis=0), 0.0, atol=2e-8)
         results.append(result)
-    np.testing.assert_allclose(results[0].energy, results[1].energy, atol=1e-9, rtol=0)
-    np.testing.assert_allclose(results[0].forces, results[1].forces, atol=2e-8, rtol=0)
+    for result in results[1:]:
+        np.testing.assert_allclose(results[0].energy, result.energy, atol=1e-9, rtol=0)
+        np.testing.assert_allclose(results[0].forces, result.forces, atol=2e-8, rtol=0)
 
 
 @pytest.mark.skipif(

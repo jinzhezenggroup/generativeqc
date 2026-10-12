@@ -47,6 +47,7 @@ DENSITY_FITTING_NONE = 0
 DENSITY_FITTING_CPU_REFERENCE = 1
 DENSITY_FITTING_CUDA = 2
 DENSITY_FITTING_AUTO = 3
+DENSITY_FITTING_CORRELATION_CUDA = 4
 PRECISION_FP64 = 0
 PRECISION_AUTO = 1
 PRECISION_WORK_DETAIL_VERSION = 1
@@ -1098,6 +1099,15 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         void_pp,
     ]
     library.generativeqc_system_create.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_correlation_auxiliary_system_create_v1"):
+        library.generativeqc_correlation_auxiliary_system_create_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(SystemDescriptor),
+            void_pp,
+        ]
+        library.generativeqc_correlation_auxiliary_system_create_v1.restype = (
+            ctypes.c_int
+        )
     library.generativeqc_system_create_ecp.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(SystemDescriptor),
@@ -1189,6 +1199,21 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         ctypes.POINTER(ResultDescriptor),
     ]
     library.generativeqc_calculation_execute.restype = ctypes.c_int
+    if hasattr(library, "generativeqc_calculation_execute_components_v1"):
+        library.generativeqc_calculation_execute_components_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ResultDescriptor),
+            ctypes.POINTER(ResultDescriptor),
+            ctypes.POINTER(ResultDescriptor),
+        ]
+        library.generativeqc_calculation_execute_components_v1.restype = ctypes.c_int
+        library.generativeqc_calculation_get_mp2_component_diagnostic_v1.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(CorrelationDiagnostic),
+        ]
+        library.generativeqc_calculation_get_mp2_component_diagnostic_v1.restype = (
+            ctypes.c_int
+        )
     library.generativeqc_calculation_get_scf_diagnostic.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(ScfDiagnostic),

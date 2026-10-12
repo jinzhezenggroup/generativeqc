@@ -32,6 +32,11 @@ bridge uses the native spherical-basis tag.
 - CPU compilation found two transitive-header dependencies (ECP status and GFN2
   spherical tags); explicit dependencies/native tags repair them. CUDA execution
   requires its ordinary hardware-qualified CI; CPU validation is not GPU evidence.
+- Correlation-only MP2 delegates preparation to the DF-RCCSD(T) owner and must
+  forward the resolved native auxiliary through that second hop. Composing the
+  CBS route without this argument compiled but rejected valid inputs. The real
+  C API preparation regression detects the missed handoff with host metadata and
+  CUDA intent only, without device initialization or numerical execution.
 
 ## References
 

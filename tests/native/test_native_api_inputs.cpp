@@ -192,6 +192,45 @@ void auxiliary_lifetime(generativeqc_context* context, generativeqc_method metho
             "batch failed to rebind the owned auxiliary geometry");
   }
 }
+
+void correlation_auxiliary_forwarding(generativeqc_context* cpu_context) {
+  auto orbital = system(cpu_context, 0.8);
+  auto auxiliary = system(cpu_context, 0.3);
+  auxiliary->correlation_auxiliary = true;
+  // Preparation only copies host metadata. Supply CUDA intent without creating
+  // a device context or executing the prepared calculation.
+  generativeqc_context metadata_context{};
+  metadata_context.state.requested_backend = core::kCudaBackend;
+  auto request = descriptor(GENERATIVEQC_METHOD_MP2, auxiliary.get());
+  request.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA;
+  generativeqc_calculation* out = nullptr;
+  const auto status =
+      generativeqc_calculation_prepare(&metadata_context, orbital.get(), &request, &out);
+  if (status != GENERATIVEQC_STATUS_SUCCESS)
+    throw std::runtime_error("correlation MP2 auxiliary forwarding: " +
+                             metadata_context.last_detail);
+  Calculation prepared(out, generativeqc_calculation_destroy);
+  require(!prepared->plan->capabilities().supports_batch,
+          "correlation-only MP2 unexpectedly admitted batches");
+
+  out = nullptr;
+  request.density_fitting_auxiliary_basis = nullptr;
+  require(generativeqc_calculation_prepare(&metadata_context, orbital.get(), &request, &out) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              !out,
+          "correlation-only MP2 accepted an implicit auxiliary");
+  auto mismatch = system(cpu_context, 0.3, 0.9);
+  request.density_fitting_auxiliary_basis = mismatch.get();
+  require(generativeqc_calculation_prepare(&metadata_context, orbital.get(), &request, &out) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              !out,
+          "correlation-only MP2 accepted mismatched auxiliary geometry");
+  request = descriptor(GENERATIVEQC_METHOD_MP2, auxiliary.get());
+  require(generativeqc_calculation_prepare(&metadata_context, orbital.get(), &request, &out) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+              !out,
+          "legacy RI-MP2 accepted a correlation-only auxiliary handle");
+}
 }  // namespace
 
 int main() {
@@ -209,6 +248,7 @@ int main() {
       invalid_inputs(context.get(), method);
       auxiliary_lifetime(context.get(), method);
     }
+    correlation_auxiliary_forwarding(context.get());
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

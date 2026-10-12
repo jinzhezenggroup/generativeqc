@@ -7,12 +7,14 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <optional>
 #include <string_view>
 
 #include "methods/batch_capabilities.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
+#include "methods/df_rccsdt_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
@@ -67,6 +69,12 @@ class Mp2Prepared final : public PreparedCalculation {
   Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
+  Result execute_components_impl(bool compute_forces, unsigned components) override {
+    if ((components && density_fitted_) || (components & ~kHfComponent))
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "MP2 companions require conventional RHF-MP2");
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr, components);
+  }
 
   void transfer_cuda_reference_plan_to(Mp2Prepared& target) noexcept {
     target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
@@ -74,7 +82,8 @@ class Mp2Prepared final : public PreparedCalculation {
 
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
                                      bool* warm_start_fallback,
-                                     std::optional<scf::HfWarmState>* retained_warm_state) {
+                                     std::optional<scf::HfWarmState>* retained_warm_state,
+                                     unsigned components = 0) {
     std::lock_guard<std::mutex> lock(mutex_);
     runtime::df_progress::Scope trace("mp2_endpoint");
     last_.reset();
@@ -224,15 +233,25 @@ class Mp2Prepared final : public PreparedCalculation {
               std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
         if (raw_source) conventional_source = raw_source.get();
       };
+      Result result;
+      std::size_t component_capacity = 0;
+      std::size_t component_peak = 0;
       const auto run_phase = [&](auto&& operation) {
         return run_with_cuda_reference_budget(
             reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+              if (component_capacity >= correlation_budget)
+                throw std::length_error("MP2 companion outputs exhaust the memory budget");
+              correlation_budget -= component_capacity;
               try {
                 return operation(correlation_budget);
-              } catch (const std::length_error&) {
+              } catch (const std::length_error& error) {
                 if (!reference_source) throw;
+                runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
+                                                   error.what());
               } catch (const std::bad_alloc&) {
                 if (!reference_source) throw;
+                runtime::df_progress::Scope::label("mp2_reference_source_memory_error",
+                                                   "allocation");
               }
               // Optional source residency must not reject a previously
               // admitted endpoint. Unwind phase-local work, release the source
@@ -243,6 +262,23 @@ class Mp2Prepared final : public PreparedCalculation {
               return operation(correlation_budget);
             });
       };
+      if (components & kHfComponent) {
+        result.hf_component.emplace();
+        result.hf_component->energy = ref.energy;
+        if (compute_forces) {
+          auto force = run_phase([&](std::size_t correlation_budget) {
+            prepare_source();
+            return mp2::reference_force(ref, *conventional_source, correlation_budget, cuda,
+                                        context_.device_id);
+          });
+          component_peak = posthf::checked_add(
+              force.planned_endpoint_peak_bytes,
+              posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes()));
+          result.hf_component->forces = std::move(force.forces);
+          component_capacity =
+              posthf::checked_mul(result.hf_component->forces.capacity(), sizeof(double));
+        }
+      }
       const auto corr = run_phase([&](std::size_t correlation_budget) {
         prepare_source();
         runtime::df_progress::Scope::number(
@@ -259,10 +295,11 @@ class Mp2Prepared final : public PreparedCalculation {
       });
       // Preserve this completed phase's simultaneous peak if force admission
       // subsequently retires the optional reference executable.
-      const auto energy_capacity =
-          posthf::checked_add(posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity),
-                              cuda_reference_plan_.retained_numeric_bytes());
-      Result result;
+      auto completed_phase_capacity = std::max(
+          component_peak,
+          posthf::checked_add(
+              posthf::checked_add(corr.numeric_capacity_bytes, component_capacity),
+              posthf::checked_add(warm_capacity, cuda_reference_plan_.retained_numeric_bytes())));
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
@@ -282,6 +319,117 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.absolute_tolerance = 1e-12;
         response_options.restart = 30;
         response_options.max_iterations = 200;
+        struct ForceCache {
+          std::array<std::vector<double>, 6> blocks;
+          std::size_t bytes{}, peak{};
+        };
+        ForceCache cache;
+        const auto clear_force_cache_allocation_error = [] {
+#if GENERATIVEQC_HAS_CUDA
+          // A refused optional CUDA allocation leaves the runtime's last-error
+          // slot set. Consume only that expected status before bounded replay;
+          // an unrelated asynchronous/backend error must still propagate.
+          const auto error = cudaGetLastError();
+          if (error != cudaSuccess && error != cudaErrorMemoryAllocation)
+            throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, cudaGetErrorString(error));
+#endif
+        };
+        const auto* cache_override = std::getenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+        const auto* force_tiling_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+        if (cuda && !density_fitted_ &&
+            (!cache_override || std::string_view(cache_override) != "0") &&
+            (!force_tiling_override || std::string_view(force_tiling_override) != "0")) {
+          cache = run_phase([&](std::size_t correlation_budget) {
+            prepare_source();
+            if (!conventional_source->supports_device_read(
+                    integrals::ElectronInteractionOperator::eri, context_.device_id))
+              return ForceCache{};
+            const auto occupied_count = ref.nocc;
+            const auto virtual_count = ref.nbf - occupied_count;
+            const std::array<std::array<std::size_t, 4>, 6> shapes{{
+                {occupied_count, virtual_count, occupied_count, virtual_count},
+                {occupied_count, occupied_count, virtual_count, virtual_count},
+                {occupied_count, virtual_count, occupied_count, occupied_count},
+                {occupied_count, virtual_count, virtual_count, virtual_count},
+                {occupied_count, occupied_count, occupied_count, occupied_count},
+                {virtual_count, virtual_count, virtual_count, virtual_count},
+            }};
+            std::size_t cache_bytes = 0;
+            for (const auto& shape : shapes) {
+              std::size_t elements = 1;
+              for (const auto extent : shape) elements = posthf::checked_mul(elements, extent);
+              cache_bytes =
+                  posthf::checked_add(cache_bytes, posthf::checked_mul(elements, sizeof(double)));
+            }
+            // Reserve at most a quarter for optional primal storage. Complete
+            // force admission still checks its real remaining phase budget.
+            if (cache_bytes > correlation_budget / 4) return ForceCache{};
+            try {
+              std::size_t selected_axis = 0, peak = 0;
+              for (std::size_t axis = ref.nbf; axis > 0; --axis) {
+                try {
+                  posthf::NativeBlockProvider candidate(
+                      *conventional_source, ref, correlation_budget, static_cast<unsigned>(axis),
+                      posthf::AOTileDomain::Basis);
+                  std::size_t candidate_peak = 0;
+                  for (const auto& shape : shapes) {
+                    const auto plan = candidate.plan(shape, true);
+                    candidate_peak = std::max(
+                        candidate_peak,
+                        posthf::checked_add(
+                            cache_bytes, posthf::checked_add(plan.host_bytes, plan.device_bytes)));
+                  }
+                  if (candidate_peak > correlation_budget) continue;
+                  selected_axis = axis;
+                  peak = candidate_peak;
+                  break;
+                } catch (const std::length_error&) {
+                  continue;
+                }
+              }
+              if (!selected_axis) return ForceCache{};
+              std::vector<std::size_t> occupied(occupied_count), virtuals(virtual_count);
+              std::iota(occupied.begin(), occupied.end(), 0);
+              std::iota(virtuals.begin(), virtuals.end(), occupied_count);
+              const std::array<posthf::MOSlots, 6> requests{{
+                  {occupied, virtuals, occupied, virtuals},
+                  {occupied, occupied, virtuals, virtuals},
+                  {occupied, virtuals, occupied, occupied},
+                  {occupied, virtuals, virtuals, virtuals},
+                  {occupied, occupied, occupied, occupied},
+                  {virtuals, virtuals, virtuals, virtuals},
+              }};
+              ForceCache candidate;
+              candidate.peak = peak;
+              for (std::size_t index = 0; index < requests.size(); ++index) {
+                posthf::NativeBlockProvider producer(
+                    *conventional_source, ref, correlation_budget - candidate.bytes,
+                    static_cast<unsigned>(selected_axis), posthf::AOTileDomain::Basis);
+                candidate.blocks[index] = producer.get(requests[index], true, context_.device_id);
+                candidate.bytes = posthf::checked_add(
+                    candidate.bytes,
+                    posthf::checked_mul(candidate.blocks[index].capacity(), sizeof(double)));
+                if (candidate.bytes > cache_bytes)
+                  throw std::length_error("MP2 force cache exceeds its admitted capacity");
+              }
+              return candidate;
+            } catch (const std::length_error&) {
+              clear_force_cache_allocation_error();
+              return ForceCache{};
+            } catch (const std::bad_alloc&) {
+              clear_force_cache_allocation_error();
+              return ForceCache{};
+            }
+          });
+          completed_phase_capacity =
+              std::max(completed_phase_capacity,
+                       posthf::checked_add(
+                           cache.peak,
+                           posthf::checked_add(
+                               component_capacity,
+                               posthf::checked_add(
+                                   warm_capacity, cuda_reference_plan_.retained_numeric_bytes()))));
+        }
         force_diagnostic = run_phase([&](std::size_t correlation_budget) {
           prepare_source();
           runtime::df_progress::Scope::number(
@@ -289,6 +437,36 @@ class Mp2Prepared final : public PreparedCalculation {
               conventional_source &&
                   conventional_source->supports_device_read(
                       integrals::ElectronInteractionOperator::eri, context_.device_id));
+          if (cache.bytes) {
+            try {
+              if (cache.bytes >= correlation_budget)
+                throw std::length_error("MP2 force cache exhausts its phase budget");
+              response_options.max_workspace_bytes = correlation_budget - cache.bytes;
+              const std::array<posthf::BorrowedMOBlock, 6> blocks{{
+                  {{false, true, false, true}, cache.blocks[0]},
+                  {{false, false, true, true}, cache.blocks[1]},
+                  {{false, true, false, false}, cache.blocks[2]},
+                  {{false, true, true, true}, cache.blocks[3]},
+                  {{false, false, false, false}, cache.blocks[4]},
+                  {{true, true, true, true}, cache.blocks[5]},
+              }};
+              auto force = mp2::conventional_force_cuda(
+                  ref, *conventional_source, correlation_budget - cache.bytes, threshold_, 1e-10,
+                  response_options, context_.device_id, cache.blocks[0], blocks);
+              force.planned_endpoint_peak_bytes =
+                  posthf::checked_add(force.planned_endpoint_peak_bytes, cache.bytes);
+              force.measured_endpoint_peak_bytes = 0;
+              runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", cache.bytes);
+              return force;
+            } catch (const std::length_error&) {
+              cache = {};
+              clear_force_cache_allocation_error();
+            } catch (const std::bad_alloc&) {
+              cache = {};
+              clear_force_cache_allocation_error();
+            }
+          }
+          runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", 0);
           response_options.max_workspace_bytes = correlation_budget;
           return density_fitted_
                      ? mp2::density_fitted_force_cpu(
@@ -314,7 +492,7 @@ class Mp2Prepared final : public PreparedCalculation {
       diagnostic.same_spin_energy = corr.same_spin;
       diagnostic.minimum_absolute_denominator = corr.minimum_denominator;
       diagnostic.reference_residual = ref.commutator_residual;
-      diagnostic.numeric_capacity_bytes = std::max(reference_capacity, energy_capacity);
+      diagnostic.numeric_capacity_bytes = std::max(reference_capacity, completed_phase_capacity);
       diagnostic.energy_tile_count = corr.tiles;
       diagnostic.mo_host_staging = executed_cuda && !density_fitted_ ? 1 : 0;
       diagnostic.reference_execution_plan_reused = reference_plan_reused ? 1 : 0;
@@ -343,7 +521,8 @@ class Mp2Prepared final : public PreparedCalculation {
         last_->planned_endpoint_peak_bytes = std::max<std::uint64_t>(
             last_->numeric_capacity_bytes,
             posthf::checked_add(
-                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity),
+                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes,
+                                    posthf::checked_add(warm_capacity, component_capacity)),
                 cuda_reference_plan_.retained_numeric_bytes()));
         // External warm/plan reservations are not part of the force allocator
         // telemetry. Keep the whole-endpoint measurement unknown when either
@@ -570,6 +749,8 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& d, const core::System* auxiliary_basis) {
   const auto density_fitting_mode = d.density_fitting_mode;
+  if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA)
+    return prepare_df_rccsdt_calculation(caps, context, system, d, auxiliary_basis);
   if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
