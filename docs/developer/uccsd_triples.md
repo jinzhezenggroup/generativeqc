@@ -13,7 +13,9 @@ This is the fixed-amplitude tile definition. The separate
 [complete UCCSD(T) energy owner](uccsd_t_owner.md) binds a converged
 [UCCSD state](uccsd_solver.md), admits denominator and storage/work limits,
 enumerates the tile coverage, accumulates the four channels and publishes their
-provenance. Tile cotangents are not yet unrestricted analytic nuclear forces.
+provenance. Tile cotangents alone are not unrestricted analytic nuclear forces;
+the distinct [corrected physical/nuclear owners](uccsd_physical_response.md)
+bind the complete response chain explicitly.
 
 ## Scientific definition
 
@@ -150,7 +152,8 @@ implementation describes this contract in
 `python/generativeqc_compiler/cc/triples_fock_response.py`. The unrestricted
 full-Fock owner below supplies this missing denominator chain separately;
 corrected Lambda parameter requests retain their fixed-canonical-input scope.
-Complete corrected Hamiltonian/UHF/nuclear composition is not implemented.
+Complete corrected Hamiltonian/UHF/nuclear composition belongs to the distinct
+[corrected physical/nuclear owners](uccsd_physical_response.md).
 The standard physical-response owner intentionally still rejects corrected
 owners/results. Its standard Lambda qualification is not disabled or relabelled.
 
@@ -186,9 +189,10 @@ diagonal-gate failures expose neither partial moments nor prefix correction
 energies/source bars. Closing this consumer leaves borrowed owners open.
 
 This is covariant canonical-reference triples Hamiltonian response, not a
-normal-ordering, corrected orbital response or nuclear-force endpoint. A future
-physical consumer must explicitly combine fresh full moments with freshly
-qualified corrected Lambda and retain the complete all-rotation gate.
+normal-ordering, corrected orbital response or nuclear-force endpoint by itself.
+The distinct corrected physical consumer explicitly combines fresh full moments
+with freshly qualified corrected Lambda, full-frame metric transport and the
+complete all-rotation gate; its nuclear consumer binds every derivative term.
 
 ## Qualification
 

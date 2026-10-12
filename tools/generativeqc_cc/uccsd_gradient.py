@@ -13,7 +13,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from generativeqc_compiler.cc.gradient_equations import (
@@ -68,7 +68,7 @@ class UCCSDGradientOptions:
 
 
 @dataclass(frozen=True)
-class UCCSDGradientResult:
+class _UCCSDGradientResult:
     """Detached total energy, positive nuclear gradient, and negative forces."""
 
     total_energy: float
@@ -100,7 +100,12 @@ class UCCSDGradientResult:
         object.__setattr__(self, "provenance", _freeze(self.provenance))
 
 
-class PreparedUCCSDGradient:
+@dataclass(frozen=True)
+class UCCSDGradientResult(_UCCSDGradientResult):
+    """Standard CCSD energy and forces; corrected records are not this subtype."""
+
+
+class _PreparedUCCSDGradient:
     """Borrow a physical owner and bind every AO derivative and nuclear term.
 
     Each solve freshly qualifies CC, standard Lambda, and full orbital
@@ -112,13 +117,12 @@ class PreparedUCCSDGradient:
 
     def __init__(
         self,
-        physical: PreparedUCCSDPhysicalResponse,
+        physical: Any,
         *,
         options: UCCSDGradientOptions | None = None,
     ) -> None:
         started = time.perf_counter()
-        if not isinstance(physical, PreparedUCCSDPhysicalResponse):
-            raise TypeError("UCCSD gradient requires a physical response owner")
+        self._validate_physical(physical)
         options = UCCSDGradientOptions() if options is None else options
         if not isinstance(options, UCCSDGradientOptions):
             raise TypeError("UCCSD gradient requires gradient options")
@@ -215,6 +219,21 @@ class PreparedUCCSDGradient:
         )
         self.preparation_seconds = time.perf_counter() - started
 
+    def _validate_physical(self, physical: Any) -> None:
+        if not isinstance(physical, PreparedUCCSDPhysicalResponse):
+            raise TypeError("UCCSD gradient requires a physical response owner")
+
+    def _make_result(
+        self, relaxed: Any, gradient: np.ndarray, provenance: dict
+    ) -> _UCCSDGradientResult:
+        return UCCSDGradientResult(
+            self.reference.reference_energy + self.physical.lambdas.correlation_energy,
+            gradient,
+            -gradient,
+            relaxed.response_identity,
+            provenance,
+        )
+
     def _assert_current(self) -> None:
         if self._closed:
             raise RuntimeError("prepared UCCSD gradient is closed")
@@ -260,7 +279,7 @@ class PreparedUCCSDGradient:
         self._assert_current()
         return outputs
 
-    def solve(self) -> UCCSDGradientResult:
+    def solve(self) -> _UCCSDGradientResult:
         """Publish only after all fresh response and native derivative gates pass."""
         self._assert_current()
         started = time.perf_counter()
@@ -311,7 +330,7 @@ class PreparedUCCSDGradient:
             raise ValueError(
                 "native UCCSD one-electron derivative returned invalid gradients"
             )
-        gradient = np.array(gradient, copy=True)
+        gradient = np.array(gradient, dtype=np.float64, copy=True)
         offsets = np.cumsum((0, *self.source.shell_sizes))
         primitive_evaluations, calls = 0, 0
         for indices in product(range(len(self.source.shells)), repeat=4):
@@ -362,11 +381,9 @@ class PreparedUCCSDGradient:
         if primitive_evaluations > self.planned_primitive_terms:
             raise MemoryError("UCCSD derivative primitive count exceeded admission")
         self._assert_current()
-        return UCCSDGradientResult(
-            self.reference.reference_energy + self.physical.lambdas.correlation_energy,
+        return self._make_result(
+            relaxed,
             gradient,
-            -gradient,
-            relaxed.response_identity,
             {
                 "physical_response": relaxed.provenance,
                 "derivative_backend": self.backend,
@@ -404,3 +421,19 @@ class PreparedUCCSDGradient:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+
+class PreparedUCCSDGradient(_PreparedUCCSDGradient):
+    """Standard CCSD forces with the unchanged standard physical-owner gate."""
+
+    def __init__(
+        self,
+        physical: PreparedUCCSDPhysicalResponse,
+        *,
+        options: UCCSDGradientOptions | None = None,
+    ) -> None:
+        super().__init__(physical, options=options)
+
+    def solve(self) -> UCCSDGradientResult:
+        """Freshly qualify the standard response and contract every nuclear term."""
+        return cast("UCCSDGradientResult", super().solve())
