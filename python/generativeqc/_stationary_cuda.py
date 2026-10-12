@@ -1979,6 +1979,32 @@ class _CudaSources:
                     strict=True,
                 )
             )
+        scaled_metrics = getattr(
+            self.library, "stationary_becke_binary_scaled_metrics_v1", None
+        )
+        if scaled_metrics is not None:
+            scaled_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            scaled_values = (ct.c_uint64 * 6)()
+            if scaled_metrics(self.handle, scaled_values, 6):
+                raise RuntimeError("stationary binary-scaled Becke metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "becke_binary_scaled_requested",
+                        "becke_binary_scaled_selected",
+                        "becke_binary_scaled_batches",
+                        "becke_binary_scaled_points",
+                        "becke_binary_scaled_phased_bytes",
+                        "becke_binary_scaled_cooperative_normalize",
+                    ),
+                    scaled_values,
+                    strict=True,
+                )
+            )
         becke_counters = getattr(
             self.library, "stationary_becke_phase_metrics_v1", None
         )
@@ -2615,6 +2641,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "becke_elided_reverse_pair_panel_write_bytes",
         "becke_elided_gather_pair_panel_read_bytes",
         "phased_becke_batches",
+        "becke_binary_scaled_batches",
+        "becke_binary_scaled_points",
         "becke_primitive_batches",
         "becke_primitive_reverse_pair_visits",
         "restricted_point_batches",

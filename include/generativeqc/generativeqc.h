@@ -1273,6 +1273,23 @@ typedef struct generativeqc_ks_diagnostic {
   double physical_residual_max;
 } generativeqc_ks_diagnostic;
 
+/** Narrow target-KS value-provider census. A Coulomb application acts on the
+ * total density; exchange applications count executed spin contractions,
+ * including a zero-density spin if its K contraction actually runs.
+ * Counts include discarded target attempts and final physical-Fock rebuilds,
+ * but exclude preliminary-method preparation, integral preparation, derivatives,
+ * XC, and other linear algebra. They are not timings or ERI/FLOP counts.
+ * complete=0 means unavailable; its zero fields are not zero-work evidence.
+ * This does not upgrade precision-work or full operator-inventory completeness.
+ */
+typedef struct generativeqc_ks_coulomb_exchange_work_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  int32_t complete;
+  uint64_t coulomb_applications;
+  uint64_t exchange_applications;
+} generativeqc_ks_coulomb_exchange_work_v1;
+
 /** Cumulative transport performed by one prepared CUDA KS owner.
  *
  * Counts are measured at native copy/synchronization sites rather than
@@ -1898,6 +1915,21 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_ks_diagnostic* out,
     generativeqc_ks_iteration* history, uint32_t history_capacity);
 
+/** @native-contract generativeqc_calculation_get_ks_coulomb_exchange_work_v1
+ * @behavior Copy observed target-KS value-provider Coulomb/exchange applications.
+ * @inputs Initialize out with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+ * NULL out probes completed KS-record availability.
+ * @outputs Copies the narrow census, including discarded target attempts. Inspect complete
+ * before using counts; uninstrumented paths return complete=0 and zero unavailable fields.
+ * @errors Invalid owner is INVALID_ARGUMENT; invalid descriptor is ABI_MISMATCH.
+ * NOT_IMPLEMENTED means no completed KS record. Failure leaves output untouched.
+ * @lifetime The caller owns the copied record. Keep owner/context alive during this call.
+ * @execution Synchronous; serialize execution, queries and destruction on this owner/context.
+ * @units Logical applications, not recurrences, FLOPs, bytes or time.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_coulomb_exchange_work_v1(
+    const generativeqc_calculation* calculation, generativeqc_ks_coulomb_exchange_work_v1* out);
+
 /** Query cumulative prepared-owner CUDA KS transport. Available immediately
  * after CUDA KS preparation so callers can separate setup from phase deltas. */
 /** @native-contract generativeqc_calculation_get_ks_transport_diagnostic
@@ -2500,6 +2532,21 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_cc_performance_diagn
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_ks_diagnostic* out,
     generativeqc_ks_iteration* history, uint32_t history_capacity);
+
+/** @native-contract generativeqc_batch_get_ks_coulomb_exchange_work_v1
+ * @behavior Copy one input item's observed target-KS value-provider J/K applications.
+ * @inputs Initialize out with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+ * index is the zero-based original input index. NULL out probes completed-record availability.
+ * @outputs Copies the narrow census, including discarded target attempts. Inspect complete
+ * before using counts; uninstrumented paths return complete=0 and zero unavailable fields.
+ * @errors Invalid owner/index is INVALID_ARGUMENT; invalid descriptor is ABI_MISMATCH.
+ * NOT_IMPLEMENTED means no completed KS record. Failure leaves output untouched.
+ * @lifetime The caller owns the copied record. Keep owner/context alive during this call.
+ * @execution Synchronous; serialize execution, queries and destruction on this owner/context.
+ * @units Logical applications, not recurrences, FLOPs, bytes or time.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_ks_coulomb_exchange_work_v1* out);
 
 /** Input-ordered cumulative CUDA KS transport. Geometry rebuilds retain the
  * retired owner's counters and add the replacement owner's setup. */

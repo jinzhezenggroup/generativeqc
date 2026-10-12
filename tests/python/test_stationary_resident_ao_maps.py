@@ -1,15 +1,15 @@
 """Ordinary force mask admission, identity, and replay remain caller-owned."""
 
-import ast
-import inspect
 import sys
 import typing
 import weakref
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
 
 import pytest
 from generativeqc import _stationary_cuda as runtime
+from test_stationary_large_grid_work import _geometry_loop
 
 
 @pytest.mark.parametrize("cutoff", [None, 1e-16])
@@ -305,28 +305,118 @@ def test_default_and_public_forwarding_do_not_enable_screening(
     assert calls[-1]["resident_ao_cache_bytes"] == 0
 
 
-def test_actual_resident_loop_uses_owner_for_selected_geometry_lease() -> None:
-    """Only the no-map branch may construct a dense device-point feature lease."""
-    source = ast.parse(
-        inspect.getsource(runtime._complete_rks_cuda_gradient_diagnostic)
+@pytest.mark.parametrize("mapped", [False, True])
+@pytest.mark.parametrize("begin,end", [(0, 7), (17, 20), (255, 256)])
+@pytest.mark.parametrize("failure", [None, "create", "derivative", "consume"])
+def test_resident_geometry_feature_lease_contract(
+    mapped: bool, begin: int, end: int, failure: str | None
+) -> None:
+    """Execute production selection, validation, consumption, and cleanup on CPU."""
+    events = []
+    request = {}
+    domain = object()
+    ingredients = ("rho", "sigma", "tau")
+    resident = SimpleNamespace(points=4096, weights=8192, atomic_weights=16384)
+
+    def require_order(order: int) -> None:
+        assert events == ["enter"] and order == 2
+        events.append("derivative")
+        if failure == "derivative":
+            raise RuntimeError("derivative validation failed")
+
+    task = SimpleNamespace(
+        layout=SimpleNamespace(require_derivative_order=require_order)
     )
-    leases = [
-        node
-        for node in ast.walk(source)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "feature_task_device_points"
-    ]
-    assert len(leases) == 1
-    assert ast.unparse(leases[0].args[2]) == "None"
-    selection = next(
-        node
-        for node in ast.walk(source)
-        if isinstance(node, ast.IfExp) and node.body is leases[0]
+
+    @contextmanager
+    def lease() -> typing.Iterator[object]:
+        events.append("enter")
+        try:
+            yield task
+        finally:
+            events.append("release")
+
+    def create(*args: typing.Any) -> typing.Any:
+        assert events == []
+        request["args"] = args
+        if failure == "create":
+            raise MemoryError("selected provider allocation failed")
+        return lease()
+
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        raise AssertionError("the unselected provider must not allocate a lease")
+
+    ao = SimpleNamespace(feature_task_device_points=forbidden if mapped else create)
+
+    class Maps:
+        """A present map can be falsy; only absence permits dense allocation."""
+
+        def __bool__(self) -> bool:
+            return False
+
+    maps = Maps()
+    maps.domain = domain
+    maps.feature_task = create if mapped else forbidden
+    expected = (
+        (ao, domain, begin, end - begin, ingredients)
+        if mapped
+        else (4096 + begin * 24, end - begin, None, ingredients)
     )
-    assert ast.unparse(selection.test) == "ao_maps is None"
-    assert ast.unparse(selection.orelse.func) == "ao_maps.feature_task"
-    assert [ast.unparse(value) for value in selection.orelse.args[:2]] == [
-        "ao",
-        "ao_maps.domain",
-    ]
+
+    def consume(
+        current: object,
+        offset: int,
+        per_atom: int,
+        weighted: int,
+        host_weighted: object,
+        atomic: int,
+        host_atomic: object,
+        *,
+        functional: int,
+    ) -> None:
+        assert current is task and request["args"] == expected
+        assert events == ["enter", "derivative"]
+        assert offset == begin and per_atom == 17 and functional == 1
+        assert weighted == 8192 + begin * 8
+        assert atomic == 16384 + begin * 8
+        assert host_weighted is host_atomic is None
+        events.append("consume")
+        if failure == "consume":
+            raise RuntimeError("geometry consumer failed")
+
+    def drain() -> None:
+        assert events[-1] == "release"
+        events.append("drain")
+
+    scope = {
+        "grid_work": SimpleNamespace(chunks=lambda: [(begin, end)]),
+        "tile_points": end - begin,
+        "resident_grid": resident,
+        "ao": ao,
+        "ao_maps": maps if mapped else None,
+        "sources": SimpleNamespace(
+            geometry_molecular_resident_weights=consume, drain_geometry=drain
+        ),
+        "timeline": SimpleNamespace(phase=lambda _: nullcontext()),
+        "ingredients": ingredients,
+        "needs_first": True,
+        "points_per_atom": 17,
+        "functional": 1,
+        "profile_device": False,
+    }
+    if failure == "create":
+        with pytest.raises(MemoryError, match="selected provider allocation"):
+            _geometry_loop(scope)
+        assert events == []
+    elif failure == "derivative":
+        with pytest.raises(RuntimeError, match="derivative validation"):
+            _geometry_loop(scope)
+        assert events == ["enter", "derivative", "release"]
+    elif failure == "consume":
+        with pytest.raises(RuntimeError, match="geometry consumer failed"):
+            _geometry_loop(scope)
+        assert events == ["enter", "derivative", "consume", "release"]
+    else:
+        _geometry_loop(scope)
+        assert events == ["enter", "derivative", "consume", "release", "drain"]
+    assert request["args"] == expected

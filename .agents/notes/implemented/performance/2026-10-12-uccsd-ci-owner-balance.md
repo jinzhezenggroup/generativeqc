@@ -140,3 +140,9 @@ and absent, untracked, tracked and tracked-but-missing inventories, retaining
 exactly one owner and unchanged modulo indices for all unrelated test files.
 
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38205701393/job/114670271600
+
+## Superseding parallel allocation
+
+The paired core-a placement is superseded by the measured split in
+[the parallel-tail balance note](2026-10-12-uccsd-parallel-tail-balance.md).
+The historical observations above remain unchanged.

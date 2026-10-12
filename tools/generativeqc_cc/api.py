@@ -142,8 +142,12 @@ def energy(
 ) -> typing.Any:
     """Return the energy-only RCCSD single point from an owned RHF reference.
 
-    ``backend`` selects the physical-equation evaluator: ``"cpu"`` is the #148
-    interpreter; ``"cuda"`` compiles the same TensorIR through #146 and
+    ``backend`` selects the physical-equation evaluator: ``"cpu"`` retains
+    the #148 interpreter oracle; ``"cpu-native"`` compiles the same physical
+    TensorIR through the shared bounded CPU backend while the independent
+    final expanded equation remains interpreted. A CPU native compiler Path
+    and artifact cache Path are optional (defaults: CXX and user cache).
+    ``"cuda"`` compiles the same TensorIR through #146 and
     requires an explicit ``CudaCompilerAdapter`` and cache. ``"cuda-resident"``
     keeps T/R/integrals/DIIS resident across iterations and reads only scalar
     convergence control until final acceptance. Forces,
@@ -163,8 +167,27 @@ def energy(
             raise ValueError("RCCSD warm_start cannot be combined with raw t1/t2")
         if backend != "cuda-resident":
             t1, t2 = warm_start.for_reference(snapshot)
-    if backend == "cpu":
-        state = solve(snapshot, provider, options=options, t1=t1, t2=t2)
+    if backend in ("cpu", "cpu-native"):
+        executor = None
+        if backend == "cpu-native":
+            from .native_tensor_cpu import NativeCCTensorExecutor
+            from .solver import SolverOptions
+
+            if compiler is not None and not isinstance(compiler, Path):
+                raise TypeError("native CPU RCCSD compiler must be a pathlib.Path")
+            if cache is not None and not isinstance(cache, Path):
+                raise TypeError("native CPU RCCSD cache must be a pathlib.Path")
+            native_options = SolverOptions() if options is None else options
+            if not isinstance(native_options, SolverOptions):
+                raise TypeError("options must be SolverOptions")
+            executor = NativeCCTensorExecutor(
+                max_bytes=native_options.max_bytes,
+                compiler=compiler,
+                cache=cache,
+            )
+        state = solve(
+            snapshot, provider, options=options, t1=t1, t2=t2, executor=executor
+        )
     elif backend in ("cuda", "cuda-resident"):
         if not isinstance(compiler, CudaCompilerAdapter):
             raise ValueError("CUDA RCCSD requires a CudaCompilerAdapter")
@@ -188,7 +211,9 @@ def energy(
             kwargs["warm_start"] = warm_start
         state = selected_solver(snapshot, provider, **kwargs)
     else:
-        raise ValueError("RCCSD backend must be 'cpu', 'cuda' or 'cuda-resident'")
+        raise ValueError(
+            "RCCSD backend must be 'cpu', 'cpu-native', 'cuda' or 'cuda-resident'"
+        )
     reference = snapshot.reference_energy
     return RCCSDResult(
         backend=backend,
