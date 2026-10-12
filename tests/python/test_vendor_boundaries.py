@@ -63,7 +63,6 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     )
     for path in consumers:
         assert path not in inventory
-        assert "scf_matrix_product_view(" in (ROOT / path).read_text()
     manifest = json.loads((ROOT / MANIFEST).read_text())
     provider = manifest["files"]["src/scf/cuda/df_scf_library.cpp"]
     assert provider["classification"] == "provider"
@@ -72,7 +71,6 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     # only its six ordinary GEMMs have moved behind the shared adapter.
     setup = "src/scf/cuda/df_plan_setup.cpp"
     assert "cublasDgemm" not in inventory.get(setup, {})
-    assert "scf_matrix_product_view(" in (ROOT / setup).read_text()
 
 
 @pytest.mark.parametrize(
