@@ -38,9 +38,12 @@ from generativeqc_compiler.xc.bulk_point_program import (
     bind_runtime_semilocal_point_program,
 )
 from generativeqc_compiler.xc.bulk_runtime import (
-    PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
+    production_candidate_domain,
 )
+from generativeqc_compiler.xc.capability_resolution import CapabilityNotQualified
+from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
+from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from generativeqc_compiler.xc.molecular_scf_evidence import (
     build_result,
     stage_evidence,
@@ -553,6 +556,23 @@ def qualify_molecular_scf(
             raise ValueError(f"{label} must be finite and nonnegative")
     if not isinstance(evidence, str) or not evidence.strip():
         raise ValueError("molecular-SCF qualification requires an evidence reference")
+    domain = production_candidate_domain(name)
+    if domain == DENSITY_WORK_DOMAIN:
+        capability = functional_capability(name)
+        raise CapabilityNotQualified(
+            name=capability.name,
+            identity=capability.identity,
+            blockers=(
+                (
+                    "molecular-scf",
+                    (
+                        "density-work molecular-SCF requires qualified native restricted "
+                        "normalization: folded polarized work densities do not reproduce "
+                        "the unpolarized worker in the active [floor, 2*floor) tail"
+                    ),
+                ),
+            ),
+        )
 
     prerequisites = {
         "compiled-cpu": _stage_payload(compiled_cpu_evidence, "compiled-cpu"),
@@ -574,7 +594,7 @@ def qualify_molecular_scf(
         name,
         spin="polarized",
         order=1,
-        domain=PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+        domain=domain,
     )
     binding = bind_runtime_semilocal_point_program(program)
     for resolution in resolutions.values():
