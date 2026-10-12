@@ -46,6 +46,7 @@ from .calculator import (
     Shell,
     method_capabilities,
 )
+from .cbs import CBSBasis, CBSComponent, CBSResult, CCSDTCBSCalculator
 from .dispersion import (
     D3CorrectionBatch,
     D3CorrectionResult,
@@ -150,6 +151,10 @@ __all__ = [
     "BasisShell",
     "BatchItemResult",
     "BatchResult",
+    "CBSBasis",
+    "CBSComponent",
+    "CBSResult",
+    "CCSDTCBSCalculator",
     "Calculator",
     "ContributionLedger",
     "CorrelationResult",
