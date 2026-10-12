@@ -128,11 +128,11 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     RccsdNativeState* replay_state = nullptr, std::size_t retained_host_bytes = 0,
     std::size_t retained_df_source_bytes = 0, DFGapResponseFingerprints* fingerprints = nullptr,
     DFPhysicalResponseComparison* physical_replay = nullptr,
-    bool fused_triples_scalar_response = false, runtime::PrecisionDirective admitted_triples_w = {},
+    bool fused_triples_scalar_response = true, runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
+    bool lambda_serial_scratch_reuse = true, bool ccsd_mixed_precision = false,
     bool lambda_mixed_precision = false, bool lambda_resident_krylov = false,
     DFCorrelationDemand demand = {}) {
   const auto started = Clock::now();
@@ -915,7 +915,7 @@ DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext& executi
                                               const generativeqc_method_descriptor& descriptor,
                                               bool forces, DFCorrelationDemand demand) {
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
-                             true, true, 32, 0, {}, true, false, true, false, false, {}, 30, true,
-                             true, true, nullptr, false, false, false, false, demand);
+                             true, true, 32, 0, {}, true, false, true, false, true, {}, 30, true,
+                             true, true, nullptr, true, false, false, false, demand);
 }
 }  // namespace generativeqc::methods::detail

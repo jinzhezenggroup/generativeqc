@@ -1,0 +1,262 @@
+{
+  "schema": "generativeqc.ecp-raw-matrices.manifest.v1",
+  "inputs_sha256": "68c5fd2f05fd965827d347902eae3ba0cdc400b9e3cf01b4e39d027124ad034c",
+  "inputs_bytes": 2214,
+  "receipt_sha256": "2963d90ea3ffe66ddb1ebc59e97e10390c64955970ae1ca362fe5b8fb96606bb",
+  "receipt_bytes": 90775,
+  "generator": {
+    "path": "tools/generate_ecp_raw_matrix_reference.py",
+    "commit": "cda5457f9fdbab43674a0826f0b634e433f9921f",
+    "sha256": "e03529770f7639075a149c1a0829466cf5885eacaf332fc09daf238c259d40b5"
+  },
+  "audit_helper": {
+    "path": "tools/generate_cpu_hf_high_l_reference.py",
+    "git_blob": "2732b0c821e1031a9bd43b0e6aa108b54265dd5c",
+    "sha256": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+  },
+  "source": {
+    "repository": "jinzhezenggroup/generativeqc",
+    "commit": "61a0e715fde35566722870389af8e137036232db",
+    "path": "tests/python/test_ecp.py",
+    "git_blob": "4cc83247f7a02b4cdfd019f635b2d6a06f05fe08",
+    "sha256": "c96db5045d1aad55af885018ec6a75dad3dff25c49e631989f9aa43ac369d817"
+  },
+  "acquisition": {
+    "repository": "njzjz-bot/vibeqc",
+    "checkout_sha": "cda5457f9fdbab43674a0826f0b634e433f9921f",
+    "run_id": 38237868353,
+    "run_attempt": 1,
+    "job_id": 114772903727,
+    "url": "https://github.com/njzjz-bot/vibeqc/actions/runs/38237868353",
+    "artifact_id": 11741038848,
+    "artifact_bytes": 21894,
+    "artifact_sha256": "05cda16196cde7d4dfe98880abcaef7e3ec63c1123cf720648dad56beae4186e"
+  },
+  "replicas": [
+    {
+      "path": "acquisition-first.json",
+      "sha256": "9ff7999abd490b60bcae8b026fa61b9675b649249cf69436027c58dad192be68",
+      "bytes": 90344
+    },
+    {
+      "path": "acquisition-second.json",
+      "sha256": "6c7e1b4385b2dc6d5116c716ab6a69d1a7c35d5dfca024383061b111a9254256",
+      "bytes": 90345
+    }
+  ],
+  "records": [
+    {
+      "input_sha256": "198de62b2ae060d3b5c44b9531374bb8073ece394409d08524bc570333d98f6c",
+      "nao": 9,
+      "ao_labels": [
+        "0 Na 3s    ",
+        "0 Na 4s    ",
+        "0 Na 3px   ",
+        "0 Na 3py   ",
+        "0 Na 3pz   ",
+        "0 Na 4px   ",
+        "0 Na 4py   ",
+        "0 Na 4pz   ",
+        "1 H 1s    "
+      ],
+      "ao_locations": [
+        0,
+        1,
+        2,
+        5,
+        8,
+        9
+      ],
+      "atom_ao_slices": [
+        [
+          0,
+          4,
+          0,
+          8
+        ],
+        [
+          4,
+          5,
+          8,
+          9
+        ]
+      ],
+      "core_electrons": [
+        10,
+        0
+      ],
+      "nelec": [
+        1,
+        1
+      ],
+      "effective_nuclear_charges": [
+        1,
+        1
+      ],
+      "id": "d0-spherical"
+    },
+    {
+      "input_sha256": "32628385d92b398d0e526c9f734945af57e23342524ddd077d414147d56b5273",
+      "nao": 9,
+      "ao_labels": [
+        "0 Na 3s    ",
+        "0 Na 4s    ",
+        "0 Na 3px   ",
+        "0 Na 3py   ",
+        "0 Na 3pz   ",
+        "0 Na 4px   ",
+        "0 Na 4py   ",
+        "0 Na 4pz   ",
+        "1  H 1s    "
+      ],
+      "ao_locations": [
+        0,
+        1,
+        2,
+        5,
+        8,
+        9
+      ],
+      "atom_ao_slices": [
+        [
+          0,
+          4,
+          0,
+          8
+        ],
+        [
+          4,
+          5,
+          8,
+          9
+        ]
+      ],
+      "core_electrons": [
+        10,
+        0
+      ],
+      "nelec": [
+        1,
+        1
+      ],
+      "effective_nuclear_charges": [
+        1,
+        1
+      ],
+      "id": "d0-cartesian"
+    },
+    {
+      "input_sha256": "fbddca98878b6128ac8bef0026bc415da88c2b413875f477b744f43cf4018ae7",
+      "nao": 14,
+      "ao_labels": [
+        "0 Na 3s    ",
+        "0 Na 4s    ",
+        "0 Na 3px   ",
+        "0 Na 3py   ",
+        "0 Na 3pz   ",
+        "0 Na 4px   ",
+        "0 Na 4py   ",
+        "0 Na 4pz   ",
+        "0 Na 3dxy  ",
+        "0 Na 3dyz  ",
+        "0 Na 3dz^2 ",
+        "0 Na 3dxz  ",
+        "0 Na 3dx2-y2",
+        "1 H 1s    "
+      ],
+      "ao_locations": [
+        0,
+        1,
+        2,
+        5,
+        8,
+        13,
+        14
+      ],
+      "atom_ao_slices": [
+        [
+          0,
+          5,
+          0,
+          13
+        ],
+        [
+          5,
+          6,
+          13,
+          14
+        ]
+      ],
+      "core_electrons": [
+        10,
+        0
+      ],
+      "nelec": [
+        1,
+        1
+      ],
+      "effective_nuclear_charges": [
+        1,
+        1
+      ],
+      "id": "d1-spherical"
+    },
+    {
+      "input_sha256": "2d2800d938c1a77e16ba5b3fbb12b5422ab29b8d4b2e93a64a1075c40ce60a16",
+      "nao": 15,
+      "ao_labels": [
+        "0 Na 3s    ",
+        "0 Na 4s    ",
+        "0 Na 3px   ",
+        "0 Na 3py   ",
+        "0 Na 3pz   ",
+        "0 Na 4px   ",
+        "0 Na 4py   ",
+        "0 Na 4pz   ",
+        "0 Na 3dxx  ",
+        "0 Na 3dxy  ",
+        "0 Na 3dxz  ",
+        "0 Na 3dyy  ",
+        "0 Na 3dyz  ",
+        "0 Na 3dzz  ",
+        "1  H 1s    "
+      ],
+      "ao_locations": [
+        0,
+        1,
+        2,
+        5,
+        8,
+        14,
+        15
+      ],
+      "atom_ao_slices": [
+        [
+          0,
+          5,
+          0,
+          14
+        ],
+        [
+          5,
+          6,
+          14,
+          15
+        ]
+      ],
+      "core_electrons": [
+        10,
+        0
+      ],
+      "nelec": [
+        1,
+        1
+      ],
+      "effective_nuclear_charges": [
+        1,
+        1
+      ],
+      "id": "d1-cartesian"
+    }
+  ]
+}

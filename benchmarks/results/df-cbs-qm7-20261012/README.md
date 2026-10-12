@@ -16,9 +16,20 @@ orbital-response and nuclear-repulsion derivatives.
 
 Raw endpoint JSON records retain the actual native library SHA256 and hashes of
 the changed native/compiler/frontend owners, oracle and qualification driver.
-Those hashes are checked against the committed file bytes, not the stale Git
-HEAD of a separately exported remote checkout. The qualified library SHA256 is
+Those hashes were checked against commit
+`5911c23b02b9ebf4f55ba6bededd5ecf9454a633`, not the stale Git HEAD of a
+separately exported remote checkout. This is the pre-integration qualification:
+newer master/remote force defaults are not covered by these frozen receipts.
+See `../df-cbs-integrated-20261013/` for integrated requalification.
+The qualified library SHA256 is
 `a1ee0a87e89258b62e072191370070d9659aef9d7d7b3abcaf29c65766b31413`.
+
+Endpoint JSON is retained as lossless `.json.gz` files. To stay within the
+unchanged aggregate evidence budget, the pre-integration ethane full source
+trace is recovered from existing Git history, not a new external archive:
+`git show 5911c23b02b9ebf4f55ba6bededd5ecf9454a633:benchmarks/results/df-cbs-qm7-20261012/ethane-cbs.trace.jsonl.gz`.
+The integrated trace remains in the current checkout. No numerical samples,
+force vectors or acceptance receipts are removed by this storage compaction.
 
 Runs use finite Slurm allocations on `node4` (`n4` SSH alias), partition `main`,
 one `gpu:5090:1`, preserving Slurm's device visibility. Hardware is RTX 5090,

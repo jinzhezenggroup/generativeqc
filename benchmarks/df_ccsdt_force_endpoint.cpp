@@ -104,11 +104,13 @@ int main(int argc, char** argv) {
       frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
     const bool parallel_gap_reduction = argc <= 19 || selector(19);
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
-    const bool fused_triples_scalar_response = argc > 22 && selector(22);
+    const bool fused_triples_scalar_response =
+        argc <= 22 || std::string(argv[22]) == "auto" || selector(22);
     const bool lambda_core_reuse = selector(25);
     const bool lambda_audit_matrix = selector(26);
     const bool lambda_primal_matrix = argc <= 27 || selector(27);
-    const bool lambda_serial_scratch_reuse = argc > 28 && selector(28);
+    const bool lambda_serial_scratch_reuse =
+        argc <= 28 || std::string(argv[28]) == "auto" || selector(28);
     const bool triples_w_fp32 = argc > 23 && selector(23);
     const bool ccsd_mixed_precision = argc > 30 && selector(30);
     const bool lambda_mixed_precision = argc > 31 && selector(31);

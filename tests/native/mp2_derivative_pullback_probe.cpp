@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <new>
@@ -60,7 +61,10 @@ void operator delete[](void* pointer, std::size_t) noexcept { ::operator delete(
 
 using namespace generativeqc;
 using Quartet = std::array<std::size_t, 4>;
-using Counts = std::array<std::size_t, 9>;
+using Counts = std::array<std::size_t, 12>;
+
+std::vector<double> physical_derivatives;
+std::size_t physical_n = 0;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -211,6 +215,13 @@ std::vector<double> direct_rank_two(const Fixture& f, const std::vector<double>&
 // Each AO has distinct a and da/dR. Derivatives obey all eight ERI symmetries,
 // but retain center-specific values before repeated-atom scattering.
 std::array<double, 12> center_derivatives(Quartet ao) {
+  if (!physical_derivatives.empty()) {
+    std::array<double, 12> result{};
+    const auto n4 = physical_n * physical_n * physical_n * physical_n;
+    for (std::size_t coordinate = 0; coordinate < 12; ++coordinate)
+      result[coordinate] = physical_derivatives[coordinate * n4 + index(physical_n, ao)];
+    return result;
+  }
   std::array<double, 4> a{};
   for (unsigned slot = 0; slot < 4; ++slot) a[slot] = 0.15 + 0.07 * ao[slot];
   const double u = a[0] + a[1], v = a[2] + a[3];
@@ -230,7 +241,7 @@ struct Expected {
   std::vector<unsigned char> seen;
   std::vector<double> local, gradient, one, overlap;
 };
-Expected expected(const Fixture& f, const std::vector<double>& ao, bool factorized) {
+Expected expected(const Fixture& f, const std::vector<double>& ao, bool factorized, bool compact) {
   Expected e;
   const auto n = f.reference.nbf, h = f.system.shells.size(), coords = 3 * f.system.atoms.size();
   const auto& c = f.reference.coefficients;
@@ -266,8 +277,10 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
   std::set<std::array<std::size_t, 2>> pairs;
   std::set<std::array<std::size_t, 3>> triples;
   const auto persistent = sizeof(double) * 2 * n * n + sizeof(std::size_t) * (h + 1);
+  const auto o = f.reference.nocc, v = n - o;
+  const auto first_row = compact ? o * (2 * n + v * v) : n * n * n;
   e.allocation_calls = 5 + h;  // rank-two outputs/workspaces, offsets, first stages
-  e.total_bytes = sizeof(double) * (4 * n * n + n * n * n * n) + sizeof(std::size_t) * (h + 1);
+  e.total_bytes = sizeof(double) * (4 * n * n + n * first_row) + sizeof(std::size_t) * (h + 1);
   for (std::size_t i = 0; i < h; ++i)
     for (std::size_t j = 0; j < h; ++j)
       for (std::size_t k = 0; k < h; ++k)
@@ -284,7 +297,7 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
           e.iterations[6] += local * n;
           if (!factorized) e.iterations[8] += local;
           const auto shell =
-              sizeof(double) * (di * n * n * n + di * dj * n * n + di * dj * dk * n + local);
+              sizeof(double) * (di * first_row + di * dj * n * n + di * dj * dk * n + local);
           e.shell_peak = std::max(e.shell_peak, shell);
           e.peak = std::max(e.peak, persistent + shell);
           ++e.allocation_calls;
@@ -293,7 +306,14 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
   for (auto p : pairs) {
     const auto size =
         (f.offsets[p[0] + 1] - f.offsets[p[0]]) * (f.offsets[p[1] + 1] - f.offsets[p[1]]) * n * n;
-    e.iterations[4] += size * n;
+    if (compact) {
+      const auto rows = size / (n * n);
+      e.iterations[9] += rows * o * n;
+      e.iterations[10] += rows * o * (n - 1);
+      e.iterations[11] += rows * o * v * v;
+    } else {
+      e.iterations[4] += size * n;
+    }
     ++e.allocation_calls;
     e.total_bytes += sizeof(double) * size;
   }
@@ -306,7 +326,6 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
     e.total_bytes += sizeof(double) * size;
   }
   if (factorized) {
-    const auto o = f.reference.nocc, v = n - o;
     for (std::size_t mu = 0; mu < n; ++mu)
       for (std::size_t p = 0; p < n; ++p) {
         if (c[mu * n + p] == 0) continue;
@@ -326,14 +345,26 @@ Expected expected(const Fixture& f, const std::vector<double>& ao, bool factoriz
 
 int main(int argc, char** argv) {
   try {
-    require(argc == 4, "expected case, factorized, sparse arguments");
+    require(argc == 4 || argc == 5, "expected case, factorized, sparse and optional physical data");
     const unsigned id = std::stoul(argv[1]);
     const unsigned representation = std::stoul(argv[2]);
-    const bool factorized = representation == 1, sparse = std::stoi(argv[3]);
+    const bool factorized = representation == 1 || representation == 3;
+    const bool compact = representation == 1, sparse = std::stoi(argv[3]);
     auto f = fixture(id, representation, sparse);
     const auto n = f.reference.nbf, h = f.system.shells.size();
+    if (argc == 5) {
+      physical_n = n;
+      physical_derivatives.resize(12 * n * n * n * n);
+      std::ifstream input(argv[4], std::ios::binary);
+      input.read(reinterpret_cast<char*>(physical_derivatives.data()),
+                 physical_derivatives.size() * sizeof(double));
+      require(input.good() && input.peek() == std::ifstream::traits_type::eof(),
+              "physical derivative payload shape");
+      for (double value : physical_derivatives)
+        require(std::isfinite(value), "nonfinite physical derivative payload");
+    }
     const auto ao = direct_pullback(f);
-    auto e = expected(f, ao, factorized);
+    auto e = expected(f, ao, factorized, compact);
     std::size_t callbacks = 0, elements = 0, measured_shell_peak = 0;
     std::vector<double> initial_gradient(3 * f.system.atoms.size());
     for (std::size_t t = 0; t < initial_gradient.size(); ++t) initial_gradient[t] = 0.01 * (t + 1);
@@ -358,7 +389,10 @@ int main(int argc, char** argv) {
       const auto dl = f.offsets[q[3] + 1] - f.offsets[q[3]];
       require(local.size() == di * dj * dk * dl, "local shape");
       const auto shell_bytes =
-          sizeof(double) * (di * n * n * n + di * dj * n * n + di * dj * dk * n + local.size());
+          sizeof(double) * (di * (compact ? f.reference.nocc * (2 * n + (n - f.reference.nocc) *
+                                                                            (n - f.reference.nocc))
+                                          : n * n * n) +
+                            di * dj * n * n + di * dj * dk * n + local.size());
       const auto persistent = sizeof(double) * 2 * n * n + sizeof(std::size_t) * (h + 1);
       require(allocation::live == persistent + shell_bytes, "active quartet allocation ownership");
       measured_shell_peak = std::max(measured_shell_peak, allocation::live - persistent);
@@ -389,8 +423,10 @@ int main(int argc, char** argv) {
     };
     allocation::enabled = true;
     {
-      auto result =
-          mp2::detail::conventional_derivative(f.system, f.reference, f.weights, one, shell);
+      auto result = mp2::detail::conventional_derivative(
+          f.system, f.reference, f.weights, one, shell,
+          compact ? mp2::detail::FactorizedFirstLayout::automatic
+                  : mp2::detail::FactorizedFirstLayout::staged);
       allocation::enabled = false;
       require(allocation::live == 0, "common allocations escaped invocation");
       require(initial_gradient.empty(), "callback output was not ownership-transferred");

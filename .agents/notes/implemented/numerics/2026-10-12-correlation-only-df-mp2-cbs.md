@@ -83,6 +83,15 @@ owner beyond conventional 56-AO admission; the C7H16 endpoint qualifies MP2,
 not a full large-molecule CBS calculation. Planned capacities are not measured
 allocator peaks, and these single endpoint observations are not speedup claims.
 
+On 2026-10-13, integrate remote head `c2ef4302b` rather than overwriting its
+landed master changes. The CC group inherits the guarded fusion/serial-scratch
+defaults, while MP2 demand still skips those consumers. Rebuilt integrated
+GPU and both QM7 endpoints pass again; the 26-file source maps, library hash,
+raw forces and acceptance receipts are in
+`benchmarks/results/df-cbs-integrated-20261013/`. Existing compiled forwarding
+probes needed the new demand type; they now consume its actual declaration and
+test both CC and factors-only MP2 dispatch without weakening native gates.
+
 ## Revisit when
 
 Source/scratch admission or actual endpoint timing, rather than speculative

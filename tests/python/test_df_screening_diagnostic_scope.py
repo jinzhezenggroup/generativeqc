@@ -1,32 +1,11 @@
 """Exercise the real endpoint wrapper without requiring a CUDA allocation."""
 
-import ast
 import typing
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from benchmarks import df_policy_endpoint as endpoint
-
-
-def _execute() -> typing.Any:
-    source = Path(endpoint.__file__).read_text()
-    tree = ast.parse(source)
-    node = next(
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "execute"
-    )
-    namespace = {**vars(endpoint), "args": SimpleNamespace(energy_only=False)}
-    # Execute only the AST of the checked-in function under test, never external input.
-    exec(  # noqa: S102
-        compile(
-            ast.Module(body=[node], type_ignores=[]), str(endpoint.__file__), "exec"
-        ),
-        namespace,
-    )
-    return namespace["execute"]
 
 
 @pytest.mark.parametrize("inherited", [None, "1", "off"])
@@ -43,7 +22,7 @@ def test_clean_and_cold_calls_disable_inherited_screening(
             endpoint.os.environ.get("GENERATIVEQC_DF_SCREENING_FEATURES")
         )
     )
-    execute = _execute()
+    execute = endpoint.execute_endpoint
     execute(owner)
     execute(owner, cold=True)
     assert seen == [None, None]
@@ -64,5 +43,57 @@ def test_diagnostic_failure_restores_original_environment(
         raise RuntimeError("injected endpoint failure")
 
     with pytest.raises(RuntimeError, match="injected endpoint failure"):
-        _execute()(SimpleNamespace(execute=fail), screening_features=True)
+        endpoint.execute_endpoint(
+            SimpleNamespace(execute=fail), screening_features=True
+        )
     assert endpoint.os.environ.get("GENERATIVEQC_DF_SCREENING_FEATURES") == inherited
+
+
+@pytest.mark.parametrize("energy_only", [False, True])
+@pytest.mark.parametrize("cold", [False, True])
+@pytest.mark.parametrize("screening_features", [False, True])
+def test_complete_endpoint_properties_and_timing(
+    monkeypatch: pytest.MonkeyPatch,
+    energy_only: bool,
+    cold: bool,
+    screening_features: bool,
+) -> None:
+    """Cold evidence includes forces even when later samples request only energy."""
+    monkeypatch.setenv("GENERATIVEQC_DF_SCREENING_FEATURES", "off")
+    events = []
+    ticks = iter([10.0, 14.5])
+    result = object()
+    expected_features = "1" if screening_features else None
+
+    def clock() -> float:
+        assert (
+            endpoint.os.environ.get("GENERATIVEQC_DF_SCREENING_FEATURES")
+            == expected_features
+        )
+        events.append("clock")
+        return next(ticks)
+
+    def execute(**kwargs: typing.Any) -> object:
+        assert (
+            endpoint.os.environ.get("GENERATIVEQC_DF_SCREENING_FEATURES")
+            == expected_features
+        )
+        assert kwargs == {
+            "strict": True,
+            "properties": ("energy",)
+            if energy_only and not cold
+            else ("energy", "forces"),
+        }
+        events.append("endpoint")
+        return result
+
+    monkeypatch.setattr(endpoint, "time", SimpleNamespace(perf_counter=clock))
+    observed, seconds = endpoint.execute_endpoint(
+        SimpleNamespace(execute=execute),
+        energy_only=energy_only,
+        cold=cold,
+        screening_features=screening_features,
+    )
+    assert observed is result and seconds == 4.5
+    assert events == ["clock", "endpoint", "clock"]
+    assert endpoint.os.environ["GENERATIVEQC_DF_SCREENING_FEATURES"] == "off"

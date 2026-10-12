@@ -229,6 +229,34 @@ def test_native_energy_force_finite_difference_and_failure_publication(
     assert np.all(rejected[2] == 12345.0) and np.all(rejected[3] == 12345.0)
 
 
+@pytest.mark.parametrize("name", ["h2", "water", "lih"])
+@pytest.mark.parametrize("triples", [False, True])
+def test_complete_response_defaults_preserve_legacy_force(
+    probe: typing.Any,
+    name: str,
+    triples: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gap-free production defaults retain independent physical acceptance."""
+    metadata, _ = load_fixture(name)
+    monkeypatch.setenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE", "1")
+    monkeypatch.setenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "1")
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    monkeypatch.setenv("GENERATIVEQC_TEST_LAMBDA_SERIAL_SCRATCH", "0")
+    baseline = run(probe, metadata, triples=triples)
+    assert baseline[0] == 0, baseline[1]
+    monkeypatch.delenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS")
+    monkeypatch.delenv("GENERATIVEQC_TEST_LAMBDA_SERIAL_SCRATCH")
+    candidate = run(probe, metadata, triples=triples)
+    assert candidate[0] == 0, candidate[1]
+    np.testing.assert_allclose(candidate[2], baseline[2], atol=3e-10, rtol=3e-10)
+    np.testing.assert_allclose(
+        candidate[3][:4], independent(metadata, triples), atol=3e-9, rtol=0
+    )
+    assert max(candidate[3][4:8]) < 1e-8
+    np.testing.assert_array_equal(candidate[4][1:8], baseline[4][1:8])
+
+
 def test_complete_water_all_nuclear_coordinates(
     probe: typing.Any, tmp_path: Path
 ) -> None:
