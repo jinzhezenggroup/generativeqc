@@ -1,16 +1,17 @@
-"""Compile the two DFT descriptor readers without legacy prefix helpers.
+"""Compile the DFT grid descriptor reader without legacy prefix helpers.
 
-Minimal dependent types isolate descriptor defaults/copy ownership; full native
-DFT integration remains covered by the ordinary library build and native suite.
+Minimal dependent types isolate grid descriptor defaults; real auxiliary-system
+copy ownership is covered by test_native_api_inputs.cpp through the C API.
 """
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,19 +26,12 @@ def test_current_dft_readers_do_not_probe_legacy_prefixes() -> None:
 
 def test_current_dft_descriptor_readers_compile_and_keep_defaults(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     text = _source()
     grid = text[
         text.index("dft::GridSpec ks_grid_options(") : text.index(
             "Result adapt_result("
-        )
-    ]
-    auxiliary = text[
-        text.index("std::optional<core::System> ks_auxiliary_template(") : text.index(
-            "void validate_ks_auxiliary_geometry("
         )
     ]
     unit = tmp_path / "descriptor.cpp"
@@ -80,21 +74,17 @@ struct generativeqc_ks_options {
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
 };
-struct Auxiliary {core::System data;};
 struct generativeqc_method_descriptor {
  std::size_t struct_size=sizeof(generativeqc_method_descriptor);
  const generativeqc_ks_options* ks_options=nullptr;
- const Auxiliary* density_fitting_auxiliary_basis=nullptr;
 };
 """
         + grid
-        + auxiliary
         + r"""
 int main() {
  generativeqc_method_descriptor d; scf::ScfOptions options; NativeKsExecutionPlan plan;
  auto defaults=ks_grid_options(d,options,plan);
  assert(defaults.version==1 && options.xc_tile_points==256);
- assert(!ks_auxiliary_template(d));
  generativeqc_ks_options input; d.ks_options=&input;
  auto copied=ks_grid_options(d,options,plan);
  assert(copied.version==2 && copied.radial_points==7 && options.xc_tile_points==37);
@@ -112,19 +102,13 @@ int main() {
   try {(void)ks_grid_options(d,options,plan);}catch(const std::exception&){++rejected;}
  }
  assert(rejected==6);
- Auxiliary aux{{{1,8}}}; d.density_fitting_auxiliary_basis=&aux;
- auto owned=ks_auxiliary_template(d); aux.data.atoms[0]=7;
- assert(owned && owned->atoms[0]==1 && owned->atoms[1]==8);
+
 }
 """,
         encoding="utf-8",
     )
     binary = tmp_path / "descriptor"
-    subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(unit), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [unit], binary, compile_args=["-std=c++20", "-O0"], compile_timeout=30
     )
     subprocess.run([str(binary)], check=True, timeout=10)

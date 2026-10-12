@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 
+#include "generativeqc/generativeqc.h"
 #include "integrals/ecp.hpp"
 
 namespace generativeqc::integrals {
