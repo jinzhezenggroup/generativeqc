@@ -43,7 +43,9 @@ def test_all_four_fixed_matrices_and_basis_load_without_pyscf(
             atoms, basis, ecp, matrix = load_reference(
                 representation=representation, d_shell=d_shell
             )
-            record = _record_from_resolved_basis(basis, ecp, representation, frozen=True)
+            record = _record_from_resolved_basis(
+                basis, ecp, representation, frozen=True
+            )
             nao = (15 if representation == "cartesian" else 14) if d_shell else 9
             assert np.asarray(matrix).shape == (nao, nao)
             assert np.isfinite(matrix).all()
@@ -89,8 +91,17 @@ def test_unknown_case_has_no_nearby_fallback(representation: Any, d_shell: Any) 
 @pytest.mark.parametrize(
     "field",
     (
-        "shape", "ragged", "nonfinite", "duplicate", "basis", "ecp",
-        "atom", "ao_order", "normalization", "replay", "provenance",
+        "shape",
+        "ragged",
+        "nonfinite",
+        "duplicate",
+        "basis",
+        "ecp",
+        "atom",
+        "ao_order",
+        "normalization",
+        "replay",
+        "provenance",
     ),
 )
 def test_semantic_receipt_mutants_fail_closed(tmp_path: Path, field: str) -> None:
@@ -114,7 +125,8 @@ def test_semantic_receipt_mutants_fail_closed(tmp_path: Path, field: str) -> Non
         record["molecule_atoms"][0][1][0] += 0.001
     elif field == "ao_order":
         record["ao_labels"][0], record["ao_labels"][1] = (
-            record["ao_labels"][1], record["ao_labels"][0]
+            record["ao_labels"][1],
+            record["ao_labels"][0],
         )
     elif field == "normalization":
         record["normalization"]["values"] = [1.0] * record["nao"]
@@ -151,7 +163,9 @@ def test_loading_returns_independent_mutable_copies() -> None:
     assert fresh[3][0][0] == expected
 
 
-@pytest.mark.parametrize("field", ("matrix", "unnormalized", "local_derivative", "nonlocal_derivative"))
+@pytest.mark.parametrize(
+    "field", ("matrix", "unnormalized", "local_derivative", "nonlocal_derivative")
+)
 def test_real_numerical_gate_rejects_mutants(field: str) -> None:
     _, _, _, expected = _load()
     matrix = np.array(expected, dtype=np.float64)
@@ -159,8 +173,11 @@ def test_real_numerical_gate_rejects_mutants(field: str) -> None:
     # Synthetic endpoint objects exercise the actual unchanged scientific
     # assertions; every expected matrix number is from the genuine receipt.
     actual = SimpleNamespace(
-        matrix=matrix.copy(), local=matrix.copy(), nonlocal_=np.zeros_like(matrix),
-        local_derivative=derivative.copy(), nonlocal_derivative=derivative.copy(),
+        matrix=matrix.copy(),
+        local=matrix.copy(),
+        nonlocal_=np.zeros_like(matrix),
+        local_derivative=derivative.copy(),
+        nonlocal_derivative=derivative.copy(),
     )
     refined = copy.deepcopy(actual)
     _assert_raw_matrix_results(actual, refined, expected)
@@ -193,7 +210,8 @@ def _assert_retained_replicas(root: Path) -> None:
     reference = json.loads((root / "reference.json").read_text())
     replay = reference["replay"]
     assert [entry["path"] for entry in manifest["replicas"]] == [
-        "acquisition-first.json", "acquisition-second.json"
+        "acquisition-first.json",
+        "acquisition-second.json",
     ]
     assert replay["replicas"] == ["first", "second"]
     assert replay["receipt_sha256"] == [

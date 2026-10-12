@@ -47,17 +47,43 @@ def selectors(inputs: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def validate_inputs(inputs: dict[str, Any], input_path: Path) -> None:
-    require_keys(inputs, {
-        "schema", "source", "audit_helper", "atoms", "unit", "charge", "spin",
-        "basis_libraries", "ecp_libraries", "extra_d_shell", "representations",
-        "d_shells", "precision", "matrix_unit", "overlap_unit", "normalization",
-        "expected_core_electrons", "python", "packages", "preserved_gates",
-        "basis_data_sources",
-    })
-    if inputs["packages"] != {
-        "pyscf": "2.14.0", "numpy": "2.3.5", "scipy": "1.17.0",
-        "h5py": "3.16.0", "threadpoolctl": "3.6.0",
-    } or inputs["python"] != "3.12.12":
+    require_keys(
+        inputs,
+        {
+            "schema",
+            "source",
+            "audit_helper",
+            "atoms",
+            "unit",
+            "charge",
+            "spin",
+            "basis_libraries",
+            "ecp_libraries",
+            "extra_d_shell",
+            "representations",
+            "d_shells",
+            "precision",
+            "matrix_unit",
+            "overlap_unit",
+            "normalization",
+            "expected_core_electrons",
+            "python",
+            "packages",
+            "preserved_gates",
+            "basis_data_sources",
+        },
+    )
+    if (
+        inputs["packages"]
+        != {
+            "pyscf": "2.14.0",
+            "numpy": "2.3.5",
+            "scipy": "1.17.0",
+            "h5py": "3.16.0",
+            "threadpoolctl": "3.6.0",
+        }
+        or inputs["python"] != "3.12.12"
+    ):
         raise ValueError("generation dependency pins changed")
     if inputs["schema"] != "generativeqc.ecp-raw-matrices.inputs.v1":
         raise ValueError("unsupported ECP input schema")
@@ -81,7 +107,8 @@ def validate_inputs(inputs: dict[str, Any], input_path: Path) -> None:
         inputs["precision"] != "float64"
         or inputs["matrix_unit"] != "Hartree"
         or inputs["overlap_unit"] != "dimensionless"
-        or inputs["normalization"] != (
+        or inputs["normalization"]
+        != (
             "ECPscalar / sqrt(diag(int1e_ovlp))[:,None] / "
             "sqrt(diag(int1e_ovlp))[None,:]"
         )
@@ -94,9 +121,10 @@ def validate_inputs(inputs: dict[str, Any], input_path: Path) -> None:
         path = ROOT / entry["path"]
         if not path.is_file() or audit.digest(path.read_bytes()) != entry["sha256"]:
             raise ValueError(f"reviewed source/helper byte identity mismatch: {field}")
-    if Path(audit.__file__).resolve() != (
-        ROOT / inputs["audit_helper"]["path"]
-    ).resolve():
+    if (
+        Path(audit.__file__).resolve()
+        != (ROOT / inputs["audit_helper"]["path"]).resolve()
+    ):
         raise ValueError("imported audit helper is not the reviewed checkout file")
     if input_path.resolve() != DEFAULT_INPUTS.resolve():
         raise ValueError("generation accepts only the reviewed input path")
@@ -129,7 +157,9 @@ def installed_integral_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
             (basis_files if is_basis else libraries).append(record)
     if len(basis_files) != 2 or not libraries:
         raise ValueError("missing allowlisted installed basis/integral identity")
-    expected_basis = {entry["path"]: entry["sha256"] for entry in inputs["basis_data_sources"]}
+    expected_basis = {
+        entry["path"]: entry["sha256"] for entry in inputs["basis_data_sources"]
+    }
     if {entry["path"]: entry["sha256"] for entry in basis_files} != expected_basis:
         raise ValueError("installed basis data differs from pinned upstream bytes")
     return {"basis_files": basis_files, "integral_libraries": libraries}
@@ -141,10 +171,7 @@ def array_values(record: dict[str, Any], shape: list[int]) -> Any:
         if (
             not isinstance(values, list)
             or len(values) != shape[0]
-            or any(
-                not isinstance(row, list) or len(row) != shape[1]
-                for row in values
-            )
+            or any(not isinstance(row, list) or len(row) != shape[1] for row in values)
         ):
             raise ValueError("incorrect full matrix dimensions")
     elif (
@@ -201,17 +228,22 @@ def validate_ecp(ecp: dict[str, Any]) -> None:
     require_keys(ecp, {"Na"})
     potential = ecp["Na"]
     if (
-        not isinstance(potential, list) or len(potential) != 2
-        or type(potential[0]) is not int or potential[0] != 10
-        or not isinstance(potential[1], list) or len(potential[1]) != 3
+        not isinstance(potential, list)
+        or len(potential) != 2
+        or type(potential[0]) is not int
+        or potential[0] != 10
+        or not isinstance(potential[1], list)
+        or len(potential[1]) != 3
     ):
         raise ValueError("invalid resolved Na ECP inventory")
     angular_channels = []
     for channel in potential[1]:
         if (
-            not isinstance(channel, list) or len(channel) != 2
+            not isinstance(channel, list)
+            or len(channel) != 2
             or type(channel[0]) is not int
-            or not isinstance(channel[1], list) or not 3 <= len(channel[1]) <= 8
+            or not isinstance(channel[1], list)
+            or not 3 <= len(channel[1]) <= 8
         ):
             raise ValueError("invalid resolved ECP channel")
         angular_channels.append(channel[0])
@@ -238,15 +270,24 @@ def validate_provenance(
     require_keys(
         provenance,
         {
-            "configuration", "inputs_sha256", "generator_sha256",
-            "audit_helper_sha256", "test_source_sha256", "execution",
-            "python", "platform", "machine", "packages", "threadpools",
+            "configuration",
+            "inputs_sha256",
+            "generator_sha256",
+            "audit_helper_sha256",
+            "test_source_sha256",
+            "execution",
+            "python",
+            "platform",
+            "machine",
+            "packages",
+            "threadpools",
             "installed_integral_inputs",
         },
     )
     expected = {
         "configuration": {
-            "policy": "explicit-empty-regular-file", "sha256": audit.digest(b"")
+            "policy": "explicit-empty-regular-file",
+            "sha256": audit.digest(b""),
         },
         "inputs_sha256": audit.digest(input_path.read_bytes()),
         "generator_sha256": audit.digest(Path(__file__).read_bytes()),
@@ -279,8 +320,13 @@ def validate_provenance(
         require_keys(
             pool,
             {
-                "user_api", "internal_api", "version", "num_threads",
-                "architecture", "library", "sha256",
+                "user_api",
+                "internal_api",
+                "version",
+                "num_threads",
+                "architecture",
+                "library",
+                "sha256",
             },
         )
         if type(pool["num_threads"]) is not int or pool["num_threads"] != 1:
@@ -297,9 +343,7 @@ def validate_provenance(
                 raise ValueError("invalid optional native library metadata")
 
 
-def validate(
-    receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path
-) -> None:
+def validate(receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path) -> None:
     require_keys(
         receipt, {"schema", "replica", "process_id", "provenance", "inputs", "records"}
     )
@@ -320,19 +364,38 @@ def validate(
         require_keys(
             record,
             {
-                "input", "input_sha256", "nao", "ao_labels", "ao_locations",
-                "atom_ao_slices", "core_electrons", "nelec",
-                "molecule_basis", "molecule_ecp", "molecule_atoms",
-                "effective_nuclear_charges", "overlap", "normalization",
-                "ecp_raw", "ecp_normalized",
+                "input",
+                "input_sha256",
+                "nao",
+                "ao_labels",
+                "ao_locations",
+                "atom_ao_slices",
+                "core_electrons",
+                "nelec",
+                "molecule_basis",
+                "molecule_ecp",
+                "molecule_atoms",
+                "effective_nuclear_charges",
+                "overlap",
+                "normalization",
+                "ecp_raw",
+                "ecp_normalized",
             },
         )
         case = record["input"]
         require_keys(
             case,
             {
-                "id", "representation", "d_shell", "atoms", "unit",
-                "charge", "spin", "cart", "basis", "ecp",
+                "id",
+                "representation",
+                "d_shell",
+                "atoms",
+                "unit",
+                "charge",
+                "spin",
+                "cart",
+                "basis",
+                "ecp",
             },
         )
         for key, value in selector.items():
@@ -352,7 +415,9 @@ def validate(
         if (
             record["molecule_atoms"] != case["atoms"]
             or record["effective_nuclear_charges"] != [1, 1]
-            or any(type(value) is not int for value in record["effective_nuclear_charges"])
+            or any(
+                type(value) is not int for value in record["effective_nuclear_charges"]
+            )
             or record["molecule_basis"] != case["basis"]
             or record["molecule_ecp"] != case["ecp"]
         ):
@@ -371,7 +436,8 @@ def validate(
             raise ValueError("resolved AO count mismatch")
         labels = record["ao_labels"]
         if (
-            not isinstance(labels, list) or len(labels) != nao
+            not isinstance(labels, list)
+            or len(labels) != nao
             or any(not isinstance(label, str) or not label for label in labels)
             or len(set(labels)) != nao
         ):
@@ -379,9 +445,11 @@ def validate(
         locations = record["ao_locations"]
         shell_count = sum(len(shells) for shells in case["basis"].values())
         if (
-            not isinstance(locations, list) or len(locations) != shell_count + 1
+            not isinstance(locations, list)
+            or len(locations) != shell_count + 1
             or any(type(value) is not int for value in locations)
-            or locations[0] != 0 or locations[-1] != nao
+            or locations[0] != 0
+            or locations[-1] != nao
             or any(a >= b for a, b in zip(locations, locations[1:], strict=False))
         ):
             raise ValueError("invalid shell-to-AO ordering")
@@ -389,14 +457,18 @@ def validate(
             raise ValueError("shell-to-AO map differs from resolved basis order")
         atom_slices = record["atom_ao_slices"]
         if (
-            not isinstance(atom_slices, list) or len(atom_slices) != 2
+            not isinstance(atom_slices, list)
+            or len(atom_slices) != 2
             or any(
-                not isinstance(row, list) or len(row) != 4
+                not isinstance(row, list)
+                or len(row) != 4
                 or any(type(value) is not int for value in row)
                 for row in atom_slices
             )
-            or atom_slices[0][0] != 0 or atom_slices[-1][1] != shell_count
-            or atom_slices[0][2] != 0 or atom_slices[-1][3] != nao
+            or atom_slices[0][0] != 0
+            or atom_slices[-1][1] != shell_count
+            or atom_slices[0][2] != 0
+            or atom_slices[-1][3] != nao
             or atom_slices[0][1] != atom_slices[1][0]
             or atom_slices[0][3] != atom_slices[1][2]
         ):
@@ -404,8 +476,12 @@ def validate(
         if atom_slices != expected_slices:
             raise ValueError("atom-to-AO map differs from explicit Na/H order")
         if (
-            record["core_electrons"] != [10, 0] or record["nelec"] != [1, 1]
-            or any(type(value) is not int for value in record["core_electrons"] + record["nelec"])
+            record["core_electrons"] != [10, 0]
+            or record["nelec"] != [1, 1]
+            or any(
+                type(value) is not int
+                for value in record["core_electrons"] + record["nelec"]
+            )
         ):
             raise ValueError("incorrect effective electron bookkeeping")
         matrices = {
@@ -420,15 +496,15 @@ def validate(
             for j in range(nao):
                 expected = matrices["ecp_raw"][i][j] / norms[i] / norms[j]
                 if abs(matrices["ecp_normalized"][i][j] - expected) > REPLAY_ATOL:
-                    raise ValueError("normalized ECP matrix does not match full raw data")
+                    raise ValueError(
+                        "normalized ECP matrix does not match full raw data"
+                    )
                 for values in matrices.values():
                     if abs(values[i][j] - values[j][i]) > 1e-12:
                         raise ValueError("independent scalar matrix is not symmetric")
 
 
-def generate(
-    inputs: dict[str, Any], input_path: Path, replica: str
-) -> dict[str, Any]:
+def generate(inputs: dict[str, Any], input_path: Path, replica: str) -> dict[str, Any]:
     if any(name == "pyscf" or name.startswith("pyscf.") for name in sys.modules):
         raise ValueError("a fresh interpreter without PySCF is required")
     if any(name.startswith("PYSCF_") for name in os.environ):
@@ -446,8 +522,11 @@ def generate(
 
 
 def calculate(
-    inputs: dict[str, Any], input_path: Path, replica: str,
-    config: Path, inventory: dict[str, set[Path]],
+    inputs: dict[str, Any],
+    input_path: Path,
+    replica: str,
+    config: Path,
+    inventory: dict[str, set[Path]],
 ) -> dict[str, Any]:
     import numpy as np
     import pyscf
@@ -480,14 +559,22 @@ def calculate(
             }
             case = {
                 **selector,
-                "atoms": inputs["atoms"], "unit": inputs["unit"],
-                "charge": inputs["charge"], "spin": inputs["spin"],
+                "atoms": inputs["atoms"],
+                "unit": inputs["unit"],
+                "charge": inputs["charge"],
+                "spin": inputs["spin"],
                 "cart": selector["representation"] == "cartesian",
-                "basis": basis, "ecp": ecp,
+                "basis": basis,
+                "ecp": ecp,
             }
             molecule = gto.M(
-                atom=case["atoms"], basis=basis, ecp=ecp, unit=case["unit"],
-                charge=case["charge"], spin=case["spin"], cart=case["cart"],
+                atom=case["atoms"],
+                basis=basis,
+                ecp=ecp,
+                unit=case["unit"],
+                charge=case["charge"],
+                spin=case["spin"],
+                cart=case["cart"],
                 verbose=0,
             )
             if not np.array_equal(
@@ -499,48 +586,73 @@ def calculate(
             norms = np.sqrt(overlap.diagonal())
             normalized = raw / norms[:, None] / norms[None, :]
             nao = molecule.nao_nr()
-            records.append({
-                "input": case, "input_sha256": audit.digest(audit.canonical(case)),
-                "nao": nao, "ao_labels": molecule.ao_labels(),
-                "ao_locations": molecule.ao_loc_nr().tolist(),
-                "atom_ao_slices": molecule.aoslice_by_atom().tolist(),
-                "core_electrons": [molecule.atom_nelec_core(i) for i in range(2)],
-                "nelec": list(molecule.nelec),
-                "molecule_basis": molecule._basis, "molecule_ecp": molecule._ecp,
-                "molecule_atoms": [[molecule.atom_symbol(i), molecule.atom_coord(i).tolist()] for i in range(2)],
-                "effective_nuclear_charges": [molecule.atom_charge(i) for i in range(2)],
-                "overlap": audit.array_record(overlap.tolist(), [nao, nao]),
-                "normalization": audit.array_record(norms.tolist(), [nao]),
-                "ecp_raw": audit.array_record(raw.tolist(), [nao, nao]),
-                "ecp_normalized": audit.array_record(normalized.tolist(), [nao, nao]),
-            })
+            records.append(
+                {
+                    "input": case,
+                    "input_sha256": audit.digest(audit.canonical(case)),
+                    "nao": nao,
+                    "ao_labels": molecule.ao_labels(),
+                    "ao_locations": molecule.ao_loc_nr().tolist(),
+                    "atom_ao_slices": molecule.aoslice_by_atom().tolist(),
+                    "core_electrons": [molecule.atom_nelec_core(i) for i in range(2)],
+                    "nelec": list(molecule.nelec),
+                    "molecule_basis": molecule._basis,
+                    "molecule_ecp": molecule._ecp,
+                    "molecule_atoms": [
+                        [molecule.atom_symbol(i), molecule.atom_coord(i).tolist()]
+                        for i in range(2)
+                    ],
+                    "effective_nuclear_charges": [
+                        molecule.atom_charge(i) for i in range(2)
+                    ],
+                    "overlap": audit.array_record(overlap.tolist(), [nao, nao]),
+                    "normalization": audit.array_record(norms.tolist(), [nao]),
+                    "ecp_raw": audit.array_record(raw.tolist(), [nao, nao]),
+                    "ecp_normalized": audit.array_record(
+                        normalized.tolist(), [nao, nao]
+                    ),
+                }
+            )
         pools = []
         for pool in threadpool_info():
             path = Path(pool["filepath"])
-            pools.append({
-                key: pool.get(key)
-                for key in (
-                    "user_api", "internal_api", "version", "num_threads", "architecture"
-                )
-            } | {"library": path.name, "sha256": audit.digest(path.read_bytes())})
+            pools.append(
+                {
+                    key: pool.get(key)
+                    for key in (
+                        "user_api",
+                        "internal_api",
+                        "version",
+                        "num_threads",
+                        "architecture",
+                    )
+                }
+                | {"library": path.name, "sha256": audit.digest(path.read_bytes())}
+            )
         if any(pool["num_threads"] != 1 for pool in pools):
             raise ValueError("native pool is not single-threaded")
     audit.check_imported_modules(inventory)
     receipt = {
         "schema": "generativeqc.ecp-raw-matrices.receipt.v1",
-        "replica": replica, "process_id": os.getpid(), "inputs": inputs,
+        "replica": replica,
+        "process_id": os.getpid(),
+        "inputs": inputs,
         "provenance": {
             "configuration": {
-                "policy": "explicit-empty-regular-file", "sha256": audit.digest(b"")
+                "policy": "explicit-empty-regular-file",
+                "sha256": audit.digest(b""),
             },
             "inputs_sha256": audit.digest(input_path.read_bytes()),
             "generator_sha256": audit.digest(Path(__file__).read_bytes()),
             "audit_helper_sha256": inputs["audit_helper"]["sha256"],
             "test_source_sha256": inputs["source"]["sha256"],
             "execution": audit.execution_identity(),
-            "python": platform.python_version(), "platform": platform.platform(),
-            "machine": platform.machine(), "packages": packages,
-            "threadpools": pools, "installed_integral_inputs": installed_integral_inputs(inputs),
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "packages": packages,
+            "threadpools": pools,
+            "installed_integral_inputs": installed_integral_inputs(inputs),
         },
         "records": records,
     }
@@ -571,9 +683,7 @@ def verify(
             if key != "normalization":
                 a = [value for row in a for value in row]
                 b = [value for row in b for value in row]
-            maximum = max(
-                maximum, *(abs(x - y) for x, y in zip(a, b, strict=True))
-            )
+            maximum = max(maximum, *(abs(x - y) for x, y in zip(a, b, strict=True)))
     if maximum > REPLAY_ATOL:
         raise ValueError(f"independent full-matrix replay disagrees: {maximum}")
     first["replay"] = {
@@ -581,7 +691,8 @@ def verify(
         "receipt_sha256": [audit.digest(path.read_bytes()) for path in paths],
         "replicas": [first["replica"], second["replica"]],
         "process_ids": [first["process_id"], second["process_id"]],
-        "absolute_tolerance": REPLAY_ATOL, "max_absolute_difference": maximum,
+        "absolute_tolerance": REPLAY_ATOL,
+        "max_absolute_difference": maximum,
     }
     return first
 
@@ -600,18 +711,25 @@ def main() -> None:
         parser.error("provide exactly one of --replica or --verify")
     result = (
         verify(args.verify, inputs, args.inputs)
-        if args.verify else generate(inputs, args.inputs, args.replica)
+        if args.verify
+        else generate(inputs, args.inputs, args.replica)
     )
-    raw = (json.dumps(result, sort_keys=True, indent=2, allow_nan=False) + "\n").encode()
+    raw = (
+        json.dumps(result, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    ).encode()
     if len(raw) > MAX_BYTES:
         raise ValueError("reference receipt exceeds its strict byte cap")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("xb") as stream:
         stream.write(raw)
     identity = args.replica or "validated"
-    print(f"Validated four matrices: replica={identity} bytes={len(raw)} sha256={audit.digest(raw)}")
+    print(
+        f"Validated four matrices: replica={identity} bytes={len(raw)} sha256={audit.digest(raw)}"
+    )
     if args.emit:
-        print(f"GQC_ECP_JSON_BEGIN replica={identity} sha256={audit.digest(raw)} bytes={len(raw)}")
+        print(
+            f"GQC_ECP_JSON_BEGIN replica={identity} sha256={audit.digest(raw)} bytes={len(raw)}"
+        )
         sys.stdout.write(raw.decode())
         print("GQC_ECP_JSON_END")
 

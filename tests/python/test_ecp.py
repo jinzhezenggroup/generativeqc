@@ -71,7 +71,11 @@ def fixture(
 
 
 def _record_from_resolved_basis(
-    basis: typing.Any, ecp: typing.Any, representation: typing.Any, *, frozen: bool = False
+    basis: typing.Any,
+    ecp: typing.Any,
+    representation: typing.Any,
+    *,
+    frozen: bool = False,
 ) -> typing.Any:
     elements = []
     for symbol, z in (("Na", 11), ("H", 1)):
@@ -119,12 +123,14 @@ def _record_from_resolved_basis(
         BasisProvenance(
             (
                 "Retained independent PySCF basis/ECP receipt"
-                if frozen else "PySCF test-only installed basis library"
+                if frozen
+                else "PySCF test-only installed basis library"
             ),
             "2.14.0",
             (
                 "Resolved external test data retained with acquisition provenance"
-                if frozen else "upstream external test data; not redistributed"
+                if frozen
+                else "upstream external test data; not redistributed"
             ),
             canonical_hash({"basis": basis, "ecp": ecp}),
         ),

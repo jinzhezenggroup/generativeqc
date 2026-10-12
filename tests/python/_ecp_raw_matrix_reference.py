@@ -43,8 +43,10 @@ def _array(record: dict[str, Any], shape: list[int]) -> Any:
         raise ValueError("incorrect array type or shape")
     values = record["values"]
     if len(shape) == 2:
-        if not isinstance(values, list) or len(values) != shape[0] or any(
-            not isinstance(row, list) or len(row) != shape[1] for row in values
+        if (
+            not isinstance(values, list)
+            or len(values) != shape[0]
+            or any(not isinstance(row, list) or len(row) != shape[1] for row in values)
         ):
             raise ValueError("ragged matrix values")
         flat = [number for row in values for number in row]
@@ -77,14 +79,17 @@ def _validate(
     if (
         inputs["atoms"] != [["Na", [0.13, -0.21, 0.17]], ["H", [0.43, 0.19, 3.2]]]
         or inputs["unit"] != "Bohr"
-        or type(inputs["charge"]) is not int or inputs["charge"] != 0
-        or type(inputs["spin"]) is not int or inputs["spin"] != 0
+        or type(inputs["charge"]) is not int
+        or inputs["charge"] != 0
+        or type(inputs["spin"]) is not int
+        or inputs["spin"] != 0
         or inputs["representations"] != ["spherical", "cartesian"]
         or inputs["d_shells"] != [False, True]
         or inputs["basis_libraries"] != {"Na": "lanl2dz", "H": "sto-3g"}
         or inputs["ecp_libraries"] != {"Na": "lanl2dz"}
         or inputs["extra_d_shell"] != [2, [0.35, 1.0]]
-        or inputs["normalization"] != (
+        or inputs["normalization"]
+        != (
             "ECPscalar / sqrt(diag(int1e_ovlp))[:,None] / "
             "sqrt(diag(int1e_ovlp))[None,:]"
         )
@@ -103,17 +108,19 @@ def _validate(
         or manifest["source"] != inputs["source"]
         or manifest["audit_helper"] != inputs["audit_helper"]
         or provenance["python"] != inputs["python"]
-        or provenance["configuration"] != {
-            "policy": "explicit-empty-regular-file", "sha256": _digest(b"")
-        }
-        or provenance["execution"] != {
+        or provenance["configuration"]
+        != {"policy": "explicit-empty-regular-file", "sha256": _digest(b"")}
+        or provenance["execution"]
+        != {
             "checkout_sha": acquisition["checkout_sha"],
             "github_repository": acquisition["repository"],
             "github_sha": acquisition["checkout_sha"],
             "github_run_id": str(acquisition["run_id"]),
             "github_run_attempt": str(acquisition["run_attempt"]),
         }
-        or {name: package["version"] for name, package in provenance["packages"].items()}
+        or {
+            name: package["version"] for name, package in provenance["packages"].items()
+        }
         != inputs["packages"]
     ):
         raise ValueError("historical acquisition provenance mismatch")
@@ -121,9 +128,8 @@ def _validate(
     if (
         replay["schema"] != "generativeqc.independent-process-replay.v1"
         or replay["replicas"] != ["first", "second"]
-        or replay["receipt_sha256"] != [
-            replica["sha256"] for replica in manifest["replicas"]
-        ]
+        or replay["receipt_sha256"]
+        != [replica["sha256"] for replica in manifest["replicas"]]
         or len(replay["process_ids"]) != 2
         or any(type(pid) is not int or pid <= 0 for pid in replay["process_ids"])
         or replay["process_ids"][0] == replay["process_ids"][1]
@@ -149,15 +155,19 @@ def _validate(
     ):
         case = record["input"]
         if (
-            case["id"] != identity or binding["id"] != identity
+            case["id"] != identity
+            or binding["id"] != identity
             or case["representation"] != representation
-            or type(case["d_shell"]) is not bool or case["d_shell"] != d_shell
+            or type(case["d_shell"]) is not bool
+            or case["d_shell"] != d_shell
             or type(case["cart"]) is not bool
             or case["cart"] != (representation == "cartesian")
             or case["atoms"] != inputs["atoms"]
             or case["unit"] != inputs["unit"]
-            or type(case["charge"]) is not int or case["charge"] != 0
-            or type(case["spin"]) is not int or case["spin"] != 0
+            or type(case["charge"]) is not int
+            or case["charge"] != 0
+            or type(case["spin"]) is not int
+            or case["spin"] != 0
             or record["molecule_atoms"] != case["atoms"]
             or record["molecule_basis"] != case["basis"]
             or record["molecule_ecp"] != case["ecp"]
@@ -174,7 +184,8 @@ def _validate(
         if base_basis is None:
             base_basis, base_ecp = unextended, case["ecp"]
         if (
-            unextended != base_basis or case["ecp"] != base_ecp
+            unextended != base_basis
+            or case["ecp"] != base_ecp
             or record["core_electrons"] != [10, 0]
             or record["effective_nuclear_charges"] != [1, 1]
             or record["nelec"] != [1, 1]
@@ -200,7 +211,10 @@ def _validate(
                 expected = matrices["ecp_raw"][i][j] / norms[i] / norms[j]
                 if abs(matrices["ecp_normalized"][i][j] - expected) > 1e-13:
                     raise ValueError("incorrect normalized ECP matrix")
-                if any(abs(matrix[i][j] - matrix[j][i]) > 1e-12 for matrix in matrices.values()):
+                if any(
+                    abs(matrix[i][j] - matrix[j][i]) > 1e-12
+                    for matrix in matrices.values()
+                ):
                     raise ValueError("nonsymmetric scalar reference matrix")
 
 
@@ -214,10 +228,15 @@ def load_reference(
     inputs, input_raw = _read(root / "inputs.json")
     receipt, receipt_raw = _read(root / "reference.json")
     for prefix, raw in (("inputs", input_raw), ("receipt", receipt_raw)):
-        if len(raw) != manifest[f"{prefix}_bytes"] or _digest(raw) != manifest[f"{prefix}_sha256"]:
+        if (
+            len(raw) != manifest[f"{prefix}_bytes"]
+            or _digest(raw) != manifest[f"{prefix}_sha256"]
+        ):
             raise ValueError("fixed reference byte checksum mismatch")
     _validate(receipt, inputs, manifest)
     identity = f"d{int(d_shell)}-{representation}"
-    record = next(record for record in receipt["records"] if record["input"]["id"] == identity)
+    record = next(
+        record for record in receipt["records"] if record["input"]["id"] == identity
+    )
     case = record["input"]
     return case["atoms"], case["basis"], case["ecp"], record["ecp_normalized"]["values"]
