@@ -327,7 +327,11 @@ macro(generativeqc_configure_cuda_backend target)
     target_sources(${target} PRIVATE src/scf/aot_shell_registry_stub.cpp)
   endif()
   generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)
-  if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT AND _generativeqc_stationary_names)
+  # Native C++/CLI force bindings and Python-only stationary DSOs are
+  # independent products. The monolithic CLI needs only the former.
+  if(_generativeqc_stationary_names AND
+     (GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA OR
+      GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT))
     # Preserve hashed source/asset identity separately from generator imports.
     set(_generativeqc_stationary_contract_assets
       "src/dft/stationary_gradient_cuda.cuh"
@@ -406,6 +410,7 @@ macro(generativeqc_configure_cuda_backend target)
     generativeqc_set_cuda_compile_pool(
         generativeqc_stationary_sp_primitives "${_generativeqc_aot_compile_pool}")
 
+    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
     # Component-expanded s/p/d derivatives are shared compiler output: generate
     # the bounded primitive inventory once, then device-link it into each
     # method/spin wrapper. The 23 x 16 layout is part of the versioned v3
@@ -453,6 +458,9 @@ macro(generativeqc_configure_cuda_backend target)
     generativeqc_set_cuda_compile_pool(
         generativeqc_stationary_spd_primitives "${_generativeqc_aot_compile_pool}")
 
+    endif()  # GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT: Python s/p/d consumers
+
+    if(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA)
     # Native composition uses the same scientific wrappers and shared primitive
     # objects, but isolates their profile-local symbols before static linking.
     # Availability does not promote any public force capability by itself.
@@ -526,6 +534,9 @@ macro(generativeqc_configure_cuda_backend target)
       target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
     endif()
 
+    endif()  # GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
+
+    if(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT)
     # Generated source weights are exact-plan-bound after #665/#689. Package
     # semilocal and admitted global-hybrid plans through one profile catalog;
     # runtime selection still verifies the exact StationaryGradientPlan identity.
@@ -698,6 +709,7 @@ macro(generativeqc_configure_cuda_backend target)
       install(FILES "${_generativeqc_stationary_spd_manifest}"
         DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endforeach()
+    endif()  # GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT: Python shared artifacts
   else()
     target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
   endif()

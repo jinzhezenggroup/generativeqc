@@ -44,7 +44,10 @@ set(GENERATIVEQC_CUTLASS_ROOT "" CACHE PATH "Root of an external CUTLASS 3.9.2 s
 option(GENERATIVEQC_ENABLE_AOT_SHELLS
        "Build generated shell kernels in addition to the generic CUDA path" ON)
 option(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT
-       "Build packaged stationary CUDA force artifacts" ON)
+       "Build Python-consumer stationary CUDA force shared artifacts" ON)
+option(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
+       "Link graph-qualified native CUDA stationary force profiles into the C++ core"
+       ${GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT})
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
