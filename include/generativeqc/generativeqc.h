@@ -877,7 +877,7 @@ typedef struct generativeqc_method_descriptor {
   /** Optional KS snapshot. NULL preserves the method's built-in model.
    * The descriptor and pointees need only outlive the prepare call. */
   const generativeqc_ks_options* ks_options;
-  /** RCCSD controls. Zero selects the documented default except
+  /** Restricted/unrestricted CCSD controls. Zero selects the documented default except
    * ccsd_diis_history=0, which explicitly disables DIIS. */
   uint32_t ccsd_max_iterations;
   uint32_t ccsd_diis_history;
@@ -886,7 +886,7 @@ typedef struct generativeqc_method_descriptor {
   double ccsd_denominator_threshold;
   double ccsd_damping;
   double ccsd_level_shift;
-  /** Frozen occupied orbitals are not implemented for the native RCCSD owner.
+  /** Frozen occupied orbitals are not implemented for the native CCSD owners.
    * Zero means all occupied orbitals are correlated. */
   uint32_t ccsd_frozen_core;
   /** Optional execution-only cold-start policy. Pointee is copied at preparation.
@@ -1123,7 +1123,7 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t measured_response_workspace_peak_bytes;
   /** Successful allocation events in the same GMRES ownership domain. */
   uint64_t response_workspace_allocation_count;
-  /** RCCSD-only fields. Zero for methods that do not publish iterative CC state. */
+  /** Iterative restricted/unrestricted CCSD fields. Zero for other methods. */
   uint64_t ccsd_iterations;
   uint64_t ccsd_diis_restarts;
   double ccsd_correlation_energy;
@@ -1137,13 +1137,13 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t ccsd_amplitude_d2h_bytes;
   uint64_t ccsd_synchronizations;
   char ccsd_replay_equation_hash[65];
-  /** Standard canonical noniterative (T) correction; zero for non-RCCSD(T) methods. */
+  /** Standard canonical noniterative (T) correction; zero for methods without (T). */
   double ccsd_t_triples_energy;
-  /** Number of triangular virtual triples evaluated by the native (T) owner. */
+  /** Triangular virtual triples for RCCSD(T), ordered scalar tiles for UCCSD(T). */
   uint64_t ccsd_t_virtual_triples;
   /** Peak temporary numeric workspace owned by the native (T) evaluator. */
   uint64_t ccsd_t_workspace_bytes;
-  /** Audited standard-(T) inventory identity; empty for non-RCCSD(T) methods. */
+  /** Audited restricted/unrestricted standard-(T) inventory; empty without (T). */
   char ccsd_t_equation_hash[65];
   /** Nonzero only when the successful RHF attempt for this complete correlated
    * endpoint used a compatible caller-retained CUDA executable plan. This is
@@ -1154,7 +1154,7 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t reference_execution_plan_owned_device_bytes;
 } generativeqc_correlation_diagnostic;
 
-/** Additive observational RCCSD/RCCSD(T) phase/work record.
+/** Additive observational native coupled-cluster phase/work record.
  * This descriptor does not alter correlation science or convergence contracts.
  * Nested phases are intentionally not additive: source is contained by provider,
  * while iteration/replay/update/DIIS are contained by solver.
@@ -2048,9 +2048,9 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_precision_work
  */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_correlation_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_correlation_diagnostic* diagnostic);
-/** Most recent RCCSD/RCCSD(T) phase/work record; NULL out probes availability. */
+/** Most recent native coupled-cluster phase/work record; NULL out probes availability. */
 /** @native-contract generativeqc_calculation_get_cc_performance_diagnostic
- * @behavior Read the latest RCCSD/RCCSD(T) phase and work evidence.
+ * @behavior Read the latest native coupled-cluster phase and work evidence.
  * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
  * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
  * probes availability.
@@ -2488,7 +2488,7 @@ generativeqc_batch_get_correlation_diagnostic(const generativeqc_batch* batch, u
                                               generativeqc_correlation_diagnostic* diagnostic);
 /** Input-ordered counterpart of generativeqc_calculation_get_cc_performance_diagnostic. */
 /** @native-contract generativeqc_batch_get_cc_performance_diagnostic
- * @behavior Read the latest RCCSD/RCCSD(T) phase and work evidence.
+ * @behavior Read the latest native coupled-cluster phase and work evidence.
  * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
  * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
  * probes availability. index is the zero-based original input index, not a bucket index.

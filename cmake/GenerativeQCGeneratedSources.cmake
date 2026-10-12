@@ -669,6 +669,15 @@ macro(generativeqc_register_host_generated_sources target)
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
     ARGS ${_generativeqc_native_arena_args} --cpu-header "${GENERATIVEQC_RCCSD_CPU_HEADER}")
 
+  generativeqc_register_generated_sources(
+    NAME generativeqc_uccsd_cpu_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cpu.hpp"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_uccsd_native.py"
+    ARGS --cpu-header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_uccsd_cpu.hpp")
+
   # The DF families share the existing RCCSD emitter. Their CPU queries
   # also own exact admission sizes for CUDA; generate once for both backends.
   foreach(_df_family IN ITEMS native core hoisted spectator_pairs)

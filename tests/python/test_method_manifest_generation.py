@@ -27,6 +27,8 @@ EXPECTED_ABI_IDS = {
     "pbe-d4-rks": 18,
     "df-rccsd(t)": 19,
     "ump2": 20,
+    "uccsd": 21,
+    "uccsd(t)": 22,
 }
 
 
