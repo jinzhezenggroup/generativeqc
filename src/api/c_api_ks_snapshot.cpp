@@ -80,6 +80,13 @@ generativeqc_status check_current(const generativeqc_batch& batch,
 }
 
 #if GENERATIVEQC_HAS_CUDA
+void check_cpks_cuda(cudaError_t status) {
+  if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
+  if (status != cudaSuccess)
+    throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
+                                              cudaGetErrorString(status));
+}
+
 /** Adapt the shared orbital/vector engine, not a second CPKS algebra. Its
  * density callback holds the current KS lease and supplies the native XC map. */
 class CudaKsKrylov final : public generativeqc::response::ResidentKrylovBackend {
@@ -597,21 +604,31 @@ generativeqc_status generativeqc_ks_response_solve_v1(
     const auto coefficients_offset = 2 + 4 * snapshot->atoms + 2 * matrix;
     if (snapshot->values.size() < coefficients_offset + matrix + nbf)
       throw std::invalid_argument("CPKS snapshot orbital payload is incomplete");
-    generativeqc::runtime::CudaDeviceScope device(response->device);
-    generativeqc::runtime::OwnedCudaEvent ready(response->device, cudaEventDisableTiming);
+    generativeqc::runtime::CudaDeviceScope device(response->device, check_cpks_cuda);
+    generativeqc::runtime::OwnedCudaEvent ready(response->device, cudaEventDisableTiming,
+                                               check_cpks_cuda);
     const auto xc_before = response->plan->transfers();
     const auto density_response = [&](const double* direction, void* stream) {
       const auto current = check_current(*batch, response->index, response->token);
       if (current != GENERATIVEQC_STATUS_SUCCESS)
         throw generativeqc::methods::MethodError(current, "stale CPKS response generation");
-      ready.record(static_cast<cudaStream_t>(stream));
-      generativeqc::runtime::cuda_resource_check(
-          cudaStreamWaitEvent(response->stream.get(), ready.get(), 0));
-      const auto generation = ++response->generation;
-      response->plan->enqueue_response(response->density, direction, response->count, generation);
-      const auto scalars = response->plan->read_scalars(generation);
-      if (scalars.error) throw std::invalid_argument("invalid resident XC response domain");
-      return response->plan->view(generation).potential;
+      try {
+        ready.record(static_cast<cudaStream_t>(stream));
+        check_cpks_cuda(cudaStreamWaitEvent(response->stream.get(), ready.get(), 0));
+        const auto generation = ++response->generation;
+        response->plan->enqueue_response(response->density, direction, response->count, generation);
+        const auto scalars = response->plan->read_scalars(generation);
+        if (scalars.error) throw std::invalid_argument("invalid resident XC response domain");
+        return response->plan->view(generation).potential;
+      } catch (...) {
+        // The XC stream may already borrow the resident orbital arena. Settle
+        // that lease before its owner unwinds, without replacing the failure.
+        try {
+          response->stream.synchronize();
+        } catch (...) {
+        }
+        throw;
+      }
     };
     generativeqc_rhf_response_resident* raw_owner = nullptr;
     status = generativeqc::api::create_cuda_cpks_response(

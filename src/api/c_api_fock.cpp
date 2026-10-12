@@ -407,11 +407,16 @@ extern "C" generativeqc_status generativeqc_fock_plan_diagnostic(
 namespace {
 #if GENERATIVEQC_HAS_CUDA
 void resident_cuda(cudaError_t status) {
-  if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+  if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
+  if (status != cudaSuccess)
+    throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
+                                              cudaGetErrorString(status));
 }
 void resident_blas(cublasStatus_t status) {
+  if (status == CUBLAS_STATUS_ALLOC_FAILED) throw std::bad_alloc();
   if (status != CUBLAS_STATUS_SUCCESS)
-    throw std::runtime_error("resident RHF response cuBLAS failure");
+    throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_CUDA_ERROR,
+                                              "resident response cuBLAS failure");
 }
 std::size_t resident_product(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a) throw std::bad_alloc();
