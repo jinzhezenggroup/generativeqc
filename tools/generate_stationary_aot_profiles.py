@@ -10,7 +10,9 @@ from tools.generate_native_semilocal_families import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/stationary_aot_profiles.json"
-OUTPUT = ROOT / "python/generativeqc_compiler/method/_generated_stationary_aot_profiles.py"
+OUTPUT = (
+    ROOT / "python/generativeqc_compiler/method/_generated_stationary_aot_profiles.py"
+)
 SCHEMA = "generativeqc.stationary-aot-build-profiles.v1"
 
 
@@ -26,12 +28,19 @@ def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
         if set(record) != {"name", "family", "method", "legacy"}:
             raise ValueError("invalid stationary CUDA AOT profile")
         name, family, method, legacy = (
-            record["name"], record["family"], record["method"], record["legacy"]
+            record["name"],
+            record["family"],
+            record["method"],
+            record["legacy"],
         )
         if (
-            not isinstance(name, str) or not name or name in names
-            or not isinstance(method, str) or not method
-            or family not in codes or type(legacy) is not bool
+            not isinstance(name, str)
+            or not name
+            or name in names
+            or not isinstance(method, str)
+            or not method
+            or family not in codes
+            or type(legacy) is not bool
         ):
             raise ValueError("invalid or duplicated stationary CUDA AOT profile")
         names.add(name)

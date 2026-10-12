@@ -6,6 +6,7 @@ from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_FUNCTIONALS,
     QUALIFIED_STATIONARY_AOT_PROFILES,
 )
+
 from tools import generate_stationary_aot_profiles as generator
 
 
@@ -21,6 +22,10 @@ def test_aot_profile_legacy_transport_is_generated_without_name_branch() -> None
     assert QUALIFIED_FUNCTIONALS == (0, 1, 2)
     assert len(QUALIFIED_STATIONARY_AOT_PROFILES) == 10
     assert {profile.name for profile in QUALIFIED_STATIONARY_AOT_PROFILES} == {
-        "lda", "pbe", "r2scan", "pbe0", "b3lyp"
+        "lda",
+        "pbe",
+        "r2scan",
+        "pbe0",
+        "b3lyp",
     }
     assert all(profile.plan.identity for profile in QUALIFIED_STATIONARY_AOT_PROFILES)

@@ -807,7 +807,9 @@ QUALIFIED_SP_COMPONENTS = ("", "x", "y", "z")
 QUALIFIED_SPD_COMPONENTS = ("", "x", "xx", "xy", "xz", "y", "yy", "yz", "z", "zz")
 QUALIFIED_SPD_AOT_SHARD_WIDTH = 16
 QUALIFIED_SPD_AOT_SHARDS = 23
-QUALIFIED_FUNCTIONALS = tuple(sorted({code for _, code, _, legacy in STATIONARY_AOT_BUILD_PROFILES if legacy}))
+QUALIFIED_FUNCTIONALS = tuple(
+    sorted({code for _, code, _, legacy in STATIONARY_AOT_BUILD_PROFILES if legacy})
+)
 QUALIFIED_SPINS = ("unpolarized", "polarized")
 QUALIFIED_PARTITION_ITERATIONS = 3
 
@@ -987,7 +989,8 @@ def _legacy_profile(functional: int, spin: str) -> StationaryAotProfile:
     if spin not in QUALIFIED_SPINS:
         raise ValueError("AOT stationary spin must be unpolarized or polarized")
     profiles = tuple(
-        p for p in QUALIFIED_STATIONARY_AOT_PROFILES
+        p
+        for p in QUALIFIED_STATIONARY_AOT_PROFILES
         if p.functional == functional and p.spin == spin and p.legacy
     )
     if len(profiles) != 1:

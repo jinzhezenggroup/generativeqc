@@ -4,9 +4,9 @@
 # manifests/stationary_aot_profiles.json.
 
 STATIONARY_AOT_BUILD_PROFILES = (
-    ('lda', 0, 'LDA_XC_PW', True),
-    ('pbe', 1, 'PBE', True),
-    ('r2scan', 2, 'R2SCAN', True),
-    ('pbe0', 1, 'PBE0', False),
-    ('b3lyp', 3, 'B3LYP', False),
+    ("lda", 0, "LDA_XC_PW", True),
+    ("pbe", 1, "PBE", True),
+    ("r2scan", 2, "R2SCAN", True),
+    ("pbe0", 1, "PBE0", False),
+    ("b3lyp", 3, "B3LYP", False),
 )
