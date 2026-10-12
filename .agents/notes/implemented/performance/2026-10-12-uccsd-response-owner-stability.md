@@ -79,3 +79,31 @@ qualify the actual combined workload.
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38227091725/job/114738146004
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38227091725/job/114738146040
 - tests/python/test_ci_shard_ownership.py
+
+
+## Landed native-transfer integration after the remaining A timeout
+
+Run 38232996979 on head `86ddf9a7` verified the response-to-B change:
+core-c passed 10691 cases/855 skips in 933.54 seconds and core-b passed
+8797 cases/4310 skips in 1137.56 seconds. Core-a instead reached the
+unchanged 30-minute test-step cap at 10:28:42 UTC in job 114756776752,
+with standard-gradient cases still active and no visible assertion failure.
+The other pytest times were runtime-heavy 1105.36, compiler-heavy 1232.31,
+posthf 1754.70 and ecp-forces 866.39 seconds. These are observations from
+this run, not runtime guarantees for another inventory.
+
+Both complete native transfer files ran on failed core-a: the six
+`test_cc_native_tensor_cpu.py` cases account for 254.947 observed
+start/result worker-seconds and the three `test_uccsd_native.py` cases for
+275.880. The same bounded transfer already reviewed and qualified in #2350
+has now landed in master `61a0e715fde35566722870389af8e137036232db`.
+Compose that actual master with the reviewed restricted-CUDA head, retaining
+this response-to-B pin and both original modulo slots. No new allocation
+policy or unlanded scientific dependency is introduced.
+
+The existing compiler lane retains its dependencies, loadfile scheduling and
+diagnostics, including the previously documented absence of core-only fault
+preloading. Every transferred case and fresh owner remains unchanged. The
+sum of these worker intervals plus the prior compiler duration is not a
+wall-time bound; the final combined hosted run and normal merge queue remain
+the deadline gates. All seven shard budgets and worker counts are unchanged.

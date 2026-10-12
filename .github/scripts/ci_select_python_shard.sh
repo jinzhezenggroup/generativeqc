@@ -285,6 +285,11 @@ rebalance_paths=(
   tests/python/test_uccsd_t_owner.py
   tests/python/test_uccsd_physical_response.py
   tests/python/test_uccsd_triples_response.py
+  # The 2026-10-12 full-Fock CI still left a late corrected-Lambda tail.
+  # Transfer these bounded complete native files to the compiler lane;
+  # keep their core slots so every unrelated file retains its owner.
+  tests/python/test_cc_native_tensor_cpu.py
+  tests/python/test_uccsd_native.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -310,10 +315,8 @@ core_hotspots_a=(
   # Keep this measured long tail parallel on the lighter core-a workers;
   # its >1751 worker-seconds must not become one serial loadfile task.
   tests/python/test_uccsd_gradient.py
-  # Make room for corrected Lambda on core-c without serializing either
-  # UCCSD owner. These complete files retain parallel worksteal and their
-  # original core inventory slots; see the 2026-10-12 tail-balance note.
-  tests/python/test_cc_native_tensor_cpu.py
+  # Keep complete high-angular HF parallel with its original core slot;
+  # the native TensorIR CPU file now has a dedicated compiler transfer.
   tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
@@ -518,6 +521,15 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
+    # Both complete native files have bounded serial cost and fresh
+    # function-local owners. Do not admit absent or untracked paths.
+    for path in \
+      tests/python/test_cc_native_tensor_cpu.py \
+      tests/python/test_uccsd_native.py; do
+      if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+        test_targets+=("$path")
+      fi
+    done
     if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
       test_targets+=(tests/python/test_wb97mv_complete.py)
     fi
