@@ -306,6 +306,13 @@ nightly_hessian_paths=(
 # Keep all scientific tests and all existing nightly-only qualifications.
 core_hotspots_a=(
   tests/python/test_mixed_rsh_df_forces.py
+  # PR #2329 / run 38202660731 left only two gradient cases at timeout.
+  # Keep this measured long tail parallel on the lighter core-a workers;
+  # its >1751 worker-seconds must not become one serial loadfile task.
+  tests/python/test_uccsd_gradient.py
+  # PR #2347 / run 38205701393 left two corrected-Lambda cases at timeout.
+  # Fresh per-test owners need parallel worksteal, not serial loadfile.
+  tests/python/test_uccsd_t_lambda.py
 )
 core_hotspots_b=(
   tests/python/test_df_lambda_core_reuse.py
