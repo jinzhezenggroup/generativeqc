@@ -1,9 +1,13 @@
+#include "scf/cuda/direct_coulomb.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/cuda_fock_provider.hpp"
@@ -15,6 +19,14 @@
 namespace {
 using namespace generativeqc::scf;
 using generativeqc::core::System;
+// The private provider header must stand alone while declaring exactly the
+// callback type exposed by the public transport contract.
+using ResidentDerivativeEntry = cudaError_t (*)(
+    cuda_execution::GeneratedExchangePlan&, bool, const double*, const double*, double, double,
+    const CudaDerivativeSourceConsumer&, bool);
+static_assert(std::is_same_v<
+              decltype(&cuda_execution::consume_generated_full_range_energy_derivatives),
+              ResidentDerivativeEntry>);
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -555,18 +567,49 @@ void resident_derivative_sources() {
     matrix(std::vector<double>(actual.begin() + 3 * coordinates, actual.end()), expected_pulay,
            "resident Pulay scratch-reuse oracle");
 
-    const CudaDerivativeSourceConsumer fail_after_copy = [&](const CudaDerivativeSourceView& view) {
+    const auto expect_failure = [&](const CudaDerivativeSourceConsumer& fail,
+                                    generativeqc_status jk_status,
+                                    generativeqc_status one_electron_status) {
+      require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                  plan, alpha, spin_beta, elements, fail, detail) == jk_status,
+              "resident J/K consumer failure lost its status");
+      require(cudaStreamQuery(binding.stream) == cudaSuccess,
+              "failed resident J/K callback returned before its copies drained");
+      require(consume_prepared_cuda_stationary_one_electron_pair(
+                  plan.cuda_direct_source(), alpha, weight, elements, fail, detail) ==
+                  one_electron_status,
+              "resident one-electron consumer failure lost its status");
+      require(cudaStreamQuery(binding.stream) == cudaSuccess,
+              "failed resident one-electron callback returned before its copies drained");
+      submit();
+    };
+    for (const auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                              GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                              GENERATIVEQC_STATUS_INVALID_ARGUMENT}) {
+      const CudaDerivativeSourceConsumer typed_failure = [&](const auto& view) {
+        consume(view);
+        throw generativeqc::Error(status, "injected typed resident source consumer failure");
+      };
+      expect_failure(typed_failure, status, status);
+    }
+    const CudaDerivativeSourceConsumer fail_after_copy = [&](const auto& view) {
       consume(view);
       throw std::runtime_error("injected resident source consumer failure");
     };
-    require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-                plan, alpha, spin_beta, elements, fail_after_copy, detail) !=
-                    GENERATIVEQC_STATUS_SUCCESS &&
-                consume_prepared_cuda_stationary_one_electron_pair(
-                    plan.cuda_direct_source(), alpha, weight, elements, fail_after_copy, detail) !=
-                    GENERATIVEQC_STATUS_SUCCESS,
-            "resident source consumer failure was published as success");
-    submit();
+    expect_failure(fail_after_copy, GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                   GENERATIVEQC_STATUS_NUMERICAL_FAILURE);
+    const CudaDerivativeSourceConsumer allocation_failure = [&](const auto& view) {
+      consume(view);
+      throw std::bad_alloc();
+    };
+    expect_failure(allocation_failure, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                   GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+    const CudaDerivativeSourceConsumer invalid_failure = [&](const auto& view) {
+      consume(view);
+      throw std::invalid_argument("injected invalid resident source consumer");
+    };
+    expect_failure(invalid_failure, GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                   GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     const auto before_rejection = callbacks;
     require(consume_prepared_cuda_stationary_one_electron_pair(
                 plan.cuda_direct_source(), alpha, weight, elements + 1, consume, detail) ==

@@ -24,6 +24,7 @@
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/queue_plan.hpp"
+#include "scf/cuda_direct_jk.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {

@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -11,8 +12,11 @@
 #include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
-#include "scf/cuda_derivative_sources.hpp"
 #include "scf/direct_block_schedule.hpp"
+
+namespace generativeqc::scf {
+struct CudaDerivativeSourceView;
+}
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -167,7 +171,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 cudaError_t consume_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient,
-    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default = false);
+    const std::function<void(const CudaDerivativeSourceView&)>& consumer,
+    bool allow_spatial_default = false);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

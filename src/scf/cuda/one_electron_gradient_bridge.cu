@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -515,10 +516,13 @@ generativeqc_status consume_prepared_cuda_stationary_one_electron_pair(
     detail = std::string("prepared generated one-electron CUDA failure: ") +
              cudaGetErrorString(failure.status);
     return failure.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
-                                                       : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+                                                       : GENERATIVEQC_STATUS_CUDA_ERROR;
   } catch (const std::bad_alloc&) {
     detail = "prepared generated one-electron consumer allocation failed";
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const generativeqc::Error& error) {
+    detail = error.what();
+    return error.status();
   } catch (const std::invalid_argument& error) {
     detail = error.what();
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

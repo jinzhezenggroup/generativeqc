@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -2460,9 +2461,15 @@ generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
                       "resident shell derivative spin storage is invalid");
     direct_jk_check(cudaSetDevice(plan->device_id));
-    direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
-        *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-        exchange_coefficient, consumer, allow_spatial_default));
+    try {
+      direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
+          *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
+          exchange_coefficient, consumer, allow_spatial_default));
+    } catch (const generativeqc::Error& error) {
+      // Preserve the callback's typed status through the existing provider
+      // guard and its failure drain; driver failures are not bad seed input.
+      throw DirectJkFailure{error.status(), error.what()};
+    }
   });
 }
 
