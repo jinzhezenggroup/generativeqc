@@ -24,6 +24,13 @@ enum class SemilocalFamily : std::uint32_t {
   Wb97mv = 4,
 };
 
+struct CpuStationaryForceProfile {
+  std::uint32_t spin_mask;
+  double exact_exchange_fraction;
+  double semilocal_exchange_scale;
+  double semilocal_correlation_scale;
+};
+
 struct SemilocalFamilyMetadata {
   SemilocalFamily family;
   const char* name;
@@ -40,6 +47,8 @@ struct SemilocalFamilyMetadata {
   bool molecular_nonlocal_domain;
   bool incremental_xc;
   bool stationary_second_order;
+  std::array<CpuStationaryForceProfile, 2> cpu_stationary_force_profiles;
+  std::uint32_t cpu_stationary_force_profile_count;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -65,6 +74,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      true,
+     {{{0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
+     0U,
      {CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"LDA_X", "LDA_C_PW", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -86,6 +97,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      true,
      true,
+     {{{3U, 0.0, 1.0, 1.0}, {3U, 0.25, 0.75, 1.0}}},
+     2U,
      {CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"GGA_X_PBE", "GGA_C_PBE", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -107,6 +120,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      false,
+     {{{0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
+     0U,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -128,6 +143,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      false,
+     {{{1U, 0.2, 1.0, 1.0}, {0U, 0.0, 0.0, 0.0}}},
+     1U,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"},
      {0.08, 0.72, 0.19, 0.81},
@@ -149,6 +166,8 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      false,
      false,
+     {{{0U, 0.0, 0.0, 0.0}, {0U, 0.0, 0.0, 0.0}}},
+     0U,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_WB97M_V", "MGGA_C_WB97M_V", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -230,6 +249,24 @@ constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) 
 
 constexpr bool semilocal_family_supports_stationary_second_order(SemilocalFamily family) noexcept {
   return semilocal_family_metadata(family).stationary_second_order;
+}
+
+constexpr bool semilocal_family_cpu_stationary_force_qualified(
+    SemilocalFamily family, std::uint32_t spin_channels, bool exact_exchange_present,
+    double exact_exchange_fraction, double semilocal_exchange_scale,
+    double semilocal_correlation_scale) noexcept {
+  if (spin_channels < 1U || spin_channels > 2U) return false;
+  const auto& metadata = semilocal_family_metadata(family);
+  for (std::uint32_t i = 0; i < metadata.cpu_stationary_force_profile_count; ++i) {
+    const auto& profile = metadata.cpu_stationary_force_profiles[i];
+    if ((profile.spin_mask & (1U << (spin_channels - 1U))) != 0 &&
+        (profile.exact_exchange_fraction != 0.0) == exact_exchange_present &&
+        profile.exact_exchange_fraction == exact_exchange_fraction &&
+        profile.semilocal_exchange_scale == semilocal_exchange_scale &&
+        profile.semilocal_correlation_scale == semilocal_correlation_scale)
+      return true;
+  }
+  return false;
 }
 
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {

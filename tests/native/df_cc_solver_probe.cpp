@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -33,6 +34,14 @@ int main(int argc, char* argv[]) {
     options.packed_diis = header[6] & 32;
     options.df_mixed_precision = header[6] & (1ULL << 63);
     if (header[6] & (1ULL << 62)) options.df_mixed_precision_max_evaluations = 2;
+    for (int argument = 1; argument < argc; ++argument) {
+      if (std::string_view(argv[argument]) != "--mixed-switch-residual") continue;
+      if (++argument == argc) throw std::invalid_argument("missing mixed switch residual");
+      const std::string token(argv[argument]);
+      std::size_t consumed = 0;
+      options.df_mixed_precision_switch_residual = std::stod(token, &consumed);
+      if (consumed != token.size()) throw std::invalid_argument("invalid mixed switch residual");
+    }
     // Probe-only high bits select a tile limit without changing the public API.
     const auto batch_limit = (header[6] & ~((1ULL << 63) | (1ULL << 62))) >> 8;
     if (batch_limit) options.df_auxiliary_batch_limit = batch_limit;

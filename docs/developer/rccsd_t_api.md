@@ -191,12 +191,15 @@ existing correlation memory budget. Diagnostics publish `E_(T)`, virtual-triple
 count, workspace bytes and the audited triples inventory hash separately from
 the RCCSD correlation diagnostics.
 
-The current public boundary remains deliberately bounded:
+Conventional force admission uses the live resource planner, convergence and
+numerical-stability checks, not a fixed AO threshold. Native CCSD(T) independent
+force oracles reach 56 AOs; larger requests have not been automatically qualified
+by removing the former guard.
 
 ```text
-CPU energy + force:          yes (qualified conventional <=56-AO force domain)
+CPU energy + force:          yes (resource/numerical gates; no fixed AO cap)
 CPU homogeneous batch:      yes
-CUDA energy + force:         yes (same force domain)
+CUDA energy + force:         yes (same admission; CUDA required)
 CUDA homogeneous batch:     yes
 fully resident CUDA response:no (internal qualification path only)
 DF/frozen-core/open-shell:   no

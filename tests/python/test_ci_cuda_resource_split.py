@@ -1,7 +1,10 @@
-"""Keep both CUDA jobs mandatory and resource sources owned by the CMake graph."""
+"""Keep all CUDA jobs mandatory and resource sources owned by the CMake graph."""
 
 from __future__ import annotations
 
+import glob
+import hashlib
+import os
 import re
 import shutil
 import subprocess
@@ -24,8 +27,8 @@ def _step(job: str, name: str) -> str:
     return section.split("      - name: ", 1)[0]
 
 
-def test_both_cuda_jobs_remain_required_with_the_same_source_and_budget() -> None:
-    for name in ("cuda-compile", "cuda-resources"):
+def test_all_cuda_jobs_remain_required_with_the_same_source_and_budget() -> None:
+    for name in ("cuda-compile", "cuda-resources", "cuda-direct-aot"):
         job = _job(name)
         header = job.split("    steps:\n", 1)[0]
         assert "needs: merge_queue_liveness" in header
@@ -45,12 +48,13 @@ def test_both_cuda_jobs_remain_required_with_the_same_source_and_budget() -> Non
         "cpu",
         "cuda-compile",
         "cuda-resources",
+        "cuda-direct-aot",
         "python",
     } <= {name.strip() for name in needs.group(1).split(",")}
     assert "jobs: ${{ toJSON(needs) }}" in aggregate
     assert "allowed-failures:" not in aggregate
     # The exact event-dependent skip set is exercised by test_native_cli_workflow:
-    # only the scheduled artifact job is exempt, never either CUDA gate.
+    # only the scheduled artifact job is exempt, never a CUDA gate.
 
 
 @pytest.mark.parametrize(
@@ -96,6 +100,11 @@ def test_both_cuda_jobs_remain_required_with_the_same_source_and_budget() -> Non
             "Compile generated TensorIR static-data artifacts",
             "tools/validate_tensor_cuda_compile.py",
         ),
+        (
+            "cuda-direct-aot",
+            "Qualify direct J/K AOT static resources (shard 6)",
+            "tools/validate_direct_jk_aot_resources.py",
+        ),
     ],
 )
 def test_existing_gates_are_unconditional_and_owned_once(
@@ -136,6 +145,201 @@ def test_resources_generate_the_native_cmake_source_without_rebuilding_library()
     assert "if: always()" in reports
     assert "build/xc-compile" in reports
     assert "build/native-xc-resource" in reports
+
+
+def test_direct_aot_has_an_independent_bounded_cold_compile_and_receipts() -> None:
+    job = _job("cuda-direct-aot")
+    header = job.split("    steps:\n", 1)[0]
+    assert "github.event_name != 'push'" in header
+    compile_step = _step(
+        "cuda-direct-aot", "Qualify direct J/K AOT static resources (shard 6)"
+    )
+    job_minutes = int(re.search(r"timeout-minutes: (\d+)", header)[1])
+    step_minutes = int(re.search(r"timeout-minutes: (\d+)", compile_step)[1])
+    compiler_seconds = int(re.search(r"--compile-timeout (\d+)", compile_step)[1])
+    # Reserve time for compiler-group shutdown/metadata, setup and publication.
+    assert 0 < compiler_seconds <= (step_minutes - 2) * 60
+    assert step_minutes <= job_minutes - 3
+    assert "--record-output" not in compile_step
+    assert "build/cuda-release-sm120/CMakeCache.txt" in compile_step
+    assert "build/cuda-release-sm120/generated/production_shell_kernels" in compile_step
+    assert (
+        job.index("Install ccache 4.14")
+        < job.index("Configure direct J/K AOT release context")
+        < job.index("Qualify direct J/K AOT static resources")
+    )
+    # Sibling validators do not consume the direct shard's wall-clock budget.
+    for tool in (
+        "validate_f_shells.py",
+        "validate_xc.py",
+        "validate_native_xc_resources.py",
+        "validate_stationary_cuda_compile.py",
+        "validate_tensor_cuda_compile.py",
+    ):
+        assert tool not in job
+    restore = _step("cuda-direct-aot", "Restore direct J/K AOT resource cache")
+    save = _step("cuda-direct-aot", "Save direct J/K AOT resource cache")
+    assert "path: build/direct-jk-aot-cache" in restore
+    assert "direct-jk-aot-12.9-sm120-" in restore
+    assert "github.event_name != 'merge_group'" in save
+    assert "steps.direct_jk_aot_cache.outputs.cache-hit != 'true'" in save
+    assert "always()" not in save and "continue-on-error:" not in save
+    reports = _step(
+        "cuda-direct-aot", "Preserve direct J/K AOT resource qualification report"
+    )
+    assert "if: always()" in reports
+    for receipt in (
+        "report.json",
+        "cuobjdump.txt",
+        "compile.json",
+        "compiler-cache.json",
+        "nvcc.log",
+    ):
+        assert receipt in reports
+
+
+@pytest.mark.parametrize("active", ["true", "false", ""])
+@pytest.mark.parametrize(
+    "event,ref,expected",
+    [
+        ("pull_request", "refs/pull/1/merge", True),
+        ("merge_group", "refs/heads/gh-readonly-queue/master/pr-1", True),
+        ("schedule", "refs/heads/master", True),
+        ("workflow_dispatch", "refs/heads/master", True),
+        ("workflow_dispatch", "refs/heads/feature", True),
+        ("push", "refs/heads/master", True),
+        ("push", "refs/heads/feature", False),
+        ("push", "refs/tags/v1.2.3", False),
+    ],
+)
+def test_direct_aot_preserves_required_events_and_only_seeds_master_pushes(
+    active: str, event: str, ref: str, expected: bool
+) -> None:
+    header = _job("cuda-direct-aot").split("    steps:\n", 1)[0]
+    expression = re.search(r"^    if: (.+)$", header, re.MULTILINE)[1]
+    expression = (
+        expression.replace("needs.merge_queue_liveness.outputs.active", '"$ACTIVE"')
+        .replace("github.event_name", '"$EVENT"')
+        .replace("github.ref", '"$REF"')
+    )
+    result = subprocess.run(
+        ["bash", "-c", f"if [[ {expression} ]]; then printf run; else printf skip; fi"],
+        env={**os.environ, "ACTIVE": active, "EVENT": event, "REF": ref},
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.stdout == ("run" if expected and active != "false" else "skip")
+
+
+def _cache_patterns(prefix: str) -> list[str]:
+    line = next(line for line in WORKFLOW.splitlines() if f"key: {prefix}" in line)
+    return re.findall(r"'([^']+)'", line.split("hashFiles(", 1)[1])
+
+
+def _selected_cache_inputs(root: Path, patterns: list[str]) -> list[Path]:
+    selected: set[Path] = set()
+    for pattern in patterns:
+        exclude = pattern.startswith("!")
+        matches = {
+            root / value
+            for value in glob.glob(
+                pattern.removeprefix("!"), root_dir=root, recursive=True
+            )
+            if (root / value).is_file()
+        }
+        if exclude:
+            selected -= matches
+        else:
+            selected |= matches
+    return sorted(selected)
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "f-shell-cuda-v2-",
+        "xc-cuda-",
+        "stationary-cuda-",
+        "tensor-static-cuda-",
+        "direct-jk-aot-",
+    ],
+)
+def test_resource_cache_keys_ignore_bytecode_but_track_source(
+    tmp_path: Path, prefix: str
+) -> None:
+    patterns = _cache_patterns(prefix)
+    source = tmp_path / "python/generativeqc_compiler/common/example.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("value = 1\n")
+
+    def fingerprint() -> str:
+        return hashlib.sha256(
+            b"".join(
+                path.read_bytes() for path in _selected_cache_inputs(tmp_path, patterns)
+            )
+        ).hexdigest()
+
+    original = fingerprint()
+    bytecode = source.parent / "__pycache__/example.cpython-311.pyc"
+    bytecode.parent.mkdir()
+    for generated in (
+        bytecode,
+        bytecode.with_suffix(".receipt"),
+        source.with_suffix(".pyc"),
+        source.with_suffix(".pyo"),
+    ):
+        generated.write_bytes(b"checkout-specific compiled bytecode")
+    assert _selected_cache_inputs(tmp_path, patterns) == [source]
+    assert fingerprint() == original
+    bytecode.write_bytes(b"changed import timestamp")
+    assert fingerprint() == original
+    source.write_text("value = 2\n")
+    assert fingerprint() != original
+
+
+def test_direct_aot_transport_key_covers_inner_implementation_inputs(
+    tmp_path: Path,
+) -> None:
+    from tools.validate_direct_jk_aot_resources import COMPILE_IMPLEMENTATIONS
+
+    expected = []
+    for name in COMPILE_IMPLEMENTATIONS:
+        source = tmp_path / name
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(name)
+        expected.append(source)
+    assert _selected_cache_inputs(
+        tmp_path, _cache_patterns("direct-jk-aot-")
+    ) == sorted(expected)
+
+
+def _assert_direct_aot_is_required(aggregate: str) -> None:
+    dependencies = re.search(r"needs: \[([^\]]+)\]", aggregate)
+    assert dependencies is not None
+    assert "cuda-direct-aot" in {name.strip() for name in dependencies[1].split(",")}
+    assert "jobs: ${{ toJSON(needs) }}" in aggregate
+    assert "allowed-failures:" not in aggregate
+    assert "continue-on-error:" not in aggregate
+    allowed = re.search(r"allowed-skips: (.+)", aggregate)
+    assert allowed is not None and "cuda-direct-aot" not in allowed[1]
+
+
+@pytest.mark.parametrize("fault", ["missing", "skippable", "non_gating"])
+def test_direct_aot_aggregate_rejects_weakened_gate_controls(fault: str) -> None:
+    aggregate = _job("pass")
+    _assert_direct_aot_is_required(aggregate)
+    if fault == "missing":
+        aggregate = aggregate.replace("cuda-direct-aot, ", "")
+    elif fault == "skippable":
+        aggregate = aggregate.replace(
+            "'native-cli-artifact'", "'native-cli-artifact,cuda-direct-aot'"
+        )
+    else:
+        aggregate += "\n    continue-on-error: true\n"
+    with pytest.raises(AssertionError):
+        _assert_direct_aot_is_required(aggregate)
 
 
 @pytest.mark.skipif(

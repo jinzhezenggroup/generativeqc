@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <optional>
 
 #include "cc/df_source.hpp"
 #include "cc/solver.hpp"
@@ -47,6 +48,8 @@ struct RccsdNativeState {
 // The descriptor/reference remain conventional FP64 RHF. Response retention
 // keeps the original source/frame alive and charges it beside the CC solve;
 // energy-only calls release it normally. Public method registration is separate.
+// An absent mixed request selects the qualified native DF auto policy; explicit
+// true/false retain diagnostic warmup and exact-FP64 ablations at every size.
 RccsdNativeState run_rccsd_native_state(
     runtime::ExecutionContext&, const core::System&, const generativeqc_method_descriptor&,
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache = nullptr,
@@ -55,7 +58,10 @@ RccsdNativeState run_rccsd_native_state(
     bool retain_df_response = false, bool df_matrix_gemm = true,
     scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr,
     std::size_t df_auxiliary_batch_limit = 8, bool derived_denominators = true,
-    bool packed_diis = false, bool df_mixed_precision = false, bool df_mp2_mode = false);
+    bool packed_diis = false, std::optional<bool> df_mixed_precision = std::nullopt,
+    double df_mixed_precision_switch_residual =
+        cc::SolverOptions{}.df_mixed_precision_switch_residual,
+    bool df_mp2_mode = false);
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities&, core::ContextState&, const core::System&,

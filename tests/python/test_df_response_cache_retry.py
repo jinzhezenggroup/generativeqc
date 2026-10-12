@@ -28,8 +28,11 @@ _SHIM = r"""
 #include <string>
 #include <vector>
 #include "runtime/execution_precision.hpp"
+#include "cc/solver.hpp"
+namespace cc = generativeqc::cc;
 __DF_CORRELATION_DEMAND__
 DFCorrelationDemand expected_demand;
+bool group_defaults = false, expected_forces = false;
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point x) {
   return std::chrono::duration<double>(Clock::now() - x).count();
@@ -43,7 +46,9 @@ struct MethodError : std::runtime_error {
 int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
 bool expected_packed = false, expected_serial_scratch = false;
-bool expected_ccsd_mixed = false, expected_lambda_mixed = false;
+std::optional<bool> expected_ccsd_mixed;
+bool expected_lambda_mixed = false;
+double expected_ccsd_switch = cc::SolverOptions{}.df_mixed_precision_switch_residual;
 bool expected_resident_krylov = false;
 bool expected_parallel_gap = false, expected_gap_cotangents = true;
 generativeqc::runtime::PrecisionDirective expected_w;
@@ -136,12 +141,19 @@ struct DFPhysicalResponseComparison {
 };
 RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::System&,
                                         const generativeqc_method_descriptor& d, void*, const std::vector<double>*,
-                                        void*, std::size_t reserve, const core::System*, bool, bool,
-                                        void*, std::size_t, bool, bool packed_diis,
-                                        bool ccsd_mixed_precision, bool df_mp2_mode) {
+                                        void*, std::size_t reserve, const core::System*,
+                                        bool retain_df_response, bool df_matrix_gemm,
+                                        void*, std::size_t batch_limit, bool derived_denominators, bool packed_diis,
+                                        std::optional<bool> ccsd_mixed_precision,
+                                        double ccsd_mixed_switch_residual, bool df_mp2_mode) {
   assert(packed_diis == expected_packed);
   assert(ccsd_mixed_precision == expected_ccsd_mixed);
+  assert(ccsd_mixed_switch_residual == expected_ccsd_switch);
   assert(df_mp2_mode == expected_demand.mp2);
+  if (group_defaults) {
+    assert(retain_df_response == expected_forces);
+    assert(df_matrix_gemm && derived_denominators && batch_limit == 32);
+  }
   ++calls;
   RccsdNativeState s;
   s.df_mp2_mode = df_mp2_mode;
@@ -184,6 +196,12 @@ assert(lambda_resident_krylov == expected_resident_krylov);
 assert(lambda_primal_matrix == (physical_replay == nullptr));
 assert(demand.mp2 == expected_demand.mp2);
 assert(demand.companions == expected_demand.companions);
+if (group_defaults) {
+  assert(forces == expected_forces && with_triples == !expected_demand.mp2);
+  assert(df_auxiliary_reduction && lambda_matrix_gemm && lambda_batch_limit == 32);
+  assert(lambda_core_reuse && lambda_audit_matrix && fused_triples_scalar_response);
+  assert(frame_options.recycling == nullptr);
+}
 later_phase(state.budget);
 DFCCSDTResult result;
 result.total_seconds = elapsed(started);
@@ -206,12 +224,13 @@ int main() {
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
                                expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-                               expected_demand);
+                               expected_ccsd_switch, expected_demand);
   };
   for (bool mp2 : {false, true})
   for (unsigned companions : {0U, 1U})
   for (bool mixed_lambda : {false, true})
-  for (bool mixed_ccsd : {false, true})
+  for (std::optional<bool> mixed_ccsd : {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}})
+  for (double switch_residual : {100.0 * 1e-9, 1e-4})
   for (bool serial_scratch : {false, true})
   for (bool resident_krylov : {false, true})
   for (bool mixed_w : {false, true})
@@ -228,6 +247,7 @@ int main() {
       : runtime::PrecisionDirective{};
   expected_lambda_interval = interval;
   expected_ccsd_mixed = mixed_ccsd;
+  expected_ccsd_switch = switch_residual;
   expected_lambda_mixed = mixed_lambda;
   expected_serial_scratch = serial_scratch;
   expected_resident_krylov = resident_krylov;
@@ -317,7 +337,7 @@ int main() {
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
       expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-      expected_demand);
+      expected_ccsd_switch, expected_demand);
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -329,7 +349,7 @@ int main() {
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
         true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
-        expected_demand);
+        expected_ccsd_switch, expected_demand);
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();
@@ -357,8 +377,37 @@ int main() {
   assert(overflowed && calls == 0 && late_calls == 0 && live == 0 && drains == 0 && clears == 0 &&
          cache.retained == 40);
   }
+  // Exercise the actual CBS group wrapper, including all public companion
+  // masks: CCSD(T) may request HF and MP2; MP2 may request HF only.
+  group_defaults = true;
+  expected_ccsd_mixed = false;
+  expected_ccsd_switch = cc::SolverOptions{}.df_mixed_precision_switch_residual;
+  expected_lambda_mixed = false;
+  expected_serial_scratch = true;
+  expected_resident_krylov = false;
+  expected_packed = false;
+  expected_parallel_gap = true;
+  expected_gap_cotangents = false;
+  expected_w = {};
+  expected_lambda_interval = 30;
+  for (bool mp2 : {false, true})
+  for (unsigned companions : {0U, 1U, 2U, 3U})
+  for (bool forces : {false, true}) {
+    if (mp2 && (companions & 2U)) continue;
+    expected_demand = {mp2, companions};
+    expected_forces = forces;
+    calls = drains = clears = late_calls = preparations = 0;
+    failure = 0;
+    descriptor.limit = 100;
+    const auto result = run_df_correlation_group_native(
+        execution, system, auxiliary, descriptor, forces, expected_demand);
+    assert(calls == 1 && drains == 1 && late_calls == 1 && live == 0 && clears == 0);
+    assert(preparations == 1 && result.primal.reference_seconds == 0.125 &&
+           !result.recycling_discarded_primal_attempt);
+  }
   puts(
-      "PASS: three late phases retry once after drain+clear; physical errors propagate; repeated "
+      "PASS: group defaults and companion demands remain independent; "
+      "three late phases retry once after drain+clear; physical errors propagate; repeated "
       "resource failure stops; cold failure stays single; early primal refusal stays bounded; "
       "republished-cache second failure cannot cause third attempt; unsuccessful attempt work "
       "flagged unavailable");

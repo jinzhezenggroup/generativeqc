@@ -132,8 +132,10 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = false,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = true, bool ccsd_mixed_precision = false,
-    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false,
+    bool lambda_serial_scratch_reuse = true,
+    std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
+    bool lambda_resident_krylov = false,
+    double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
     DFCorrelationDemand demand = {}) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
@@ -167,7 +169,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                             checked_add(recycle_bytes,
                                         physical_replay ? physical_replay->output_bytes : 0)),
                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
-                packed_diis, ccsd_mixed_precision, demand.mp2);
+                packed_diis, ccsd_mixed_precision, ccsd_mixed_switch_residual, demand.mp2);
   if (retained_host_bytes >= state.budget)
     throw std::length_error("DF correlation retained caller state exhausts complete budget");
   if (demand.mp2 && !state.df_mp2_mode) {
@@ -844,8 +846,9 @@ DFCCSDTResult run_df_ccsdt_native(
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
     std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
     bool lambda_primal_matrix, DFCCSDTReferenceExperiment* reference_experiment,
-    bool lambda_serial_scratch_reuse, bool ccsd_mixed_precision, bool lambda_mixed_precision,
-    bool lambda_resident_krylov, DFCorrelationDemand demand) {
+    bool lambda_serial_scratch_reuse, std::optional<bool> ccsd_mixed_precision,
+    bool lambda_mixed_precision, bool lambda_resident_krylov, double ccsd_mixed_switch_residual,
+    DFCorrelationDemand demand) {
   if (demand.mp2 && with_triples) throw std::invalid_argument("DF-MP2 cannot request CC triples");
   if (reference_experiment && reference_experiment->reference)
     throw std::invalid_argument("clear the previous experiment reference before reuse");
@@ -886,7 +889,7 @@ DFCCSDTResult run_df_ccsdt_native(
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
         lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, lambda_primal_matrix,
         diagnostic, lambda_serial_scratch_reuse, ccsd_mixed_precision, lambda_mixed_precision,
-        lambda_resident_krylov, demand);
+        lambda_resident_krylov, ccsd_mixed_switch_residual, demand);
   };
   try {
     return finish(attempt());
@@ -916,6 +919,7 @@ DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext& executi
                                               bool forces, DFCorrelationDemand demand) {
   return run_df_ccsdt_native(execution, system, auxiliary, descriptor, forces, !demand.mp2, true,
                              true, true, 32, 0, {}, true, false, true, false, true, {}, 30, true,
-                             true, true, nullptr, true, false, false, false, demand);
+                             true, true, nullptr, true, false, false, false,
+                             cc::SolverOptions{}.df_mixed_precision_switch_residual, demand);
 }
 }  // namespace generativeqc::methods::detail

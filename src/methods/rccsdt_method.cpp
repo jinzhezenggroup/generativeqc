@@ -120,10 +120,6 @@ class RccsdtPrepared final : public PreparedCalculation {
     runtime::df_progress::Scope component_trace("ccsdt_endpoint");
     last_.reset();
     last_performance_.reset();
-    if (compute_forces && molecule::ao_count(system_) > cc::kRccsdtForceMaxAOs)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "native RCCSD(T) force AO dimension exceeds its qualified domain");
-
     const auto warm_capacity =
         warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     auto state = run_rccsd_native_state(

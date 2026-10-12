@@ -18,6 +18,7 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
+    SEMILOCAL_FAMILY_BY_CODE,
     SEMILOCAL_FAMILY_CODES,
 )
 from generativeqc_compiler.xc.automatic_semilocal import (
@@ -1364,13 +1365,19 @@ class NativeKsSnapshot:
             raise NotImplementedError(
                 "native point response requires matching CPU spin state"
             )
-        # The snapshot's functional wire code is not a boolean: newer SCF
-        # methods (for example r2SCAN=2) must never be interpreted as PBE.
-        if self.metadata[6] not in (0, 1) or self.coefficients != (1.0, 1.0, 0.0):
+        # The frozen v1 C ABI transports a two-slot LDA/PBE point-response
+        # kernel. Admit only the generated compatibility binding for this exact
+        # compiler-owned SCF family; do not interpret an arbitrary family code
+        # as a PBE boolean or promote new functional support silently.
+        family = SEMILOCAL_FAMILY_BY_CODE.get(self.metadata[6])
+        response_slot = (
+            family["legacy_cpu_point_response_slot"] if family is not None else None
+        )
+        if response_slot is None or self.coefficients != (1.0, 1.0, 0.0):
             raise NotImplementedError(
-                "native point response requires unscaled LDA/PBE only"
+                "native point response requires a qualified unscaled legacy XC plan"
             )
-        if type(pbe) is not bool or pbe != bool(self.metadata[6]):
+        if type(pbe) is not bool or int(pbe) != response_slot:
             raise ValueError("native response functional mismatch")
         values = [np.asarray(x) for x in (rho, gradient, delta_rho, delta_gradient)]
         n = values[0].size // spins
@@ -1409,7 +1416,7 @@ class NativeKsSnapshot:
         _native.check(
             self._library,
             evaluate(
-                int(pbe),
+                response_slot,
                 *(x.ctypes.data_as(pointer) for x in values),
                 n,
                 output.ctypes.data_as(pointer),

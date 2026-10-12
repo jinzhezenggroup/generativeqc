@@ -16,13 +16,17 @@ PREFIX = r"""
 #include <cassert>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include "cc/solver.hpp"
+#include "molecule/basis.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 namespace probe {
 namespace core = generativeqc::core;
+namespace cc = generativeqc::cc;
+namespace molecule = generativeqc::molecule;
 int rhf_calls = 0, source_calls = 0, allocations = 0;
 unsigned expected_math = 0;
 namespace runtime {
@@ -221,11 +225,12 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     objects = []
     env = dict(os.environ, CCACHE_BASEDIR=str(ROOT))
-    # Compile the complete real policy/domain translation units, not test reimplementations.
+    # Compile real AO counting and policy/domain units, not test reimplementations.
     for source in (
         probe,
         ROOT / "src/scf/cuda/df_source_domain.cpp",
         ROOT / "src/scf/cuda/rhf_policy.cpp",
+        ROOT / "src/molecule/basis.cpp",
     ):
         obj = tmp / (source.stem + ".o")
         subprocess.run(
