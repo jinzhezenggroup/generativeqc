@@ -1,6 +1,5 @@
 #include "generativeqc/geometry_optimizer.hpp"
 
-#include <cassert>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -9,14 +8,18 @@
 
 namespace geo = generativeqc::geometry;
 
+static void require(bool condition, const char* message) {
+  if (!condition) throw std::runtime_error(message);
+}
+
 static void expect_throw(const std::function<void()>& fn, std::string needle) {
   try {
     fn();
   } catch (const std::exception& error) {
-    assert(std::string(error.what()).find(needle) != std::string::npos);
+    require(std::string(error.what()).find(needle) != std::string::npos, "wrong exception text");
     return;
   }
-  assert(false && "expected optimizer failure");
+  throw std::runtime_error("expected optimizer failure");
 }
 
 int main() {
@@ -38,12 +41,12 @@ int main() {
   limits.force_tolerance = 1e-7;
   std::vector<double> start{3, -2, 1};
   auto low = geo::minimize(start, limits, quadratic(0.5, 3));
-  assert(low.steps > 0 && low.max_force < limits.force_tolerance);
-  for (double x : low.coordinates) assert(std::abs(x - 0.5) < 1e-6);
+  require(low.steps > 0 && low.max_force < limits.force_tolerance, "analytic optimizer regression");
+  for (double x : low.coordinates) require(std::abs(x - 0.5) < 1e-6, "analytic optimizer regression");
   auto high = geo::minimize(low.coordinates, limits, quadratic(-0.7, 12));
-  assert(high.steps > 0 && high.max_force < limits.force_tolerance);
-  for (double x : high.coordinates) assert(std::abs(x + 0.7) < 1e-6);
-  assert(high.evaluations >= high.steps + 1);
+  require(high.steps > 0 && high.max_force < limits.force_tolerance, "analytic optimizer regression");
+  for (double x : high.coordinates) require(std::abs(x + 0.7) < 1e-6, "analytic optimizer regression");
+  require(high.evaluations >= high.steps + 1, "analytic optimizer regression");
 
   std::size_t calls = 0;
   auto quartic = [&](std::span<const double> x) -> geo::EnergyForces {
@@ -53,9 +56,9 @@ int main() {
   };
   limits.force_tolerance = 1e-6;
   auto q = geo::minimize(std::vector<double>{1, 0, 0}, limits, quartic);
-  assert(std::abs(q.coordinates[0]) < 0.01);
-  assert(q.max_force <= limits.force_tolerance);
-  assert(calls >= q.steps + 1);
+  require(std::abs(q.coordinates[0]) < 0.01, "analytic optimizer regression");
+  require(q.max_force <= limits.force_tolerance, "analytic optimizer regression");
+  require(calls >= q.steps + 1, "analytic optimizer regression");
 
   expect_throw([&] { geo::minimize(std::vector<double>{1, 2}, limits, quadratic(0, 1)); },
                "atom-major");
