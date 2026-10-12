@@ -1,0 +1,68 @@
+name: Generate fixed high-l PySCF reference
+
+# One-time acquisition on the user-requested fork branch only.
+# Remove this push trigger after retaining the validated authentic receipt.
+on:
+  push:
+    branches: [oracle/cpu-hf-high-l-reference-20261012]
+    paths:
+      - .github/workflows/generate-high-l-reference.yml
+      - tools/generate_cpu_hf_high_l_reference.py
+      - tests/reference_data/cpu_hf_high_l/inputs.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: high-l-reference-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Generate authentic PySCF high-l receipt
+    if: github.repository == 'njzjz-bot/vibeqc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+      PYTHONHASHSEED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.12.14"
+          enable-cache: false
+      - name: Install only the pinned independent reference dependencies
+        run: |
+          uv venv --python 3.12.14 .oracle-venv
+          uv pip install --python .oracle-venv/bin/python --only-binary=:all: \
+            pyscf==2.14.0 numpy==2.3.5 scipy==1.17.0 h5py==3.16.0 threadpoolctl==3.6.0
+      - name: Generate twice in independent CPU-only interpreters
+        run: |
+          ulimit -c 0
+          .oracle-venv/bin/python tools/generate_cpu_hf_high_l_reference.py \
+            --replica first --output oracle-receipts/first.json
+          .oracle-venv/bin/python tools/generate_cpu_hf_high_l_reference.py \
+            --replica second --output oracle-receipts/second.json
+      - name: Validate the complete inventory and independent replay
+        run: |
+          .oracle-venv/bin/python tools/generate_cpu_hf_high_l_reference.py \
+            --verify oracle-receipts/first.json oracle-receipts/second.json \
+            --output oracle-receipts/validated.json --emit
+      - name: Upload only the bounded scientific receipts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cpu-hf-high-l-pyscf-reference-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            oracle-receipts/first.json
+            oracle-receipts/second.json
+            oracle-receipts/validated.json
+          if-no-files-found: error
+          retention-days: 14
