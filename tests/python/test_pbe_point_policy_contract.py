@@ -1,5 +1,7 @@
 """Execute composed family/equal-spin policies through production point ABIs."""
 
+import hashlib
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -35,18 +37,52 @@ def test_compiled_family_equal_spin_point_contract(
         encoding="utf-8",
     )
     binary = tmp_path / "point-policy-contract"
-    native_cxx.build_executable(
-        [ROOT / "tests/native/fixtures/xc_point_policy/contract.cpp"],
-        binary,
-        compile_args=(
-            "-std=c++17",
-            "-O2",
-            "-ffp-contract=off",
-            "-fno-fast-math",
-            f"-I{tmp_path}",
-            f"-I{ROOT / 'src'}",
-        ),
-    )
+    try:
+        native_cxx.build_executable(
+            [ROOT / "tests/native/fixtures/xc_point_policy/contract.cpp"],
+            binary,
+            compile_args=(
+                "-std=c++17",
+                "-O2",
+                "-ffp-contract=off",
+                "-fno-fast-math",
+                f"-I{tmp_path}",
+                f"-I{ROOT / 'src'}",
+            ),
+        )
+    except subprocess.CalledProcessError as exc:
+        evidence = ROOT / ".artifacts/point-policy-contract-native-failure"
+        evidence.mkdir(parents=True, exist_ok=True)
+        inputs = {}
+        for source_file in (
+            tmp_path / "point_program.hpp",
+            tmp_path / "point_dispatch.hpp",
+            tmp_path / "cuda_runtime_api.h",
+            ROOT / "tests/native/fixtures/xc_point_policy/contract.cpp",
+        ):
+            data = source_file.read_bytes()
+            (evidence / source_file.name).write_bytes(data)
+            inputs[source_file.name] = hashlib.sha256(data).hexdigest()
+        (evidence / "failure.json").write_text(
+            json.dumps(
+                {
+                    "command": exc.cmd,
+                    "returncode": exc.returncode,
+                    "stdout": exc.stdout,
+                    "stderr": exc.stderr,
+                    "input_sha256": inputs,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        diagnostic = f"Native probe evidence: {evidence}\n{(exc.stderr or '')[:6000]}"
+        if hasattr(exc, "add_note"):
+            exc.add_note(diagnostic)
+        else:
+            print(diagnostic)
+        raise
     completed = subprocess.run(
         [
             str(binary),
