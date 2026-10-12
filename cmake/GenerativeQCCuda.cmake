@@ -335,8 +335,6 @@ macro(generativeqc_configure_cuda_backend target)
     # Preserve hashed source/asset identity separately from generator imports.
     set(_generativeqc_stationary_contract_assets
       "src/dft/stationary_gradient_cuda.cuh"
-      "src/dft/native_stationary_shared_kernels.hpp"
-      "src/dft/native_stationary_shared_kernels.cu"
       "src/dft/becke_scaled_policy.hpp"
       "src/dft/grid_task_view.cuh"
       "src/dft/xc_point.hpp"
@@ -495,11 +493,14 @@ macro(generativeqc_configure_cuda_backend target)
         OUTPUTS ${_generativeqc_native_stationary_sources}
         DEPENDS ${_generativeqc_stationary_contract_inputs}
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_runtime.cuh"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_shared_kernels.hpp"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_shared_kernels.cu"
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_stationary_binding.hpp"
         ARGS --output-dir "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}" --all-profiles
              --profiles ${_generativeqc_native_stationary_profiles}
         COMMENT "Generating compiler-selected CUDA stationary force graphs")
       add_library(generativeqc_native_stationary STATIC
+                  src/dft/native_stationary_shared_kernels.cu
                   ${_generativeqc_native_stationary_sources}
                   $<TARGET_OBJECTS:generativeqc_stationary_sp_primitives>)
       add_dependencies(generativeqc_native_stationary generativeqc_native_stationary_codegen)

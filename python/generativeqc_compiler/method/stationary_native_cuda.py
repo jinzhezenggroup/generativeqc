@@ -84,12 +84,20 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         )
     # Native source reduction is a complete ordered unit sum in ProgramIR.
     # Its only CUDA kernel is linked once for all admitted method graphs.
-    reduction = plan.reduction_program(atoms=1).outputs["gradient"]
+    reduction_program = plan.reduction_program(atoms=1)
+    reduction = reduction_program.outputs["gradient"]
     if (
         reduction.op != "add"
+        or reduction.spec.shape != (1, 3)
+        or reduction.spec.dtype != "float64"
+        or any(
+            node.op != "input"
+            or node.spec.shape != (1, 3)
+            or node.spec.dtype != "float64"
+            for node in reduction.inputs
+        )
         or tuple(node.attrs.get("name") for node in reduction.inputs) != sources
-        or tuple(reduction.attrs.get("coefficients", ()))
-        != (Fraction(1),) * len(sources)
+        or tuple(reduction.attrs.get("coefficients", ())) != ((1, 1),) * len(sources)
     ):
         raise ValueError(
             "native shared CUDA reduction requires the exact unit-source sum"
@@ -168,6 +176,7 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
     return (
         '#include "dft/cuda_stationary_binding.hpp"\n'
         "#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1\n"
+        f"// stationary-reduction-program: {reduction_program.logical_hash}\n"
         + aliases
         + "\n"
         + wrapper

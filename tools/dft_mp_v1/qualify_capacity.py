@@ -310,7 +310,7 @@ NATIVE_GRID_ABI_CONTRACT_SHA256 = (
 # The compiler now supplies the inventory and grouped native generation; retain
 # the full wiring/discovery-policy digest so either integration fails closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "1db651c7a1af88afbb4fc931d6e6635c70dfac68679f992b7ff07f0d1ffea859"
+    "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"

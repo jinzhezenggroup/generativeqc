@@ -47,6 +47,7 @@ def test_independent_stationary_options_keep_linkable_binding(
         "  set_property(GLOBAL APPEND PROPERTY ${target}_sources ${ARGN})\n"
         "endfunction()\n"
         "function(add_library target kind)\n"
+        "  set_property(GLOBAL APPEND PROPERTY ${target}_sources ${ARGN})\n"
         "  set_property(GLOBAL APPEND PROPERTY libraries ${target}:${kind})\n"
         "endfunction()\n"
         "function(generativeqc_register_generated_sources)\n"
@@ -74,6 +75,8 @@ def test_independent_stationary_options_keep_linkable_binding(
         + "generativeqc_configure_cuda_backend(core)\n"
         + "get_property(sources GLOBAL PROPERTY core_sources)\n"
         + "get_property(libraries GLOBAL PROPERTY libraries)\n"
+        + "get_property(native_sources GLOBAL PROPERTY generativeqc_native_stationary_sources)\n"
+        + f'file(WRITE "{tmp_path.as_posix()}/native_sources.txt" "${{native_sources}}")\n'
         + f'file(WRITE "{tmp_path.as_posix()}/sources.txt" "${{sources}}")\n'
         + f'file(WRITE "{tmp_path.as_posix()}/libraries.txt" "${{libraries}}")\n'
     )
@@ -86,6 +89,10 @@ def test_independent_stationary_options_keep_linkable_binding(
     )
     libraries = (tmp_path / "libraries.txt").read_text().split(";")
     assert any(entry.endswith(":SHARED") for entry in libraries) == python_aot
+    native_sources = (tmp_path / "native_sources.txt").read_text().split(";")
+    assert native_sources.count("src/dft/native_stationary_shared_kernels.cu") == int(
+        native
+    )
     # Link the actual CMake-selected implementations of this host ABI. Other
     # CUDA-core sources and device objects belong to hosted CUDA integration.
     selected = []
