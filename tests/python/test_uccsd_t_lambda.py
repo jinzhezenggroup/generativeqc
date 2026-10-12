@@ -331,25 +331,9 @@ def test_corrected_admission_precedes_execution(
         PreparedUCCSDTLambda(standard, triples, options=options)
 
 
-@pytest.mark.parametrize(
-    "fault",
-    [
-        "state",
-        "correction",
-        "packed",
-        "bars",
-        "energies",
-        "missing_triples_energy",
-        "missing_correlation_energy",
-        "backend",
-        "channel",
-    ],
-)
-def test_corrected_qualification_does_not_trust_records(
-    small_corrected: tuple, fault: str
+def _assert_corrected_qualification_rejects_record(
+    owner: PreparedUCCSDTLambda, result: Any, fault: str
 ) -> None:
-    _, _, owner = small_corrected
-    result = owner.solve()
     if fault == "state":
         forged = replace(
             result,
@@ -418,6 +402,29 @@ def test_corrected_qualification_does_not_trust_records(
         forged = replace(result, triples_response=changed)
     with pytest.raises((ValueError, ImplicitSolveError)):
         owner.qualify(forged)
+
+
+def test_corrected_qualification_does_not_trust_records(small_corrected: tuple) -> None:
+    # Only detached result copies change. Keep destructive owner/lifetime and
+    # monkeypatch tests on their own function-scoped small_corrected fixtures.
+    _, _, owner = small_corrected
+    result = owner.solve()
+    for fault in (
+        "state",
+        "correction",
+        "packed",
+        "bars",
+        "energies",
+        "missing_triples_energy",
+        "missing_correlation_energy",
+        "backend",
+        "channel",
+    ):
+        _assert_corrected_qualification_rejects_record(owner, result, fault)
+    # A rejected record must neither poison the owner nor mutate the valid one.
+    packed, diagnostics = owner.qualify(result)
+    np.testing.assert_array_equal(packed, result.packed_multipliers)
+    assert diagnostics["stationarity_norm"] <= owner.options.lambda_tolerance
 
 
 def test_corrected_lifetimes_and_detached_records(small_corrected: tuple) -> None:
