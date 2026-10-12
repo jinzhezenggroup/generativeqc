@@ -13,7 +13,7 @@ import os
 import time
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from generativeqc_compiler.array_api import VibeArray, input_array
@@ -24,6 +24,10 @@ from typing_extensions import Self
 
 from . import _array_api_eager as eager
 
+if TYPE_CHECKING:
+    from generativeqc.ks import KsOptions
+    from generativeqc_compiler.method import MethodIR
+
 _PREFIX = "__gqc_molecular_"
 _CAPTURE: ContextVar[_MolecularCapture | None] = ContextVar(
     "generativeqc_molecular_capture", default=None
@@ -33,6 +37,10 @@ _CAPTURE: ContextVar[_MolecularCapture | None] = ContextVar(
 @dataclass(frozen=True, init=False)
 class MolecularModel:
     """Immutable, method-neutral native molecular energy source.
+
+    ``method`` accepts a native selector or an immutable, audited MethodIR.
+    ``ks_options`` may specify the grid and XC scheduling but cannot override
+    the method-owned XC composition. Unsupported science fails via Calculator.
 
     Native Calculator owns method resolution, electronic structure and its
     available analytic forces; TensorIR compiles only the surrounding algebra
@@ -47,7 +55,7 @@ class MolecularModel:
     """
 
     _numbers: tuple[int, ...]
-    _method: str
+    _method: str | MethodIR
     _basis: str
     _charge: int
     _multiplicity: int
@@ -57,12 +65,13 @@ class MolecularModel:
     _device: int
     _controls: tuple[tuple[str, Any], ...]
     _resource_budget: Any
+    _ks_options: KsOptions | None
 
     def __init__(
         self,
         elements: tuple[str | int, ...],
         *,
-        method: str,
+        method: str | MethodIR,
         basis: str = "sto-3g",
         charge: int = 0,
         multiplicity: int = 1,
@@ -70,6 +79,7 @@ class MolecularModel:
         device: int = 0,
         density_fitting: str = "none",
         auxiliary_basis: str | None = None,
+        ks_options: KsOptions | None = None,
         max_iterations: int = 100,
         diis_history: int = 8,
         energy_tolerance: float = 1e-12,
@@ -86,6 +96,7 @@ class MolecularModel:
         Compiled owners must be closed to release native workspaces.
         """
         from generativeqc_compiler.common.resources import ResourceBudget
+        from generativeqc_compiler.method import MethodIR
 
         from generativeqc.elements import atomic_number
 
@@ -94,9 +105,12 @@ class MolecularModel:
         numbers = tuple(atomic_number(element) for element in elements)
         if type(charge) is not int or not -(2**31) <= charge < 2**31:
             raise ValueError("molecular charge must be an int32")
-        if not isinstance(method, str) or not method.strip():
-            raise ValueError("molecular method must be a nonempty native selector")
-        method = method.strip().lower()
+        if isinstance(method, str):
+            if not method.strip():
+                raise ValueError("molecular method must be a nonempty native selector")
+            method = method.strip().lower()
+        elif not isinstance(method, MethodIR):
+            raise TypeError("molecular method must be a native selector or MethodIR")
         electrons = sum(numbers) - charge
         if method == "rhf" and (electrons <= 0 or electrons % 2):
             raise ValueError("RHF requires a positive even electron count")
@@ -156,6 +170,19 @@ class MolecularModel:
         ):
             raise ValueError("auxiliary_basis requires enabled density fitting")
 
+        if ks_options is not None:
+            from generativeqc.ks import KsOptions
+
+            if not isinstance(ks_options, KsOptions):
+                raise TypeError("molecular ks_options must be a KsOptions record")
+            if (
+                ks_options.functional is not None
+                or ks_options.composition is not None
+                or ks_options._method_ir is not None
+            ):
+                raise ValueError(
+                    "molecular ks_options controls grid/schedule only; XC belongs to method"
+                )
         object.__setattr__(self, "_numbers", numbers)
         object.__setattr__(self, "_method", method)
         object.__setattr__(self, "_basis", basis)
@@ -177,11 +204,16 @@ class MolecularModel:
             ),
         )
         object.__setattr__(self, "_resource_budget", resource_budget)
+        object.__setattr__(self, "_ks_options", ks_options)
 
     def _payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema": "generativeqc.array-api.molecular-source/v1",
-            "native_method": self._method,
+            "native_method": (
+                self._method
+                if isinstance(self._method, str)
+                else f"methodir:{self._method.identity}"
+            ),
             "atomic_numbers": self._numbers,
             "basis": self._basis,
             "charge": self._charge,
@@ -198,6 +230,12 @@ class MolecularModel:
                 None if self._resource_budget is None else asdict(self._resource_budget)
             ),
         }
+        if not isinstance(self._method, str):
+            # Canonical science, not a user label, determines deduplication/cache IDs.
+            payload["method_ir_identity"] = self._method.identity
+        if self._ks_options is not None:
+            payload["ks_options"] = asdict(self._ks_options)
+        return payload
 
     def _calculator(self) -> Any:
         from generativeqc import Calculator
@@ -213,6 +251,7 @@ class MolecularModel:
             precision="fp64",
             density_fitting=self._density_fitting,
             auxiliary_basis=self._auxiliary_basis,
+            ks_options=self._ks_options,
             initial_guess=None,
             resource_budget=self._resource_budget,
             **dict(self._controls),
@@ -528,7 +567,11 @@ class _MolecularRuntime:
             previous = self.diagnostics.get(source.energy, {})
             self.diagnostics[source.energy] = {
                 "source": source.energy,
-                "method": getattr(source.operator, "_method", "rhf"),
+                "method": (
+                    source.operator._method
+                    if isinstance(source.operator._method, str)
+                    else source.operator._method.identifier
+                ),
                 "calls": previous.get("calls", 0) + 1,
                 "force_calls": previous.get("force_calls", 0) + int(derivative),
                 "total_iterations": previous.get("total_iterations", 0)
