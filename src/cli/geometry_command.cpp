@@ -19,8 +19,8 @@
 
 #include "cli/native_basis.hpp"
 #include "cli_method_catalog.hpp"
-#include "generativeqc/geometry_optimizer.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "generativeqc/geometry_optimizer.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
 
@@ -70,9 +70,8 @@ bool is_correlated(const RunOptions& o) {
 }
 
 void select_stage_method(RunOptions& input, std::string name) {
-  std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
+  std::transform(name.begin(), name.end(), name.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   if (name == "ccsd(t)") name = "rccsd(t)";
   if (name == "df-ccsd(t)") name = "df-rccsd(t)";
   input.composition = nullptr;
@@ -132,13 +131,13 @@ std::vector<Stage> build_stages(const RunOptions& target) {
     const bool last = i + 1 == names.size();
     stage.inputs = target;
     select_stage_method(stage.inputs, names[i]);
-    if (last && (stage.inputs.method != target.method ||
-                 stage.inputs.composition != target.composition))
+    if (last &&
+        (stage.inputs.method != target.method || stage.inputs.composition != target.composition))
       throw UsageError("the final --stages method must match --method");
     if (last) stage.inputs = target;
     if (!last) {
-      stage.inputs.basis_name = target.preopt_basis_name.empty()
-                                    ? target.basis_name : target.preopt_basis_name;
+      stage.inputs.basis_name =
+          target.preopt_basis_name.empty() ? target.basis_name : target.preopt_basis_name;
       stage.inputs.basis_explicit = !target.preopt_basis_name.empty();
       stage.inputs.density_fitting = GENERATIVEQC_DENSITY_FITTING_NONE;
       stage.inputs.density_fitting_explicit = false;
@@ -161,11 +160,13 @@ std::vector<Stage> build_stages(const RunOptions& target) {
     }
     stage.auto_preopt = !last && target.optimization_stages.empty();
     stage.optimizer.max_steps = target.optimization_max_steps;
-    stage.optimizer.force_tolerance = last ? target.optimization_fmax
-        : (i == 0 ? std::max(8e-3, target.optimization_fmax * 12)
-                  : std::max(2e-3, target.optimization_fmax * 4));
-    stage.optimizer.max_atom_step = last ? target.optimization_max_step
-        : std::max(target.optimization_max_step, i == 0 ? 0.7 : 0.45);
+    stage.optimizer.force_tolerance = last
+                                          ? target.optimization_fmax
+                                          : (i == 0 ? std::max(8e-3, target.optimization_fmax * 12)
+                                                    : std::max(2e-3, target.optimization_fmax * 4));
+    stage.optimizer.max_atom_step =
+        last ? target.optimization_max_step
+             : std::max(target.optimization_max_step, i == 0 ? 0.7 : 0.45);
     stages.push_back(std::move(stage));
   }
   return stages;
@@ -180,8 +181,7 @@ generativeqc_method_descriptor descriptor(const RunOptions& o, const System* aux
   d.diis_history = o.diis_history;
   d.energy_tolerance = o.energy_tolerance.value_or(is_xtb(o) ? 1e-10 : 1e-12);
   d.density_tolerance = o.density_tolerance.value_or(is_xtb(o) ? 1e-8 : 1e-10);
-  d.screening_tolerance = o.screening_tolerance.value_or(
-      is_xtb(o) || is_correlated(o) ? 0 : 1e-14);
+  d.screening_tolerance = o.screening_tolerance.value_or(is_xtb(o) || is_correlated(o) ? 0 : 1e-14);
   d.density_fitting_mode = o.density_fitting;
   d.density_fitting_auxiliary_basis = auxiliary ? auxiliary->get() : nullptr;
   d.density_fitting_relative_threshold = o.density_fitting_threshold;
@@ -222,9 +222,11 @@ Calculation prepare(Context& context, System& system, const RunOptions& o, const
 class Objective {
  public:
   Objective(RunOptions inputs, const std::vector<generativeqc_atom>& atoms)
-      : inputs_(std::move(inputs)), atoms_(atoms),
+      : inputs_(std::move(inputs)),
+        atoms_(atoms),
         context_(generativeqc_context_descriptor{sizeof(generativeqc_context_descriptor),
-                 GENERATIVEQC_ABI_VERSION, inputs_.device_id, inputs_.backend}) {
+                                                 GENERATIVEQC_ABI_VERSION, inputs_.device_id,
+                                                 inputs_.backend}) {
     if (!is_xtb(inputs_)) {
       orbital_ = expand_basis_input(
           inputs_.basis_name, atoms_,
@@ -232,10 +234,10 @@ class Objective {
       inputs_.representation = orbital_.representation;
     }
     if (!is_xtb(inputs_) && inputs_.auxiliary_basis_explicit) {
-      auxiliary_ = expand_basis_input(
-          inputs_.auxiliary_basis_name, atoms_,
-          !is_local_basis(inputs_.auxiliary_basis_name)
-              ? std::optional(inputs_.representation) : std::nullopt);
+      auxiliary_ = expand_basis_input(inputs_.auxiliary_basis_name, atoms_,
+                                      !is_local_basis(inputs_.auxiliary_basis_name)
+                                          ? std::optional(inputs_.representation)
+                                          : std::nullopt);
       if (!auxiliary_.ecp_terms.empty())
         throw UsageError("auxiliary optimization basis cannot contain ECP potentials");
     }
@@ -249,11 +251,12 @@ class Objective {
       atoms_[i].y = coords[3 * i + 1];
       atoms_[i].z = coords[3 * i + 2];
     }
-    const auto system_descriptor = make_system_descriptor(
-        orbital_, is_xtb(inputs_), inputs_.representation);
-    System system = orbital_.ecp_terms.empty()
-        ? System(context_, system_descriptor)
-        : System(context_, system_descriptor, orbital_.core_electrons, orbital_.ecp_terms);
+    const auto system_descriptor =
+        make_system_descriptor(orbital_, is_xtb(inputs_), inputs_.representation);
+    System system =
+        orbital_.ecp_terms.empty()
+            ? System(context_, system_descriptor)
+            : System(context_, system_descriptor, orbital_.core_electrons, orbital_.ecp_terms);
     std::optional<System> aux;
     if (inputs_.auxiliary_basis_explicit) {
       aux.emplace(context_, make_system_descriptor(auxiliary_, false, auxiliary_.representation));
@@ -262,10 +265,8 @@ class Objective {
     if (!(calculation.supported_properties() & GENERATIVEQC_PROPERTY_FORCES))
       throw Error(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                   "analytic forces are unavailable in this prepared geometry stage");
-    auto result = calculation.execute(GENERATIVEQC_PROPERTY_ENERGY |
-                                      GENERATIVEQC_PROPERTY_FORCES);
-    if (!result.forces)
-      throw std::runtime_error("native force owner returned no analytic forces");
+    auto result = calculation.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+    if (!result.forces) throw std::runtime_error("native force owner returned no analytic forces");
     return {result.energy, std::move(*result.forces)};
   }
 
@@ -273,13 +274,16 @@ class Objective {
   generativeqc_system_descriptor make_system_descriptor(
       const NativeBasisData& basis, bool xtb,
       generativeqc_basis_representation representation) const {
-    return {sizeof(generativeqc_system_descriptor), GENERATIVEQC_ABI_VERSION,
-            atoms_.data(), static_cast<std::uint32_t>(atoms_.size()),
+    return {sizeof(generativeqc_system_descriptor),
+            GENERATIVEQC_ABI_VERSION,
+            atoms_.data(),
+            static_cast<std::uint32_t>(atoms_.size()),
             xtb ? nullptr : basis.shells.data(),
             xtb ? 0u : static_cast<std::uint32_t>(basis.shells.size()),
             xtb ? nullptr : basis.primitives.data(),
             xtb ? 0u : static_cast<std::uint32_t>(basis.primitives.size()),
-            inputs_.charge, inputs_.multiplicity,
+            inputs_.charge,
+            inputs_.multiplicity,
             xtb ? GENERATIVEQC_BASIS_CARTESIAN : representation};
   }
   RunOptions inputs_;
@@ -293,19 +297,17 @@ void print_plan(const std::vector<Stage>& stages) {
   for (std::size_t i = 0; i < stages.size(); ++i) {
     if (i) std::cout << ',';
     const auto& s = stages[i];
-    std::cout << "{\"method\":\"" << json_escape(s.inputs.method_name)
-              << "\",\"backend\":\"" << backend_name(s.inputs.backend)
-              << "\",\"basis\":\"" << (is_xtb(s.inputs) ? "intrinsic" : json_escape(s.inputs.basis_name))
+    std::cout << "{\"method\":\"" << json_escape(s.inputs.method_name) << "\",\"backend\":\""
+              << backend_name(s.inputs.backend) << "\",\"basis\":\""
+              << (is_xtb(s.inputs) ? "intrinsic" : json_escape(s.inputs.basis_name))
               << "\",\"force_tolerance\":" << s.optimizer.force_tolerance
               << ",\"max_steps\":" << s.optimizer.max_steps
-              << ",\"optional_if_unsupported\":" << (s.auto_preopt ? "true" : "false")
-              << '}';
+              << ",\"optional_if_unsupported\":" << (s.auto_preopt ? "true" : "false") << '}';
   }
   std::cout << "]}\n";
 }
 
-void write_xyz(const std::filesystem::path& path,
-               const std::vector<generativeqc_atom>& atoms,
+void write_xyz(const std::filesystem::path& path, const std::vector<generativeqc_atom>& atoms,
                std::span<const double> coords, double energy) {
   if (std::filesystem::exists(path))
     throw UsageError("optimized XYZ output already exists (refusing to overwrite): " +
@@ -313,12 +315,12 @@ void write_xyz(const std::filesystem::path& path,
   // Atomic numbers in XYZ are supported by the native CLI's own reader.
   std::ofstream stream(path, std::ios::out | std::ios::trunc);
   if (!stream) throw std::runtime_error("cannot create optimized XYZ: " + path.string());
-  stream << atoms.size() << "\noptimized with GenerativeQC; E=" << std::setprecision(17)
-         << energy << " Hartree; units=angstrom\n";
+  stream << atoms.size() << "\noptimized with GenerativeQC; E=" << std::setprecision(17) << energy
+         << " Hartree; units=angstrom\n";
   for (std::size_t i = 0; i < atoms.size(); ++i) {
-    stream << atoms[i].atomic_number << ' ' << coords[i * 3] / 1.8897261254578281
-           << ' ' << coords[i * 3 + 1] / 1.8897261254578281
-           << ' ' << coords[i * 3 + 2] / 1.8897261254578281 << '\n';
+    stream << atoms[i].atomic_number << ' ' << coords[i * 3] / 1.8897261254578281 << ' '
+           << coords[i * 3 + 1] / 1.8897261254578281 << ' '
+           << coords[i * 3 + 2] / 1.8897261254578281 << '\n';
   }
   if (!stream) throw std::runtime_error("cannot finish optimized XYZ: " + path.string());
 }
@@ -354,16 +356,14 @@ int geometry_command(const RunOptions& options, std::vector<generativeqc_atom> a
       } catch (const Error& error) {
         // Only auto-selected preparatory NOT_IMPLEMENTED may be skipped.
         // Never skip failed convergence, numerical output or target failure.
-        if (!stage.auto_preopt || error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
-          throw;
+        if (!stage.auto_preopt || error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) throw;
         record.status = "skipped_unsupported";
         record.detail = error.what();
         reports.push_back(std::move(record));
         continue;
       }
       bool use_first = true;
-      final = geometry::minimize(coords, stage.optimizer,
-                                 [&](std::span<const double> position) {
+      final = geometry::minimize(coords, stage.optimizer, [&](std::span<const double> position) {
         if (use_first) {
           use_first = false;
           return *initial;
@@ -386,27 +386,24 @@ int geometry_command(const RunOptions& options, std::vector<generativeqc_atom> a
     write_xyz(options.optimization_output, atoms, coords, final.energy);
 
   if (options.json) {
-    std::cout << "{\"status\":\"converged\",\"method\":\""
-              << json_escape(options.method_name) << "\",\"energy_hartree\":"
-              << final.energy << ",\"max_force_hartree_per_bohr\":" << final.max_force
-              << ",\"coordinates_bohr\":[";
+    std::cout << "{\"status\":\"converged\",\"method\":\"" << json_escape(options.method_name)
+              << "\",\"energy_hartree\":" << final.energy
+              << ",\"max_force_hartree_per_bohr\":" << final.max_force << ",\"coordinates_bohr\":[";
     for (std::size_t i = 0; i < atoms.size(); ++i) {
       if (i) std::cout << ',';
-      std::cout << '[' << coords[3*i] << ',' << coords[3*i+1] << ','
-                << coords[3*i+2] << ']';
+      std::cout << '[' << coords[3 * i] << ',' << coords[3 * i + 1] << ',' << coords[3 * i + 2]
+                << ']';
     }
     std::cout << "],\"stages\":[";
     for (std::size_t i = 0; i < reports.size(); ++i) {
       const auto& r = reports[i];
       if (i) std::cout << ',';
-      std::cout << "{\"method\":\"" << json_escape(r.method)
-                << "\",\"backend\":\"" << backend_name(r.backend)
-                << "\",\"basis\":\"" << json_escape(r.basis)
+      std::cout << "{\"method\":\"" << json_escape(r.method) << "\",\"backend\":\""
+                << backend_name(r.backend) << "\",\"basis\":\"" << json_escape(r.basis)
                 << "\",\"status\":\"" << r.status << '"';
       if (r.status == "converged")
         std::cout << ",\"energy_hartree\":" << r.outcome.energy
-                  << ",\"max_force\":" << r.outcome.max_force
-                  << ",\"steps\":" << r.outcome.steps
+                  << ",\"max_force\":" << r.outcome.max_force << ",\"steps\":" << r.outcome.steps
                   << ",\"evaluations\":" << r.outcome.evaluations;
       else
         std::cout << ",\"reason\":\"" << json_escape(r.detail) << '"';
@@ -420,16 +417,15 @@ int geometry_command(const RunOptions& options, std::vector<generativeqc_atom> a
     for (const auto& r : reports) {
       std::cout << "stage: " << r.method << " (" << r.status << ")";
       if (r.status == "converged")
-        std::cout << " steps=" << r.outcome.steps
-                  << " evaluations=" << r.outcome.evaluations;
+        std::cout << " steps=" << r.outcome.steps << " evaluations=" << r.outcome.evaluations;
       else
         std::cout << " reason=" << r.detail;
       std::cout << '\n';
     }
     std::cout << "coordinates_bohr:\n";
     for (std::size_t i = 0; i < atoms.size(); ++i)
-      std::cout << "  " << atoms[i].atomic_number << ' ' << coords[3*i] << ' '
-                << coords[3*i+1] << ' ' << coords[3*i+2] << '\n';
+      std::cout << "  " << atoms[i].atomic_number << ' ' << coords[3 * i] << ' '
+                << coords[3 * i + 1] << ' ' << coords[3 * i + 2] << '\n';
   }
   return 0;
 }

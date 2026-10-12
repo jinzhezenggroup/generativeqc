@@ -26,8 +26,8 @@
 #include <unistd.h>
 #endif
 
-#include "cli/native_basis.hpp"
 #include "cli/geometry_command.hpp"
+#include "cli/native_basis.hpp"
 #include "cli/options.hpp"
 #include "cli/profiles.hpp"
 #include "cli/resources.hpp"
@@ -251,7 +251,8 @@ void print_usage(std::ostream& out) {
          "  --json                   Emit machine-readable output\n"
          "\nNative geometry optimize options (default: automatic cheap-to-target):\n"
          "  --stages METHOD,METHOD,...  Explicit ordered stages; final must match --method\n"
-         "  --preopt-basis NAME      Gaussian basis for preliminary stages (default: target basis)\n"
+         "  --preopt-basis NAME      Gaussian basis for preliminary stages (default: target "
+         "basis)\n"
          "  --opt-fmax F             Final max atomic force (Hartree/Bohr; default: 0.0003)\n"
          "  --opt-max-steps N        Max geometry steps per stage (default: 80)\n"
          "  --opt-max-step F         Max per-atom displacement (Bohr; default: 0.35)\n"
@@ -627,12 +628,10 @@ RunOptions parse_run(int argc, char** argv) {
       options.grid_explicit = true;
     } else if (optimizing && option == "--stages") {
       options.optimization_stages = std::string(value());
-      if (options.optimization_stages.empty())
-        throw UsageError("--stages must not be empty");
+      if (options.optimization_stages.empty()) throw UsageError("--stages must not be empty");
     } else if (optimizing && option == "--preopt-basis") {
       options.preopt_basis_name = std::string(value());
-      if (options.preopt_basis_name.empty())
-        throw UsageError("--preopt-basis requires a name");
+      if (options.preopt_basis_name.empty()) throw UsageError("--preopt-basis requires a name");
       if (!generativeqc::cli::is_local_basis(options.preopt_basis_name)) {
         options.preopt_basis_name = lower(options.preopt_basis_name);
         std::replace(options.preopt_basis_name.begin(), options.preopt_basis_name.end(), '_', '-');
@@ -642,13 +641,13 @@ RunOptions parse_run(int argc, char** argv) {
     } else if (optimizing && option == "--opt-max-steps") {
       options.optimization_max_steps = parse_positive_u32(value(), "optimization steps");
     } else if (optimizing && option == "--opt-max-step") {
-      options.optimization_max_step = parse_positive_finite_double(value(), "optimization max step");
+      options.optimization_max_step =
+          parse_positive_finite_double(value(), "optimization max step");
     } else if (optimizing && option == "--plan-only") {
       options.optimization_plan_only = true;
     } else if (optimizing && option == "--output") {
       options.optimization_output = std::string(value());
-      if (options.optimization_output.empty())
-        throw UsageError("--output requires a filename");
+      if (options.optimization_output.empty()) throw UsageError("--output requires a filename");
     } else if (option == "--forces") {
       options.forces = true;
     } else if (option == "--json") {
@@ -1144,8 +1143,7 @@ int main(int argc, char** argv) {
         return 0;
       }
       const auto options = parse_run(argc, argv);
-      if (!options.optimization_plan_only &&
-          options.backend == GENERATIVEQC_BACKEND_CUDA &&
+      if (!options.optimization_plan_only && options.backend == GENERATIVEQC_BACKEND_CUDA &&
           options.density_fitting != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE)
         generativeqc::cli::activate_local_profile(argc, argv, options.device_id);
       return generativeqc::cli::geometry_command(options, read_xyz(options));

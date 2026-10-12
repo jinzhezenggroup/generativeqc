@@ -93,7 +93,8 @@ inline Result minimize(std::span<const double> initial, const Options& options,
     if (fmax <= options.force_tolerance)
       return {std::move(x), current.energy, fmax, step, evaluations};
     if (step == options.max_steps)
-      throw std::runtime_error("geometry optimization exhausted its step budget without convergence");
+      throw std::runtime_error(
+          "geometry optimization exhausted its step budget without convergence");
 
     std::vector<double> g(n), direction(n);
     for (std::size_t i = 0; i < n; ++i) g[i] = -current.forces[i];
@@ -113,8 +114,7 @@ inline Result minimize(std::span<const double> initial, const Options& options,
     }
     for (std::size_t j = 0; j < history.size(); ++j) {
       const double beta = history[j].inv_sy * dot(history[j].y, direction);
-      for (std::size_t i = 0; i < n; ++i)
-        direction[i] += history[j].s[i] * (alpha[j] - beta);
+      for (std::size_t i = 0; i < n; ++i) direction[i] += history[j].s[i] * (alpha[j] - beta);
     }
     for (double& v : direction) v = -v;
     double slope = dot(g, direction);

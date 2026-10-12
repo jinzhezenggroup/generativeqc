@@ -1,10 +1,10 @@
-#include "generativeqc/geometry_optimizer.hpp"
-
 #include <cmath>
 #include <functional>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "generativeqc/geometry_optimizer.hpp"
 
 namespace geo = generativeqc::geometry;
 
@@ -42,10 +42,13 @@ int main() {
   std::vector<double> start{3, -2, 1};
   auto low = geo::minimize(start, limits, quadratic(0.5, 3));
   require(low.steps > 0 && low.max_force < limits.force_tolerance, "analytic optimizer regression");
-  for (double x : low.coordinates) require(std::abs(x - 0.5) < 1e-6, "analytic optimizer regression");
+  for (double x : low.coordinates)
+    require(std::abs(x - 0.5) < 1e-6, "analytic optimizer regression");
   auto high = geo::minimize(low.coordinates, limits, quadratic(-0.7, 12));
-  require(high.steps > 0 && high.max_force < limits.force_tolerance, "analytic optimizer regression");
-  for (double x : high.coordinates) require(std::abs(x + 0.7) < 1e-6, "analytic optimizer regression");
+  require(high.steps > 0 && high.max_force < limits.force_tolerance,
+          "analytic optimizer regression");
+  for (double x : high.coordinates)
+    require(std::abs(x + 0.7) < 1e-6, "analytic optimizer regression");
   require(high.evaluations >= high.steps + 1, "analytic optimizer regression");
 
   std::size_t calls = 0;
@@ -62,20 +65,35 @@ int main() {
 
   expect_throw([&] { geo::minimize(std::vector<double>{1, 2}, limits, quadratic(0, 1)); },
                "atom-major");
-  expect_throw([&] { geo::minimize(start, limits, [](std::span<const double>) {
-                 return geo::EnergyForces{0, {1}};
-               }); }, "invalid forces");
-  expect_throw([&] { geo::minimize(start, limits, [](std::span<const double> x) {
-                 return geo::EnergyForces{std::nan(""), std::vector<double>(x.size(), 0)};
-               }); }, "nonfinite");
+  expect_throw(
+      [&] {
+        geo::minimize(start, limits,
+                      [](std::span<const double>) { return geo::EnergyForces{0, {1}}; });
+      },
+      "invalid forces");
+  expect_throw(
+      [&] {
+        geo::minimize(start, limits, [](std::span<const double> x) {
+          return geo::EnergyForces{std::nan(""), std::vector<double>(x.size(), 0)};
+        });
+      },
+      "nonfinite");
   geo::Options short_run = limits;
   short_run.max_steps = 1;
   short_run.max_atom_step = 1e-5;
   expect_throw([&] { geo::minimize(start, short_run, quadratic(0, 3)); }, "step budget");
-  expect_throw([&] { geo::minimize(start, limits, [](std::span<const double> x) {
-                 return geo::EnergyForces{0, std::vector<double>(x.size(), 1)};
-               }); }, "line search failed");
-  expect_throw([&] { geo::minimize(start, limits, [](std::span<const double>) -> geo::EnergyForces {
-                 throw std::runtime_error("electronic method did not converge");
-               }); }, "electronic method did not converge");
+  expect_throw(
+      [&] {
+        geo::minimize(start, limits, [](std::span<const double> x) {
+          return geo::EnergyForces{0, std::vector<double>(x.size(), 1)};
+        });
+      },
+      "line search failed");
+  expect_throw(
+      [&] {
+        geo::minimize(start, limits, [](std::span<const double>) -> geo::EnergyForces {
+          throw std::runtime_error("electronic method did not converge");
+        });
+      },
+      "electronic method did not converge");
 }

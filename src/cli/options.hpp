@@ -59,7 +59,7 @@ struct RunOptions {
   std::string preopt_basis_name;
   std::string optimization_output;
   std::uint32_t optimization_max_steps{80};
-  double optimization_fmax{3e-4};       // Hartree/Bohr
+  double optimization_fmax{3e-4};      // Hartree/Bohr
   double optimization_max_step{0.35};  // Bohr per atom
   bool optimization_plan_only{false};
 };
