@@ -498,7 +498,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "bd50019aad09080e4481510b1676839c24421bc379ee747b3b8c5558ad9470ac"
+            "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -3518,8 +3518,8 @@ def test_local_ao_capacity_stays_global_and_pair_work_stays_complete() -> None:
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",
-            "feature_lease = _stationary_resident_feature_task(",
-            "feature_lease = ao_maps.select(",
+            "else ao_maps.feature_task(",
+            "else ao_maps.select(",
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",

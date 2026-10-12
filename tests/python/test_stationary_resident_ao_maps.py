@@ -3,12 +3,13 @@
 import sys
 import typing
 import weakref
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
 
 import pytest
 from generativeqc import _stationary_cuda as runtime
+from test_stationary_large_grid_work import _geometry_loop
 
 
 @pytest.mark.parametrize("cutoff", [None, 1e-16])
@@ -306,17 +307,26 @@ def test_default_and_public_forwarding_do_not_enable_screening(
 
 @pytest.mark.parametrize("mapped", [False, True])
 @pytest.mark.parametrize("begin,end", [(0, 7), (17, 20), (255, 256)])
-@pytest.mark.parametrize("failure", [None, "create", "consume"])
+@pytest.mark.parametrize("failure", [None, "create", "derivative", "consume"])
 def test_resident_geometry_feature_lease_contract(
     mapped: bool, begin: int, end: int, failure: str | None
 ) -> None:
-    """The selected provider owns the tile's inputs, errors, and lease lifetime."""
+    """Execute production selection, validation, consumption, and cleanup on CPU."""
     events = []
     request = {}
-    task = object()
     domain = object()
     ingredients = ("rho", "sigma", "tau")
-    resident = SimpleNamespace(points=4096)
+    resident = SimpleNamespace(points=4096, weights=8192, atomic_weights=16384)
+
+    def require_order(order: int) -> None:
+        assert events == ["enter"] and order == 2
+        events.append("derivative")
+        if failure == "derivative":
+            raise RuntimeError("derivative validation failed")
+
+    task = SimpleNamespace(
+        layout=SimpleNamespace(require_derivative_order=require_order)
+    )
 
     @contextmanager
     def lease() -> typing.Iterator[object]:
@@ -327,6 +337,7 @@ def test_resident_geometry_feature_lease_contract(
             events.append("release")
 
     def create(*args: typing.Any) -> typing.Any:
+        assert events == []
         request["args"] = args
         if failure == "create":
             raise MemoryError("selected provider allocation failed")
@@ -352,28 +363,60 @@ def test_resident_geometry_feature_lease_contract(
         else (4096 + begin * 24, end - begin, None, ingredients)
     )
 
-    def consume() -> None:
-        selected = runtime._stationary_resident_feature_task(
-            ao, resident, maps if mapped else None, begin, end, ingredients
-        )
-        # Creation must not enter or eagerly close the provider's lease.
-        assert events == []
-        with selected as current:
-            assert current is task
-            assert request["args"] == expected
-            assert events == ["enter"]
-            if failure == "consume":
-                raise RuntimeError("geometry consumer failed")
+    def consume(
+        current: object,
+        offset: int,
+        per_atom: int,
+        weighted: int,
+        host_weighted: object,
+        atomic: int,
+        host_atomic: object,
+        *,
+        functional: int,
+    ) -> None:
+        assert current is task and request["args"] == expected
+        assert events == ["enter", "derivative"]
+        assert offset == begin and per_atom == 17 and functional == 1
+        assert weighted == 8192 + begin * 8
+        assert atomic == 16384 + begin * 8
+        assert host_weighted is host_atomic is None
+        events.append("consume")
+        if failure == "consume":
+            raise RuntimeError("geometry consumer failed")
 
+    def drain() -> None:
+        assert events[-1] == "release"
+        events.append("drain")
+
+    scope = {
+        "grid_work": SimpleNamespace(chunks=lambda: [(begin, end)]),
+        "tile_points": end - begin,
+        "resident_grid": resident,
+        "ao": ao,
+        "ao_maps": maps if mapped else None,
+        "sources": SimpleNamespace(
+            geometry_molecular_resident_weights=consume, drain_geometry=drain
+        ),
+        "timeline": SimpleNamespace(phase=lambda _: nullcontext()),
+        "ingredients": ingredients,
+        "needs_first": True,
+        "points_per_atom": 17,
+        "functional": 1,
+        "profile_device": False,
+    }
     if failure == "create":
         with pytest.raises(MemoryError, match="selected provider allocation"):
-            consume()
+            _geometry_loop(scope)
         assert events == []
+    elif failure == "derivative":
+        with pytest.raises(RuntimeError, match="derivative validation"):
+            _geometry_loop(scope)
+        assert events == ["enter", "derivative", "release"]
     elif failure == "consume":
         with pytest.raises(RuntimeError, match="geometry consumer failed"):
-            consume()
-        assert events == ["enter", "release"]
+            _geometry_loop(scope)
+        assert events == ["enter", "derivative", "consume", "release"]
     else:
-        consume()
-        assert events == ["enter", "release"]
+        _geometry_loop(scope)
+        assert events == ["enter", "derivative", "consume", "release", "drain"]
     assert request["args"] == expected

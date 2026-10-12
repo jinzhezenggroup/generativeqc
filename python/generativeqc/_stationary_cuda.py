@@ -2999,22 +2999,6 @@ def _stationary_resident_ao_cache(
     return owner
 
 
-def _stationary_resident_feature_task(
-    ao: typing.Any,
-    resident_grid: typing.Any,
-    ao_maps: typing.Any,
-    begin: int,
-    end: int,
-    ingredients: typing.Any,
-) -> typing.Any:
-    """Select a feature lease for a resident grid tile and its admitted map domain."""
-    if ao_maps is None:
-        return ao.feature_task_device_points(
-            resident_grid.points + 3 * begin * 8, end - begin, None, ingredients
-        )
-    return ao_maps.feature_task(ao, ao_maps.domain, begin, end - begin, ingredients)
-
-
 def _complete_rks_cuda_gradient_diagnostic(
     state: typing.Any,
     basis: typing.Any,
@@ -3720,8 +3704,22 @@ def _complete_rks_cuda_gradient_diagnostic(
                 for begin in range(chunk_begin, chunk_end, tile_points):
                     end = min(begin + tile_points, chunk_end)
                     if resident_grid is not None:
-                        feature_lease = _stationary_resident_feature_task(
-                            ao, resident_grid, ao_maps, begin, end, ingredients
+                        point_pointer = resident_grid.points + 3 * begin * 8
+                        feature_lease = (
+                            ao.feature_task_device_points(
+                                point_pointer,
+                                end - begin,
+                                None,
+                                ingredients,
+                            )
+                            if ao_maps is None
+                            else ao_maps.feature_task(
+                                ao,
+                                ao_maps.domain,
+                                begin,
+                                end - begin,
+                                ingredients,
+                            )
                         )
                         with feature_lease as task:
                             task.layout.require_derivative_order(
