@@ -50,7 +50,9 @@ invalid domains and incompatible policy/launcher rejection. CUDA scheduling is
 stubbed; unrelated generated mathematical providers reject if reached. This
 does not qualify GPU arithmetic, performance or dynamic traffic.
 
-The 97-point independent gate applies to ordinary and equal-spin consumers.
+The 97-point independent gate exercises ordinary two-spin consumers under both
+equal-spin policy settings. It does not execute the RKS equal-spin consumer;
+that consumer's 87-point cross-policy parity is scoped separately below.
 The wider 87-point subnormal corpus independently qualifies the separate
 `evaluate_pbe0_restricted_bound` consumer at the original strict tolerance for
 all nine components. Ordinary and equal-spin consumers retain full 87-point
