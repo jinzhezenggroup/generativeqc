@@ -103,7 +103,6 @@ struct InactiveEigensolverProfileEntry {
   bool provider_invoked{};
 };
 
-
 /** Methods without an SCF seed need not implement checkpointing. */
 class BatchWarmStarts {
  public:

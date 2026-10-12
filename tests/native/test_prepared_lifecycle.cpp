@@ -185,8 +185,7 @@ void optional_batch_capabilities() {
       state.reset();
     }
     std::size_t warm_density_size(std::size_t) const override { return 0; }
-    const std::optional<generativeqc::scf::HfWarmState>& warm_state(
-        std::size_t) const override {
+    const std::optional<generativeqc::scf::HfWarmState>& warm_state(std::size_t) const override {
       return state;
     }
     void restore_warm_states(
