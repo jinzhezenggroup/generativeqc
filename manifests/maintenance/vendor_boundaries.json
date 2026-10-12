@@ -75,14 +75,6 @@
         "cublasDgemmStridedBatched": 7
       }
     },
-    "src/scf/cuda/df_final_validation.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
-      "references": {
-        "cublasDgemm": 1
-      }
-    },
     "src/scf/cuda/df_generated_tiles.hpp": {
       "classification": "migration",
       "contract": "#1890",
