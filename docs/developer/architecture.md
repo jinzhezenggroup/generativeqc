@@ -159,6 +159,28 @@ All public descriptors begin with `struct_size` and `abi_version`. ABI version
 0 is experimental: callers can detect compatibility, but semantic stability is
 not promised until a 1.0 release.
 
+## Native CMake target boundaries
+
+The installed SDK, Python wheel, and native CLI still use the same
+`generativeqc` public library. Two CPU-only internal OBJECT targets provide
+separate incremental compile units:
+
+- `generativeqc_cpu_scf_solver`: host SCF solver safeguards, eigensystem
+  validation, warm-subspace checks, reference linear algebra, and prepared
+  spectral operations.
+- `generativeqc_cpu_basis_integrals`: host basis handling, MINAO preparation,
+  and density-fitting metric operations.
+
+`cmake --build <build-dir> --target generativeqc_cpu_scf_solver
+generativeqc_cpu_basis_integrals` builds just those component objects.
+CMake injects their objects into the published library rather than linking
+separate static archives, preserving symbol inclusion in shared, wheel, and
+monolithic-CLI builds. Component compilation inherits the parent library's
+include directories, definitions, and C++ flags; PIC and optional PCH are
+preserved. Code-generated sources, CUDA objects, and device-link ownership
+remain on the existing build path. Move more sources only after auditing
+generated-header dependencies and provider-specific compile requirements.
+
 ## Performance engineering
 
 Performance-sensitive planners must account for scientific work amplification as well as
