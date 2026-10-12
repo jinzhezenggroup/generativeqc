@@ -115,7 +115,7 @@ int main(int argc,char** argv) {
   std::unique_ptr<scf::PreparedFockPlan> cache;
   if (mode == 9) {
     struct Shape { int electrons; std::size_t nbf; bool automatic; };
-    const Shape shapes[]{{16,136,false},{18,145,false},{18,146,true}};
+    const Shape shapes[]{{16,136,false},{18,136,false},{18,137,true}};
     core::System auxiliary;
     for (const auto shape : shapes)
     for (bool cuda : {false,true})
