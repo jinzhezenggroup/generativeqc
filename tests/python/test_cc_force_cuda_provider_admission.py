@@ -186,5 +186,31 @@ int main() {
     } catch (const std::length_error&) { rejected=true; }
     if (!rejected) return 10;
   }
+  // Exercise both sides of the historical 12/56-AO cutoffs without allocating
+  // force tensors. A valid shape is admitted under an adequate numeric budget;
+  // the same shape must fail a tight budget through the real planner.
+  cc::generated::scratch = 0;
+  for (std::size_t n : {std::size_t{13}, std::size_t{57}}) {
+    core::System system; system.atoms.resize(1); system.shells.resize(n);
+    hf::PhysicalReference reference; reference.nbf=n; reference.nocc=1;
+    reference.orbital_energies.resize(n);
+    for (std::size_t k=0; k<n; ++k)
+      reference.orbital_energies[k] = static_cast<double>(k);
+    cc::Problem problem; problem.nocc=1; problem.nvir=n-1;
+    cc::SolverResult result;
+    result.t1.resize(n-1); result.t2.resize((n-1)*(n-1));
+    constexpr std::size_t source_bytes=8192, budget=8ULL<<30;
+    for (bool triples : {false, true}) for (bool cuda : {false, true}) {
+      const auto allowed=cc::plan_relaxed_rccsd_force_cpu(
+          system,reference,problem,result,budget,triples,source_bytes,cuda);
+      if (!allowed.minimum_peak_bytes || allowed.peak_bytes>budget) return 13;
+      bool refused=false;
+      try {
+        (void)cc::plan_relaxed_rccsd_force_cpu(
+            system,reference,problem,result,1024,triples,source_bytes,cuda);
+      } catch (const std::length_error&) { refused=true; }
+      if (!refused) return 14;
+    }
+  }
 }
 """

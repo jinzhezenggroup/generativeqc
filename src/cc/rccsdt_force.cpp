@@ -385,8 +385,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                                     std::size_t source_bytes,
                                                     bool cuda_transform = false) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
-  if (!o || !v || n > (include_triples ? kRccsdtForceMaxAOs : 12) || reference.nbf != n ||
-      reference.nocc != o || molecule::ao_count(system) != n || !max_bytes)
+  if (!o || !v || reference.nbf != n || reference.nocc != o || molecule::ao_count(system) != n ||
+      !max_bytes)
     throw std::invalid_argument("invalid RCCSD(T) force resource dimensions");
   const auto n2 = square(n), n4 = fourth(n), ov = checked_mul(o, v),
              amplitudes = checked_add(ov, square(ov));
@@ -610,10 +610,10 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 #endif
   if (!cc_result.converged())
     throw std::invalid_argument("RCCSD(T) force requires converged RCCSD amplitudes");
-  if (!max_bytes || reference.nbf > (include_triples ? kRccsdtForceMaxAOs : 12) ||
-      reference.nbf != problem.nocc + problem.nvir || reference.nocc != problem.nocc ||
-      eps_o.size() != problem.nocc || eps_v.size() != problem.nvir ||
-      !std::isfinite(denominator_threshold) || denominator_threshold <= 0.0 ||
+  if (!max_bytes || reference.nbf != checked_add(problem.nocc, problem.nvir) ||
+      reference.nocc != problem.nocc || eps_o.size() != problem.nocc ||
+      eps_v.size() != problem.nvir || !std::isfinite(denominator_threshold) ||
+      denominator_threshold <= 0.0 ||
       (cuda_derivative && (device_id < 0 || !derivative_stage_budget)))
     throw std::invalid_argument("RCCSD(T) force is outside the qualified conventional domain");
   const auto o = problem.nocc, v = problem.nvir, n = reference.nbf;

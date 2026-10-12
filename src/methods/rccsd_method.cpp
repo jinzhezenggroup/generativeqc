@@ -704,10 +704,6 @@ class RccsdPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     last_performance_.reset();
-    if (compute_forces && molecule::ao_count(system_) > 12)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "native RCCSD forces are qualified only through 12 AOs");
-
     const auto warm_capacity =
         warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     if (warm_capacity >= solver_options_.max_bytes ||
