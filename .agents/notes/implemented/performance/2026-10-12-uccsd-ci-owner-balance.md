@@ -69,3 +69,35 @@ complete per-test timings if another measured shard approaches its budget.
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38187785285
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38199980410
 - tests/python/test_ci_shard_ownership.py
+
+## Follow-up: keep the complete gradient tail parallel
+
+Run 38202660731 tested merge tree fb66c86bfa65e1ce0d30a28c363741881aaef6c5
+after the complete-owner transfer above. Core-c completed 16,495 of 16,497
+cases (12,370 passed, 4,125 skipped), leaving only gradient admission
+options0 and native hcore-binding checks at its 30-minute deadline. The
+five independent molecular gradient cases, including spherical and
+broken-symmetry cases, and the reconverged finite-difference case passed.
+No assertion failure was reported.
+
+The passing stacked #2340 run 38202771274 used identical gradient source
+(blob 0ff724562688bf6ccf7f5b825ddbc1d8677970e7) and finished core-c in
+1,537.41 s. Its slowest-duration table alone records 1,751.22 worker-seconds
+in the gradient file: five complete molecular calls, nine fresh fixture
+setups, and the finite-difference call. This is a lower bound on summed
+test work, not a whole-file wall time or predicted speedup.
+
+Pin the complete gradient file to core-a through the existing hotspot
+owner mechanism. Keep worksteal, all 17 cases, fresh function-scoped
+fixtures, and the original core inventory index. Same-run core-a/core-b
+were 1,126.86/1,269.84 s; the stacked run measured 1,258.70/1,327.50 s.
+Core-a therefore has the larger observed margin in both runs. This does
+not establish the resulting critical path: final rerouted CI must still
+measure it. Serial loadfile routing remains rejected, and the unchanged
+30-minute budget remains enforced. Posthf passed in 1,728.94 s on #2329
+and 1,736.37 s on #2340; no additional load is assigned there.
+
+Extend the executable all-event ownership regression with the gradient
+pin, worksteal mode, absent/untracked/tracked/missing behavior, and
+unchanged indices for unrelated files. No scientific code, test oracle,
+fixture reuse, acceptance gate, or worker count changes.

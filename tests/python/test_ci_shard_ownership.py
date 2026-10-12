@@ -207,6 +207,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_dft_mp_v1_capacity.py",
             "test_df_lambda_frontier.py",
         ),
+        "core-a": ("test_uccsd_gradient.py",),
         "core-b": (
             "test_df_lambda_core_reuse.py",
             "test_df_triples_distinct_moments.py",
@@ -246,7 +247,9 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
 def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
     event: str, presence: str, tmp_path: Path
 ) -> None:
+    gradient = "tests/python/test_uccsd_gradient.py"
     owners = {
+        gradient: "core-a",
         "tests/python/test_uccsd_lambda.py": "posthf",
         "tests/python/test_uccsd_t_owner.py": "posthf",
         "tests/python/test_uccsd_physical_response.py": "posthf",
@@ -280,7 +283,9 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
             shard for shard, (_, targets, _) in selections.items() if path in targets
         ]
         assert actual == ([owner] if tracked else [])
-        assert selections[owner][0] == "loadfile"
+        assert selections[owner][0] == (
+            "worksteal" if owner == "core-a" else "loadfile"
+        )
         assert not any(
             path in argument
             for _, _, arguments in selections.values()
@@ -288,5 +293,8 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         )
     for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
         assert selections[shard][1] == [
-            path for path in inventory[bucket::3] if path not in owners
+            path
+            for index, path in enumerate(inventory)
+            if (path == gradient and bucket == 0)
+            or (path not in owners and index % 3 == bucket)
         ]
