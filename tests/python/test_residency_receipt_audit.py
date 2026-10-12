@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tools.audit_residency_receipts import _decode_json, audit, audit_df_trace
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -526,3 +528,67 @@ def test_strict_json_decoder_rejects_nonfinite_and_deep_inputs(tmp_path: Path) -
         "status": "INCOMPLETE",
         "reason": "JSON nesting exceeds recursion limit",
     }
+
+
+@pytest.mark.parametrize("version", [True, False, 1.0, "1", None, [], {}, 2])
+@pytest.mark.parametrize("document", ["contract", "receipt"])
+def test_receipt_schema_versions_require_integers(
+    version: object, document: str
+) -> None:
+    """Malformed version types cannot turn a complete receipt into PASS."""
+    expected = contract()
+    observed = receipt(expected, [])
+    (expected if document == "contract" else observed)["version"] = version
+    assert audit(expected, observed) == {
+        "status": "INCOMPLETE",
+        "reason": f"unsupported {document} schema/version",
+    }
+
+
+@pytest.mark.parametrize("version", [True, 1.0, "1"])
+def test_historical_trace_rejects_malformed_version_before_trace_validation(
+    version: object,
+) -> None:
+    expected = json.loads((EVIDENCE / "historical-oh-df-contract.json").read_text())
+    expected["version"] = version
+    manifest = json.loads((OLD / "manifest.json").read_text())
+    trace = OLD / "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto.jsonl"
+    assert audit_df_trace(expected, trace, manifest) == {
+        "status": "INCOMPLETE",
+        "reason": "unsupported contract schema/version",
+    }
+
+
+@pytest.mark.parametrize("version", [True, 1.0])
+@pytest.mark.parametrize("document", ["contract", "receipt"])
+def test_cli_rejects_coercible_versions_with_machine_readable_incomplete(
+    tmp_path: Path, version: object, document: str
+) -> None:
+    expected = contract()
+    observed = receipt(expected, [])
+    # This same evidence is valid with its original integer version.
+    assert audit(expected, observed)["status"] == "PASS"
+    (expected if document == "contract" else observed)["version"] = version
+    contract_path = tmp_path / "contract.json"
+    receipt_path = tmp_path / "receipt.json"
+    contract_path.write_text(json.dumps(expected), encoding="utf-8")
+    receipt_path.write_text(json.dumps(observed), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/audit_residency_receipts.py"),
+            "--contract",
+            str(contract_path),
+            "--receipt",
+            str(receipt_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {
+        "status": "INCOMPLETE",
+        "reason": f"unsupported {document} schema/version",
+    }
+    assert result.stderr == ""

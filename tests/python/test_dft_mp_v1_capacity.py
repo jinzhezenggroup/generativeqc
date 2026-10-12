@@ -66,6 +66,7 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
         tmp_path,
         (
             "src/dft/stationary_gradient_cuda.cuh",
+            "src/dft/becke_scaled_policy.hpp",
             "python/generativeqc/_ks_snapshot.py",
             "python/generativeqc/_snapshot_grid_cache.py",
             "python/generativeqc_compiler/method/stationary_resources.py",
@@ -436,6 +437,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "component_page_sha256": "09be8b78cfee217fef2e37ed5bb26b7a5231f63bd5303dcccacdb6fd1ccb4d9b",
         "descriptor_packer_sha256": "92af808cc0d0551072b0a00c29631b86f9c4b65e95bacd68701c4cfbdab926e0",
         "exact_ao_map_resources_sha256": "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9",
+        "becke_scaled_policy_sha256": (
+            "201fa31bb36d8a3331200e48abf63977727e6825ac301f1e6a6a9fb2c07499c0"
+        ),
+        "native_becke_normalize_dispatch_sha256": (
+            "94a74e1093603c69cb24ee1c2a6732e413f94bc82c25f734b011fcbd2a612e1e"
+        ),
+        "native_becke_binary_scaled_metrics_sha256": (
+            "89e7d6e1d62e133b1bd48500024013c426aaede9688fdb248ee32d2c453cccae"
+        ),
         "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
         "public_wrapper_sha256": (
             "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
@@ -453,10 +463,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
         ),
         "metric_delta_sha256": (
-            "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
+            "0b158358e77b94d84b845b388a3403769b9ae30b6b6ad5172ca30e0f329b1143"
         ),
         "metrics_sha256": (
-            "135d534e3b9c2205a13dcb21268f1a83c5281eeabc14ec3595cef56cea817a57"
+            "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
         ),
         "ordinary_tile_resources_sha256": (
             "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
@@ -510,13 +520,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
         ),
         "native_owner_sha256": (
-            "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
+            "ddca5ed4b429304cf051b9c28d4c3d5f88d805b0c94c08fbbe1e3955c8e944a1"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
         ),
         "native_create_sha256": (
-            "6f53897b29a59fadd01d991eb1b9e8bd8dffec88cadb6ce52ecf2ad529e613c4"
+            "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
         ),
         "native_reset_sha256": (
             "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
@@ -525,7 +535,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
         ),
         "native_phased_becke_input_sha256": (
-            "82ce3a72f5c936129f9ca82d2db03690288026aa3f2c4ff050de0c0014ad4558"
+            "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
         ),
         "native_becke_zero_seed_configuration_sha256": (
             "cbdd375e3c81bb1a6473186ca5fc9b190bae96c7b96bf8ccad651955a6f295aa"
@@ -552,7 +562,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "9716c5ab6a7e91e7cd990769132d517d581143f9393fe0b58d696cbd705d8062"
+            "db6d58dc0396444c56402217f9562438d6f286a25bfccf7f4676846dcf842520"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -573,7 +583,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
         ),
         "native_phased_becke_admission_sha256": (
-            "89c3159ed18cb971b9056aa0f30291539de95996a6e0d913d1c879e7efd23489"
+            "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
         ),
         "native_becke_normalize_configuration_sha256": (
             "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -617,9 +627,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "stationary_integral_device_reserve_sha256": (
             "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
         ),
-        "init_sha256": (
-            "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
-        ),
+        "init_sha256": qualify_capacity.NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256,
         "decode_sha256": (
             "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
         ),
@@ -2857,10 +2865,10 @@ def test_normalize_constructor_contract_fails_closed(
             "native_becke_normalize_configuration_sha256",
         ),
         (
-            "void launch_geometry(",
-            "if (owner.becke_normalize_cooperative)",
+            "void launch_phased_becke_normalize(",
+            "if (cooperative)",
             "if (true)",
-            "native_launch_geometry_sha256",
+            "native_becke_normalize_dispatch_sha256",
         ),
         (
             "int stationary_becke_normalize_metrics_v1(",
@@ -4022,3 +4030,143 @@ def test_zero_seed_override_preserves_dense_capacity(
             )
         )
     assert results[0] == results[1]
+
+
+@pytest.mark.parametrize(
+    "relative,marker,old,new,gate",
+    [
+        (
+            "src/dft/becke_scaled_policy.hpp",
+            "constexpr bool binary_scaled_becke_eligible(",
+            "&& !primitive_selected",
+            "&& primitive_selected",
+            "binary-scaled Becke policy",
+        ),
+        (
+            "src/dft/becke_scaled_policy.hpp",
+            "constexpr bool binary_scaled_becke_eligible(",
+            "atoms <= 128 && phased && center_geometry",
+            "atoms <= 256",
+            "binary-scaled Becke policy",
+        ),
+        (
+            "src/dft/becke_scaled_policy.hpp",
+            "constexpr bool binary_scaled_becke_automatic(",
+            "atoms >= 96",
+            "atoms >= 48",
+            "binary-scaled Becke policy",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "struct Owner {",
+            "(!becke_binary_scaled_automatic ||",
+            "(true ||",
+            "native_owner_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "int stationary_create(",
+            "p->becke_binary_scaled_requested = binary_scaled_requested;",
+            "p->becke_binary_scaled_requested = true;",
+            "native_create_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "PhasedBeckeInput phased_input(",
+            "owner.binary_scaled_becke_active()",
+            "true",
+            "native_phased_becke_input_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_geometry(",
+            "launch_phased_becke_normalize<false>",
+            "launch_phased_becke_normalize<true>",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "int stationary_configure_phased_becke_v1(",
+            "owner->becke_normalize_supported && attributes.maxThreadsPerBlock >= 128",
+            "true",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_phased_becke_normalize(",
+            "phased_becke_normalize_cooperative<BinaryScaled>",
+            "phased_becke_normalize_cooperative<false>",
+            "native_becke_normalize_dispatch_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_phased_becke_normalize(",
+            "phased_becke_normalize<BinaryScaled>",
+            "phased_becke_normalize<false>",
+            "native_becke_normalize_dispatch_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "int stationary_becke_binary_scaled_metrics_v1(",
+            "count != 6",
+            "count != 5",
+            "native_becke_binary_scaled_metrics_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "int stationary_becke_binary_scaled_metrics_v1(",
+            "output[1] = owner->binary_scaled_becke_active();",
+            "output[1] = owner->becke_binary_scaled_requested;",
+            "native_becke_binary_scaled_metrics_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "int stationary_becke_binary_scaled_metrics_v1(",
+            "output[3] = owner->becke_binary_scaled_points;",
+            "output[3] = 0;",
+            "native_becke_binary_scaled_metrics_sha256",
+        ),
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "    def metrics(self)",
+            "if scaled_metrics is not None:",
+            "if False:",
+            "metrics page",
+        ),
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "    def metrics(self)",
+            "if scaled_metrics(self.handle, scaled_values, 6):",
+            "if False:",
+            "metrics page",
+        ),
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "def _metric_delta(",
+            '        "becke_binary_scaled_batches",\n',
+            "",
+            "metric_delta_sha256",
+        ),
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "def _metric_delta(",
+            '        "becke_binary_scaled_points",\n',
+            "",
+            "metric_delta_sha256",
+        ),
+    ],
+)
+def test_binary_scaled_becke_contract_fails_closed(
+    tmp_path: Path, relative: str, marker: str, old: str, new: str, gate: str
+) -> None:
+    """Bind bounded admission, extracted dispatch and per-call work accounting."""
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    qualify_capacity._source_limits(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text()
+    position = source.index(old, source.index(marker))
+    target.write_text(source[:position] + new + source[position + len(old) :])
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)

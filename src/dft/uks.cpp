@@ -32,6 +32,7 @@ using namespace reference;
 struct SpinEvaluation {
   FockMatrices fock;
   dft::EnergyComponents components;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 struct SpinXcEvaluator {
@@ -131,11 +132,13 @@ SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_co
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(alpha, beta);
   SpinEvaluation out;
+  out.coulomb_exchange_work = jk.coulomb_exchange_work;
   out.fock = assemble_fock(plan.strategy(), ints.hcore, jk);
   const auto primary_energy = contract_fock_energy_components(plan.strategy(), jk, alpha, beta);
   double exact_exchange = primary_energy.exchange;
   if (long_range_correction) {
     const auto correction_jk = long_range_correction->build(alpha, beta);
+    out.coulomb_exchange_work.add(correction_jk.coulomb_exchange_work);
     const auto& correction_strategy = long_range_correction->strategy();
     if (correction_jk.exchange_alpha.size() != out.fock.alpha.size() ||
         correction_jk.exchange_beta.size() != out.fock.beta.size())
@@ -272,6 +275,7 @@ ScfResult run_uks_impl(
   }
   solver::Diis diis(options.diis_history, true);
   ScfResult result;
+  result.dft_diagnostic.coulomb_exchange_work = CoulombExchangeWork::empty();
   result.initial_density_used = initial_density != nullptr;
   auto& diagnostic = result.dft_diagnostic;
   diagnostic.occupations = {na, nb};
@@ -319,6 +323,7 @@ ScfResult run_uks_impl(
               evaluate(plan, long_range_correction, basis, grid, state.alpha, state.beta,
                        evaluate_xc, options, nonlocal_correlation, nonlocal_domain);
           ++result.fock_builds;
+          diagnostic.coulomb_exchange_work.add(physical.coulomb_exchange_work);
           Matrix ra = commutator_residual(physical.fock.alpha, state.alpha, ints.overlap, n);
           Matrix rb = commutator_residual(physical.fock.beta, state.beta, ints.overlap, n);
           const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
@@ -433,6 +438,7 @@ ScfResult run_uks_impl(
     auto final = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
                           options, nonlocal_correlation, nonlocal_domain);
     ++result.fock_builds;
+    diagnostic.coulomb_exchange_work.add(final.coulomb_exchange_work);
     double previous_physical_energy = result.energy;
     result.converged = false;
     constexpr unsigned maximum_final_corrections = 4;
@@ -457,6 +463,7 @@ ScfResult run_uks_impl(
       auto next = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
                            options, nonlocal_correlation, nonlocal_domain);
       ++result.fock_builds;
+      diagnostic.coulomb_exchange_work.add(next.coulomb_exchange_work);
       const Matrix ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
       const Matrix rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
       const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);

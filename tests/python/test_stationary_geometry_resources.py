@@ -186,12 +186,20 @@ return 0;
 def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
     tmp_path: Path,
 ) -> None:
-    """Execute production allocation/create with explicit CUDA resource stubs."""
+    """Execute create with real generated Becke dependencies and CUDA resource stubs."""
+    from generativeqc_compiler.xc.becke_scaled_products import emit_binary_scaled_becke
+    from generativeqc_compiler.xc.grid_native import (
+        emit_grid_adjoint,
+        emit_grid_partials,
+    )
+    from generativeqc_compiler.xc.grid_phased import emit_phased_becke
     from test_stationary_task_work_budget import _block
 
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    cache = shutil.which("sccache") or shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and compiler cache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     body = "\n".join(
         (
@@ -203,7 +211,14 @@ def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
     )
     source = tmp_path / "create.cpp"
     source.write_text(
-        r"""
+        emit_grid_adjoint()
+        + emit_grid_partials()
+        + emit_phased_becke()
+        + emit_binary_scaled_becke()
+        + '#include "'
+        + str(ROOT / "src/dft/becke_scaled_policy.hpp")
+        + '"\n'
+        + r"""
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -216,7 +231,6 @@ def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
 using cudaEvent_t=void*;
 using cudaStream_t=void*;
 namespace generativeqc_stationary_cuda {}
-namespace generativeqc_grid_adjoint { struct CenterPair { double values[6]; }; }
 namespace generativeqc::runtime {
 template <class Element> struct OwnedCudaBuffer {
   explicit operator bool() const { return false; }
@@ -327,7 +341,7 @@ int main() {
     )
     executable = tmp_path / "create"
     subprocess.run(
-        [compiler, "-std=c++17", str(source), "-o", str(executable)],
+        [cache, compiler, "-std=c++17", str(source), "-o", str(executable)],
         check=True,
         timeout=30,
     )

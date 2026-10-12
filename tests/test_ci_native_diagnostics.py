@@ -262,7 +262,10 @@ def test_workflow_keeps_diagnostics_in_failure_artifacts() -> None:
     preparation = source.split("      - name: Prepare bounded native diagnostics\n", 1)[
         1
     ].split("      - name:", 1)[0]
-    assert "        if: matrix.shard == 'core-b'\n" in preparation
+    assert (
+        "        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' "
+        "|| matrix.shard == 'core-c'\n" in preparation
+    )
     assert "ccache --version" in preparation
     assert (
         ".venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q"
@@ -271,6 +274,54 @@ def test_workflow_keeps_diagnostics_in_failure_artifacts() -> None:
     assert '"${diagnostic_args[@]}"' in source
     wheels = (ROOT / ".github/workflows/wheels.yml").read_text()
     assert "  push:\n    branches: [master]" in wheels
+
+
+@pytest.mark.parametrize(
+    ("shard", "enabled"),
+    [
+        ("core-a", True),
+        ("core-b", True),
+        ("core-c", True),
+        ("runtime-heavy", False),
+        ("compiler-heavy", False),
+        ("posthf", False),
+        ("ecp-forces", False),
+    ],
+)
+def test_workflow_diagnostic_arguments_follow_shard_scope(
+    tmp_path: Path, shard: str, enabled: bool
+) -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text()
+    step = source.split("      - name: Run Python tests with coverage\n", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    selection = (
+        "diagnostic_args=()"
+        + step.split("diagnostic_args=()", 1)[1].split(".venv/bin/python -m pytest", 1)[
+            0
+        ]
+    )
+    selection = selection.replace("${{ matrix.shard }}", shard)
+    result = subprocess.run(
+        ["bash", "-e", "-c", selection + '\n printf "%s\\n" "${diagnostic_args[@]}"'],
+        cwd=tmp_path,
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=10,
+    )
+    expected = (
+        [
+            "-p",
+            "tools.pytest_native_diagnostics",
+            f"--native-diagnostics-dir={tmp_path}/.artifacts/native-diagnostics",
+            f"--native-diagnostics-library={tmp_path}/libnative-fault-record.so",
+        ]
+        if enabled
+        else []
+    )
+    assert result.stdout.splitlines() == (expected or [""])
 
 
 def test_startup_failure_restores_descriptors_and_core_limit(

@@ -27,9 +27,9 @@ and 226,492,416 normalization atom entries. This is scheduling, not work removal
 ## Provenance And Scope
 
 - Matched timing: job 2500, base `83109befe5b97a5542b30e169da74c81d04719e6`
-  plus `source.patch`, source identity `b0e32abf342aa53877f2a350801a1dfdc1bc74d341df0cebe82a738d74429d2f`.
+  plus `source.patch.xz`, source identity `b0e32abf342aa53877f2a350801a1dfdc1bc74d341df0cebe82a738d74429d2f`.
 - Integration qualification: job 2505, base `80296618e2003427b220331e1c0d4dad6752391e`
-  plus `integration-source.patch`; actual hashes and receipts are in
+  plus `integration-source.patch.xz`; actual hashes and receipts are in
   `qualification.json`. The normalization compiler/helper/native files are
   byte-identical across cohorts. No performance claim on the integration base.
 - Final gates: 49 normalization/interface/fallback tests, four clean sanitizers
@@ -52,10 +52,16 @@ recomputes independent whole-vector gates, medians, semantic work and actual
 solver iteration counts. Changed vectors/counters cannot reuse a passing summary.
 
 For exact timing-source restoration, retain this directory outside the source
-checkout, check out the measured base, apply `source.patch`, and verify
+checkout, check out the measured base, decompress `source.patch.xz` with `xz -dc`, apply the result, and verify
 `source-files.sha256`. Set `PYTHON`, `CUDA_ROOT` and optionally `HOST_CXX`, then
 run `bash <retained-directory>/reproduce.sh` on n2. It uses ccache and finite
 Slurm allocation without changing scheduler visibility. `PROFILE=1` optionally
 adds a separate intrusive campaign; it is not part of the retained timing proof.
 Full build/test/profiler logs remain in ignored artifacts. No Release or external
 archive is needed for reproduction.
+
+The two paired records and both source patches use lossless XZ storage. The
+publication records their decoded sizes and SHA-256 identities; every original
+JSON byte, vector, failed gate and patch line survives decompression. The evidence
+envelope changes only the attachment paths and stored hashes. No sample, source,
+acceptance gate or qualification result is removed or reclassified.

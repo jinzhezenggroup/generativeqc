@@ -215,6 +215,13 @@ generativeqc_status generativeqc_calculation_get_ks_diagnostic(
                                                history_capacity);
 }
 
+generativeqc_status generativeqc_calculation_get_ks_coulomb_exchange_work_v1(
+    const generativeqc_calculation* calculation, generativeqc_ks_coulomb_exchange_work_v1* out) {
+  if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  return generativeqc::api::copy_ks_coulomb_exchange_work(calculation->ks_diagnostic, out);
+}
+
 generativeqc_status generativeqc_calculation_get_ks_transport_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_ks_transport_diagnostic* out) {
   if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

@@ -75,6 +75,7 @@ struct NativeKsExecutionPlan {
   std::uint32_t functional{};
   bool generated_split_hybrid{};
   const dft::SemilocalPointProgram* automatic_program{};
+  const dft::RestrictedSemilocalPointProgram* automatic_restricted_program{};
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_method method) noexcept {
@@ -101,6 +102,8 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_metho
 bool unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
 
 std::uint32_t scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
+  if (!unrestricted(plan) && plan.automatic_restricted_program)
+    return plan.automatic_restricted_program->domain_version;
   if (plan.automatic_program) return plan.automatic_program->domain_version;
   return plan.generated_split_hybrid ? 4U
                                      : dft::semilocal_family_domain_version(plan.semilocal_family);
@@ -140,6 +143,7 @@ struct SemilocalAdmission {
   std::uint32_t functional{};
   bool generated_split_hybrid{};
   const dft::SemilocalPointProgram* automatic_program{};
+  const dft::RestrictedSemilocalPointProgram* automatic_restricted_program{};
 };
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const generativeqc_ks_options& input) {
@@ -189,8 +193,14 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
       const auto automatic =
           dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
       if (automatic)
-        return {dft::SemilocalFamily::Lda, 1.0,   1.0,
-                automatic.functional_code, false, automatic.program};
+        return {dft::SemilocalFamily::Lda,
+                1.0,
+                1.0,
+                automatic.functional_code,
+                false,
+                automatic.program,
+                dft::generated::automatic_restricted_libxc_program(
+                    std::string_view(component.component_id))};
     }
   }
 
@@ -212,7 +222,9 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
-  if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
+  if (plan.automatic_program)
+    return scf_domain_version(plan) == 5U ? dft::generated::kAutomaticDensityLibxcScfDomain
+                                          : dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
@@ -253,6 +265,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
     execution_plan.automatic_program = semilocal.automatic_program;
+    execution_plan.automatic_restricted_program = semilocal.automatic_restricted_program;
     if (execution_plan.automatic_program &&
         (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
          ks_input->has_nonlocal_correlation != 0))
@@ -2185,6 +2198,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       native = unrestricted(execution_plan_)
                    ? scf::run_semilocal_uks(fock_, basis_, grid_, execution_options,
                                             *execution_plan_.automatic_program, seed)
+               : execution_plan_.automatic_restricted_program
+                   ? scf::run_semilocal_rks(fock_, basis_, grid_, execution_options,
+                                            *execution_plan_.automatic_restricted_program, seed)
                    : scf::run_semilocal_rks(fock_, basis_, grid_, execution_options,
                                             *execution_plan_.automatic_program, seed);
     } else if (execution_plan_.generated_split_hybrid)
@@ -2476,6 +2492,8 @@ class KsPreparedBatch final : public PreparedBatch {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("KS batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
+    std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
+        size(), scf::CoulombExchangeWork::empty());
     std::vector<bool> ready(size(), false);
     std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
     std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
@@ -2532,6 +2550,9 @@ class KsPreparedBatch final : public PreparedBatch {
 
     const auto finish = [&](std::size_t i, scf::ScfResult native) {
       auto& result = results[i];
+      auto& observed = target_coulomb_exchange_work[i];
+      observed.add(native.dft_diagnostic.coulomb_exchange_work);
+      native.dft_diagnostic.coulomb_exchange_work = observed;
       if (preliminary_requested[i] && !native.preliminary_guess.requested_kind)
         native.preliminary_guess = preliminary_diagnostics[i];
       result.calculation = adapt_result(std::move(native), backend_);
@@ -2620,6 +2641,9 @@ class KsPreparedBatch final : public PreparedBatch {
           }
           finish(i, std::move(native));
         } catch (...) {
+          target_coulomb_exchange_work[i].complete = false;
+          if (result.calculation.ks_diagnostic)
+            result.calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
           result.status = item_exception_status();
         }
       }
