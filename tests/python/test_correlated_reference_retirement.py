@@ -756,6 +756,7 @@ void mp2_probe(int failure, std::size_t warm_capacity) {
   core::System system_;
   std::optional<core::System> auxiliary_;
   scf::PreparedFockPlan* prepared_exact = nullptr;
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_source;
   hf::PhysicalReference ref;
   std::optional<mp2::ConventionalForceResult> force_diagnostic;
   bool rejected = false;
@@ -922,6 +923,7 @@ ENDPOINT_CALLBACK_STANDINS = r"""
 #include <limits>
 #include <tuple>
 #include "response/native_gmres.hpp"
+#include "runtime/df_progress_trace.hpp"
 using posthf::checked_add;
 bool triples_should_fail = false;
 std::vector<std::size_t> force_budgets, triples_budgets;
