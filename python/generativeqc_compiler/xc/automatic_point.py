@@ -15,9 +15,14 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .bulk_runtime import build_bulk_runtime_program
-from .density_work import DENSITY_WORK_DOMAIN
+from .density_work import DENSITY_WORK_DOMAIN, DENSITY_WORK_DOMAIN_VERSION
 from .equal_spin import equal_spin_roots
-from .libxc_work import automatic_work_policy, polarized_work_setup
+from .libxc_work import (
+    LIBXC_WORK_DOMAIN,
+    LIBXC_WORK_DOMAIN_VERSION,
+    automatic_work_policy,
+    polarized_work_setup,
+)
 from .physical_kinetic_predicate import (
     PREDICATE_VARIABLE,
     bind_physical_kinetic_predicate,
@@ -25,6 +30,7 @@ from .physical_kinetic_predicate import (
 )
 
 AUTOMATIC_POINT_LAYOUTS = {
+    ("rho",): 1,
     ("rho_a", "rho_b"): 1,
     ("rho_a", "rho_b", "sigma_aa", "sigma_ab", "sigma_bb"): 7,
     (
@@ -56,18 +62,36 @@ class AutomaticPointSource:
     outputs: tuple[tuple[int, ...], ...]
     expression_identity: str
     source: str
+    spin: Literal["polarized", "unpolarized"]
+    domain: str
+    domain_version: int
+
+    @property
+    def mathematical_contract(self) -> dict:
+        """Bind derivatives to their actual layout, not an equal-input inference."""
+        return {
+            "expression_identity": self.expression_identity,
+            "spin": self.spin,
+            "domain": self.domain,
+            "domain_version": self.domain_version,
+            "features": self.features,
+            "outputs": self.outputs,
+            "ingredient_mask": self.ingredient_mask,
+            "normalization": (
+                "original-total-density-partial"
+                if self.spin == "unpolarized"
+                else "physical-spin-partials"
+            ),
+        }
 
     @property
     def source_identity(self) -> str:
         """Hash exact emitted bytes and layout without assigning runtime support."""
         return canonical_hash(
             {
-                "schema": "generativeqc.automatic-libxc-point-source.v1",
+                "schema": "generativeqc.automatic-libxc-point-source.v2",
                 "backend": self.backend,
-                "expression_identity": self.expression_identity,
-                "features": self.features,
-                "outputs": self.outputs,
-                "ingredient_mask": self.ingredient_mask,
+                "mathematics": self.mathematical_contract,
                 "source": self.source,
             }
         )
@@ -78,6 +102,7 @@ def emit_automatic_point(
     *,
     backend: Literal["cpu", "cuda"] = "cpu",
     equal_spin: bool = False,
+    spin: Literal["polarized", "unpolarized"] = "polarized",
 ) -> AutomaticPointSource:
     """Lower one ordinary semilocal Graph into the native physical-spin ABI.
 
@@ -91,17 +116,27 @@ def emit_automatic_point(
     The optional CUDA slice binds paired work
     inputs after differentiation, retaining every polarized partial. Only a
     producer proving equal physical spins may call that slice. This source
-    grants no runtime admission.
+    grants no runtime admission. Explicit unpolarized density work instead uses
+    the canonical U1 Graph: paired transport channels are restored to total
+    density before any worker floor, and the scalar derivative is duplicated
+    only for the existing native half-channel contraction. This is not the
+    polarized equal-spin optimization, which retains P2 derivative roots.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
     if equal_spin and backend != "cuda":
         raise ValueError("automatic equal-spin point lowering requires CUDA")
+    if spin not in ("polarized", "unpolarized"):
+        raise ValueError("automatic point spin must be polarized or unpolarized")
+    if equal_spin and spin != "polarized":
+        raise ValueError("equal-spin lowering requires polarized derivative roots")
     policy = automatic_work_policy(name)
     density_only = policy.family == "lda"
+    if spin == "unpolarized" and not density_only:
+        raise ValueError("automatic unpolarized point requires density-only work")
     program = build_bulk_runtime_program(
         name,
-        spin="polarized",
+        spin=spin,
         order=1,
         **({"domain": DENSITY_WORK_DOMAIN} if density_only else {}),
     )
@@ -126,7 +161,7 @@ def emit_automatic_point(
             "  const double total_density = rho_a + rho_b;",
             f"  if (total_density < {float(policy.density_threshold).hex()}) return {{}};",
         )
-        work_arguments = features
+        work_arguments = ("total_density",) if spin == "unpolarized" else features
     else:
         work_lines, work_arguments = polarized_work_setup(policy, features)
     variables = dict(zip(features, work_arguments, strict=True))
@@ -160,6 +195,8 @@ def emit_automatic_point(
     )
     stem = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     function_name = f"automatic_{stem}_point"
+    if spin == "unpolarized":
+        function_name += "_unpolarized"
     if equal_spin:
         function_name += "_equal_spin"
     value_type = "SemilocalPointValue" if backend == "cpu" else "DevicePointValue"
@@ -185,6 +222,13 @@ def emit_automatic_point(
         "  const double rho_a = rho[0];",
         "  const double rho_b = rho[1];",
     ]
+    if spin == "unpolarized":
+        lines.extend(
+            [
+                "  if (rho_a != rho_b)",
+                reject("unpolarized worker requires paired transport channels"),
+            ]
+        )
     if ingredient_mask != 1:
         lines.extend(
             [
@@ -229,7 +273,7 @@ def emit_automatic_point(
             f"  {value_type} out{{}};",
             f"  out.energy = {energy};",
             f"  out.rho[0] = {refs[1]};",
-            f"  out.rho[1] = {refs[2]};",
+            f"  out.rho[1] = {refs[1] if spin == 'unpolarized' else refs[2]};",
         ]
     )
     if ingredient_mask != 1:
@@ -275,4 +319,9 @@ def emit_automatic_point(
         outputs=program.outputs,
         expression_identity=expression_identity,
         source="\n".join(lines),
+        spin=spin,
+        domain=DENSITY_WORK_DOMAIN if density_only else LIBXC_WORK_DOMAIN,
+        domain_version=(
+            DENSITY_WORK_DOMAIN_VERSION if density_only else LIBXC_WORK_DOMAIN_VERSION
+        ),
     )

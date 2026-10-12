@@ -320,6 +320,10 @@ core_hotspots_a=(
   tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
+  # The added restricted-CUDA test shifted this complete response file
+  # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
+  # and its original enumeration slot; all cases stay selected.
+  tests/python/test_uccsd_response.py
   # Keep the independent full-Fock matrix on its measured parallel owner.
   tests/python/test_uccsd_triples_fock_response.py
   tests/python/test_df_lambda_core_reuse.py
