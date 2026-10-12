@@ -22,7 +22,9 @@ def fixtures() -> tuple[str, str, str]:
             f"00000000 T generativeqc::dft::native_stationary_profile_{profile}()"
             for profile in compiler_native_profiles()
         )
-        + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"\n        + "\n00000000 T generativeqc::dft::launch_native_stationary_source_transport(...)"\n        + "\n00000000 T generativeqc::dft::launch_native_stationary_source_reduction(...)"
+        + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"
+        + "\n00000000 T generativeqc::dft::launch_native_stationary_source_transport(...)"
+        + "\n00000000 T generativeqc::dft::launch_native_stationary_source_reduction(...)"
     )
     return cache, registry, symbols
 
