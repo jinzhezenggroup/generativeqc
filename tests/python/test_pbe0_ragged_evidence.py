@@ -106,9 +106,7 @@ def test_main_retains_endpoint_and_geometry_evidence(
     """Run the real trajectory controller against a synchronous fake owner."""
     from generativeqc import _native
 
-    scientific = {
-        "geometries_bohr": [[[1, [0.0, 0.0, 0.0]]], [[1, [0.0, 0.0, 0.001]]]]
-    }
+    scientific = {"geometries_bohr": [[[1, [0.0, 0.0, 0.0]]], [[1, [0.0, 0.0, 0.001]]]]}
     oracle = {
         "energy": -1.0,
         "forces": [[0.0, 0.0, 0.0]],
