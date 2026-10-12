@@ -69,3 +69,74 @@ complete per-test timings if another measured shard approaches its budget.
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38187785285
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38199980410
 - tests/python/test_ci_shard_ownership.py
+
+## Follow-up: keep the complete gradient tail parallel
+
+Run 38202660731 tested merge tree fb66c86bfa65e1ce0d30a28c363741881aaef6c5
+after the complete-owner transfer above. Core-c completed 16,495 of 16,497
+cases (12,370 passed, 4,125 skipped), leaving only gradient admission
+options0 and native hcore-binding checks at its 30-minute deadline. The
+five independent molecular gradient cases, including spherical and
+broken-symmetry cases, and the reconverged finite-difference case passed.
+No assertion failure was reported.
+
+The passing stacked #2340 run 38202771274 used identical gradient source
+(blob 0ff724562688bf6ccf7f5b825ddbc1d8677970e7) and finished core-c in
+1,537.41 s. Its slowest-duration table alone records 1,751.22 worker-seconds
+in the gradient file: five complete molecular calls, nine fresh fixture
+setups, and the finite-difference call. This is a lower bound on summed
+test work, not a whole-file wall time or predicted speedup.
+
+Pin the complete gradient file to core-a through the existing hotspot
+owner mechanism. Keep worksteal, all 17 cases, fresh function-scoped
+fixtures, and the original core inventory index. Same-run core-a/core-b
+were 1,126.86/1,269.84 s; the stacked run measured 1,258.70/1,327.50 s.
+Core-a therefore has the larger observed margin in both runs. This does
+not establish the resulting critical path: final rerouted CI must still
+measure it. Serial loadfile routing remains rejected, and the unchanged
+30-minute budget remains enforced. Posthf passed in 1,728.94 s on #2329
+and 1,736.37 s on #2340; no additional load is assigned there.
+
+Extend the executable all-event ownership regression with the gradient
+pin, worksteal mode, absent/untracked/tracked/missing behavior, and
+unchanged indices for unrelated files. No scientific code, test oracle,
+fixture reuse, acceptance gate, or worker count changes.
+
+## Follow-up: keep corrected Lambda on parallel core-a workers
+
+PR #2347 at bfa436a7de1003ac18c3f5d9a7552af10f95fe09 tested merge tree
+53ee27af0fc47016f5bd57d7aea1c66ed7563c8b in run 38205701393. Core-c job
+114670271600 reached its unchanged 30-minute pytest deadline with only
+corrected-Lambda parameter-storage admission and late-triples-failure cases
+unfinished. Its log records 20 corrected-Lambda host passes and three CUDA
+skips, including all three independent molecular finite-difference adjoints
+and the restricted-limit comparison. No assertion failure was reported.
+
+The new file first started at 05:27:26 UTC, nearly twenty minutes after the
+pytest step began. Its completed host cases span about 1,492 summed seconds
+between logged start/result timestamps. This is an observational scheduling
+measure, not JUnit phase timing or a complete-file wall time; the interrupted
+cases are excluded. The function-scoped small_corrected fixture reconstructs
+live parent, standard adjoint and triples owners for every negative control.
+Closing and mutating those owners is part of the tests, so sharing mutable
+owners or replacing fresh qualification would weaken their isolation.
+
+Pin the complete corrected-Lambda file to core-a through the existing hotspot
+mechanism, alongside the independently reviewed gradient pin from e3454647.
+Keep worksteal and the original core inventory index. Same-run core-a already
+ran all 17 gradient cases (14 host passes, three CUDA skips), with at least
+948.74 worker-seconds in its slowest-duration table, and completed in
+838.30 s, versus core-b 1,465.50 s;
+posthf, runtime-heavy and compiler-heavy took 855.07, 1,077.48 and 912.32 s.
+The larger observed parallel margin supports core-a. It does not predict the
+new critical path, and final rerouted CI remains the completion authority.
+
+Serial loadfile transfer is rejected: the observed corrected-Lambda workload
+already approaches the entire step budget before including its two unfinished
+cases, collection or unrelated files. No scientific source, test body, fixture
+scope, oracle, numerical threshold, worker count, timeout or cache behavior
+changes. The ownership regression includes both pinned files for every event
+and absent, untracked, tracked and tracked-but-missing inventories, retaining
+exactly one owner and unchanged modulo indices for all unrelated test files.
+
+- https://github.com/jinzhezenggroup/generativeqc/actions/runs/38205701393/job/114670271600
