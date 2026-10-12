@@ -1,6 +1,6 @@
 # Decision: use certificate-bound nonlinear UHF restarts, not a second SCF solver
 
-Status: implemented (internal CPU slice)  
+Status: implemented (internal CPU slice)
 Date: 2026-10-12
 
 ## Problem
@@ -65,5 +65,5 @@ Integrate UKS using its actual XC response owner, not by relabeling UHF.
 - https://github.com/jinzhezenggroup/generativeqc/pull/2240
 - docs/developer/uhf_stability.md
 
-Agent: ChatGPT  
+Agent: ChatGPT
 Model: GPT-6

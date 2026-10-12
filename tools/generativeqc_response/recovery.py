@@ -8,10 +8,10 @@ Only real, internal, fixed-geometry UHF rotations are currently supported.
 from __future__ import annotations
 
 import math
+import typing
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-import typing
 
 import numpy as np
 from generativeqc.profiles import canonical_hash
@@ -53,7 +53,9 @@ class RecoveryOptions:
             or any(not 0 < a < math.pi / 2 for a in angles)
             or any(a >= b for a, b in zip(angles, angles[1:]))
         ):
-            raise ValueError("angles require 1-6 strictly increasing finite rotations (0, pi/2)")
+            raise ValueError(
+                "angles require 1-6 strictly increasing finite rotations (0, pi/2)"
+            )
         object.__setattr__(self, "angles", angles)
         if type(self.max_nbf) is not int or self.max_nbf < 1:
             raise ValueError("max_nbf must be a positive integer")
@@ -61,7 +63,11 @@ class RecoveryOptions:
             raise ValueError("budget_bytes must be a positive integer")
         for field in ("downhill_tolerance", "energy_tolerance", "root_tolerance"):
             value = getattr(self, field)
-            if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+            if (
+                not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+            ):
                 raise ValueError(f"{field} must be finite and positive")
 
 
@@ -91,10 +97,16 @@ def _metrics(reference: object, densities: np.ndarray) -> UHFSpinDiagnostics:
     na, nb = reference.nocc("alpha"), reference.nocc("beta")
     sz = (na - nb) / 2.0
     # Collinear determinant: <S^2> = Sz(Sz+1) + Nb - Tr(Da S Db S).
-    squared = float(sz * (sz + 1) + nb - np.trace(densities[0] @ overlap @ densities[1] @ overlap))
+    squared = float(
+        sz * (sz + 1) + nb - np.trace(densities[0] @ overlap @ densities[1] @ overlap)
+    )
     squared = max(0.0, squared) if squared >= -1e-10 else squared
     populations = [np.diag(d @ overlap).copy() for d in densities]
-    if not math.isfinite(squared) or squared < 0 or any(not np.isfinite(p).all() for p in populations):
+    if (
+        not math.isfinite(squared)
+        or squared < 0
+        or any(not np.isfinite(p).all() for p in populations)
+    ):
         raise RecoveryUnqualified("nonfinite or invalid spin diagnostics")
     return UHFSpinDiagnostics(
         squared,
@@ -102,7 +114,12 @@ def _metrics(reference: object, densities: np.ndarray) -> UHFSpinDiagnostics:
         immutable(populations[0]),
         immutable(populations[1]),
         float(np.linalg.norm((densities[0] - densities[1]) @ overlap)),
-        canonical_hash({"reference": reference.identity, "densities": sha256(densities.tobytes()).hexdigest()}),
+        canonical_hash(
+            {
+                "reference": reference.identity,
+                "densities": sha256(densities.tobytes()).hexdigest(),
+            }
+        ),
     )
 
 
@@ -111,15 +128,25 @@ def _electronic_energy(operator: UHFResponseOperator, densities: np.ndarray) -> 
     reference = operator.problem.reference
     a, b = operator._fock_response(densities[0], densities[1])
     a, b = np.asarray(a), np.asarray(b)
-    if any(m.shape != reference.hcore.shape or np.iscomplexobj(m) or not np.isfinite(m).all() for m in (a, b)):
+    if any(
+        m.shape != reference.hcore.shape
+        or np.iscomplexobj(m)
+        or not np.isfinite(m).all()
+        for m in (a, b)
+    ):
         raise RecoveryUnqualified("invalid source Fock during trial energy")
-    result = float(np.sum((densities[0] + densities[1]) * reference.hcore) + 0.5 * (np.sum(densities[0] * a) + np.sum(densities[1] * b)))
+    result = float(
+        np.sum((densities[0] + densities[1]) * reference.hcore)
+        + 0.5 * (np.sum(densities[0] * a) + np.sum(densities[1] * b))
+    )
     if not math.isfinite(result):
         raise RecoveryUnqualified("nonfinite trial electronic energy")
     return result
 
 
-def _rotate_density(operator: UHFResponseOperator, direction: np.ndarray, angle: float) -> np.ndarray:
+def _rotate_density(
+    operator: UHFResponseOperator, direction: np.ndarray, angle: float
+) -> np.ndarray:
     reference = operator.problem.reference
     layout = operator.problem.layout
     blocks = []
@@ -135,9 +162,17 @@ def _rotate_density(operator: UHFResponseOperator, direction: np.ndarray, angle:
     return immutable(value)
 
 
-def _same_root(left: np.ndarray, right: np.ndarray, overlap: np.ndarray, tolerance: float, *, spin_flip: bool) -> bool:
+def _same_root(
+    left: np.ndarray,
+    right: np.ndarray,
+    overlap: np.ndarray,
+    tolerance: float,
+    *,
+    spin_flip: bool,
+) -> bool:
     def defect(pair: np.ndarray) -> float:
         return float(max(np.linalg.norm((left[i] - pair[i]) @ overlap) for i in (0, 1)))
+
     if defect(right) < tolerance:
         return True
     return bool(spin_flip and defect(right[::-1]) < tolerance)
@@ -163,7 +198,10 @@ class UHFRecoveryResult:
     def assert_current(self) -> None:
         self.initial.assert_current(self.initial_operator)
         self.recovered.assert_current(self.operator)
-        if self.status not in ("RECOVERED", "UNCHANGED") or self.recovered.status != "STABLE":
+        if (
+            self.status not in ("RECOVERED", "UNCHANGED")
+            or self.recovered.status != "STABLE"
+        ):
             raise RecoveryUnqualified("unqualified root publication")
 
 
@@ -192,21 +230,42 @@ def recover_uhf_stability(
     n = r0.nbf
     # Charge the certificate budget, all AO seeds and all basis-rotation scratch
     # before applying the source or asking the callback to allocate a solver.
-    estimated = r0.numeric_bytes + 8 * (36 * n * n + 8 * operator.dimension + 2 * len(options.angles) * n * n)
+    estimated = r0.numeric_bytes + 8 * (
+        36 * n * n + 8 * operator.dimension + 2 * len(options.angles) * n * n
+    )
     if n > options.max_nbf or estimated > options.budget_bytes:
         raise RecoveryUnqualified("recovery numeric budget rejected before execution")
     initial = diagnose_uhf_stability(operator, options=stability_options)
     if initial.status in ("EMPTY", "NEAR_SINGULAR"):
-        raise RecoveryUnqualified(f"cannot publish unresolved {initial.status} reference")
+        raise RecoveryUnqualified(
+            f"cannot publish unresolved {initial.status} reference"
+        )
     original = _densities(r0)
     if initial.status == "STABLE":
         spin = _metrics(r0, original)
-        return UHFRecoveryResult("UNCHANGED", initial, initial, operator, operator, 0.0, spin, 0, 1, 0, 1, canonical_hash({"certificate": initial.identity, "status": "UNCHANGED"}))
+        return UHFRecoveryResult(
+            "UNCHANGED",
+            initial,
+            initial,
+            operator,
+            operator,
+            0.0,
+            spin,
+            0,
+            1,
+            0,
+            1,
+            canonical_hash({"certificate": initial.identity, "status": "UNCHANGED"}),
+        )
     if initial.direction is None:
         raise RecoveryUnqualified("negative direction absent from unstable certificate")
     initial.assert_current(operator)
     base_energy = _electronic_energy(operator, original)
-    roots: list[tuple[UHFResponseOperator, UHFStabilityCertificate, np.ndarray, UHFSpinDiagnostics]] = []
+    roots: list[
+        tuple[
+            UHFResponseOperator, UHFStabilityCertificate, np.ndarray, UHFSpinDiagnostics
+        ]
+    ] = []
     attempted = 0
     equivalent = 0
     for angle in options.angles:
@@ -230,20 +289,46 @@ def recover_uhf_stability(
                 raise RecoveryUnqualified("SCF callback did not return a UHF operator")
             r1 = candidate.problem.reference
             if (
-                any(getattr(r1, attr) != getattr(r0, attr) for attr in ("algorithm", "geometry_hash", "basis_hash", "hamiltonian_id", "representation", "precision"))
+                any(
+                    getattr(r1, attr) != getattr(r0, attr)
+                    for attr in (
+                        "algorithm",
+                        "geometry_hash",
+                        "basis_hash",
+                        "hamiltonian_id",
+                        "representation",
+                        "precision",
+                    )
+                )
                 or r1.nbf != n
                 or any(r1.nocc(s) != r0.nocc(s) for s in ("alpha", "beta"))
                 or candidate.backend.identity != operator.backend.identity
                 or not np.array_equal(r1.overlap, r0.overlap)
                 or not np.array_equal(r1.hcore, r0.hcore)
             ):
-                raise RecoveryUnqualified("SCF result changes geometry, Hamiltonian or spin occupation")
+                raise RecoveryUnqualified(
+                    "SCF result changes geometry, Hamiltonian or spin occupation"
+                )
             new_density = _densities(r1)
-            if _same_root(new_density, original, r0.overlap, options.root_tolerance, spin_flip=False):
+            if _same_root(
+                new_density,
+                original,
+                r0.overlap,
+                options.root_tolerance,
+                spin_flip=False,
+            ):
                 continue
             post_energy = _electronic_energy(candidate, new_density)
-            if abs((r1.reference_energy - r0.reference_energy) - (post_energy - base_energy)) > options.energy_tolerance:
-                raise RecoveryUnqualified("SCF energy does not match its converged source-owned Fock")
+            if (
+                abs(
+                    (r1.reference_energy - r0.reference_energy)
+                    - (post_energy - base_energy)
+                )
+                > options.energy_tolerance
+            ):
+                raise RecoveryUnqualified(
+                    "SCF energy does not match its converged source-owned Fock"
+                )
             if r1.reference_energy >= r0.reference_energy - options.downhill_tolerance:
                 continue
             certificate = diagnose_uhf_stability(candidate, options=stability_options)
@@ -255,7 +340,10 @@ def recover_uhf_stability(
                     index
                     for index, old in enumerate(roots)
                     if _same_root(
-                        new_density, old[2], r0.overlap, options.root_tolerance,
+                        new_density,
+                        old[2],
+                        r0.overlap,
+                        options.root_tolerance,
                         spin_flip=r0.nocc("alpha") == r0.nocc("beta"),
                     )
                 ),
@@ -267,24 +355,45 @@ def recover_uhf_stability(
                 equivalent += 1
                 # Preserve the energetically best member of each physical
                 # equivalence class, not whichever SCF seed was tried first.
-                if r1.reference_energy < roots[duplicate][0].problem.reference.reference_energy:
+                if (
+                    r1.reference_energy
+                    < roots[duplicate][0].problem.reference.reference_energy
+                ):
                     roots[duplicate] = (candidate, certificate, new_density, spin)
     initial.assert_current(operator)
     if not roots:
-        raise RecoveryUnqualified("no lower-energy, fully stable, converged UHF root after bounded restarts")
+        raise RecoveryUnqualified(
+            "no lower-energy, fully stable, converged UHF root after bounded restarts"
+        )
     winner = min(roots, key=lambda item: item[0].problem.reference.reference_energy)
     recovered, evidence, _, spin = winner
     evidence.assert_current(recovered)
-    identity = canonical_hash({
-        "kind": "bounded-real-uhf-recovery-v1",
-        "original": initial.identity,
-        "recovered": evidence.identity,
-        "spin": spin.density_identity,
-        "energy_change": recovered.problem.reference.reference_energy - r0.reference_energy,
-        "source": sha256(Path(__file__).read_bytes()).hexdigest(),
-        "options": vars(options),
-    })
-    return UHFRecoveryResult("RECOVERED", initial, evidence, recovered, operator, r0.reference_energy - recovered.problem.reference.reference_energy, spin, attempted, len(roots) + equivalent, equivalent, len(roots), identity)
+    identity = canonical_hash(
+        {
+            "kind": "bounded-real-uhf-recovery-v1",
+            "original": initial.identity,
+            "recovered": evidence.identity,
+            "spin": spin.density_identity,
+            "energy_change": recovered.problem.reference.reference_energy
+            - r0.reference_energy,
+            "source": sha256(Path(__file__).read_bytes()).hexdigest(),
+            "options": vars(options),
+        }
+    )
+    return UHFRecoveryResult(
+        "RECOVERED",
+        initial,
+        evidence,
+        recovered,
+        operator,
+        r0.reference_energy - recovered.problem.reference.reference_energy,
+        spin,
+        attempted,
+        len(roots) + equivalent,
+        equivalent,
+        len(roots),
+        identity,
+    )
 
 
 def native_uhf_operator_from_scf(
@@ -303,7 +412,9 @@ def native_uhf_operator_from_scf(
     from generativeqc.fock import FockScfResult
     from scipy.linalg import eigh
 
-    if type(previous) is not UHFResponseOperator or not isinstance(scf_result, FockScfResult):
+    if type(previous) is not UHFResponseOperator or not isinstance(
+        scf_result, FockScfResult
+    ):
         raise RecoveryUnqualified("expected native FockScfResult and UHF operator")
     if not math.isfinite(residual_tolerance) or not 0 < residual_tolerance <= 1e-7:
         raise ValueError("invalid native UHF export residual tolerance")
@@ -314,7 +425,10 @@ def native_uhf_operator_from_scf(
         raise RecoveryUnqualified("invalid native spin-resolved density")
     if not scf_result.initial_density_used or not math.isfinite(scf_result.energy):
         raise RecoveryUnqualified("native SCF did not consume the supplied spin seed")
-    if not math.isfinite(scf_result.density_rms) or scf_result.density_rms > residual_tolerance:
+    if (
+        not math.isfinite(scf_result.density_rms)
+        or scf_result.density_rms > residual_tolerance
+    ):
         raise RecoveryUnqualified("native SCF reported inadequate convergence")
     previous.validate_current()
     # Check native density's physical metric and spin electron counts.
@@ -325,7 +439,9 @@ def native_uhf_operator_from_scf(
             or abs(np.trace(d[i] @ overlap) - r0.nocc(spin)) > residual_tolerance
             or np.max(np.abs(d[i] @ overlap @ d[i] - d[i])) > residual_tolerance
         ):
-            raise RecoveryUnqualified(f"native {spin} density is not an occupied projector")
+            raise RecoveryUnqualified(
+                f"native {spin} density is not an occupied projector"
+            )
     a, b = previous._fock_response(d[0], d[1])
     focks = []
     frames = []
@@ -343,13 +459,17 @@ def native_uhf_operator_from_scf(
         frames.append(coefficients)
         energies.append(eigvals)
     if mismatch > residual_tolerance:
-        raise RecoveryUnqualified("native final density is not canonical self-consistent")
-    generation = canonical_hash({
-        "kind": "native-uhf-scf-export-v1",
-        "prior": r0.identity,
-        "native": scf_result.identity,
-        "density": sha256(np.ascontiguousarray(d).tobytes()).hexdigest(),
-    })
+        raise RecoveryUnqualified(
+            "native final density is not canonical self-consistent"
+        )
+    generation = canonical_hash(
+        {
+            "kind": "native-uhf-scf-export-v1",
+            "prior": r0.identity,
+            "native": scf_result.identity,
+            "density": sha256(np.ascontiguousarray(d).tobytes()).hexdigest(),
+        }
+    )
     result_reference = replace(
         r0,
         fock_alpha=focks[0],
@@ -390,11 +510,18 @@ def recover_uhf_with_native_fock_plan(
         raise RecoveryUnqualified("native recovery requires UHF operator and FockPlan")
     if type(operator.backend) is not NativeJKBackend:
         raise RecoveryUnqualified("native CPU J/K provider is required")
-    if plan._device_id is not None or plan.spec not in (
-        FockBuildSpec.hf("unrestricted", derivative_order=0),
-        FockBuildSpec.hf("unrestricted", derivative_order=1),
-    ) or plan.diagnostics["screening_tolerance"] != 0.0:
-        raise RecoveryUnqualified("only unscreened exact unrestricted CPU HF is admitted")
+    if (
+        plan._device_id is not None
+        or plan.spec
+        not in (
+            FockBuildSpec.hf("unrestricted", derivative_order=0),
+            FockBuildSpec.hf("unrestricted", derivative_order=1),
+        )
+        or plan.diagnostics["screening_tolerance"] != 0.0
+    ):
+        raise RecoveryUnqualified(
+            "only unscreened exact unrestricted CPU HF is admitted"
+        )
     source = operator.backend.source
     if (
         plan.basis.nao != operator.problem.reference.nbf
