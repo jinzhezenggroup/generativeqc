@@ -1039,6 +1039,7 @@ jobs:
           # Selection is sourced into this shell so its arrays flow into pytest.
           # GitHub Actions caps each inline run script at 21,000 characters.
           source .github/scripts/ci_select_python_shard.sh
+          source .github/scripts/ci_collect_python_shard.sh
           diagnostic_args=()
           if [[ "${{ matrix.shard }}" == "core-a" || "${{ matrix.shard }}" == "core-b" || "${{ matrix.shard }}" == "core-c" ]]; then
             diagnostic_args+=(
@@ -1047,10 +1048,11 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          .venv/bin/python -m pytest "${test_targets[@]}" -v \
+          .venv/bin/python -m pytest "${collection_targets[@]}" -v \
             -o faulthandler_timeout=900 \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
+            "${collection_args[@]}" \
             "${coverage_args[@]}" \
             "${diagnostic_args[@]}" \
             "${extra_args[@]}"

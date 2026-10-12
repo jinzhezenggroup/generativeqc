@@ -358,7 +358,9 @@ def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
     assert '--junitxml=".artifacts/pytest-${{ matrix.shard }}.xml"' in source
     assert "path: .artifacts/" in source
     assert "source .github/scripts/ci_select_python_shard.sh" in source
-    assert 'pytest "${test_targets[@]}" -v' in source
+    assert 'pytest "${collection_targets[@]}" -v' in source
+    assert "source .github/scripts/ci_collect_python_shard.sh" in source
+    assert '"${collection_args[@]}"' in source
     assert "-o faulthandler_timeout=900" in source
 
 
@@ -597,3 +599,251 @@ def test_real_worksteal_seeds_every_worker_without_changing_selected_cases(
     assert actual == expected
     if mode == "serial":
         assert records == [list(expected.elements())]
+
+
+def _collection_arguments(
+    shard: str, targets: list[str], root: Path
+) -> subprocess.CompletedProcess[str]:
+    """Exercise the separate adapter without changing the selector's outputs."""
+    adapter = ROOT / ".github/scripts/ci_collect_python_shard.sh"
+    script = 'test_targets=("$@")\n'
+    script += f"source {shlex.quote(str(adapter))}\n"
+    script += (
+        'printf "%s\\0" "${collection_targets[@]}" --ignore-- "${collection_args[@]}"\n'
+    )
+    return subprocess.run(
+        ["bash", "-eu", "-c", script, "collection", *targets],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=root,
+        env={**os.environ, "GENERATIVEQC_CI_SHARD": shard},
+    )
+
+
+def _split_collection(result: subprocess.CompletedProcess[str]) -> tuple[list, list]:
+    assert result.returncode == 0, result.stdout + result.stderr
+    parts = result.stdout.split("\0")[:-1]
+    boundary = parts.index("--ignore--")
+    return parts[:boundary], parts[boundary + 1 :]
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("shard", SHARDS)
+def test_collection_adapter_preserves_exact_shard_file_inventory(
+    event: str, shard: str
+) -> None:
+    """No ownership or event-dependent science selection moves into the adapter."""
+    _, selected, _ = _selection(event, shard)
+    targets, arguments = _split_collection(_collection_arguments(shard, selected, ROOT))
+    if shard.startswith("core-"):
+        assert targets == ["tests/python"]
+        ignored = {item.removeprefix("--ignore=") for item in arguments}
+        discovered = {
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "tests/python").rglob("test_*.py")
+        }
+        assert discovered - ignored == set(selected)
+        assert not (set(selected) & ignored)
+    else:
+        assert targets == selected
+        assert arguments == []
+
+
+@pytest.mark.parametrize("mode", ("priority", "duplicate", "nodeid", "nested"))
+def test_collection_adapter_preserves_explicit_order_fallback(
+    mode: str, tmp_path: Path
+) -> None:
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    for name in ("test_a.py", "test_b.py"):
+        (directory / name).write_text("def test_ok(): pass\n", encoding="utf-8")
+    nested = directory / "test_nested"
+    nested.mkdir()
+    (nested / "test_x.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    targets = {
+        "nested": ["tests/python/test_nested/test_x.py"],
+        "priority": ["tests/python/test_b.py", "tests/python/test_a.py"],
+        "duplicate": ["tests/python/test_a.py", "tests/python/test_a.py"],
+        "nodeid": ["tests/python/test_a.py::test_ok"],
+    }[mode]
+    actual, arguments = _split_collection(
+        _collection_arguments("core-b", targets, tmp_path)
+    )
+    assert actual == targets
+    assert arguments == []
+
+
+@pytest.mark.parametrize("targets", ([], ["tests/python/test_missing.py"]))
+def test_collection_adapter_fails_closed_for_empty_or_missing_selection(
+    targets: list[str], tmp_path: Path
+) -> None:
+    (tmp_path / "tests/python").mkdir(parents=True)
+    result = _collection_arguments("core-b", targets, tmp_path)
+    assert result.returncode != 0
+    assert "::error::" in result.stderr
+
+
+@pytest.mark.parametrize("workers", (0, 4))
+@pytest.mark.parametrize("fresh", (False, True))
+def test_single_discovery_preserves_nodes_fixtures_and_unselected_import_boundary(
+    workers: int, fresh: bool, tmp_path: Path
+) -> None:
+    """Real pytest/xdist keeps the complete cases and never imports foreign files."""
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        "import json, os\nfrom pathlib import Path\n"
+        "def pytest_collection_finish(session):\n"
+        "    worker = os.environ.get('PYTEST_XDIST_WORKER', 'serial')\n"
+        "    if session.items:\n"
+        "        Path(worker + '.json').write_text(json.dumps([i.nodeid for i in session.items]))\n",
+        encoding="utf-8",
+    )
+    for name in ("a", "z"):
+        (directory / f"test_{name}.py").write_text(
+            "import pytest\n"
+            "@pytest.fixture(scope='module', params=[1, 2])\n"
+            "def shared(request):\n    yield request.param\n"
+            "@pytest.mark.parametrize('value', [3, 4])\n"
+            "def test_value(shared, value):\n    assert shared + value in (4, 5, 6)\n"
+            "@pytest.mark.skip(reason='preserve skip')\n"
+            "def test_skip(shared):\n    raise AssertionError('skipped')\n",
+            encoding="utf-8",
+        )
+    # Neither tracked nor untracked foreign tests may execute import side effects.
+    (directory / "test_unselected.py").write_text(
+        "raise AssertionError('foreign import')\n"
+    )
+    (directory / "untracked_test.py").write_text(
+        "raise AssertionError('untracked import')\n"
+    )
+    foreign = directory / "foreign"
+    foreign.mkdir()
+    (foreign / "conftest.py").write_text("raise AssertionError('foreign conftest')\n")
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "conftest.py").write_text("raise AssertionError('symlink conftest')\n")
+    (directory / "linked").symlink_to(external, target_is_directory=True)
+    selected = ["tests/python/test_a.py", "tests/python/test_z.py"]
+    targets, arguments = _split_collection(
+        _collection_arguments("core-b", selected, tmp_path)
+    )
+    env = {
+        **os.environ,
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTEST_ADDOPTS": "",
+        "PYTHONPATH": str(ROOT),
+    }
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "xdist.plugin",
+        "-n",
+        str(workers),
+        "--dist=worksteal",
+    ]
+    if fresh:
+        command.extend(
+            (
+                "-p",
+                "tools.pytest_ci_fresh_frontier",
+                "--ci-fresh-priority=tests/python/test_z.py",
+            )
+        )
+    baseline = subprocess.run(
+        command + selected,
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert baseline.returncode == 0, baseline.stdout + baseline.stderr
+    expected = {path.name: path.read_text() for path in tmp_path.glob("*.json")}
+    for path in tmp_path.glob("*.json"):
+        path.unlink()
+    adapted = subprocess.run(
+        command + targets + arguments,
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert adapted.returncode == 0, adapted.stdout + adapted.stderr
+    actual = {path.name: path.read_text() for path in tmp_path.glob("*.json")}
+    assert actual == expected
+    assert len(actual) == (workers or 1)
+    assert "8 passed, 4 skipped" in baseline.stdout
+    assert "8 passed, 4 skipped" in adapted.stdout
+    # An ordinary developer invocation is unchanged and still sees foreign files.
+    ordinary = subprocess.run(
+        command + ["tests/python"],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert ordinary.returncode != 0
+    assert "foreign import" in ordinary.stdout
+    assert "untracked import" in ordinary.stdout
+    assert "foreign conftest" in ordinary.stdout
+    assert "symlink conftest" in ordinary.stdout
+
+
+def test_collection_adapter_rejects_partial_file_enumeration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (directory / "test_a.py").write_text("def test_ok(): pass\n")
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    find = binary / "find"
+    find.write_text("#!/bin/sh\nprintf 'tests/python/test_a.py\\0'\nexit 17\n")
+    find.chmod(0o755)
+    monkeypatch.setenv("PATH", str(binary) + os.pathsep + os.environ["PATH"])
+    result = _collection_arguments("core-b", ["tests/python/test_a.py"], tmp_path)
+    assert result.returncode != 0
+    assert "could not enumerate Python collection exclusions" in result.stderr
+    assert not result.stdout
+
+
+def test_collection_adapter_is_repeatable_without_broadening_selection(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (directory / "test_a.py").write_text("def test_ok(): pass\n")
+    adapter = shlex.quote(str(ROOT / ".github/scripts/ci_collect_python_shard.sh"))
+    script = (
+        "test_targets=(tests/python/test_a.py)\n"
+        f"source {adapter}\n"
+        "printf 'raise AssertionError(42)\\n' > tests/python/test_late.py\n"
+        f"source {adapter}\n"
+        '[[ "${test_targets[*]}" == tests/python/test_a.py ]]\n'
+        'printf "%s\\0" "${collection_targets[@]}" --ignore-- "${collection_args[@]}"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-eu", "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "GENERATIVEQC_CI_SHARD": "core-b"},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    targets, arguments = _split_collection(result)
+    assert targets == ["tests/python"]
+    assert "--ignore=tests/python/test_late.py" in arguments
+    assert "--ignore=tests/python/test_a.py" not in arguments
