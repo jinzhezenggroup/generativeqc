@@ -87,7 +87,9 @@ class StandaloneCudaForceTests(unittest.TestCase):
             verify_contract(
                 cache,
                 registry,
-                symbols.replace("launch_native_stationary_source_reduction(", "discarded("),
+                symbols.replace(
+                    "launch_native_stationary_source_reduction(", "discarded("
+                ),
             )
 
     def test_missing_registry_entry_point_fails(self) -> None:
