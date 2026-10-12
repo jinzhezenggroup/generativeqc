@@ -57,6 +57,7 @@ _NATIVE_H6 = [
 ]
 
 
+
 @contextmanager
 def _response(
     parent: Any,
@@ -163,6 +164,7 @@ def _independent_analytic(oracle: Any) -> np.ndarray:
     )
 
 
+
 @pytest.mark.parametrize(
     "atom,spin,broken",
     [("N 0 0 0; H 0 -.8 .6; H 0 .8 .6", 1, False)],
@@ -200,6 +202,7 @@ def test_corrected_physical_weights_close_reconverged_total_energy_fd(
             for value in (*result.weights.values(), result.orbital_adjoint):
                 with pytest.raises(ValueError):
                     value.setflags(write=True)
+
 
 
 @pytest.mark.parametrize(
@@ -281,6 +284,7 @@ def test_complete_corrected_native_cpu_force_has_independent_oracles(
                         value.setflags(write=True)
 
 
+
 @contextmanager
 def _small_response_context() -> Any:
     snapshot, source = _noninteracting(4, 2, 2)
@@ -292,12 +296,14 @@ def _small_response_context() -> Any:
         yield owners
 
 
+
 @pytest.fixture(scope="module")
 def small_response() -> Any:
     # Each response.solve() replays its scientific qualifications from live owners.
     # Tests with function-local monkeypatches share the expensive prepared graph.
     with _small_response_context() as owners:
         yield owners
+
 
 
 @pytest.fixture
@@ -330,7 +336,6 @@ def test_standard_and_corrected_type_boundaries_remain_distinct(
     assert result.triples_energy == 0.0
 
 
-
 def test_corrected_admission_precedes_raw_producer_reads(
     small_response: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -356,7 +361,6 @@ def test_corrected_admission_precedes_raw_producer_reads(
             )
 
 
-
 def test_corrected_requires_the_same_live_triples_owner(small_response: tuple) -> None:
     physical, corrected, _ = small_response
     parent = corrected.prepared
@@ -372,7 +376,6 @@ def test_corrected_requires_the_same_live_triples_owner(small_response: tuple) -
             physical.provider,
             nuclear_repulsion=0.0,
         )
-
 
 
 def test_complete_second_replay_is_admitted_before_raw_reads(
@@ -399,7 +402,6 @@ def test_complete_second_replay_is_admitted_before_raw_reads(
         )
 
 
-
 def test_late_correction_transport_failure_never_publishes(
     small_response: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -416,7 +418,6 @@ def test_late_correction_transport_failure_never_publishes(
     monkeypatch.setattr(executor, "execute", nonfinite)
     with pytest.raises(FloatingPointError, match="nonfinite"):
         physical.solve()
-
 
 
 def test_fresh_correction_comparison_rejects_detached_bar_drift(
@@ -445,7 +446,6 @@ def test_fresh_correction_comparison_rejects_detached_bar_drift(
         physical.solve()
 
 
-
 def test_final_same_occupancy_stationarity_is_not_an_ov_only_gate(
     small_response: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -467,7 +467,6 @@ def test_final_same_occupancy_stationarity_is_not_an_ov_only_gate(
         physical.solve()
 
 
-
 def test_closed_full_fock_owner_never_publishes(closing_small_response: tuple) -> None:
     physical, corrected, fock = closing_small_response
     fock.close()
@@ -475,6 +474,7 @@ def test_closed_full_fock_owner_never_publishes(closing_small_response: tuple) -
         physical.solve()
     assert not physical.provider._closed
     corrected._check_open()
+
 
 
 @pytest.mark.skipif(
