@@ -155,3 +155,103 @@ def test_budget_rejects_before_diagnostic_and_callback(options: RecoveryOptions)
 def test_invalid_angle_admission(angles: tuple[float, ...]) -> None:
     with pytest.raises(ValueError):
         RecoveryOptions(angles=angles)
+
+
+def test_native_h2_broken_root_matches_independent_pyscf_214(record_property) -> None:
+    """Real native SCF reconvergence; PySCF is used only as a test oracle."""
+    import os
+
+    try:
+        import pyscf
+        from pyscf import gto, scf
+    except ImportError:
+        if os.environ.get("GENERATIVEQC_REQUIRE_UHF_RECOVERY_ORACLE") == "1":
+            pytest.fail("pinned PySCF recovery oracle required")
+        pytest.skip("pinned molecular oracle unavailable; not scientific PASS")
+    assert pyscf.__version__ == "2.14.0"
+
+    from scipy.linalg import eigh
+
+    from generativeqc.fock import FockBuildSpec, FockPlan
+    from generativeqc_compiler.dft import NativeAO
+    from tools.generativeqc_posthf.sources import NativeSource
+    from tools.generativeqc_response.backends import NativeJKBackend
+    from tools.generativeqc_response.recovery import recover_uhf_with_native_fock_plan
+
+    bohr = 1.8897261246257702
+    atoms = [("H", (0.0, 0.0, -bohr)), ("H", (0.0, 0.0, bohr))]
+    with (
+        NativeAO(atoms, basis="sto-3g", multiplicity=1) as basis,
+        NativeSource(atoms, basis="sto-3g", multiplicity=1) as source,
+        FockPlan(
+            basis, FockBuildSpec.hf("unrestricted", derivative_order=0),
+            screening_tolerance=0.0, device="cpu",
+        ) as native_plan,
+    ):
+        overlap, hcore = source.one_electron()
+        rhf_density, _ = source.rhf_density(tolerance=1e-12)
+        symmetric_seed = np.stack([0.5 * rhf_density] * 2)
+        symmetric = native_plan.solve(
+            initial_density=symmetric_seed,
+            compute_forces=False,
+            max_iterations=200,
+            energy_tolerance=1e-11,
+            density_tolerance=1e-10,
+        )
+        assert symmetric.initial_density_used
+        assert np.max(np.abs(symmetric.density[0] - symmetric.density[1])) < 1e-8
+        backend = NativeJKBackend(source)
+        # This initial setup is test-only; production recovery uses the shared
+        # UHF response Fock seam and an exact native FockPlan SCF callback.
+        total_j, _ = backend.coulomb_exchange(symmetric.density.sum(axis=0))
+        _, ka = backend.coulomb_exchange(symmetric.density[0])
+        _, kb = backend.coulomb_exchange(symmetric.density[1])
+        focks = (hcore + total_j - ka, hcore + total_j - kb)
+        eigenpairs = [eigh(f, overlap) for f in focks]
+        residual = max(
+            float(np.max(np.abs(f @ c - overlap @ c * e)))
+            for f, (e, c) in zip(focks, eigenpairs, strict=True)
+        )
+        snapshot = UHFReferenceSnapshot(
+            overlap, hcore, *focks, *(c for e, c in eigenpairs),
+            *(e for e, c in eigenpairs), *(np.array([1.0, 0.0]) for _ in (0, 1)),
+            symmetric.energy, max(residual, symmetric.density_rms),
+            source.geometry_hash, source.basis_hash, "symmetric-native-scaffold",
+            representation="cartesian", hf_backend="cpu-native",
+        )
+        operator = UHFResponseOperator(
+            UHFResponseOperator.build_problem(snapshot, backend), backend
+        )
+        assert diagnose_uhf_stability(operator).status == "UNSTABLE"
+        result = recover_uhf_with_native_fock_plan(operator, native_plan)
+        result.assert_current()
+        assert result.recovered.status == "STABLE"
+        assert result.energy_drop > 0.1
+        assert result.spin.spin_projection == 0
+        assert result.spin.spin_squared > 0.5
+        # Basis exponents and contractions are aligned with the native source.
+        # PySCF neither supplies the integrals nor performs production recovery.
+        matched = {
+            "H": [
+                [shell.angular_momentum, *[
+                    [p.exponent, p.coefficient] for p in shell.primitives
+                ]]
+                for shell in basis.shells if shell.atom_index == 0
+            ]
+        }
+        mol = gto.M(atom=atoms, unit="Bohr", basis=matched, spin=0, cart=True, verbose=0)
+        oracle = scf.UHF(mol)
+        oracle.conv_tol = 1e-13
+        oracle.conv_tol_grad = 1e-10
+        oracle.max_cycle = 200
+        local_start = np.zeros((2, 2, 2))
+        local_start[0, 0, 0] = local_start[1, 1, 1] = 1.0
+        oracle.kernel(dm0=local_start)
+        assert oracle.converged
+        np.testing.assert_allclose(
+            result.operator.problem.reference.reference_energy, oracle.e_tot, atol=2e-7
+        )
+        record_property("native_recovered_energy", float(result.operator.problem.reference.reference_energy))
+        record_property("pyscf_version", pyscf.__version__)
+        record_property("recovered_spin_squared", result.spin.spin_squared)
+        record_property("source_evidence", result.identity)
