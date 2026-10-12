@@ -16,13 +16,15 @@ def fixtures() -> tuple[str, str, str]:
         )
     )
     registry = "\n".join(
-        f"    &native_stationary_profile_{profile}(),"
-        for profile in EXPECTED_PROFILES
+        f"    &native_stationary_profile_{profile}()," for profile in EXPECTED_PROFILES
     )
-    symbols = "\n".join(
-        f"00000000 T generativeqc::dft::native_stationary_profile_{profile}()"
-        for profile in EXPECTED_PROFILES
-    ) + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"
+    symbols = (
+        "\n".join(
+            f"00000000 T generativeqc::dft::native_stationary_profile_{profile}()"
+            for profile in EXPECTED_PROFILES
+        )
+        + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"
+    )
     return cache, registry, symbols
 
 
@@ -37,7 +39,9 @@ class StandaloneCudaForceTests(unittest.TestCase):
                 cache.replace(
                     "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA:BOOL=ON",
                     "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA:BOOL=OFF",
-                ), registry, symbols
+                ),
+                registry,
+                symbols,
             )
 
     def test_python_shared_artifacts_are_not_distribution_dependencies(self) -> None:
@@ -47,27 +51,43 @@ class StandaloneCudaForceTests(unittest.TestCase):
                 cache.replace(
                     "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=OFF",
                     "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=ON",
-                ), registry, symbols
+                ),
+                registry,
+                symbols,
             )
 
     def test_missing_registered_profile_fails(self) -> None:
         cache, registry, symbols = fixtures()
         with self.assertRaisesRegex(ValueError, "registry mismatch"):
-            verify_contract(cache, registry.replace("&native_stationary_profile_b3lyp_uks(),", ""), symbols)
+            verify_contract(
+                cache,
+                registry.replace("&native_stationary_profile_b3lyp_uks(),", ""),
+                symbols,
+            )
 
     def test_linker_discarded_profile_fails(self) -> None:
         cache, registry, symbols = fixtures()
         with self.assertRaisesRegex(ValueError, "missing native force symbol"):
-            verify_contract(cache, registry, symbols.replace(
-                "generativeqc::dft::native_stationary_profile_r2scan_uks()", "discarded()",
-            ))
+            verify_contract(
+                cache,
+                registry,
+                symbols.replace(
+                    "generativeqc::dft::native_stationary_profile_r2scan_uks()",
+                    "discarded()",
+                ),
+            )
 
     def test_missing_registry_entry_point_fails(self) -> None:
         cache, registry, symbols = fixtures()
         with self.assertRaisesRegex(ValueError, "registry entry point"):
-            verify_contract(cache, registry, symbols.replace(
-                "generativeqc::dft::cuda_stationary_bindings()", "discarded()",
-            ))
+            verify_contract(
+                cache,
+                registry,
+                symbols.replace(
+                    "generativeqc::dft::cuda_stationary_bindings()",
+                    "discarded()",
+                ),
+            )
 
 
 if __name__ == "__main__":

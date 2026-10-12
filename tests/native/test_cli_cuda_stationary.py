@@ -16,9 +16,16 @@ import tempfile
 from pathlib import Path
 
 METHODS = (
-    "lda-rks", "lda-uks", "pbe-rks", "pbe-uks",
-    "pbe0-rks", "pbe0-uks", "r2scan-rks", "r2scan-uks",
-    "b3lyp-rks", "b3lyp-uks",
+    "lda-rks",
+    "lda-uks",
+    "pbe-rks",
+    "pbe-uks",
+    "pbe0-rks",
+    "pbe0-uks",
+    "r2scan-rks",
+    "r2scan-uks",
+    "b3lyp-rks",
+    "b3lyp-uks",
 )
 # Non-symmetry-aligned H2 coordinates, in Bohr; only s shell functions.
 BASE_COORDS = ((0.12, -0.09, -0.71), (-0.08, 0.13, 0.79))
@@ -38,14 +45,33 @@ def write_xyz(path: Path, displacement: float = 0.0) -> None:
 def calculate(cli: Path, xyz: Path, method: str, *, forces: bool) -> dict:
     open_shell = method.endswith("-uks")
     command = [
-        str(cli), "run", str(xyz), "--units", "bohr",
-        "--method", method, "--basis", "sto-3g", "--backend", "cuda",
-        "--representation", "cartesian",
-        "--density-fitting", "none", "--precision", "fp64",
-        "--charge", "1" if open_shell else "0",
-        "--multiplicity", "2" if open_shell else "1",
-        "--max-iterations", "200", "--energy-tolerance", "1e-12",
-        "--density-tolerance", "1e-10",
+        str(cli),
+        "run",
+        str(xyz),
+        "--units",
+        "bohr",
+        "--method",
+        method,
+        "--basis",
+        "sto-3g",
+        "--backend",
+        "cuda",
+        "--representation",
+        "cartesian",
+        "--density-fitting",
+        "none",
+        "--precision",
+        "fp64",
+        "--charge",
+        "1" if open_shell else "0",
+        "--multiplicity",
+        "2" if open_shell else "1",
+        "--max-iterations",
+        "200",
+        "--energy-tolerance",
+        "1e-12",
+        "--density-tolerance",
+        "1e-10",
     ]
     if forces:
         command.append("--forces")
@@ -77,26 +103,34 @@ def check_method(cli: Path, tmp: Path, method: str) -> None:
     if not isinstance(vectors, list) or len(vectors) != 2:
         raise AssertionError(f"{method}: missing complete two-atom force array")
     if any(
-        not isinstance(v, list) or len(v) != 3 or
-        any(not isinstance(x, (float, int)) or not math.isfinite(x) for x in v)
+        not isinstance(v, list)
+        or len(v) != 3
+        or any(not isinstance(x, (float, int)) or not math.isfinite(x) for x in v)
         for v in vectors
     ):
         raise AssertionError(f"{method}: invalid analytic forces: {vectors}")
     for axis in range(3):
         if abs(vectors[0][axis] + vectors[1][axis]) > 2e-5:
-            raise AssertionError(f"{method}: translation invariance failed on axis {axis}")
+            raise AssertionError(
+                f"{method}: translation invariance failed on axis {axis}"
+            )
     energies = []
     for tag, shift in (("plus", BOHR_STEP), ("minus", -BOHR_STEP)):
         displaced = tmp / f"{tag}.xyz"
         write_xyz(displaced, shift)
-        energies.append(calculate(cli, displaced, method, forces=False)["energy_hartree"])
+        energies.append(
+            calculate(cli, displaced, method, forces=False)["energy_hartree"]
+        )
     reference_force = -(energies[0] - energies[1]) / (2 * BOHR_STEP)
     if abs(vectors[1][2] - reference_force) > 2e-3:
         raise AssertionError(
             f"{method}: analytic z force {vectors[1][2]:.9g} differs from "
             f"fully reconverged finite difference {reference_force:.9g}"
         )
-    print(f"PASS {method}: energy, full analytic forces, translation and reconverged FD", flush=True)
+    print(
+        f"PASS {method}: energy, full analytic forces, translation and reconverged FD",
+        flush=True,
+    )
 
 
 def main() -> int:

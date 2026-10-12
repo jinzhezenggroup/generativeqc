@@ -12,9 +12,16 @@ import subprocess
 from pathlib import Path
 
 EXPECTED_PROFILES = (
-    "lda_rks", "lda_uks", "pbe_rks", "pbe_uks",
-    "pbe0_rks", "pbe0_uks", "r2scan_rks", "r2scan_uks",
-    "b3lyp_rks", "b3lyp_uks",
+    "lda_rks",
+    "lda_uks",
+    "pbe_rks",
+    "pbe_uks",
+    "pbe0_rks",
+    "pbe0_uks",
+    "r2scan_rks",
+    "r2scan_uks",
+    "b3lyp_rks",
+    "b3lyp_uks",
 )
 
 
@@ -27,7 +34,9 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
     ):
         match = re.search(rf"^{option}:BOOL=(\S+)$", cache, flags=re.MULTILINE)
         if match is None or match.group(1) != expected:
-            raise ValueError(f"{option} must equal {expected} in the distribution build")
+            raise ValueError(
+                f"{option} must equal {expected} in the distribution build"
+            )
 
     linked = set(re.findall(r"&native_stationary_profile_([a-z0-9_]+)\(\)", registry))
     expected_set = set(EXPECTED_PROFILES)
@@ -42,7 +51,9 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
         if signature not in symbol_listing:
             raise ValueError(f"compiled CLI is missing native force symbol {signature}")
     if "generativeqc::dft::cuda_stationary_bindings()" not in symbol_listing:
-        raise ValueError("compiled CLI is missing its native stationary registry entry point")
+        raise ValueError(
+            "compiled CLI is missing its native stationary registry entry point"
+        )
 
 
 def main() -> int:
@@ -56,7 +67,9 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     symbols = subprocess.run(
         ["nm", "--demangle", "--extern-only", "--defined-only", str(args.cli)],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
     verify_contract(cache, registry, symbols)
     print(
