@@ -13,9 +13,10 @@ import platform
 import statistics
 import subprocess
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -219,9 +220,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         },
         "validation": {
             "original": _validate_pair(first_hvp, first_hessian, direction),
-            "changed_geometry": _validate_pair(
-                changed_hvp, changed_hessian, direction
-            ),
+            "changed_geometry": _validate_pair(changed_hvp, changed_hessian, direction),
         },
         "notes": [
             "No CUDA or GPU acceptance is used.",

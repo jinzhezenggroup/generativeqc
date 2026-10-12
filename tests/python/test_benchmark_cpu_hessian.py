@@ -28,8 +28,7 @@ def test_cpu_hessian_moved_geometry_does_not_change_source():
     assert tuple(atoms) == original
     assert moved[0][0] == atoms[0][0]
     np.testing.assert_allclose(
-        np.asarray([row[1] for row in moved])
-        - np.asarray([row[1] for row in atoms]),
+        np.asarray([row[1] for row in moved]) - np.asarray([row[1] for row in atoms]),
         0.02 * direction,
         atol=1e-15,
     )
