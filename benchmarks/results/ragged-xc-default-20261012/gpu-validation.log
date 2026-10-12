@@ -1,5 +1,0 @@
-Slurm job=2931 visible=0
-CUDA XC point batches: independent E/V, ordered maps, tails and replay passed
-CUDA XC ragged batches: independent E/V, cross-block maps and replay passed
-CUDA XC ragged batches: independent E/V, cross-block maps and replay passed
-CUDA XC ragged batches: independent E/V, cross-block maps and replay passed

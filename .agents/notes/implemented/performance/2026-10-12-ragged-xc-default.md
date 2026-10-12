@@ -66,6 +66,13 @@ dropped or normalized. The separately instrumented moved trajectories execute
 do not constitute an all-device or complete memory/uncached-compilation
 promotion-envelope claim.
 
+Checkout retention follows the unchanged aggregate evidence cap: compact
+endpoint records remain in the result directory, while exact complete raw
+records, full vectors/histories and logs are recovered from ancestral evidence
+commit `47c7da365`. The offline consumer authenticates the original raw hashes
+and compact fields before rechecking every independent vector gate. Do not
+replace this with unauthenticated maximum-error assertions or raise the budget.
+
 ## Revisit when
 
 Broaden endpoint/device evidence or refine continuous resource/work admission,

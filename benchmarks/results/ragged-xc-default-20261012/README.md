@@ -43,7 +43,7 @@ Warm/moved-warm execute 1/1. Moved usually executes 12/12: one incumbent
 96-atom sample executes 15/15 and one candidate 48-atom sample 14/14.
 These are neither excluded nor rescaled. Separate diagnostic moved samples
 execute 12 exact-J/K invocations and 12 XC invocations in both arms.
-`summary.json` retains per-phase operator times/counts and original receipts;
+The compact endpoint records retain per-phase operator times/counts and receipts;
 overlapping GPU/host intervals must not be added into endpoint times.
 
 At 96 atoms the candidate admits 7,248 large compact tiles at the original
@@ -55,12 +55,25 @@ compilation cost are not qualified by this campaign.
 
 Native independent E/V, ragged cross-block/nonidentity-map/tail tests and
 capture/replay pass. Memcheck reports zero errors; racecheck reports zero
-hazards/errors/warnings. The preserved logs and hashes identify the exact
-tested binaries. CI and host tests are reported separately in the PR.
+hazards/errors/warnings. The preserved hashes and archived exact logs identify
+the tested binaries. CI and host tests are reported separately in the PR.
+
+## Storage and exact raw recovery
+
+The repository's unchanged 64-MiB aggregate evidence cap leaves insufficient
+checkout space for another complete raw campaign. Current compact XZ records
+retain every sample's timing, status, final residuals, iterations, Fock builds,
+operator receipts and source/binary identity. Full force vectors, per-iteration
+histories, diagnostic traces and exact sanitizer/cache/Slurm logs remain in
+the existing ancestral evidence commit
+`47c7da365ff8b8b26579ddd18ca8240fb19348c1`; they are **not discarded**, rounded
+or moved to an unauthorized external archive. This follows the repository's
+Git-history recovery policy rather than raising its budget or deleting another
+campaign. `raw_recovery` binds the exact uncompressed payload SHA per case.
 
 ## Recheck and reproduce
 
-From a checkout of the measured commit, retain this evidence directory and run:
+From this PR's checkout with its Git history available, run:
 
 ```bash
 cd benchmarks/results/ragged-xc-default-20261012
@@ -69,9 +82,12 @@ cd ../../..
 PYTHONPATH=python:. python benchmarks/results/ragged-xc-default-20261012/summarize.py
 ```
 
-The summarizer checks measured source hashes, reference identity, every complete
-force vector and original convergence status before recomputing medians/noise
-and work. It needs Python dependencies, not a GPU. Release CUDA builds use
+The summarizer reads the checksum-bound complete raw records with `git show`,
+compares every compact field against them, checks measured source hashes at
+`ce01eaf5a`, reference identity, every complete force vector and original
+convergence status, then recomputes medians/noise and work. It needs Python
+dependencies and these local Git objects, not a GPU or network. A shallow clone
+must fetch the two named commits first. Release CUDA builds use
 the existing CMake `generativeqc`, `generativeqc_dft_cuda_tests`,
 `generativeqc_stationary_pbe0_rks_manifest` and
 `generativeqc_stationary_pbe0_rks_spd_manifest` targets with verified ccache
@@ -81,5 +97,6 @@ launchers. If generated weighted headers are missing, use the repository's
 `validate-n2.sh` and `qualify-n2.sh` retain the exact executed commands and
 environment paths. Stage a fresh source/binary tree and use finite `srun`
 allocations on node2, `main`, `--gres=gpu:pro6000:1`, 8 CPUs, with respective
-20/55-minute limits. Never override scheduler device visibility. Raw JSON and
-diagnostic traces are gzip-compressed without altering their payloads.
+20/55-minute limits. Never override scheduler device visibility. For fresh
+reproduction use source commit `ce01eaf5a`, retaining these instructions outside
+the checkout. The ancestral raw JSON/traces use unchanged gzip payloads.

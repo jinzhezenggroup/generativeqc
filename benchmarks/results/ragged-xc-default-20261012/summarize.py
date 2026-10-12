@@ -9,6 +9,8 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import lzma
+import subprocess
 from pathlib import Path
 
 from generativeqc_compiler.common.performance import assess_comparison
@@ -19,8 +21,20 @@ from benchmarks.readme_omol25 import check_record
 def summarize(directory: Path, atoms: int) -> dict:
     """Keep all samples, executed work, noise gates and source provenance."""
     root = directory.resolve().parents[2]
-    path = directory / f"ragged-default-{atoms}.json.gz"
-    data = json.loads(gzip.decompress(path.read_bytes()))
+    path = directory / f"endpoints-{atoms}.json.xz"
+    compact = json.loads(lzma.decompress(path.read_bytes()))
+    recovery = compact.pop("raw_recovery")
+    stored = subprocess.check_output(
+        ["git", "show", f"{recovery['revision']}:{recovery['path']}"], cwd=root
+    )
+    raw = gzip.decompress(stored)
+    assert hashlib.sha256(raw).hexdigest() == recovery["uncompressed_sha256"]
+    data = json.loads(raw)
+    reduced = json.loads(raw)
+    for sample in reduced["samples"]:
+        sample.pop("forces")
+        sample["ks_diagnostic"].pop("history", None)
+    assert compact == reduced
     reference_path = (
         root
         / "benchmarks/results/pbe0-xc-tiles-20261006"
@@ -33,9 +47,10 @@ def summarize(directory: Path, atoms: int) -> dict:
     assert reference["protocol"] == data["protocol"]
     assert len(data["samples"]) == 48
     for source, digest in data["source_sha256"].items():
-        assert hashlib.sha256((root / source).read_bytes()).hexdigest() == digest, (
-            source
+        measured = subprocess.check_output(
+            ["git", "show", f"ce01eaf5a:{source}"], cwd=root
         )
+        assert hashlib.sha256(measured).hexdigest() == digest, source
     validations = []
     for sample in data["samples"]:
         geometry = 0 if sample["phase"] in ("cold", "warm") else 1
