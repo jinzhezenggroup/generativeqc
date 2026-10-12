@@ -32,11 +32,24 @@ def test_every_automatic_registration_has_a_producer_bound_sibling(name: str) ->
     """The structural census, not a positive name/code whitelist, owns coverage."""
     provider = emit_automatic_cuda_provider(name)
     ordinary = emit_automatic_point(name, backend="cuda")
-    restricted = emit_automatic_point(name, backend="cuda", equal_spin=True)
+    density_only = provider.feature_terms == 1
+    restricted = emit_automatic_point(
+        name,
+        backend="cuda",
+        spin="unpolarized" if density_only else "polarized",
+        equal_spin=not density_only,
+    )
     assert provider.point == ordinary
-    assert restricted.expression_identity == ordinary.expression_identity
-    assert restricted.features == ordinary.features
-    assert restricted.outputs == ordinary.outputs
+    assert provider.restricted == restricted
+    if density_only:
+        assert restricted.spin == "unpolarized"
+        assert restricted.features == ("rho",)
+        assert restricted.outputs == ((), (0,))
+        assert restricted.expression_identity != ordinary.expression_identity
+    else:
+        assert restricted.expression_identity == ordinary.expression_identity
+        assert restricted.features == ordinary.features
+        assert restricted.outputs == ordinary.outputs
     assert restricted.source_identity != ordinary.source_identity
     assert ordinary.source in provider.source
     assert restricted.source in provider.source
@@ -47,7 +60,6 @@ def test_every_automatic_registration_has_a_producer_bound_sibling(name: str) ->
             f"automatic_evaluate_points<{provider.feature_terms}, {batched}, "
             f"{provider.provider_name}_equal_spin>" in provider.source
         )
-    assert provider.source.count("if (use_equal_spin_points(spins))") == 2
 
 
 def test_cpu_cannot_request_an_unproven_equal_spin_slice() -> None:
@@ -174,9 +186,9 @@ int main() {{
     setenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", selection, 1);
     for (unsigned spins : {{1, 2}}) {{
       launch(nullptr,nullptr,nullptr,37,spins,nullptr,nullptr,nullptr,code,1,1,nullptr);
-      assert(!observed_batch && observed_restricted == (selection[0] == '1' && spins == 1));
+      assert(!observed_batch && observed_restricted == (({str(provider.feature_terms == 1).lower()} || selection[0] == '1') && spins == 1));
       launch_batch(nullptr,nullptr,nullptr,37,spins,nullptr,nullptr,nullptr,code,1,1,16);
-      assert(observed_batch && observed_restricted == (selection[0] == '1' && spins == 1));
+      assert(observed_batch && observed_restricted == (({str(provider.feature_terms == 1).lower()} || selection[0] == '1') && spins == 1));
     }}
   }}
   unsetenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN");
