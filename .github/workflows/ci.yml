@@ -1603,6 +1603,8 @@ jobs:
         shell: bash
         run: |
           ccache --zero-stats
+          echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
+            echo "::warning::Unable to record compiler-cache statistics boundary"
           cmake --preset cuda-release-sm120 \
             -DGENERATIVEQC_BUILD_TESTS=ON \
             -DGENERATIVEQC_CUDA_FAST_COMPILE=ON \
@@ -1610,13 +1612,24 @@ jobs:
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build --preset cuda-release-sm120 \
             --target generativeqc_cuda_runtime_tests --parallel 3
+      - name: Report fast CUDA seed compiler cache
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.fast_cuda_seed.outputs.cache_stats_reset == 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: >-
+          python3 tools/report_ci_ccache.py
+          --label "CUDA native CLI fast seed (shared library)"
+          --verbose --build-dir build/cuda-release-sm120
       - name: Build monolithic C++ CUDA CLI (release or fast PR)
+        id: native_cli_build
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         env:
           CLI_FAST_COMPILE: ${{ steps.cli_scope.outputs.tier == 'fast' && 'ON' || 'OFF' }}
         run: |
           ccache --zero-stats
+          echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
+            echo "::warning::Unable to record compiler-cache statistics boundary"
           # PCH calls bypass strict ccache. Disable only this CI preset use;
           # retain normal header/macro validation instead of cache sloppiness.
           cmake --preset cuda-release-cli-sm120 \
@@ -1624,7 +1637,7 @@ jobs:
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
       - name: Show detailed CLI compiler cache statistics
-        if: always() && steps.cli_scope.outputs.tier != 'skip'
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true
         run: ccache --show-stats --verbose
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
@@ -1681,8 +1694,13 @@ jobs:
           ldd "$cli"
           ccache --show-stats
       - name: Summarize compiler cache
-        if: always() && steps.cli_scope.outputs.tier != 'skip'
-        run: python3 tools/report_ci_ccache.py --label "CUDA native CLI"
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: >-
+          python3 tools/report_ci_ccache.py
+          --label "CUDA native CLI monolithic build"
+          --build-dir build/cuda-release-cli-sm120
       - name: Save complete shared CUDA ccache on master
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_ccache.outputs.cache-hit != 'true'
         continue-on-error: true
