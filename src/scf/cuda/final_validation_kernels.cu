@@ -69,11 +69,16 @@ __global__ void eigen_kernel(ValidationInputs in, const double* fc, const double
     if (in.generation && (!isfinite(in.c[k]) || !isfinite(in.values[column])))
       r.invalid |= validation_input_failure;
     if (in.physical_fock) {
-      const double other = in.f[in.transposed_operators ? k : column + row * in.n];
-      if (!isfinite(in.f[operator_index]) ||
-          fabs(in.f[operator_index] - other) >
-              1e-12 * fmax(1.0, fmax(fabs(in.f[operator_index]), fabs(other))))
-        r.invalid |= validation_input_failure;
+      // Resident proof has no detached input scan. Preserve the same absolute/
+      // relative symmetry gate for every operator, not only the physical Fock.
+      const auto other_index = in.transposed_operators ? k : column + row * in.n;
+      const double* matrices[]{in.f, in.s, in.h, in.d};
+      for (const auto* matrix : matrices) {
+        const double value = matrix[operator_index], other = matrix[other_index];
+        if (!isfinite(value) || !isfinite(other) ||
+            fabs(value - other) > 1e-12 * fmax(1.0, fmax(fabs(value), fabs(other))))
+          r.invalid |= validation_input_failure;
+      }
     }
     r.norm_f = hypot(r.norm_f, in.f[operator_index]);
     r.norm_c = hypot(r.norm_c, in.c[k]);
@@ -144,7 +149,17 @@ __global__ void columns_kernel(std::size_t n, std::size_t occupied, const double
     columns[k] = column < occupied ? c[k] * weight * (values ? values[column] : 1.0) : 0.0;
   }
 }
+__global__ void weights_status_kernel(std::size_t elements, const double* density,
+                                      const double* weighted, int* status) {
+  for (std::size_t element = blockIdx.x * blockDim.x + threadIdx.x; element < elements;
+       element += gridDim.x * blockDim.x)
+    if (!isfinite(density[element]) || !isfinite(weighted[element])) atomicExch(status, 1);
+}
 }  // namespace
+void launch_validation_weights_status(cudaStream_t stream, std::size_t elements,
+                                      const double* density, const double* weighted, int* status) {
+  weights_status_kernel<<<128, threads, 0, stream>>>(elements, density, weighted, status);
+}
 void launch_validation_fock(cudaStream_t s, std::size_t n, const double* h, const double* j,
                             const double* k, double weight, double* f) {
   fock_kernel<<<validation_block_count(n), threads, 0, s>>>(n, h, j, k, weight, f);

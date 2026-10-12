@@ -90,10 +90,10 @@ Python result storage is owned by the caller.
 
 ## Internal final-state handoff
 
-The native CPU RKS and resident CUDA RKS/UKS owners provide an internal,
-versioned final-state handoff for issue #163. CPU UKS and CPU ECP handoffs
-remain unsupported. This interface is deliberately absent from the public
-C/Python result ABI and does not make public force requests supported.
+The native CPU and resident CUDA RKS/UKS owners provide an internal,
+versioned final-state handoff for issue #163. CPU ECP handoffs remain
+unsupported. This interface is deliberately absent from the public C/Python
+result ABI; a handoff alone does not qualify a public force request.
 
 After a converged solve, `methods/dft_method.hpp` can return an eligibility
 token for either a prepared single calculation or one prepared batch item. The
@@ -117,6 +117,96 @@ after every gate passes. A stale token is rejected before matrix transfer.
 explicit handoff from ordinary energy execution. The existing public
 `matrix_d2h_bytes` total still includes snapshot matrices, so legacy transport
 accounting remains conservative without an ABI change.
+
+### Resident CUDA stationary weights
+
+`CudaKsPlan::prepare_resident_final_stationary_weights` admits the exact current
+token on an ordinary stream, canonicalizes the physical final Fock on device,
+and computes validation products using the existing matrix provider or its
+bounded native kernel. The shared `accept_final_state_products` and
+`validate_ks_final_state_evidence` policies apply the same eigenframe, density,
+trace, idempotency, commutator, canonicality and KS component-energy gates as the
+detached read. Device validation also checks the symmetry and finiteness of
+F/S/H/D. No host matrix algebra or D/F/C/orbital-energy export occurs in this
+operation.
+
+Only an accepted proof stages resident total D/W using the existing weighted
+projector and spin-sum owners. UKS retains separate spin occupations, including
+explicit empty-beta storage, while the one-electron consumer borrows their
+totals. A bounded finite-status read precedes publication. The validation packet
+storage is included in `cuda_ks_state_bytes`, including tiny AO domains without
+a BLAS allowance; iteration matrices provide serialized, phase-local scratch.
+Repeated leases perform no work or transfer and do not overwrite published
+storage. A preceding validated weighted detached read can be borrowed unchanged.
+Stale admission submits no work; a failed proof revokes final eligibility while
+preserving the independently retained warm seed.
+
+The uncached prepared Direct integral-derivative consumer uses this operation
+instead of manufacturing a host snapshot. The existing DF response contract
+still explicitly consumes host D/W. `resident_final_validations` counts device
+proofs, and `scalar_d2h_bytes`/`final_state_d2h_bytes` charge their bounded packets;
+`final_state_reads` and `matrix_d2h_bytes` do not increase for a resident proof.
+Energy-only/default validation policy and per-model force capability are
+unchanged. This lease is not a complete native CUDA force controller: XC,
+moving-grid/Becke, nuclear assembly and complete publication remain separate
+consumers. Numeric arena checks alone do not establish complete endpoint RSS or
+library/context allocation bounds.
+
+The private `dft_cuda_native_stationary_gradient` qualification endpoint now
+composes the complete all-electron Direct PBE/PBE0 RKS/UKS source inventory in
+C++. Statically isolated bindings reuse the existing compiler-emitted profile
+and shared primitive objects; there is no runtime artifact loader or compiler.
+The native grid owner consumes the accepted resident spin density and lends
+generation-checked device tasks. Callback-scoped one-electron/Pulay and separate
+J/K sources are copied into plan-owned source slots before provider scratch can
+be reused. Native J/K forces are explicitly converted to energy derivatives.
+The emitted ordered reduction gates publication on complete contiguous grid
+coverage, all integral/nuclear sources, finite device status and the unchanged
+final token. Failed requests leave the caller's previous output untouched.
+
+The prepared SDK/batch force consumer uses the same complete controller for
+compiled strict-FP64, all-electron s/p Direct PBE/PBE0 RKS/UKS contexts with
+full-range exact J/K and three partition iterations. Admission shares one native
+rule with descriptor sizing, remains per prepared item, and does not add a
+method-global force bit. DF, ECP, wider angular momentum, other precision,
+range-separated/nonlocal/dispersion and unavailable compiled profiles do not
+inherit this admission. The complete gradient is negated once at publication.
+Python routes only fleets whose every prepared item advertises forces; remaining
+compositions keep their existing qualified consumer. The default SCF and
+initial-guess trajectories are unchanged, including their existing setup
+transfers; the native force itself does not export a final dense D/W frame.
+
+The controller device allowance
+includes the stationary/grid numeric arenas and the grid provider allowance,
+excluding the SCF/Fock owner already charged elsewhere. Reported work is this
+consumer's work, not a substitute for complete SCF-plus-force timing or
+simultaneously-live host/device/context receipts. Actual TensorIR arenas use the
+native numeric allocation ledger. Each retained controller separately reserves
+its grid provider allowance against the same request, so cached controllers
+cannot each spend the entire remaining budget. The reservation is admission
+capacity, not a measured CUDA allocation; release follows the controller after
+its stationary/grid users have drained, including outside an observation scope.
+Below-minimum shape preflight performs no allocation and does not invent an
+allocator-rejection event.
+
+`generativeqc_resource_stationary_cuda_v1` exposes the same additional-controller
+shape authority used by construction, without querying a CUDA device or creating
+an owner. Its nine fields are grid numeric bytes, grid-provider allowance,
+stationary minimum/cached numeric bytes, combined minimum/cached admission,
+effective tile points, geometry lanes, and geometry threads. An unbuilt profile
+returns unavailable; invalid or short requests leave the output untouched.
+Capacity availability is not method/property admission and does not replace
+the legacy Python force planner or its separate not-yet-cut-over domains.
+
+Independent fixture checks can
+be reproduced from a verbose Slurm test log with
+`tools/check_native_stationary_cuda_oracles.py --input <log>`; PySCF is required
+only by that offline validation tool, never by the native consumer. The tool
+requires its complete fixture inventory and independently checks energy, final
+spin D/W and the full moving-grid gradient. Missing, duplicate, malformed or
+nonfinite receipts fail rather than skip. The native test exports reference
+matrices only after checking that the complete consumer itself exports no dense
+frame; those test-only observations do not enter production force assembly.
 
 ## CUDA KS preparation
 

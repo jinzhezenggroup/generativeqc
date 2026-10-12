@@ -441,6 +441,173 @@ void retained_direct_derivative_reuse() {
   matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
+/** Copy callback-scoped sources before the provider reuses its single force arena.
+ * The UKS case deliberately has an empty beta density; host adapters and the
+ * independent one-electron provider remain separate numerical witnesses. */
+void resident_derivative_sources() {
+  const auto system = fixture(true);
+  const auto extent = generativeqc::molecule::ao_count(system);
+  const auto elements = extent * extent;
+  const auto coordinates = 3 * system.atoms.size();
+  std::size_t primitives = 0;
+  for (const auto& shell : system.shells) primitives += shell.primitives.size();
+  const auto budget = cuda_direct_coulomb_device_bytes(1, extent, system.atoms.size(),
+                                                       system.shells.size(), primitives, 1);
+  std::vector<double> density(elements), weighted(elements), empty_beta(elements);
+  for (std::size_t orbital = 0; orbital < extent; ++orbital) {
+    density[orbital * extent + orbital] = 0.4;
+    weighted[orbital * extent + orbital] = -0.3;
+  }
+  for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+    const auto strategy =
+        resolve_fock_build(make_rsh_primary_fock_spec(spin, 0.2), FockBackend::Cuda, 0.0);
+    PreparedFockPlan plan(system, nullptr, strategy, 0, budget, 1);
+    const auto binding = prepared_cuda_direct_derivative_binding(plan);
+    require(binding && cudaSetDevice(binding.device_id) == cudaSuccess,
+            "resident derivative owner binding failed");
+    struct DeviceCopies {
+      cudaStream_t stream;
+      double* values{};
+      ~DeviceCopies() {
+        (void)cudaStreamSynchronize(stream);
+        if (values) (void)cudaFree(values);
+      }
+    } copies{binding.stream};
+    require(cudaMalloc(reinterpret_cast<void**>(&copies.values),
+                       (3 * elements + 4 * coordinates) * sizeof(double)) == cudaSuccess,
+            "resident derivative test allocation failed");
+    auto* alpha = copies.values;
+    auto* beta = alpha + elements;
+    auto* weight = beta + elements;
+    auto* sources = weight + elements;
+    require(cudaMemcpyAsync(alpha, density.data(), elements * sizeof(double),
+                            cudaMemcpyHostToDevice, binding.stream) == cudaSuccess &&
+                cudaMemcpyAsync(beta, empty_beta.data(), elements * sizeof(double),
+                                cudaMemcpyHostToDevice, binding.stream) == cudaSuccess &&
+                cudaMemcpyAsync(weight, weighted.data(), elements * sizeof(double),
+                                cudaMemcpyHostToDevice, binding.stream) == cudaSuccess,
+            "resident derivative test input upload failed");
+    const auto* spin_beta = spin == FockSpin::Unrestricted ? beta : nullptr;
+    std::string detail;
+    std::vector<double> expected_jk, expected_hcore, expected_pulay;
+    require(
+        execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+            plan, alpha, spin_beta, elements, expected_jk, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        detail.c_str());
+    require(execute_cuda_stationary_one_electron_pair(binding.device_id, system, density, weighted,
+                                                      1, 8U << 20, expected_hcore, expected_pulay,
+                                                      detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::size_t callbacks = 0;
+    const double* hcore_scratch = nullptr;
+    const CudaDerivativeSourceConsumer consume = [&](const CudaDerivativeSourceView& view) {
+      require(view.device == binding.device_id && view.producer_stream == binding.stream &&
+                  view.values && view.coordinates == coordinates,
+              "resident derivative callback has invalid device/stream/extent");
+      std::size_t slot = 0;
+      if (view.kind == CudaDerivativeSourceKind::FullRangeJk) {
+        require(view.channels == 2 && view.convention == CudaDerivativeConvention::Force,
+                "resident J/K lost its independent force channels");
+      } else {
+        require(view.channels == 1 && view.convention == CudaDerivativeConvention::EnergyGradient,
+                "resident one-electron source changed derivative convention");
+        if (view.kind == CudaDerivativeSourceKind::OneElectron) {
+          slot = 2;
+          hcore_scratch = view.values;
+        } else {
+          require(
+              view.kind == CudaDerivativeSourceKind::OverlapPulay && view.values == hcore_scratch,
+              "one-electron pair stopped reusing its callback-scoped scratch");
+          slot = 3;
+        }
+      }
+      require(cudaMemcpyAsync(sources + slot * coordinates, view.values,
+                              view.channels * coordinates * sizeof(double),
+                              cudaMemcpyDeviceToDevice, binding.stream) == cudaSuccess,
+              "resident derivative source copy failed");
+      ++callbacks;
+    };
+    OneElectronGradientResources resources;
+    const auto submit = [&] {
+      require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                  plan, alpha, spin_beta, elements, consume, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      require(consume_prepared_cuda_stationary_one_electron_pair(
+                  plan.cuda_direct_source(), alpha, weight, elements, consume, detail,
+                  &resources) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      require(resources.host_numeric_bytes == 0 && resources.device_bytes == 0 &&
+                  resources.host_to_device_bytes == 0 && resources.device_to_host_bytes == 0 &&
+                  resources.stream_synchronizations == 0,
+              "resident source delivery staged or drained numeric data");
+    };
+    submit();
+    require(callbacks == 3, "resident source callback inventory is incomplete");
+    std::vector<double> actual(4 * coordinates);
+    require(cudaMemcpyAsync(actual.data(), sources, actual.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost, binding.stream) == cudaSuccess &&
+                cudaStreamSynchronize(binding.stream) == cudaSuccess,
+            "resident source test publication failed");
+    for (std::size_t coordinate = 0; coordinate < 2 * coordinates; ++coordinate)
+      close(-actual[coordinate], expected_jk[coordinate], 2e-9, "resident J/K sign/channel oracle");
+    matrix(std::vector<double>(actual.begin() + 2 * coordinates, actual.begin() + 3 * coordinates),
+           expected_hcore, "resident hcore oracle");
+    matrix(std::vector<double>(actual.begin() + 3 * coordinates, actual.end()), expected_pulay,
+           "resident Pulay scratch-reuse oracle");
+
+    const CudaDerivativeSourceConsumer fail_after_copy = [&](const CudaDerivativeSourceView& view) {
+      consume(view);
+      throw std::runtime_error("injected resident source consumer failure");
+    };
+    require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                plan, alpha, spin_beta, elements, fail_after_copy, detail) !=
+                    GENERATIVEQC_STATUS_SUCCESS &&
+                consume_prepared_cuda_stationary_one_electron_pair(
+                    plan.cuda_direct_source(), alpha, weight, elements, fail_after_copy, detail) !=
+                    GENERATIVEQC_STATUS_SUCCESS,
+            "resident source consumer failure was published as success");
+    submit();
+    const auto before_rejection = callbacks;
+    require(consume_prepared_cuda_stationary_one_electron_pair(
+                plan.cuda_direct_source(), alpha, weight, elements + 1, consume, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                callbacks == before_rejection,
+            "resident source extent rejection submitted work");
+
+    require(
+        cudaStreamSynchronize(binding.stream) == cudaSuccess &&
+            cudaStreamBeginCapture(binding.stream, cudaStreamCaptureModeThreadLocal) == cudaSuccess,
+        "resident source capture fixture failed");
+    std::vector<double> unpublished_hcore{42.0}, unpublished_pulay{43.0};
+    require(consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+                plan, alpha, spin_beta, elements, consume, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                consume_prepared_cuda_stationary_one_electron_pair(
+                    plan.cuda_direct_source(), alpha, weight, elements, consume, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                execute_prepared_cuda_stationary_one_electron_pair(
+                    plan.cuda_direct_source(), alpha, weight, elements, 8U << 20, unpublished_hcore,
+                    unpublished_pulay, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                callbacks == before_rejection,
+            "captured source adapter submitted or drained provider work");
+    cudaGraph_t graph{};
+    require(cudaStreamEndCapture(binding.stream, &graph) == cudaSuccess && graph,
+            "source rejection invalidated the caller's capture");
+    require(cudaGraphDestroy(graph) == cudaSuccess &&
+                unpublished_hcore == std::vector<double>{42.0} &&
+                unpublished_pulay == std::vector<double>{43.0},
+            "captured host adapter changed unpublished outputs");
+    require(execute_prepared_cuda_stationary_one_electron_pair(
+                plan.cuda_direct_source(), alpha, weight, elements,
+                2 * coordinates * sizeof(double) - 1, unpublished_hcore, unpublished_pulay,
+                detail) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                unpublished_hcore == std::vector<double>{42.0} &&
+                unpublished_pulay == std::vector<double>{43.0},
+            "host adapter budget rejection partially published sources");
+    submit();
+  }
+}
+
 void retained_lr_only_derivative() {
   const auto system = fixture(true);
   std::size_t primitives = 0;
@@ -657,6 +824,7 @@ int main() {
     ragged_replay();
     prepared_replay();
     retained_direct_derivative_reuse();
+    resident_derivative_sources();
     retained_lr_only_derivative();
     retained_range_shell_d_parity();
     independent_reference_export();

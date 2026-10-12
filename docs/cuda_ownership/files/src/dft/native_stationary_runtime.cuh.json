@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/native_stationary_runtime.cuh",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Private static adapter around the compiler-emitted stationary profile. Owns callback-scoped device source copy/sign transport, complete source/grid-span admission, exceptional state and retained producer-stream draining. The transport kernel implements only derivative-convention conversion and finite checks; XC/AO/Becke, nuclear derivatives, source slots, coefficients and final ordered reduction remain compiler-owned. Availability alone does not authorize public CUDA forces.",
+  "regions": []
+}

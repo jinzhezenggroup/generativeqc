@@ -139,6 +139,74 @@ void residual_norm_contract() {
             "nonfinite maximum commutator did not fail closed");
 }
 
+void resident_evidence_contract() {
+  Fixture fixture;
+  fixture.limits.require_canonicality = true;
+  VerifiedKsFinalState detached;
+  require(fixture.validate(false, &detached), "resident evidence fixture failed");
+  const KsFinalStateEvidence evidence{fixture.id,
+                                      fixture.candidate.fock_density_generation,
+                                      true,
+                                      fixture.physical.components,
+                                      fixture.physical.reported_energy,
+                                      fixture.physical.physical_residual};
+  KsFinalStateDiagnostic accepted;
+  std::string detail;
+  const auto validate = [&](const auto& witness, const auto& products, const auto& limits) {
+    accepted.reported_energy_error = 99;
+    return validate_ks_final_state_evidence(fixture.id, 2, witness, limits, products, accepted,
+                                            detail);
+  };
+  require(validate(evidence, detached.diagnostic.determinant, fixture.limits), detail.c_str());
+  near(accepted.component_energy, detached.diagnostic.component_energy,
+       "resident evidence changed the KS energy convention");
+  const std::vector<std::function<void(KsFinalStateEvidence&)>> mutations{
+      [](auto& value) { ++value.identity.model.owner; },
+      [](auto& value) { value.physical_origin = false; },
+      [](auto& value) { --value.fock_density_generation; },
+      [](auto& value) { value.reported_energy += 1e-5; },
+      [](auto& value) { value.physical_residual = 2e-9; },
+      [](auto& value) { value.components.xc = std::numeric_limits<double>::quiet_NaN(); }};
+  for (const auto& mutation : mutations) {
+    auto invalid = evidence;
+    mutation(invalid);
+    require(!validate(invalid, detached.diagnostic.determinant, fixture.limits) &&
+                accepted.reported_energy_error == 0 && accepted.determinant.eigenframes.empty(),
+            "invalid resident evidence published diagnostics");
+  }
+  const std::vector<std::function<void(solver::FinalStateDiagnostic&)>> product_mutations{
+      [](auto& value) { value.eigenframes.clear(); },
+      [](auto& value) { value.eigenframes[0].solver_info = 1; },
+      [](auto& value) { value.eigenframes[0].maximum_metric_error = 1e-7; },
+      [](auto& value) { value.eigenframes[0].scaled_eigen_residual = 1e-11; },
+      [](auto& value) { value.maximum_trace_error = 1e-7; },
+      [](auto& value) { value.maximum_idempotency_error = 1e-7; },
+      [](auto& value) { value.maximum_density_error = 1e-7; },
+      [](auto& value) { value.maximum_canonical_error = 1e-7; },
+      [](auto& value) { value.maximum_commutator = 1e-7; },
+      [](auto& value) { value.density_rms = 1e-7; },
+      [](auto& value) { value.maximum_commutator = -1; },
+      [](auto& value) { value.energy = std::numeric_limits<double>::infinity(); }};
+  for (const auto& mutation : product_mutations) {
+    auto invalid = detached.diagnostic.determinant;
+    mutation(invalid);
+    require(!validate(evidence, invalid, fixture.limits), "invalid resident products passed");
+  }
+  auto limits = fixture.limits;
+  limits.require_canonicality = false;
+  require(!validate(evidence, detached.diagnostic.determinant, limits),
+          "resident evidence admitted noncanonical products");
+  limits = fixture.limits;
+  limits.density_tolerance = std::numeric_limits<double>::quiet_NaN();
+  require(!validate(evidence, detached.diagnostic.determinant, limits),
+          "resident evidence accepted a nonfinite tolerance");
+  auto boundary = detached.diagnostic.determinant;
+  boundary.maximum_commutator = std::min(1e-8, fixture.limits.density_tolerance);
+  require(validate(evidence, boundary, fixture.limits), "resident inclusive boundary failed");
+  boundary.maximum_commutator = std::nextafter(boundary.maximum_commutator, 1.0);
+  require(!validate(evidence, boundary, fixture.limits), "resident boundary widened");
+}
+
 void analytic_rks_and_uks() {
   Fixture rks;
   VerifiedKsFinalState energy, gradient;
@@ -320,6 +388,7 @@ void model_and_state_rejection() {
 int main() {
   try {
     residual_norm_contract();
+    resident_evidence_contract();
     backend_product_policy();
     analytic_rks_and_uks();
     cuda_global_hybrid_identity();

@@ -120,8 +120,11 @@ void launch_copy_selected_matrices_kernel(dim3 grid, dim3 block, std::size_t sha
 }
 void launch_matrix_product_kernel(dim3, dim3, std::size_t, cudaStream_t stream, std::int32_t,
                                   std::int32_t, const double*, bool, const double*,
-                                  const std::uint8_t*, double*, double) {
+                                  const std::uint8_t*, double*, double, bool transpose_right,
+                                  std::int32_t reduction_rank) {
   assert(stream == expected_stream);
+  // Ordinary matrix-owner fallbacks keep the incumbent full square product.
+  assert(!transpose_right && reduction_rank == -1);
   ++natives;
 }
 void launch_spin_matrix_product_kernel(dim3, dim3, std::size_t, cudaStream_t stream, std::int32_t,

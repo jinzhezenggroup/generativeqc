@@ -110,6 +110,10 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_resident_final_validation_tests
                        tests/native/test_resident_final_validation.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas SKIP_77)
+    generativeqc_native_test(generativeqc_ks_resident_weights_tests
+                       tests/native/test_ks_resident_weights.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
+    set_tests_properties(generativeqc_ks_resident_weights_tests PROPERTIES TIMEOUT 240)
     generativeqc_native_test(generativeqc_df_density_seed_tests tests/native/test_df_density_seed.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver SKIP_77)
     set_property(SOURCE "${GENERATIVEQC_GRID_SOURCE}" src/dft/cuda_ks.cpp src/dft/cuda_xc.cpp
@@ -533,7 +537,11 @@ macro(generativeqc_add_native_tests)
                        NO_GENERATIVEQC LIBRARIES CUDA::cudart SKIP_77)
     add_dependencies(generativeqc_ecp_policy_cuda_tests generativeqc_ecp_codegen)
     target_include_directories(generativeqc_ecp_policy_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-    generativeqc_native_test(generativeqc_cuda_fock_composition_tests tests/native/test_cuda_fock_composition.cpp)
+    generativeqc_native_test(generativeqc_cuda_fock_composition_tests
+                       tests/native/test_cuda_fock_composition.cpp LIBRARIES CUDA::cudart)
+    generativeqc_native_test(generativeqc_native_stationary_cuda_binding_tests
+                       tests/native/test_native_stationary_cuda_binding.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
   endif()
 
   if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AOT_SHELLS)

@@ -11,6 +11,7 @@
 #include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
+#include "scf/cuda_derivative_sources.hpp"
 #include "scf/direct_block_schedule.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -157,6 +158,14 @@ cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
     bool separate_sources = true, bool allow_spatial_default = false);
+
+/** Consume the same generated J/K channels directly on their owning stream.
+ * No host gradient is allocated or copied. The callback must enqueue its copy
+ * before provider scratch is reused; an exceptional submission is drained. */
+cudaError_t consume_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient,
+    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default = false);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

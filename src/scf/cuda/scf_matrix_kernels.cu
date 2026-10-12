@@ -90,7 +90,8 @@ __global__ void build_orthogonalizer_kernel(std::int32_t batch_size, std::int32_
 
 __global__ void matrix_product_kernel(std::int32_t batch_size, std::int32_t nbf, const double* left,
                                       bool transpose_left, const double* right,
-                                      const std::uint8_t* active, double* output, double scale) {
+                                      const std::uint8_t* active, double* output, double scale,
+                                      bool transpose_right, std::int32_t reduction_rank) {
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t matrix_size = n * n;
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -102,10 +103,13 @@ __global__ void matrix_product_kernel(std::int32_t batch_size, std::int32_t nbf,
   const std::size_t column = local / n;
   const std::size_t offset = static_cast<std::size_t>(system) * matrix_size;
   double value = 0.0;
-  for (std::size_t k = 0; k < n; ++k) {
+  const auto rank = reduction_rank < 0 ? n : static_cast<std::size_t>(reduction_rank);
+  for (std::size_t k = 0; k < rank; ++k) {
     const std::size_t left_index =
         transpose_left ? matrix_index(k, row, n) : matrix_index(row, k, n);
-    value += left[offset + left_index] * right[offset + matrix_index(k, column, n)];
+    const auto right_index =
+        transpose_right ? matrix_index(column, k, n) : matrix_index(k, column, n);
+    value += left[offset + left_index] * right[offset + right_index];
   }
   output[element] = scale * value;
 }
@@ -307,9 +311,11 @@ void launch_build_orthogonalizer_kernel(dim3 grid, dim3 block, std::size_t share
 void launch_matrix_product_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                   cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
                                   const double* left, bool transpose_left, const double* right,
-                                  const std::uint8_t* active, double* output, double scale) {
+                                  const std::uint8_t* active, double* output, double scale,
+                                  bool transpose_right, std::int32_t reduction_rank) {
   matrix_product_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, nbf, left, transpose_left, right, active, output, scale);
+      batch_size, nbf, left, transpose_left, right, active, output, scale, transpose_right,
+      reduction_rank);
 }
 
 void launch_broadcast_spin_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

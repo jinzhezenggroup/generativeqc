@@ -115,7 +115,7 @@ template <class T> int resource_cuda_malloc(T** p,std::size_t n,bool* host_oom=n
 }
 int resource_cuda_free(void* p){return cudaFree(p);}
 """
-    source = prelude
+    source = f'#include "{ROOT / "src/dft/cuda_grid_storage.hpp"}"\n' + prelude
     # Keep the actual CSR buffer ownership/destruction types in the extracted
     # GridPlan; only CUDA API allocation is replaced by the host double.
     for marker in (

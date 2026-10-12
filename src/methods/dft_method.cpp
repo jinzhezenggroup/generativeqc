@@ -658,6 +658,7 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
   add(target.matrix_d2h_bytes, value.matrix_d2h_bytes);
   add(target.final_state_d2h_bytes, value.final_state_d2h_bytes);
   add(target.final_state_reads, value.final_state_reads);
+  add(target.resident_final_validations, value.resident_final_validations);
   add(target.synchronizations, value.synchronizations);
   add(target.iterations, value.iterations);
   add(target.occupation_stabilized_proposals, value.occupation_stabilized_proposals);
@@ -787,6 +788,42 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
 }
 #endif
 
+/** One immutable CUDA admission rule for metadata and complete force consumers.
+ * Availability is deliberately context-specific, not a method-global force bit.
+ * Optional compiled bindings, precise Fock coefficients, representation and
+ * FP64 are prerequisites; unsupported contexts retain their existing consumer. */
+std::string_view native_cuda_stationary_profile(const NativeKsExecutionPlan& execution_plan,
+                                                const scf::ScfOptions& options,
+                                                const dft::GridSpec& grid, bool all_electron,
+                                                std::size_t maximum_angular) noexcept {
+  if (!all_electron || maximum_angular > 1 || grid.partition_iterations != 3 ||
+      options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+      options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+      !options.resolved_fock_build ||
+      options.resolved_fock_build->backend != scf::FockBackend::Cuda ||
+      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe ||
+      execution_plan.automatic_program || execution_plan.generated_split_hybrid ||
+      execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
+      execution_plan.d4_correction || options.semilocal_correlation_scale != 1.0)
+    return {};
+  const auto& spec = options.resolved_fock_build->spec;
+  const auto admitted_term = [](const scf::FockTermSpec& term) {
+    return !term.present || (term.approximation == scf::FockApproximation::Exact &&
+                             term.op == scf::FockOperator::FullRange && term.omega == 0.0);
+  };
+  if (spec.derivative_order != 0 || !spec.coulomb.present || spec.coulomb.coefficient != 1.0 ||
+      !admitted_term(spec.coulomb) || !admitted_term(spec.exchange) ||
+      execution_plan.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
+    return {};
+  const bool hybrid = spec.exchange.present;
+  if (options.semilocal_exchange_scale != (hybrid ? 0.75 : 1.0) ||
+      (hybrid && spec.exchange.coefficient != (execution_plan.spin_channels == 1 ? -0.125 : -0.25)))
+    return {};
+  const auto profile = hybrid ? (execution_plan.spin_channels == 1 ? "pbe0_rks" : "pbe0_uks")
+                              : (execution_plan.spin_channels == 1 ? "pbe_rks" : "pbe_uks");
+  return dft::cuda_stationary_binding(profile) ? profile : std::string_view{};
+}
+
 class KsPreparedCalculation final : public PreparedCalculation {
  public:
   KsPreparedCalculation(Capabilities capabilities, core::System system,
@@ -850,18 +887,28 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
-  /** Method-global manifest stays energy-only. Force capability is a
-   * property of this immutable prepared physical execution context. Only
-   * strict-FP64 all-electron CPU fitted PBE/PBE0 with full response
-   * providers is admitted for RKS/UKS; CPU Direct additionally requires the
-   * packaged s/p/d derivative provider. CUDA, corrections and
-   * unrepresented XC graphs remain fail-closed until separately qualified. */
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
     return options_.preliminary_guess;
   }
 
+  /** Force capability belongs to the immutable prepared context, never the
+   * method-global manifest. CPU fitted/Direct domains retain their existing
+   * rules; CUDA requires a complete compiled s/p Direct PBE/PBE0 profile and
+   * valid bounded capacity. Corrections and other graphs remain fail-closed. */
   [[nodiscard]] bool supports_native_pbe_force() const noexcept {
+    if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
+      const auto profile = admitted_cuda_stationary_profile();
+      if (profile.empty()) return false;
+      try {
+        (void)dft::cuda_stationary_capacity(*dft::cuda_stationary_binding(profile), basis_.natom,
+                                            basis_.nao, basis_.nprimitive, grid_.point_count(),
+                                            options_.xc_tile_points);
+        return true;
+      } catch (...) {
+        return false;
+      }
+    }
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
          options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
@@ -1848,7 +1895,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto transfers_before = cuda_->transfers();
     dft::VerifiedKsFinalState exported_state;
     generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
-    if (!cached_density) {
+    if (!cached_density && fitted) {
       status = read_final_state(expected, true, exported_state, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       cached_density = &exported_state.density;
@@ -1874,7 +1921,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
              std::all_of(blocks.begin(), blocks.end(),
                          [&](const auto& matrix) { return matrix.size() == matrix_elements; });
     };
-    if (!valid_cached(*cached_density) || !valid_cached(*cached_weighted_density)) {
+    if (cached_density &&
+        (!valid_cached(*cached_density) || !valid_cached(*cached_weighted_density))) {
       detail = "cached CUDA stationary D/W has an incompatible spin or AO shape";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
@@ -1891,7 +1939,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     dft::CudaKsResidentStationaryWeightsBinding resident_weights;
-    status = cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
+    if (cached_density) {
+      status = cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
+    } else {
+      // Direct sources need only resident D/W. The native owner authenticates
+      // and validates them without manufacturing a detached host snapshot.
+      dft::KsFinalStateDiagnostic resident_diagnostic;
+      status = cuda_->prepare_resident_final_stationary_weights(expected, resident_weights,
+                                                                resident_diagnostic, detail);
+    }
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (!resident_weights || resident_weights.device_id != device ||
         resident_weights.matrix_elements != matrix_elements || resident_weights.spins != spins) {
@@ -1974,6 +2030,132 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  generativeqc_status native_cuda_stationary_gradient(const dft::CudaKsFinalStateToken& expected,
+                                                      std::size_t maximum_device_bytes,
+                                                      std::vector<double>& output,
+                                                      dft::CudaStationaryResources& resources,
+                                                      std::string& detail) {
+    resources = {};
+    detail.clear();
+#if GENERATIVEQC_HAS_CUDA
+    const auto current = [&] {
+      dft::CudaKsFinalStateToken token;
+      std::string token_detail;
+      return cuda_ &&
+             cuda_->final_state_token(token, token_detail) == GENERATIVEQC_STATUS_SUCCESS &&
+             token == expected;
+    };
+    if (!current()) {
+      detail = "native CUDA stationary gradient requires the exact live final-state token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto profile = admitted_cuda_stationary_profile();
+    if (profile.empty()) {
+      detail = "native CUDA stationary profile is unavailable for this scientific model";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    try {
+      if (stationary_controller_ &&
+          stationary_controller_->resources().device_upper_bytes > maximum_device_bytes) {
+        detail = "retained native CUDA stationary controller exceeds the new device allowance";
+        return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      }
+      if (!stationary_controller_) {
+        stationary_controller_ = std::make_unique<dft::CudaStationaryController>(
+            system_, basis_, grid_, profile, expected.identity.model.device,
+            options_.xc_tile_points, maximum_device_bytes);
+      }
+      dft::CudaKsResidentDensityBinding density;
+      auto status = cuda_->resident_final_density(expected, density, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      dft::CudaKsResidentStationaryWeightsBinding weights;
+      dft::KsFinalStateDiagnostic diagnostic;
+      status =
+          cuda_->prepare_resident_final_stationary_weights(expected, weights, diagnostic, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
+                                                qualified_spatial_force_default());
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
+        resources = stationary_controller_->resources();
+      else
+        stationary_controller_.reset();
+      return status;
+    } catch (const std::bad_alloc&) {
+      detail = "native CUDA stationary host/device allocation or admission failed";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    } catch (const generativeqc::Error& failure) {
+      stationary_controller_.reset();
+      detail = failure.what();
+      return failure.status();
+    } catch (const std::invalid_argument& failure) {
+      detail = failure.what();
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    } catch (const std::exception& failure) {
+      stationary_controller_.reset();
+      detail = failure.what();
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+#else
+    detail = "native CUDA stationary gradient requires a CUDA build";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
+  std::string_view admitted_cuda_stationary_profile() const noexcept {
+    if (backend_ != GENERATIVEQC_BACKEND_CUDA) return {};
+    const bool all_electron = system_.ecp_terms.empty() &&
+                              std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                                           [](const auto& atom) { return atom.ecp_core != 0; });
+    std::size_t maximum_angular = 0;
+    for (const auto& shell : system_.shells)
+      maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
+    return native_cuda_stationary_profile(execution_plan_, options_, grid_.spec(), all_electron,
+                                          maximum_angular);
+  }
+
+  generativeqc_status native_cuda_stationary_capacity(dft::CudaStationaryCapacity& capacity,
+                                                      std::string& detail) const {
+    const auto profile = admitted_cuda_stationary_profile();
+    if (profile.empty()) {
+      detail = "native CUDA stationary capacity is unavailable for this prepared context";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    try {
+      const auto candidate = dft::cuda_stationary_capacity(
+          *dft::cuda_stationary_binding(profile), basis_.natom, basis_.nao, basis_.nprimitive,
+          grid_.point_count(), options_.xc_tile_points);
+      capacity = candidate;
+      detail.clear();
+      return GENERATIVEQC_STATUS_SUCCESS;
+    } catch (const std::bad_alloc&) {
+      detail = "native CUDA stationary capacity metadata allocation failed";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    } catch (const std::exception& error) {
+      detail = error.what();
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+  }
+
+  generativeqc_status native_cuda_stationary_limit(std::size_t maximum_device_bytes,
+                                                   std::string& detail) {
+    dft::CudaStationaryCapacity capacity;
+    const auto status = native_cuda_stationary_capacity(capacity, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (maximum_device_bytes < capacity.minimum_device_bytes) {
+      detail = "native CUDA stationary allowance is below the complete consumer minimum";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+#if GENERATIVEQC_HAS_CUDA
+    if (stationary_controller_ &&
+        stationary_controller_->resources().device_upper_bytes > maximum_device_bytes) {
+      detail = "retained native CUDA stationary controller exceeds the new item allowance";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+#endif
+    stationary_device_allowance_ = maximum_device_bytes;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
   /** The native single-system and batch entry points must consume identical
    * token-qualified stationary derivative sources and one complete force sink.
    * This is intentionally not a second batch-specific DFT force equation. */
@@ -1987,6 +2169,22 @@ class KsPreparedCalculation final : public PreparedCalculation {
     dft::VerifiedKsFinalState frame;
     std::string detail;
     auto status = final_state_token(token, detail);
+    if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
+      dft::CudaStationaryCapacity capacity;
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
+        status = native_cuda_stationary_capacity(capacity, detail);
+      std::vector<double> gradient;
+      dft::CudaStationaryResources resources;
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
+        status = native_cuda_stationary_gradient(
+            token, stationary_device_allowance_.value_or(capacity.cached_device_bytes), gradient,
+            resources, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS)
+        throw MethodError(status, detail.empty() ? "native CUDA DFT force unavailable" : detail);
+      for (auto& value : gradient) value = -value;
+      result.forces.swap(gradient);
+      return;
+    }
     if (status == GENERATIVEQC_STATUS_SUCCESS)
       status = read_final_state(token, true, frame, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
@@ -2345,8 +2543,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
   std::optional<dft::KsPhysicalState> cpu_physical_;
   std::unique_ptr<dft::dispersion::D4Plan> d4_;
   std::unique_ptr<dft::nlc::Vv10Plan> nonlocal_;
+  std::optional<std::size_t> stationary_device_allowance_;
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<dft::CudaKsPlan> cuda_;
+  std::unique_ptr<dft::CudaStationaryController> stationary_controller_;
 #endif
 };
 
@@ -2430,7 +2630,7 @@ class KsPreparedBatch final : public PreparedBatch {
   std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
                                             bool compute_forces) override {
     // A native force request is admitted only when *every* prepared item has
-    // the source-complete CPU DF-PBE/PBE0 owner. Mixed or missing contexts must
+    // a source-complete native owner. Mixed or missing contexts must
     // not quietly receive an energy-only result with an unfilled force buffer.
     if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
           return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
@@ -2472,7 +2672,7 @@ class KsPreparedBatch final : public PreparedBatch {
 #endif
           item.plan.reset();
           item.resident_warm = false;
-          item.plan = make_plan(target);
+          item.plan = make_plan(target, item.stationary_device_allowance);
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
 #if GENERATIVEQC_HAS_CUDA
@@ -2717,6 +2917,43 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status native_cuda_stationary_gradient(std::size_t index,
+                                                      const dft::CudaKsFinalStateToken& expected,
+                                                      std::size_t maximum_device_bytes,
+                                                      std::vector<double>& output,
+                                                      dft::CudaStationaryResources& resources,
+                                                      std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->native_cuda_stationary_gradient(expected, maximum_device_bytes,
+                                                                 output, resources, detail);
+    resources = {};
+    detail = "KS batch item has no native stationary owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status native_cuda_stationary_capacity(std::size_t index,
+                                                      dft::CudaStationaryCapacity& capacity,
+                                                      std::string& detail) const {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->native_cuda_stationary_capacity(capacity, detail);
+    detail = "KS batch item has no native stationary owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status native_cuda_stationary_limit(std::size_t index,
+                                                   std::size_t maximum_device_bytes,
+                                                   std::string& detail) {
+    if (index >= items_.size() || !items_[index].plan) {
+      detail = "native CUDA stationary allowance requires a live prepared item";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto status =
+        items_[index].plan->native_cuda_stationary_limit(maximum_device_bytes, detail);
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      items_[index].stationary_device_allowance = maximum_device_bytes;
+    return status;
+  }
+
   generativeqc_status resident_density(std::size_t index,
                                        const dft::CudaKsFinalStateToken& expected, int& device,
                                        const double*& alpha, const double*& beta,
@@ -2899,6 +3136,7 @@ class KsPreparedBatch final : public PreparedBatch {
     // replaceable geometry owner. A failed rebuild must not revoke it and
     // prevent the next force replay from reconstructing this item's plan.
     generativeqc_property_flags prepared_properties{};
+    std::optional<std::size_t> stationary_device_allowance;
     std::unique_ptr<KsPreparedCalculation> plan;
     // Density is materialized only for explicit output, import, or rebuilding
     // an owner. Empty density with resident_warm=true is a valid lazy snapshot.
@@ -2908,10 +3146,18 @@ class KsPreparedBatch final : public PreparedBatch {
     dft::CudaKsTransfers retired_transfers;
 #endif
   };
-  std::unique_ptr<KsPreparedCalculation> make_plan(const core::System& system) const {
-    return std::make_unique<KsPreparedCalculation>(capabilities_, system, execution_plan_, options_,
-                                                   grid_spec_, backend_, device_,
-                                                   ks_auxiliary_for_system(system, auxiliary_));
+  std::unique_ptr<KsPreparedCalculation> make_plan(
+      const core::System& system,
+      std::optional<std::size_t> stationary_device_allowance = {}) const {
+    auto plan = std::make_unique<KsPreparedCalculation>(
+        capabilities_, system, execution_plan_, options_, grid_spec_, backend_, device_,
+        ks_auxiliary_for_system(system, auxiliary_));
+    if (stationary_device_allowance) {
+      std::string detail;
+      const auto status = plan->native_cuda_stationary_limit(*stationary_device_allowance, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) throw MethodError(status, detail);
+    }
+    return plan;
   }
   void materialize_warm(std::size_t i) const {
     const auto& item = items_.at(i);
@@ -3051,6 +3297,74 @@ generativeqc_status dft_mixed_density_fitted_integral_gradient_cached(
                                                       detail);
   detail = "mixed density-fitted integral gradient requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_native_stationary_gradient(PreparedBatch& batch, std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        std::size_t maximum_device_bytes,
+                                                        std::vector<double>& output,
+                                                        dft::CudaStationaryResources& resources,
+                                                        std::string& detail) {
+  if (auto* ks = dynamic_cast<KsPreparedBatch*>(&batch))
+    return ks->native_cuda_stationary_gradient(index, expected, maximum_device_bytes, output,
+                                               resources, detail);
+  resources = {};
+  detail = "native CUDA stationary gradient requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_stationary_capacity(PreparedBatch& batch, std::size_t index,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail) {
+  const auto* ks = dynamic_cast<const KsPreparedBatch*>(&batch);
+  if (ks) return ks->native_cuda_stationary_capacity(index, capacity, detail);
+  detail = "native CUDA stationary capacity requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_stationary_limit(PreparedBatch& batch, std::size_t index,
+                                              std::size_t maximum_device_bytes,
+                                              std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->native_cuda_stationary_limit(index, maximum_device_bytes, detail);
+  detail = "native CUDA stationary allowance requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descriptor& descriptor,
+                                                 std::span<const std::uint64_t> shape,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail) {
+  if (shape.size() != 7 || !shape[0] || !shape[1] || !shape[2] ||
+      std::any_of(shape.begin(), shape.end(),
+                  [](auto value) { return value > std::numeric_limits<std::size_t>::max(); }))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  try {
+    NativeKsExecutionPlan execution_plan;
+    auto options = dft_options(descriptor, GENERATIVEQC_BACKEND_CUDA, execution_plan);
+    const auto grid = ks_grid_options(descriptor, options, execution_plan);
+    const auto profile = native_cuda_stationary_profile(execution_plan, options, grid,
+                                                        shape[5] == 0 && shape[6] == 0, shape[4]);
+    if (profile.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto points = runtime::size_mul(
+        shape[0], runtime::size_mul(grid.radial_points,
+                                    runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
+    if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const auto candidate =
+        dft::cuda_stationary_capacity(*dft::cuda_stationary_binding(profile), shape[0], shape[1],
+                                      shape[2], shape[3], options.xc_tile_points);
+    capacity = candidate;
+    detail.clear();
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const MethodError& error) {
+    detail = error.what();
+    return error.status();
+  } catch (const std::bad_alloc&) {
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
 }
 
 generativeqc_status dft_cuda_integral_gradient_cached(

@@ -43,11 +43,15 @@ void launch_build_orthogonalizer_kernel(dim3 grid, dim3 block, std::size_t share
                                         const double* eigenvalues, const std::uint8_t* active,
                                         double* orthogonalizer, std::uint8_t* failed);
 
-/** Preserve launch geometry, stream and per-item state routing. */
+/** Preserve launch geometry, stream and per-item state routing. The optional
+ * right transpose and leading reduction rank serve resident final-state
+ * products with square-padded panels. Callers validate 0 <= rank <= nbf;
+ * the default -1 retains the complete incumbent SCF multiplication. */
 void launch_matrix_product_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                   cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
                                   const double* left, bool transpose_left, const double* right,
-                                  const std::uint8_t* active, double* output, double scale = 1.0);
+                                  const std::uint8_t* active, double* output, double scale = 1.0,
+                                  bool transpose_right = false, std::int32_t reduction_rank = -1);
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_broadcast_spin_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

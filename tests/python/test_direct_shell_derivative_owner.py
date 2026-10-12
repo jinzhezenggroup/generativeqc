@@ -93,11 +93,15 @@ def _assert_full_range_derivative_layout(body: str) -> None:
     normalized = " ".join(body.split())
     assert "bool separate_sources" in normalized
     assert (
-        "std::vector<double> result((separate_sources ? 2U : 1U) * coordinates)"
+        "std::vector<double> result((separate_sources ? 2U : 1U) * batch.total_atoms * 3U)"
         in normalized
     )
     assert (
-        "cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream)"
+        "const auto output_elements = (separate_sources ? 2U : 1U) * coordinates"
+        in normalized
+    )
+    assert (
+        "cudaMemsetAsync(p.force, 0, output_elements * sizeof(double), shared.stream)"
         in normalized
     )
     assert (
@@ -109,12 +113,23 @@ def _assert_full_range_derivative_layout(body: str) -> None:
 def test_full_range_derivative_shares_one_queue_and_download() -> None:
     """Work reduction is source reuse, not removal of an observable component."""
     source = _source("src/scf/cuda/direct_coulomb.cpp")
-    body = source.split(
-        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
-    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    enqueue = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    host = cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
+    resident = cpp_function_definition(
+        source, "consume_generated_full_range_energy_derivatives"
+    )
+    body = enqueue + host
     _assert_full_range_derivative_layout(body)
     assert body.count("launch_bounded_shell_energy_derivative(") == 1
     assert body.count("cudaMemcpyAsync(") == 1
+    assert "enqueue_generated_full_range_energy_derivatives(" in host
+    assert "enqueue_generated_full_range_energy_derivatives(" in resident
+    assert "cudaMemcpyAsync(" not in enqueue + resident
+    assert "CudaDerivativeConvention::Force" in resident
     assert "for (unsigned source" not in body
     dispatcher = _source("src/scf/cuda/direct_bounded_fallback.cu")
     assert "DirectRangeOperator::FullSources" in dispatcher
@@ -138,9 +153,12 @@ def test_full_range_derivative_layout_rejects_understated_storage(
     before: str, after: str
 ) -> None:
     source = _source("src/scf/cuda/direct_coulomb.cpp")
-    body = source.split(
-        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
-    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    body = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    body += cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
     assert before in body
     with pytest.raises(AssertionError):
         _assert_full_range_derivative_layout(body.replace(before, after))
@@ -655,7 +673,7 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     stationary = _source("python/generativeqc/_stationary_cuda.py")
 
     begin = methods.index("generativeqc_status cuda_integral_gradient(")
-    end = methods.index("Result execute_impl(bool compute_forces)", begin)
+    end = methods.index("generativeqc_status native_cuda_stationary_gradient(", begin)
     body = methods[begin:end]
     assert "const bool range_exchange = execution_plan_.range_exchange;" in body
     _assert_stationary_integral_layout(body, api, snapshot)

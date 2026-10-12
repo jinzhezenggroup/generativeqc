@@ -57,6 +57,9 @@ struct CudaKsTransfers {
   std::size_t phase_resident_value_bytes{}, phase_resident_numeric_peak_bytes{};
   std::uint64_t setup_h2d_bytes{}, density_h2d_bytes{}, scalar_d2h_bytes{}, matrix_d2h_bytes{};
   std::uint64_t final_state_d2h_bytes{}, final_state_reads{};
+  /** Resident canonical proofs transfer only bounded diagnostic packets, not
+   * detached D/F/C/epsilon. Repeated leases do not increment this count. */
+  std::uint64_t resident_final_validations{};
   std::uint64_t synchronizations{}, iterations{};
   /** Intermediate orthonormal KS orbital frames retained entirely on device for
    * a future #991 warm-subspace admission attempt. These are implementation
@@ -277,11 +280,22 @@ class CudaKsPlan {
   generativeqc_status resident_final_fitted_projection(
       const CudaKsFinalStateToken& expected, CudaKsResidentFittedProjectionBinding& binding,
       std::string& detail) const;
-  /** Borrow total stationary D/W already staged by a successful weighted
-   * final-state read. This performs no CUDA launch, transfer, or synchronization. */
+  /** Borrow total stationary D/W already staged by resident preparation or a
+   * successful weighted final-state read. This performs no CUDA launch,
+   * transfer, or synchronization. */
   generativeqc_status resident_final_stationary_weights(
       const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
       std::string& detail) const;
+  /** Validate the exact final physical frame on device and stage total D/W
+   * without exporting matrices or invoking host scientific algebra. Shared
+   * acceptance gates consume only scalar packets; all scratch is precharged.
+   * A previously validated weighted read may be borrowed unchanged. Repeated
+   * leases preserve published pointers; stale admission submits no work, and
+   * a failed proof revokes the final state without discarding last-good warm
+   * storage. This does not change energy-only/default validation policy. */
+  generativeqc_status prepare_resident_final_stationary_weights(
+      const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+      KsFinalStateDiagnostic& diagnostic, std::string& detail);
   /** Borrow final total rho/grad-rho already produced by device-fused
    * nonlocal XC. The binding is available only for the exact current token
    * and performs no transfer, synchronization or numerical launch. */

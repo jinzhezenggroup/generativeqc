@@ -439,6 +439,11 @@ class PreparedBatch:
                     phase="preparation",
                 )
                 check_resource_status(self._library, status, self.resource_diagnostics)
+                from .resources_ks import configure_native_cuda_stationary_batch
+
+                configure_native_cuda_stationary_batch(
+                    self._library, self._batch, self.resource_plan
+                )
             if calculator._dispersion_method_ir is not None:
                 from generativeqc_compiler.method import (
                     D4Spec,

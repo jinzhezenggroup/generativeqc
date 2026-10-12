@@ -11,6 +11,7 @@
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
+#include "methods/dft_method.hpp"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
 
@@ -29,6 +30,44 @@ generativeqc_status generativeqc_ks_batch_supported_properties_v1(
   if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   *output = *value;
   return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Authenticate the same additional capacity against the prepared item. This
+ * query needs no SCF/final token and publishes only after complete admission. */
+generativeqc_status generativeqc_ks_batch_stationary_cuda_capacity_v1(
+    const generativeqc_batch* batch, std::uint32_t index, std::uint64_t* values,
+    std::size_t count) {
+  if (!batch || !values || count != 9 || index >= batch->plan->size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    generativeqc::dft::CudaStationaryCapacity capacity;
+    std::string detail;
+    const auto status = generativeqc::methods::detail::dft_cuda_stationary_capacity(
+        *batch->plan, index, capacity, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto snapshot = generativeqc::dft::cuda_stationary_capacity_values(capacity);
+    std::copy(snapshot.begin(), snapshot.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
+/** Apply an admitted per-item bound before force consumers are constructed.
+ * The native item retains it across geometry replacement and failed replays. */
+generativeqc_status generativeqc_ks_batch_stationary_cuda_limit_v1(
+    generativeqc_batch* batch, std::uint32_t index, std::uint64_t maximum_device_bytes) {
+  if (!batch || index >= batch->plan->size() ||
+      maximum_device_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    return generativeqc::methods::detail::dft_cuda_stationary_limit(
+        *batch->plan, index, maximum_device_bytes, batch->context->last_detail);
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
 }
 
 generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(

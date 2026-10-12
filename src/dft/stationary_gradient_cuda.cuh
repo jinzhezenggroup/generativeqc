@@ -107,11 +107,26 @@ size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntas
               2 * ns * n * n) +
          (cache_center_geometry ? 48 * (na * (na - 1) / 2) : 0) + 256;
 }
+/** Preserve typed device/host allocation (2/3) and device runtime (4) failures.
+ * Invalid/numerical failures remain 1; existing nonzero-rejection callers keep
+ * their behavior while native consumers can preserve the public CUDA status. */
 template <class F>
 int guarded(Owner* owner, char* error, size_t size, F f) noexcept {
   try {
     f();
     return 0;
+  } catch (const DeviceAllocationError& e) {
+    if (owner) owner->failed = true;
+    error_text(error, size, e.what());
+    return 2;
+  } catch (const std::bad_alloc& e) {
+    if (owner) owner->failed = true;
+    error_text(error, size, e.what());
+    return 3;
+  } catch (const DeviceRuntimeError& failure) {
+    if (owner) owner->failed = true;
+    error_text(error, size, failure.what());
+    return 4;
   } catch (const std::exception& e) {
     if (owner) owner->failed = true;
     error_text(error, size, e.what());

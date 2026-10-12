@@ -1233,7 +1233,7 @@ def test_public_cuda_batch_changed_geometry_and_failure_isolation() -> None:
         assert owner._lease.executions == 3
 
 
-def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
+def test_cuda_ks_resource_plan_accounts_for_public_force_consumers() -> None:
     from test_dft_complete_cpu import ATOMS
 
     calc = _calculator("pbe-rks")
@@ -1245,7 +1245,15 @@ def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
         for candidate in request.candidates
         for estimate in candidate.estimates
     }
-    assert "serialized generated KS force device staging cap" in names
+    native = all(
+        "cuda_stationary_cache" in dict(candidate.decisions)
+        for candidate in request.candidates
+    )
+    if native:
+        assert "all native KS stationary CUDA consumers" in names
+        assert "serialized generated KS force device staging cap" not in names
+    else:
+        assert "serialized generated KS force device staging cap" in names
     assert "serialized generated KS force host staging cap" in names
     assert "serialized KS snapshot grid cache cap" in names
 

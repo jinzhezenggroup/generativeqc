@@ -7,9 +7,31 @@
 #include <string>
 
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_stationary_capacity.hpp"
+#include "dft/cuda_stationary_controller.hpp"
 #include "methods/method.hpp"
 
 namespace generativeqc::methods::detail {
+
+/** Context-qualified additional CUDA force capacity without any CUDA operation.
+ * Shapes are atoms, AOs, primitives, grid points, maximum shell l, ECP terms
+ * and total ECP core electrons. Model admission is shared with prepared owners;
+ * this metadata alone neither supplies a final token nor evaluates science. */
+generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descriptor& descriptor,
+                                                 std::span<const std::uint64_t> shape,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail);
+
+/** Read the same capacity from an authenticated prepared item, before SCF. */
+generativeqc_status dft_cuda_stationary_capacity(PreparedBatch& batch, std::size_t index,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail);
+
+/** Bound one retained consumer, including future geometry rebuilds. Admission
+ * remains scientific/context-specific; this only selects optional AO caching. */
+generativeqc_status dft_cuda_stationary_limit(PreparedBatch& batch, std::size_t index,
+                                              std::size_t maximum_device_bytes,
+                                              std::string& detail);
 
 /** Detached derivative inputs copied from the same owner as the #162 state.
  * The token remains authoritative: this copy alone never proves freshness. */
@@ -55,15 +77,29 @@ generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::size_t& bytes, std::string& detail);
 
-/** Five explicit CUDA stationary sources: hcore, overlap/Pulay, J, SR-K,
- * LR-K. The live token binds D/W, geometry, radial parameters and spin.
- * XC, nonlocal correlation and nuclear repulsion are separate consumers. */
+/** CUDA stationary integral sources: hcore, overlap/Pulay, J and full-range K,
+ * or separate SR-K/LR-K for range-separated models. Direct consumers validate
+ * and stage resident D/W without exporting a detached frame; the retained DF
+ * response contract still requires its explicit host snapshot. The live token
+ * binds geometry, radial parameters and spin. XC, nonlocal correlation and
+ * nuclear repulsion remain separate consumers, not a complete force. */
 generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                std::vector<double>& output,
                                                std::size_t maximum_bytes,
                                                std::array<std::uint64_t, 9>& work,
                                                std::string& detail);
+
+/** Private complete-source CUDA Direct qualification endpoint, not public
+ * force admission. PBE/PBE0 RKS/UKS only. The additional device allowance
+ * excludes the already charged SCF/Fock frame. Failure preserves output; the
+ * exact final token gates both submission and terminal publication. */
+generativeqc_status dft_cuda_native_stationary_gradient(PreparedBatch& batch, std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        std::size_t maximum_device_bytes,
+                                                        std::vector<double>& output,
+                                                        dft::CudaStationaryResources& resources,
+                                                        std::string& detail);
 
 /** Snapshot-backed variant for a consumer that already exported and validated
  * D/W under the exact same live token. The native owner still revalidates the

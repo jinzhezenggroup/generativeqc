@@ -28,18 +28,15 @@ std::size_t dimension(const Matrix& overlap) {
   const auto n = static_cast<std::size_t>(std::sqrt(overlap.size()));
   return n && n <= std::numeric_limits<std::size_t>::max() / n && n * n == overlap.size() ? n : 0;
 }
-bool valid_input(const FinalStateIdentity& current, const Matrix& overlap, const Matrix& hcore,
-                 double nuclear, const std::vector<Matrix>& density,
-                 const FinalStateLimits& limits) {
-  const auto n = dimension(overlap);
+bool valid_identity(const FinalStateIdentity& current, std::size_t n,
+                    const FinalStateLimits& limits) {
   const auto& id = current.factor;
   const auto spins = current.model.spec.spin == FockSpin::Restricted ? 1U : 2U;
   if (!n || !id.basis || !id.reference || !id.orbital_generation || !id.density_generation ||
-      !current.solve_epoch || current.occupied.size() != spins || density.size() != spins ||
-      !std::isfinite(nuclear) || !std::isfinite(limits.density_tolerance) ||
+      n > std::numeric_limits<std::size_t>::max() / n || !current.solve_epoch ||
+      current.occupied.size() != spins || !std::isfinite(limits.density_tolerance) ||
       limits.density_tolerance <= 0 || !std::isfinite(limits.energy_tolerance) ||
-      limits.energy_tolerance <= 0 || limits.maximum_corrections > 64 || !symmetric(overlap, n) ||
-      !symmetric(hcore, n))
+      limits.energy_tolerance <= 0 || limits.maximum_corrections > 64)
     return false;
   try {
     validate_resolved_fock_build(current.model);
@@ -47,8 +44,18 @@ bool valid_input(const FinalStateIdentity& current, const Matrix& overlap, const
     return false;
   }
   for (std::size_t spin = 0; spin < spins; ++spin)
-    if (current.occupied[spin] > n || !symmetric(density[spin], n)) return false;
+    if (current.occupied[spin] > n) return false;
   return true;
+}
+bool valid_input(const FinalStateIdentity& current, const Matrix& overlap, const Matrix& hcore,
+                 double nuclear, const std::vector<Matrix>& density,
+                 const FinalStateLimits& limits) {
+  const auto n = dimension(overlap);
+  return valid_identity(current, n, limits) && std::isfinite(nuclear) &&
+         density.size() == current.occupied.size() && symmetric(overlap, n) &&
+         symmetric(hcore, n) &&
+         std::all_of(density.begin(), density.end(),
+                     [n](const auto& matrix) { return symmetric(matrix, n); });
 }
 bool valid_fock(const FinalStateIdentity& current, const PhysicalFockFrame& fock, std::size_t n,
                 bool device = false) {
@@ -91,19 +98,12 @@ bool validate_final_state(const FinalStateIdentity& current, const Matrix& overl
     return false;
   }
   const double weight = current.model.spec.spin == FockSpin::Restricted ? 2.0 : 1.0;
-  const double tolerance = std::min(1e-8, limits.density_tolerance);
   diagnostic.eigenframes.resize(density.size());
   const bool require_eigen_residual = limits.require_canonicality || !limits.allow_stationary_reuse;
   if (operations) {
     if (!operations->products(current, overlap, hcore, nuclear_energy, density, fock, orbitals,
                               limits, diagnostic, detail))
       return false;
-    if (diagnostic.eigenframes.size() != density.size()) {
-      detail = "final-state provider returned incomplete spin diagnostics";
-      return false;
-    }
-    for (const auto& frame : diagnostic.eigenframes)
-      if (!accept_eigen_frame(frame, detail, require_eigen_residual)) return false;
   } else {
     for (std::size_t spin = 0; spin < density.size(); ++spin) {
       const auto& frame = orbitals.spins[spin];
@@ -156,6 +156,25 @@ bool validate_final_state(const FinalStateIdentity& current, const Matrix& overl
     }
     diagnostic.energy = physical_energy(hcore, nuclear_energy, density, fock);
   }
+  return accept_final_state_products(current, n, limits, diagnostic, detail);
+}
+
+bool accept_final_state_products(const FinalStateIdentity& current, std::size_t dimension,
+                                 const FinalStateLimits& limits,
+                                 const FinalStateDiagnostic& diagnostic, std::string& detail) {
+  detail.clear();
+  if (!valid_identity(current, dimension, limits)) {
+    detail = "invalid final-state identity, model, occupations or tolerances";
+    return false;
+  }
+  if (diagnostic.eigenframes.size() != current.occupied.size()) {
+    detail = "final-state provider returned incomplete spin diagnostics";
+    return false;
+  }
+  const bool require_eigen_residual = limits.require_canonicality || !limits.allow_stationary_reuse;
+  for (const auto& frame : diagnostic.eigenframes)
+    if (!accept_eigen_frame(frame, detail, require_eigen_residual)) return false;
+  const double tolerance = std::min(1e-8, limits.density_tolerance);
   for (double value : {diagnostic.maximum_commutator, diagnostic.density_rms,
                        diagnostic.maximum_trace_error, diagnostic.maximum_idempotency_error,
                        diagnostic.maximum_density_error, diagnostic.maximum_canonical_error}) {

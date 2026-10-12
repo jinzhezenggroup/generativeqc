@@ -69,6 +69,7 @@ function(generativeqc_add_dft_sources target)
       src/dft/cuda_cosx_derivative.cu
       src/dft/cuda_xc.cpp
       src/dft/cuda_ks.cpp
+      src/dft/cuda_stationary_controller.cpp
       src/dft/cuda_ks_kernels.cu
       src/dft/cuda_quadrature.cu
       src/dft/dispersion/d3_cuda.cu
@@ -84,6 +85,8 @@ function(generativeqc_add_dft_sources target)
       set_property(SOURCE src/dft/cuda_quadrature.cu APPEND PROPERTY
                    COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
     endif()
+  else()
+    target_sources(${target} PRIVATE src/dft/cuda_stationary_binding_stub.cpp)
   endif()
 endfunction()
 

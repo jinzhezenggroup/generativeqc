@@ -9,6 +9,8 @@
 
 #include "../tensor/cuda_runtime.cuh"
 #include "ao_grid_work.hpp"
+#include "cuda_grid_api.hpp"
+#include "cuda_grid_storage.hpp"
 #include "generativeqc/generativeqc.h"
 #include "grid_task_view.cuh"
 #include "xc_point.hpp"
@@ -264,20 +266,12 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
     const size_t tile = mul(capacity, p->active_capacity);
     if (mul(p->jets, tile) > static_cast<size_t>(INT64_MAX))
       throw std::invalid_argument("CUDA grid index overflow");
-    size_t elements =
-        add(add(p->packed_size, matrices), add(mul(16, capacity), mul(p->jets + 8, tile)));
-    // Selected mode retains global D and V explicitly, plus bounded local D/V
-    // and one index map. Dense mode keeps its established allocation contract.
-    if (p->local)
-      elements =
-          add(elements,
-              add(matrices, add(mul(4, mul(active_capacity, active_capacity)), active_capacity)));
-    if (p->orbital_enabled)
-      elements = add(elements, add(mul(p->nao, add(p->orbital_capacity[0], p->orbital_capacity[1])),
-                                   mul(add(p->active_capacity, mul(4, capacity)), orbital_tile)));
     static_assert(sizeof(size_t) == sizeof(double), "grid map arena requires 64-bit indices");
-    const size_t numeric = mul(8, elements), error_offset = mul(add(numeric, 255) / 256, 256);
-    const size_t workspace = add(error_offset, 256), bytes = add(workspace, 4U << 20);
+    const auto storage = generativeqc::dft::cuda_grid_storage(
+        p->packed_size, p->nao, capacity, p->jets, active_capacity, orbital_capacity, orbital_tile);
+    const auto error_offset = storage.error_offset;
+    const auto workspace = storage.workspace_bytes;
+    const auto bytes = storage.allocation_bytes;
     if (expected_bytes && bytes != expected_bytes)
       throw std::invalid_argument("native/Python grid plan mismatch");
     // Arena preparation restores its caller's device. Keep the complete owner
@@ -289,7 +283,8 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
     p->projection = generativeqc::dft::generated::prepare_grid_panel(
         std::min(size_t{4}, p->jets), capacity, p->active_capacity,
         std::max(p->active_capacity, p->orbital_tile), p->context.stream,
-        (96U << 20) + generativeqc::tensor::PreparedBoundedContraction::host_reservation);
+        generativeqc::dft::CudaGridStorage::provider_allowance +
+            generativeqc::tensor::PreparedBoundedContraction::host_reservation);
     p->projection_prepare_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     p->context.metrics.provider_retained_bytes = p->projection->retained_provider_bytes();
@@ -416,6 +411,12 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
     if (!alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
       throw std::invalid_argument("invalid CUDA grid resident density binding");
     ctx.check_device();
+#if GENERATIVEQC_TEST_HOOKS
+    if (fail_next_grid_runtime) {
+      fail_next_grid_runtime = false;
+      throw DeviceRuntimeError("injected CUDA grid runtime failure");
+    }
+#endif
     if (matrix_elements != p.nao * p.nao)
       throw std::invalid_argument("CUDA grid resident density shape mismatch");
     require_device_pointer(alpha, ctx.device);

@@ -89,7 +89,8 @@ namespace generativeqc::scf::cuda_execution {
 int cuda_status(int s) {return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;}
 int blas_status(int s) {return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;}
 void launch_matrix_product_kernel(dim3,dim3,std::size_t,cudaStream_t,std::int32_t,std::int32_t,
-                                 const double*,bool,const double*,const std::uint8_t*,double*,double) {
+                                 const double*,bool,const double*,const std::uint8_t*,double*,double,
+                                 bool,std::int32_t) {
   assert(false);
 }
 void launch_spin_matrix_product_kernel(dim3,dim3,std::size_t,cudaStream_t,std::int32_t,std::int32_t,

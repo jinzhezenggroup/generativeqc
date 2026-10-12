@@ -212,12 +212,10 @@ struct KsStateStorage {
     reserve(final_enabled, 1);
     reserve(control, 1);
     reserve(scalar_records, kCudaKsChunkCapacity);
-    // Reuse four existing iteration matrices after final-frame export. Only
+    // Reuse four existing iteration matrices after final-frame selection. Only
     // bounded scalar reductions need additional, publicly charged storage.
-    if (MatrixLibraryOwner::provider_allowance(static_cast<int>(n)))
-      reserve(final_validation_partial, resident_final_validation_partial_count(n));
-    else
-      final_validation_partial = nullptr;
+    // Tiny owners use their existing native products, not a new BLAS allowance.
+    reserve(final_validation_partial, resident_final_validation_partial_count(n));
     return bytes;
   }
 };
@@ -310,6 +308,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   unsigned final_corrections{}, refinement_iterations{};
   std::uint32_t functional{semilocal_family_code(SemilocalFamily::Lda)};
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
+  KsFinalStateDiagnostic final_validation_diagnostic;
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
   double previous_energy{std::numeric_limits<double>::infinity()};
   double previous_energy_correction{};
@@ -1063,6 +1062,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
             : (incremental_direct_jk ? sum(options.max_iterations, kMaximumFinalCorrections)
                                      : options.max_iterations);
     output.dft_diagnostic.history.reserve(diagnostic_iterations);
+    final_validation_diagnostic.determinant.eigenframes.reserve(spins);
     resource.retained_host_numeric_bytes =
         (host_xc_density.capacity() + host_xc_alpha.capacity() + host_xc_beta.capacity() +
          host_xc_potential.capacity()) *
@@ -1070,6 +1070,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
         sizeof(host_all_spins) + sizeof(host_one) +
+        final_validation_diagnostic.determinant.eigenframes.capacity() *
+            sizeof(scf::solver::EigenFrameDiagnostic) +
         tensor::CudaMatrixProductBinding::kPreparationHostBytes +
         tensor::CudaStructuredProductBinding::kPreparationHostBytes;
     if (!host_unfused)
@@ -2458,19 +2460,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return {1, final_identity()};
   }
 
-  VerifiedKsFinalState read_final(const CudaKsFinalStateToken& expected,
-                                  bool compute_weighted_density, std::string& detail) {
-    const auto current = token();
-    if (expected.version != 1 || expected != current)
-      throw std::invalid_argument(
-          "CUDA KS final-state token has stale owner, epoch, generation, model or occupations");
-    current_device();
-    cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
-    check(cudaStreamIsCapturing(stream, &capture));
-    if (capture != cudaStreamCaptureStatusNone)
-      throw std::invalid_argument(
-          "CUDA KS final-state read requires an ordinary noncapturing stream");
-
+  void prepare_final_frame() {
     if (!final_frame_ready) {
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
@@ -2483,6 +2473,144 @@ struct CudaKsPlan::Impl : KsStateStorage {
             "CUDA KS final-state eigensolver launch failed");
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
+  }
+
+  void stage_stationary_weights() {
+    constexpr unsigned threads = 128;
+    build_density(final_coefficients, final_eigenvalues, final_enabled, tmp1);
+    check(cudaGetLastError());
+    if (spins == 2) {
+      const auto matrix_blocks = static_cast<unsigned>((matrix + threads - 1) / threads);
+      // One batch permits the total to overwrite the first spin block.
+      launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
+                                          static_cast<std::int32_t>(n), tmp1, final_enabled, tmp1);
+      check(cudaGetLastError());
+      launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
+                                          static_cast<std::int32_t>(n), density, final_enabled,
+                                          tmp2);
+      check(cudaGetLastError());
+    }
+  }
+
+  bool resident_final_products(bool canonical, double nuclear,
+                               scf::solver::FinalStateDiagnostic& diagnostic, std::string& detail) {
+    std::array<scf::cuda_df::ValidationInputs, 2> inputs{};
+    for (unsigned spin = 0; spin < spins; ++spin) {
+      auto& input = inputs[spin];
+      const auto offset = static_cast<std::size_t>(spin) * matrix;
+      input.n = n;
+      input.occupied = occupations[spin];
+      input.weight = spins == 1 ? 2 : 1;
+      input.f = fock + offset;
+      input.s = overlap;
+      input.h = hcore;
+      input.d = density + offset;
+      input.c = final_coefficients + offset;
+      input.values = final_eigenvalues + static_cast<std::size_t>(spin) * n;
+      input.info = final_solver_info + spin;
+      input.physical_fock = true;
+      input.transposed_operators = true;
+    }
+    const ResidentFinalValidationWorkspace workspace{{tmp1, tmp2, residual, effective},
+                                                     final_validation_partial,
+                                                     resident_final_validation_partial_count(n)};
+    ResidentFinalValidationTransfers transfers;
+    const auto record = [&] {
+      movement.scalar_d2h_bytes += transfers.device_to_host_bytes;
+      movement.final_state_d2h_bytes += transfers.device_to_host_bytes;
+      movement.synchronizations += transfers.synchronizations;
+      if (transfers.synchronizations &&
+          transfers.device_to_host_bytes == spins * sizeof(scf::cuda_df::ValidationPartial))
+        ++movement.resident_final_validations;
+    };
+    try {
+      const bool valid = resident_final_state_products(
+          matrix_products.view(), std::span(inputs.data(), spins), workspace, canonical, nuclear,
+          diagnostic, detail, &transfers);
+      record();
+      return valid;
+    } catch (...) {
+      // Invalid solver/symmetry evidence is detected after the packet drain;
+      // rejecting it must not erase the transport that actually happened.
+      record();
+      throw;
+    }
+  }
+
+  KsFinalStateDiagnostic prepare_resident_weights(const CudaKsFinalStateToken& expected,
+                                                  std::string& detail) {
+    const auto current = token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument("CUDA KS resident final-state token is stale");
+    current_device();
+    cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
+    check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::invalid_argument("CUDA KS resident final-state proof cannot capture");
+    if (final_stationary_weights_ready) return final_validation_diagnostic;
+    try {
+      prepare_final_frame();
+      scf::solver::FinalStateLimits limits;
+      limits.density_tolerance = options.density_tolerance;
+      limits.energy_tolerance = options.energy_tolerance;
+      limits.maximum_corrections = 0;
+      limits.require_canonicality = true;
+      scf::solver::FinalStateDiagnostic products;
+      if (!resident_final_products(true, provider.one_electron().nuclear_repulsion, products,
+                                   detail))
+        throw std::runtime_error(detail.empty() ? "CUDA KS resident final-state products failed"
+                                                : detail);
+      const KsFinalStateEvidence evidence{current.identity,
+                                          final_generation,
+                                          true,
+                                          output.dft_diagnostic.components,
+                                          output.energy,
+                                          output.dft_diagnostic.physical_residual};
+      KsFinalStateDiagnostic diagnostic;
+      if (token() != current ||
+          !validate_ks_final_state_evidence(current.identity, n, evidence, limits, products,
+                                            diagnostic, detail))
+        throw std::runtime_error(detail.empty() ? "CUDA KS resident final-state proof failed"
+                                                : detail);
+      stage_stationary_weights();
+      check(cudaMemsetAsync(staged_xc_error, 0, sizeof(int), stream));
+      scf::cuda_df::launch_validation_weights_status(stream, matrix, spins == 1 ? density : tmp2,
+                                                     tmp1, staged_xc_error);
+      check(cudaGetLastError());
+      int weights_status{};
+      check(cudaMemcpyAsync(&weights_status, staged_xc_error, sizeof(weights_status),
+                            cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+      ++movement.synchronizations;
+      movement.scalar_d2h_bytes += sizeof(weights_status);
+      movement.final_state_d2h_bytes += sizeof(weights_status);
+      if (weights_status || token() != current)
+        throw std::runtime_error("CUDA KS resident stationary D/W is nonfinite or lost its owner");
+      final_validation_diagnostic = diagnostic;
+      final_frame_ready = final_stationary_weights_ready = true;
+      return diagnostic;
+    } catch (...) {
+      // Scratch is phase-local. Drain even an incomplete frame launch before
+      // revoking authorization, without touching the separate warm density.
+      (void)cudaStreamSynchronize(stream);
+      final_state_ready = final_frame_ready = final_stationary_weights_ready = false;
+      throw;
+    }
+  }
+
+  VerifiedKsFinalState read_final(const CudaKsFinalStateToken& expected,
+                                  bool compute_weighted_density, std::string& detail) {
+    const auto current = token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS final-state token has stale owner, epoch, generation, model or occupations");
+    current_device();
+    cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
+    check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::invalid_argument(
+          "CUDA KS final-state read requires an ordinary noncapturing stream");
+    prepare_final_frame();
 
     // The final-state product proof is shared by every prepared full-range
     // global hybrid; the semilocal XC family does not change its matrix algebra.
@@ -2511,29 +2639,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // A device proof borrows tmp1/tmp2 before staging the force consumer's W/D.
     // The reference fallback retains its original single-drain staging order.
     bool staged_stationary_weights = false;
-    const auto stage_stationary_weights = [&] {
-      constexpr unsigned threads = 128;
-      if (spins == 1) {
-        build_density(final_coefficients, final_eigenvalues, final_enabled, tmp1);
-        check(cudaGetLastError());
-      } else {
-        build_density(final_coefficients, final_eigenvalues, final_enabled, tmp1);
-        check(cudaGetLastError());
-        const auto matrix_blocks = static_cast<unsigned>((matrix + threads - 1) / threads);
-        // One batch permits the total to overwrite the first spin block.
-        launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
-                                            static_cast<std::int32_t>(n), tmp1, final_enabled,
-                                            tmp1);
-        check(cudaGetLastError());
-        launch_sum_uhf_spin_matrices_kernel(matrix_blocks, threads, 0, stream, 1,
-                                            static_cast<std::int32_t>(n), density, final_enabled,
-                                            tmp2);
-        check(cudaGetLastError());
-      }
+    const auto stage_weights = [&] {
+      stage_stationary_weights();
       staged_stationary_weights = true;
     };
     if (compute_weighted_density && !final_stationary_weights_ready && !device_validation)
-      stage_stationary_weights();
+      stage_weights();
 
     KsPhysicalState physical;
     KsFinalStateCandidate candidate;
@@ -2613,37 +2724,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
             &core != &provider.one_electron().hcore || densities != physical.density ||
             physical_fock.spins != physical.fock || frame.spins.size() != candidate.spins.size())
           throw std::invalid_argument("CUDA KS validation products lost their exported owner");
-        std::array<scf::cuda_df::ValidationInputs, 2> inputs{};
         for (unsigned spin = 0; spin < spins; ++spin) {
           if (frame.spins[spin].vectors != candidate.spins[spin].vectors ||
               frame.spins[spin].values != candidate.spins[spin].values)
             throw std::invalid_argument("CUDA KS validation products lost their exported frame");
-          auto& input = inputs[spin];
-          const auto offset = static_cast<std::size_t>(spin) * matrix;
-          input.n = n;
-          input.occupied = occupations[spin];
-          input.weight = spins == 1 ? 2 : 1;
-          input.f = fock + offset;
-          input.s = overlap;
-          input.h = hcore;
-          input.d = density + offset;
-          input.c = final_coefficients + offset;
-          input.values = final_eigenvalues + static_cast<std::size_t>(spin) * n;
-          input.info = final_solver_info + spin;
-          input.physical_fock = true;
-          input.transposed_operators = true;
         }
-        const ResidentFinalValidationWorkspace workspace{
-            {tmp1, tmp2, residual, effective},
-            final_validation_partial,
-            resident_final_validation_partial_count(n)};
-        const bool valid = resident_final_state_products(
-            matrix_products.view(), std::span(inputs.data(), spins), workspace,
-            validation_limits.require_canonicality, nuclear, diagnostic, product_detail);
-        const auto diagnostic_bytes = spins * sizeof(scf::cuda_df::ValidationPartial);
-        movement.scalar_d2h_bytes += diagnostic_bytes;
-        movement.final_state_d2h_bytes += diagnostic_bytes;
-        ++movement.synchronizations;
+        const bool valid = resident_final_products(validation_limits.require_canonicality, nuclear,
+                                                   diagnostic, product_detail);
         if (token() != current)
           throw std::invalid_argument("CUDA KS final-state owner changed during validation");
         return valid;
@@ -2666,7 +2753,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     if (device_validation && compute_weighted_density) {
       try {
-        stage_stationary_weights();
+        stage_weights();
         check(cudaStreamSynchronize(stream));
         ++movement.synchronizations;
       } catch (...) {
@@ -2674,7 +2761,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         throw;
       }
     }
-    if (staged_stationary_weights) final_stationary_weights_ready = true;
+    if (staged_stationary_weights) {
+      final_validation_diagnostic = verified.diagnostic;
+      final_stationary_weights_ready = true;
+    }
     return verified;
   }
 
@@ -2884,7 +2974,7 @@ generativeqc_status CudaKsPlan::resident_final_stationary_weights(
           "CUDA KS resident stationary-weight token has stale owner, epoch, generation or model");
     if (!impl_->final_stationary_weights_ready || !impl_->tmp1 || !impl_->matrix)
       throw std::logic_error(
-          "CUDA KS resident stationary D/W requires a successful weighted final-state read");
+          "CUDA KS resident stationary D/W requires successful final-state weight preparation");
     const auto* total_density = impl_->spins == 1 ? impl_->density : impl_->tmp2;
     if (!total_density)
       throw std::logic_error("CUDA KS resident stationary density storage is unavailable");
@@ -2899,6 +2989,33 @@ generativeqc_status CudaKsPlan::resident_final_stationary_weights(
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
+generativeqc_status CudaKsPlan::prepare_resident_final_stationary_weights(
+    const CudaKsFinalStateToken& expected, CudaKsResidentStationaryWeightsBinding& binding,
+    KsFinalStateDiagnostic& diagnostic, std::string& detail) {
+  binding = {};
+  diagnostic = {};
+  detail.clear();
+  try {
+    auto accepted = impl_->prepare_resident_weights(expected, detail);
+    const auto status = resident_final_stationary_weights(expected, binding, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    diagnostic = std::move(accepted);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    detail = "host allocation for CUDA KS resident final-state diagnostics failed";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const generativeqc::Error& error) {
+    detail = error.what();
+    return error.status();
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    if (detail.empty()) detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
 generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
     const CudaKsFinalStateToken& expected, CudaKsResidentNonlocalFeaturesBinding& binding,
     std::string& detail) const {

@@ -410,18 +410,22 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
   }
 }
 
-generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
+generativeqc_status consume_prepared_cuda_stationary_one_electron_pair(
     CudaDirectJkPlan* source, const double* resident_density,
-    const double* resident_weighted_density, std::size_t matrix_elements, std::size_t maximum_bytes,
-    std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    const double* resident_weighted_density, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail,
     OneElectronGradientResources* resources) {
   if (resources) *resources = {};
   detail.clear();
   if (!source || source->device_id < 0 || source->derivative_order < 1 || !source->stream ||
-      !resident_density || !resident_weighted_density || !maximum_bytes) {
+      !resident_density || !resident_weighted_density) {
     detail =
         "prepared one-electron force requires a derivative-capable Direct owner and resident D/W";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  if (!consumer) {
+    detail = "prepared one-electron force requires a resident source consumer";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto n = source->diagnostic.nbf;
   if (!n || n > std::numeric_limits<std::size_t>::max() / n || matrix_elements != n * n ||
@@ -450,16 +454,20 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   const auto atoms = source->coordinates_per_item / 3;
-  if (atoms > std::numeric_limits<std::size_t>::max() / (6 * sizeof(double)) ||
-      6 * atoms * sizeof(double) > maximum_bytes) {
-    detail = "prepared one-electron host output staging exceeds maximum_bytes";
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  if (atoms > std::numeric_limits<std::size_t>::max() / (6 * sizeof(double))) {
+    detail = "prepared one-electron source extent overflows";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
   try {
-    std::vector<double> hcore_result(3 * atoms), pulay_result(3 * atoms);
     DeviceGuard device_guard;
     check(cudaSetDevice(source->device_id));
+    cudaStreamCaptureStatus capture{};
+    check(cudaStreamIsCapturing(source->stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone) {
+      detail = "prepared one-electron sources require an ordinary noncapturing stream";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
     struct BorrowedStreamFence {
       cudaStream_t stream{};
       bool completed{};
@@ -468,7 +476,7 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
       }
     } fence{source->stream};
 
-    runtime::cuda_trace::TraceOperation trace("one_electron_stationary_pair_prepared",
+    runtime::cuda_trace::TraceOperation trace("one_electron_stationary_pair_resident",
                                               source->stream, {1, n, 0, false, false});
     runtime::cuda_trace::TraceRegion derivatives("one_electron_pair_resident_metadata",
                                                  source->stream);
@@ -489,17 +497,92 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
     check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, hcore_weights, nullptr,
                                                  hcore_schedule, 1.0, output, source->stream));
-    check(cudaMemcpyAsync(hcore_result.data(), output, output_bytes, cudaMemcpyDeviceToHost,
-                          source->stream));
+    consumer({CudaDerivativeSourceKind::OneElectron, CudaDerivativeConvention::EnergyGradient,
+              source->device_id, reinterpret_cast<void*>(source->stream), output, 3 * atoms, 1});
     check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
     check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, pulay_weights, nullptr,
                                                  1, 1.0, output, source->stream));
-    check(cudaMemcpyAsync(pulay_result.data(), output, output_bytes, cudaMemcpyDeviceToHost,
-                          source->stream));
+    consumer({CudaDerivativeSourceKind::OverlapPulay, CudaDerivativeConvention::EnergyGradient,
+              source->device_id, reinterpret_cast<void*>(source->stream), output, 3 * atoms, 1});
     derivatives.finish();
-    check(cudaStreamSynchronize(source->stream));
     fence.completed = true;
+    runtime::cuda_trace::trace_counter("response_scratch_bytes", 0);
+    runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
+    runtime::cuda_trace::trace_counter("device_to_host_bytes", 0);
+    runtime::cuda_trace::trace_counter("stream_synchronizations", 0);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const CudaFailure& failure) {
+    detail = std::string("prepared generated one-electron CUDA failure: ") +
+             cudaGetErrorString(failure.status);
+    return failure.status == cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                       : GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  } catch (const std::bad_alloc&) {
+    detail = "prepared generated one-electron consumer allocation failed";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
 
+generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
+    CudaDirectJkPlan* source, const double* resident_density,
+    const double* resident_weighted_density, std::size_t matrix_elements, std::size_t maximum_bytes,
+    std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    OneElectronGradientResources* resources) {
+  if (resources) *resources = {};
+  detail.clear();
+  if (!source || source->device_id < 0 || source->derivative_order < 1 || !source->stream ||
+      !resident_density || !resident_weighted_density || !maximum_bytes) {
+    detail =
+        "prepared one-electron force requires a derivative-capable Direct owner and resident D/W";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto coordinates = source->coordinates_per_item;
+  if (coordinates > std::numeric_limits<std::size_t>::max() / (2 * sizeof(double)) ||
+      2 * coordinates * sizeof(double) > maximum_bytes) {
+    detail = "prepared one-electron host output staging exceeds maximum_bytes";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  try {
+    DeviceGuard device_guard;
+    check(cudaSetDevice(source->device_id));
+    cudaStreamCaptureStatus capture{};
+    check(cudaStreamIsCapturing(source->stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone) {
+      detail = "prepared one-electron sources require an ordinary noncapturing stream";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    std::vector<double> hcore_result(coordinates), pulay_result(coordinates);
+    struct HostResultDrain {
+      cudaStream_t stream;
+      bool pending{true};
+      ~HostResultDrain() {
+        if (pending && stream) (void)cudaStreamSynchronize(stream);
+      }
+    } drain{source->stream};
+    runtime::cuda_trace::TraceOperation trace("one_electron_stationary_pair_prepared",
+                                              source->stream, {1, source->diagnostic.nbf});
+    const auto consume = [&](const CudaDerivativeSourceView& view) {
+      if (view.coordinates != coordinates || view.channels != 1 ||
+          view.convention != CudaDerivativeConvention::EnergyGradient ||
+          (view.kind != CudaDerivativeSourceKind::OneElectron &&
+           view.kind != CudaDerivativeSourceKind::OverlapPulay))
+        throw std::invalid_argument("prepared one-electron source protocol changed");
+      auto& target =
+          view.kind == CudaDerivativeSourceKind::OneElectron ? hcore_result : pulay_result;
+      check(cudaMemcpyAsync(target.data(), view.values, coordinates * sizeof(double),
+                            cudaMemcpyDeviceToHost,
+                            reinterpret_cast<cudaStream_t>(view.producer_stream)));
+    };
+    const auto status = consume_prepared_cuda_stationary_one_electron_pair(
+        source, resident_density, resident_weighted_density, matrix_elements, consume, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    check(cudaStreamSynchronize(source->stream));
+    drain.pending = false;
     const auto finite = [](const auto& values) {
       return std::all_of(values.begin(), values.end(),
                          [](double value) { return std::isfinite(value); });
@@ -511,12 +594,11 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     if (resources) {
       resources->host_numeric_bytes =
           (hcore_result.capacity() + pulay_result.capacity()) * sizeof(double);
-      resources->device_to_host_bytes = 2 * output_bytes;
+      resources->device_to_host_bytes = 2 * coordinates * sizeof(double);
       resources->stream_synchronizations = 1;
     }
-    runtime::cuda_trace::trace_counter("response_scratch_bytes", 0);
     runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
-    runtime::cuda_trace::trace_counter("device_to_host_bytes", 2 * output_bytes);
+    runtime::cuda_trace::trace_counter("device_to_host_bytes", 2 * coordinates * sizeof(double));
     runtime::cuda_trace::trace_counter("stream_synchronizations", 1);
     hcore_gradient.swap(hcore_result);
     pulay_gradient.swap(pulay_result);

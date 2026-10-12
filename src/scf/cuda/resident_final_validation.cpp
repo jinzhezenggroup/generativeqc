@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "runtime/cuda_component_trace.hpp"
+#include "scf/cuda/scf_matrix_kernels.hpp"
 #include "tensor/cuda_square_linalg.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -18,13 +19,16 @@ void check(cudaError_t status) {
 
 struct Drain {
   cudaStream_t stream;
+  ResidentFinalValidationTransfers* transfers{};
   bool pending{true};
   ~Drain() {
-    if (pending) (void)cudaStreamSynchronize(stream);
+    if (pending && cudaStreamSynchronize(stream) == cudaSuccess && transfers)
+      ++transfers->synchronizations;
   }
   void finish() {
     check(cudaStreamSynchronize(stream));
     runtime::cuda_trace::trace_counter("explicit_synchronizations", 1);
+    if (transfers) ++transfers->synchronizations;
     pending = false;
   }
 };
@@ -44,10 +48,12 @@ bool resident_final_state_products(MatrixLibraryResources resources,
                                    std::span<const cuda_df::ValidationInputs> spins,
                                    ResidentFinalValidationWorkspace workspace, bool canonical,
                                    double nuclear, solver::FinalStateDiagnostic& diagnostic,
-                                   std::string& detail) {
+                                   std::string& detail,
+                                   ResidentFinalValidationTransfers* transfers) {
   diagnostic = {};
   detail.clear();
-  if (!resources.blas_ || spins.empty() || spins.size() > 2 || !spins[0].n ||
+  if (transfers) *transfers = {};
+  if (spins.empty() || spins.size() > 2 || !spins[0].n ||
       spins[0].n > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       spins[0].n > std::numeric_limits<std::size_t>::max() / sizeof(double) / spins[0].n ||
       !workspace.partial ||
@@ -55,6 +61,10 @@ bool resident_final_state_products(MatrixLibraryResources resources,
       !std::isfinite(nuclear))
     throw std::invalid_argument("invalid resident final-validation resources");
   const auto dimension = spins[0].n;
+  if (!resources.blas_ &&
+      dimension * dimension > static_cast<std::size_t>(std::numeric_limits<unsigned>::max()) *
+                                  cuda_df::validation_threads)
+    throw std::invalid_argument("resident native final-validation launch extent overflows");
   const auto matrix_bytes = dimension * dimension * sizeof(double);
   const auto partial_count = resident_final_validation_partial_count(dimension);
   const auto partial_bytes = partial_count * sizeof(cuda_df::ValidationPartial);
@@ -105,11 +115,20 @@ bool resident_final_state_products(MatrixLibraryResources resources,
   auto* packet = workspace.partial + 3 * blocks;
   std::array<cuda_df::ValidationPartial, 2> observed{};
   // Pageable result packets remain alive until the exceptional/ordinary drain.
-  Drain drain{resources.stream_};
+  Drain drain{resources.stream_, transfers};
   const auto gemm = [&](const double* left, const double* right, double* output,
                         bool transpose_left = false, bool transpose_right = false, int rank = -1) {
     if (rank == 0) {
       check(cudaMemsetAsync(output, 0, matrix_bytes, resources.stream_));
+      return;
+    }
+    if (!resources.blas_) {
+      launch_matrix_product_kernel(
+          (dimension * dimension + cuda_df::validation_threads - 1) / cuda_df::validation_threads,
+          cuda_df::validation_threads, 0, resources.stream_, 1, extent, left, transpose_left, right,
+          nullptr, output, 1.0, transpose_right, rank);
+      check(cudaPeekAtLastError());
+      runtime::cuda_trace::trace_counter("validation_native_products", 1);
       return;
     }
     const auto status =
@@ -147,6 +166,7 @@ bool resident_final_state_products(MatrixLibraryResources resources,
     check(cudaPeekAtLastError());
     check(cudaMemcpyAsync(&observed[spin], packet, sizeof(*packet), cudaMemcpyDeviceToHost,
                           resources.stream_));
+    if (transfers) transfers->device_to_host_bytes += sizeof(*packet);
   }
   drain.finish();
   runtime::cuda_trace::trace_counter("device_to_host_bytes", spins.size() * sizeof(*packet));

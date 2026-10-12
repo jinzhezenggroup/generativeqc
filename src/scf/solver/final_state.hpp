@@ -76,6 +76,14 @@ struct FinalStateDiagnostic {
   std::vector<EigenFrameDiagnostic> eigenframes;
 };
 
+/** Accept authenticated backend products without materializing matrix inputs.
+ * The caller proves the physical frame's identity and lifetime; this shared
+ * policy checks determinant metadata and exactly the detached-state numerical
+ * gates. It does not compute products, repair a frame, or authorize cached W. */
+bool accept_final_state_products(const FinalStateIdentity& current, std::size_t dimension,
+                                 const FinalStateLimits& limits,
+                                 const FinalStateDiagnostic& diagnostic, std::string& detail);
+
 /** Synchronous backend algebra beneath the shared identity, acceptance and
  * correction policy. An installed provider must supply every operation;
  * exceptions are observable provider failures, never a reference fallback.
