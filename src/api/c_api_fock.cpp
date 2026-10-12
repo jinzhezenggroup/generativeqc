@@ -5,9 +5,11 @@
 #include <memory>
 #include <stdexcept>
 
+#include "api/cuda_response.hpp"
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "generativeqc/fock.h"
+#include "methods/method.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
 
@@ -39,6 +41,8 @@ struct generativeqc_rhf_response_resident {
   double *slots{}, *coefficients{}, *energy_occ{}, *energy_virt{};
   double *density{}, *coulomb{}, *exchange{};
   double *transform_one{}, *transform_two{}, *gap_scratch{};
+  double exchange_coefficient{-0.5};
+  generativeqc::api::CudaDensityResponseAction density_response;
   std::vector<double> orbital_energies;
   bool reconstruction_ready{};
   int* numerical_error{};
@@ -447,10 +451,11 @@ void resident_sync(generativeqc_rhf_response_resident* owner) {
 #endif
 }  // namespace
 
-extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
+static generativeqc_status create_response_resident(
     generativeqc_fock_plan* plan, const double* coefficients, uint64_t coefficient_count,
     const double* orbital_energies, uint64_t energy_count, uint32_t nocc, uint32_t vector_slots,
-    uint64_t device_budget_bytes, generativeqc_rhf_response_resident** output) {
+    uint64_t device_budget_bytes, generativeqc_rhf_response_resident** output,
+    const generativeqc::api::CudaDensityResponseAction& density_response = {}) {
   if (output) *output = nullptr;
   if (!plan || !coefficients || !orbital_energies || !output)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -463,14 +468,22 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
             "resident RHF response requires CUDA Fock plan");
     require(
         strategy.spec.spin == generativeqc::scf::FockSpin::Restricted &&
-            strategy.spec.coulomb.present && strategy.spec.exchange.present &&
+            strategy.spec.coulomb.present &&
             strategy.spec.coulomb.approximation == generativeqc::scf::FockApproximation::Exact &&
-            strategy.spec.exchange.approximation == generativeqc::scf::FockApproximation::Exact &&
             strategy.spec.coulomb.op == generativeqc::scf::FockOperator::FullRange &&
-            strategy.spec.exchange.op == generativeqc::scf::FockOperator::FullRange &&
-            strategy.spec.coulomb.coefficient == 1.0 &&
-            strategy.spec.exchange.coefficient == -0.5 && strategy.screening_tolerance == 0.0,
-        "resident RHF response requires exact unscreened conventional RHF J/K");
+            strategy.spec.coulomb.coefficient == 1.0 && strategy.spec.derivative_order == 0 &&
+            strategy.screening_tolerance == 0.0 &&
+            (!strategy.spec.exchange.present ||
+             (strategy.spec.exchange.approximation == generativeqc::scf::FockApproximation::Exact &&
+              strategy.spec.exchange.op == generativeqc::scf::FockOperator::FullRange &&
+              strategy.spec.exchange.omega == 0.0 &&
+              std::isfinite(strategy.spec.exchange.coefficient) &&
+              strategy.spec.exchange.coefficient >= -0.5 &&
+              strategy.spec.exchange.coefficient <= 0.0)),
+        "resident orbital response requires exact unscreened full-range J/K");
+    require(density_response ||
+                (strategy.spec.exchange.present && strategy.spec.exchange.coefficient == -0.5),
+            "resident RHF response requires conventional RHF exchange");
     auto* direct = source.cuda_direct_source();
     require(direct != nullptr, "resident RHF response direct CUDA source unavailable");
     const auto n = source.one_electron().nbf;
@@ -498,6 +511,8 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
     const auto doubles = resident_sum(
         {slot_values, matrix, occupied_matrix, virtual_matrix, 3 * matrix, 2 * transform, dim});
     const auto bytes = resident_sum({resident_product(doubles, sizeof(double)), sizeof(int)});
+    if (density_response && device_budget_bytes && bytes > device_budget_bytes)
+      throw std::bad_alloc();
     require(device_budget_bytes > 0 && bytes <= device_budget_bytes,
             "resident RHF response device budget is insufficient");
 
@@ -513,6 +528,9 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
     owner->vector_slots = vector_slots;
     owner->allocation_bytes = bytes;
     owner->orbital_energies.assign(orbital_energies, orbital_energies + energy_count);
+    owner->exchange_coefficient =
+        strategy.spec.exchange.present ? strategy.spec.exchange.coefficient : 0.0;
+    owner->density_response = density_response;
 
     resident_cuda(cudaSetDevice(owner->device_id));
     resident_blas(cublasCreate(&owner->blas));
@@ -580,6 +598,7 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
     return generativeqc::api::map_exception(&plan->detail);
   }
 #else
+  (void)density_response;
   (void)coefficient_count;
   (void)energy_count;
   (void)nocc;
@@ -588,6 +607,54 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
   plan->detail = "resident RHF response requires a CUDA-enabled library";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
+}
+
+extern "C" generativeqc_status generativeqc_rhf_response_resident_create(
+    generativeqc_fock_plan* plan, const double* coefficients, uint64_t coefficient_count,
+    const double* orbital_energies, uint64_t energy_count, uint32_t nocc, uint32_t vector_slots,
+    uint64_t device_budget_bytes, generativeqc_rhf_response_resident** output) {
+  return create_response_resident(plan, coefficients, coefficient_count, orbital_energies,
+                                  energy_count, nocc, vector_slots, device_budget_bytes, output);
+}
+
+generativeqc_status generativeqc::api::create_cuda_cpks_response(
+    generativeqc_fock_plan* plan, const core::System& system, const scf::FockBuildSpec& spec,
+    int device, const double* coefficients, std::size_t coefficient_count, const double* energies,
+    std::size_t energy_count, unsigned occupied, unsigned vector_slots,
+    std::size_t device_budget_bytes, const CudaDensityResponseAction& density_response,
+    generativeqc_rhf_response_resident** output) {
+  if (output) *output = nullptr;
+  if (!plan || !output || !density_response) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto status = validate_cuda_cpks_source(plan, system, spec, device);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto retained = cuda_cpks_response_provider_bytes(plan);
+  if (device_budget_bytes <= retained) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  return create_response_resident(plan, coefficients, coefficient_count, energies, energy_count,
+                                  occupied, vector_slots, device_budget_bytes - retained, output,
+                                  density_response);
+}
+
+generativeqc_status generativeqc::api::validate_cuda_cpks_source(const generativeqc_fock_plan* plan,
+                                                                 const core::System& system,
+                                                                 const scf::FockBuildSpec& spec,
+                                                                 int device) {
+  if (!plan || !plan->source->matches_system(system) || plan->source->strategy().spec != spec)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
+  const auto* direct = plan->source->cuda_direct_source();
+  if (!direct || generativeqc::scf::cuda_direct_jk_device(direct) != device)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#else
+  (void)device;
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+std::size_t generativeqc::api::cuda_cpks_response_provider_bytes(
+    const generativeqc_fock_plan* plan) {
+  if (!plan) throw std::invalid_argument("null CPKS Fock provider");
+  return plan->source->diagnostic().device_bytes;
 }
 
 extern "C" void generativeqc_rhf_response_resident_destroy(
@@ -799,7 +866,7 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
     const auto o = static_cast<int>(owner->nocc);
     const auto v = static_cast<int>(owner->nvirt);
     const auto dim = static_cast<int>(owner->dimension);
-    const double one = 1.0, zero = 0.0, two = 2.0, half = -0.5, minus = -1.0;
+    const double one = 1.0, zero = 0.0, two = 2.0, minus = -1.0;
     const auto* x = resident_slot(owner, source);
     auto* y = resident_slot(owner, destination);
     const auto* c_occ = owner->coefficients;
@@ -820,14 +887,25 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_apply(
     std::string detail;
     const auto status = generativeqc::scf::enqueue_cuda_direct_jk_device(
         owner->direct, spec, owner->density, nullptr, owner->nbf * owner->nbf, owner->coulomb,
-        owner->exchange, nullptr, owner->numerical_error, detail);
+        spec.exchange.present ? owner->exchange : nullptr, nullptr, owner->numerical_error, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
-      throw std::runtime_error(detail.empty() ? "resident direct J/K enqueue failed" : detail);
+      throw generativeqc::methods::MethodError(
+          status, detail.empty() ? "resident direct J/K enqueue failed" : detail);
 
+    const auto* xc =
+        owner->density_response ? owner->density_response(owner->density, owner->stream) : nullptr;
+    require(!owner->density_response || xc, "resident XC response returned no potential");
     resident_blas(cublasDcopy(owner->blas, n * n, owner->coulomb, 1, owner->density, 1));
     ++owner->blas_calls;
-    resident_blas(cublasDaxpy(owner->blas, n * n, &half, owner->exchange, 1, owner->density, 1));
-    ++owner->blas_calls;
+    if (owner->exchange_coefficient != 0.0) {
+      resident_blas(cublasDaxpy(owner->blas, n * n, &owner->exchange_coefficient, owner->exchange,
+                                1, owner->density, 1));
+      ++owner->blas_calls;
+    }
+    if (xc) {
+      resident_blas(cublasDaxpy(owner->blas, n * n, &one, xc, 1, owner->density, 1));
+      ++owner->blas_calls;
+    }
     resident_blas(cublasDgemm(owner->blas, CUBLAS_OP_N, CUBLAS_OP_N, n, o, n, &one, owner->density,
                               n, c_occ, n, &zero, owner->transform_two, n));
     ++owner->blas_calls;
@@ -868,6 +946,10 @@ extern "C" generativeqc_status generativeqc_rhf_response_resident_reconstruct_v1
 #if GENERATIVEQC_HAS_CUDA
   return resident_guard(owner, [&] {
     owner->reconstruction_ready = false;
+    if (owner->density_response)
+      throw generativeqc::methods::MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "resident CPKS weighted-density reconstruction is not qualified");
     const auto n = owner->nbf, o = owner->nocc, v = owner->nvirt, matrix = n * n;
     require(frozen_mo && overlap_mo && frozen_count == matrix && overlap_count == matrix,
             "resident RHF reconstruction matrix shape mismatch");

@@ -480,7 +480,8 @@ __device__ inline DevicePointValue from_point(const point::Value& value) {
 // Layout adaptation only: response differentiates the same scaled point
 // expression as the CPU consumer, including its vacuum/empty-spin policy.
 __device__ inline DevicePointValue response_point(const double* features, const double* delta, I p,
-                                                  I count, I spins, I terms, I functional) {
+                                                  I count, I spins, I terms, I functional,
+                                                  double exchange_scale, double correlation_scale) {
   double rho[2]{}, gradient[2][3]{}, drho[2]{}, dgradient[2][3]{};
   for (I s = 0; s < spins; ++s) {
     rho[s] = features[s * terms * count + p];
@@ -493,8 +494,8 @@ __device__ inline DevicePointValue response_point(const double* features, const 
   }
   return from_point(
       spins == 1
-          ? point::restricted_response(functional == static_cast<I>(SemilocalFamily::Pbe), rho[0], gradient[0], drho[0], dgradient[0])
-          : point::unrestricted_response(functional == static_cast<I>(SemilocalFamily::Pbe), rho, gradient, drho, dgradient));
+          ? point::restricted_response(functional == static_cast<I>(SemilocalFamily::Pbe), rho[0], gradient[0], drho[0], dgradient[0], exchange_scale, correlation_scale)
+          : point::unrestricted_response(functional == static_cast<I>(SemilocalFamily::Pbe), rho, gradient, drho, dgradient, exchange_scale, correlation_scale));
 }
 
 template <bool equal_spin = false>
@@ -673,9 +674,10 @@ struct CuratedPointEvaluator {
   }
   __device__ static DevicePointValue response_point(
       const double* features, const double* delta, I point, I count, I spins,
-      I feature_terms, I functional) {
+      I feature_terms, I functional, double exchange_scale, double correlation_scale) {
     return cuda_xc_detail::response_point(
-        features, delta, point, count, spins, feature_terms, functional);
+        features, delta, point, count, spins, feature_terms, functional,
+        exchange_scale, correlation_scale);
   }
 };
 

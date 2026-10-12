@@ -123,7 +123,6 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
   if (scaled && !cuda_xc_capability_qualified(program.fast_paths.component_scaling))
     throw std::invalid_argument("scaled CUDA XC point program is not qualified");
-  if (response && scaled) throw std::invalid_argument("scaled CUDA XC response is not qualified");
   if (response && !cuda_xc_capability_qualified(program.fast_paths.response))
     throw std::invalid_argument("CUDA XC response is not qualified for this point program");
   if (ao_precision != CudaXcAoPrecision::Fp64 &&
