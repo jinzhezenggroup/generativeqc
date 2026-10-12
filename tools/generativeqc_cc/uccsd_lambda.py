@@ -663,12 +663,8 @@ class PreparedUCCSDLambda:
             _preparation_seconds=self.preparation_seconds,
         )
 
-    def parameter_cotangent(
-        self, result: UCCSDLambdaResult, parameter: str
-    ) -> UCCSDParameterCotangent:
-        """Requalify Lambda and return one bounded canonical MO-input cotangent."""
-        self._check_open()
-        started = time.perf_counter()
+    def _packed_result(self, result: UCCSDLambdaResult) -> np.ndarray:
+        """Validate physical arrays and identities without trusting diagnostics."""
         if (
             not isinstance(result, UCCSDLambdaResult)
             or result.state_identity != self.state_identity
@@ -687,6 +683,42 @@ class PreparedUCCSDLambda:
             or self._lambda_identity(packed) != result.lambda_identity
         ):
             raise ValueError("UCCSD Lambda packed/full or identity disagreement")
+        return immutable(packed)
+
+    def qualify(
+        self, result: UCCSDLambdaResult
+    ) -> tuple[np.ndarray, Mapping[str, Any]]:
+        """Freshly qualify standard CCSD Lambda for a composed physical consumer.
+
+        Returned packed duals own immutable storage. Parent and actual amplitude
+        stationarity are replayed through this owner's native executor, with
+        the same admitted numeric/work bounds as per-input requests. This is
+        not a bypass for corrected-(T) or forged multipliers.
+        """
+        self._check_open()
+        packed = self._packed_result(result)
+        counter = _Counter()
+        primal_residual, energy_drift = self._qualify_parent(counter)
+        norm, maximum = self._stationarity(packed, counter)
+        self._check_open()
+        return packed, _freeze(
+            {
+                "primal_residual_max": primal_residual,
+                "energy_drift": energy_drift,
+                "stationarity_norm": norm,
+                "stationarity_max": maximum,
+                "executed_semantic_scalar_work": counter.scalar_work,
+                "native_calls": counter.native_calls,
+            }
+        )
+
+    def parameter_cotangent(
+        self, result: UCCSDLambdaResult, parameter: str
+    ) -> UCCSDParameterCotangent:
+        """Requalify Lambda and return one bounded canonical MO-input cotangent."""
+        self._check_open()
+        started = time.perf_counter()
+        packed = self._packed_result(result)
         action = self._parameter_programs.get(parameter)
         if action is None:
             action = build_parameter_vjp(

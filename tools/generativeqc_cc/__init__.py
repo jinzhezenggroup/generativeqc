@@ -12,13 +12,16 @@ owner.
 PreparedUCCSD separately accepts validated UHF snapshots with conventional
 spin-resolved providers and shared native CPU/CUDA TensorIR contractions. Its
 explicit host-controlled iteration contract does not register Calculator
-UCCSD/UCCSD(T) methods or supply unrestricted Lambda or forces. PreparedUCCSDT
+UCCSD/UCCSD(T) methods. PreparedUCCSDT
 qualifies a converged UCCSD state and adds all four canonical triples channels
 through bounded shared CPU/CUDA tiles with complete numeric/work admission.
 PreparedUCCSDLambda supplies native CPU/CUDA Lambda and fixed-orbital input
 cotangents in explicit physical excitation-dual coordinates, reusing the existing
-GMRES acceptance contract. It does not yet supply unrestricted orbital relaxation
-or nuclear forces.
+GMRES acceptance contract. PreparedUCCSDPhysicalResponse binds the raw spin
+Hamiltonian and shared UHF adjoint; PreparedUCCSDGradient streams complete
+conventional shell derivatives. CPU one-electron derivatives explicitly use the
+native compatibility recurrence; CUDA derivatives do not fall back to CPU.
+Neither owner supplies corrected-(T) response or public method registration.
 """
 
 from generativeqc_compiler.cc.doubles import build_ccsd_program
@@ -140,11 +143,21 @@ from .triples_tiles import (
     tile_triples_energy_masked,
     tile_triples_energy_tensorir,
 )
+from .uccsd_gradient import (
+    PreparedUCCSDGradient,
+    UCCSDGradientOptions,
+    UCCSDGradientResult,
+)
 from .uccsd_lambda import (
     PreparedUCCSDLambda,
     UCCSDLambdaOptions,
     UCCSDLambdaResult,
     UCCSDParameterCotangent,
+)
+from .uccsd_physical_response import (
+    PreparedUCCSDPhysicalResponse,
+    UCCSDPhysicalResponseOptions,
+    UCCSDRelaxedCotangents,
 )
 from .uccsd_solver import PreparedUCCSD, UCCSDIteration, UCCSDResult
 from .uccsd_t import PreparedUCCSDT, UCCSDTOptions, UCCSDTResult
@@ -190,7 +203,9 @@ __all__ = [
     "PreparedRCCSDTForceBatch",
     "PreparedResidentCCSD",
     "PreparedUCCSD",
+    "PreparedUCCSDGradient",
     "PreparedUCCSDLambda",
+    "PreparedUCCSDPhysicalResponse",
     "PreparedUCCSDT",
     "RCCSDResult",
     "RCCSDTBatchItemResult",
@@ -206,10 +221,14 @@ __all__ = [
     "TransportCompatibility",
     "TriplesTileConfig",
     "TriplesTileEnumerator",
+    "UCCSDGradientOptions",
+    "UCCSDGradientResult",
     "UCCSDIteration",
     "UCCSDLambdaOptions",
     "UCCSDLambdaResult",
     "UCCSDParameterCotangent",
+    "UCCSDPhysicalResponseOptions",
+    "UCCSDRelaxedCotangents",
     "UCCSDResult",
     "UCCSDTOptions",
     "UCCSDTResult",
