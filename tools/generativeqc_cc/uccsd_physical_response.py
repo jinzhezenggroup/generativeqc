@@ -334,7 +334,8 @@ class PreparedUCCSDPhysicalResponse:
         )
         self.planned_producer_tiles = checked_bytes(
             3 * provider_tiles**4
-            + 3 * options.max_operator_actions * response_tiles**4,
+            + 3 * options.max_operator_actions * response_tiles**4
+            + (2 if isinstance(self.source, NativeSource) else 0),
             "physical UCCSD producer tasks",
         )
         terms = (
@@ -354,7 +355,10 @@ class PreparedUCCSDPhysicalResponse:
             else 0
         )
         self.planned_primitive_terms = checked_bytes(
-            (3 + 3 * options.max_operator_actions) * terms**4,
+            (3 + 3 * options.max_operator_actions) * terms**4
+            + (2 + len(self.source.atoms)) * terms**2
+            if isinstance(self.source, NativeSource)
+            else 0,
             "physical UCCSD primitive source terms",
         )
         if self.planned_producer_tiles > options.max_producer_tiles:
@@ -393,6 +397,26 @@ class PreparedUCCSDPhysicalResponse:
         }
         provider.admit(tuple(self.requests.values()))
         self._consumer_binding = self._consumer_contract()
+        # A supplied reference can be self-consistent yet describe a different
+        # one-electron Hamiltonian. Native forces must differentiate the actual
+        # source S/h, not silently bind native derivatives to arbitrary inputs.
+        if isinstance(self.source, NativeSource):
+            native_overlap, native_hcore = self.source.one_electron()
+            for name, actual, expected in (
+                ("overlap", native_overlap, reference.overlap),
+                ("hcore", native_hcore, reference.hcore),
+            ):
+                if (
+                    type(actual) is not np.ndarray
+                    or actual.dtype != np.float64
+                    or actual.shape != expected.shape
+                    or not np.isfinite(actual).all()
+                    or float(np.max(np.abs(actual - expected), initial=0))
+                    > options.binding_tolerance
+                ):
+                    raise ValueError(
+                        f"native UCCSD {name} binding differs from reference"
+                    )
         self._binding = (
             lambdas,
             result,

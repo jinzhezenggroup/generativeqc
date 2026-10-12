@@ -324,6 +324,28 @@ def test_private_cpu_derivative_failures_leave_outputs_unchanged(
     np.testing.assert_array_equal(one, 83.0)
 
 
+@pytest.mark.parametrize("field", ["overlap", "hcore"])
+def test_native_one_electron_binding_is_verified_before_eri_reads(
+    native_physical: Any, field: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = native_physical.source
+    overlap, hcore = source.one_electron()
+    if field == "overlap":
+        overlap = overlap + 0.01 * np.eye(source.nbf)
+    else:
+        hcore = hcore + 0.01 * np.eye(source.nbf)
+    monkeypatch.setattr(source, "one_electron", lambda: (overlap, hcore))
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("mismatched one-electron binding read ERIs")
+
+    monkeypatch.setattr(native_physical.provider, "get", forbidden)
+    with pytest.raises(ValueError, match=f"{field} binding"):
+        PreparedUCCSDPhysicalResponse(
+            native_physical.lambdas, native_physical.result, native_physical.provider
+        )
+
+
 @pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicit allocated-GPU opt-in",
@@ -371,7 +393,7 @@ def test_complete_cuda_gradient_matches_independent_oracle(
         with (
             CudaSpinJKBackend(source) as orbital_backend,
             ConventionalProvider(
-                orbital_backend.export_reference() if atoms == _H2 else snapshot,
+                orbital_backend.export_reference()[0] if atoms == _H2 else snapshot,
                 source,
                 backend="cuda",
                 cuda_artifact=artifact,

@@ -32,6 +32,8 @@ are `-(G_U+G_U.T)/4`. Do not import a restricted sign or occupancy factor.
 Both owners admit logical numeric state, native tensor staging and generated
 scalar-loop work before scientific execution. The physical owner additionally
 caps producer tile traversals, primitive source tuples and UHF operator actions;
+native preparation also verifies the actual source hcore and overlap against
+the supplied snapshot before ERI reads, rather than trusting identity strings;
 the force owner caps all ordered shell quartets and derivative primitive tuples.
 The provider's own budget admits all three full raw-MO Coulomb blocks. A CUDA
 provider requires an explicitly supplied matching exact `CudaSpinJKBackend`;

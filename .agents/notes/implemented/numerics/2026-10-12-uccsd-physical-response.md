@@ -38,6 +38,13 @@ fallback. Keep this distinction in capabilities, options, and provenance.
 
 ## Invariants
 
+Verify native source hcore and overlap against the supplied snapshot before
+reading raw ERIs. Matching geometry/basis identities and internally consistent
+normal ordering do not prove that an externally supplied one-electron matrix
+is the Hamiltonian differentiated by native shell derivatives. Otherwise a
+modified one-electron problem could silently receive partial native forces.
+Charge the two matrix reads and their primitive work before this verification.
+
 Freshly qualify standard CCSD Lambda, raw bindings, energies, generated/shared
 Fov actions, true Z residual, and all rotation blocks before publishing. Bind
 borrowed lifetimes/configurations, add nuclear repulsion once, keep mixed-spin
