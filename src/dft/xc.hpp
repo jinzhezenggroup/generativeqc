@@ -186,11 +186,41 @@ struct SemilocalPointProgram {
   SemilocalPointEvaluator evaluate{};
 };
 
+/** Restricted coefficients are derivatives with respect to original total
+ * density, total Cartesian gradient and total tau. No spin folding or worker
+ * normalization is implied by this ABI. kinetic retains the native vtau/2
+ * weak-form convention. */
+struct RestrictedSemilocalPointValue {
+  double energy{};
+  double rho{};
+  double gradient[3]{};
+  double kinetic{};
+};
+
+using RestrictedSemilocalPointEvaluator =
+    RestrictedSemilocalPointValue (*)(double rho, const double (&gradient)[3], double tau);
+
+/** A distinct restricted descriptor preserves the existing polarized ABI and
+ * links to an explicit total-density consumer rather than silently invoking a
+ * legacy polarized callback. The descriptor alone grants no qualification. */
+struct RestrictedSemilocalPointProgram {
+  const char* identifier{};
+  const char* expression_identity{};
+  unsigned ingredient_mask{};
+  unsigned domain_version{};
+  RestrictedSemilocalPointEvaluator evaluate{};
+};
+
 void validate_semilocal_point_program(const SemilocalPointProgram& program);
+void validate_semilocal_point_program(const RestrictedSemilocalPointProgram& program);
 
 XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
                                    const std::vector<double>& density,
                                    const SemilocalPointProgram& program,
+                                   std::size_t tile_points = 256, XcDensitySource source = {});
+XcIntegral integrate_semilocal_rks(const AoBasis& basis, const MolecularGrid& grid,
+                                   const std::vector<double>& density,
+                                   const RestrictedSemilocalPointProgram& program,
                                    std::size_t tile_points = 256, XcDensitySource source = {});
 SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid& grid,
                                        const std::vector<double>& alpha_density,

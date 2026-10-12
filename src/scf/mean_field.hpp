@@ -36,6 +36,7 @@ namespace generativeqc::dft {
 class AoBasis;
 class MolecularGrid;
 struct SemilocalPointProgram;
+struct RestrictedSemilocalPointProgram;
 namespace nlc {
 class Vv10Plan;
 struct Vv10Parameters;
@@ -93,6 +94,12 @@ ScfResult run_r2scan_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis
 ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                             const dft::MolecularGrid& grid, const ScfOptions& options,
                             const dft::SemilocalPointProgram& program,
+                            const std::vector<double>* initial_density = nullptr);
+
+/** Restricted total-density counterpart with a separately bound point ABI. */
+ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const dft::RestrictedSemilocalPointProgram& program,
                             const std::vector<double>* initial_density = nullptr);
 
 /** Generic RSH lowering. Fractions are physical exact-exchange weights. */

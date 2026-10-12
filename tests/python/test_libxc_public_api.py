@@ -9,6 +9,7 @@ from generativeqc.ks import (
     parse_automatic_libxc_selector,
 )
 from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
+from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 
@@ -61,22 +62,22 @@ def test_public_libxc_backend_neutral_capability_stays_energy_only() -> None:
 
 
 @pytest.mark.parametrize(
-    ("selector", "transport", "spin"),
+    ("selector", "transport", "spin", "domain"),
     (
-        ("libxc:LDA_C_BR78", "lda-rks", "unpolarized"),
-        ("libxc-rks:GGA_X_APBE", "pbe-rks", "unpolarized"),
-        ("libxc-uks:GGA_X_APBE", "pbe-uks", "polarized"),
-        ("libxc:MGGA_X_LTA", "r2scan-rks", "unpolarized"),
+        ("libxc:LDA_C_BR78", "lda-rks", "unpolarized", DENSITY_WORK_DOMAIN),
+        ("libxc-rks:GGA_X_APBE", "pbe-rks", "unpolarized", AUTOMATIC_SCF_DOMAIN),
+        ("libxc-uks:GGA_X_APBE", "pbe-uks", "polarized", AUTOMATIC_SCF_DOMAIN),
+        ("libxc:MGGA_X_LTA", "r2scan-rks", "unpolarized", AUTOMATIC_SCF_DOMAIN),
     ),
 )
 def test_public_libxc_selector_uses_ingredient_transport_only(
-    selector: str, transport: str, spin: str
+    selector: str, transport: str, spin: str, domain: str
 ) -> None:
     calculator = Calculator(method=selector, basis="sto-3g", device="cpu")
 
     assert calculator._native_method_name == transport
     assert calculator.method_ir.spin == spin
-    assert calculator.ks_options.scf_domain == AUTOMATIC_SCF_DOMAIN
+    assert calculator.ks_options.scf_domain == domain
 
 
 def test_public_libxc_selector_and_snapshot_code_share_identity() -> None:
