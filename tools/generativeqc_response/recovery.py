@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import Callable
+import typing
 
 import numpy as np
 from generativeqc.profiles import canonical_hash
@@ -20,12 +20,13 @@ from scipy.linalg import expm
 from tools.generativeqc_posthf.reference import immutable
 
 from .stability import (
-    StabilityOptions,
     StabilityUnqualified,
-    UHFStabilityCertificate,
     diagnose_uhf_stability,
 )
 from .uhf import UHFResponseOperator
+
+if typing.TYPE_CHECKING:
+    from .stability import StabilityOptions, UHFStabilityCertificate
 
 
 class RecoveryUnqualified(StabilityUnqualified):
@@ -168,7 +169,7 @@ class UHFRecoveryResult:
 
 def recover_uhf_stability(
     operator: UHFResponseOperator,
-    solve: Callable[[np.ndarray], UHFResponseOperator],
+    solve: typing.Callable[[np.ndarray], UHFResponseOperator],
     *,
     options: RecoveryOptions | None = None,
     stability_options: StabilityOptions | None = None,
