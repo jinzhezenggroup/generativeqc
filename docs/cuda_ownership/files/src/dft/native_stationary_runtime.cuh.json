@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/native_stationary_runtime.cuh",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Private static adapter around compiler-emitted stationary profiles. Owns complete source/grid-span admission, exceptional state and producer-stream draining. Calls the shared source-transport CUDA launcher for derivative-convention conversion; XC/AO/Becke and source weights retain their original compiler-owned definitions.",
+  "regions": []
+}

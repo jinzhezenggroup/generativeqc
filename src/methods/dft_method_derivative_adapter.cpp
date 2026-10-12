@@ -106,4 +106,36 @@ generativeqc_status dft_cuda_fixed_density_profile(PreparedBatch& batch, std::si
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status dft_cuda_native_stationary_gradient(PreparedBatch& batch, std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        std::size_t maximum_device_bytes,
+                                                        std::vector<double>& output,
+                                                        dft::CudaStationaryResources& resources,
+                                                        std::string& detail) {
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->native_cuda_stationary_gradient(index, expected, maximum_device_bytes, output,
+                                               resources, detail);
+  resources = {};
+  detail = "native CUDA stationary gradient requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_stationary_capacity(PreparedBatch& batch, std::size_t index,
+                                                 dft::CudaStationaryCapacity& capacity,
+                                                 std::string& detail) {
+  const auto* ks = dynamic_cast<const KsBatchOwnerPort*>(&batch);
+  if (ks) return ks->native_cuda_stationary_capacity(index, capacity, detail);
+  detail = "native CUDA stationary capacity requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_stationary_limit(PreparedBatch& batch, std::size_t index,
+                                              std::size_t maximum_device_bytes,
+                                              std::string& detail) {
+  auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch);
+  if (ks) return ks->native_cuda_stationary_limit(index, maximum_device_bytes, detail);
+  detail = "native CUDA stationary allowance requires a prepared KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 }  // namespace generativeqc::methods::detail

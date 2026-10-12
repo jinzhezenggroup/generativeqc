@@ -92,8 +92,13 @@ class OwnedCudaStream {
 
 class OwnedCudaEvent {
  public:
+  using StatusChecker = CudaDeviceScope::StatusChecker;
+
   OwnedCudaEvent() = default;
-  explicit OwnedCudaEvent(int device, unsigned flags = cudaEventDefault) { create(device, flags); }
+  explicit OwnedCudaEvent(int device, unsigned flags = cudaEventDefault,
+                          StatusChecker check = cuda_resource_check) {
+    create(device, flags, check);
+  }
   OwnedCudaEvent(const OwnedCudaEvent&) = delete;
   OwnedCudaEvent& operator=(const OwnedCudaEvent&) = delete;
   OwnedCudaEvent(OwnedCudaEvent&& other) noexcept { move_from(other); }
@@ -106,18 +111,20 @@ class OwnedCudaEvent {
   }
   ~OwnedCudaEvent() { reset(); }
 
-  void create(int device, unsigned flags = cudaEventDefault) {
+  void create(int device, unsigned flags = cudaEventDefault,
+              StatusChecker check = cuda_resource_check) {
     if (event_) throw std::logic_error("CUDA event already owned");
-    CudaDeviceScope guard(device);
-    cuda_resource_check(cudaEventCreateWithFlags(&event_, flags));
+    CudaDeviceScope guard(device, check);
+    check(cudaEventCreateWithFlags(&event_, flags));
+    check_ = check;
     device_ = device;
   }
 
-  void record(cudaStream_t stream) const { cuda_resource_check(cudaEventRecord(event_, stream)); }
-  void synchronize() const { cuda_resource_check(cudaEventSynchronize(event_)); }
+  void record(cudaStream_t stream) const { check_(cudaEventRecord(event_, stream)); }
+  void synchronize() const { check_(cudaEventSynchronize(event_)); }
   [[nodiscard]] float elapsed_since(const OwnedCudaEvent& begin) const {
     float milliseconds = 0;
-    cuda_resource_check(cudaEventElapsedTime(&milliseconds, begin.event_, event_));
+    check_(cudaEventElapsedTime(&milliseconds, begin.event_, event_));
     return milliseconds;
   }
 
@@ -136,10 +143,12 @@ class OwnedCudaEvent {
 
  private:
   void move_from(OwnedCudaEvent& other) noexcept {
+    check_ = other.check_;
     device_ = other.device_;
     event_ = std::exchange(other.event_, nullptr);
     other.device_ = -1;
   }
+  StatusChecker check_{cuda_resource_check};
   int device_{-1};
   cudaEvent_t event_{};
 };

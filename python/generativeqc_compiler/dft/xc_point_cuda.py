@@ -48,7 +48,8 @@ __device__ __forceinline__ void evaluate_point_tiles(
     DevicePointValue xc;
     if constexpr (response)
       xc = PointEvaluator::response_point(
-          features, delta, local_point, count, spins, feature_terms, functional);
+          features, delta, local_point, count, spins, feature_terms, functional,
+          exchange_scale, correlation_scale);
     else
       xc = PointEvaluator::physical_point(
           functional, rho, gradient, tau, exchange_scale, correlation_scale);

@@ -1,0 +1,14 @@
+{
+  "path": "src/dft/native_stationary_shared_kernels.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Shared native CUDA derivative transport and complete source-reduction launch owners. Keeps stream, bounds and final nonfinite-status handling in the verified C++ context; mathematical source weights and admission are validated by compiler ProgramIR, not method names.",
+  "regions": [
+    {
+      "start": "__global__ void reduce_sources(",
+      "stop": "cudaError_t launch_native_stationary_source_transport(",
+      "role": "scientific",
+      "reason": "Ordered unit-coefficient gradient sum of the complete MethodIR stationary source inventory, preserving source order, FP64 arithmetic and the original finite test."
+    }
+  ]
+}

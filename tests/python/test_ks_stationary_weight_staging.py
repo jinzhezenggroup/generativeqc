@@ -18,7 +18,15 @@ def _stage_source() -> str:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text(encoding="utf-8")
     begin = source.index("    bool staged_stationary_weights = false;")
     end = source.index("    KsPhysicalState physical;", begin)
-    return source[begin:end]
+    from test_stationary_task_work_budget import _block
+
+    stage = _block(source, "  void stage_stationary_weights(")
+    stage = stage.replace(
+        "void stage_stationary_weights()",
+        "const auto stage_stationary_weights = [&]()",
+        1,
+    )
+    return stage + ";\n" + source[begin:end]
 
 
 @pytest.fixture(scope="module")
@@ -94,8 +102,7 @@ int main(int argc, char** argv) {
         + _stage_source()
         + r"""
     if (device_validation && compute_weighted_density && !final_stationary_weights_ready) {
-      stage_stationary_weights();
-      staged_stationary_weights = true;
+      stage_weights();
     }
     assert(staged_stationary_weights == (attempt == 0));
     final_stationary_weights_ready = true;
@@ -132,13 +139,87 @@ def test_stationary_staging_keeps_both_spin_weights_and_reuses_them(
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def test_stationary_weight_lease_is_published_only_after_validation() -> None:
+def test_stationary_weight_lease_is_published_only_after_validation(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the production acceptance/publication tail with fault controls."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text(encoding="utf-8")
     begin = source.index("  VerifiedKsFinalState read_final(")
-    end = source.index("  std::vector<double> download(", begin)
-    read = source[begin:end]
-    publish = "if (staged_stationary_weights) final_stationary_weights_ready = true;"
-    assert read.count(publish) == 1
-    assert read.index("validate_ks_final_state(") < read.index(publish)
-    assert read.index(publish) < read.index("return verified;")
-    assert "cudaStreamSynchronize" not in _stage_source()
+    begin = source.index("    VerifiedKsFinalState verified;", begin)
+    end = source.index("    return verified;", begin) + len("    return verified;")
+    program = tmp_path / "publication.cpp"
+    program.write_text(
+        r"""
+#include <cassert>
+#include <stdexcept>
+#include <string>
+
+struct VerifiedKsFinalState { int diagnostic = 0; };
+bool final_state_ready = true, final_stationary_weights_ready = false;
+int final_validation_diagnostic = -1, failure = 0, stages = 0, validations = 0;
+int stream = 7;
+struct { unsigned synchronizations = 0; } movement;
+struct { int identity = 1; } current;
+struct OneElectron { int overlap = 2, hcore = 3; };
+struct Provider { OneElectron one_electron() { return {}; } } provider;
+int physical = 4, candidate = 5, limits = 6, operations = 7;
+int cudaStreamSynchronize(int value) { assert(value == stream); return failure == 4; }
+void check(int status) { if(status) throw std::runtime_error("drain"); }
+bool validate_ks_final_state(int, int, int, int, int, int, bool,
+                            VerifiedKsFinalState& verified, std::string& detail, int*) {
+  ++validations;
+  assert(!final_stationary_weights_ready && final_validation_diagnostic == -1);
+  if(failure == 1) { detail = "rejected"; return false; }
+  if(failure == 2) throw std::invalid_argument("invalid owner");
+  verified.diagnostic = 42;
+  return true;
+}
+VerifiedKsFinalState read(bool device_validation, bool compute_weighted_density) {
+  std::string detail;
+  bool staged_stationary_weights = compute_weighted_density && !device_validation;
+  const auto stage_weights = [&] {
+    assert(validations && !final_stationary_weights_ready);
+    ++stages;
+    if(failure == 3) throw std::runtime_error("stage");
+    staged_stationary_weights = true;
+  };
+"""
+        + source[begin:end]
+        + r"""
+}
+int main() {
+  for(bool device : {false, true}) {
+    for(int injected : {1, 2, 3, 4, 0}) {
+      if(!device && (injected == 3 || injected == 4)) continue;
+      failure = injected;
+      final_state_ready = true;
+      final_stationary_weights_ready = false;
+      final_validation_diagnostic = -1;
+      stages = validations = 0;
+      bool threw = false;
+      try {
+        const auto result = read(device, true);
+        assert(result.diagnostic == 42);
+      } catch(const std::exception&) { threw = true; }
+      assert(threw == (failure != 0));
+      assert(final_stationary_weights_ready == !threw);
+      assert(final_validation_diagnostic == (threw ? -1 : 42));
+      if(threw) assert(!final_state_ready);
+      assert(validations == 1);
+      assert(stages == (device && (failure == 0 || failure >= 3) ? 1 : 0));
+    }
+    final_stationary_weights_ready = false;
+    final_validation_diagnostic = -1;
+    stages = validations = 0;
+    const auto no_weights = read(device, false);
+    assert(no_weights.diagnostic == 42 && !final_stationary_weights_ready);
+    assert(final_validation_diagnostic == -1 && stages == 0);
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    binary = native_cxx.build_executable(
+        [program], tmp_path / "publication", compile_args=["-std=c++17", "-O0"]
+    )
+    subprocess.run([str(binary)], check=True, timeout=10)

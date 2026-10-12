@@ -388,6 +388,8 @@ struct cudaDeviceProp {
   size_t sharedMemPerBlock=49152;
 };
 static cudaDeviceProp actual;
+struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 void cuda_check(int code) { if(code) throw std::runtime_error("device error"); }
 int cudaGetDeviceProperties(cudaDeviceProp* out,int) { *out=actual; return 0; }
 """
