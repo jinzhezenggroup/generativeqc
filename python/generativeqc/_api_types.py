@@ -127,7 +127,7 @@ class CorrelationResult:
 
 @dataclass(frozen=True)
 class CcPerformanceResult:
-    """Observational RCCSD/RCCSD(T) phase and semantic-work telemetry."""
+    """Observational native coupled-cluster phase and semantic-work telemetry."""
 
     reference_seconds: float
     problem_seconds: float

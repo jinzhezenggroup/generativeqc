@@ -60,7 +60,10 @@ function(generativeqc_add_dft_sources target)
     src/dft/dispersion/d4_runtime.cpp
     src/dft/nonlocal_correlation/vv10_runtime.cpp
     src/dft/nonlocal_correlation/vv10_integration.cpp
-    src/methods/dft_method.cpp)
+    src/methods/dft_method.cpp
+    src/methods/dft_method_preparation.cpp
+    src/methods/dft_method_final_state_adapter.cpp
+    src/methods/dft_method_derivative_adapter.cpp)
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       src/dft/cosx_fock_provider.cpp
@@ -97,6 +100,8 @@ function(generativeqc_add_posthf_cc_sources target)
     src/methods/mp2_method.cpp
     src/methods/ump2_method.cpp
     src/methods/rccsd_method.cpp
+    src/cc/uccsd_solver.cpp
+    src/methods/uccsd_method.cpp
     src/methods/rccsdt_method.cpp
     src/methods/df_rccsdt_method.cpp
     src/methods/df_hf_guess.cpp
@@ -135,13 +140,10 @@ endfunction()
 function(generativeqc_add_integrals_scf_sources target)
   target_sources(${target} PRIVATE
     src/integrals/s_integrals.cpp
-    src/integrals/minao_basis.cpp
-    src/integrals/density_fitting_metric.cpp
     src/integrals/generated_df_cpu.cpp
     src/integrals/ecp.cpp
     src/integrals/stationary_component_contract.cpp
     src/methods/hf_method.cpp
-    src/molecule/basis.cpp
     src/scf/density_fitting.cpp
     src/scf/density_factor.cpp
     src/scf/df_response_weights.cpp
@@ -154,16 +156,9 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/fock_execution.cpp
     src/scf/rhf.cpp
     src/scf/solver/diis.cpp
-    src/scf/solver/proposal_control.cpp
     src/scf/solver/mean_field_driver.cpp
-    src/scf/solver/eigen_frame.cpp
-    src/scf/solver/cpu_target_eigen.cpp
     src/solver/cpu/johnson_broyden.cpp
-    src/solver/cpu/prepared_spectral.cpp
-    src/scf/solver/final_state.cpp
-    src/scf/solver/warm_subspace.cpp
     src/scf/gradient/hf_gradient.cpp
-    src/scf/reference/linalg.cpp
     src/scf/reference/mean_field.cpp
     src/scf/initial_guess/density.cpp
     src/scf/initial_guess/minao.cpp
@@ -275,4 +270,43 @@ function(generativeqc_add_component_sources target)
   generativeqc_add_integrals_scf_sources(${target})
   generativeqc_add_dft_sources(${target})
   generativeqc_add_posthf_cc_sources(${target})
+endfunction()
+
+# Internal CPU-only compile boundaries. Keep CUDA, generated-header consumers,
+# and device-link owners on the parent target until their dependencies are split.
+# OBJECT libraries preserve every compiled object in both the shared SDK/wheel
+# and the static monolithic CLI; ordinary STATIC archives could omit objects.
+function(generativeqc_add_cpu_component_object_targets target)
+  add_library(generativeqc_cpu_scf_solver OBJECT
+    src/scf/reference/linalg.cpp
+    src/scf/solver/proposal_control.cpp
+    src/scf/solver/eigen_frame.cpp
+    src/scf/solver/cpu_target_eigen.cpp
+    src/scf/solver/final_state.cpp
+    src/scf/solver/warm_subspace.cpp
+    src/solver/cpu/prepared_spectral.cpp)
+  add_library(generativeqc_cpu_basis_integrals OBJECT
+    src/molecule/basis.cpp
+    src/integrals/minao_basis.cpp
+    src/integrals/density_fitting_metric.cpp)
+
+  foreach(_cpu_component IN ITEMS
+      generativeqc_cpu_scf_solver generativeqc_cpu_basis_integrals)
+    set_target_properties(${_cpu_component} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # Use the same build-time defines and compiler policy as the containing
+    # library (CUDA present/absent, BLAS provider, wheel and optional PCH).
+    # These expressions are evaluated after the parent target is configured.
+    target_include_directories(${_cpu_component} PRIVATE
+      "$<TARGET_PROPERTY:${target},INCLUDE_DIRECTORIES>")
+    target_compile_definitions(${_cpu_component} PRIVATE
+      "$<TARGET_PROPERTY:${target},COMPILE_DEFINITIONS>")
+    target_compile_options(${_cpu_component} PRIVATE
+      "$<TARGET_PROPERTY:${target},COMPILE_OPTIONS>")
+    target_link_libraries(${_cpu_component} PRIVATE Threads::Threads)
+    if(GENERATIVEQC_ENABLE_CXX_PCH)
+      target_precompile_headers(${_cpu_component} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/pch.hpp>")
+    endif()
+    target_sources(${target} PRIVATE $<TARGET_OBJECTS:${_cpu_component}>)
+  endforeach()
 endfunction()

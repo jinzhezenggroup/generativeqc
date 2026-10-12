@@ -75,15 +75,14 @@ def test_native_cli_tier_admits_all_selected_build_stages(
     "event", ["schedule", "pull_request", "merge_group", "workflow_dispatch"]
 )
 @pytest.mark.parametrize("result", ["success", "skipped", "failure", "cancelled"])
+@pytest.mark.parametrize("required_job", ["native-cli-artifact", "cuda-direct-aot"])
 def test_aggregate_only_admits_intentional_scheduled_artifact_skip(
-    event: str, result: str
+    event: str, result: str, required_job: str
 ) -> None:
     job = _job("pass")
     needed = re.search(r"needs: \[([^\]]+)\]", job)
     assert needed is not None
-    assert "native-cli-artifact" in {
-        name.strip() for name in needed.group(1).split(",")
-    }
+    assert required_job in {name.strip() for name in needed.group(1).split(",")}
     allowed = re.search(r"allowed-skips: \$\{\{ (.*?) \}\}", job)
     assert allowed is not None
     # Evaluate the actual event-dependent input passed to the pinned alls-green
@@ -100,10 +99,15 @@ def test_aggregate_only_admits_intentional_scheduled_artifact_skip(
         {"native-cli-artifact"} if event == "schedule" else set()
     )
     accepted = result == "success" or (
-        result == "skipped" and "native-cli-artifact" in allowed_skips.split(",")
+        result == "skipped" and required_job in allowed_skips.split(",")
     )
     assert accepted == (
-        result == "success" or (event == "schedule" and result == "skipped")
+        result == "success"
+        or (
+            event == "schedule"
+            and result == "skipped"
+            and required_job == "native-cli-artifact"
+        )
     )
 
 

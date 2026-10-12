@@ -32,6 +32,7 @@ GRID_CONTRACT_FILES = (
     "src/dft/cuda_quadrature.cu",
     "src/dft/grid.hpp",
     "src/methods/dft_method.cpp",
+    "src/methods/dft_method_preparation.cpp",
 )
 
 
@@ -2238,7 +2239,7 @@ def test_grid_count_fails_closed_when_native_abi_lowering_moves(
     tmp_path: Path,
 ) -> None:
     copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
-    target = tmp_path / "src/methods/dft_method.cpp"
+    target = tmp_path / "src/methods/dft_method_preparation.cpp"
     source = target.read_text(encoding="utf-8")
     old = "grid.radial_points = input.radial_points;"
     assert old in source

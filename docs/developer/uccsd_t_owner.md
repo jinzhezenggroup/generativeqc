@@ -9,8 +9,11 @@ canonical triples energy to an accepted [UCCSD state](uccsd_solver.md). It
 reuses the parent's native CPU/CUDA executor and the compiler-owned
 [four-channel triples definition](uccsd_triples.md); it does not introduce
 another integral producer, restricted normalization or spin-orbital embedding.
-This is an internal supplied-reference energy API, not a Calculator registry
-entry, DF method, resident GPU solver, Lambda implementation or analytic force.
+This is an internal supplied-reference energy API, not the production method
+owner. The separate [native user endpoint](../user/unrestricted_cc.md) uses
+the same compiler-owned four-channel inventory with C++ lifetime/iteration
+ownership. This internal API is not a DF method, resident GPU solver, Lambda
+implementation or analytic force.
 
 ## Binding and execution
 
