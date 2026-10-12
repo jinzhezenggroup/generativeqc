@@ -63,10 +63,11 @@ def test_provider_source_identity_covers_layout_and_emitted_contract() -> None:
     for altered in (
         replace(provider, source=provider.source + "\n"),
         replace(provider, provider_name="another_provider"),
-        replace(provider, feature_terms=1),
         replace(provider, point=replace(provider.point, expression_identity="0" * 64)),
     ):
         assert altered.source_identity != provider.source_identity
+    with pytest.raises(ValueError, match="restricted layout"):
+        replace(provider, feature_terms=1)
 
 
 def test_emission_does_not_grant_public_cuda_admission() -> None:
@@ -97,7 +98,7 @@ def test_aot_descriptor_binds_shared_science_and_exact_launcher_source() -> None
     assert provider.source in shard
     assert descriptor in shard
     assert provider.source_identity in descriptor
-    assert provider.point.expression_identity in descriptor
+    assert provider.expression_identity in descriptor
     assert f"0x{entry.code:x}U" in descriptor
     assert "7U," in descriptor
     assert "&launch, &launch_batch, {}" in descriptor
