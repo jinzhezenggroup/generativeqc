@@ -20,9 +20,11 @@ extern "C" {
  * Only a successfully executed prepared KS calculation with a current verified
  * final state may provide source-major [H', Pulay, J', K'] +dE/dR blocks.
  * Source size is exactly 4*3*Natom doubles; work has exactly nine uint64 slots.
- * CPU DF and qualified CUDA DF/Direct are admitted; CPU Direct and ECP/range/
- * nonlocal/dispersion domains fail closed. Caller output is unchanged on
- * failure. XC/Becke/nuclear terms are absent; this is NOT an analytic force. */
+ * CPU DF, qualified CPU Direct PBE/PBE0 and qualified CUDA DF/Direct are admitted;
+ * ECP/range/nonlocal/dispersion domains fail closed. Caller output is unchanged on
+ * failure. XC/Becke/nuclear terms are absent; this is NOT an analytic force.
+ * CPU Direct work[3] counts owned source/weight numeric capacity, excluding
+ * recurrence scratch, allocator overhead and the retained SCF owner. */
 generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
     generativeqc_calculation* calculation, double* values, std::size_t count,
     std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);

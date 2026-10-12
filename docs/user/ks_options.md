@@ -91,12 +91,12 @@ for paired E+F validation and the limits of the retained configuration evidence.
 
 ### CUDA Direct integral forces
 
-Exact-direct PBE0/RKS owners explicitly requesting FP64 with at least 384 public AOs
-automatically reuse primitive-local spatial Coulomb states in the order-six
-s/p/d force consumer. Eligibility is authenticated by the DFT method after its
-resident final-density token check; generic HF and range-separated consumers
-do not infer PBE0 from an exchange coefficient. Density fitting, ECP, nonlocal
-correlation, D4 and lower-precision execution retain their existing defaults.
+Exact-direct full-range RKS global hybrids with strict FP64 and at least
+384 public AOs automatically request primitive-local spatial Coulomb reuse in
+the order-six s/p/d force consumer. This includes eligible PBE0 and B3LYP:
+the method authenticates Direct J/K, operators, exact-exchange coefficient and
+resident final-density token, not a functional name alone. HF, UKS, fitted, ECP,
+RSH, nonlocal, D4 and lower-precision consumers retain the incumbent defaults.
 
 `GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=0` forces the incumbent schedule.
 Explicit `=1` or `=spatial-reuse` requests reuse outside the automatic method
@@ -113,11 +113,13 @@ for the algorithm, qualification scope and retained alternatives.
 
 ### CUDA final-state validation
 
-Native CUDA KS automatically reuses resident final-state matrix products for
-full-precision, exact-direct PBE0/RKS owners with at least 384 AOs. Selection
-also requires the existing matrix-library handle, charged reduction storage,
-and no already-published stationary W/total-D scratch lease. Other owners retain
-the reference route. Repeated reads preserve their published bindings.
+Native CUDA KS automatically requests resident final-state matrix products
+for strict-FP64 full-range exact-direct RKS global hybrids with at least 384 AOs.
+The admitted mathematical producer (such as PBE0 or B3LYP), signed exchange
+and Direct J/K operators—not the PBE0 label—determine eligibility. Resource and
+live-generation checks still require the matrix-library handle, charged packets
+and no previously published stationary W/total-D lease. UKS, fitted, RSH,
+nonlocal, mixed and incremental consumers retain the reference route.
 
 `GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION=0` forces the reference route.
 Explicit `=1` requests the resident route outside the automatic scope, but does

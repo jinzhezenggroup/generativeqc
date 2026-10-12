@@ -94,10 +94,13 @@ struct DFCCSDTResult {
  * Lambda defaults request batch 32 and original-graph matrix fresh replay.
  * Complete host/device budgets and currently free VRAM admit actual storage;
  * smaller batches and the original scalar replay remain bounded fallbacks.
- * ccsd_batch_limit=0 selects the endpoint default: 32 for energy-only calls,
- * eight for forces. Positive limits remain explicit overrides. The solver
+ * ccsd_batch_limit=0 selects the endpoint default: 32 for energy and forces.
+ * Positive limits remain explicit overrides. The solver
  * admits the actual tile under its existing full budget and dimension checks;
  * this does not change standalone CCSD or any response precision policy.
+ * lambda_resident_krylov is a default-off storage binding of the same physical
+ * Lambda actions. Its admission includes both providers and the DF device
+ * ceiling; refusal retains the existing host-vector response schedule.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -112,7 +115,7 @@ DFCCSDTResult run_df_ccsdt_native(
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
     bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
-    bool lambda_mixed_precision = false);
+    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

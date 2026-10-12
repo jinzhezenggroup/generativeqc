@@ -7,11 +7,8 @@ from pathlib import Path
 import pytest
 
 
-def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
-    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
-    section = (
-        path.read_text().split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
-    )
+def _assert_cpu_budget(workflow: str) -> None:
+    section = workflow.split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
     header = section.split("\n    steps:\n", 1)[0]
     match = re.search(
         r"timeout-minutes: \$\{\{ matrix.compiler == 'gcc' && "
@@ -26,11 +23,8 @@ def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
     assert "continue-on-error:" not in header
 
 
-def test_cpu_budget_preserves_required_work_and_early_cache_save() -> None:
-    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
-    section = (
-        path.read_text().split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
-    )
+def _assert_cpu_work_and_cache_lifecycle(workflow: str) -> None:
+    section = workflow.split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
 
     def step(name: str) -> str:
         return section.split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
@@ -44,14 +38,62 @@ def test_cpu_budget_preserves_required_work_and_early_cache_save() -> None:
         assert command in block
         assert "if:" not in block
         assert "continue-on-error:" not in block
-    assert (
-        section.index("      - name: Build\n")
-        < section.index("      - name: Save ccache immediately after build\n")
-        < section.index("      - name: Test\n")
+    assert section.index("      - name: Build\n") < section.index(
+        "      - name: Test\n"
     )
-    save = step("Save ccache immediately after build")
+    # PR/queue CPU correctness consumes a trusted snapshot; it no longer saves
+    # per-matrix caches before CTest. Keep publication out of this consumer.
+    assert "uses: actions/cache/save@" not in section
+    restore = step("Restore shared Linux CPU ccache (CPU CTest)")
+    assert "uses: actions/cache/restore@" in restore
+    assert "path: ~/.cache/ccache" in restore
+
+    seed = workflow.split("\n  master-cpu-cache:\n", 1)[1].split("\n  cpu:\n", 1)[0]
+    header = seed.split("\n    steps:\n", 1)[0]
+    assert (
+        "if: github.event_name == 'push' && github.ref == 'refs/heads/master'" in header
+    )
+    assert "timeout-minutes: 55" in header
+    # The complete producer saves independently of downstream correctness, so a
+    # failing CTest/Python job cannot discard already successful compiler work.
+    assert "needs:" not in header
+    assert "continue-on-error:" not in header
+    assert "ctest" not in seed and "lcov" not in seed
+
+    def seed_step(name: str) -> str:
+        return seed.split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
+
+    builds = (
+        "Compile GCC, instrumented GCC, and Clang",
+        "Build Python native cache seed",
+    )
+    complete_name = "Save complete CPU compiler cache"
+    assert seed.index(f"      - name: {builds[0]}\n") < seed.index(
+        f"      - name: {builds[1]}\n"
+    )
+    for name in builds:
+        block = seed_step(name)
+        assert "cmake --build" in block
+        assert "if:" not in block and "continue-on-error:" not in block
+        assert seed.index(f"      - name: {name}\n") < seed.index(
+            f"      - name: {complete_name}\n"
+        )
+    save = seed_step(complete_name)
     assert "uses: actions/cache/save@" in save
-    assert "key: ${{ steps.cpu_ccache.outputs.cache-primary-key }}" in save
+    assert "if: steps.master_cpu_ccache.outputs.cache-hit != 'true'" in save
+    assert "key: ${{ steps.master_cpu_ccache.outputs.cache-primary-key }}" in save
+    assert "always()" not in save and "failure()" not in save
+    assert "continue-on-error: true" in save
+    seed_restore = seed_step("Restore shared CPU ccache")
+    key = next(line.strip() for line in seed_restore.splitlines() if "key:" in line)
+    assert key in restore
+    partial = seed_step("Preserve partial master CPU compiler work")
+    assert "always()" in partial and "continue-on-error: true" in partial
+    assert "timeout-minutes: 2" in partial
+    assert (
+        "format('{0}-partial-{1}-{2}', steps.master_cpu_ccache.outputs.cache-primary-key"
+        in partial
+    )
     ownership = step("Generate current CUDA ownership report")
     assert "if: matrix.compiler == 'gcc'" in ownership
     assert "python3 tools/report_cuda_ownership.py --check" in ownership
@@ -67,6 +109,75 @@ def test_cpu_budget_preserves_required_work_and_early_cache_save() -> None:
     report = step("Preserve C++ coverage for the upload-only job")
     assert "name: coverage-report-cpp" in report
     assert "path: coverage-cpp.info" in report
+
+
+def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    _assert_cpu_budget(path.read_text())
+
+
+def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    _assert_cpu_work_and_cache_lifecycle(path.read_text())
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("&& 20 || 15", "&& 19 || 15"),
+        (
+            "run: cmake --build build --parallel",
+            "if: false\n        run: cmake --build build --parallel",
+        ),
+        (
+            "run: ctest --test-dir build --output-on-failure",
+            "continue-on-error: true\n        run: ctest --test-dir build --output-on-failure",
+        ),
+        ("uses: actions/cache/restore@", "uses: actions/cache/save@"),
+        (
+            "if: github.event_name == 'push' && github.ref == 'refs/heads/master'",
+            "if: github.event_name == 'pull_request'",
+        ),
+        ("timeout-minutes: 55", "timeout-minutes: 55\n    needs: cpu"),
+        (
+            "if: steps.master_cpu_ccache.outputs.cache-hit != 'true'",
+            "if: always() && steps.master_cpu_ccache.outputs.cache-hit != 'true'",
+        ),
+        (
+            "format('{0}-partial-{1}-{2}', steps.master_cpu_ccache.outputs.cache-primary-key",
+            "format('{0}', steps.master_cpu_ccache.outputs.cache-primary-key",
+        ),
+        (
+            "lcov --capture --directory build --output-file coverage-cpp.info",
+            "echo coverage-disabled",
+        ),
+    ],
+)
+def test_cpu_budget_and_cache_contract_rejects_regressions(
+    before: str, after: str
+) -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    workflow = path.read_text()
+    assert before in workflow
+    broken = workflow.replace(before, after)
+    with pytest.raises(AssertionError):
+        _assert_cpu_budget(broken)
+        _assert_cpu_work_and_cache_lifecycle(broken)
+
+
+def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    workflow = path.read_text()
+    start = workflow.index("      - name: Save complete CPU compiler cache\n")
+    end = workflow.index(
+        "      - name: Preserve partial master CPU compiler work\n", start
+    )
+    save = workflow[start:end]
+    broken = workflow[:start] + workflow[end:]
+    insertion = broken.index("      - name: Build Python native cache seed\n")
+    broken = broken[:insertion] + save + broken[insertion:]
+    with pytest.raises(AssertionError):
+        _assert_cpu_work_and_cache_lifecycle(broken)
 
 
 @pytest.mark.parametrize(
@@ -134,9 +245,10 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     assert "coverage-report-python-${{ matrix.shard }}" in section
     assert "benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}" in section
     cache_line = next(
-        line for line in section.splitlines() if "key: ccache-python-" in line
+        line for line in section.splitlines() if "key: ccache-linux-cpu-v4-" in line
     )
     assert "'tests/**'" not in cache_line
+    assert "'tests/python/**'" not in cache_line
     assert "-DGENERATIVEQC_BUILD_TESTS=OFF" in section
     assert "-DGENERATIVEQC_PYTHON_WHEEL=ON" in section
     assert "-DPython3_EXECUTABLE=" in section

@@ -664,6 +664,12 @@
       "domain": "canonical-rccsd-packed-lambda",
       "evidence": [
         "tests/native/test_cc_lambda_preconditioner.cpp",
+        "tests/native/test_cc_resident_endpoint.cpp",
+        "tests/python/test_df_lambda_resident_cuda.py",
+        "tests/python/test_df_resident_force_cuda.py",
+        "benchmarks/results/response-contract/2026-10-11/qualification-resident-lambda.json.xz",
+        "benchmarks/results/response-contract/2026-10-11/qualification-resident-integration.json.xz",
+        "benchmarks/results/response-contract/2026-10-11/qualification-resident-df.json.xz",
         "tests/python/test_rccsd_native_lambda_owner.py"
       ],
       "evidence_levels": {
@@ -716,9 +722,9 @@
         }
       },
       "exception": {
-        "missing_capability": "Device-resident dimension-sized Krylov state for conventional and DF Lambda; transpose currently uploads seeds and downloads outputs per action.",
+        "missing_capability": "Default conventional and DF Lambda retain host vectors. Both have an opt-in shared resident/right-preconditioned binding and native E+F qualification drivers; broader source-matched default-promotion/prepared-lifetime gates remain missing.",
         "owner": "src/cc/lambda_response_cuda.cu",
-        "retirement_condition": "Use the existing resident controller with admitted resident right preconditioning, stream/lifetime/accounting and independent residual gates; qualify matched complete endpoint A/B before promotion."
+        "retirement_condition": "Qualify conventional and DF candidates' matched complete endpoint A/B, full provider/resource accounting and prepared-lifetime domains before default promotion; retain diagonal policy and independent audits."
       },
       "execution_owner": "src/cc/lambda_response_cuda.cu",
       "id": "cc-response-cuda-rccsd-lambda",

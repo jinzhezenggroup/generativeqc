@@ -64,6 +64,22 @@ builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
   Publication rechecks that the current remote tag still identifies the built
   commit; a moved tag fails instead of receiving mismatched artifacts.
 
+### Pull-request packaging gate
+
+Relevant pull requests and merge groups must now **link, smoke-test, install
+and package a real monolithic CUDA CLI before passing CI**. Changes to CMake,
+CLI, packaging, or their CI configuration use the full release-mode
+code-generation settings. Other native/runtime/compiler changes use faster NVCC
+compilation, but still execute the static link, binary smoke tests, archive
+checksums and extracted-binary comparison. Documentation-only changes skip
+the expensive build; an unknown Git diff runs the full build rather than
+silently skipping it. PR archives are retained for seven days, without
+publishing any GitHub Release.
+
+The CI job summary reports exact unstripped ELF, a stripped ELF size estimate
+and `.tar.gz` byte counts. These compile-only checks are not a real-GPU runtime
+or performance qualification.
+
 After extracting the archive:
 
 ```bash
@@ -335,7 +351,7 @@ native capability: preparation remains authoritative.
 
 ### Context-qualified native DFT analytic forces
 
-A narrow **CPU, density-fitted, all-electron RKS PBE** force path now composes
+A bounded **CPU, Direct or density-fitted, all-electron PBE/PBE0 RKS/UKS and B3LYP RKS** force path composes
 the same prepared electronic state as the energy route with the native one-
 and two-electron response providers, generated XC point derivatives, the
 moving molecular grid/Becke partition derivative and nuclear repulsion:
@@ -345,33 +361,41 @@ generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
   --backend cpu --density-fitting cpu --forces --json
 ```
 
-The generated **PBE0-RKS** composition can use this route only when its
-prepared full-range exact-exchange **and** Coulomb terms both admit the same
-CPU density-fitted derivative provider. Its H2/STO-3G native CLI analytic
-force is independently checked against central differences of fully
+Use `--density-fitting none` for the exact Direct source instead. Its packaged
+derivative and work-envelope prerequisites are documented in the
+[C++ SDK derivative contract](native_cpp.md#density-fitting-and-derivative-boundary).
+The generated **PBE0-RKS/UKS and B3LYP-RKS** compositions can use either route only when their
+prepared full-range exact-exchange **and** Coulomb terms admit the corresponding
+native derivative provider. Their H2/STO-3G native CLI analytic
+forces are independently checked against central differences of fully
 reconverged molecular energies at displaced geometries, while the C++ SDK
 test checks the exact prepared force-capability contract and translation
 invariance. These tests are a narrow admission gate, not evidence of general
-PBE0 gradients across bases, spins or backends. The installed C++ SDK queries the
+hybrid gradients across bases, spins or backends. The installed C++ SDK queries the
 actual prepared context through
 `generativeqc_calculation_get_supported_properties_v1`; the generic method
 registry remains energy-only because it cannot promise forces for every
 backend, grid, spin or approximation. Use `Calculation::supported_properties()`
 rather than the global method manifest to test this narrow admission.
 
-This is not support for native CUDA DFT forces, CPU Direct DFT forces, UKS,
+For an open-shell cation, use `--method pbe-uks` or `pbe0-uks` with
+`--charge 1 --multiplicity 2`. Separate alpha/beta blocks, including an empty
+beta population, pass the same stationary-state gate. Direct s/p/d and DF
+orbital-through-f/auxiliary-through-g contexts retain their existing basis
+boundaries; see the SDK contract for qualification details.
+
+This is not support for native CUDA DFT forces, B3LYP UKS,
 r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
 requests reject before execution and do not return a partial derivative.
-Native **prepared batches** also reuse that CPU density-fitted PBE/PBE0
-RKS force consumer only when every member has a qualified prepared
+Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
+RKS/UKS and B3LYP RKS force consumer only when every member has a qualified prepared
 context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item
 native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
-whitelist in Python. General native CUDA/UKS/Direct DFT batch forces
+whitelist in Python. Native CUDA and other Direct DFT batch forces
 remain work under #2151.
-This slice requires complete independent numeric/CI acceptance before being
-considered production-qualified. See [C++ SDK usage](native_cpp.md).
+See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 
 ## Manage local profile activation
 

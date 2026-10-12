@@ -4,7 +4,6 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
-#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -21,7 +20,6 @@
 #include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
-#include "dft/incremental_direct_jk_control.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
@@ -29,6 +27,7 @@
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "methods/scf_common_options.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/resource_usage.hpp"
@@ -37,6 +36,7 @@
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/stationary_integral_gradient.hpp"
 #include "scf/types.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -75,6 +75,7 @@ struct NativeKsExecutionPlan {
   std::uint32_t functional{};
   bool generated_split_hybrid{};
   const dft::SemilocalPointProgram* automatic_program{};
+  const dft::RestrictedSemilocalPointProgram* automatic_restricted_program{};
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_method method) noexcept {
@@ -101,6 +102,8 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_metho
 bool unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
 
 std::uint32_t scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
+  if (!unrestricted(plan) && plan.automatic_restricted_program)
+    return plan.automatic_restricted_program->domain_version;
   if (plan.automatic_program) return plan.automatic_program->domain_version;
   return plan.generated_split_hybrid ? 4U
                                      : dft::semilocal_family_domain_version(plan.semilocal_family);
@@ -140,6 +143,7 @@ struct SemilocalAdmission {
   std::uint32_t functional{};
   bool generated_split_hybrid{};
   const dft::SemilocalPointProgram* automatic_program{};
+  const dft::RestrictedSemilocalPointProgram* automatic_restricted_program{};
 };
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const generativeqc_ks_options& input) {
@@ -189,8 +193,14 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
       const auto automatic =
           dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
       if (automatic)
-        return {dft::SemilocalFamily::Lda, 1.0,   1.0,
-                automatic.functional_code, false, automatic.program};
+        return {dft::SemilocalFamily::Lda,
+                1.0,
+                1.0,
+                automatic.functional_code,
+                false,
+                automatic.program,
+                dft::generated::automatic_restricted_libxc_program(
+                    std::string_view(component.component_id))};
     }
   }
 
@@ -212,34 +222,11 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
-  if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
+  if (plan.automatic_program)
+    return scf_domain_version(plan) == 5U ? dft::generated::kAutomaticDensityLibxcScfDomain
+                                          : dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
-}
-
-/** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
- * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
-bool incremental_direct_jk_benchmark_requested(const char* name) {
-  const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
-  if (control == dft::IncrementalDirectJkControl::Invalid)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      std::string(name) + " must be 0/off or 1/on");
-  return control == dft::IncrementalDirectJkControl::Enabled;
-}
-
-std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr) return std::nullopt;
-  if (*value < '0' || *value > '9')
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      std::string(name) + " must be an unsigned integer");
-  errno = 0;
-  char* end = nullptr;
-  const unsigned long parsed = std::strtoul(value, &end, 10);
-  if (errno == ERANGE || end == value || *end != '\0' || parsed > UINT_MAX)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      std::string(name) + " must be an unsigned integer");
-  return static_cast<unsigned>(parsed);
 }
 
 std::optional<double> incremental_direct_jk_benchmark_density_rms_threshold(const char* name) {
@@ -259,16 +246,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   if (!std::isfinite(descriptor.energy_tolerance) || !std::isfinite(descriptor.density_tolerance) ||
       !std::isfinite(descriptor.screening_tolerance))
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "DFT tolerances must be finite");
-  scf::ScfOptions options;
-  options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
-  options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
-  options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
-  options.energy_tolerance =
-      descriptor.energy_tolerance > 0.0 ? descriptor.energy_tolerance : 1.0e-10;
-  options.density_tolerance =
-      descriptor.density_tolerance > 0.0 ? descriptor.density_tolerance : 1.0e-8;
-  options.screening_tolerance =
-      descriptor.screening_tolerance > 0.0 ? descriptor.screening_tolerance : 1.0e-12;
+  scf::ScfOptions options = common_scf_options(descriptor);
 
   const auto legacy_plan = legacy_ks_execution_plan(descriptor.method);
   const generativeqc_ks_options* ks_input = nullptr;
@@ -287,6 +265,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
     execution_plan.automatic_program = semilocal.automatic_program;
+    execution_plan.automatic_restricted_program = semilocal.automatic_restricted_program;
     if (execution_plan.automatic_program &&
         (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
          ks_input->has_nonlocal_correlation != 0))
@@ -303,12 +282,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     semilocal = {execution_plan.semilocal_family, 1.0, 1.0};
   }
 
-  const auto mode = descriptor.density_fitting_mode;
-  if (mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
-      mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
-      mode != GENERATIVEQC_DENSITY_FITTING_CUDA && mode != GENERATIVEQC_DENSITY_FITTING_AUTO)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "unknown density-fitting execution mode");
+  const auto mode = checked_density_fitting_mode(descriptor);
   options.density_fitting_mode = mode;
   if ((mode == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
        backend != GENERATIVEQC_BACKEND_CPU_REFERENCE) ||
@@ -322,17 +296,13 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   if (descriptor.density_fitting_relative_threshold != 0.0)
     options.density_fitting_relative_threshold = descriptor.density_fitting_relative_threshold;
   options.density_fitting_memory_budget_bytes = descriptor.density_fitting_memory_budget_bytes;
-  if (descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
-      descriptor.precision_mode != GENERATIVEQC_PRECISION_AUTO)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "unknown floating-point precision mode");
-  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-      backend != GENERATIVEQC_BACKEND_CUDA)
+  const auto precision_mode = checked_precision_mode(descriptor);
+  if (precision_mode == GENERATIVEQC_PRECISION_AUTO && backend != GENERATIVEQC_BACKEND_CUDA)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DFT automatic precision currently requires CUDA");
-  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
+  if (precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
-  options.precision_mode = descriptor.precision_mode;
+  options.precision_mode = precision_mode;
 
   scf::FockBuildSpec fock;
   fock.spin =
@@ -836,7 +806,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                         NativeKsExecutionPlan execution_plan, scf::ScfOptions options,
                         dft::GridSpec grid, generativeqc_backend backend, int device,
                         const std::optional<core::System>& auxiliary)
-      : capabilities_(capabilities),
+      : PreparedCalculation(backend, device),
+        capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
         options_(std::move(options)),
@@ -894,42 +865,64 @@ class KsPreparedCalculation final : public PreparedCalculation {
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
   /** Method-global manifest stays energy-only. Force capability is a
    * property of this immutable prepared physical execution context. Only
-   * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
-   * providers is currently admitted; UKS, CUDA, Direct, corrections and
-   * unrepresented XC graphs remain fail-closed until separately qualified. */
+   * strict-FP64 all-electron CPU Direct or fitted PBE/PBE0 RKS/UKS and
+   * B3LYP RKS with complete stationary derivative providers is admitted.
+   * Direct additionally requires packaged s/p/d derivatives. B3LYP UKS,
+   * CUDA, corrections and unrepresented XC graphs remain separately gated. */
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
     return options_.preliminary_guess;
   }
 
-  [[nodiscard]] bool supports_native_pbe_force() const noexcept {
+  [[nodiscard]] bool supports_native_gga_force() const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE ||
-        execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe ||
-        execution_plan_.spin_channels != 1 || execution_plan_.automatic_program ||
-        execution_plan_.generated_split_hybrid || execution_plan_.range_exchange ||
-        execution_plan_.nonlocal_correlation || execution_plan_.d4_correction ||
-        !system_.ecp_terms.empty() ||
+        (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
+        (execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe &&
+         execution_plan_.semilocal_family != dft::SemilocalFamily::B3lyp) ||
+        execution_plan_.automatic_program || execution_plan_.generated_split_hybrid ||
+        execution_plan_.range_exchange || execution_plan_.nonlocal_correlation ||
+        execution_plan_.d4_correction || !system_.ecp_terms.empty() ||
         std::any_of(system_.atoms.begin(), system_.atoms.end(),
                     [](const auto& atom) { return atom.ecp_core != 0; }))
       return false;
-    const auto& spec = fock_.strategy().spec;
-    const auto fitted = [](const scf::FockTermSpec& term) {
-      return !term.present || (term.approximation == scf::FockApproximation::DensityFitted &&
-                               term.op == scf::FockOperator::FullRange);
-    };
-    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !fitted(spec.coulomb) ||
-        !fitted(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
+    if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        (!integrals::has_packaged_cpu_eri_shell_derivatives() ||
+         std::any_of(system_.shells.begin(), system_.shells.end(),
+                     [](const auto& shell) { return shell.angular_momentum > 2; })))
       return false;
-    const bool pbe = !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 = spec.exchange.present && spec.exchange.coefficient == -0.125 &&
-                      options_.semilocal_exchange_scale == 0.75;
-    return pbe || pbe0;
+    const auto& spec = fock_.strategy().spec;
+    if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
+      return false;
+    const auto approximation = options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
+                                   ? scf::FockApproximation::Exact
+                                   : scf::FockApproximation::DensityFitted;
+    const auto admitted_term = [approximation](const scf::FockTermSpec& term) {
+      return !term.present || (term.approximation == approximation &&
+                               term.op == scf::FockOperator::FullRange && term.omega == 0.0);
+    };
+    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !admitted_term(spec.coulomb) ||
+        !admitted_term(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
+      return false;
+    const bool pbe_family = execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe;
+    const bool pbe =
+        pbe_family && !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
+    const bool pbe0 =
+        pbe_family && spec.exchange.present &&
+        spec.exchange.coefficient == (execution_plan_.spin_channels == 1 ? -0.125 : -0.25) &&
+        options_.semilocal_exchange_scale == 0.75;
+    const bool b3lyp = !pbe_family && execution_plan_.spin_channels == 1 && spec.exchange.present &&
+                       spec.exchange.coefficient == -0.1 &&
+                       options_.semilocal_exchange_scale == 1.0;
+    return (pbe || pbe0 || b3lyp) &&
+           (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+            scf::cpu_stationary_direct_force_work_admitted(
+                system_, spec.exchange.present, grid_.point_count(), options_.xc_tile_points));
   }
 
   [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept override {
     return capabilities_.supported_properties |
-           (supports_native_pbe_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
+           (supports_native_gga_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   }
 
   const core::System& system() const noexcept { return system_; }
@@ -1019,6 +1012,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
   }
 
   void invalidate_result() override { invalidate_final_state(); }
+  void reset_execution_impl() override { clear_warm_start(); }
 
   void invalidate_final_state() noexcept {
     cpu_physical_.reset();
@@ -1225,14 +1219,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
     const auto status = read_final_state(expected, true, state, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    // These are the provider's actual metric and the collocation/grid sources
-    // used by this immutable KS owner, not caller-supplied identity labels.
-    output = {std::move(state), system_,        fock_.one_electron().overlap,
-              basis_.packed,    grid_.points(), grid_.weights(),
-              grid_.owners()};
-    // Both backends collocate this owner's exact host-built quadrature. Export
-    // its raw measures directly; dividing partitioned weights loses tail data.
-    output.atomic_weights = grid_.atomic_weights();
+    const auto sources_status = read_derivative_sources(expected, output, detail);
+    if (sources_status != GENERATIVEQC_STATUS_SUCCESS) return sources_status;
+    output.state = std::move(state);
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
       const auto after = cuda_->transfers();
@@ -1241,6 +1230,31 @@ class KsPreparedCalculation final : public PreparedCalculation {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status read_derivative_sources(const dft::CudaKsFinalStateToken& expected,
+                                              KsDerivativeSnapshot& output, std::string& detail) {
+    output = {};
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "KS derivative sources have a stale final-state token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    // These are the provider's actual metric and the collocation/grid sources
+    // used by this immutable KS owner, not caller-supplied identity labels.
+    output.system = system_;
+    output.overlap = fock_.one_electron().overlap;
+    output.packed_basis = basis_.packed;
+    output.points = grid_.points();
+    output.weights = grid_.weights();
+    output.grid_owners = grid_.owners();
+    // Both backends collocate this owner's exact host-built quadrature. Export
+    // its raw measures directly; dividing partitioned weights loses tail data.
+    output.atomic_weights = grid_.atomic_weights();
+    output.resident_grid = grid_.cuda_view();
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -1493,20 +1507,37 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return cuda_integral_gradient(expected, output, maximum_bytes, work, detail, &density,
                                     &weighted_density);
 #endif
-    detail = "CPU Direct KS stationary integral sources need a retained native derivative owner";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    if (!supports_native_gga_force()) {
+      detail = "CPU Direct KS stationary integral sources require a qualified GGA owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto spins = expected.identity.model.spins;
+    if (density.size() != spins || weighted_density.size() != spins || (spins != 1 && spins != 2)) {
+      detail = "CPU Direct stationary D/W spin shape mismatch";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto method = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
+                            ? scf::CpuStationaryGga::B3lyp
+                        : fock_.strategy().spec.exchange.present ? scf::CpuStationaryGga::Pbe0
+                                                                 : scf::CpuStationaryGga::Pbe;
+    const std::span<const double> empty;
+    auto candidate = scf::cpu_stationary_integral_gradient(
+        fock_, density[0], weighted_density[0], method, maximum_bytes,
+        spins == 2 ? std::span<const double>(density[1]) : empty,
+        spins == 2 ? std::span<const double>(weighted_density[1]) : empty);
+    work[3] = candidate.numeric_capacity;
+    output = std::move(candidate.sources);
+    detail.clear();
+    return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  /** Only this method owner can authenticate the full PBE0 composition.
-   * Generic/HF/RSH derivative consumers do not infer it from a K coefficient. */
+  /** Authenticate the complete restricted Direct global-hybrid derivative
+   * capability, not a functional name or isolated K coefficient. */
   bool qualified_spatial_force_default() const {
     const auto& strategy = fock_.strategy();
     const auto& spec = strategy.spec;
-    const bool direct_pbe0 =
-        dft::pbe0_rks_final_validation_composition(
-            execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe,
-            spec.exchange.coefficient, options_.semilocal_exchange_scale,
-            options_.semilocal_correlation_scale) &&
+    const bool direct_global_hybrid =
+        dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient) &&
         strategy.backend == scf::FockBackend::Cuda && spec.derivative_order == 0 &&
         spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
         spec.coulomb.approximation == scf::FockApproximation::Exact &&
@@ -1520,7 +1551,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
         std::none_of(system_.atoms.begin(), system_.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     return dft::spatial_spd_force_default_eligible(
-        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0,
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid,
         options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
   }
 
@@ -1991,7 +2022,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
    * token-qualified stationary derivative sources and one complete force sink.
    * This is intentionally not a second batch-specific DFT force equation. */
   void add_prepared_native_forces(Result& result) {
-    if (!supports_native_pbe_force())
+    if (!supports_native_gga_force())
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "native DFT analytic forces are unqualified for this prepared context (#2151)");
@@ -2005,19 +2036,36 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw MethodError(status, detail.empty() ? "native DFT final state unavailable" : detail);
 
+    auto retained_bytes = host_numeric_capacity();
+    for (const auto* matrices : {&frame.density, &frame.fock, &frame.weighted_density})
+      for (const auto& matrix : *matrices)
+        retained_bytes = runtime::add_capacity(retained_bytes, runtime::vector_bytes(matrix));
+    for (const auto& orbital : frame.orbitals)
+      retained_bytes = runtime::add_capacity(
+          retained_bytes, runtime::vector_capacities(orbital.values, orbital.vectors));
+    if (result.ks_diagnostic)
+      retained_bytes = runtime::add_capacity(retained_bytes,
+                                             runtime::vector_bytes(result.ks_diagnostic->history));
+    runtime::CpuRetainedCapacity retained(retained_bytes);
+
     std::vector<double> integrals;
     std::array<std::uint64_t, 9> work{};
-    // Bound compact source publication separately from the prepared DF
-    // metric and response providers, which enforce their own budgets.
+    // Bound owned source/weight buffers separately from the retained SCF owner
+    // and DF response providers. This is not an allocator/recurrence census.
     constexpr std::size_t kSourcePublicationBytes = 64ull * 1024ull * 1024ull;
     status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
                                         kSourcePublicationBytes, work, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
+    runtime::CpuRetainedCapacity retained_integrals(runtime::vector_bytes(integrals));
 
-    const auto xc = dft::stationary_pbe_xc_derivative(
-        basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
-        options_.semilocal_correlation_scale);
+    const auto xc = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
+                        ? dft::stationary_b3lyp_xc_derivative(basis_, grid_, frame.density,
+                                                              options_.xc_tile_points)
+                        : dft::stationary_pbe_xc_derivative(basis_, grid_, frame.density,
+                                                            options_.xc_tile_points,
+                                                            options_.semilocal_exchange_scale,
+                                                            options_.semilocal_correlation_scale);
     const std::size_t ncoord = 3 * system_.atoms.size();
     if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
       throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
@@ -2033,6 +2081,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "native DFT final-state force token changed");
     result.forces.resize(ncoord);
+    runtime::sample_cpu_capacity(runtime::vector_capacities(xc.gradient, gradient, result.forces));
     for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
       if (!std::isfinite(gradient[coordinate]))
         throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
@@ -2041,9 +2090,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
   }
 
-  Result execute(bool compute_forces) override {
-    invalidate_final_state();
-    if (compute_forces && !supports_native_pbe_force()) {
+  Result execute_impl(bool compute_forces) override {
+    if (compute_forces && !supports_native_gga_force()) {
       const char* issue = execution_plan_.automatic_program ? "#1122"
                           : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
                               ? "#164"
@@ -2150,6 +2198,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       native = unrestricted(execution_plan_)
                    ? scf::run_semilocal_uks(fock_, basis_, grid_, execution_options,
                                             *execution_plan_.automatic_program, seed)
+               : execution_plan_.automatic_restricted_program
+                   ? scf::run_semilocal_rks(fock_, basis_, grid_, execution_options,
+                                            *execution_plan_.automatic_restricted_program, seed)
                    : scf::run_semilocal_rks(fock_, basis_, grid_, execution_options,
                                             *execution_plan_.automatic_program, seed);
     } else if (execution_plan_.generated_split_hybrid)
@@ -2396,7 +2447,8 @@ class KsPreparedBatch final : public PreparedBatch {
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
                   generativeqc_backend backend, int device, bool warm_enabled,
                   std::optional<core::System> auxiliary)
-      : capabilities_(capabilities),
+      : PreparedBatch(backend, device),
+        capabilities_(capabilities),
         systems_(std::move(systems)),
         execution_plan_(execution_plan),
         options_(std::move(options)),
@@ -2426,11 +2478,10 @@ class KsPreparedBatch final : public PreparedBatch {
       if (item.plan) item.plan->invalidate_final_state();
   }
 
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     // A native force request is admitted only when *every* prepared item has
-    // the source-complete CPU DF-PBE/PBE0 owner. Mixed or missing contexts must
+    // the source-complete CPU Direct/DF GGA owner. Mixed or missing contexts must
     // not quietly receive an energy-only result with an unfilled force buffer.
     if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
           return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
@@ -2441,6 +2492,8 @@ class KsPreparedBatch final : public PreparedBatch {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("KS batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
+    std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
+        size(), scf::CoulombExchangeWork::empty());
     std::vector<bool> ready(size(), false);
     std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
     std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
@@ -2497,6 +2550,9 @@ class KsPreparedBatch final : public PreparedBatch {
 
     const auto finish = [&](std::size_t i, scf::ScfResult native) {
       auto& result = results[i];
+      auto& observed = target_coulomb_exchange_work[i];
+      observed.add(native.dft_diagnostic.coulomb_exchange_work);
+      native.dft_diagnostic.coulomb_exchange_work = observed;
       if (preliminary_requested[i] && !native.preliminary_guess.requested_kind)
         native.preliminary_guess = preliminary_diagnostics[i];
       result.calculation = adapt_result(std::move(native), backend_);
@@ -2556,6 +2612,8 @@ class KsPreparedBatch final : public PreparedBatch {
         try {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
+            if (!result.target_fock_work) result.target_fock_work.emplace();
+            result.target_fock_work->begin_attempt();
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
             cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
                         !attempt && !reuse && preliminary_seeds[i]
@@ -2583,6 +2641,9 @@ class KsPreparedBatch final : public PreparedBatch {
           }
           finish(i, std::move(native));
         } catch (...) {
+          target_coulomb_exchange_work[i].complete = false;
+          if (result.calculation.ks_diagnostic)
+            result.calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
           result.status = item_exception_status();
         }
       }
@@ -2608,6 +2669,7 @@ class KsPreparedBatch final : public PreparedBatch {
               throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                                 "CUDA KS physical evaluation failed");
             finish(i, cuda->result(false));
+            results[i].target_fock_work->finish_attempt(cuda->completed_fock_builds());
           } catch (...) {
             results[i].status = item_exception_status();
             running[i] = false;
@@ -2780,6 +2842,16 @@ class KsPreparedBatch final : public PreparedBatch {
                                             KsDerivativeSnapshot& output, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_derivative_state(expected, output, detail);
+    output = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status read_derivative_sources(std::size_t index,
+                                              const dft::CudaKsFinalStateToken& expected,
+                                              KsDerivativeSnapshot& output, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->read_derivative_sources(expected, output, detail);
     output = {};
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -3137,6 +3209,16 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
                                               KsDerivativeSnapshot& output, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->read_derivative_state(index, expected, output, detail);
+  output = {};
+  detail = "prepared batch is not a KS final-state owner";
+  return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+}
+
+generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_t index,
+                                                const dft::CudaKsFinalStateToken& expected,
+                                                KsDerivativeSnapshot& output, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->read_derivative_sources(index, expected, output, detail);
   output = {};
   detail = "prepared batch is not a KS final-state owner";
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

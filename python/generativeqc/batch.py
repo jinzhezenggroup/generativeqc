@@ -74,6 +74,8 @@ class BatchItemResult:
     basis_metadata: dict = field(default_factory=dict)
     accuracy: AccuracyAssessment | None = None
     restart_origin: str = "cold"
+    # Complete target-execution count, including certified discarded attempts;
+    # the KS snapshot below describes only the returned attempt. None is unknown.
     fock_builds: int | None = None
     # None means this item did not complete a solve, or the library predates the query.
     precision: dict | None = None
@@ -415,7 +417,8 @@ class PreparedBatch:
                     prepare(),
                     context=(
                         self._context
-                        if calculator._method
+                        if calculator._capabilities.family == "density_functional"
+                        or calculator._method
                         in (
                             _native.METHOD_MP2,
                             _native.METHOD_UMP2,

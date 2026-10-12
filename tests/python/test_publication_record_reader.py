@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import json
+import lzma
 from pathlib import Path
 
 import pytest
@@ -10,13 +11,15 @@ import pytest
 from tools.generativeqc_validation.record import load_publication_record
 
 
-def bundle(directory: Path, *, packed: bool = False) -> dict:
+def bundle(directory: Path, *, packed: str | None = None) -> dict:
     values = [{"seconds": 0.12345678901234567}, {"seconds": 1e-14}]
     child = json.dumps(values).encode()
     child_name = "parts/water.json"
     if packed:
-        child = gzip.compress(child, mtime=0)
-        child_name += ".gz"
+        child = (
+            gzip.compress(child, mtime=0) if packed == "gz" else lzma.compress(child)
+        )
+        child_name += "." + packed
     record = {
         "record_parts": {
             "timings": [
@@ -31,8 +34,12 @@ def bundle(directory: Path, *, packed: bool = False) -> dict:
     primary = json.dumps(record).encode()
     name = "samples.json"
     if packed:
-        primary = gzip.compress(primary, mtime=0)
-        name += ".gz"
+        primary = (
+            gzip.compress(primary, mtime=0)
+            if packed == "gz"
+            else lzma.compress(primary)
+        )
+        name += "." + packed
     files = []
     for path, data in [(name, primary), (child_name, child)]:
         target = directory / path
@@ -51,9 +58,9 @@ def bundle(directory: Path, *, packed: bool = False) -> dict:
     return manifest
 
 
-@pytest.mark.parametrize("packed", [False, True])
+@pytest.mark.parametrize("packed", [None, "gz", "xz"])
 def test_manifest_selection_preserves_record_values(
-    tmp_path: Path, packed: bool
+    tmp_path: Path, packed: str | None
 ) -> None:
     bundle(tmp_path, packed=packed)
     assert load_publication_record(tmp_path, role="samples", name="samples.json") == {
@@ -64,16 +71,17 @@ def test_manifest_selection_preserves_record_values(
 
 
 @pytest.mark.parametrize("fault", ["duplicate", "bytes", "sha256", "missing", "path"])
+@pytest.mark.parametrize("packed", [None, "gz", "xz"])
 def test_invalid_inventory_fails_before_reading_record(
-    tmp_path: Path, fault: str
+    tmp_path: Path, fault: str, packed: str | None
 ) -> None:
-    manifest = bundle(tmp_path)
+    manifest = bundle(tmp_path, packed=packed)
     if fault == "duplicate":
         manifest["files"].append(dict(manifest["files"][0]))
     elif fault in {"bytes", "sha256"}:
         manifest["files"][1][fault] = 0 if fault == "bytes" else "0" * 64
     elif fault == "missing":
-        (tmp_path / "parts/water.json").unlink()
+        (tmp_path / manifest["files"][1]["path"]).unlink()
     else:
         manifest["files"][1]["path"] = "../outside.json"
     (tmp_path / "publication.json").write_text(json.dumps(manifest))
@@ -123,7 +131,7 @@ def test_logical_part_keys_stay_posix_on_windows(
 
     from tools.generativeqc_validation import record
 
-    bundle(tmp_path, packed=True)
+    bundle(tmp_path, packed="gz")
     native_path = Path
 
     def windows_relative_path(value: str | Path) -> Path | PureWindowsPath:

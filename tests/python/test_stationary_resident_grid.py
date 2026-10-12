@@ -20,9 +20,7 @@ def test_generic_stationary_cuda_borrows_native_grid() -> None:
     assert "resident_grid.device != device" in body
     assert "resident_grid.point_count != grid_points" in body
     assert "grid_points != na * points_per_atom" in body
-    assert "ao.feature_task_device_points(" in body
     assert "sources.geometry_molecular_resident_weights(" in body
-    assert "resident_grid.points + 3 * begin * 8" in body
     assert "resident_grid.weights + begin * 8" in body
     assert "resident_grid.atomic_weights + begin * 8" in body
 

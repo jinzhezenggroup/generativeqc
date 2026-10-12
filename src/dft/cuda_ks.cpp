@@ -24,6 +24,7 @@
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/compiled_execution_region.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -324,6 +325,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::uint64_t phase_submitted_begin{};
   std::size_t phase_device_bytes{}, phase_host_bytes{};
 
+  /** A successful SCF closes captured iteration borrowers, not immutable ERIs.
+   * The final-state token still owns D/W/XC and the primary derivative source;
+   * post-SCF value consumers can reuse this independently audited value lease. */
+  void audit_phase_source() {
+    if (!phase_source || !phase_source->active()) return;
+    device_chunk_region.invalidate();
+    solver_region_executor.invalidate();
+    const auto actions = movement.submitted_iterations - phase_submitted_begin;
+    check(phase_source->audit(), "CUDA KS phase source finite/census audit failed");
+    movement.phase_resident_fock_actions += actions;
+    phase_source->observe_completed(actions);
+    phase_submitted_begin = movement.submitted_iterations;
+  }
+
   void retire_phase_source(bool audit) {
     if (!phase_source) return;
     auto retired = std::move(phase_source);
@@ -355,9 +370,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto& strategy = provider.strategy();
     // Public ledgers have no reserved quartic allowance yet. A forced request
     // must not bypass their complete resource plan or alter precision/ranges.
-    if (spins != 1 || !has_exchange || fitted_coulomb || fitted_exchange || has_range_correction ||
-        nonlocal_correlation || incremental_direct_jk || precision_schedule.any_lower_precision() ||
-        runtime::active_device_resource_ledger ||
+    if (fitted_coulomb || fitted_exchange || has_range_correction || incremental_direct_jk ||
+        precision_schedule.any_lower_precision() || runtime::active_device_resource_ledger ||
         strategy.spec.coulomb.op != scf::FockOperator::FullRange ||
         strategy.spec.exchange.op != scf::FockOperator::FullRange)
       return;
@@ -367,6 +381,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
     constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;
+    const auto buckets = direct_jk_resident_bucket_policy(
+        std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
+        std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),
+        direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
+    if (!buckets.valid)
+      throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
     const auto generic_fock =
         maximum_angular == 3 &&
         scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec);
@@ -394,14 +414,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     required = sum(required, runtime::vector_capacities(basis.packed, grid.points(), grid.weights(),
                                                         grid.owners()));
     phase_source = std::make_unique<DirectJkSourceLease>(stream);
-    check(phase_source->prepare(
-              device, {system}, options.max_iterations, direct_nbf, required,
-              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
-                                                    : std::numeric_limits<std::size_t>::max(),
-              selection, "cuda_ks_resident_values_prepare", cold, generic_fock,
-              strategy.screening_tolerance,
-              direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,
-              auto_policy),
+    check(phase_source->prepare(device, {system}, options.max_iterations, direct_nbf, required,
+                                options.reference_memory_budget_bytes
+                                    ? options.reference_memory_budget_bytes
+                                    : std::numeric_limits<std::size_t>::max(),
+                                selection, "cuda_ks_resident_values_prepare", cold, generic_fock,
+                                strategy.screening_tolerance, buckets.ceiling, false, auto_policy,
+                                buckets.mask, spins),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -426,10 +445,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   generativeqc_status enqueue_primary_jk(const double* alpha, const double* beta, bool mixed,
-                                         std::string& detail) {
-    if (phase_source && phase_source->active())
-      return phase_source->enqueue(provider.strategy().spec, alpha, j, exchange, jk_error,
-                                   provider.strategy().screening_tolerance, detail);
+                                         std::string& detail, bool use_source = true) {
+    runtime::cuda_trace::TraceOperation trace(
+        has_exchange ? "cuda_ks_exact_jk_shared" : "cuda_ks_exact_j", stream,
+        {1, n, 0, use_source && phase_source && phase_source->active(), false});
+    if (use_source && phase_source && phase_source->active())
+      return phase_source->enqueue(provider.strategy().spec, alpha, j,
+                                   has_exchange ? exchange : nullptr, jk_error,
+                                   provider.strategy().screening_tolerance, detail, beta,
+                                   has_exchange && spins == 2 ? exchange + matrix : nullptr);
     return scf::enqueue_prepared_cuda_fock(provider, alpha, beta, matrix, j, exchange,
                                            has_exchange && spins == 2 ? exchange + matrix : nullptr,
                                            jk_error, mixed, detail,
@@ -1179,7 +1203,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           // explicitly accounts for optional panels across those lifetimes.
           xc->prepare_point_batches(point_batch_tiles,
                                     runtime::active_device_resource_ledger ? 0 : point_batch_budget,
-                                    point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0);
+                                    point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0,
+                                    point_batch_size("GENERATIVEQC_CUDA_XC_RAGGED_BATCH", 1) != 0);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }
@@ -1689,7 +1714,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const bool active = device_chunk_mode ? finish_device() : finish_legacy();
       if (!active) {
         auditing_phase = !is_failed && phase_source && phase_source->active();
-        retire_phase_source(!is_failed);
+        if (is_failed || !output.converged)
+          retire_phase_source(false);
+        else
+          audit_phase_source();
         if (auditing_phase && output.converged && warm_updates) rebase_warm_energy();
         auditing_phase = false;
       }
@@ -1728,7 +1756,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void rebase_warm_energy() {
     runtime::df_progress::Scope trace("cuda_ks_warm_energy_rebase", "cuda_device");
     std::string status_detail;
-    check(enqueue_primary_jk(density, nullptr, false, status_detail), status_detail);
+    // Warm replay retires optional values before selecting a new source. Its
+    // baseline must therefore use the incumbent without destroying the final
+    // solve's value lease or changing the returned physical F[D]/XC frame.
+    check(enqueue_primary_jk(density, spins == 2 ? density + matrix : nullptr, false, status_detail,
+                             false),
+          status_detail);
     ++movement.warm_energy_rebase_fock_actions;
     ++output.fock_builds;
     ++output.precision.post_scf_fock_builds;
@@ -1739,8 +1772,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (const auto kind :
          {scf::PrecisionOperatorKind::CoulombJ, scf::PrecisionOperatorKind::ExchangeK,
           scf::PrecisionOperatorKind::Diagnostics})
-      record_precision_operator(kind, scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict);
+      if (kind != scf::PrecisionOperatorKind::ExchangeK || has_exchange)
+        record_precision_operator(kind, scf::PrecisionDtype::Fp64,
+                                  scf::PrecisionArithmeticMode::Strict);
     const auto potential =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused
             ? xc->view(generation)
@@ -1817,6 +1851,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   CudaXcView stage_xc(std::uint64_t next_generation,
                       generativeqc::runtime::PrecisionPhase phase =
                           generativeqc::runtime::PrecisionPhase::StrictAudit) {
+    runtime::cuda_trace::TraceOperation trace("cuda_ks_xc_shared", stream, {1, n, 0, false, false});
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
       if (!device_nonlocal) {
@@ -2480,14 +2515,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
-    const bool direct_pbe0 =
-        pbe0_rks_final_validation_composition(
-            is_semilocal_family(functional, SemilocalFamily::Pbe), exchange_coefficient,
-            options.semilocal_exchange_scale, options.semilocal_correlation_scale) &&
-        has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction &&
-        !nonlocal_correlation;
+    // The final-state product proof is shared by every prepared full-range
+    // global hybrid; the semilocal XC family does not change its matrix algebra.
+    const auto& final_spec = provider.strategy().spec;
+    const bool direct_global_hybrid =
+        has_exchange && restricted_global_hybrid_exchange_coefficient(exchange_coefficient) &&
+        !fitted_coulomb && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
+        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        final_spec.derivative_order == 0 && final_spec.coulomb.present &&
+        final_spec.coulomb.coefficient == 1.0 &&
+        final_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        final_spec.coulomb.op == scf::FockOperator::FullRange && final_spec.exchange.present &&
+        final_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        final_spec.exchange.op == scf::FockOperator::FullRange;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_pbe0, !precision_schedule.any_lower_precision());
+        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision());
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&
@@ -2722,6 +2766,22 @@ scf::ScfResult CudaKsPlan::result(bool export_density) {
         impl_->xc->transfers().evaluations - impl_->initial_xc_evaluations;
   if (export_density) result.density = impl_->download(impl_->density);
   return result;
+}
+std::optional<std::uint64_t> CudaKsPlan::completed_fock_builds() const noexcept {
+  if (!impl_->started || impl_->is_active || impl_->is_pending || impl_->is_failed ||
+      !impl_->complete_precision_inventory_domain())
+    return std::nullopt;
+  const auto& work = impl_->output.precision_work;
+  const auto recorded =
+      std::count_if(work.events.begin(), work.events.end(), [](const auto& event) {
+        return event.kind == scf::PrecisionWorkEventKind::MixedFock ||
+               event.kind == scf::PrecisionWorkEventKind::StrictFock ||
+               event.kind == scf::PrecisionWorkEventKind::PostScfFock;
+      });
+  // A terminal nonconverged attempt has no FinalAudit. Its physical build
+  // ledger must nevertheless cover every build; audit flags stay unchanged.
+  if (static_cast<std::uint64_t>(recorded) != impl_->output.fock_builds) return std::nullopt;
+  return impl_->output.fock_builds;
 }
 scf::ScfResult CudaKsPlan::run(const std::vector<double>* seed, bool reuse_warm,
                                bool export_density, CudaKsSeedOrigin seed_origin) {
@@ -2966,7 +3026,20 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
       spec.exchange.present = want_k && strategy.spec.exchange.present;
       if (!spec.coulomb.present && !spec.exchange.present) return;
 
-      if (auto* direct = impl_->provider.cuda_direct_source()) {
+      if (impl_->phase_source && impl_->phase_source->active()) {
+        profile.milliseconds[slot] = timed([&] {
+          check(impl_->phase_source->enqueue(
+                    spec, impl_->density, spec.coulomb.present ? impl_->j : nullptr,
+                    spec.exchange.present ? impl_->exchange : nullptr, impl_->jk_error,
+                    impl_->provider.strategy().screening_tolerance, detail, beta,
+                    spec.exchange.present && impl_->spins == 2 ? impl_->exchange + impl_->matrix
+                                                               : nullptr),
+                detail);
+        });
+        check(impl_->phase_source->audit(), "fixed-density resident J/K audit failed");
+        impl_->phase_source->observe_completed(1);
+        read_error(impl_->jk_error, want_j ? "fixed-density J" : "fixed-density K");
+      } else if (auto* direct = impl_->provider.cuda_direct_source()) {
         profile.milliseconds[slot] = timed([&] {
           check(scf::enqueue_cuda_direct_jk_device(
                     direct, spec, impl_->density, beta, impl_->matrix,

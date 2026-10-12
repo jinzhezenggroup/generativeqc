@@ -21,7 +21,7 @@ JOB = WORKFLOW.split("\n  master-cache-cleanup:\n", 1)[1].split(
 # Stop at the end of the job's script, excluding comments for the next job.
 SCRIPT = textwrap.dedent(JOB.split("        run: |\n", 1)[1].split("\n  #", 1)[0])
 PREFIX = "/repos/owner/repo/actions"
-NAME = "cuda-ccache-master-12.9-sm120-v2"
+NAME = "cuda-ccache-master-12.9-sm120-v3"
 pytestmark = pytest.mark.skipif(
     not all(shutil.which(command) for command in ("bash", "jq")),
     reason="requires the workflow's host shell tools",
@@ -45,7 +45,7 @@ if response is None:
     sys.exit(23)
 if endpoint.endswith('/artifacts'):
     assert '--paginate' in args and '--slurp' in args
-    assert 'name=cuda-ccache-master-12.9-sm120-v2' in args
+    assert 'name=cuda-ccache-master-12.9-sm120-v3' in args
 print(json.dumps(response))
 """
 
@@ -116,10 +116,10 @@ def _deleted(calls: list[list]) -> list[int]:
 
 
 def test_cleanup_only_runs_after_successful_master_compile_and_is_non_gating() -> None:
-    assert "needs: cuda-compile" in JOB
+    assert "needs: native-cli-artifact" in JOB
     assert (
         "if: github.event_name == 'push' && github.ref == 'refs/heads/master' "
-        "&& needs.cuda-compile.result == 'success'" in JOB
+        "&& needs.native-cli-artifact.result == 'success'" in JOB
     )
     assert "continue-on-error: true" in JOB
     assert "actions: write" in JOB

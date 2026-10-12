@@ -281,19 +281,28 @@ void check() {
     require((calls == 1) == (seed != nullptr), "core retry retained candidate seed");
     auto r = baseline;
     r.converged = calls == 2;
+    r.dft_diagnostic.coulomb_exchange_work = {true, calls, 0};
     return r;
   });
   require(calls == 2 && retried.converged && retried.preliminary_guess.target_attempts == 2 &&
               retried.preliminary_guess.outcome == PreliminaryOutcome::TargetRetried &&
               retried.preliminary_guess.discarded_target_iterations == baseline.iterations,
           "nonconvergence retry was not bounded/counted");
+  require(retried.dft_diagnostic.coulomb_exchange_work.complete &&
+              retried.dft_diagnostic.coulomb_exchange_work.coulomb_applications == 3 &&
+              retried.dft_diagnostic.coulomb_exchange_work.exchange_applications == 0,
+          "discarded target provider work was lost");
   calls = 0;
   retried = run_with_preliminary_guess(plan, controls, nullptr, 0, [&](const auto*) {
     if (++calls == 1) throw std::runtime_error("synthetic numerical failure");
-    return baseline;
+    auto returned = baseline;
+    returned.dft_diagnostic.coulomb_exchange_work = {true, 2, 0};
+    return returned;
   });
   require(calls == 2 && !retried.preliminary_guess.work_counters_complete,
           "exception census was certified");
+  require(!retried.dft_diagnostic.coulomb_exchange_work.complete,
+          "cold retry repaired missing discarded target provider work");
   calls = 0;
   try {
     (void)run_with_preliminary_guess(plan, controls, nullptr, 0,

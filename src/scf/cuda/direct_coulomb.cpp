@@ -736,16 +736,24 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources, bool allow_spatial_default) {
+    bool separate_sources, bool allow_spatial_default, bool bilinear) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
     return cudaErrorInvalidValue;
-  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (bilinear && (unrestricted || separate_sources || p.shared->batch.batch_size != 1 ||
+                   p.shared->screening != 0.0 || beta == nullptr))
+    return cudaErrorInvalidValue;
+  // The two existing projection slots carry D and P, not spin densities.
+  // Density screening is disabled: spin bounds do not bound a signed cross term.
+  auto error = prepare_generated_exchange_density(p, unrestricted || bilinear, alpha, beta);
   if (error != cudaSuccess) return error;
 
   auto& shared = *p.shared;
-  const auto b = shared.batch;
+  auto b = shared.batch;
+  if (bilinear)
+    b.direct_force_seed = p.direct_spin + product(static_cast<std::size_t>(b.direct_nbf),
+                                                  static_cast<std::size_t>(b.direct_nbf));
   runtime::cuda_trace::TraceOperation trace(
       "direct_jk_force", shared.stream,
       {static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.nbf), 0, true, true});

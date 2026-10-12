@@ -51,5 +51,10 @@
     "commit": "1ac537e67b60b4e0e733de42783d4d5f755e3f5e",
     "base": "8504566587a58613e408c40d55d19509469e03f1",
     "scope": "Published MP2 common/header/native probe bytes unchanged. The broader production inventory changed; historical loaded-library identities and endpoint receipts qualify the original measured snapshots, not the integrated build. Latest-head build and endpoint qualification must be assessed separately."
+  },
+  "latest_integration": {
+    "upstream_commit": "61a0e715fde35566722870389af8e137036232db",
+    "production_source_identity": "97278d8cb40b46b29f547d0e38d0e32d49a6da11a9451a5c36ce9e47e6dabe1d",
+    "scope": "The common/header/native probe and published tests remain byte-identical. The full production inventory changed; prior endpoint bundles retain original source/library identities. Resolved six-site materialization bindings and aggregate retention were verified; current-source Linux native/PySCF and installed-library qualification remain pending required CI/independent acceptance."
   }
 }

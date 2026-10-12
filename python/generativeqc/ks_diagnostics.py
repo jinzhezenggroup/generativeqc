@@ -6,6 +6,10 @@ import typing
 from dataclasses import asdict, dataclass
 
 from generativeqc_compiler.xc._generated_native_semilocal import SCF_DOMAIN_BY_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 
 from . import _native
@@ -56,6 +60,8 @@ class KsDiagnostic:
     the other. Electron counts use the AO overlap metric, not quadrature.
     A warm retry reports its final attempt; this is not a total-work counter
     for discarded attempts. Execution and transport profiling are separate.
+    The optional coulomb_exchange_work is a narrow, observed target-execution
+    census including discarded attempts; it does not certify full precision.
     """
 
     occupations: tuple[int, int]
@@ -70,6 +76,7 @@ class KsDiagnostic:
     density_change_max: float
     physical_residual_max: float
     history: tuple[KsIteration, ...]
+    coulomb_exchange_work: dict[str, typing.Any] | None = None
 
     def to_payload(self) -> typing.Any:
         """Copy every iteration; known unavailable stage baselines are null.
@@ -107,6 +114,36 @@ def _components(value: typing.Any) -> typing.Any:
     )
 
 
+def _coulomb_exchange_work(
+    library: typing.Any, handle: typing.Any, index: typing.Any
+) -> dict[str, typing.Any] | None:
+    name = (
+        "generativeqc_calculation_get_ks_coulomb_exchange_work_v1"
+        if index is None
+        else "generativeqc_batch_get_ks_coulomb_exchange_work_v1"
+    )
+    query = getattr(library, name, None)
+    if query is None:
+        return None
+    record = _native.KsCoulombExchangeWorkDescriptor(
+        ctypes.sizeof(_native.KsCoulombExchangeWorkDescriptor), _native.ABI_VERSION
+    )
+    prefix = (handle,) if index is None else (handle, index)
+    status = query(*prefix, ctypes.byref(record))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    return {
+        "complete": bool(record.complete),
+        "coulomb_applications": record.coulomb_applications
+        if record.complete
+        else None,
+        "exchange_applications": record.exchange_applications
+        if record.complete
+        else None,
+    }
+
+
 def read_ks_diagnostic(
     library: typing.Any,
     handle: typing.Any,
@@ -134,7 +171,11 @@ def read_ks_diagnostic(
         return None
     _native.check(library, status)
     # Domain IDs identify numerical policies, independently of method aliases.
-    if expected_domain == AUTOMATIC_SCF_DOMAIN:
+    if expected_domain == DENSITY_WORK_DOMAIN:
+        if summary.scf_domain_version != DENSITY_WORK_DOMAIN_VERSION:
+            raise RuntimeError("native density-work Libxc diagnostic domain mismatch")
+        domain = DENSITY_WORK_DOMAIN
+    elif expected_domain == AUTOMATIC_SCF_DOMAIN:
         if summary.scf_domain_version != LIBXC_WORK_DOMAIN_VERSION:
             raise RuntimeError("native automatic Libxc diagnostic domain mismatch")
         domain = AUTOMATIC_SCF_DOMAIN
@@ -182,6 +223,7 @@ def read_ks_diagnostic(
         density_change_max=summary.density_change_max,
         physical_residual_max=summary.physical_residual_max,
         history=tuple(rows),
+        coulomb_exchange_work=_coulomb_exchange_work(library, handle, index),
     )
 
 

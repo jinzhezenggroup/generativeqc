@@ -198,6 +198,51 @@ nuclear gradients. Energy-only calls are allowed for energy-capable methods;
 The initial public method-neutral source remains host-staged FP64 and first
 order; higher-order implicit/response gradients are not inferred.
 
+### User-composed XC methods inside Array API
+
+A user may combine **already audited** XC components through the public
+`generativeqc.extensions` builders, then pass their canonical `MethodIR`
+directly to `xp.MolecularModel`. This uses the existing native SCF and,
+**only when qualified**, its analytic force. Explicit `KsOptions` may select
+the grid and tile schedule, but cannot replace the method's XC composition.
+
+```python
+from generativeqc import GridSpec, KsOptions
+from generativeqc.extensions import method, xc
+from generativeqc.experimental import array_api as xp
+
+functional = xc.compose(
+    "my-pbe50",
+    {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
+    exact_exchange="1/2",
+)
+method_ir = method.compose("my-pbe50", xc=functional)
+model = xp.MolecularModel(
+    ("H", "H"), method=method_ir, basis="sto-3g", backend="cpu",
+    ks_options=KsOptions(grid=GridSpec()),
+)
+coordinates = xp.asarray(
+    [[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]], dtype=xp.float64,
+)
+compiled = xp.compile(lambda positions: model(positions), backend="cpu")
+try:
+    energy = compiled(coordinates)
+finally:
+    compiled.close()
+```
+
+The MethodIR identity, not the custom label, determines source deduplication;
+grid/scheduling options are also included in the immutable source identity.
+The source passes the original MethodIR to `Calculator`; it does not
+reconstruct the science from the label. Unsupported methods, device routes
+and missing analytic-force support fail through the native capability gate,
+not through a silent fallback. For methods with qualified analytic forces,
+`xp.value_and_grad` reuses the existing first-order native-source AD path.
+
+This does **not** allow an arbitrary new formula in \(\rho,\sigma,\tau\)
+to run self-consistently. That separate compiler/SCF work is tracked in
+[XC expression-to-SCF #2330](https://github.com/jinzhezenggroup/generativeqc/issues/2330).
+
 ### Diagnose small-endpoint overhead
 
 The opt-in environment switch

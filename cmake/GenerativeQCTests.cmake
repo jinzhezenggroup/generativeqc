@@ -62,6 +62,12 @@ endfunction()
 
 macro(generativeqc_add_native_tests)
   enable_testing()
+  # Algorithmic tests need no CUDA, native solver, Python, or external oracle.
+  generativeqc_native_test(generativeqc_geometry_optimizer_tests
+                       tests/native/test_geometry_optimizer.cpp
+                       NO_GENERATIVEQC NO_SRC_INCLUDE)
+  target_include_directories(generativeqc_geometry_optimizer_tests PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/include")
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
                        tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)
@@ -137,6 +143,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_fock_provider_tests tests/native/test_fock_provider.cpp)
   generativeqc_native_test(generativeqc_fock_api_tests tests/native/test_fock_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_native_tests tests/native/test_rhf.cpp)
+  generativeqc_native_test(generativeqc_mean_field_options_tests
+                       tests/native/test_mean_field_options.cpp)
 
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_final_state_tests tests/native/test_final_state.cpp)
@@ -160,6 +168,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_low_rank_preconditioner_tests tests/native/test_low_rank_preconditioner.cpp)
     generativeqc_native_test(generativeqc_rhf_frame_recycle_tests tests/native/test_rhf_frame_recycle.cpp)
     generativeqc_native_test(generativeqc_cc_lambda_preconditioner_tests tests/native/test_cc_lambda_preconditioner.cpp)
+    generativeqc_native_test(generativeqc_cc_resident_endpoint_tests tests/native/test_cc_resident_endpoint.cpp)
     generativeqc_native_test(generativeqc_triples_fock_response_tests tests/native/test_triples_fock_response.cpp)
     generativeqc_native_test(generativeqc_mp2_gradient_tests tests/native/test_mp2_gradient.cpp)
     generativeqc_native_test(generativeqc_posthf_rank2_tests tests/native/test_posthf_rank2_transform.cpp)
@@ -203,6 +212,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
+  generativeqc_native_test(generativeqc_prepared_lifecycle_tests tests/native/test_prepared_lifecycle.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)
   generativeqc_native_test(generativeqc_cpu_compensated_sum_tests
                      tests/native/test_cpu_compensated_sum.cpp NO_GENERATIVEQC)
@@ -391,6 +401,8 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
     add_test(NAME generativeqc_dft_cuda_point_batch_tests COMMAND generativeqc_dft_cuda_tests --point-batches)
     set_tests_properties(generativeqc_dft_cuda_point_batch_tests PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME generativeqc_dft_cuda_ragged_batch_tests COMMAND generativeqc_dft_cuda_tests --ragged-batches)
+    set_tests_properties(generativeqc_dft_cuda_ragged_batch_tests PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME generativeqc_dft_cuda_matrix_tests COMMAND generativeqc_dft_cuda_tests --matrix-schedule)
     add_test(NAME generativeqc_dft_cuda_potential_lowering_tests COMMAND generativeqc_dft_cuda_tests --potential-lowering)
     set_tests_properties(generativeqc_dft_cuda_potential_lowering_tests PROPERTIES SKIP_RETURN_CODE 77)
@@ -461,8 +473,17 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_dft_integral_sources_tests
                        tests/native/test_dft_integral_sources.cpp)
+  generativeqc_native_test(generativeqc_ks_host_resource_tests
+                       tests/native/test_ks_host_resources.cpp)
+  generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
+                       tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
+  generativeqc_native_test(generativeqc_dft_restricted_point_tests
+                       tests/native/test_dft_restricted_point.cpp)
+  add_dependencies(generativeqc_dft_restricted_point_tests generativeqc_libxc_semilocal_cpu_codegen)
+  target_include_directories(generativeqc_dft_restricted_point_tests PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/libxc_semilocal_cpu")
   generativeqc_native_test(generativeqc_uks_tests tests/native/test_uks.cpp)
   if(NOT WIN32)
     generativeqc_native_test(generativeqc_wb97mv_scf_tests tests/native/test_wb97mv_scf.cpp)

@@ -66,6 +66,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
       response.df_mixed_precision_warmup_tolerance = std::numeric_limits<double>::quiet_NaN();
       response.df_mixed_precision_max_iterations = 0;
     }
+    response.cuda_resident_krylov = mode & 65536;
     response.df_audit_matrix_gemm = !(mode & 128);
     if (!(mode & 2048)) {
       response.df_primal_matrix_gemm = mode & 1024;
@@ -139,7 +140,18 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              d.df_fp32_gemm_summands,
                              d.df_precision_cast_elements,
                              d.df_mixed_iterations,
-                             d.df_strict_iterations};
+                             d.df_strict_iterations,
+                             std::size_t(d.resident_krylov),
+                             std::size_t(d.resident_krylov_refused),
+                             d.resident_krylov_bytes,
+                             d.resident_device_admission_bytes,
+                             d.resident_provider_allowance_bytes,
+                             d.resident_provider_observed_bytes,
+                             std::size_t(d.resident_provider_version),
+                             std::size_t(d.resident_runtime_version),
+                             d.krylov_h2d_bytes,
+                             d.krylov_d2h_bytes,
+                             d.krylov_synchronizations};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

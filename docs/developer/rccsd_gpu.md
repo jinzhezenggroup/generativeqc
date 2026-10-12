@@ -205,11 +205,14 @@ last finite device amplitudes are retained separately and downloaded only for a
 failure/result record. `diis_size=0` is supported as resident Jacobi rather than
 a backend switch.
 
-### Incoming-residual mixing for CUDA DF energies
+### Incoming-residual mixing for CUDA DF energies and forces
 
-The native CUDA DF energy owner selects `SolverOptions::diis_input_residual`;
-the option defaults to false for supplied problems, CPU, conventional and
-force/Lambda/response owners. With this option, history stores `(G(T), R(T))`,
+The native CUDA DF amplitude owner selects `SolverOptions::diis_input_residual`
+for both energy calls and the forward CCSD solve of complete analytic-force
+calls. The option defaults to false for supplied problems, CPU and conventional
+owners. Lambda keeps its existing solver and independent response audits;
+this policy does not differentiate the iteration history or change the
+Lagrangian. With this option, history stores `(G(T), R(T))`,
 where `G(T)` is the damped Jacobi map and `R(T)` is the incoming unshifted
 physical residual. Minimizing combinations of these residuals and combining
 the outgoing maps implements diagonally weighted Anderson fixed-point mixing:
@@ -225,6 +228,9 @@ No precision, equation, history storage, resource admission or CPU-oracle work
 is introduced; `diis_size=0` retains the same Jacobi-only path. The legacy
 trial-residual path remains available through the internal option.
 
+See the [force-consumer decision](../../.agents/notes/implemented/numerics/2026-10-11-df-cc-force-input-residual.md)
+for the retained independent force gates and scoped endpoint evidence.
+
 ### Distinct occupied moments for DF triples energies
 
 The native DF `(T)` energy owner automatically reuses equal physical occupied W
@@ -238,8 +244,8 @@ SolverOptions; it adds no public option.
 ### Bounded batches for independent physical replay
 
 `SolverOptions::df_replay_auxiliary_batch` defaults to false for internal
-callers. Native CUDA DF energy owners without retained response request up to
-16 auxiliary lanes for the final expanded virtual graph. This is an independent
+callers. Native CUDA DF energy and analytic-force owners request up to 16
+auxiliary lanes for the final expanded virtual graph. This is an independent
 lowering of the original equations: it consumes the final amplitudes and every
 original factor, not the hoisted primal's intermediates or cached residuals.
 The expanded core remains fresh and unchanged.
@@ -250,9 +256,10 @@ host descriptors enter complete numeric capacity. Budget, dimension or optional
 binding refusal retains the original one-Q replay, without displacing an
 existing provider or primal tile. Each accumulator lane visits Q in order and
 checks every addition for finiteness, rather than forming tile subtotals that
-could hide overflow. Ordinary iteration fallback and CPU, conventional,
-force/Lambda/response defaults remain unbatched. Work counters include the
-actual batched graph, packing and fused ordered accumulation.
+could hide overflow. Ordinary iteration fallback and CPU, conventional and
+standalone supplied-problem defaults remain unbatched. This selector does not
+change Lambda, orbital-response equations or their independent audits. Work
+counters include the actual batched graph, packing and fused ordered accumulation.
 
 The internal energy facade accepts `backend="cuda-resident"`. It remains
 energy-only. Slice C now additionally exposes the production native owner through

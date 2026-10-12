@@ -2,62 +2,48 @@
 
 from __future__ import annotations
 
-import ast
-import builtins
 import ctypes as ct
 import typing
-from pathlib import Path
-from types import CodeType, FunctionType, SimpleNamespace
+from types import SimpleNamespace
 
-import numpy as np
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def _constructor() -> CodeType:
-    path = ROOT / "python/generativeqc/_ks_snapshot.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    owner = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "NativeKsSnapshot"
-    )
-    init = next(
-        node
-        for node in owner.body
-        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
-    )
-    module = compile(ast.Module(body=[init], type_ignores=[]), str(path), "exec")
-    return next(
-        value
-        for value in module.co_consts
-        if isinstance(value, CodeType) and value.co_name == "__init__"
-    )
+from generativeqc import _ks_snapshot as runtime
+from generativeqc_compiler.xc.density_work import DENSITY_WORK_DOMAIN
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 
 
 @pytest.mark.parametrize(
-    ("code", "wire_version", "work_version", "accepted"),
+    ("code", "wire_version", "work_version", "automatic_domain", "accepted"),
     [
-        (0x30001, 4, 4, True),
-        (0x30001, 3, 4, False),
-        (0x30001, 7, 7, True),
-        (0x30001, 4, 7, False),
-        (0, 1, 7, True),
-        (1, 1, 7, True),
-        (2, 1, 7, True),
-        (3, 2, 7, True),
-        (4, 3, 7, True),
-        (0x10001, 4, 7, True),
-        (0x10001, 7, 7, False),
-        (99, 1, 7, False),
+        (0x30001, 4, 4, LIBXC_WORK_DOMAIN, True),
+        (0x30001, 3, 4, LIBXC_WORK_DOMAIN, False),
+        (0x30001, 7, 7, LIBXC_WORK_DOMAIN, True),
+        (0x30001, 4, 7, LIBXC_WORK_DOMAIN, False),
+        (0x30001, 5, 4, DENSITY_WORK_DOMAIN, True),
+        (0x30001, 4, 4, DENSITY_WORK_DOMAIN, False),
+        (0x30001, 5, 4, LIBXC_WORK_DOMAIN, False),
+        (0x30001, 5, 4, "unregistered-domain", False),
+        (0, 1, 7, None, True),
+        (1, 1, 7, None, True),
+        (2, 1, 7, None, True),
+        (3, 2, 7, None, True),
+        (4, 3, 7, None, True),
+        (0x10001, 4, 7, None, True),
+        (0x10001, 7, 7, None, False),
+        (99, 1, 7, None, False),
     ],
 )
 def test_snapshot_domain_is_shared_and_rejects_mismatch(
-    code: int, wire_version: int, work_version: int, accepted: bool
+    code: int,
+    wire_version: int,
+    work_version: int,
+    automatic_domain: str | None,
+    accepted: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     copied: list[int] = []
     destroyed: list[int] = []
+    method_ir = object()
 
     def create(
         batch: typing.Any,
@@ -89,33 +75,35 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         generativeqc_ks_snapshot_destroy_v1=destroy,
     )
 
+    class Options:
+        @property
+        def method_ir(self) -> object:
+            return method_ir
+
+        @property
+        def scf_domain(self) -> str:
+            return domain()
+
     class Batch:
         system_count = 1
         _batch = None
         _context = None
         _calculator = SimpleNamespace(
-            _method_name="test-selector", _density_fitting_mode=0
+            _method_name="irrelevant-display-name",
+            _density_fitting_mode=0,
+            ks_options=Options(),
         )
         _library = library
 
         def _ensure_open(self) -> None:
             pass
 
-    class Snapshot:
-        _handle: int
-        _library: typing.Any
-        backend: str
-
-        def close(self) -> None:
-            if self._handle:
-                self._library.generativeqc_ks_snapshot_destroy_v1(self._handle)
-                self._handle = 0
-
     def check(library: typing.Any, status: int, **kwargs: typing.Any) -> None:
         assert status == 0
 
-    def domain(method: str) -> str:
-        assert code < 0x30000, "automatic selectors must use their producer version"
+    def domain() -> str:
+        if automatic_domain is not None:
+            return automatic_domain
         return {
             0: "curated-1",
             1: "curated-1",
@@ -125,46 +113,33 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
             0x10001: "split-hybrid",
         }.get(code, "unregistered-domain")
 
-    namespace = {
-        "__builtins__": builtins.__dict__,
-        "ct": ct,
-        "typing": typing,
-        "np": np,
-        "PreparedBatch": Batch,
-        "_native": SimpleNamespace(check=check, DENSITY_FITTING_NONE=0),
-        "native_xc_functional_code": lambda method: code,
-        "scf_domain_for_method": domain,
-        "SPLIT_HYBRID_SCF_DOMAIN": "split-hybrid",
-        "_SCF_DOMAIN_VERSION_BY_DOMAIN": {
+    def native_code(semantic_method: object) -> int:
+        assert semantic_method is method_ir
+        return code
+
+    monkeypatch.setattr(runtime, "PreparedBatch", Batch)
+    monkeypatch.setattr(runtime._native, "check", check)
+    monkeypatch.setattr(runtime, "_native_semilocal_code", native_code)
+    monkeypatch.setattr(runtime, "SPLIT_HYBRID_SCF_DOMAIN", "split-hybrid")
+    monkeypatch.setattr(
+        runtime,
+        "_SCF_DOMAIN_VERSION_BY_DOMAIN",
+        {
             "curated-1": 1,
             "curated-2": 2,
             "curated-3": 3,
         },
-        "AUTOMATIC_FUNCTIONAL_CODE_BASE": 0x30000,
-        "LIBXC_WORK_DOMAIN_VERSION": work_version,
-        "immutable": lambda value: value,
-    }
-    initialize = FunctionType(_constructor(), namespace)
-    snapshot = Snapshot()
+    )
+    monkeypatch.setattr(runtime, "LIBXC_WORK_DOMAIN_VERSION", work_version)
+    snapshot = object.__new__(runtime.NativeKsSnapshot)
     if accepted:
-        initialize(snapshot, Batch(), 0)
+        snapshot.__init__(Batch(), 0)
         assert snapshot.backend == "cpu"
         assert copied == [42] and destroyed == []
         snapshot.close()
         assert destroyed == [42]
     else:
         with pytest.raises(NotImplementedError, match="snapshot/domain version"):
-            initialize(snapshot, Batch(), 0)
+            snapshot.__init__(Batch(), 0)
         assert copied == [] and destroyed == [42]
         assert snapshot._handle == 0
-
-
-def test_snapshot_imports_the_producer_work_domain_version() -> None:
-    path = ROOT / "python/generativeqc/_ks_snapshot.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    assert any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "generativeqc_compiler.xc.libxc_work"
-        and any(alias.name == "LIBXC_WORK_DOMAIN_VERSION" for alias in node.names)
-        for node in tree.body
-    )

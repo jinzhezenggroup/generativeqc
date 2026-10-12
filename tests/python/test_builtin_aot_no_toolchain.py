@@ -7,8 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
-def test_builtin_rhf_runs_without_toolchain_activation(tmp_path: Path) -> None:
+
+@pytest.mark.parametrize("method", ("rhf", "pbe-rks"))
+def test_builtin_method_runs_without_toolchain_activation(
+    tmp_path: Path, method: str
+) -> None:
     """A qualified AOT built-in must not probe or launch a compiler."""
 
     root = Path(__file__).resolve().parents[2]
@@ -65,14 +70,19 @@ subprocess.Popen = _forbid_subprocess
         pythonpath.append(existing_pythonpath)
     missing = tmp_path / "missing-toolchain"
 
-    code = """
+    expected_energy = -1.11671432506255 if method == "rhf" else -1.1520643753396715
+    properties = ("energy", "forces") if method == "rhf" else ("energy",)
+    code = f"""
 from generativeqc import Calculator
 
 atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
-result = Calculator(method="rhf", basis="sto-3g", device="cpu").singlepoint(atoms)
+result = Calculator(method={method!r}, basis="sto-3g", device="cpu").singlepoint(atoms, properties={properties!r})
 assert result.converged
 assert result.executed_backend == "cpu_reference"
-assert abs(result.energy - (-1.11671432506255)) < 2.0e-9
+assert abs(result.energy - ({expected_energy!r})) < 2.0e-9
+if "forces" in {properties!r}:
+    assert result.forces is not None
+    assert len(result.forces) == 2
 """
 
     result = subprocess.run(

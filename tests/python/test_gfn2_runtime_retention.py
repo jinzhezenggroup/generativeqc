@@ -5,18 +5,21 @@ from __future__ import annotations
 import ctypes
 import gc
 import os
-import shutil
 import subprocess
 import threading
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 from generativeqc import Calculator, Result, _native
 from generativeqc._context_owner import ContextOwner
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 WATER = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 1.43, 1.1)), ("H", (0.0, -1.43, 1.1))]
@@ -221,16 +224,15 @@ def test_owner_replaces_backend_and_device_identity() -> None:
     ]
 
 
-def test_context_workspace_lifetime_without_runtime_oracle(tmp_path: Path) -> None:
+def test_context_workspace_lifetime_without_runtime_oracle(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     """Compile the real method adapter with a counted, non-scientific bridge.
 
     This proves the workspace survives destruction of individual calculations,
     stays private to its context, and outlives replacement while a prepared
     owner still references it. Endpoint tests independently qualify the math.
     """
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required")
     source = tmp_path / "lifetime.cpp"
     source.write_text(r"""
 #include "methods/xtb_method.hpp"
@@ -278,19 +280,18 @@ int main(){
   if(first.workspace || live!=0)return 8;
 }
 """)
-    binary = tmp_path / "lifetime"
-    command = [
-        compiler,
-        "-std=c++20",
-        "-O0",
-        "-I",
-        str(ROOT / "src"),
-        "-I",
-        str(ROOT / "include"),
-        str(source),
-        str(ROOT / "src/methods/xtb_method.cpp"),
-        "-o",
-        str(binary),
-    ]
-    subprocess.run(command, check=True, capture_output=True, text=True, timeout=120)
+    binary = native_cxx.build_executable(
+        [
+            source,
+            ROOT / "src/methods/xtb_method.cpp",
+            ROOT / "src/methods/prepared_execution.cpp",
+        ],
+        tmp_path / "lifetime",
+        compile_args=(
+            "-std=c++20",
+            "-O0",
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
+        ),
+    )
     subprocess.run([str(binary)], check=True, timeout=10)

@@ -103,6 +103,14 @@ measured snapshots, not the integrated build. Latest-head build and endpoint
 qualification require separate evidence; CI success alone is not that scientific
 acceptance.
 
+Latest upstream integration uses `61a0e715f`; the six retained materialization
+records bind the actual resolved MP2 sources and upstream RCCSD(T) consumer.
+The complete production identity is recorded separately as `latest_integration`
+in provenance. The prior endpoint bundles remain historical qualifications of
+their original installed builds. Current-source native/oracle and installed-build
+qualification are pending Linux CI and independent acceptance; source equality
+of the common pullback alone does not qualify the newer complete endpoint.
+
 ## Reproduction
 
 Use immutable LF baseline/candidate source snapshots and a verified compiler

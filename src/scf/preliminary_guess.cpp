@@ -330,6 +330,7 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
     result.preliminary_guess = diagnostic;
     return result;
   }
+  CoulombExchangeWork discarded_work;
   try {
     runtime::CpuRetainedCapacity retained_seed(runtime::vector_bytes(*density));
     auto result = solve(&*density);
@@ -339,6 +340,7 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
     }
     diagnostic.discarded_target_iterations = result.iterations;
     diagnostic.discarded_target_fock_builds = result.fock_builds;
+    discarded_work = result.dft_diagnostic.coulomb_exchange_work;
   } catch (const std::bad_alloc&) {
     throw;
   } catch (const std::runtime_error&) {
@@ -349,6 +351,9 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
   diagnostic.outcome = PreliminaryOutcome::TargetRetried;
   diagnostic.target_attempts = 2;
   auto result = solve(nullptr);
+  // The narrow census spans both target attempts, but not preliminary-method
+  // preparation. An exception leaves discarded_work unknown and revokes it.
+  result.dft_diagnostic.coulomb_exchange_work.add(discarded_work);
   result.preliminary_guess = diagnostic;
   return result;
 }

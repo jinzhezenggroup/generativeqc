@@ -524,6 +524,18 @@ class KsDiagnosticDescriptor(ctypes.Structure):
     ]
 
 
+class KsCoulombExchangeWorkDescriptor(ctypes.Structure):
+    """Narrow observed target-KS value-provider applications; not precision certification."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("complete", ctypes.c_int32),
+        ("coulomb_applications", ctypes.c_uint64),
+        ("exchange_applications", ctypes.c_uint64),
+    ]
+
+
 class KsTransportDiagnosticDescriptor(ctypes.Structure):
     """Cumulative measured CUDA KS movement for one prepared owner."""
 
@@ -1223,6 +1235,20 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             ctypes.c_uint32,
         ]
         ks_query.restype = ctypes.c_int
+    for name, prefix in (
+        ("generativeqc_calculation_get_ks_coulomb_exchange_work_v1", [ctypes.c_void_p]),
+        (
+            "generativeqc_batch_get_ks_coulomb_exchange_work_v1",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+    ):
+        work_query = getattr(library, name, None)
+        if work_query is not None:
+            work_query.argtypes = [
+                *prefix,
+                ctypes.POINTER(KsCoulombExchangeWorkDescriptor),
+            ]
+            work_query.restype = ctypes.c_int
     for name, prefix in (
         ("generativeqc_calculation_get_ks_transport_diagnostic", [ctypes.c_void_p]),
         (

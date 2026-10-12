@@ -10,6 +10,17 @@
 
 namespace generativeqc::cc::detail {
 
+/** Borrowed inputs/error flag on the DF action owner's existing stream.
+ * The action owner outlives all queued consumers; this view conveys no new
+ * scientific generation or independent storage ownership.
+ */
+struct DFLambdaResidentState {
+  void* stream{};
+  double* seed_one{};
+  double* seed_two{};
+  int* error{};
+};
+
 /** Resident native DF scientific actions for the existing Lambda solve.
  * Retained-core and every auxiliary derivative execute on one stream. Inputs
  * are staged once; outputs detach only after the complete sticky-error audit.
@@ -33,6 +44,13 @@ class DFLambdaActions {
   void finish_mixed_precision();
   void transpose(bool independent, std::span<const double> one, std::span<const double> two,
                  std::vector<double>& out_one, std::vector<double>& out_two);
+  [[nodiscard]] DFLambdaResidentState resident_state() const noexcept;
+  /** Enqueue the existing physical transpose using already resident seeds.
+   * Outputs are borrowed until the next action. Enqueue their consumers on
+   * resident_state().stream and audit its sticky error before publication.
+   * This entry point neither stages dimension-sized data nor fences success.
+   */
+  [[nodiscard]] std::pair<const double*, const double*> transpose_device(bool independent);
   void seeds(std::span<const double> one, std::span<const double> two);
   std::vector<double> parameter(std::string_view name, std::size_t count);
   std::pair<std::vector<double>, std::vector<double>> virtual_factors();

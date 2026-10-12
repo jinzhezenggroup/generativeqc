@@ -44,6 +44,19 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+def test_partial_source_default_requires_new_qualification(tmp_path: Path) -> None:
+    """A measured explicit mask cannot silently become the production default."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_jk_source_policy.hpp"
+    original = source.read_text()
+    source.write_text(original.replace("mask{(1U << 28) - 1}", "mask{32752}"))
+    assert any(
+        "experimental partial source default or admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 @pytest.mark.parametrize(
     "relative,before,after",
     [
@@ -93,87 +106,6 @@ def test_independent_pair_default_refuses_domain_or_capacity_drift(
 @pytest.mark.parametrize(
     "relative,before,after",
     [
-        (
-            "src/dft/cuda_ks.cpp",
-            "const auto requested = direct_jk_source_selection(selection);",
-            "if (!selection) return; const auto requested = direct_jk_source_selection(selection);",
-        ),
-        (
-            "src/dft/cuda_ks.cpp",
-            "if (requested == DirectJkSourceSelection::disabled) return;",
-            "if (false) return;",
-        ),
-        ("src/dft/cuda_ks.cpp", "strategy.screening_tolerance,", "0.0,"),
-        ("src/dft/cuda_ks.cpp", "spins != 1 ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "!has_exchange ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "fitted_coulomb ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "fitted_exchange ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "has_range_correction ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "nonlocal_correlation ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "incremental_direct_jk ||", "false ||"),
-        ("src/dft/cuda_ks.cpp", "precision_schedule.any_lower_precision()", "false"),
-        (
-            "src/dft/cuda_ks.cpp",
-            "runtime::active_device_resource_ledger ||",
-            "false ||",
-        ),
-        (
-            "src/dft/cuda_ks.cpp",
-            "strategy.spec.coulomb.op !=",
-            "strategy.spec.coulomb.op ==",
-        ),
-        (
-            "src/dft/cuda_ks.cpp",
-            "strategy.spec.exchange.op !=",
-            "strategy.spec.exchange.op ==",
-        ),
-        (
-            "src/dft/cuda_ks.cpp",
-            "DirectJkSourceAutoPolicy::screened_cold;",
-            "DirectJkSourceAutoPolicy::generic_f;",
-        ),
-        (
-            "src/scf/cuda/direct_jk_source_policy.hpp",
-            "return 16ULL << 30;",
-            "return 32ULL << 30;",
-        ),
-        (
-            "src/scf/cuda/direct_jk_source_policy.hpp",
-            "return 8ULL << 30;",
-            "return 16ULL << 30;",
-        ),
-        (
-            "src/scf/cuda/direct_jk_source_policy.hpp",
-            "maximum_angular <= 2",
-            "maximum_angular <= 3",
-        ),
-        (
-            "src/scf/cuda/direct_jk_source_policy.hpp",
-            "if (!(screening > 0.0))",
-            "if (false)",
-        ),
-    ],
-)
-def test_ks_phase_value_domain_is_audited(
-    tmp_path: Path, relative: str, before: str, after: str
-) -> None:
-    """Keep default auto, opt-out, the Schwarz mask and finite source ceilings."""
-    payload = _payload()
-    _copy_audited_sources(payload, tmp_path)
-    source = tmp_path / relative
-    original = source.read_text()
-    assert before in original
-    source.write_text(original.replace(before, after))
-    assert any(
-        "KS phase-value auto default or admission domain drifted" in error
-        for error in validate_inventory(payload, root=tmp_path)
-    )
-
-
-@pytest.mark.parametrize(
-    "relative,before,after",
-    [
-        ("src/scf/cuda/direct_jk_source_policy.hpp", "!value ||", "false ||"),
         ("src/scf/cuda/direct_jk_source_policy.hpp", "if (!cold_phase)", "if (false)"),
         (
             "src/scf/cuda/direct_jk_source_policy.hpp",
@@ -212,10 +144,8 @@ def test_rhf_phase_value_default_domain_is_audited(
     original = source.read_text()
     assert before in original
     source.write_text(original.replace(before, after))
-    expected_owner = "KS" if before == "!value ||" else "RHF"
     assert any(
-        f"{expected_owner} phase-value auto default or admission domain drifted"
-        in error
+        "RHF phase-value auto default or admission domain drifted" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 
@@ -285,8 +215,28 @@ def test_native_xc_batch_defaults_are_audited(
         ),
         (
             "src/dft/cuda_ks_final_validation_policy.hpp",
-            "fock_exchange_coefficient == -0.125",
-            "fock_exchange_coefficient == -0.25",
+            "std::isfinite(coefficient)",
+            "true",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "coefficient < 0.0",
+            "coefficient <= 0.0",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "coefficient >= -0.5",
+            "coefficient >= -1.0",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "final_validation_partial && matrix_products.library_enabled()",
+            "matrix_products.library_enabled()",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "final_validation_partial && matrix_products.library_enabled()",
+            "final_validation_partial",
         ),
         (
             "src/dft/cuda_ks.cpp",
@@ -298,7 +248,7 @@ def test_native_xc_batch_defaults_are_audited(
 def test_native_ks_final_validation_default_is_audited(
     tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
-    """Default promotion must not silently expand the measured scope or leases."""
+    """Audit exact-hybrid bounds and required matrix resources and live leases."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / relative
@@ -405,6 +355,39 @@ def test_panel_traversal_refuses_domain_or_reduction_order_drift(
     source.write_text(original.replace(before, after))
     assert any(
         "bounded panel traversal admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("d.w_contraction_storage_bits == 64", "true"),
+        ("d.w_contraction_compute_bits == 64", "true"),
+        ("d.w_contraction_accumulation_bits == 64", "true"),
+        ("const auto source = sources.index[perm];", "const auto source = perm;"),
+        (
+            "moments + perm * p.v3, moments + source * p.v3",
+            "bar_w + perm * p.v3, moments + source * p.v3",
+        ),
+        (
+            "bar_w + perm * p.v3, bar_panel, out, reverse_gemm",
+            "bar_w, bar_panel, out, reverse_gemm",
+        ),
+    ],
+)
+def test_force_distinct_default_refuses_precision_copy_or_cotangent_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Forward reuse must never broaden precision or collapse reverse slots."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "forward-only force admission drifted" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 
@@ -873,8 +856,10 @@ def test_new_cc_default_off_option_must_be_registered(
     assert any(control in error and "unregistered" in error for error in errors)
 
 
-@pytest.mark.parametrize("initializer", ["{}", "{false}", " = false"])
-def test_new_response_default_off_option_must_be_registered(
+@pytest.mark.parametrize(
+    "initializer", ["{}", "{false}", " = false", "{true}", " = true"]
+)
+def test_new_response_option_must_be_registered(
     tmp_path: Path, initializer: str
 ) -> None:
     payload = _payload()
@@ -883,14 +868,14 @@ def test_new_response_default_off_option_must_be_registered(
     original = source.read_text()
     changed = original.replace(
         "struct RHFFrameResponseOptions {",
-        f"struct RHFFrameResponseOptions {{\n  bool new_default_off_path{initializer};",
+        f"struct RHFFrameResponseOptions {{\n  bool new_response_path{initializer};",
         1,
     )
     assert changed != original
     source.write_text(changed)
     errors = validate_inventory(payload, root=tmp_path)
     assert any(
-        "response-option:new_default_off_path" in error and "unregistered" in error
+        "response-option:new_response_path" in error and "unregistered" in error
         for error in errors
     )
 

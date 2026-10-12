@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
+#include "api/ks_diagnostic.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fleet.hpp"
@@ -163,6 +165,12 @@ void combinations() {
               const auto df = fitted_data(0.0, cutoff);
               const auto prepared = plan(spec, exact, df);
               const auto actual = prepared.build(a, b);
+              require(actual.coulomb_exchange_work.complete, "CPU J/K census unavailable");
+              require(actual.coulomb_exchange_work.coulomb_applications == (j ? 1U : 0U),
+                      "CPU J applications disagree with dispatched provider");
+              require(
+                  actual.coulomb_exchange_work.exchange_applications == (k ? (uhf ? 2U : 1U) : 0U),
+                  "CPU K applications disagree with dispatched spins");
               const auto expected = oracle(spec, exact, df, a, b);
               matrix(actual.coulomb, expected.coulomb, "independent J");
               matrix(actual.exchange_alpha, expected.exchange_alpha, "independent alpha K");
@@ -183,6 +191,48 @@ void combinations() {
               close(prepared.energy_derivative(a, b).at(0), fd, 2e-9,
                     "mixed-provider derivative/metric response");
             }
+}
+
+void work_census_boundaries() {
+  auto observed = CoulombExchangeWork::empty();
+  observed.add({true, 3, 2});
+  observed.add({true, 4, 1});
+  require(observed.complete && observed.coulomb_applications == 7 &&
+              observed.exchange_applications == 3,
+          "observed provider counts were not accumulated");
+  for (const auto& overflowing :
+       {CoulombExchangeWork{true, std::numeric_limits<std::uint64_t>::max(), 0},
+        CoulombExchangeWork{true, 0, std::numeric_limits<std::uint64_t>::max()},
+        CoulombExchangeWork{}}) {
+    auto invalid = observed;
+    invalid.add(overflowing);
+    invalid.add(CoulombExchangeWork::empty());
+    require(!invalid.complete, "unknown/overflowed work regained certification");
+    std::optional<generativeqc::dft::ScfDiagnostic> source{std::in_place};
+    source->coulomb_exchange_work = invalid;
+    generativeqc_ks_coulomb_exchange_work_v1 record{};
+    record.struct_size = sizeof(record);
+    record.abi_version = GENERATIVEQC_ABI_VERSION;
+    require(generativeqc::api::copy_ks_coulomb_exchange_work(source, &record) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
+                !record.complete && !record.coulomb_applications && !record.exchange_applications,
+            "partial provider work was published as a certified zero");
+  }
+  std::optional<generativeqc::dft::ScfDiagnostic> source{std::in_place};
+  source->coulomb_exchange_work = observed;
+  generativeqc_ks_coulomb_exchange_work_v1 record{};
+  record.struct_size = sizeof(record);
+  record.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc::api::copy_ks_coulomb_exchange_work(source, &record) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              record.complete && record.coulomb_applications == 7 &&
+              record.exchange_applications == 3,
+          "provider census copy changed the observation");
+  record.struct_size = 0;
+  require(generativeqc::api::copy_ks_coulomb_exchange_work(source, &record) ==
+                  GENERATIVEQC_STATUS_ABI_MISMATCH &&
+              record.coulomb_applications == 7,
+          "rejected descriptor overwrote caller output");
 }
 
 void preflight() {
@@ -213,6 +263,10 @@ void preflight() {
   const auto zero = plan(spec, exact, df);
   const auto raw = zero.build(density);
   require(raw.coulomb.size() == 4 && raw.exchange_alpha.size() == 4, "zero weight lost raw terms");
+  require(raw.coulomb_exchange_work.complete &&
+              raw.coulomb_exchange_work.coulomb_applications == 1 &&
+              raw.coulomb_exchange_work.exchange_applications == 1,
+          "zero coefficient hid executed provider work");
   close(zero.energy_derivative(density)[0], 0.0, 0.0, "zero-weight response");
   spec.derivative_order = 0;
   const auto energy_only = plan(spec, exact, df);
@@ -572,6 +626,7 @@ void prepared_identity() {
 int main() {
   try {
     combinations();
+    work_census_boundaries();
     preflight();
     incremental_direct_jk_policy_resolution();
     molecular_endpoints();

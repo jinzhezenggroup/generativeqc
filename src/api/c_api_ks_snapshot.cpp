@@ -17,6 +17,7 @@
 #include "integrals/ecp_cuda.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "methods/dft_method.hpp"
+#include "molecule/basis.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
 #include "dft/grid_task_view.cuh"
@@ -53,7 +54,10 @@ struct generativeqc_ks_xc_response {
   // every buffer is also tied to the still-live stream on exceptional exit.
   generativeqc::runtime::OwnedCudaStream stream;
   generativeqc::runtime::OwnedCudaBuffer<std::byte> arena;
-  generativeqc::runtime::OwnedCudaBuffer<double> density, direction;
+  generativeqc::runtime::OwnedCudaBuffer<double> direction;
+  // The batch/token, not this response consumer, owns the converged D. Every
+  // response action rechecks that token before touching this borrowed pointer.
+  const double* density{};
   std::unique_ptr<generativeqc::dft::CudaXcPlan> plan;
 #endif
 };
@@ -374,7 +378,7 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
-    status = generativeqc::methods::detail::read_dft_derivative_state(
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
         *batch->plan, snapshot->index, snapshot->token, source, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
@@ -383,20 +387,35 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     const generativeqc::dft::AoBasis basis(source.system);
     if (basis.packed != source.packed_basis)
       throw std::invalid_argument("CUDA response packed basis differs from native state");
+    const auto borrow_grid = static_cast<bool>(source.resident_grid);
     const auto layout = generativeqc::dft::cuda_xc_layout_shape(
         basis.natom, basis.nprimitive, basis.nao, source.weights.size(), identity.model.functional,
-        identity.model.spins == 2, tile_points, true);
+        identity.model.spins == 2, tile_points, true, generativeqc::dft::CudaXcAoPrecision::Fp64,
+        identity.model.semilocal_exchange_scale, identity.model.semilocal_correlation_scale,
+        borrow_grid);
     using generativeqc::runtime::size_mul;
     const auto count = size_mul(size_mul(layout.spins, layout.nao, "XC response overflow"),
                                 layout.nao, "XC response overflow");
     const auto bytes = generativeqc::runtime::size_add(
-        layout.device_bytes, size_mul(count, 2 * sizeof(double), "XC response overflow"),
+        layout.device_bytes, size_mul(count, sizeof(double), "XC response overflow"),
         "XC response overflow");
     if (bytes > budget_bytes) throw std::bad_alloc();
-    std::vector<double> density;
-    for (const auto& spin : source.state.density)
-      density.insert(density.end(), spin.begin(), spin.end());
-    if (density.size() != count) throw std::invalid_argument("CUDA response spin shape mismatch");
+    int density_device = -1;
+    const double *alpha = nullptr, *beta = nullptr;
+    std::size_t matrix_elements = 0;
+    unsigned spins = 0;
+    void* source_stream = nullptr;
+    status = generativeqc::methods::detail::dft_cuda_resident_density(
+        *batch->plan, snapshot->index, snapshot->token, density_device, alpha, beta,
+        matrix_elements, spins, source_stream, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    if (density_device != identity.model.device || spins != layout.spins ||
+        matrix_elements != layout.nao * layout.nao || !alpha || !source_stream ||
+        (spins == 2 && beta != alpha + matrix_elements))
+      throw std::invalid_argument("CUDA response resident spin shape mismatch");
     auto result = std::make_unique<generativeqc_ks_xc_response>();
     result->index = snapshot->index;
     result->token = snapshot->token;
@@ -410,14 +429,16 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     result->stream.create(result->device);
     const auto stream = result->stream.get();
     result->arena.allocate(result->device, layout.device_bytes, stream);
-    result->density.allocate(result->device, count, stream);
+    result->density = alpha;
     result->direction.allocate(result->device, count, stream);
     result->plan = std::make_unique<generativeqc::dft::CudaXcPlan>(
         layout, source.packed_basis, source.points, source.weights, result->arena.get(),
-        layout.device_bytes, stream);
-    generativeqc::runtime::cuda_resource_check(
-        cudaMemcpyAsync(result->density.get(), density.data(), count * sizeof(double),
-                        cudaMemcpyHostToDevice, stream));
+        layout.device_bytes, stream, source.resident_grid);
+    // Grid and D remain with the prepared SCF owner. Establish the dependency
+    // once without an export/re-upload; snapshot freshness guards later actions.
+    generativeqc::runtime::OwnedCudaEvent ready(result->device, cudaEventDisableTiming);
+    ready.record(static_cast<cudaStream_t>(source_stream));
+    generativeqc::runtime::cuda_resource_check(cudaStreamWaitEvent(stream, ready.get(), 0));
     result->stream.synchronize();
     status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -452,7 +473,7 @@ generativeqc_status generativeqc_ks_xc_response_apply_v1(generativeqc_batch* bat
                                                                count * sizeof(double),
                                                                cudaMemcpyHostToDevice, stream));
     response->input_bytes += count * sizeof(double);
-    response->plan->enqueue_response(response->density.get(), response->direction.get(), count,
+    response->plan->enqueue_response(response->density, response->direction.get(), count,
                                      ++response->generation);
     const auto scalars = response->plan->read_scalars(response->generation);
     if (scalars.error) throw std::invalid_argument("invalid CUDA XC response direction/domain");
@@ -484,7 +505,7 @@ generativeqc_status generativeqc_ks_xc_response_diagnostic_v1(
   const auto& t = response->plan->transfers();
   const auto& l = response->plan->layout();
   const std::array<std::uint64_t, 12> result{response->device_bytes,
-                                             t.setup_h2d_bytes + response->count * sizeof(double),
+                                             t.setup_h2d_bytes,
                                              response->input_bytes,
                                              t.output_d2h_bytes,
                                              t.synchronizations + response->extra_synchronizations,
@@ -546,11 +567,11 @@ generativeqc_status generativeqc_ks_snapshot_ecp_derivatives_v1(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
-    status = generativeqc::methods::detail::read_dft_derivative_state(
+    status = generativeqc::methods::detail::read_dft_derivative_sources(
         *batch->plan, snapshot->index, snapshot->token, source, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (source.system.ecp_terms.empty()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto n = source.state.orbitals.at(0).values.size();
+    const auto n = generativeqc::molecule::ao_count(source.system);
     const auto atoms = source.system.atoms.size();
     if (!n || atoms > std::numeric_limits<std::size_t>::max() / 6 / n / n ||
         count != 6 * atoms * n * n)
@@ -1023,8 +1044,8 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
         output[10] = xc.kinetic[1];
       };
       if (automatic) {
-        // The native SCF and stationary derivative consumers must evaluate the
-        // same AOT program, including its pinned Libxc work-domain continuation.
+        // This legacy ABI is explicitly polarized. Restricted density-work
+        // consumers use v4 so they do not apply a per-spin floor to total rho.
         const auto xc = automatic.program->evaluate(local_rho, local_gradient, local_tau);
         bool finite = std::isfinite(xc.energy);
         for (double value : xc.rho) finite = finite && std::isfinite(value);
@@ -1075,6 +1096,68 @@ generativeqc_status generativeqc_xc_point_batch_v2(std::uint32_t functional, con
                                                    std::size_t value_count) {
   return generativeqc_xc_point_batch_v3(functional, 1.0, 1.0, rho, gradient, tau, point_count,
                                         values, value_count);
+}
+
+/** Layout-aware private stationary bridge. RKS feature transport retains two
+ * equal half-density channels, but the U1 descriptor consumes their original
+ * total. Duplicating total-feature derivatives makes the existing half-channel
+ * pullback contract to the same restricted derivative, including native vtau/2.
+ * Spin is explicit producer metadata, never inferred from equal input values.
+ * Legacy domains retain their SCF's polarized-fold continuation. */
+generativeqc_status generativeqc_xc_point_batch_v4(std::uint32_t functional, std::uint32_t spins,
+                                                   double exchange_scale, double correlation_scale,
+                                                   const double* rho, const double* gradient,
+                                                   const double* tau, std::size_t point_count,
+                                                   double* values, std::size_t value_count) {
+  constexpr std::size_t stride = 11;
+  if ((spins != 1U && spins != 2U) || !rho || !gradient || !tau || !values || !point_count ||
+      point_count > std::numeric_limits<std::size_t>::max() / stride ||
+      value_count != stride * point_count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (spins == 2U)
+    return generativeqc_xc_point_batch_v3(functional, exchange_scale, correlation_scale, rho,
+                                          gradient, tau, point_count, values, value_count);
+  for (std::size_t point = 0; point < point_count; ++point) {
+    if (rho[point] != rho[point_count + point] || tau[point] != tau[point_count + point])
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      if (gradient[point * 3 + axis] != gradient[(point_count + point) * 3 + axis])
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto automatic = generativeqc::dft::generated::automatic_libxc_entry(functional);
+  if (!automatic || automatic.program->domain_version <= 4U)
+    return generativeqc_xc_point_batch_v3(functional, exchange_scale, correlation_scale, rho,
+                                          gradient, tau, point_count, values, value_count);
+  if (exchange_scale != 1.0 || correlation_scale != 1.0)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* restricted = generativeqc::dft::generated::automatic_restricted_libxc_program(
+      automatic.program->identifier);
+  if (!restricted || restricted->domain_version != automatic.program->domain_version ||
+      restricted->ingredient_mask != automatic.program->ingredient_mask)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    generativeqc::dft::validate_semilocal_point_program(*restricted);
+    for (std::size_t point = 0; point < point_count; ++point) {
+      double total_gradient[3]{};
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        total_gradient[axis] =
+            gradient[point * 3 + axis] + gradient[(point_count + point) * 3 + axis];
+      const auto xc = restricted->evaluate(rho[point] + rho[point_count + point], total_gradient,
+                                           tau[point] + tau[point_count + point]);
+      bool finite = std::isfinite(xc.energy) && std::isfinite(xc.rho) && std::isfinite(xc.kinetic);
+      for (double coefficient : xc.gradient) finite = finite && std::isfinite(coefficient);
+      if (!finite) throw std::runtime_error("nonfinite restricted Libxc point result");
+      double* output = values + stride * point;
+      output[0] = xc.energy;
+      output[1] = output[2] = xc.rho;
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        output[3 + axis] = output[6 + axis] = xc.gradient[axis];
+      output[9] = output[10] = xc.kinetic;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
 }
 
 void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot) { delete snapshot; }

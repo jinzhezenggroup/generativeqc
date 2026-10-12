@@ -243,6 +243,27 @@ class NativeSource:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        lib.generativeqc_posthf_one_electron_gradient_cpu_v1.argtypes = [
+            ct.c_void_p,
+            _DOUBLE,
+            _DOUBLE,
+            ct.c_size_t,
+            _DOUBLE,
+            ct.c_size_t,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        lib.generativeqc_posthf_weighted_eri_shell_gradient_cpu_v1.argtypes = [
+            ct.c_void_p,
+            _SIZE,
+            _DOUBLE,
+            ct.c_size_t,
+            _DOUBLE,
+            ct.c_size_t,
+            _UINT64,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
         lib.generativeqc_posthf_one_electron_gradient_cuda_v1.argtypes = [
             ct.c_void_p,
             ct.c_int,
@@ -553,6 +574,78 @@ class NativeSource:
                 gradient.size,
             )
         return immutable(gradient)
+
+    def one_electron_gradient_cpu(
+        self, *, overlap_weights: typing.Any, hcore_weights: typing.Any
+    ) -> np.ndarray:
+        """Explicit CPU compatibility recurrence; no dense derivative tensors.
+
+        Nuclear repulsion is excluded. This is not a generated one-electron
+        derivative path; callers must disclose that native compatibility policy.
+        """
+        blocks = []
+        for raw in (overlap_weights, hcore_weights):
+            array = np.asarray(raw)
+            if np.iscomplexobj(array):
+                raise ValueError("one-electron CPU weights must be real")
+            value = np.ascontiguousarray(array, dtype=np.float64)
+            if value.shape != (self.nbf, self.nbf) or not np.isfinite(value).all():
+                raise ValueError("one-electron CPU requires finite [AO,AO] weights")
+            blocks.append(value)
+        gradient = np.empty((len(self.atoms), 3), dtype=np.float64)
+        with self._lock:
+            self._check_open()
+            self._call(
+                "generativeqc_posthf_one_electron_gradient_cpu_v1",
+                self._handle,
+                *(pointer(value) for value in blocks),
+                self.nbf**2,
+                pointer(gradient),
+                gradient.size,
+            )
+        if not np.isfinite(gradient).all():
+            raise FloatingPointError("nonfinite one-electron CPU gradient")
+        return immutable(gradient)
+
+    def weighted_eri_shell_gradient_cpu(
+        self, shell_indices: typing.Any, weights: typing.Any
+    ) -> tuple[np.ndarray, int]:
+        """Packaged s/p/d derivatives in independent slot order; no fallback.
+
+        Return the four positive center derivatives and actual primitive kernel
+        evaluations. No molecular AO rank-four or coordinate tensor is allocated.
+        """
+        indices = tuple(shell_indices)
+        if len(indices) != 4 or any(
+            type(index) is not int or not 0 <= index < len(self.shells)
+            for index in indices
+        ):
+            raise ValueError("ERI shell gradient requires four valid shell indices")
+        shape = tuple(self.shell_sizes[index] for index in indices)
+        raw = np.asarray(weights)
+        if np.iscomplexobj(raw):
+            raise ValueError("ERI shell weights must be real")
+        value = np.ascontiguousarray(raw, dtype=np.float64)
+        if value.shape != shape or not np.isfinite(value).all():
+            raise ValueError("ERI shell weights require finite shell-shaped values")
+        native_indices = (ct.c_size_t * 4)(*indices)
+        gradient = np.empty((4, 3), dtype=np.float64)
+        evaluations = ct.c_uint64()
+        with self._lock:
+            self._check_open()
+            self._call(
+                "generativeqc_posthf_weighted_eri_shell_gradient_cpu_v1",
+                self._handle,
+                native_indices,
+                pointer(value),
+                value.size,
+                pointer(gradient),
+                gradient.size,
+                ct.byref(evaluations),
+            )
+        if not np.isfinite(gradient).all():
+            raise FloatingPointError("nonfinite packaged CPU ERI shell gradient")
+        return immutable(gradient), int(evaluations.value)
 
     def one_electron_gradient_cuda(
         self,

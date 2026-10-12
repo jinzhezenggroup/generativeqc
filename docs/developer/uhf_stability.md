@@ -132,3 +132,65 @@ not a scientific PASS; the environment flag makes missing PySCF a failure.
 JUnit records version, reference residual/energy, curvature and certificate
 identity. Record source hashes and the actual focused execution artifacts with
 the PR's exact head; generic CI green cannot replace these molecular gates.
+
+
+## Experimental bounded CPU UHF root recovery
+
+The internal CPU helper **tools.generativeqc_response.recovery.recover_uhf_stability**
+consumes the full-real-OV certificate above and does **not** provide another
+SCF solver. Its explicit **solve(seed)** callback must run an existing UHF SCF
+engine from an immutable two-spin AO density and return a fresh, converged
+canonical UHFResponseOperator. It can be adapted to native
+FockPlan.solve(initial_density=seed, compute_forces=False) and a source-matched
+reference exporter. PySCF is not called by recovery production code.
+
+This is an **internal fixed-Hamiltonian CPU handoff**, not a public Calculator
+feature or an automatic root/force publisher. UKS, complex/spin-flip stability,
+large-system solvers and cross-geometry intended-root tracking are unsupported.
+
+### Sequence and gates
+
+1. Reject oversized numeric/basis requests before source work. Require a
+   qualified **UNSTABLE** certificate for rotation. A **STABLE** reference
+   passes through without calling SCF; **EMPTY**/**NEAR_SINGULAR** fail closed.
+2. Form signed finite orbital rotations with the established convention
+   C_new = C exp(-angle K). Build exact occupied-projector spin AO seeds.
+3. Evaluate complete nonlinear trial HF energy differences through the existing
+   source-owned J/K Fock seam. Only downhill seeds reach the SCF callback.
+4. Check recovered geometry/basis/overlap/hcore/backend Hamiltonian and alpha/
+   beta electron numbers; require new canonical SCF stationarity, independent
+   provider energy agreement, a strictly lower total energy and a **STABLE**
+   second full real-internal diagnostic. Invalidation or inconsistent energies
+   block publication.
+5. Compare overlap-metric AO densities to collapse identical restarts.
+   A global alpha/beta flip is treated as equivalent only in equal-spin-count
+   singlet references. This does **not** certify general point-group/spatial
+   equivalence.
+
+The returned evidence binds the original and recovered certificates.
+Call UHFRecoveryResult.assert_current() before consumption; this does not yet
+authorize *nuclear force publication*. Diagnostics report collinear spin-squared
+expectation, spin projection, **AO Mulliken** populations (not atomic
+populations), energy drop, distinct roots and spin-flipped duplicates.
+Each SCF callback owns its own resource budget; this helper limits only
+its explicitly accounted numerical buffers and finite restart count.
+
+The CPU scientific regression is an independently converged two-site Hubbard
+dimer with U=1.2, hopping t=0.2, one alpha and one beta electron: the
+symmetric unstable stationary state has electronic energy 0.2 Eh and the
+qualified symmetry-broken stable state has analytic electronic energy
+-2*t*t/U = -0.0666666666666667 Eh. Both signed initial rotations converge
+to equivalent spin-inverted roots. Run the test with:
+
+    PYTHONPATH="$PWD/python:$PWD" python -m pytest tests/python/test_uhf_recovery.py -q
+
+This dimer regression is not a molecular H2 production qualification. The new native CPU adapter (recover_uhf_with_native_fock_plan) requires exact,
+unscreened unrestricted HF and a source-matched, prepared FockPlan; its
+native_uhf_operator_from_scf exporter rebuilds canonical generalized-eigenstate
+frames and refuses non-idempotent or non-self-consistent final spin densities.
+A separate opt-in molecular acceptance gate reconverges H2/STO-3G with the
+**native** CPU FockPlan and compares the final energy to an independently
+converged PySCF 2.14.0 UHF reference (PySCF never runs the production SCF).
+Missing PySCF is a skip, not a scientific pass; set the environment variable
+GENERATIVEQC_REQUIRE_UHF_RECOVERY_ORACLE=1 to turn missing oracle into failure.
+This internal proof is still not a public automatic root/force selector.

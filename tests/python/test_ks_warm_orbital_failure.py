@@ -35,6 +35,8 @@ def orbital_probe(
         for signature in (
             "  void invalidate_warm_orbitals()",
             "  void clear_warm_state()",
+            "  void audit_phase_source()",
+            "  void retire_phase_source(bool audit)",
             "  void enqueue()",
             "  bool finish()",
         )
@@ -70,11 +72,28 @@ int cudaMemcpyAsync(void* target, const void* source, std::size_t bytes, int kin
   return 0;
 }
 int cudaStreamSynchronize(void*) { ++fences; return 0; }
-void check(int status) { if (status) throw std::runtime_error("injected copy failure"); }
+void check(int status, const char* detail = "injected copy failure") {
+  if (status) throw std::runtime_error(detail);
+}
 struct Owner {
   bool is_pending = false;
-  struct Source { bool active() const { return true; } };
+  struct Source {
+    bool fail_audit = false, audited = false;
+    std::uint64_t completed = 0;
+    bool active() const { return true; }
+    int audit() { audited = true; return fail_audit ? 1 : 0; }
+    void observe_completed(std::uint64_t actions) { completed += actions; }
+  };
   std::unique_ptr<Source> phase_source;
+  struct Region {
+    bool bound = true;
+    void invalidate() { bound = false; }
+  } device_chunk_region, solver_region_executor;
+  struct {
+    std::size_t provider_device_bytes = 512, retained_host_numeric_bytes = 128;
+  } resource;
+  std::size_t phase_device_bytes = 256, phase_host_bytes = 64;
+  std::uint64_t phase_submitted_begin = 1;
   int rebases = 0;
   bool device_chunk_mode = false, is_active = true, is_failed = false;
   bool warm_ready = true, warm_orbitals_ready = false, warm_updates = true;
@@ -97,15 +116,14 @@ struct Owner {
   } output;
   struct {
     std::uint64_t warm_orbital_frames_retained = 0, warm_orbital_frame_invalidations = 0;
+    std::uint64_t submitted_iterations = 3, phase_resident_fock_actions = 0;
   } movement;
   double density[8], proposal[8], warm[8], warm_orbitals[8], tmp2[8];
   void* stream = nullptr;
   std::string scenario;
-  void retire_phase_source(bool audit) {
-    phase_source.reset();
-    if (audit && scenario == "resident-audit") throw std::runtime_error("source audit");
-  }
   void rebase_warm_energy() {
+    assert(phase_source && phase_source->audited);
+    assert(!device_chunk_region.bound && !solver_region_executor.bound);
     ++rebases;
     if (scenario == "resident-rebase") throw std::runtime_error("energy rebase");
     warm_energy = -3000.0;
@@ -163,6 +181,7 @@ int main(int argc, char** argv) {
   const bool resident = scenario.find("resident-") == 0;
   if (resident) {
     owner.phase_source = std::make_unique<Owner::Source>();
+    owner.phase_source->fail_audit = scenario == "resident-audit";
     owner.is_active = false;
     owner.output.converged = scenario != "resident-unconverged";
     owner.warm_updates = scenario != "resident-frozen";
@@ -177,7 +196,19 @@ int main(int argc, char** argv) {
   const bool handoff_failure = scenario == "resident-audit" || scenario == "resident-rebase";
   assert(thrown == ((failed && scenario != "physical") || handoff_failure));
   if (resident) {
-    assert(!owner.phase_source);
+    const bool retained = !handoff_failure && scenario != "resident-unconverged";
+    assert(static_cast<bool>(owner.phase_source) == retained);
+    assert(!owner.device_chunk_region.bound && !owner.solver_region_executor.bound);
+    assert(owner.resource.provider_device_bytes == (retained ? 512U : 256U));
+    assert(owner.resource.retained_host_numeric_bytes == (retained ? 128U : 64U));
+    if (retained) {
+      assert(owner.phase_source->audited && owner.phase_source->completed == 2);
+      assert(owner.movement.phase_resident_fock_actions == 2);
+      assert(owner.phase_submitted_begin == owner.movement.submitted_iterations);
+      assert(owner.phase_device_bytes == 256 && owner.phase_host_bytes == 64);
+    } else {
+      assert(owner.phase_device_bytes == 0 && owner.phase_host_bytes == 0);
+    }
     if (handoff_failure) {
       assert(owner.is_failed && !owner.is_active && !owner.is_pending);
       assert(!owner.output.converged && !owner.final_state_ready && !owner.warm_ready);
@@ -241,6 +272,13 @@ int main(int argc, char** argv) {
   assert(owner.warm_energy == std::numeric_limits<double>::infinity());
   assert(owner.warm_energy_correction == 0.0);
   assert(owner.movement.warm_orbital_frame_invalidations == before_clear + was_ready);
+  if (resident) {
+    owner.retire_phase_source(false);
+    owner.retire_phase_source(false);
+    assert(!owner.phase_source);
+    assert(owner.resource.provider_device_bytes == 256);
+    assert(owner.resource.retained_host_numeric_bytes == 64);
+  }
 }
 """
     )

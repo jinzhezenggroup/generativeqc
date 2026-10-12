@@ -13,10 +13,12 @@
       "sha256": "43c29d486c66c3644e086b2d284ea11c945aa45fc6661f5c2d44b96bcb0faed8"
     },
     {
-      "bytes": 146796,
-      "path": "samples.json.gz",
+      "bytes": 39596,
+      "path": "samples.json.xz",
       "role": "samples",
-      "sha256": "5caa3e5c5dfc60dba7eed5a8afcf80aeb6d5bb8056023e2b9e8c7f4715f18838"
+      "sha256": "681d1c1475fe16bc91f1960747c0855a23879780d966f278a0c9a33ebc85930b",
+      "decoded_bytes": 866324,
+      "decoded_sha256": "2936b59346c82f0c9805bbc143485b57c9c8298251ae6c190a9eed67501b086c"
     },
     {
       "bytes": 67686,

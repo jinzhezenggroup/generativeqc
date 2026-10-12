@@ -82,6 +82,18 @@ candidates and need not be simultaneously attainable.
 
 ## Current provider inventory
 
+CPU KS calculator plans with a discovered
+`generativeqc_resource_ks_cpu_host_v1` query obtain their host capacities from
+the same allocation-free native sizing owner as the installed CLI. The query
+accounts for each retained numeric/value-metadata owner and serialized
+preparation/SCF workspace, including the optional restricted AO cache and
+nonlocal provider. It does not execute quadrature, integrals or SCF. Native
+rejection is not retried with a Python estimate; the schedule identity records
+which sizing owner is selected. Standalone no-library dry runs and older
+libraries retain portable metadata sizing without implicitly loading a library.
+This bridge does not constitute complete native admission/lease authority or
+full simultaneously-live allocator/RSS receipts; CUDA sizing is unchanged.
+
 | Provider | Retained storage | Temporary peak and execution schedule |
 | --- | --- | --- |
 | CPU direct RHF/UHF | All fleet topology, warm densities and outputs | Largest serialized item: forward-mode Jet/recurrence arrays, Cartesian/public integral coexistence, SCF/DIIS/eigensolver matrices and forces |

@@ -9,6 +9,21 @@
 
 namespace generativeqc::api {
 
+/** Unavailable observations never expose their partial/default zeros as evidence. */
+inline generativeqc_status copy_ks_coulomb_exchange_work(
+    const std::optional<dft::ScfDiagnostic>& source,
+    generativeqc_ks_coulomb_exchange_work_v1* out) {
+  if (out && !valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (!source) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (out) {
+    const auto& work = source->coulomb_exchange_work;
+    *out = {sizeof(*out), GENERATIVEQC_ABI_VERSION, work.complete ? 1 : 0,
+            work.complete ? work.coulomb_applications : 0,
+            work.complete ? work.exchange_applications : 0};
+  }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 /** Copy only validated caller-owned descriptors, without allocating another
  * history or changing the method's numerical state. Validate every row before
  * writing any output so a malformed tail row cannot publish a partial result. */

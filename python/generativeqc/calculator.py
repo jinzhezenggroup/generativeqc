@@ -444,13 +444,13 @@ class Calculator:
 
                 method = native_dft_carrier_for_ir(electronic_ir)
 
-            from .ks import AUTOMATIC_SCF_DOMAIN, SCF_DOMAIN, KsOptions
+            from .ks import SCF_DOMAIN, KsOptions, scf_domain_for_method
 
             if ks_options is None:
                 ks_options = KsOptions(
                     composition=electronic_ir,
                     scf_domain=(
-                        AUTOMATIC_SCF_DOMAIN
+                        scf_domain_for_method(electronic_ir)
                         if automatic_libxc_resolution is not None
                         else SCF_DOMAIN
                     ),
@@ -468,7 +468,7 @@ class Calculator:
                     ks_options,
                     composition=electronic_ir,
                     scf_domain=(
-                        AUTOMATIC_SCF_DOMAIN
+                        scf_domain_for_method(electronic_ir)
                         if automatic_libxc_resolution is not None
                         else ks_options.scf_domain
                     ),
@@ -2376,11 +2376,13 @@ class Calculator:
                 properties=requested_properties,
             ).require_feasible()
         if self._dispersion_method_ir is not None or (
-            compute_forces and self._capabilities.family == "density_functional"
+            self._capabilities.family == "density_functional"
         ):
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
-            # scientific implementation in the single-system path.
+            # scientific implementation in the single-system path. Energy-only
+            # must use the same SCF owner, final-state gates and optimization
+            # selection; requesting derivatives changes only the consumer.
             with self.prepare_batch(
                 [native_atoms],
                 charges=[charge],

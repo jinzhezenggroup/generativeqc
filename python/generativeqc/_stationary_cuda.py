@@ -1979,6 +1979,32 @@ class _CudaSources:
                     strict=True,
                 )
             )
+        scaled_metrics = getattr(
+            self.library, "stationary_becke_binary_scaled_metrics_v1", None
+        )
+        if scaled_metrics is not None:
+            scaled_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            scaled_values = (ct.c_uint64 * 6)()
+            if scaled_metrics(self.handle, scaled_values, 6):
+                raise RuntimeError("stationary binary-scaled Becke metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "becke_binary_scaled_requested",
+                        "becke_binary_scaled_selected",
+                        "becke_binary_scaled_batches",
+                        "becke_binary_scaled_points",
+                        "becke_binary_scaled_phased_bytes",
+                        "becke_binary_scaled_cooperative_normalize",
+                    ),
+                    scaled_values,
+                    strict=True,
+                )
+            )
         becke_counters = getattr(
             self.library, "stationary_becke_phase_metrics_v1", None
         )
@@ -2290,6 +2316,10 @@ class PreparedStationaryCudaExecution:
         resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
     ) -> None:
+        if self._lease.closed:
+            raise RuntimeError("prepared stationary CUDA execution is closed")
+        if self._lease.running:
+            raise RuntimeError("prepared stationary CUDA execution is running")
         if not integral_derivatives and (
             aot_directory is not None
             or ecp
@@ -2540,12 +2570,12 @@ class PreparedStationaryCudaExecution:
 
     def close(self) -> None:
         with self._lock:
+            self._lease.close()
             self._resident_ao_maps = None
             self._resident_ao_map_key = None
             if self._stack is not None:
                 self._stack.close()
                 self._stack = None
-            self._lease.invalidate()
 
     def __enter__(self) -> typing.Any:
         return self
@@ -2611,6 +2641,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "becke_elided_reverse_pair_panel_write_bytes",
         "becke_elided_gather_pair_panel_read_bytes",
         "phased_becke_batches",
+        "becke_binary_scaled_batches",
+        "becke_binary_scaled_points",
         "becke_primitive_batches",
         "becke_primitive_reverse_pair_visits",
         "restricted_point_batches",
@@ -3345,6 +3377,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         artifact = prepared.stationary_artifact
         grid_artifact = prepared.grid_artifact
         artifacts = list(prepared.artifacts)
+        prepared._lease.begin(
+            prepared._lease.contract.request,
+            max_host_bytes=max_host_bytes,
+            max_device_bytes=max_device_bytes,
+        )
     tensor_work = {
         "executions": 0,
         "h2d_numeric_bytes": 0,
@@ -4218,9 +4255,13 @@ def complete_rks_cuda_gradient_diagnostic(
     if not isinstance(prepared, PreparedStationaryCudaExecution):
         raise TypeError("prepared CUDA execution has the wrong owner type")
     with prepared._lock:
+        if prepared._lease.closed:
+            raise RuntimeError("prepared stationary CUDA execution is closed")
+        if prepared._lease.running:
+            raise RuntimeError("prepared stationary CUDA execution is running")
         try:
             result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
-        except Exception:
+        except BaseException:
             prepared._lease.mark_failure()
             raise
         prepared._lease.mark_success()

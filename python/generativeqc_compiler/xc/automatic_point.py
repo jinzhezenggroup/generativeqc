@@ -15,8 +15,14 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from .bulk_runtime import build_bulk_runtime_program
+from .density_work import DENSITY_WORK_DOMAIN
 from .equal_spin import equal_spin_roots
 from .libxc_work import automatic_work_policy, polarized_work_setup
+from .physical_kinetic_predicate import (
+    PREDICATE_VARIABLE,
+    bind_physical_kinetic_predicate,
+    emit_physical_kinetic_side,
+)
 
 AUTOMATIC_POINT_LAYOUTS = {
     ("rho_a", "rho_b"): 1,
@@ -80,19 +86,24 @@ def emit_automatic_point(
     original-density weighting, Cartesian gradients apply the sigma chain rule,
     and kinetic coefficients include the native half-vtau convention. CUDA
     reports invalid physical inputs/outputs with ``DevicePointValue.valid``;
-    CPU retains domain exceptions. The optional CUDA slice binds paired work
+    CPU retains domain exceptions. Unchanged work inputs use exact original
+    Cartesian coordinates for kinetic predicates, retaining branch payloads.
+    The optional CUDA slice binds paired work
     inputs after differentiation, retaining every polarized partial. Only a
     producer proving equal physical spins may call that slice. This source
-    grants no runtime admission, and leaves CPU and incumbent emission intact.
+    grants no runtime admission.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("automatic point backend must be cpu or cuda")
     if equal_spin and backend != "cuda":
         raise ValueError("automatic equal-spin point lowering requires CUDA")
+    policy = automatic_work_policy(name)
+    density_only = policy.family == "lda"
     program = build_bulk_runtime_program(
         name,
         spin="polarized",
         order=1,
+        **({"domain": DENSITY_WORK_DOMAIN} if density_only else {}),
     )
     features = program.spec.features
     try:
@@ -108,22 +119,44 @@ def emit_automatic_point(
     if program.outputs != expected_outputs:
         raise ValueError(f"automatic Libxc E/vxc output layout changed: {name}")
 
-    policy = automatic_work_policy(name)
-    work_lines, work_arguments = polarized_work_setup(policy, features)
+    if density_only:
+        # The projected Graph owns floors and original-density energy weighting.
+        # Passing floored inputs here would reweight energy a second time.
+        work_lines = (
+            "  const double total_density = rho_a + rho_b;",
+            f"  if (total_density < {float(policy.density_threshold).hex()}) return {{}};",
+        )
+        work_arguments = features
+    else:
+        work_lines, work_arguments = polarized_work_setup(policy, features)
     variables = dict(zip(features, work_arguments, strict=True))
-    emitter = ScalarCEmitter(program.graph, variables)
-    roots = (
-        equal_spin_roots(program.graph, program.roots) if equal_spin else program.roots
+    roots, physical_kinetic = bind_physical_kinetic_predicate(
+        program.graph, program.roots
     )
+    if equal_spin:
+        roots = equal_spin_roots(program.graph, roots)
+    kinetic_lines = emit_physical_kinetic_side() if physical_kinetic else ()
+    if physical_kinetic:
+        variables[PREDICATE_VARIABLE] = PREDICATE_VARIABLE
+    emitter = ScalarCEmitter(program.graph, variables)
     emitter.emit(roots)
     refs = [emitter.reference(root) for root in roots]
-    expression_identity = canonical_hash(
-        {
-            "schema": "generativeqc.automatic-libxc-work-point.v1",
-            "interior_expression": program.expression_hash,
-            "work_policy": policy.to_payload(),
-            "features": features,
-        }
+    expression_identity = (
+        program.expression_hash
+        if density_only
+        else canonical_hash(
+            {
+                "schema": "generativeqc.automatic-libxc-work-point.v1",
+                "interior_expression": program.expression_hash,
+                "work_policy": policy.to_payload(),
+                "features": features,
+                **(
+                    {"physical_kinetic_predicate": kinetic_lines}
+                    if physical_kinetic
+                    else {}
+                ),
+            }
+        )
     )
     stem = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     function_name = f"automatic_{stem}_point"
@@ -183,12 +216,18 @@ def emit_automatic_point(
         lines.append("  (void)tau;")
 
     lines.extend(work_lines)
+    lines.extend(kinetic_lines)
 
     lines.extend(emitter.lines)
+    energy = (
+        refs[0]
+        if density_only
+        else f"{refs[0]} * total_density / (work_rho_a + work_rho_b)"
+    )
     lines.extend(
         [
             f"  {value_type} out{{}};",
-            f"  out.energy = {refs[0]} * total_density / (work_rho_a + work_rho_b);",
+            f"  out.energy = {energy};",
             f"  out.rho[0] = {refs[1]};",
             f"  out.rho[1] = {refs[2]};",
         ]

@@ -1,0 +1,55 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent complete-force gates pass; isolated fresh ABBA observes a scoped endpoint benefit. No statistical/global or latest-master timing claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2692,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "6ac7f2f3e2d7a46981f233f980e0b704d1695f73c23b80b989a83c4ebbdc5868"
+    },
+    {
+      "bytes": 488,
+      "path": "production-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "084969db57b1bff15791201170fdd24a0382cf740e6daef3fe71c3570aceb4af"
+    },
+    {
+      "bytes": 67460,
+      "path": "raw-receipts.json.xz",
+      "role": "samples",
+      "sha256": "879adeb407a77622f6b9695e019eb316d0d4beaca9269551448517e2d448e7e1"
+    },
+    {
+      "bytes": 7959,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "9c8d0ee31c9c49f317523abba9cb53e0ce477c54909f157354c0296cb3bc9491"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=2",
+      "--time=00:30:00",
+      "bash",
+      "qualify-feature.sh",
+      "q32-default",
+      "candidate-q32-default",
+      "0"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "34dd51ed3ebc5b03b17f095de2cd7b39903923c8"
+  }
+}

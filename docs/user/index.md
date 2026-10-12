@@ -23,6 +23,7 @@ methods
 :maxdepth: 1
 :caption: Run and reuse calculations
 
+geometry_optimization
 batched_hf
 checkpoint
 basis_projection

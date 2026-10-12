@@ -1,0 +1,108 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent complete E+F, exact work, bounded fallback and actual partial-provider lifetime gates pass; local endpoint gains are retained without shared formal/global/default promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 4434,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "24c5738bab7a78f9d808fe8ac31dc2959a711c8d8e17607188127dd555efa86f"
+    },
+    {
+      "bytes": 2874,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "591288f232111e767c54ebdbe6a3798d88fccb1c387b297e7cd1078a60c7c1f5"
+    },
+    {
+      "bytes": 991,
+      "path": "basis.input.gz",
+      "role": "input",
+      "sha256": "45609470b1aa2c58129f02ca6907a288046390fbd413418b914b34cff84e7798"
+    },
+    {
+      "bytes": 860,
+      "path": "selection.json.gz",
+      "role": "summary",
+      "sha256": "8999730f8fec7bca54077a8bc31ce3feccc80cb84febb2681dfe13029ef19d97"
+    },
+    {
+      "bytes": 2192,
+      "path": "comparison.json.gz",
+      "role": "summary",
+      "sha256": "493287f88887e1658812f2dbac3c2f3d647d35110ace00d36e81e0fa33915ce1"
+    },
+    {
+      "bytes": 798,
+      "path": "source-observers.json.gz",
+      "role": "summary",
+      "sha256": "6fbf6bc8aa015520c9708b0e988fdbc88b813c76ff72af6b0bdd2ca54ebc0351"
+    },
+    {
+      "bytes": 7948,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "81a195d032dc4999100acc3839f8a3af74e224d23678e439a1f5d3e54851924c"
+    },
+    {
+      "bytes": 1082,
+      "path": "oracle.json.gz",
+      "role": "samples",
+      "sha256": "a8d1a55197002af004319f106b6950fb8c6ef119c79829366b4f083766349880"
+    },
+    {
+      "bytes": 345,
+      "path": "qualification.json.gz",
+      "role": "summary",
+      "sha256": "cb7940d706ff7a52a7069ba68ea52a158ebeaea2114bde1256de7be9d5282a5a"
+    },
+    {
+      "bytes": 14108,
+      "path": "measured-endpoint-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "7156bf22ab9216a3390ed76133b5af47dc465e47494887c62cd45b01812cbae4"
+    },
+    {
+      "bytes": 4282,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "531120e67dbbcdd153eeaa2c546dfe8418cc313c03c151ea346a9db8750d5c43"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "reproduce.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "637466c624c4c4c4dd4eb7c511a2c88675744325"
+  },
+  "source_reconstruction": {
+    "full_patch_bytes": 30702,
+    "full_patch_git_path": "benchmarks/results/selective-eri-rhf-partial-20261011/measured-source.patch.gz",
+    "full_patch_sha256": "bacb8c2bc1cc8802944b28451a54bdd900330d85a07b9ef5f1d1425ba75ce07c",
+    "full_snapshot_git_revision": "0d27821557ba77bfd6e1a65316ed88bc20061fbd",
+    "included_paths": [
+      "src/hf/rhf_frame_response.cu",
+      "src/scf/cuda/direct_jk.cpp",
+      "src/scf/cuda/direct_jk_plan.hpp",
+      "src/scf/cuda/reference_eri_policy.hpp",
+      "src/scf/cuda/rhf_resident_values.cpp",
+      "src/scf/cuda/rhf_resident_values.hpp",
+      "src/scf/cuda_direct_jk_device.hpp",
+      "tests/native/rhf_frame_response_probe.cpp",
+      "tests/python/test_rhf_frame_response_cuda.py",
+      "benchmarks/selective_eri_rhf_acceptance.py",
+      "benchmarks/selective_eri_rhf_endpoint.cpp",
+      "benchmarks/selective_eri_rhf_endpoint.py"
+    ],
+    "scope": "All compiled native modifications, endpoint/client/oracle and real-GPU response tests; optional offline profiler/selector and host-test edits remain in existing Git history."
+  }
+}

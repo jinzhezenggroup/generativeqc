@@ -286,9 +286,26 @@ def test_legacy_math_sources_and_paired_execution_header_are_pinned() -> None:
 
 
 def test_forces_keep_full_response_materialization() -> None:
+    """Forward-only copies never remap independent response cotangent slots."""
     owner = (ROOT / "src/cc/df_triples_cuda.cu").read_text()
-    response = owner[owner.index("static DFCudaResponseResult pullback_df_cuda_impl") :]
+    joint_start = owner.index("DFCudaCombinedResponseResult pullback_and_fock_df_cuda(")
+    response = owner[
+        owner.index("static DFCudaResponseResult pullback_df_cuda_impl") : joint_start
+    ]
     assert "MomentSourceMap" not in response and "energy_distinct_tile" not in response
+    joint = owner[joint_start:]
+    reverse = joint[
+        joint.index("const auto run_pullback") : joint.index(
+            "const bool distinct_moments"
+        )
+    ]
+    assert "sources" not in reverse and "MomentSourceMap" not in reverse
+    assert "bar_w + perm * p.v3" in reverse
+    assert "d.w_contraction_storage_bits == 64" in joint
+    assert "d.w_contraction_compute_bits == 64" in joint
+    assert "d.w_contraction_accumulation_bits == 64" in joint
+    assert "cudaMemcpyDeviceToDevice" in joint
+    assert "energy_distinct_tile" not in joint
     endpoint = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     assert (
         "if (forces) {\n      auto response = cc::triples::pullback_and_fock_df_cuda("

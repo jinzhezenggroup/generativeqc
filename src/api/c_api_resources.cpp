@@ -15,6 +15,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/ks_host_resources.hpp"
 #include "scf/preliminary_guess.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -514,6 +515,29 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
     return 0;
   } catch (const std::exception&) {
     return 1;
+  }
+}
+
+/** Shape-only private CPU host inventory, not an execution capability.
+ * Successful queries use only scalar/stack storage, without heap/provider work.
+ * Shape slots follow CpuKsHostResourceShape's field order (17 unsigned values);
+ * boolean slots 14/15 must be 0/1. Output slots follow cpu_ks_host_resource_keys.
+ * Wrong lengths, topology or overflow preserve the entire caller output.
+ */
+int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t* shape, std::size_t shape_count,
+                                         std::uint64_t* values, std::size_t value_count) {
+  if (!shape || shape_count != 17 || !values || value_count != 16 || shape[14] > 1 || shape[15] > 1)
+    return -1;
+  try {
+    const generativeqc::scf::CpuKsHostResourceShape request{
+        shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
+        shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
+        shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+    const auto inventory = generativeqc::scf::cpu_ks_host_resources(request);
+    std::copy(inventory.begin(), inventory.end(), values);
+    return 0;
+  } catch (...) {
+    return -1;
   }
 }
 

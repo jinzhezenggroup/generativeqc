@@ -71,26 +71,29 @@ def selector_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <string>
 #include "cc/lambda_response.hpp"
 int main(int argc,char** argv) {
-  if(argc!=6)return 1;
+  if(argc!=7)return 1;
   int mode=std::stoi(argv[1]);
   generativeqc::cc::LambdaOptions response;
 """
         + controls
         + r"""
   const bool sharing=std::stoi(argv[2]), mixed=std::stoi(argv[3]),
-             limit=std::stoi(argv[4]), invalid=std::stoi(argv[5]);
+             limit=std::stoi(argv[4]), invalid=std::stoi(argv[5]), resident=std::stoi(argv[6]);
   if(response.serial_scratch_reuse!=sharing || response.df_mixed_precision!=mixed)return 2;
   if(response.df_mixed_precision_max_iterations!=(invalid?0:limit?2:16))return 3;
   if(std::isnan(response.df_mixed_precision_warmup_tolerance)!=invalid)return 4;
+  if(response.cuda_resident_krylov!=resident)return 5;
 }
 """,
     )
 
 
-@pytest.mark.parametrize("mask", range(16))
+@pytest.mark.parametrize("mask", range(32))
 def test_probe_controls_have_independent_bits(selector_probe: Path, mask: int) -> None:
-    """The actual Python packer and extracted C++ decoder agree on all four bits."""
-    sharing, mixed, limit, invalid = (bool(mask & (1 << bit)) for bit in range(4))
+    """The Python packer and C++ decoder keep scratch, warmup and residency independent."""
+    sharing, mixed, limit, invalid, resident = (
+        bool(mask & (1 << bit)) for bit in range(5)
+    )
     _, _, arrays = case(1, 2)
     observed = []
 
@@ -105,15 +108,16 @@ def test_probe_controls_have_independent_bits(selector_probe: Path, mask: int) -
         mixed_precision=mixed,
         mixed_limit_two=limit,
         invalid_mixed_controls=invalid,
+        resident_krylov=resident,
     )
     mode = observed[0]
     assert isinstance(mode, int)
-    assert mode & 0xF000 == mask << 12
+    assert mode & 0x1F000 == mask << 12
     subprocess.run(
         [
             str(selector_probe),
             str(mode),
-            *(str(int(value)) for value in (sharing, mixed, limit, invalid)),
+            *(str(int(value)) for value in (sharing, mixed, limit, invalid, resident)),
         ],
         check=True,
         capture_output=True,

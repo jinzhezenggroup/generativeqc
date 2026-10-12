@@ -19,6 +19,7 @@
 
 #include "cc/df_source.hpp"
 #include "cc/rccsdt_force.hpp"
+#include "cc/reference_input.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "methods/correlated_cuda_reference.hpp"
@@ -131,27 +132,6 @@ void validate_descriptor(const generativeqc_method_descriptor& d,
                       "RCCSD requires an explicit CPU or CUDA backend");
 }
 
-std::vector<double> fock_mo(const hf::PhysicalReference& ref) {
-  const auto n = ref.nbf;
-  std::vector<double> scratch(n * n), result(n * n);
-  for (std::size_t mu = 0; mu < n; ++mu)
-    for (std::size_t q = 0; q < n; ++q) {
-      double value = 0.0;
-      for (std::size_t nu = 0; nu < n; ++nu)
-        value += ref.fock[mu * n + nu] * ref.coefficients[nu * n + q];
-      scratch[mu * n + q] = value;
-    }
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q) {
-      double value = 0.0;
-      for (std::size_t mu = 0; mu < n; ++mu)
-        value += ref.coefficients[mu * n + p] * scratch[mu * n + q];
-      if (!std::isfinite(value)) throw std::runtime_error("nonfinite RCCSD MO Fock matrix");
-      result[p * n + q] = value;
-    }
-  return result;
-}
-
 #if GENERATIVEQC_HAS_CUDA
 void attach_df_source(cc::Problem& problem, cc::DFSourceResult&& fitted, posthf::ProviderWork& work,
                       generativeqc_tensor::Metrics& metrics) {
@@ -203,16 +183,17 @@ cc::Problem build_problem(
   // A failed optional source may already have performed real work. Preserve
   // cumulative diagnostics, but validate the compiler schedule for this attempt.
   const auto initial_work = provider_work;
+  // All canonical orbital/Fock algebra consumes the method-neutral borrowed
+  // reference. The HF owner remains alive in RccsdNativeState; conventional
+  // AO and optional CUDA DF source adapters still use that physical owner.
+  const auto canonical = cc::prepare_canonical_reference_input(ref.electronic_reference());
   cc::Problem p;
-  p.nocc = ref.nocc;
+  p.nocc = canonical.occupied;
   p.reference_retained_bytes = retained_reference_bytes(ref);
-  p.nvir = ref.nbf - ref.nocc;
-  p.reference_energy = ref.energy;
-  const auto o = p.nocc, v = p.nvir, n = ref.nbf;
-  if (!o || !v || ref.orbital_energies.size() != n)
-    throw std::invalid_argument("invalid RCCSD canonical reference dimensions");
-
-  const auto fmo = fock_mo(ref);
+  p.nvir = canonical.virtuals;
+  p.reference_energy = canonical.reference_energy;
+  const auto o = p.nocc, v = p.nvir, n = canonical.basis_functions;
+  const auto& fmo = canonical.fock_mo;
   p.foo.resize(o * o);
   p.fov.resize(o * v);
   p.fvv.resize(v * v);
@@ -224,7 +205,7 @@ cc::Problem build_problem(
     for (std::size_t b = 0; b < v; ++b) p.fvv[a * v + b] = fmo[(o + a) * n + o + b];
 
   const auto n2 = o * o * v * v;
-  cc::initialize_canonical_denominators(p, ref.orbital_energies, options,
+  cc::initialize_canonical_denominators(p, canonical.orbital_energies, options,
                                         cuda && options.derived_denominators);
   if (correlation_auxiliary) {
 #if GENERATIVEQC_HAS_CUDA
@@ -680,7 +661,8 @@ class RccsdPrepared final : public PreparedCalculation {
   RccsdPrepared(Capabilities capabilities, runtime::ExecutionContext execution, core::System system,
                 scf::ScfOptions reference_options, cc::SolverOptions solver_options,
                 std::size_t reference_capacity)
-      : capabilities_(capabilities),
+      : PreparedCalculation(execution.backend(), execution.device_id()),
+        capabilities_(capabilities),
         execution_(std::move(execution)),
         system_(std::move(system)),
         reference_options_(reference_options),
@@ -708,7 +690,7 @@ class RccsdPrepared final : public PreparedCalculation {
     last_performance_.reset();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
@@ -894,7 +876,8 @@ class RccsdPreparedBatch final : public PreparedBatch {
   RccsdPreparedBatch(Capabilities capabilities, core::ContextState& context,
                      std::vector<core::System> systems,
                      const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : capabilities_(capabilities),
+      : PreparedBatch(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         execution_(context),
         context_(&context),
         systems_(std::move(systems)),
@@ -915,9 +898,8 @@ class RccsdPreparedBatch final : public PreparedBatch {
   void invalidate_result() override {
     for (auto& owner : owners_) owner->invalidate_result();
   }
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("RCCSD batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
@@ -1070,12 +1052,12 @@ RccsdNativeState run_rccsd_native_state(
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;
   solver_options.df_mixed_precision = df_mixed_precision;
-  // A changed nonlinear trajectory is qualified for CUDA DF energies only;
-  // force/Lambda owners and conventional/CPU callers retain trial-state DIIS.
-  solver_options.diis_input_residual =
-      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
-  solver_options.df_replay_auxiliary_batch =
-      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
+  // Retaining DF response inputs changes source lifetime, not the CC equations.
+  // Every observed state and the independent final physical replay stay fresh.
+  solver_options.diis_input_residual = execution.cuda_requested() && correlation_auxiliary;
+  // The fresh expanded replay consumes final amplitudes, not retained adjoint
+  // intermediates. Optional batching preserves ordered Q checks and admission.
+  solver_options.df_replay_auxiliary_batch = execution.cuda_requested() && correlation_auxiliary;
   auto reference = reference_options(descriptor, phase_budget);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;

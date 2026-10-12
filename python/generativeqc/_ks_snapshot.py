@@ -24,16 +24,22 @@ from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_FUNCTIONAL_CODE_BASE,
     automatic_functional_ingredients,
 )
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
+from generativeqc_compiler.xc.density_work import (
+    DENSITY_WORK_DOMAIN,
+    DENSITY_WORK_DOMAIN_VERSION,
+)
+from generativeqc_compiler.xc.libxc_work import (
+    LIBXC_WORK_DOMAIN,
+    LIBXC_WORK_DOMAIN_VERSION,
+)
 from generativeqc_compiler.xc.spec import FunctionalSpec
 
 from . import _native
 from .batch import PreparedBatch
 from .ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
+    _native_semilocal_code,
     electronic_method_ir,
-    native_xc_functional_code,
-    scf_domain_for_method,
     uses_molecular_nonlocal_domain,
 )
 
@@ -87,10 +93,18 @@ def _scf_xc_points(
     gradient: typing.Any,
     tau: typing.Any = None,
     *,
+    spin: str = "polarized",
     scales: typing.Any = (1.0, 1.0),
     required_ingredients: tuple[str, ...] | None = None,
 ) -> typing.Any:
-    """Evaluate the exact native semilocal SCF point model."""
+    """Evaluate the SCF model for an explicit spin layout.
+
+    RKS retains equal half-feature channels for the stationary pullback, but
+    automatic density-work programs evaluate original total features through
+    the layout-aware native ABI. The default preserves legacy polarized calls.
+    """
+    if spin not in ("unpolarized", "polarized"):
+        raise ValueError("SCF point evaluator requires an explicit supported spin")
     if type(functional) is bool:
         functional = int(functional)
     automatic = type(functional) is int and functional >= AUTOMATIC_FUNCTIONAL_CODE_BASE
@@ -126,10 +140,21 @@ def _scf_xc_points(
     if np.iscomplexobj(raw_tau) or raw_tau.shape != rho.shape:
         raise ValueError("SCF point evaluator requires real tau[2,n]")
     tau = np.ascontiguousarray(raw_tau, dtype=np.float64)
+    if spin == "unpolarized" and not (
+        np.array_equal(rho[0], rho[1])
+        and np.array_equal(gradient[0], gradient[1])
+        and np.array_equal(tau[0], tau[1])
+    ):
+        raise ValueError(
+            "restricted SCF point transport requires equal half-feature channels"
+        )
+    restricted_bridge = automatic and spin == "unpolarized"
     output = np.empty((rho.shape[1], 11), dtype=np.float64)
     try:
         evaluate = (
-            library.generativeqc_xc_point_batch_v2
+            library.generativeqc_xc_point_batch_v4
+            if restricted_bridge
+            else library.generativeqc_xc_point_batch_v2
             if scales == (1.0, 1.0)
             else library.generativeqc_xc_point_batch_v3
         )
@@ -138,11 +163,19 @@ def _scf_xc_points(
             "native library lacks the required semilocal XC point bridge"
         ) from error
     prefix_types = (
-        [ct.c_uint32]
+        [ct.c_uint32, ct.c_uint32, ct.c_double, ct.c_double]
+        if restricted_bridge
+        else [ct.c_uint32]
         if scales == (1.0, 1.0)
         else [ct.c_uint32, ct.c_double, ct.c_double]
     )
-    prefix_values = [functional] if scales == (1.0, 1.0) else [functional, *scales]
+    prefix_values = (
+        [functional, 1, *scales]
+        if restricted_bridge
+        else [functional]
+        if scales == (1.0, 1.0)
+        else [functional, *scales]
+    )
     evaluate.argtypes = [
         *prefix_types,
         ct.POINTER(ct.c_double),
@@ -287,12 +320,15 @@ class NativeKsSnapshot:
             )
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
-            method_name = self._batch._calculator._method_name
-            functional_code = native_xc_functional_code(method_name)
+            options = self._batch._calculator.ks_options
+            functional_code = _native_semilocal_code(options.method_ir)
             if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:
-                expected_domain_version = LIBXC_WORK_DOMAIN_VERSION
+                expected_domain_version = {
+                    LIBXC_WORK_DOMAIN: LIBXC_WORK_DOMAIN_VERSION,
+                    DENSITY_WORK_DOMAIN: DENSITY_WORK_DOMAIN_VERSION,
+                }.get(options.scf_domain)
             else:
-                expected_domain = scf_domain_for_method(method_name)
+                expected_domain = options.scf_domain
                 expected_domain_version = (
                     4
                     if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
@@ -873,7 +909,6 @@ class NativeKsSnapshot:
         from ._dft_gradient import (
             StationaryKsIdentity,
             native_ao_geometry_identity,
-            scf_regularization_identity,
             xc_geometry_topology_identity,
         )
 
@@ -1009,8 +1044,7 @@ class NativeKsSnapshot:
         if (
             options is None
             or options.coefficients != self.coefficients
-            or functional
-            != native_xc_functional_code(self._batch._calculator._method_name)
+            or functional != _native_semilocal_code(options.method_ir)
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
@@ -1174,7 +1208,7 @@ class NativeKsSnapshot:
                 {
                     "native_owner": owner,
                     "functional": spec.identity,
-                    "scf_domain": scf_domain_for_method(method),
+                    "scf_domain": options.scf_domain,
                     "grid": grid.identity,
                     **(
                         {"grid_provenance": dict(self.grid_provenance)}
@@ -1207,7 +1241,7 @@ class NativeKsSnapshot:
             functional_identity=spec.identity,
             # The derivative bridge consumes this exact SCF point model;
             # interior-v1 remains a separate diagnostic contract.
-            regularization_identity=scf_regularization_identity(method),
+            regularization_identity=canonical_hash({"scf_domain": options.scf_domain}),
             provider_identity=canonical_hash(provider_payload),
             owner=owner,
             solve_epoch=epoch,
@@ -1251,6 +1285,7 @@ class NativeKsSnapshot:
             rho,
             gradient,
             tau,
+            spin=functional.spin,
             scales=self.coefficients[:2],
             required_ingredients=functional.ingredients,
         )
@@ -1290,7 +1325,7 @@ class NativeKsSnapshot:
     def prepare_cuda_response(
         self, *, tile_points: int, budget_bytes: int
     ) -> typing.Any:
-        """Copy this live state's exact sources into a bounded CUDA XC owner."""
+        """Borrow this live owner's D/grid in a bounded CUDA XC response arena."""
         return _NativeCudaXCPlan(
             self, tile_points=tile_points, budget_bytes=budget_bytes
         )
@@ -1454,7 +1489,8 @@ class _NativeCudaXCPlan:
 
     Only density directions and final AO matrices cross the host/device seam.
     AO values, base/directional features, point derivatives and assembly execute
-    on device. Preparation retains the native reference density once.
+    on device. Preparation borrows the native reference D and immutable grid;
+    every action checks the source token before using those resident buffers.
     """
 
     def __init__(

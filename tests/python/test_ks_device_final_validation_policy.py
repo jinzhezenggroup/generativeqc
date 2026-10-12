@@ -27,24 +27,24 @@ def test_default_and_explicit_selectors_preserve_the_qualified_scope(
 
 int main() {
   using namespace generativeqc::dft;
-  const double exact_exchange_fraction = 0.25;
-  const double restricted_coefficient = -exact_exchange_fraction / 2.0;
-  assert(pbe0_rks_final_validation_composition(true, restricted_coefficient, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, exact_exchange_fraction, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, -exact_exchange_fraction, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, 0.0, 1.0, 1.0));
-  assert(!pbe0_rks_final_validation_composition(false, restricted_coefficient, 0.75, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, restricted_coefficient, 1.0, 1.0));
-  assert(!pbe0_rks_final_validation_composition(true, restricted_coefficient, 0.75, 0.5));
-  assert(!pbe0_rks_final_validation_composition(
-      true, std::numeric_limits<double>::quiet_NaN(), 0.75, 1.0));
+  // 20/25/54-percent RKS full-range exchange shares the same final-state
+  // validation matrix algebra; nonphysical/nonfinite weights must be refused.
+  for (double coefficient : {-0.1, -0.125, -0.27, -0.5}) {
+    assert(restricted_global_hybrid_exchange_coefficient(coefficient));
+  }
+  for (double coefficient : {0.0, 0.25, -0.500001,
+                             std::numeric_limits<double>::quiet_NaN(),
+                             std::numeric_limits<double>::infinity(),
+                             -std::numeric_limits<double>::infinity()}) {
+    assert(!restricted_global_hybrid_exchange_coefficient(coefficient));
+  }
   for (std::size_t aos : {0U, 2U, 7U, 16U, 17U, 37U, 383U, 384U, 768U, 1024U}) {
     for (unsigned spins : {0U, 1U, 2U}) {
-      for (bool direct_pbe0 : {false, true}) {
+      for (bool direct_global_hybrid : {false, true}) {
         for (bool full_precision : {false, true}) {
-          const bool expected = aos >= 384 && spins == 1 && direct_pbe0 && full_precision;
+          const bool expected = aos >= 384 && spins == 1 && direct_global_hybrid && full_precision;
           const bool eligible = device_final_validation_default_eligible(
-              aos, spins, direct_pbe0, full_precision);
+              aos, spins, direct_global_hybrid, full_precision);
           assert(eligible == expected);
           assert(device_final_validation_requested(nullptr, eligible) == expected);
           assert(!device_final_validation_requested("0", eligible));
