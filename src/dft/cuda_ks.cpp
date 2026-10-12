@@ -19,6 +19,7 @@
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/energy_change.hpp"
+#include "dft/mixed_precision_warmup.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
@@ -322,6 +323,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::uint64_t pending_fitted_projection_scratch_generation{};
   std::uint64_t final_fitted_projection_scratch_generation{};
   runtime::ExecutionPrecisionSchedule precision_schedule{};
+  MixedPrecisionWarmup mixed_warmup{};
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
       incremental_energy_refinement{};
@@ -348,6 +350,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
   std::unique_ptr<scf::cuda_execution::DirectJkSourceLease> phase_source;
+  bool phase_source_cold{};
   std::uint64_t phase_submitted_begin{};
   std::size_t phase_device_bytes{}, phase_host_bytes{};
 
@@ -397,7 +400,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Public ledgers have no reserved quartic allowance yet. A forced request
     // must not bypass their complete resource plan or alter precision/ranges.
     if (fitted_coulomb || fitted_exchange || has_range_correction || incremental_direct_jk ||
-        precision_schedule.any_lower_precision() || runtime::active_device_resource_ledger ||
+        (precision_schedule.any_lower_precision() && !strict_refinement) ||
+        runtime::active_device_resource_ledger ||
         strategy.spec.coulomb.op != scf::FockOperator::FullRange ||
         strategy.spec.exchange.op != scf::FockOperator::FullRange)
       return;
@@ -472,10 +476,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   generativeqc_status enqueue_primary_jk(const double* alpha, const double* beta, bool mixed,
                                          std::string& detail, bool use_source = true) {
+    const bool resident_source = !mixed && use_source && phase_source && phase_source->active();
     runtime::cuda_trace::TraceOperation trace(
         has_exchange ? "cuda_ks_exact_jk_shared" : "cuda_ks_exact_j", stream,
-        {1, n, 0, use_source && phase_source && phase_source->active(), false});
-    if (use_source && phase_source && phase_source->active())
+        {1, n, 0, resident_source, false});
+    if (resident_source)
       return phase_source->enqueue(provider.strategy().spec, alpha, j,
                                    has_exchange ? exchange : nullptr, jk_error,
                                    provider.strategy().screening_tolerance, detail, beta,
@@ -1017,6 +1022,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
     precision_schedule =
         resolve_cuda_ks_precision_schedule(options.precision_mode, xc_layout.fast_paths,
                                            fitted_coulomb, nonlocal_correlation != nullptr);
+    if (precision_schedule.any_lower_precision()) {
+      mixed_warmup =
+          resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),
+                                         std::getenv("GENERATIVEQC_KS_MIXED_MAX_ITERATIONS"));
+      // Early-handoff evidence currently covers restricted owners only. Keep
+      // the incumbent UKS schedule until independent open-shell qualification.
+      if (spins != 1 && (mixed_warmup.switch_residual > 0.0 || mixed_warmup.max_iterations))
+        throw std::invalid_argument("bounded mixed-precision warmup requires restricted CUDA KS");
+    }
     const bool range_incremental_eligible =
         !has_range_correction ||
         (range_correction->backend == scf::FockBackend::Cuda &&
@@ -1361,8 +1375,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       // Native cold guesses arrive as a density too. Preserve their provenance
       // instead of treating every non-null pointer as a warm or external seed.
-      prepare_phase_source((!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) &&
-                           !use_warm);
+      phase_source_cold = (!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm;
+      prepare_phase_source(phase_source_cold);
       // The bounded device-control prototype is qualified only for strict-FP64
       // direct all-electron RKS. AUTO must stay on the legacy host-controlled
       // path so its FP32 mixed-J stage and independent FP64 refinement cannot be
@@ -1755,14 +1769,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
       return active;
     } catch (...) {
+      // Preparation at the mixed-to-strict handoff may throw before a
+      // lower-level iteration guard owns the failure. Every completion error
+      // must end the trajectory, including a partially published source lease.
+      (void)cudaStreamSynchronize(stream);
+      is_pending = is_active = false;
+      is_failed = true;
+      output.converged = final_state_ready = false;
       retire_phase_source(false);
-      if (auditing_phase) {
-        (void)cudaStreamSynchronize(stream);
-        is_pending = is_active = false;
-        is_failed = true;
-        output.converged = final_state_ready = false;
-        clear_warm_state();
-      }
+      if (auditing_phase) clear_warm_state();
       occupied_fitted_factor_ready = false;
       pending_fitted_occupied = false;
       final_fitted_projection_ready = false;
@@ -2269,7 +2284,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.electronic_energy, physical.electronic_energy_correction, previous_energy,
         previous_energy_correction);
     output.density_rms = physical.density_rms;
-    diagnostic.history.push_back({output.iterations, diagnostic.components, output.energy_change,
+    const bool first_strict_energy = mixed_precision_executed && refinement_iterations == 1 &&
+                                     std::isinf(output.energy_change) && output.energy_change > 0.0;
+    const double history_energy_change = first_strict_energy ? -1.0 : output.energy_change;
+    diagnostic.history.push_back({output.iterations, diagnostic.components, history_energy_change,
                                   physical.density_change, physical.residual, diagnostic.electrons,
                                   stabilize_occupations});
     // The kernel validates electronic components; their host-side sum with
@@ -2328,7 +2346,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();
     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
     const bool enter_strict_refinement =
-        mixed_stage && (converged || output.iterations >= options.max_iterations);
+        mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
+                                      options.max_iterations, physical.maximum_residual);
     if (enter_strict_refinement) {
       // AUTO may use FP32 only as an iterative accelerator. Reset nonlinear
       // history and give refinement its own full budget for the FP64 target.
@@ -2340,6 +2359,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = true;
       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+      // The completed mixed build cannot borrow strict cached values. Prepare
+      // their independently budgeted FP64 lease only after the precision epoch
+      // changes; warm/external seeds retain the existing auto-refusal policy.
+      prepare_phase_source(phase_source_cold);
     } else if (incremental_direct_jk && converged && !final_closure && spins == 1 &&
                provider.system().ecp_terms.empty()) {
       // Both energies now belong to consecutive full-density builds. The
@@ -2420,8 +2443,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
     pending_incremental_delta = false;
-    previous_energy = physical.electronic_energy;
-    previous_energy_correction = physical.electronic_energy_correction;
+    // An approximate energy cannot be the baseline of a strict stopping test.
+    // The first FP64 observation starts a new energy epoch beside the fresh DIIS.
+    previous_energy = enter_strict_refinement ? std::numeric_limits<double>::infinity()
+                                              : physical.electronic_energy;
+    previous_energy_correction =
+        enter_strict_refinement ? 0.0 : physical.electronic_energy_correction;
     try {
       if (output.converged && complete_precision_inventory_domain()) {
         auto& work = output.precision_work;

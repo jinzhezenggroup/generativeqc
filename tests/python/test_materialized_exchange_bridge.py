@@ -108,7 +108,11 @@ struct CoulombState {
   double value{};
   double& at(unsigned, unsigned, unsigned, unsigned) { return value; }
 };
-template<unsigned Order> struct MaterializedDirectPairRecurrence {
+struct MixedPrecisionFloat;
+template<class Scalar> struct Vec3 { Scalar x, y, z; };
+template<class Scalar> using EvaluationReal = double;
+inline double scalar_value(double value) { return value; }
+template<unsigned Order, class Scalar = double> struct MaterializedDirectPairRecurrence {
   PrimitivePairData first, second;
   double coefficients[4];
   int bra[3]{}, ket[3]{};
@@ -135,7 +139,7 @@ template<unsigned Order> bool fill_range_coulomb(double, double, double,
   assert(false && "full-range bridge must not request a range recurrence");
   return false;
 }
-template<unsigned Order> double consume_cartesian_coulomb(
+template<unsigned Order, class Scalar = double> double consume_cartesian_coulomb(
     double, double, int, int, int, int, const int (&)[3], const int (&)[3],
     const CoulombState&) {
   return 0.75;
