@@ -1,6 +1,7 @@
 """Public native HF-to-MP2 energy acceptance, separate from fixture consumers."""
 
 import ctypes as ct
+import json
 import os
 import time
 import typing
@@ -472,6 +473,135 @@ def test_public_conventional_mp2_force_cuda_matches_cpu() -> None:
         cuda.correlation.planned_endpoint_peak_bytes
         <= cuda.correlation.numeric_capacity_bytes
     )
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
+    reason="requires Slurm-allocated CUDA device and native library",
+)
+@pytest.mark.parametrize("name", ["h2", "water", "lih", "f_heh"])
+def test_cuda_mp2_shared_reference_source_complete_endpoint(
+    name: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Protect complete forces, device source routing, and the disable fallback."""
+    assert os.environ.get("SLURM_JOB_ID"), "run real-GPU checks through srun"
+    metadata, _ = load_fixture(name)
+    arguments = source_arguments(metadata)
+    results = []
+    for selection in ("0", "1"):
+        journal = tmp_path / f"{name}-{selection}.jsonl"
+        monkeypatch.setenv("GENERATIVEQC_MP2_REFERENCE_SOURCE", selection)
+        monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
+        calc = Calculator(
+            method="mp2",
+            device="cuda",
+            basis=arguments["basis"],
+            basis_representation=arguments["representation"],
+        )
+        result = calc.singlepoint(
+            arguments["atoms"],
+            charge=arguments["charge"],
+            properties=("energy", "forces"),
+        )
+        assert result.converged and result.executed_backend == "cuda"
+        assert result.correlation.force_provenance_flags == 0x7
+        assert result.correlation.response_absolute_residual <= 1e-9
+        assert result.correlation.numeric_capacity_bytes <= 256 << 20
+        records = [json.loads(line) for line in journal.read_text().splitlines()]
+        routing = {
+            record["key"]: record["value"]
+            for record in records
+            if record["event"] == "VALUE" and record["name"] == "mp2_endpoint"
+        }
+        assert routing["mp2_energy_device_source"] == int(selection)
+        assert routing["mp2_force_device_source"] == int(selection)
+        source_reads = sum(
+            record["value"]
+            for record in records
+            if record.get("key") == "source_reads"
+            and record["name"] == "native_mo_blocks"
+        )
+        device_reads = sum(
+            record["value"]
+            for record in records
+            if record.get("key") == "device_source_reads"
+            and record["name"] == "native_mo_blocks"
+        )
+        assert source_reads > 0
+        assert device_reads == (source_reads if selection == "1" else 0)
+        expected = metadata["records"]["conventional"]
+        assert (
+            abs(result.energy - expected["hf_energy"] - expected["correlation_energy"])
+            <= 1e-9
+        )
+        np.testing.assert_allclose(result.forces.sum(axis=0), 0.0, atol=2e-8)
+        results.append(result)
+    np.testing.assert_allclose(results[0].energy, results[1].energy, atol=1e-9, rtol=0)
+    np.testing.assert_allclose(results[0].forces, results[1].forces, atol=2e-8, rtol=0)
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1",
+    reason="requires Slurm-allocated CUDA device and native library",
+)
+def test_cuda_mp2_optional_source_preserves_tight_budget_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Find real admission rather than assuming a vendor workspace size.
+
+    Optional source residency must preserve an admitted legacy endpoint,
+    including its retained warm density and second complete force execution.
+    """
+    assert os.environ.get("SLURM_JOB_ID"), "run real-GPU checks through srun"
+    metadata, _ = load_fixture("h2")
+    arguments = source_arguments(metadata)
+    monkeypatch.setenv("GENERATIVEQC_MP2_REFERENCE_SOURCE", "0")
+
+    def calculator(budget: int) -> Calculator:
+        return Calculator(
+            method="mp2",
+            device="cuda",
+            basis=arguments["basis"],
+            basis_representation=arguments["representation"],
+            correlation_memory_budget_bytes=budget,
+        )
+
+    lower, upper = 8 << 20, 256 << 20
+    expected = calculator(upper).singlepoint(
+        arguments["atoms"], charge=arguments["charge"], properties=("energy", "forces")
+    )
+    while upper - lower > 4096:
+        budget = (lower + upper) // 2
+        try:
+            calculator(budget).singlepoint(
+                arguments["atoms"],
+                charge=arguments["charge"],
+                properties=("energy", "forces"),
+            )
+            upper = budget
+        except RuntimeError as error:
+            assert "GENERATIVEQC error 7:" in str(error), str(error)
+            lower = budget
+    budget = upper + 1024
+    for selection in ("0", "1"):
+        monkeypatch.setenv("GENERATIVEQC_MP2_REFERENCE_SOURCE", selection)
+        with calculator(budget).prepare_batch(
+            [arguments["atoms"]], charges=[arguments["charge"]], warm_start=True
+        ) as batch:
+            for iteration in range(2):
+                result = batch.execute(
+                    properties=("energy", "forces"), strict=True
+                ).items[0]
+                assert result.converged and result.executed_backend == "cuda"
+                assert result.correlation.force_provenance_flags == 0x7
+                assert result.correlation.numeric_capacity_bytes <= budget
+                assert result.warm_start_used == bool(iteration)
+                np.testing.assert_allclose(
+                    result.energy, expected.energy, atol=1e-9, rtol=0
+                )
+                np.testing.assert_allclose(
+                    result.forces, expected.forces, atol=2e-8, rtol=0
+                )
 
 
 def test_c_api_conventional_force_is_transactional_across_repeated_execution() -> None:

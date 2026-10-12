@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <string_view>
 
 #include "hf/reference.hpp"
 #include "molecule/basis.hpp"
@@ -13,7 +16,9 @@
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
+#include "posthf/source_reuse_schedule_generated.hpp"
 #include "response/solve.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::mp2 {
@@ -85,7 +90,7 @@ response::LinearResponseProblem response_problem(const hf::PhysicalReference& re
 }
 
 ConventionalForceResult conventional_force_impl(
-    const hf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const integrals::ElectronInteractionSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, bool cuda, int device_id) {
 #if !GENERATIVEQC_HAS_CUDA
@@ -95,10 +100,10 @@ ConventionalForceResult conventional_force_impl(
       !budget_bytes || !std::isfinite(denominator_threshold) || denominator_threshold <= 0.0 ||
       !std::isfinite(same_space_threshold) || same_space_threshold <= 0.0 || device_id < 0)
     throw std::invalid_argument("invalid conventional MP2 force request");
-  posthf::NativeBlockProvider provider(source, reference, budget_bytes);
-  const auto problem = response_problem(reference, provider, cuda, device_id);
+  auto provider = std::make_unique<posthf::NativeBlockProvider>(source, reference, budget_bytes);
+  auto problem = response_problem(reference, *provider, cuda, device_id);
   const auto dimension = problem.dimension();
-  const auto plan = response::prepare_response(problem, response_options);
+  auto plan = response::prepare_response(problem, response_options);
   std::size_t maximum_shell = 0;
   for (const auto& shell : source.orbital().shells) {
     const auto count = source.orbital().basis_representation == GENERATIVEQC_BASIS_SPHERICAL
@@ -107,15 +112,58 @@ ConventionalForceResult conventional_force_impl(
     maximum_shell = std::max(maximum_shell, static_cast<std::size_t>(count));
   }
   const auto coordinate_count = posthf::checked_mul(source.orbital().atoms.size(), 3);
-  const auto provider_bytes = provider.provider_bytes();
-  const auto streamed_workspace = detail::streamed_force_workspace_bytes(
-      reference.nbf, reference.nocc, [&](const std::array<std::size_t, 4>& shape) {
-        const auto block = provider.plan(shape, cuda);
-        const auto peak = posthf::checked_add(block.host_bytes, block.device_bytes);
-        if (peak < provider_bytes)
-          throw std::logic_error("MP2 provider workspace accounting underflow");
-        return peak - provider_bytes;
-      });
+  const auto workspace_for = [&](const posthf::NativeBlockProvider& candidate) {
+    return detail::streamed_force_workspace_bytes(
+        reference.nbf, reference.nocc, [&](const std::array<std::size_t, 4>& shape) {
+          const auto block = candidate.plan(shape, cuda);
+          const auto peak = posthf::checked_add(block.host_bytes, block.device_bytes);
+          if (peak < candidate.provider_bytes())
+            throw std::logic_error("MP2 provider workspace accounting underflow");
+          return peak - candidate.provider_bytes();
+        });
+  };
+  auto streamed_workspace = workspace_for(*provider);
+  const auto legacy_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
+  const auto legacy_resources = conventional_gradient_plan(
+      reference.nbf, reference.nocc, provider->provider_bytes(), plan, maximum_shell,
+      coordinate_count, posthf::checked_mul(coordinate_count, sizeof(double)), legacy_budget);
+  const auto* tile_override = std::getenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+  if (cuda && source.supports_device_read(integrals::ElectronInteractionOperator::eri, device_id) &&
+      (!tile_override || std::string_view(tile_override) != "0")) {
+    // Reuse the compiler's cross-shell source planner from CC/MP2 energy.
+    // Every candidate covers all force consumers, not just OVOV. Preserve the
+    // legacy derivative allowance up to its actual bounded scratch ceiling.
+    const auto derivative_reserve =
+        std::min(legacy_budget - legacy_resources.peak_bytes, posthf::source_scratch_bytes);
+    std::vector<posthf::generated::SourceTileCandidate> candidates;
+    for (std::size_t axis = 1; axis <= reference.nbf; ++axis) {
+      try {
+        posthf::NativeBlockProvider candidate(source, reference, budget_bytes,
+                                              static_cast<unsigned>(axis),
+                                              posthf::AOTileDomain::Basis);
+        const auto workspace = workspace_for(candidate);
+        const auto remaining = detail::remaining_force_budget(budget_bytes, workspace);
+        const auto resources = conventional_gradient_plan(
+            reference.nbf, reference.nocc, candidate.provider_bytes(), plan, maximum_shell,
+            coordinate_count, posthf::checked_mul(coordinate_count, sizeof(double)), remaining,
+            derivative_reserve);
+        candidates.push_back({axis, 1, posthf::checked_add(resources.peak_bytes, workspace)});
+      } catch (const std::length_error&) {
+        continue;
+      }
+    }
+    if (!candidates.empty()) {
+      const auto selected = posthf::generated::select_source_tile(reference.nbf, candidates);
+      provider = std::make_unique<posthf::NativeBlockProvider>(
+          source, reference, budget_bytes, static_cast<unsigned>(selected.axis_tile),
+          posthf::AOTileDomain::Basis);
+      streamed_workspace = workspace_for(*provider);
+      problem = response_problem(reference, *provider, cuda, device_id);
+      plan = response::prepare_response(problem, response_options);
+    }
+  }
+  runtime::df_progress::Scope::number("mp2_force_source_axis_tile", provider->tile_shape()[0]);
+  const auto provider_bytes = provider->provider_bytes();
   const auto endpoint_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
   const auto base_resources = conventional_gradient_plan(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
@@ -127,8 +175,8 @@ ConventionalForceResult conventional_force_impl(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
       posthf::checked_mul(coordinate_count, sizeof(double)), endpoint_budget, backend_stage_bytes);
   const auto h = hcore_mo(reference);
-  auto adjoint = energy_adjoint(reference, provider, denominator_threshold, cuda, device_id);
-  auto orbital = canonical_orbital_rhs_streamed(reference, h, provider, adjoint,
+  auto adjoint = energy_adjoint(reference, *provider, denominator_threshold, cuda, device_id);
+  auto orbital = canonical_orbital_rhs_streamed(reference, h, *provider, adjoint,
                                                 same_space_threshold, cuda, device_id);
   std::vector<double> diagonal(dimension);
   for (std::size_t i = 0; i < reference.nocc; ++i)
@@ -139,7 +187,7 @@ ConventionalForceResult conventional_force_impl(
       response::solve_response(plan, problem, orbital.response_rhs, {}, diagonal);
   if (!response_result.converged())
     throw std::runtime_error("canonical MP2 orbital response did not converge");
-  auto weights = canonical_lagrangian_weights_streamed(reference, h, provider, std::move(adjoint),
+  auto weights = canonical_lagrangian_weights_streamed(reference, h, *provider, std::move(adjoint),
                                                        std::move(orbital), response_result.solution,
                                                        same_space_threshold, cuda, device_id);
   if (!std::isfinite(weights.stationarity_residual) || weights.stationarity_residual > 1e-7)
@@ -166,7 +214,7 @@ ConventionalForceResult conventional_force_impl(
 }  // namespace
 
 ConventionalForceResult conventional_force_cpu(const hf::PhysicalReference& reference,
-                                               const posthf::RawSource& source,
+                                               const integrals::ElectronInteractionSource& source,
                                                std::size_t budget_bytes,
                                                double denominator_threshold,
                                                double same_space_threshold,
@@ -176,7 +224,7 @@ ConventionalForceResult conventional_force_cpu(const hf::PhysicalReference& refe
 }
 
 ConventionalForceResult conventional_force_cuda(
-    const hf::PhysicalReference& reference, const posthf::RawSource& source,
+    const hf::PhysicalReference& reference, const integrals::ElectronInteractionSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
     const response::GmresOptions& response_options, int device_id) {
   return conventional_force_impl(reference, source, budget_bytes, denominator_threshold,

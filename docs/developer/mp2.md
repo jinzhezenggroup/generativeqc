@@ -50,6 +50,39 @@ result = ri.singlepoint(
 )
 ```
 
+### CUDA E+F source reuse
+
+Conventional CUDA MP2 borrows the qualified exact RHF interaction source used
+by CC. When admitted, resident reference ERIs survive energy, adjoint, orbital
+response and relaxed-weight replay; otherwise a compact source generates
+bounded unscreened device tiles. The source is tied to the current geometry,
+basis, reference and device. A unique resident owner returns its executable to
+the prepared warm cache only after the complete endpoint finishes.
+
+The compiler's source-tile planner admits cross-shell AO tiles for device-backed
+energy and force consumers. Force admission covers all streamed block shapes,
+simultaneously live outputs, response workspace and bounded derivative scratch,
+not just the energy's occupied–virtual block. Scientific equations, full-force
+stationarity and residual gates are unchanged. A memory refusal releases the
+optional source once and retries the existing bounded compatibility provider;
+it does not reinterpret a numerical failure as permission to retry.
+
+Set `GENERATIVEQC_MP2_REFERENCE_SOURCE=0` to disable the source handoff.
+`GENERATIVEQC_MP2_ENERGY_SOURCE_TILING=0` and
+`GENERATIVEQC_MP2_FORCE_SOURCE_TILING=0` independently retain shell-sized source
+tiles. `GENERATIVEQC_DF_PROGRESS_TRACE` records completed source reads, transform
+summands and transfers; it is diagnostic replay, not a substitute for endpoint
+timing. The public conventional CUDA path still stages MO blocks on the host;
+source reuse is not a claim that the complete response/adjoint is GPU-resident.
+
+Run `benchmarks/mp2_cuda_ef_endpoint.py` under a finite-time Slurm GPU allocation
+to qualify cold and prepared-warm **energy plus analytic forces**, with an
+optional independent PySCF gradient oracle and untimed work journal. Source,
+library and input provenance accompany the results. This does not enable CUDA
+RI-MP2 forces or frozen-core/CBS workflows beyond the existing method contract.
+
+### Response and force contracts
+
 CPU RI-MP2 analytic forces complete C2 by composing the native MP2 adjoint and
 true-residual RHF response with the shared fixed-rank inverse-square-root VJP and
 the bounded #143 raw three-center/metric derivative consumers. No coordinate-major
@@ -163,7 +196,7 @@ shell-stage materializations should be retained.
 C / C++ / Python public prepare
   -> method registry -> Mp2Prepared
   -> existing RHF driver, requested owned physical reference
-  -> conventional: CG10 RawSource + cyclic staged MO transforms
+  -> conventional: shared exact interaction source / RawSource fallback + cyclic MO transforms
   -> RI: shared DF source + metric factor + occupied/virtual three-center transform
   -> CG08 energy equation -> generated native CPU or CG09 CUDA tile program
   -> native compensated scalar fold
@@ -204,10 +237,12 @@ commutator residual and canonical density drift. GPU computation of Fock,
 orbitals and reference energy remains on device; its reference validation and
 matrix snapshots are disclosed host staging.
 
-Conventional correlation AO tiles come from the existing **CPU values-only
-source**. CUDA mode uploads those tiles, performs all four cyclic transforms
-with CG10 cuBLAS, downloads bounded MO tiles, reorders exchange on host, and
-uploads them through CG09's host-input ABI.
+Conventional CUDA correlation and response borrow the qualified RHF device
+source described in [CUDA E+F source reuse](#cuda-ef-source-reuse). The bounded
+compatibility fallback uses the existing CPU values-only source and uploads
+its AO tiles. Both routes perform four cyclic CUDA MO transforms, download
+bounded MO tiles, reorder exchange on the host, and upload energy tiles through
+CG09's host-input ABI. CPU force execution retains its original source route.
 
 RI mode builds the RHF reference and correlation integrals from the same
 orbital/auxiliary systems and metric threshold. `density_fitting="cpu"` selects

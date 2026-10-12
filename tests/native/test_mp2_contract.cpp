@@ -38,11 +38,14 @@ class ForwardingInteractionSource final
   void read(Operator op, const std::array<std::size_t, 4>& begin,
             const std::array<std::size_t, 4>& count, double* out,
             std::size_t elements) const override {
+    ++reads_;
     source_.read(op, begin, count, out, elements);
   }
+  std::size_t reads() const noexcept { return reads_; }
 
  private:
   const generativeqc::posthf::RawSource& source_;
+  mutable std::size_t reads_{};
 };
 
 generativeqc::core::System h2() {
@@ -774,6 +777,23 @@ void complete_conventional_force_matches_resolved_energy() {
   response.max_workspace_bytes = 64ULL << 20;
   const auto analytic = generativeqc::mp2::conventional_force_cpu(
       *hf.reference, source, 256ULL << 20, 1e-10, 1e-10, response);
+  ForwardingInteractionSource forwarded_source(source);
+  const auto forwarded = generativeqc::mp2::conventional_force_cpu(
+      *hf.reference, forwarded_source, 256ULL << 20, 1e-10, 1e-10, response);
+  require(forwarded.forces == analytic.forces &&
+              forwarded.response.residual_norm == analytic.response.residual_norm,
+          "complete MP2 force still requires a concrete RawSource owner");
+  ForwardingInteractionSource rejected_source(source);
+  bool short_budget_rejected = false;
+  try {
+    (void)generativeqc::mp2::conventional_force_cpu(*hf.reference, rejected_source,
+                                                    analytic.planned_endpoint_peak_bytes - 1, 1e-10,
+                                                    1e-10, response);
+  } catch (const std::length_error&) {
+    short_budget_rejected = true;
+  }
+  require(short_budget_rejected && rejected_source.reads() == 0,
+          "one-byte-short complete force budget performed source work before admission");
   require(analytic.response.converged(), "MP2 Z-vector did not converge");
   require(analytic.forces.size() == 6, "MP2 force shape");
   const double step = 1e-4;

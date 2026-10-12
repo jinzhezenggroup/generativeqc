@@ -1,8 +1,10 @@
 #include "posthf/mp2_energy.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 
 #include "posthf/mp2_cpu_generated.hpp"
 #include "posthf/mp2_cuda_plan.hpp"
@@ -77,8 +79,17 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   const auto total_jobs = posthf::checked_mul(posthf::checked_mul(ref.nocc, ref.nocc),
                                               posthf::checked_mul(virtual_tiles, virtual_tiles));
   const auto provider_budget = budget - kernel_reserve;
+  const auto* tile_override = std::getenv("GENERATIVEQC_MP2_ENERGY_SOURCE_TILING");
+  const auto tile_domain =
+      cuda && source.supports_device_read(integrals::ElectronInteractionOperator::eri, device) &&
+              (!tile_override || std::string_view(tile_override) != "0")
+          ? posthf::AOTileDomain::Basis
+          : posthf::AOTileDomain::Shell;
+  // Qualified device sources already accept arbitrary public-AO ranges.
+  // Broader tiles avoid repeating every MO-output transform for each tiny
+  // shell-sized AO tile; the existing complete batch planner bounds storage.
   posthf::NativeBlockProvider widest_provider(source, ref, provider_budget,
-                                              std::numeric_limits<unsigned>::max());
+                                              std::numeric_limits<unsigned>::max(), tile_domain);
   const auto maximum_axis_tile = widest_provider.tile_shape()[0];
 
   std::vector<posthf::generated::SourceTileCandidate> tile_candidates;
@@ -86,7 +97,7 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   for (std::size_t axis_tile = 1; axis_tile <= maximum_axis_tile; ++axis_tile) {
     try {
       posthf::NativeBlockProvider candidate(source, ref, provider_budget,
-                                            static_cast<unsigned>(axis_tile));
+                                            static_cast<unsigned>(axis_tile), tile_domain);
       const auto request_capacity = candidate.batch_capacity(block_shape, cuda);
       const auto candidate_reuse = generated::conventional_reuse_plan(request_capacity, total_jobs);
       const auto provider_requests = candidate_reuse.provider_requests;
@@ -105,8 +116,8 @@ Energy conventional_energy(const hf::PhysicalReference& ref,
   if (tile_candidates.empty())
     throw std::length_error("MP2 energy phase exceeds numeric memory budget");
   const auto source_tile_plan = posthf::generated::select_source_tile(ref.nbf, tile_candidates);
-  posthf::NativeBlockProvider provider(source, ref, provider_budget,
-                                       static_cast<unsigned>(source_tile_plan.axis_tile));
+  posthf::NativeBlockProvider provider(
+      source, ref, provider_budget, static_cast<unsigned>(source_tile_plan.axis_tile), tile_domain);
   const auto request_capacity = provider.batch_capacity(block_shape, cuda);
   const auto reuse = generated::conventional_reuse_plan(request_capacity, total_jobs);
   const bool shared_scan = reuse.shared_scan;
