@@ -1,6 +1,7 @@
 """Recheck independent full-vector gates and summarize retained E+F samples.
 
-Run from the measured checkout with PYTHONPATH=python:. No GPU is needed.
+Run from this checkout with local Git history and PYTHONPATH=python:.
+No GPU or network is needed.
 Diagnostic samples are checked for accuracy but never enter timing medians.
 """
 
@@ -10,6 +11,7 @@ import gzip
 import hashlib
 import json
 import lzma
+import os
 import subprocess
 from pathlib import Path
 
@@ -18,15 +20,36 @@ from generativeqc_compiler.common.performance import assess_comparison
 from benchmarks.readme_omol25 import check_record
 
 
+def read_git_blob(root: Path, revision: str, path: str) -> bytes:
+    """Read an existing local object without lazy fetch or interactive login."""
+    environment = {
+        **os.environ,
+        "GIT_NO_LAZY_FETCH": "1",
+        "GIT_ALLOW_PROTOCOL": "",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+    result = subprocess.run(
+        ["git", "cat-file", "blob", f"{revision}:{path}"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise ValueError(
+            "historical object unavailable; fetch the recorded revision "
+            f"with git fetch origin {revision} and retry"
+        )
+    return result.stdout
+
+
 def summarize(directory: Path, atoms: int) -> dict:
     """Keep all samples, executed work, noise gates and source provenance."""
     root = directory.resolve().parents[2]
     path = directory / f"endpoints-{atoms}.json.xz"
     compact = json.loads(lzma.decompress(path.read_bytes()))
     recovery = compact.pop("raw_recovery")
-    stored = subprocess.check_output(
-        ["git", "show", f"{recovery['revision']}:{recovery['path']}"], cwd=root
-    )
+    stored = read_git_blob(root, recovery["revision"], recovery["path"])
     raw = gzip.decompress(stored)
     assert hashlib.sha256(raw).hexdigest() == recovery["uncompressed_sha256"]
     data = json.loads(raw)
@@ -47,8 +70,8 @@ def summarize(directory: Path, atoms: int) -> dict:
     assert reference["protocol"] == data["protocol"]
     assert len(data["samples"]) == 48
     for source, digest in data["source_sha256"].items():
-        measured = subprocess.check_output(
-            ["git", "show", f"ce01eaf5a:{source}"], cwd=root
+        measured = read_git_blob(
+            root, "ce01eaf5a760f22cc59e58315319b61c6798dae2", source
         )
         assert hashlib.sha256(measured).hexdigest() == digest, source
     validations = []

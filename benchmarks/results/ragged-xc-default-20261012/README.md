@@ -82,12 +82,17 @@ cd ../../..
 PYTHONPATH=python:. python benchmarks/results/ragged-xc-default-20261012/summarize.py
 ```
 
-The summarizer reads the checksum-bound complete raw records with `git show`,
+The summarizer reads the checksum-bound complete raw records with `git cat-file`,
 compares every compact field against them, checks measured source hashes at
 `ce01eaf5a`, reference identity, every complete force vector and original
 convergence status, then recomputes medians/noise and work. It needs Python
 dependencies and these local Git objects, not a GPU or network. A shallow clone
-must fetch the two named commits first. Release CUDA builds use
+must fetch the two named commits first. The reader disables Git lazy fetch,
+all transport protocols and interactive credential prompts, including inherited
+settings. Missing local objects fail with an explicit fetch-and-retry message;
+the reader never fetches them itself.
+
+Release CUDA builds use
 the existing CMake `generativeqc`, `generativeqc_dft_cuda_tests`,
 `generativeqc_stationary_pbe0_rks_manifest` and
 `generativeqc_stationary_pbe0_rks_spd_manifest` targets with verified ccache
