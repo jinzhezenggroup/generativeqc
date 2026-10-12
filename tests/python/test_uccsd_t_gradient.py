@@ -15,7 +15,7 @@ from test_uccsd_gradient import _NH2, _RESTRICTED_H4, _native_oracle
 from test_uccsd_lambda import _problem
 from test_uccsd_physical_response import _ao_derivative_oracle
 from test_uccsd_solver import _snapshot
-from test_uccsd_t_owner import _noninteracting
+from test_uccsd_t_owner import _ASYMMETRIC_H6, _noninteracting
 
 from tools.generativeqc_cc.solver import SolverOptions
 from tools.generativeqc_cc.uccsd_gradient import (
@@ -165,7 +165,7 @@ def _independent_analytic(oracle: Any) -> np.ndarray:
 
 @pytest.mark.parametrize(
     "atom,spin,broken",
-    [("N 0 0 0; H 0 -.8 .6; H 0 .8 .6", 1, False)],
+    [(_ASYMMETRIC_H6, 0, False)],
 )
 def test_corrected_physical_weights_close_reconverged_total_energy_fd(
     atom: str, spin: int, broken: bool
@@ -184,11 +184,21 @@ def test_corrected_physical_weights_close_reconverged_total_energy_fd(
         ) as (physical, _, _):
             result = physical.solve()
             gradient = _ao_derivative_oracle(snapshot, oracle, result.weights)
+            # H4 and NH2 cannot populate all four triples channels. Keep their
+            # composition through the orbital response on this asymmetric case.
+            channels = physical.result.triples_response.energy.channel_energies
+            assert set(channels) == {"aaa", "aab", "abb", "bbb"}
+            assert all(abs(value) > 1e-14 for value in channels.values())
             np.testing.assert_allclose(
                 result.total_energy, oracle.e_tot + oracle.ccsd_t(), atol=3e-9, rtol=0
             )
+            # The collapsed branch has an independent analytic full gradient;
+            # one reconverged energy coordinate retains the separate FD check.
             np.testing.assert_allclose(
-                gradient, _independent_gradient_fd(oracle), atol=2e-7, rtol=0
+                gradient, _independent_analytic(oracle), atol=2e-8, rtol=0
+            )
+            np.testing.assert_allclose(
+                gradient[0, 2], _independent_fd(oracle, 0, 2), atol=2e-7, rtol=0
             )
             np.testing.assert_allclose(gradient.sum(axis=0), 0.0, atol=2e-9, rtol=0)
             assert not isinstance(result, UCCSDRelaxedCotangents)

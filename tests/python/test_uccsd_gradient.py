@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
@@ -28,6 +27,9 @@ from tools.generativeqc_cc.uccsd_solver import PreparedUCCSD
 from tools.generativeqc_posthf.export import export_uhf
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.sources import NativeSource
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _H2 = [("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4))]
 _RESTRICTED_H4 = [
@@ -96,7 +98,7 @@ def _native_oracle(source: NativeSource, *, broken: bool = False) -> Any:
     "atoms,spin,broken,representation,native_reference",
     [
         (_H2, 0, False, "cartesian", True),
-        (_NH2, 1, False, "spherical", False),
+        (_NH2, 1, False, "spherical", True),
         (
             [("H", (0.0, 0.0, 2.45665 * index)) for index in range(4)],
             0,
@@ -345,7 +347,9 @@ def test_native_one_electron_binding_is_verified_before_eri_reads(
         else:
             hcore = hcore + 0.01 * np.eye(source.nbf)
         with monkeypatch.context() as patch:
-            patch.setattr(source, "one_electron", lambda: (overlap, hcore))
+            patch.setattr(
+                source, "one_electron", lambda matrices=(overlap, hcore): matrices
+            )
             with pytest.raises(ValueError, match=f"{field} binding"):
                 PreparedUCCSDPhysicalResponse(
                     native_physical.lambdas,
