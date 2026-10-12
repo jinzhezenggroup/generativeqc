@@ -997,7 +997,7 @@ jobs:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
       - name: Prepare bounded native diagnostics
-        if: matrix.shard == 'core-b'
+        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c'
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
@@ -1022,7 +1022,7 @@ jobs:
           # GitHub Actions caps each inline run script at 21,000 characters.
           source .github/scripts/ci_select_python_shard.sh
           diagnostic_args=()
-          if [[ "${{ matrix.shard }}" == "core-b" ]]; then
+          if [[ "${{ matrix.shard }}" == "core-a" || "${{ matrix.shard }}" == "core-b" || "${{ matrix.shard }}" == "core-c" ]]; then
             diagnostic_args+=(
               -p tools.pytest_native_diagnostics
               --native-diagnostics-dir="$PWD/.artifacts/native-diagnostics"
