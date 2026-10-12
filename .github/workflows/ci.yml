@@ -509,8 +509,12 @@ jobs:
           export GENERATIVEQC_NVCC="$PWD/build/ao-radial-compiler/nvcc"
           python3 -m pytest -q \
             tests/python/test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources \
-            tests/python/test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device \
             --basetemp build/ao-radial-compile
+          # Runtime provenance fingerprints nvcc and its sibling ptxas.
+          # The shared adapter retains compiler caching for this real toolchain.
+          GENERATIVEQC_NVCC="$CUDACXX" python3 -m pytest -q \
+            tests/python/test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device \
+            --basetemp build/grid-wheel-compile
       # This consumer never publishes an incomplete or branch-scoped cache.
       # The trusted full CUDA CLI producer saves after both compile variants.
       - name: Check Fock and proposal preflight without a GPU
