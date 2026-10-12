@@ -109,7 +109,12 @@ def main() -> None:
             )
             stats = parse_stats(result.stdout)
             detail = ""
-        except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except (
+            OSError,
+            ValueError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as exc:
             detail = str(exc)
 
     summary = render_summary(args.label, stats, detail=detail)
