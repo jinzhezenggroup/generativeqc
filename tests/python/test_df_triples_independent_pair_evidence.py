@@ -43,7 +43,7 @@ def retained() -> tuple[dict, dict[str, bytes]]:
 
 
 def _apply_reviewed_force_owner(source: Path, executable: str) -> str:
-    """Replay #2303 after the allocation repair; keep both measured identities."""
+    """Replay later reviewed owners; keep all historical measured identities."""
     relative = "src/cc/df_triples_cuda.cu"
     bundle = ROOT / "benchmarks/results/df-triples-force-distinct-moments-20261012"
     force = load_publication_record(bundle)
@@ -83,8 +83,31 @@ def _apply_reviewed_force_owner(source: Path, executable: str) -> str:
     current = destination.read_bytes()
     digest = hashlib.sha256(current).hexdigest()
     assert digest == reconstruction["compiled_sources"][relative]
+
+    # #2359 adds admission/preparation fallback, then 207dd34d repairs CUDA
+    # last-error recovery. Replay the exact reviewed owner delta after #2303.
+    # The fixture is the --full-index --unified=1 diff, for offline git apply.
+    # Source endpoints: f2cf62d9b5bee139b3d8815ba78272f9770aa3c2 ->
+    # e72097ae92cdde2f7181d4fa0bd6fa8856408e57, src/cc/df_triples_cuda.cu only.
+    # These later bytes are not measured by the independent-pair receipts.
+    response_patch = (
+        ROOT / "tests/data/df-triples-response-defaults-reviewed.patch"
+    ).read_bytes()
+    assert len(response_patch) == 2363
+    assert hashlib.sha256(response_patch).hexdigest() == (
+        "2ec42e92aaa563e19ba3007f22bd8acc01c30ef164f9a3b8965e3301ec6f8907"
+    )
+    for options in (["--check"], []):
+        subprocess.run(
+            [executable, "apply", *options, "--whitespace=error-all"],
+            input=response_patch,
+            cwd=source,
+            check=True,
+            capture_output=True,
+        )
+    current = destination.read_bytes()
     assert current == (ROOT / relative).read_bytes()
-    return digest
+    return hashlib.sha256(current).hexdigest()
 
 
 @pytest.fixture(scope="module")
@@ -148,8 +171,8 @@ def repaired_source_hashes(
         result[relative] = row["repaired_sha256"]
 
     # The old allocation-repaired owner is the exact measured baseline for
-    # #2303. Replay its separately qualified forward-copy delta before binding
-    # current source; never relabel the independent-pair GPU receipts.
+    # #2303. Replay its separately qualified forward-copy delta and the later
+    # reviewed defaults repair; never relabel the independent-pair GPU receipts.
     result["src/cc/df_triples_cuda.cu"] = _apply_reviewed_force_owner(
         source, executable
     )
@@ -400,7 +423,17 @@ def test_historical_report_compaction_preserves_every_original_byte() -> None:
     )
 
 
-@pytest.mark.parametrize("drift", ("historical-source", "current-source"))
+@pytest.mark.parametrize(
+    "drift",
+    (
+        "historical-source",
+        "current-source",
+        "reviewed-patch",
+        "truncated-patch",
+        "missing-recovery",
+        "missing-retry",
+    ),
+)
 def test_force_owner_reconstruction_rejects_unreviewed_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drift: str
 ) -> None:
@@ -417,12 +450,37 @@ def test_force_owner_reconstruction_rejects_unreviewed_drift(
     destination = source / relative
     destination.parent.mkdir(parents=True)
     destination.write_bytes(measured + (b"\n" if drift == "historical-source" else b""))
-    if drift == "current-source":
+    if drift != "historical-source":
         root = tmp_path / "current"
         current = root / relative
         current.parent.mkdir(parents=True)
-        current.write_bytes((ROOT / relative).read_bytes() + b"\n")
+        contents = (ROOT / relative).read_bytes()
+        if drift == "current-source":
+            contents += b"\n"
+        elif drift == "missing-recovery":
+            before = b"const auto pending = cudaGetLastError();"
+            assert contents.count(before) == 1
+            contents = contents.replace(before, b"const auto pending = cudaSuccess;")
+        elif drift == "missing-retry":
+            before = b"      context_owner = prepare_context();"
+            assert contents.count(before) == 2
+            prefix, suffix = contents.rsplit(before, 1)
+            contents = prefix + suffix
+        current.write_bytes(contents)
         shutil.copytree(bundle, root / bundle.relative_to(ROOT))
+        relative_patch = Path("tests/data/df-triples-response-defaults-reviewed.patch")
+        response_patch = (ROOT / relative_patch).read_bytes()
+        if drift == "reviewed-patch":
+            before = b"+      if (pending != cudaSuccess"
+            assert response_patch.count(before) == 1
+            response_patch = response_patch.replace(
+                before, b"+      if (pending == cudaSuccess"
+            )
+        elif drift == "truncated-patch":
+            response_patch = response_patch[:-1]
+        fixture = root / relative_patch
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(response_patch)
         monkeypatch.setitem(globals(), "ROOT", root)
     with pytest.raises(AssertionError):
         _apply_reviewed_force_owner(source, executable)
