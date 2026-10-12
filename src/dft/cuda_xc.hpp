@@ -52,6 +52,10 @@ struct CudaXcPointBatchPlan {
   bool compact{};
   /** Actual eligible groups/tiles; heterogeneous groups retain the incumbent. */
   std::size_t compact_groups{}, compact_tiles{}, compact_nonempty_tiles{};
+  /** Explicit research admission for tiled domains through 1024 AOs. */
+  bool ragged{};
+  /** Prepared nonempty domains above the incumbent 128-AO admission. */
+  std::size_t compact_large_tiles{};
 };
 
 /** Immutable offsets into one reusable batch arena. AO labels borrow the
@@ -213,7 +217,7 @@ class CudaXcPlan {
    * the incumbent. Compact contraction batching is an explicit qualification
    * candidate; response, mixed arithmetic and optional providers do not use it. */
   void prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget,
-                             bool compact = false);
+                             bool compact = false, bool ragged = false);
   const CudaXcPointBatchPlan& point_batch_plan() const noexcept { return point_batch_plan_; }
   /** Setup-only provider preparation within an explicit additional allowance.
    * Zero retains the generated incumbent. The allowance is separate from the
@@ -345,7 +349,7 @@ namespace cuda_xc_detail {
 /** Compiler-owned small-contraction legality for one original point batch. */
 bool compact_point_batch_admitted(const CudaXcLayout& layout,
                                   const std::vector<std::size_t>& ao_offsets,
-                                  std::size_t first_tile, std::size_t end_tile);
+                                  std::size_t first_tile, std::size_t end_tile, bool ragged);
 std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
                                                                     cudaStream_t stream,
                                                                     std::size_t provider_budget);
@@ -369,7 +373,7 @@ CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool respon
 CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               const std::vector<std::size_t>& ao_offsets,
                                               std::size_t requested_tiles,
-                                              std::size_t device_budget, bool compact);
+                                              std::size_t device_budget, bool compact, bool ragged);
 CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional);
 /** Emitted capability selector for the same finite point-program registry. */
 CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);

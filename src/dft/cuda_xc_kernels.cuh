@@ -117,15 +117,19 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
        batch_begin += batch_tiles * l.tile_points) {
     const auto batch_count = std::min(batch_tiles * l.tile_points, l.npoint - batch_begin);
     const auto batch_end = batch_begin + batch_count;
-    const bool compact = compact_candidate &&
-                         compact_point_batch_admitted(l, ao_offsets, batch_begin / l.tile_points,
-                                                      1 + (batch_end - 1) / l.tile_points);
+    const bool compact =
+        compact_candidate &&
+        compact_point_batch_admitted(l, ao_offsets, batch_begin / l.tile_points,
+                                     1 + (batch_end - 1) / l.tile_points, point_batch_plan.ragged);
     std::size_t ao_offset = 0;
+    // Empty groups still launch feature/point-total bodies with a legal grid.
+    std::size_t max_active = 1;
     // Retain only AO panels. Density scratch and optional provider factors are
     // consumed immediately and reused; no AO/jet/density work is repeated.
     for (std::size_t begin = batch_begin; begin < batch_end; begin += l.tile_points) {
       const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
       const I count = block.npoint, active = block.nactive;
+      max_active = std::max(max_active, std::size_t(active));
       const auto* ids = block.ao_ids;
       auto* ao = batch_ao + ao_offset;
       auto* features = batch_features + (begin - batch_begin) * l.spins * l.feature_terms;
@@ -180,8 +184,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     const auto tile_count = 1 + (batch_count - 1) / l.tile_points;
     const auto* descriptors = compact ? batch_descriptors + batch_begin / l.tile_points : nullptr;
     if (compact) {
-      launch_batch_density(stream, l, descriptors, tile_count, density, batch_ao, batch_work,
-                           batch_features, batch_begin, ao_ids, error);
+      launch_batch_density(stream, l, descriptors, tile_count, max_active, density, batch_ao,
+                           batch_work, batch_features, batch_begin, ao_ids, error);
       cuda_check(cudaGetLastError());
       if (total_density)
         for (std::size_t begin = batch_begin; begin < batch_end; begin += l.tile_points) {
@@ -203,9 +207,9 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
                      l.correlation_scale, delta_features);
     cuda_check(cudaGetLastError());
     if (compact) {
-      launch_batch_potential(stream, l, descriptors, tile_count, batch_ao, batch_coefficients,
-                             weights, batch_work, batch_potential, batch_totals, batch_begin,
-                             ao_ids, potential, totals, error);
+      launch_batch_potential(stream, l, descriptors, tile_count, max_active, batch_ao,
+                             batch_coefficients, weights, batch_work, batch_potential, batch_totals,
+                             batch_begin, ao_ids, potential, totals, error);
       cuda_check(cudaGetLastError());
       continue;
     }

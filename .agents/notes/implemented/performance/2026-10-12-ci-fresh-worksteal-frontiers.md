@@ -95,6 +95,14 @@ counted as successful qualification.
   The existing native library is reused; this is not a current-master native
   rebuild or a new GPU qualification. Prior source-matched four-case CUDA
   evidence under finite Slurm 7828 is retained.
+- Subsequent integration of master
+  `b836b89bfbd6b8e9a71faf59b371dcf9083ec286` retains the same UCCSD scientific
+  sources. Its 135 selector/plugin cases pass in 14.77 seconds, and the
+  current 1660-target inventory retains exact composed ownership, order,
+  mode and ordinary arguments on every event. Compiler/runtime/public-API
+  audits, explicit type checks, formatting and Sphinx warnings-as-errors
+  pass again. The increase from 1657 targets is inherited new-master test
+  inventory, not added scientific work in this scheduling policy.
 - Keep four CI workers, existing 30-minute test-step limits, complete numerical
   and failure cases, independent fresh owners and compiler caches. Production
   CPU/CUDA equations, precision, derivative gates and no-fallback contracts

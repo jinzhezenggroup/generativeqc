@@ -24,6 +24,7 @@
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/compiled_execution_region.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -445,6 +446,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   generativeqc_status enqueue_primary_jk(const double* alpha, const double* beta, bool mixed,
                                          std::string& detail, bool use_source = true) {
+    runtime::cuda_trace::TraceOperation trace(
+        has_exchange ? "cuda_ks_exact_jk_shared" : "cuda_ks_exact_j", stream,
+        {1, n, 0, use_source && phase_source && phase_source->active(), false});
     if (use_source && phase_source && phase_source->active())
       return phase_source->enqueue(provider.strategy().spec, alpha, j,
                                    has_exchange ? exchange : nullptr, jk_error,
@@ -1199,7 +1203,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           // explicitly accounts for optional panels across those lifetimes.
           xc->prepare_point_batches(point_batch_tiles,
                                     runtime::active_device_resource_ledger ? 0 : point_batch_budget,
-                                    point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0);
+                                    point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0,
+                                    point_batch_size("GENERATIVEQC_CUDA_XC_RAGGED_BATCH", 1) != 0);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }
@@ -1846,6 +1851,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   CudaXcView stage_xc(std::uint64_t next_generation,
                       generativeqc::runtime::PrecisionPhase phase =
                           generativeqc::runtime::PrecisionPhase::StrictAudit) {
+    runtime::cuda_trace::TraceOperation trace("cuda_ks_xc_shared", stream, {1, n, 0, false, false});
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
       if (!device_nonlocal) {
