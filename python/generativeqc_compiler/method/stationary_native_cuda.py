@@ -88,9 +88,12 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
     if (
         reduction.op != "add"
         or tuple(node.attrs.get("name") for node in reduction.inputs) != sources
-        or tuple(reduction.attrs.get("coefficients", ())) != (Fraction(1),) * len(sources)
+        or tuple(reduction.attrs.get("coefficients", ()))
+        != (Fraction(1),) * len(sources)
     ):
-        raise ValueError("native shared CUDA reduction requires the exact unit-source sum")
+        raise ValueError(
+            "native shared CUDA reduction requires the exact unit-source sum"
+        )
     wrapper = emit_stationary_profile_aot_wrapper_cuda(profile, include_reduction=False)
     runtime = asset_path("src/dft/stationary_gradient_cuda.cuh").read_text()
     transport = asset_path("src/dft/native_stationary_runtime.cuh").read_text()
@@ -164,7 +167,7 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
 """
     return (
         '#include "dft/cuda_stationary_binding.hpp"\n'
-        '#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1\n'
+        "#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1\n"
         + aliases
         + "\n"
         + wrapper

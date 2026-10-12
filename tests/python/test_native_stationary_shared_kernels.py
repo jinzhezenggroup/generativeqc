@@ -11,7 +11,6 @@ import struct
 from fractions import Fraction
 
 import pytest
-
 from generativeqc_compiler.method.stationary_cuda import (
     _qualified_aot_profile,
     stationary_runtime_sources,
@@ -51,7 +50,9 @@ def test_native_shared_reduction_preserves_ir_source_order(profile: str) -> None
     ]
     selected = [values[index % len(values)] for index in range(len(sources))]
     original = 0.0
-    for coefficient, value in zip(reduction.attrs["coefficients"], selected, strict=True):
+    for coefficient, value in zip(
+        reduction.attrs["coefficients"], selected, strict=True
+    ):
         original += float(coefficient) * value
     shared = 0.0
     for value in selected:

@@ -1,15 +1,13 @@
-#include "dft/native_stationary_shared_kernels.hpp"
-
 #include <cstddef>
 
+#include "dft/native_stationary_shared_kernels.hpp"
 #include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::dft {
 namespace {
 
-__global__ void transport_source(const double* input, std::size_t coordinates,
-                                 std::size_t channels, double sign, double* first,
-                                 double* second, int* error) {
+__global__ void transport_source(const double* input, std::size_t coordinates, std::size_t channels,
+                                 double sign, double* first, double* second, int* error) {
   const auto coordinate = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (coordinate >= coordinates) return;
   first[coordinate] = generativeqc_tensor::finite(sign * input[coordinate], error, 0);
@@ -39,9 +37,10 @@ __global__ void reduce_sources(const double* input, std::size_t atoms, std::size
 
 }  // namespace
 
-cudaError_t launch_native_stationary_source_transport(
-    const double* input, std::size_t coordinates, std::size_t channels, double sign,
-    double* first, double* second, int* error, cudaStream_t stream) noexcept {
+cudaError_t launch_native_stationary_source_transport(const double* input, std::size_t coordinates,
+                                                      std::size_t channels, double sign,
+                                                      double* first, double* second, int* error,
+                                                      cudaStream_t stream) noexcept {
   if (!input || !first || !error || !coordinates || (channels != 1 && channels != 2))
     return cudaErrorInvalidValue;
   transport_source<<<generativeqc_tensor::blocks(coordinates, 64), 64, 0, stream>>>(
@@ -49,9 +48,9 @@ cudaError_t launch_native_stationary_source_transport(
   return cudaGetLastError();
 }
 
-cudaError_t launch_native_stationary_source_reduction(
-    const double* input, std::size_t atoms, std::size_t sources, double* output,
-    int* error, cudaStream_t stream) noexcept {
+cudaError_t launch_native_stationary_source_reduction(const double* input, std::size_t atoms,
+                                                      std::size_t sources, double* output,
+                                                      int* error, cudaStream_t stream) noexcept {
   if (!input || !output || !error || !atoms || !sources || sources > 64)
     return cudaErrorInvalidValue;
   reduce_sources<<<generativeqc_tensor::blocks(3 * atoms, 64), 64, 0, stream>>>(

@@ -29,9 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
 def test_native_binding_retains_scientific_wrapper(profile: str) -> None:
     """Token ownership changes cannot rewrite equations, literals or IR hashes."""
-    wrapper = emit_stationary_profile_aot_wrapper_cuda(
-        profile, include_reduction=False
-    )
+    wrapper = emit_stationary_profile_aot_wrapper_cuda(profile, include_reduction=False)
     legacy = emit_stationary_profile_aot_wrapper_cuda(profile)
     native = emit_native_stationary_profile_cuda(profile)
     # The XC/AO/Becke and source-weight science stays byte-identical.

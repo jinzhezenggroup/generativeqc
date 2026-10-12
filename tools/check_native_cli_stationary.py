@@ -73,7 +73,9 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
         "launch_native_stationary_source_reduction(",
     ):
         if shared not in symbol_listing:
-            raise ValueError(f"compiled CLI is missing shared CUDA kernel launcher {shared}")
+            raise ValueError(
+                f"compiled CLI is missing shared CUDA kernel launcher {shared}"
+            )
 
 
 def main() -> int:
