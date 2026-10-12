@@ -260,3 +260,16 @@ function(generativeqc_add_gfn2_runtime target)
       "GENERATIVEQC_XTB_CONFIGURED_CPU_LINALG_RUNTIME=\"${GENERATIVEQC_XTB_CPU_LINALG_LIBRARY}\"")
   endif()
 endfunction()
+
+function(generativeqc_link_cli_core target)
+  if(GENERATIVEQC_MONOLITHIC_CLI AND TARGET generativeqc_gfn2_cuda AND
+     (CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED))
+    # The CUDA archive calls host GFN2 helpers and lazy driver imports in the
+    # static core. Rescan this pair at the final link, retaining every CUDA
+    # registration/device-link object without whole-archiving the entire core.
+    target_link_libraries(${target} PRIVATE
+      "$<LINK_GROUP:RESCAN,generativeqc,$<LINK_LIBRARY:WHOLE_ARCHIVE,generativeqc_gfn2_cuda>>")
+  else()
+    target_link_libraries(${target} PRIVATE generativeqc)
+  endif()
+endfunction()

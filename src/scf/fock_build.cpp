@@ -139,6 +139,10 @@ void contract_exact_source_major(std::size_t nbf, std::span<const double> eri,
       if constexpr (Coulomb) result.coulomb[i * nbf + a] = coulomb;
     }
   }
+  result.coulomb_exchange_work = CoulombExchangeWork::empty();
+  if constexpr (Coulomb) ++result.coulomb_exchange_work.coulomb_applications;
+  if constexpr (Exchange)
+    result.coulomb_exchange_work.exchange_applications += Unrestricted ? 2U : 1U;
 }
 
 constexpr FockProviderCapabilities supported_fock_domain() {
@@ -384,6 +388,7 @@ DirectJkMatrices build_exact_direct_jk(const ResolvedFockBuild& strategy, std::s
   validate_densities(strategy.spec.spin, count, density, beta);
   if (!strategy.spec.coulomb.present && !strategy.spec.exchange.present) {
     DirectJkMatrices result;
+    result.coulomb_exchange_work = CoulombExchangeWork::empty();
     result.nbf = nbf;
     return result;
   }
@@ -403,6 +408,7 @@ DirectJkMatrices build_exact_direct_jk(const ResolvedFockBuild& strategy, std::s
   // boundary instead of paying the generic scalar J/K quartet loop when K is absent.
   if (strategy.spec.coulomb.present && !strategy.spec.exchange.present && !unrestricted) {
     tensor::cpu_gemv('N', count, count, eri.data(), density.data(), result.coulomb.data());
+    result.coulomb_exchange_work = {true, 1, 0};
     return result;
   }
 

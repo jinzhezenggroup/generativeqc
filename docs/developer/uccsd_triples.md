@@ -9,10 +9,10 @@ real-FP64 UCCSD(T) spin-channel tile to the existing TensorIR. The same scalar
 graph supports native CPU/CUDA execution and the existing JVP/VJP transformations.
 It has no runtime, PySCF or device-probing dependency during source generation.
 
-This is a fixed-amplitude tile definition, not a complete converged UCCSD(T)
-endpoint. The complete owner must still bind a converged
-[UCCSD state](uccsd_solver.md), admit denominator and storage/work limits,
-enumerate the tile coverage, accumulate the four channels and publish their
+This is the fixed-amplitude tile definition. The separate
+[complete UCCSD(T) energy owner](uccsd_t_owner.md) binds a converged
+[UCCSD state](uccsd_solver.md), admits denominator and storage/work limits,
+enumerates the tile coverage, accumulates the four channels and publishes their
 provenance. Tile cotangents are not yet unrestricted analytic nuclear forces.
 
 ## Scientific definition

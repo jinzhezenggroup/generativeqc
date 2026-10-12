@@ -536,8 +536,9 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     assert "key: ${{ steps.cli_ccache.outputs.cache-primary-key }}" in save
     assert "always()" not in save and "failure()" not in save
     assert "continue-on-error: true" in save
+    # Tier-aware display labels may change without changing build admission.
     assert producer.index(
-        "      - name: Build fully optimized precompiled C++ CUDA CLI\n"
+        "cmake --build --preset cuda-release-cli-sm120"
     ) < producer.index(save_marker)
     assert producer.index(
         "      - name: Smoke-test release-mode native command\n"
@@ -595,6 +596,35 @@ def test_cuda_ci_ao_gate_rejects_lifecycle_regressions(before: str, after: str) 
     assert before in workflow
     with pytest.raises(AssertionError):
         _assert_cuda_ci_ao_gate(workflow.replace(before, after))
+
+
+@pytest.mark.parametrize(
+    "label", ["Compile the native distribution", "Release or fast CLI build"]
+)
+def test_cuda_complete_cache_order_ignores_build_display_label(label: str) -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    command = workflow.index("cmake --build --preset cuda-release-cli-sm120")
+    start = workflow.rfind("      - name:", 0, command)
+    assert start >= 0
+    end = workflow.index("\n", start) + 1
+    renamed = workflow[:start] + f"      - name: {label}\n" + workflow[end:]
+    _assert_cuda_ci_ao_gate(renamed)
+
+
+def test_cuda_complete_cache_cannot_precede_cli_build() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    start = workflow.index("      - name: Save complete shared CUDA ccache on master\n")
+    end = workflow.index(
+        "      - name: Preserve partial master CUDA compiler work\n", start
+    )
+    save = workflow[start:end]
+    broken = workflow[:start] + workflow[end:]
+    command = broken.index("cmake --build --preset cuda-release-cli-sm120")
+    insertion = broken.rfind("      - name:", 0, command)
+    assert insertion >= 0
+    broken = broken[:insertion] + save + broken[insertion:]
+    with pytest.raises(AssertionError):
+        _assert_cuda_ci_ao_gate(broken)
 
 
 def test_cuda_complete_cache_cannot_precede_cli_smoke() -> None:
