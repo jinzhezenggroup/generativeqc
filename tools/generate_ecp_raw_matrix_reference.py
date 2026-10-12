@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import itertools
 import json
 import math
 import os
@@ -450,7 +451,7 @@ def validate(receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path) 
             or any(type(value) is not int for value in locations)
             or locations[0] != 0
             or locations[-1] != nao
-            or any(a >= b for a, b in zip(locations, locations[1:], strict=False))
+            or any(a >= b for a, b in itertools.pairwise(locations))
         ):
             raise ValueError("invalid shell-to-AO ordering")
         if locations != expected_locations:

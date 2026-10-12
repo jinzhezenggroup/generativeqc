@@ -178,9 +178,8 @@ def _validate(
             if record[key] != binding[key]:
                 raise ValueError("resolved basis/ECP/AO identity mismatch")
         unextended = json.loads(_canonical(case["basis"]))
-        if d_shell:
-            if unextended["Na"].pop() != inputs["extra_d_shell"]:
-                raise ValueError("incorrect d-shell extension")
+        if d_shell and unextended["Na"].pop() != inputs["extra_d_shell"]:
+            raise ValueError("incorrect d-shell extension")
         if base_basis is None:
             base_basis, base_ecp = unextended, case["ecp"]
         if (
