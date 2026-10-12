@@ -87,3 +87,12 @@ Large-basis MP2 response dominates the full CBS endpoint, or a bounded common
 multi-RHS RHF response contract can share operator setup across CC and MP2.
 Sharing more compatible transformed blocks requires explicit lifetime and peak
 reservations; keeping an entire dead CC problem is not a free cache.
+
+## Follow-up
+
+[Optional CUDA MP2 force primal reuse](../performance/2026-10-12-mp2-cuda-force-mo-cache.md)
+extends ordinary CUDA E+F with its own admitted symmetry cover. The unchanged
+ordinary-endpoint work invariant above describes the companion API introduction,
+not that later optimization. Its source-matched qualification also records the
+generic HF companion force cost: grouping saves work but is not universally
+faster than independently coordinated cache-enabled endpoints.

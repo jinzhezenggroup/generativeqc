@@ -69,6 +69,23 @@ historical peak only in completed endpoint diagnostics. A native regression
 inflates the historical peak above the force budget, checks actual live admission
 and compares companion forces with independently executed ordinary HF forces.
 
+## Qualification evidence
+
+Source/library-matched Slurm E+F endpoint records and acceptance details are
+retained in [the benchmark snapshot](../../../../benchmarks/results/ccsdt-cbs-native-reuse-20261012/README.md).
+The same-library cache-disable comparison improves complete H2 DZ/TZ and water
+algebra replays by 21.3x and 16.2x respectively, with actual source/read/transform
+counts and independent per-component/composite oracle gates. These are qualified
+small-domain observations, not arbitrary-basis speed guarantees.
+
+Same-basis grouping itself improves the water endpoint but regresses H2 by 28%
+against cache-enabled independent coordination. The generic stationary HF force
+consumer remains more expensive than ordinary HF's specialized force route in
+that case. Do not hide this cost behind reduced SCF/MO work counts; revisit its
+qualified derivative backend or fusion before claiming universal grouping wins.
+The disabled-source F-shell compatibility replay exceeds its 15-minute allocation;
+its default cache-enabled endpoint is separately independently oracle-qualified.
+
 ## Revisit when
 
 Larger virtual spaces make VVVV storage or construction dominate. Prefer a
