@@ -238,7 +238,8 @@ def test_raw_replica_loss_or_corruption_fails(
         path.unlink()
         error = FileNotFoundError
     else:
-        path.write_bytes(path.read_bytes() + b" ")
+        # Preserve length so this control reaches the raw-file SHA check.
+        path.write_bytes(b"[" + path.read_bytes()[1:])
         error = AssertionError
     with pytest.raises(error):
         _assert_retained_replicas(tmp_path)
