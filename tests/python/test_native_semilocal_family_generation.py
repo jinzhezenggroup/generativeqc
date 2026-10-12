@@ -209,3 +209,21 @@ def test_grid_native_selector_matches_resolved_alias_data() -> None:
         legacy_grid_xc_selector(
             replace(functional("PBE"), components=(("GGA_X_PBE", Fraction(1)),))
         )
+
+def test_cpu_stationary_force_profiles_are_generated_admission_not_method_names() -> None:
+    families = generator.load_manifest()
+    profiles = {item["symbol"]: item["cpu_stationary_force_profiles"] for item in families}
+    assert profiles["Pbe"] == [
+        {"spins": [1, 2], "exact_exchange": "0", "semilocal_exchange": "1", "semilocal_correlation": "1"},
+        {"spins": [1, 2], "exact_exchange": "1/4", "semilocal_exchange": "3/4", "semilocal_correlation": "1"},
+    ]
+    assert profiles["B3lyp"] == [
+        {"spins": [1], "exact_exchange": "1/5", "semilocal_exchange": "1", "semilocal_correlation": "1"}
+    ]
+    assert not any(profiles[item] for item in ("Lda", "R2scan", "Wb97mv"))
+    source = (ROOT / "src/methods/dft_method.cpp").read_text()
+    start = source.index("bool supports_native_gga_force() const noexcept")
+    end = source.index("[[nodiscard]] generativeqc_property_flags supported_properties()", start)
+    gate = source[start:end]
+    assert "semilocal_family_cpu_stationary_force_qualified" in gate
+    assert "const bool pbe0" not in gate and "const bool b3lyp" not in gate

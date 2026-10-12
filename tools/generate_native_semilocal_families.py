@@ -115,6 +115,24 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
             Fraction(component[1])
         if item["exchange_policy"] == "canonical" and not item.get("canonical_method"):
             raise ValueError("canonical exchange policy requires canonical_method")
+        profiles = item.get("cpu_stationary_force_profiles", [])
+        if not isinstance(profiles, list) or len(profiles) > 2:
+            raise ValueError("CPU stationary force profiles must have at most two rows")
+        for profile in profiles:
+            if not isinstance(profile, dict) or set(profile) != {
+                "spins", "exact_exchange", "semilocal_exchange", "semilocal_correlation"
+            }:
+                raise ValueError("invalid CPU stationary force profile contract")
+            if not isinstance(profile["spins"], list) or not profile["spins"] or (
+                len(set(profile["spins"])) != len(profile["spins"])
+            ) or any(type(spin) is not int or spin not in (1, 2) for spin in profile["spins"]):
+                raise ValueError("CPU stationary force profile needs explicit RKS/UKS admission")
+            exact = Fraction(profile["exact_exchange"])
+            if not 0 <= exact <= 1:
+                raise ValueError("CPU stationary exact exchange must lie in [0,1]")
+            for key in ("semilocal_exchange", "semilocal_correlation"):
+                if not 0 <= Fraction(profile[key]) <= 1:
+                    raise ValueError("CPU stationary semilocal scale must lie in [0,1]")
     return families
 
 
@@ -142,6 +160,18 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
             "nullptr" if name is None else json.dumps(name) for name in ids
         )
         coeffs_cpp = ", ".join(_cpp_number(value) for value in coeffs)
+        force_profiles = item.get("cpu_stationary_force_profiles", [])
+        profile_rows = [
+            "{" + ", ".join((
+                f"{sum(1 << (spin - 1) for spin in profile['spins'])}U",
+                _cpp_number(profile["exact_exchange"]),
+                _cpp_number(profile["semilocal_exchange"]),
+                _cpp_number(profile["semilocal_correlation"]),
+            )) + "}"
+            for profile in force_profiles
+        ]
+        profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (2 - len(profile_rows))
+        force_profiles_cpp = "{{" + ", ".join(profile_rows) + "}}"
         records.append(
             "\n".join(
                 (
@@ -166,7 +196,9 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
                     f"     {'true' if item['molecular_nonlocal_domain'] else 'false'},",
                     f"     {'true' if item['incremental_xc'] else 'false'},",
                     f"     {'true' if item['stationary_second_order'] else 'false'},",
-                    f"     {{{cpp_fast_path_capabilities(item)}}},",
+                    f"     {force_profiles_cpp},",
+                    f"     {len(force_profiles)}U,",
+                    f"     {{{cpp_fast_path_capabilities(item)}}},
                     f"     {{{ids_cpp}}},",
                     f"     {{{coeffs_cpp}}},",
                     f"     {len(component_ids)}U,",
@@ -204,6 +236,13 @@ enum class SemilocalFamily : std::uint32_t {{
 {enum_rows}
 }};
 
+struct CpuStationaryForceProfile {{
+  std::uint32_t spin_mask;
+  double exact_exchange_fraction;
+  double semilocal_exchange_scale;
+  double semilocal_correlation_scale;
+}};
+
 struct SemilocalFamilyMetadata {{
   SemilocalFamily family;
   const char* name;
@@ -220,6 +259,8 @@ struct SemilocalFamilyMetadata {{
   bool molecular_nonlocal_domain;
   bool incremental_xc;
   bool stationary_second_order;
+  std::array<CpuStationaryForceProfile, 2> cpu_stationary_force_profiles;
+  std::uint32_t cpu_stationary_force_profile_count;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -306,6 +347,24 @@ constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) 
 
 constexpr bool semilocal_family_supports_stationary_second_order(SemilocalFamily family) noexcept {{
   return semilocal_family_metadata(family).stationary_second_order;
+}}
+
+constexpr bool semilocal_family_cpu_stationary_force_qualified(
+    SemilocalFamily family, std::uint32_t spin_channels, bool exact_exchange_present,
+    double exact_exchange_fraction, double semilocal_exchange_scale,
+    double semilocal_correlation_scale) noexcept {{
+  if (spin_channels < 1U || spin_channels > 2U) return false;
+  const auto& metadata = semilocal_family_metadata(family);
+  for (std::uint32_t i = 0; i < metadata.cpu_stationary_force_profile_count; ++i) {{
+    const auto& profile = metadata.cpu_stationary_force_profiles[i];
+    if ((profile.spin_mask & (1U << (spin_channels - 1U))) != 0 &&
+        (profile.exact_exchange_fraction != 0.0) == exact_exchange_present &&
+        profile.exact_exchange_fraction == exact_exchange_fraction &&
+        profile.semilocal_exchange_scale == semilocal_exchange_scale &&
+        profile.semilocal_correlation_scale == semilocal_correlation_scale)
+      return true;
+  }}
+  return false;
 }}
 
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {{

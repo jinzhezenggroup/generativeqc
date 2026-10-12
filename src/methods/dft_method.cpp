@@ -878,8 +878,6 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
          options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
-        (execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe &&
-         execution_plan_.semilocal_family != dft::SemilocalFamily::B3lyp) ||
         execution_plan_.automatic_program || execution_plan_.generated_split_hybrid ||
         execution_plan_.range_exchange || execution_plan_.nonlocal_correlation ||
         execution_plan_.d4_correction || !system_.ecp_terms.empty() ||
@@ -902,19 +900,18 @@ class KsPreparedCalculation final : public PreparedCalculation {
                                term.op == scf::FockOperator::FullRange && term.omega == 0.0);
     };
     if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !admitted_term(spec.coulomb) ||
-        !admitted_term(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
+        !admitted_term(spec.exchange))
       return false;
-    const bool pbe_family = execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe;
-    const bool pbe =
-        pbe_family && !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 =
-        pbe_family && spec.exchange.present &&
-        spec.exchange.coefficient == (execution_plan_.spin_channels == 1 ? -0.125 : -0.25) &&
-        options_.semilocal_exchange_scale == 0.75;
-    const bool b3lyp = !pbe_family && execution_plan_.spin_channels == 1 && spec.exchange.present &&
-                       spec.exchange.coefficient == -0.1 &&
-                       options_.semilocal_exchange_scale == 1.0;
-    return (pbe || pbe0 || b3lyp) &&
+    // Normalize the spin-specific Fock K coefficient to the scientific hybrid
+    // fraction. Only explicitly qualified manifest profiles are admitted.
+    const double exchange_fraction =
+        spec.exchange.present
+            ? -spec.exchange.coefficient * (execution_plan_.spin_channels == 1 ? 2.0 : 1.0)
+            : 0.0;
+    return dft::semilocal_family_cpu_stationary_force_qualified(
+               execution_plan_.semilocal_family, execution_plan_.spin_channels,
+               spec.exchange.present, exchange_fraction, options_.semilocal_exchange_scale,
+               options_.semilocal_correlation_scale) &&
            (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
             scf::cpu_stationary_direct_force_work_admitted(
                 system_, spec.exchange.present, grid_.point_count(), options_.xc_tile_points));
