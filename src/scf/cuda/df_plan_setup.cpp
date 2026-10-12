@@ -42,13 +42,13 @@ generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::siz
                                         const double* eigenvectors,
                                         const double* scaled_eigenvectors, std::string& detail) {
   const auto offset = system * plan.naux * plan.naux;
-  auto status = runtime::cuda_trace::trace_call("resident_metric_eigen_projection", plan.stream,
-                                                [&] {
-    return scf_matrix_product_view(
-        plan, true, false, plan.naux, pairs, plan.naux, eigenvectors + offset, plan.naux,
-        raw, plan.naux, plan.exchange_intermediate, plan.naux, 1.0, 0.0,
-        "project raw CUDA DF metric factors", detail);
-  });
+  auto status =
+      runtime::cuda_trace::trace_call("resident_metric_eigen_projection", plan.stream, [&] {
+        return scf_matrix_product_view(
+            plan, true, false, plan.naux, pairs, plan.naux, eigenvectors + offset, plan.naux,
+            raw, plan.naux, plan.exchange_intermediate, plan.naux, 1.0, 0.0,
+            "project raw CUDA DF metric factors", detail);
+      });
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   status = runtime::cuda_trace::trace_call("resident_metric_scaled_rotation", plan.stream, [&] {
     return scf_matrix_product_view(

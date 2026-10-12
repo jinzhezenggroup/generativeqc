@@ -8,10 +8,6 @@ namespace generativeqc::scf::cuda_df {
 /** cuBLAS/cuSOLVER integration for retained DF SCF state.
  * Borrow plan streams and own solver workspace setup independently of J/K selection.
  */
-/** Submit an explicit strided batched GEMM through the borrowed DF SCF BLAS provider.
- * Scientific callers own equation/order semantics; this boundary owns only
- * library submission, strides, accumulation coefficients, and failure mapping.
- */
 /** Borrowed strict-FP64 column-major matrix product for DF SCF owners.
  * The caller specifies mathematical transposes, M/N/K, physical leading
  * dimensions and accumulation scalars. This adapter alone submits to the
@@ -24,6 +20,10 @@ generativeqc_status scf_matrix_product_view(
     const double* right, std::size_t right_ld, double* output, std::size_t output_ld,
     double alpha, double beta, const char* failure_context, std::string& detail);
 
+/** Submit an explicit strided batched GEMM through the borrowed DF SCF BLAS provider.
+ * Scientific callers own equation/order semantics; this boundary owns only
+ * library submission, strides, accumulation coefficients, and failure mapping.
+ */
 generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
                                      std::size_t batch_size, std::size_t nbf, const double* left,
                                      std::size_t left_stride, const double* right,
