@@ -116,7 +116,6 @@ def main(executable: str, xyz: str) -> None:
     assert value["stages"][-1]["evaluations"] >= 1
     assert len(value["coordinates_bohr"]) == 2
 
-
     # Exercise the real native CPU CCSD(T) analytic-gradient owner, rather
     # than only asserting that it appears in the proposed stage plan.
     ccsdt = invoke(
