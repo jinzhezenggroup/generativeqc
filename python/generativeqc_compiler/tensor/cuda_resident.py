@@ -147,7 +147,9 @@ def compile_resident(
         "generated": canonical_hash(source),
         "extension": canonical_hash(extension),
         "sources": {
-            _resident_dependency_logical_name(path): file_hash(path) for path in paths if path.is_file()
+            _resident_dependency_logical_name(path): file_hash(path)
+            for path in paths
+            if path.is_file()
         },
     }
     key = canonical_hash(identity)

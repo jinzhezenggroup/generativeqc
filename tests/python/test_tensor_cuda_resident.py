@@ -11,7 +11,6 @@ import typing
 from pathlib import Path
 
 import pytest
-
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import (
     Index,
@@ -300,12 +299,14 @@ def test_resident_dependency_names_match_real_checkout_or_wheel_assets() -> None
     """The identity test runs on a CPU host; no NVCC or GPU is needed."""
     from generativeqc_compiler.common.paths import PACKAGE, asset_path
 
-    assert _resident_dependency_logical_name(
-        PACKAGE / "tensor/cuda_resident.py"
-    ) == "python/generativeqc_compiler/tensor/cuda_resident.py"
-    assert _resident_dependency_logical_name(
-        asset_path("src/tensor/cuda_resident.cuh")
-    ) == "src/tensor/cuda_resident.cuh"
+    assert (
+        _resident_dependency_logical_name(PACKAGE / "tensor/cuda_resident.py")
+        == "python/generativeqc_compiler/tensor/cuda_resident.py"
+    )
+    assert (
+        _resident_dependency_logical_name(asset_path("src/tensor/cuda_resident.cuh"))
+        == "src/tensor/cuda_resident.cuh"
+    )
 
 
 def test_compile_resident_source_identity_rejects_external_dependencies(
