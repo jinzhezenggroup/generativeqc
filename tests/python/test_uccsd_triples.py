@@ -30,7 +30,12 @@ from generativeqc_compiler.tensor import (
     linearize,
     transpose_program,
 )
-from test_uccsd_equations import _amplitudes, _feeds, _fixed_li_random_profile, _molecular_case
+from test_uccsd_equations import (
+    _amplitudes,
+    _feeds,
+    _fixed_li_random_profile,
+    _molecular_case,
+)
 
 _H6 = "; ".join(f"H 0 0 {position}" for position in range(6))
 
@@ -129,13 +134,17 @@ def test_all_spin_channels_and_partitioned_tiles_match_pyscf(
 ) -> None:
     if (atom, spin, broken) == ("Li 0 0 0", 1, False):
         layout, amplitudes, reference = _fixed_li_random_profile()
-        sources = _feeds(layout, reference["fock_spin"], reference["antisymmetrized_eri"], amplitudes)
+        sources = _feeds(
+            layout, reference["fock_spin"], reference["antisymmetrized_eri"], amplitudes
+        )
         for spin_label, spin_name in (("a", "alpha"), ("b", "beta")):
             energies = reference[f"eris_energies_{spin_name}"]
             occupied = getattr(layout, "o" + spin_label)
             sources[f"eps_o_{spin_label}"] = energies[:occupied]
             sources[f"eps_v_{spin_label}"] = energies[occupied:]
-        expected = {channel: float(reference[f"channels.{channel}"]) for channel in CHANNELS}
+        expected = {
+            channel: float(reference[f"channels.{channel}"]) for channel in CHANNELS
+        }
     else:
         coupled_cluster, eris, layout, amplitudes, sources = _case(atom, spin, broken)
         expected = _oracle_channels(coupled_cluster, eris, amplitudes)

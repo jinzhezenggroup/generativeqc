@@ -249,8 +249,9 @@ def test_residuals_against_complete_determinant_space(
         )
 
 
-
-def _fixed_li_random_profile() -> tuple[UCCSDLayout, dict[str, np.ndarray], dict[str, np.ndarray]]:
+def _fixed_li_random_profile() -> tuple[
+    UCCSDLayout, dict[str, np.ndarray], dict[str, np.ndarray]
+]:
     """Read the authentic seed-37 profile and still exercise our amplitude layout."""
     from _li_uhf_random_reference import SHAPES, load_reference
 
@@ -264,6 +265,7 @@ def _fixed_li_random_profile() -> tuple[UCCSDLayout, dict[str, np.ndarray], dict
     for name, value in amplitudes.items():
         np.testing.assert_array_equal(value, arrays[f"amplitudes.{name}"], err_msg=name)
     return layout, amplitudes, arrays
+
 
 def _molecular_case(
     atom: str, spin: int, *, restricted: bool = False, broken: bool = False
@@ -342,7 +344,10 @@ def test_random_amplitudes_against_pyscf_uccsd(
         fock, integrals = reference["fock_spin"], reference["antisymmetrized_eri"]
         expected = {
             "correlation_energy": reference["correlation_energy"],
-            **{name.replace("t", "r", 1): reference[f"residuals.{name}"] for name in amplitudes},
+            **{
+                name.replace("t", "r", 1): reference[f"residuals.{name}"]
+                for name in amplitudes
+            },
         }
     else:
         coupled_cluster, eris, layout, fock, integrals = _molecular_case(
@@ -354,7 +359,9 @@ def test_random_amplitudes_against_pyscf_uccsd(
         new_t1, new_t2 = coupled_cluster.update_amps(t1, t2, eris)
         diagonal = np.diag(fock)
         nocc = layout.oa + layout.ob
-        expected = {"correlation_energy": np.array(coupled_cluster.energy(t1, t2, eris))}
+        expected = {
+            "correlation_energy": np.array(coupled_cluster.energy(t1, t2, eris))
+        }
         for block, new in zip(layout.blocks, (*new_t1, *new_t2), strict=True):
             denominator = np.zeros(block.spec.shape)
             for axis, index in enumerate(block.spec.indices):

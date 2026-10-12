@@ -29,11 +29,20 @@ if TYPE_CHECKING:
 
 
 def _documents() -> tuple[dict, dict, dict]:
-    return tuple(_read(REFERENCE_DIR / name)[0] for name in ("reference.json", "inputs.json", "manifest.json"))
+    return tuple(
+        _read(REFERENCE_DIR / name)[0]
+        for name in ("reference.json", "inputs.json", "manifest.json")
+    )
 
 
 def _copy_reference(target: Path) -> Path:
-    for name in ("reference.json", "inputs.json", "manifest.json", "acquisition-first.json", "acquisition-second.json"):
+    for name in (
+        "reference.json",
+        "inputs.json",
+        "manifest.json",
+        "acquisition-first.json",
+        "acquisition-second.json",
+    ):
         shutil.copyfile(REFERENCE_DIR / name, target / name)
     return target
 
@@ -44,13 +53,17 @@ def _write(path: Path, value: dict) -> bytes:
     return raw
 
 
-def _reseal_array(receipt: dict, manifest: dict, name: str, values: list[float]) -> None:
+def _reseal_array(
+    receipt: dict, manifest: dict, name: str, values: list[float]
+) -> None:
     """Synthetic negative controls only; never produce a numerical fixture."""
     record = receipt["arrays"][name]
     raw = struct.pack(f"<{len(values)}d", *values)
     record["data"] = base64.b64encode(raw).decode("ascii")
     record["sha256_le_f64"] = hashlib.sha256(raw).hexdigest()
-    manifest["arrays"][name] = {key: value for key, value in record.items() if key != "data"}
+    manifest["arrays"][name] = {
+        key: value for key, value in record.items() if key != "data"
+    }
 
 
 def test_complete_profile_and_both_original_processes_are_retained() -> None:
@@ -63,10 +76,17 @@ def test_complete_profile_and_both_original_processes_are_retained() -> None:
         assert np.isfinite(arrays[name]).all()
     assert inputs["populations"] == {"oa": 2, "ob": 1, "va": 3, "vb": 4}
     assert receipt["molecule"]["basis"] == inputs["resolved_basis"]
-    assert receipt["molecule"]["ao_labels_structured"] == inputs["ao_identity"]["labels"]
+    assert (
+        receipt["molecule"]["ao_labels_structured"] == inputs["ao_identity"]["labels"]
+    )
     assert receipt["molecule"]["ao_locations"] == [0, 1, 2, 5]
     assert arrays["amplitudes.t2bb"] == (0.0,) * 16
-    assert arrays["channels.aaa"] == arrays["channels.bbb"] == arrays["channels.abb"] == (0.0,)
+    assert (
+        arrays["channels.aaa"]
+        == arrays["channels.bbb"]
+        == arrays["channels.abb"]
+        == (0.0,)
+    )
     assert abs(arrays["channels.aab"][0]) > 1e-6
     assert receipt["replay"]["max_absolute_difference"] == 0
     assert receipt["replay"]["process_ids"] == [2251, 2268]
@@ -79,7 +99,9 @@ def test_complete_profile_and_both_original_processes_are_retained() -> None:
         assert original == expected
 
 
-def test_reader_has_no_live_pyscf_import_or_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reader_has_no_live_pyscf_import_or_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     original = builtins.__import__
 
     def refuse(name: str, *args: object, **kwargs: object) -> object:
@@ -102,11 +124,20 @@ def test_every_complete_array_digest_detects_changed_values(name: str) -> None:
         _validate(receipt, inputs, manifest)
 
 
-@pytest.mark.parametrize("field,value", [
-    ("dtype", "float32"), ("shape", [1, 25]), ("shape", [5, True]),
-    ("order", "F"), ("encoding", "base64-native-f64"), ("bytes", 199),
-    ("bytes", True), ("data", "*"), ("sha256_le_f64", "0" * 64),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("dtype", "float32"),
+        ("shape", [1, 25]),
+        ("shape", [5, True]),
+        ("order", "F"),
+        ("encoding", "base64-native-f64"),
+        ("bytes", 199),
+        ("bytes", True),
+        ("data", "*"),
+        ("sha256_le_f64", "0" * 64),
+    ],
+)
 def test_array_metadata_is_closed(field: str, value: object) -> None:
     receipt, _, _ = _documents()
     record = receipt["arrays"]["overlap"]
@@ -143,7 +174,9 @@ def test_duplicate_json_fields_and_oversize_input_fail_closed(tmp_path: Path) ->
 
 @pytest.mark.parametrize("name", ["acquisition-first.json", "acquisition-second.json"])
 @pytest.mark.parametrize("mode", ["missing", "corrupt", "reidentified"])
-def test_each_raw_replica_is_required_and_byte_bound(name: str, mode: str, tmp_path: Path) -> None:
+def test_each_raw_replica_is_required_and_byte_bound(
+    name: str, mode: str, tmp_path: Path
+) -> None:
     root = _copy_reference(tmp_path)
     target = root / name
     if mode == "missing":
@@ -164,18 +197,33 @@ def test_each_raw_replica_is_required_and_byte_bound(name: str, mode: str, tmp_p
     binding = next(item for item in manifest["replicas"] if item["path"] == name)
     binding.update(bytes=len(changed), sha256=hashlib.sha256(changed).hexdigest())
     receipt, _ = _read(root / "reference.json")
-    receipt["replay"]["receipt_sha256"] = [item["sha256"] for item in manifest["replicas"]]
+    receipt["replay"]["receipt_sha256"] = [
+        item["sha256"] for item in manifest["replicas"]
+    ]
     changed_receipt = _write(root / "reference.json", receipt)
-    manifest.update(receipt_bytes=len(changed_receipt), receipt_sha256=hashlib.sha256(changed_receipt).hexdigest())
+    manifest.update(
+        receipt_bytes=len(changed_receipt),
+        receipt_sha256=hashlib.sha256(changed_receipt).hexdigest(),
+    )
     _write(root / "manifest.json", manifest)
     with pytest.raises(ValueError, match="raw replica differs"):
         load_reference(root=root)
 
 
-@pytest.mark.parametrize("mutation", [
-    "seed", "spin_order", "missing_array", "duplicate_pid", "source_hash",
-    "configuration", "ao_order", "basis", "state",
-])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "seed",
+        "spin_order",
+        "missing_array",
+        "duplicate_pid",
+        "source_hash",
+        "configuration",
+        "ao_order",
+        "basis",
+        "state",
+    ],
+)
 def test_input_provenance_and_resolved_identity_mutations_fail(mutation: str) -> None:
     receipt, inputs, manifest = _documents()
     if mutation == "seed":
@@ -202,17 +250,30 @@ def test_input_provenance_and_resolved_identity_mutations_fail(mutation: str) ->
         _validate(receipt, inputs, manifest)
 
 
-@pytest.mark.parametrize("mutation", [
-    "occupation", "fock_order", "eri_symmetry", "packed_amplitude",
-    "same_spin_zero", "residual", "impossible_channel", "optimized_total",
-])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "occupation",
+        "fock_order",
+        "eri_symmetry",
+        "packed_amplitude",
+        "same_spin_zero",
+        "residual",
+        "impossible_channel",
+        "optimized_total",
+    ],
+)
 def test_scientific_relations_reject_resealed_synthetic_mutants(mutation: str) -> None:
     receipt, inputs, manifest = _documents()
     names = {
-        "occupation": "occupations_alpha", "fock_order": "fock_spin",
-        "eri_symmetry": "antisymmetrized_eri", "packed_amplitude": "packed_amplitudes",
-        "same_spin_zero": "amplitudes.t2bb", "residual": "residuals.t1a",
-        "impossible_channel": "channels.aaa", "optimized_total": "triples_optimized_total",
+        "occupation": "occupations_alpha",
+        "fock_order": "fock_spin",
+        "eri_symmetry": "antisymmetrized_eri",
+        "packed_amplitude": "packed_amplitudes",
+        "same_spin_zero": "amplitudes.t2bb",
+        "residual": "residuals.t1a",
+        "impossible_channel": "channels.aaa",
+        "optimized_total": "triples_optimized_total",
     }
     name = names[mutation]
     values = list(_array(receipt["arrays"][name], SHAPES[name]))
@@ -223,32 +284,47 @@ def test_scientific_relations_reject_resealed_synthetic_mutants(mutation: str) -
         _validate(receipt, inputs, manifest)
 
 
-@pytest.mark.parametrize("name", ["correlation_energy", *[f"residuals.{block}" for block in BLOCK_SHAPES]])
-def test_actual_equation_gate_rejects_each_changed_expected_output(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "name", ["correlation_energy", *[f"residuals.{block}" for block in BLOCK_SHAPES]]
+)
+def test_actual_equation_gate_rejects_each_changed_expected_output(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import test_uccsd_equations as equations
 
     layout, amplitudes, arrays = equations._fixed_li_random_profile()
     arrays[name] = arrays[name].copy()
     arrays[name].flat[0] += 1e-4
-    monkeypatch.setattr(equations, "_fixed_li_random_profile", lambda: (layout, amplitudes, arrays))
+    monkeypatch.setattr(
+        equations, "_fixed_li_random_profile", lambda: (layout, amplitudes, arrays)
+    )
     with pytest.raises(AssertionError):
         equations.test_random_amplitudes_against_pyscf_uccsd("Li 0 0 0", 1, False)
 
 
 @pytest.mark.parametrize("channel", ["aaa", "bbb", "aab", "abb"])
-def test_actual_channel_gate_rejects_each_changed_expected_channel(channel: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_actual_channel_gate_rejects_each_changed_expected_channel(
+    channel: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import test_uccsd_triples as triples
 
     layout, amplitudes, arrays = triples._fixed_li_random_profile()
     arrays[f"channels.{channel}"] = arrays[f"channels.{channel}"].copy() + 1e-4
-    monkeypatch.setattr(triples, "_fixed_li_random_profile", lambda: (layout, amplitudes, arrays))
+    monkeypatch.setattr(
+        triples, "_fixed_li_random_profile", lambda: (layout, amplitudes, arrays)
+    )
     with pytest.raises(AssertionError):
-        triples.test_all_spin_channels_and_partitioned_tiles_match_pyscf("Li 0 0 0", 1, False)
+        triples.test_all_spin_channels_and_partitioned_tiles_match_pyscf(
+            "Li 0 0 0", 1, False
+        )
 
 
 @pytest.mark.parametrize("case", ["equations", "triples"])
-def test_fixed_numerical_cases_execute_with_pyscf_blocked(case: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fixed_numerical_cases_execute_with_pyscf_blocked(
+    case: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import importlib
+
     import test_uccsd_equations as equations
     import test_uccsd_triples as triples
 
@@ -278,4 +354,6 @@ def test_fixed_numerical_cases_execute_with_pyscf_blocked(case: str, monkeypatch
     if case == "equations":
         equations.test_random_amplitudes_against_pyscf_uccsd("Li 0 0 0", 1, False)
     else:
-        triples.test_all_spin_channels_and_partitioned_tiles_match_pyscf("Li 0 0 0", 1, False)
+        triples.test_all_spin_channels_and_partitioned_tiles_match_pyscf(
+            "Li 0 0 0", 1, False
+        )
