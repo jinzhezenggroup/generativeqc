@@ -12,6 +12,7 @@
 #include "integrals/s_integrals.hpp"
 #include "posthf/cuda_transform.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::posthf {
@@ -170,6 +171,10 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
     const std::vector<SpinMORequestView>& requests, bool cuda, int device,
     generativeqc_tensor::Metrics* metrics, ProviderWork* work) const {
   if (requests.empty()) return {};
+  runtime::df_progress::Scope trace("native_mo_blocks", cuda ? "cuda" : "host");
+  ProviderWork observed_work;
+  if (trace.enabled() && !work) work = &observed_work;
+  const auto prior_work = trace.enabled() ? *work : ProviderWork{};
   if (cuda && reference_view_.spin_channels != 1)
     throw std::invalid_argument("unrestricted native MO CUDA transform is unavailable");
   const auto provider_started = std::chrono::steady_clock::now();
@@ -475,6 +480,25 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
   std::vector<std::vector<double>> outputs;
   outputs.reserve(states.size());
   for (auto& state : states) outputs.push_back(std::move(state.output));
+  if (trace.enabled()) {
+    // Per-call deltas keep an accumulated caller ledger from being counted
+    // again. These counters describe completed source/transform work, not a
+    // device-only timing or an inference from the planned numeric peak.
+    runtime::df_progress::Scope::number("source_scans",
+                                        work->source_scans - prior_work.source_scans);
+    runtime::df_progress::Scope::number("source_reads",
+                                        work->source_reads - prior_work.source_reads);
+    runtime::df_progress::Scope::number("device_source_reads",
+                                        work->device_source_reads - prior_work.device_source_reads);
+    runtime::df_progress::Scope::number("source_values",
+                                        work->source_values - prior_work.source_values);
+    runtime::df_progress::Scope::number("transform_fmas",
+                                        work->transform_fmas - prior_work.transform_fmas);
+    runtime::df_progress::Scope::number("transform_stages",
+                                        work->transform_stages - prior_work.transform_stages);
+    runtime::df_progress::Scope::number("h2d_bytes", work->h2d_bytes - prior_work.h2d_bytes);
+    runtime::df_progress::Scope::number("d2h_bytes", work->d2h_bytes - prior_work.d2h_bytes);
+  }
   if (work)
     work->provider_seconds +=
         std::chrono::duration<double>(std::chrono::steady_clock::now() - provider_started).count();
