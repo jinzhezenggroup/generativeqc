@@ -120,13 +120,24 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
             raise ValueError("CPU stationary force profiles must have at most two rows")
         for profile in profiles:
             if not isinstance(profile, dict) or set(profile) != {
-                "spins", "exact_exchange", "semilocal_exchange", "semilocal_correlation"
+                "spins",
+                "exact_exchange",
+                "semilocal_exchange",
+                "semilocal_correlation",
             }:
                 raise ValueError("invalid CPU stationary force profile contract")
-            if not isinstance(profile["spins"], list) or not profile["spins"] or (
-                len(set(profile["spins"])) != len(profile["spins"])
-            ) or any(type(spin) is not int or spin not in (1, 2) for spin in profile["spins"]):
-                raise ValueError("CPU stationary force profile needs explicit RKS/UKS admission")
+            if (
+                not isinstance(profile["spins"], list)
+                or not profile["spins"]
+                or (len(set(profile["spins"])) != len(profile["spins"]))
+                or any(
+                    type(spin) is not int or spin not in (1, 2)
+                    for spin in profile["spins"]
+                )
+            ):
+                raise ValueError(
+                    "CPU stationary force profile needs explicit RKS/UKS admission"
+                )
             exact = Fraction(profile["exact_exchange"])
             if not 0 <= exact <= 1:
                 raise ValueError("CPU stationary exact exchange must lie in [0,1]")
@@ -162,12 +173,16 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
         coeffs_cpp = ", ".join(_cpp_number(value) for value in coeffs)
         force_profiles = item.get("cpu_stationary_force_profiles", [])
         profile_rows = [
-            "{" + ", ".join((
-                f"{sum(1 << (spin - 1) for spin in profile['spins'])}U",
-                _cpp_number(profile["exact_exchange"]),
-                _cpp_number(profile["semilocal_exchange"]),
-                _cpp_number(profile["semilocal_correlation"]),
-            )) + "}"
+            "{"
+            + ", ".join(
+                (
+                    f"{sum(1 << (spin - 1) for spin in profile['spins'])}U",
+                    _cpp_number(profile["exact_exchange"]),
+                    _cpp_number(profile["semilocal_exchange"]),
+                    _cpp_number(profile["semilocal_correlation"]),
+                )
+            )
+            + "}"
             for profile in force_profiles
         ]
         profile_rows += ["{0U, 0.0, 0.0, 0.0}"] * (2 - len(profile_rows))
