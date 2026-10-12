@@ -29,6 +29,11 @@ def test_host_xc_staging_keeps_copy_sources_alive(
         "std::uint64_t next_generation) {\n"
         + body[body.index("    const auto bytes = elements * sizeof(double);") :]
     )
+    # Compile the production dispatch inventory too, so this lifetime probe
+    # exercises the registered route rather than reconstructing its selection.
+    registry_start = source.index("using HostRksXc =")
+    registry_end = source.index("}();", registry_start) + len("}();")
+    registry = source[registry_start:registry_end]
     harness = r"""
 #include <algorithm>
 #include <array>
@@ -40,7 +45,12 @@ def test_host_xc_staging_keeps_copy_sources_alive(
 #include <iostream>
 #include "dft/semilocal_family.hpp"
 using generativeqc::dft::SemilocalFamily;
+using generativeqc::dft::kSemilocalFamilyMetadata;
+using generativeqc::dft::semilocal_family_code;
 using generativeqc::dft::semilocal_family_from_code;
+using AoBasis = int;
+using MolecularGrid = int;
+using XcDensitySource = int;
 int selected_route = -1;
 namespace scf { struct ScfOptions {
  enum class XcExecutionSchedule { DeviceFused, HostUnfused };
@@ -55,16 +65,25 @@ struct XcIntegral { std::vector<double> potential=std::vector<double>(4,3);
 struct SpinXcIntegral { std::array<std::vector<double>,2> potential{
  std::vector<double>(4,3),std::vector<double>(4,4)};
  double energy=2.5; std::array<double,2> electrons{1,1}; };
-template<class... T> XcIntegral integrate_lda_xc_pw_rks(T&&...) { selected_route=0; return {}; }
-template<class... T> XcIntegral integrate_pbe_rks_with_tail(T&&...) { selected_route=1; return {}; }
-template<class... T> XcIntegral integrate_r2scan_rks(T&&...) { selected_route=2; return {}; }
-template<class... T> SpinXcIntegral integrate_lda_xc_pw_uks(T&&...) { selected_route=5; return {}; }
-template<class... T> SpinXcIntegral integrate_pbe_uks(T&&...) { selected_route=6; return {}; }
-template<class... T> SpinXcIntegral integrate_r2scan_uks(T&&...) { selected_route=7; return {}; }
-template<class... T> XcIntegral integrate_wb97mv_rks(T&&...) { selected_route=4; return {}; }
-template<class... T> SpinXcIntegral integrate_wb97mv_uks(T&&...) { selected_route=9; return {}; }
-template<class... T> XcIntegral integrate_b3lyp_rks(T&&...) { selected_route=3; return {}; }
-template<class... T> SpinXcIntegral integrate_b3lyp_uks(T&&...) { selected_route=8; return {}; }
+#define RKS_STUB(name, route) \
+XcIntegral name(const AoBasis&, const MolecularGrid&, const std::vector<double>&, \
+                std::size_t, XcDensitySource) { selected_route=route; return {}; }
+#define UKS_STUB(name, route) \
+SpinXcIntegral name(const AoBasis&, const MolecularGrid&, const std::vector<double>&, \
+                    const std::vector<double>&, std::size_t) { selected_route=route; return {}; }
+RKS_STUB(integrate_lda_xc_pw_rks, 0)
+RKS_STUB(integrate_pbe_rks_with_tail, 1)
+RKS_STUB(integrate_r2scan_rks, 2)
+RKS_STUB(integrate_b3lyp_rks, 3)
+RKS_STUB(integrate_wb97mv_rks, 4)
+UKS_STUB(integrate_lda_xc_pw_uks, 5)
+UKS_STUB(integrate_pbe_uks, 6)
+UKS_STUB(integrate_r2scan_uks, 7)
+UKS_STUB(integrate_b3lyp_uks, 8)
+UKS_STUB(integrate_wb97mv_uks, 9)
+#undef RKS_STUB
+#undef UKS_STUB
+HOST_XC_REGISTRY
 namespace nlc {
 XcIntegral integrate_vv10_rks(int,int,std::vector<double>&,int&,std::size_t,
                               std::vector<int>,int) { return {}; }
@@ -133,7 +152,7 @@ int main() {
  }
 }
 """
-    harness = harness.replace("STAGE_BODY", body)
+    harness = harness.replace("STAGE_BODY", body).replace("HOST_XC_REGISTRY", registry)
     cpp, binary = tmp_path / "staging.cpp", tmp_path / "staging"
     cpp.write_text(harness)
     native_cxx.build_executable(

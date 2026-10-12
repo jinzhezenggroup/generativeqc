@@ -148,6 +148,55 @@ def test_mixed_resource_refusal_keeps_strict_execution(
     os.environ.get("GENERATIVEQC_DF_CC_CUDA_TEST") != "1",
     reason="requires finite Slurm GPU allocation",
 )
+@pytest.mark.parametrize("switch_residual", [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7])
+def test_early_switch_preserves_independent_fp64_certificate(
+    solver_probe: tuple[Path, bool], switch_residual: float
+) -> None:
+    """A loose warmup target is not permission to publish approximate amplitudes."""
+    if not solver_probe[1]:
+        pytest.skip("CUDA-only candidate")
+    _, _, arrays = _case(3, 7, 14)
+    strict, strict_one, strict_two = _run(solver_probe, arrays)
+    mixed, actual_one, actual_two = _run(
+        solver_probe,
+        arrays,
+        mixed_precision=True,
+        mixed_switch_residual=switch_residual,
+    )
+    assert mixed["status"] == strict["status"] == 0
+    assert mixed["mixed_precision"] == 1
+    assert mixed["precision_switches"] == 1
+    assert mixed["iterations_called"] > mixed["mixed_evaluations"]
+    assert max(mixed["r1"], mixed["r2"]) <= 1e-10
+    np.testing.assert_allclose(mixed["energy"], strict["energy"], atol=2e-11, rtol=0)
+    np.testing.assert_allclose(actual_one, strict_one, atol=2e-10, rtol=0)
+    np.testing.assert_allclose(actual_two, strict_two, atol=2e-10, rtol=0)
+
+
+@pytest.mark.parametrize(
+    "switch_residual", ["nan", "inf", "0", "-1e-5", "0.1", "1e-12"]
+)
+def test_requested_warmup_rejects_invalid_switch_target(
+    solver_probe: tuple[Path, bool], switch_residual: str
+) -> None:
+    """Threshold tuning cannot bypass the finite separated-stage admission gate."""
+    _, _, arrays = _case(2, 3, 5)
+    process = subprocess.run(
+        [str(solver_probe[0]), "--mixed-switch-residual", switch_residual],
+        input=_stream(arrays, solver_probe[1], mixed_precision=True),
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    assert process.returncode != 0
+    assert b"invalid RCCSD mixed-precision option" in process.stderr
+    assert not process.stdout
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_DF_CC_CUDA_TEST") != "1",
+    reason="requires finite Slurm GPU allocation",
+)
 @pytest.mark.parametrize("symmetric", [True, False])
 def test_strict_pair_boundary_preserves_supplied_state_contract(
     solver_probe: tuple[Path, bool], symmetric: bool
