@@ -50,8 +50,13 @@ jobs:
           "pytest>=8" "hypothesis>=6.151.0" "ndindex>=1.8"
           "pytest-json-report>=1.5" "tomli>=2" "typing-extensions>=4.0"
           "array-api-strict==2.6.1"
-      # The source-only conformance test does not compile native objects.
-      # sccache showed zero requests here; do not pay for an unused tool.
+          "sccache>=0.16.0"
+      # Native Array API / autodiff tests compile through privately owned JIT
+      # sccache workers. Shared-daemon --show-stats can report zero requests
+      # even when real JIT compilation ran, so verify the required executable
+      # without misreporting its private-worker activity as a 0% hit rate.
+      - name: Verify native JIT compiler cache
+        run: sccache --version
       - name: Complete upstream conformance gate
         run: python tools/check_array_api_conformance.py .array-api-tests
       - name: Scientific boundary regressions
