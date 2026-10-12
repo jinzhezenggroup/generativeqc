@@ -91,6 +91,7 @@ def _native_oracle(source: NativeSource, *, broken: bool = False) -> Any:
     return oracle
 
 
+
 @pytest.mark.parametrize(
     "atoms,spin,broken,representation,native_reference",
     [
@@ -164,6 +165,7 @@ def test_complete_cpu_native_gradient_matches_independent_oracle(
                         value.setflags(write=True)
 
 
+
 @contextmanager
 def _native_physical_context() -> Iterator[Any]:
     with NativeSource(_H2) as source:
@@ -179,12 +181,14 @@ def _native_physical_context() -> Iterator[Any]:
             yield physical
 
 
+
 @pytest.fixture(scope="module")
 def native_physical() -> Iterator[Any]:
     # The native CC/Lambda setup is expensive but each solve requalifies state.
     # Test monkeypatches are function-local; non-closing tests share one owner.
     with _native_physical_context() as physical:
         yield physical
+
 
 
 @pytest.fixture
@@ -214,7 +218,6 @@ def test_gradient_admission_precedes_any_response_or_derivative(
     ):
         with pytest.raises(MemoryError):
             PreparedUCCSDGradient(native_physical, options=options)
-
 
 
 def test_late_derivative_failure_and_borrowed_lifetime_never_publish(
@@ -252,7 +255,6 @@ def test_late_derivative_failure_and_borrowed_lifetime_never_publish(
         owner.solve()
 
 
-
 def test_native_complete_gradient_matches_reconverged_molecular_finite_difference(
     native_physical: Any,
 ) -> None:
@@ -286,7 +288,6 @@ def test_native_complete_gradient_matches_reconverged_molecular_finite_differenc
     np.testing.assert_allclose(
         gradient[1, 2], (energies[1] - energies[0]) / 2e-4, atol=2e-7, rtol=0
     )
-
 
 
 def test_private_cpu_derivative_failures_leave_outputs_unchanged(
@@ -330,7 +331,6 @@ def test_private_cpu_derivative_failures_leave_outputs_unchanged(
     np.testing.assert_array_equal(one, 83.0)
 
 
-
 def test_native_one_electron_binding_is_verified_before_eri_reads(
     native_physical: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -355,6 +355,7 @@ def test_native_one_electron_binding_is_verified_before_eri_reads(
                     native_physical.result,
                     native_physical.provider,
                 )
+
 
 @pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
