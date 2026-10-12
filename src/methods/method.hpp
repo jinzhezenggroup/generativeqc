@@ -359,12 +359,14 @@ class MethodError final : public std::runtime_error {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags);
+                                             generativeqc_batch_flags flags,
+                                             const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods
 

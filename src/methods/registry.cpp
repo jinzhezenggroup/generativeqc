@@ -24,11 +24,12 @@ using ValidateSystem = generativeqc_status (*)(generativeqc_method, const core::
                                                std::string&);
 using PrepareCalculation = std::unique_ptr<PreparedCalculation> (*)(
     const Capabilities&, core::ContextState&, const core::System&,
-    const generativeqc_method_descriptor&);
+    const generativeqc_method_descriptor&, const core::System*);
 using PrepareBatch = std::unique_ptr<PreparedBatch> (*)(const Capabilities&, core::ContextState&,
                                                         std::vector<core::System>,
                                                         const generativeqc_method_descriptor&,
-                                                        generativeqc_batch_flags);
+                                                        generativeqc_batch_flags,
+                                                        const core::System*);
 
 using MethodProviderRegistration = runtime::ProviderDescriptor<Capabilities>;
 
@@ -217,18 +218,20 @@ const Capabilities* find_capabilities(generativeqc_method method) noexcept {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   validate_system(definition, system);
   validate_preliminary_system(descriptor, system);
-  return definition.prepare_calculation(definition.provider.domain, context, system, descriptor);
+  return definition.prepare_calculation(definition.provider.domain, context, system, descriptor,
+                                        auxiliary_basis);
 }
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags) {
+                                             generativeqc_batch_flags flags,
+                                             const core::System* auxiliary_basis) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   if (!definition.provider.domain.supports_batch || definition.prepare_batch == nullptr) {
@@ -240,7 +243,7 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
     validate_preliminary_system(descriptor, system);
   }
   return definition.prepare_batch(definition.provider.domain, context, std::move(systems),
-                                  descriptor, flags);
+                                  descriptor, flags, auxiliary_basis);
 }
 
 }  // namespace generativeqc::methods
