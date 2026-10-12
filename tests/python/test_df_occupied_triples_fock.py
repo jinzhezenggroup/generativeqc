@@ -651,6 +651,43 @@ def test_fused_scalar_storage_has_exact_admission_and_bounded_fallback(
     np.testing.assert_array_equal(refused_counts, 19)
 
 
+def test_fused_scalar_allocation_refusal_keeps_legacy_outputs(
+    native_combined_probe: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A post-preflight allocation refusal gets one smaller, exact retry."""
+    if os.environ.get("GENERATIVEQC_CUDA_ALLOCATION_LIMIT_TEST") != "1":
+        pytest.skip("requires the scheduled validation-only CUDA allocation interposer")
+    inputs, _ = case(2, 3, 4)
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    status, legacy, values, _, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1
+    )
+    assert status == 0, error
+    lower, upper = 1, 16 << 20
+    monkeypatch.setenv("GENERATIVEQC_TEST_TRIPLES_DEVICE_LIMIT", str(lower))
+    failed = run_combined(native_combined_probe, inputs, rows=1, panels=1)
+    assert failed[0] != 0
+    assert all(np.isnan(value).all() for value in (*failed[1], failed[2]))
+    while lower < upper:
+        middle = (lower + upper) // 2
+        monkeypatch.setenv("GENERATIVEQC_TEST_TRIPLES_DEVICE_LIMIT", str(middle))
+        result = run_combined(native_combined_probe, inputs, rows=1, panels=1)
+        if result[0] == 0:
+            upper = middle
+        else:
+            lower = middle + 1
+    monkeypatch.setenv("GENERATIVEQC_TEST_TRIPLES_DEVICE_LIMIT", str(upper))
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "1")
+    status, fallback, fallback_values, counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1
+    )
+    assert status == 0, error
+    assert counts[15] == 0 and counts[16] == 1
+    for actual, expected in zip(fallback, legacy, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(fallback_values[:1], values[:1])
+
+
 @pytest.mark.parametrize(
     "o,v,q,rows,panels",
     [
@@ -950,3 +987,143 @@ int main() {
         ),
     )
     subprocess.run([str(executable)], check=True, capture_output=True, timeout=30)
+
+
+def test_fused_preparation_retry_consumes_only_expected_cuda_error(
+    tmp_path: Path, native_cxx: typing.Any
+) -> None:
+    """Execute the real retry block with pending-error and cleanup controls."""
+    root = Path(__file__).resolve().parents[2]
+    production = (root / "src/cc/df_triples_cuda.cu").read_text()
+    start = production.index("    const auto prepare_context = [&] {")
+    stop = production.index("    auto& context = *context_owner;", start)
+    stop += len("    auto& context = *context_owner;")
+    preparation = production[start:stop]
+    error_policy = (root / "src/tensor/cuda_error.hpp").read_text()
+    error_policy = error_policy.replace("#pragma once\n", "").replace(
+        "#include <cuda_runtime_api.h>\n", ""
+    )
+    prefix = r"""
+#include <cstddef>
+#include <cstdio>
+#include <memory>
+#include <stdexcept>
+enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorLaunchFailure };
+cudaError_t pending_error = cudaSuccess;
+const char* cudaGetErrorString(cudaError_t) { return "injected runtime status"; }
+cudaError_t cudaGetLastError() {
+  const auto value = pending_error;
+  pending_error = cudaSuccess;
+  return value;
+}
+cudaError_t cudaPeekAtLastError() { return pending_error; }
+"""
+    owner = r"""
+int mode = 0, calls = 0, destroyed = 0, live = 0, replans = 0;
+namespace generativeqc_tensor {
+struct Context {
+  Context() { ++live; }
+  ~Context() { --live; ++destroyed; }
+  void prepare(int, int, int, std::size_t, std::size_t, std::size_t,
+               std::size_t, std::size_t, bool) {
+    ++calls;
+    if (live != 1 || destroyed != calls - 1)
+      throw std::logic_error("partial owner survived into retry");
+    if (mode == 6 || ((mode == 1 || mode == 7) && calls == 1)) {
+      pending_error = cudaErrorMemoryAllocation;
+      cuda_check(cudaErrorMemoryAllocation);
+    }
+    if (calls == 1) {
+      if (mode == 2) throw DeviceAllocationError("cuBLAS allocation, no runtime slot");
+      if (mode == 3) {
+        pending_error = cudaErrorLaunchFailure;
+        throw DeviceAllocationError("allocation with different pending driver error");
+      }
+      if (mode == 4) {
+        pending_error = cudaErrorLaunchFailure;
+        cuda_check(cudaErrorLaunchFailure);
+      }
+      if (mode == 5) throw std::runtime_error("numerical refusal");
+      if (mode == 8) throw std::length_error("complete resource budget refusal");
+    }
+  }
+};
+}
+struct Value { std::size_t arena = 32, error = 0, library = 8, panel_capacity = 2; };
+struct Plan { struct { Value value; } fock; };
+int exercise() {
+  const int device = 0;
+  const struct { int major = 12, minor = 0; } properties;
+  const std::size_t blas_workspace = 8, provider_allowance = 8, page_capacity = 3;
+  bool fused_selected = mode != 7;
+  Plan plan;
+  auto& p = plan.fock.value;
+  const auto admitted_layout = [&](std::size_t rows, std::size_t panels) {
+    if (fused_selected || rows != page_capacity || panels != 2 ||
+        live != 0 || destroyed != 1 || calls != 1)
+      throw std::logic_error("retry changed admission or preceded destruction");
+    ++replans;
+    Plan smaller;
+    smaller.fock.value.arena = 16;
+    return smaller;
+  };
+  try {
+"""
+    suffix = r"""
+    (void)context;
+    // Model the incumbent first successful launch's explicit runtime check.
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+    return 0;
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
+    return 1;
+  } catch (const generativeqc_tensor::DeviceRuntimeError&) {
+    return 2;
+  } catch (const std::length_error&) {
+    return 4;
+  } catch (const std::logic_error&) {
+    return 5;
+  } catch (const std::runtime_error&) {
+    return 3;
+  }
+}
+int main() {
+  const int statuses[]{0, 0, 0, 2, 2, 3, 1, 1, 4};
+  const int attempts[]{1, 2, 2, 1, 1, 1, 2, 1, 1};
+  for (mode = 0; mode < 9; ++mode) {
+    calls = destroyed = live = replans = 0;
+    pending_error = cudaSuccess;
+    const int result = exercise();
+    if (result != statuses[mode]) {
+      std::fprintf(stderr, "unexpected status in case %d: %d expected %d\n",
+                   mode, result, statuses[mode]);
+      return 110 + mode;
+    }
+    if (calls != attempts[mode] || destroyed != calls || live ||
+        replans != (attempts[mode] - 1)) return 130 + mode;
+  }
+}
+"""
+    # Peeking instead of consuming must fail the pending-OOM case, unlike an
+    # interposer that only returns an ordinary integer allocation error code.
+    for label, policy, expected in (
+        ("fixed", preparation, 0),
+        (
+            "uncleared",
+            preparation.replace("cudaGetLastError()", "cudaPeekAtLastError()", 1),
+            111,
+        ),
+    ):
+        path = tmp_path / f"{label}.cpp"
+        path.write_text(prefix + error_policy + owner + policy + suffix)
+        binary = tmp_path / label
+        native_cxx.build_executable([path], binary, compile_args=["-std=c++17", "-O2"])
+        result = subprocess.run(
+            [str(binary)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == expected, result.stdout + result.stderr
+        if expected:
+            assert "unexpected status in case 1" in result.stderr
