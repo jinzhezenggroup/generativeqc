@@ -83,6 +83,30 @@ def prepared_snapshots(
     return completed
 
 
+class PreparedBatchReceipts:
+    """Bind receipts to this trajectory's fixed geometry-index sequence."""
+
+    def __init__(self) -> None:
+        self._count = 0
+        self._geometry: int | None = None
+        self._current: list[dict[str, Any]] = []
+
+    def observe(self, path: Path, geometry: int) -> list[dict[str, Any]]:
+        """Reuse same-geometry plans, but never carry one across a rebuild."""
+        completed = prepared_snapshots(path) if path.exists() else []
+        if len(completed) < self._count:
+            raise ValueError("prepared execution receipt trace was truncated")
+        fresh = completed[self._count :]
+        # Each index names fixed coordinates in main. The native DFT batch
+        # keeps its prepared owner for exact-coordinate matches (including
+        # moved-warm and seed retries), and rebuilds on coordinate changes.
+        if geometry != self._geometry or fresh:
+            self._current = fresh[-1:]
+        self._count = len(completed)
+        self._geometry = geometry
+        return [dict(row) for row in self._current]
+
+
 def main(strategy: str = "ragged") -> None:
     """Save complete endpoint vectors, original gates and actual work counts."""
     if strategy != "ragged":
@@ -171,6 +195,7 @@ def main(strategy: str = "ragged") -> None:
             component_trace = Path(str(trace) + ".cuda") if trace else None
             if trace and (trace.exists() or Path(str(trace) + ".cuda").exists()):
                 raise ValueError("diagnostic path already exists")
+            receipts = PreparedBatchReceipts()
             with selection(enabled, trace, strategy):
                 calculator = Calculator(
                     method="pbe0-rks",
@@ -251,7 +276,9 @@ def main(strategy: str = "ragged") -> None:
                             "status_message": item.status_message,
                             "warm_start_used": item.warm_start_used,
                             "warm_start_fallback": item.warm_start_fallback,
-                            "ks_diagnostic": item.ks_diagnostic.to_payload(),
+                            "ks_diagnostic": item.ks_diagnostic.to_payload()
+                            if item.ks_diagnostic is not None
+                            else None,
                         }
                         validation = check_record(sample, oracle)
                         sample.update(
@@ -259,6 +286,14 @@ def main(strategy: str = "ragged") -> None:
                             force_max_error=validation["force_error"],
                             gate=validation["gate"],
                         )
+                        record["samples"].append(sample)
+                        save(f"{arm}/{repeat}/{phase}")
+                        if not validation["gate"]:
+                            raise AssertionError(
+                                f"independent E+F gate failed: {arm}/{phase}: "
+                                f"energy={validation['energy_error']}, "
+                                f"force={validation['force_error']}"
+                            )
                         if trace:
                             sample["component_profile"] = aggregate(
                                 [
@@ -270,17 +305,9 @@ def main(strategy: str = "ragged") -> None:
                                 ]
                             )
                         if trace and strategy == "ragged":
-                            sample["batch_receipts"] = prepared_snapshots(
-                                trace, "cuda_xc_batch_plan"
-                            )[-1:]
-                        record["samples"].append(sample)
-                        save(f"{arm}/{repeat}/{phase}")
-                        if not validation["gate"]:
-                            raise AssertionError(
-                                f"independent E+F gate failed: {arm}/{phase}: "
-                                f"energy={validation['energy_error']}, "
-                                f"force={validation['force_error']}"
-                            )
+                            sample["batch_receipts"] = receipts.observe(trace, geometry)
+                        if trace:
+                            save(f"{arm}/{repeat}/{phase}")
                         if (
                             trace
                             and enabled
