@@ -244,7 +244,9 @@ def main() -> None:
     parser.add_argument("--angular-azimuth", type=int, default=8)
     parser.add_argument("--integral-budget-bytes", type=int, default=64 << 20)
     parser.add_argument("--output-budget-bytes", type=int, default=64 << 20)
-    parser.add_argument("--strategy", choices=("sequential", "blocked", "recycled"), default="recycled")
+    parser.add_argument(
+        "--strategy", choices=("sequential", "blocked", "recycled"), default="recycled"
+    )
     parser.add_argument("--cache", type=Path, default=Path(".artifacts"))
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
