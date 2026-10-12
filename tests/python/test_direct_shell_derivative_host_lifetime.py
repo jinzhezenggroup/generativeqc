@@ -642,3 +642,109 @@ int main(int argc,char** argv) {
   std::cout<<output.size()/3<<" "<<submitted_copies<<" "<<submitted_bytes<<"\n";
 }
 """
+
+
+@pytest.mark.parametrize("cumetal", [False, True])
+def test_resident_capture_refusal_uses_portable_status_without_submission(
+    tmp_path: Path, native_cxx: NativeCxx, cumetal: bool
+) -> None:
+    """Run the real resident transport with a CUDA API lacking capture-error enums."""
+    body = _extract_function(
+        (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text(),
+        "cudaError_t consume_generated_full_range_energy_derivatives(",
+    )
+    source = tmp_path / "resident_capture.cpp"
+    binary = tmp_path / "resident_capture"
+    source.write_text(RESIDENT_CAPTURE_PREFIX + body + RESIDENT_CAPTURE_MAIN)
+    provider_args = ["-DGENERATIVEQC_CUDA_PROVIDER_CUMETAL=1"] if cumetal else []
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=[
+            "-std=c++20",
+            "-O0",
+            "-I" + str(ROOT / "src"),
+            *provider_args,
+        ],
+    )
+    subprocess.run([binary], check=True, timeout=10)
+
+
+RESIDENT_CAPTURE_PREFIX = r"""
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include "scf/cuda_derivative_sources.hpp"
+using namespace generativeqc::scf;
+using cudaStream_t = void*;
+using cudaError_t = int;
+constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1;
+#if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL)
+constexpr int expected_capture_error = cudaErrorInvalidValue;
+#else
+constexpr int cudaErrorStreamCaptureUnsupported = 2;
+constexpr int expected_capture_error = cudaErrorStreamCaptureUnsupported;
+#endif
+enum cudaStreamCaptureStatus { cudaStreamCaptureStatusNone, cudaStreamCaptureStatusActive };
+int capture_error{}, device_error{}, submission_error{}, submissions{}, drains{}, callbacks{};
+cudaStreamCaptureStatus capture_state = cudaStreamCaptureStatusNone;
+int cudaGetDevice(int* device) { *device = 0; return device_error; }
+int cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* capture) {
+  *capture = capture_state;
+  return capture_error;
+}
+int cudaStreamSynchronize(cudaStream_t) { ++drains; return cudaSuccess; }
+namespace runtime::cuda_trace {
+struct Shape { std::size_t batch, nbf, naux; bool source, streamed; };
+struct TraceOperation { TraceOperation(const char*, cudaStream_t, Shape) {} };
+void trace_counter(const char*, std::size_t) {}
+}
+struct Batch { int batch_size{1}, nbf{2}, total_atoms{1}; };
+struct Shared { Batch batch; cudaStream_t stream{reinterpret_cast<void*>(1)}; };
+struct GeneratedExchangePlan { Shared* shared; double* force; };
+template <class... Args>
+int validate_generated_full_range_derivative_inputs(Args&&...) { return cudaSuccess; }
+template <class... Args>
+int enqueue_generated_full_range_energy_derivatives(Args&&...) {
+  ++submissions;
+  return submission_error;
+}
+"""
+
+RESIDENT_CAPTURE_MAIN = r"""
+int main() {
+  Shared shared;
+  double force[6]{}, density[4]{};
+  GeneratedExchangePlan plan{&shared, force};
+  bool callback_failure = false;
+  const CudaDerivativeSourceConsumer consumer = [&](const auto& view) {
+    if (view.values != force || view.producer_stream != shared.stream ||
+        view.coordinates != 3 || view.channels != 2) throw std::logic_error("bad view");
+    ++callbacks;
+    if (callback_failure) throw std::runtime_error("consumer failure");
+  };
+  const auto invoke = [&] {
+    return consume_generated_full_range_energy_derivatives(
+        plan, false, density, nullptr, 1.0, -0.5, consumer, false);
+  };
+  capture_state = cudaStreamCaptureStatusActive;
+  if (invoke() != expected_capture_error || submissions || drains || callbacks) return 1;
+  capture_state = cudaStreamCaptureStatusNone;
+  capture_error = 7;
+  if (invoke() != 7 || submissions || drains || callbacks) return 2;
+  capture_error = 0;
+  device_error = 7;
+  if (invoke() != 7 || submissions || drains || callbacks) return 3;
+  device_error = 0;
+  if (invoke() != cudaSuccess || submissions != 1 || drains || callbacks != 1) return 4;
+  submission_error = 7;
+  if (invoke() != 7 || submissions != 2 || drains != 1 || callbacks != 1) return 5;
+  submission_error = 0;
+  callback_failure = true;
+  bool caught = false;
+  try { (void)invoke(); } catch (const std::runtime_error&) { caught = true; }
+  if (!caught || submissions != 3 || drains != 2 || callbacks != 2) return 6;
+  callback_failure = false;
+  if (invoke() != cudaSuccess || submissions != 4 || drains != 2 || callbacks != 3) return 7;
+}
+"""

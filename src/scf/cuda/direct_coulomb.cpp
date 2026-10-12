@@ -856,7 +856,15 @@ cudaError_t consume_generated_full_range_energy_derivatives(
   cudaStreamCaptureStatus capture{};
   const auto capture_status = cudaStreamIsCapturing(shared.stream, &capture);
   if (capture_status != cudaSuccess) return capture_status;
-  if (capture != cudaStreamCaptureStatusNone) return cudaErrorStreamCaptureUnsupported;
+  if (capture != cudaStreamCaptureStatusNone) {
+#if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL)
+    // CuMetal omits the capture-specific error enum. The public adapter has
+    // already refused capture as INVALID_ARGUMENT before submission or drain.
+    return cudaErrorInvalidValue;
+#else
+    return cudaErrorStreamCaptureUnsupported;
+#endif
+  }
   runtime::cuda_trace::TraceOperation trace(
       "direct_jk_force_resident", shared.stream,
       {static_cast<std::size_t>(shared.batch.batch_size),
