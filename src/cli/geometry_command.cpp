@@ -297,7 +297,7 @@ class Objective {
   std::vector<generativeqc_atom> atoms_;
   Context context_;
   NativeBasisData orbital_, auxiliary_;
-  generativeqc_backend executed_backend_{GENATIVEQC_BACKEND_CPU_REFERENCE};
+  generativeqc_backend executed_backend_{GENERATIVEQC_BACKEND_CPU_REFERENCE};
 };
 
 void print_plan(const std::vector<Stage>& stages) {
