@@ -127,6 +127,10 @@ void prepare_hf_cuda_initial_densities(
       }
     } catch (const std::bad_alloc&) {
       throw;
+    } catch (const generativeqc::Error& error) {
+      if (error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+      diagnostic.outcome = initial_guess::PreliminaryOutcome::PreparationFailed;
+      diagnostic.work_counters_complete = false;
     } catch (const std::exception&) {
       diagnostic.outcome = initial_guess::PreliminaryOutcome::PreparationFailed;
       diagnostic.work_counters_complete = false;

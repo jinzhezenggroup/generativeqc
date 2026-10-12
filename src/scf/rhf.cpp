@@ -493,7 +493,7 @@ Matrix generated_one_electron_hf_gradient(const DensityFittingScfData& data, con
       data.one_electron_gradient_mapping, data.one_electron_gradient_budget, gradient, detail,
       nullptr, -1.0);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
 #else
   (void)data;
   (void)density;
@@ -544,8 +544,10 @@ Matrix generated_df_hf_gradient(const DensityFittingScfData& data, CudaDensityFi
       data.raw.metric, terms, data.df_gradient_mapping,
       data.df_gradient_budget - spin_staging_bytes, 0, gradient, detail, nullptr, final_state);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status != GENERATIVEQC_STATUS_SUCCESS || gradient.size() != data.raw.ncoord)
-    throw std::runtime_error(detail.empty() ? "generated DF response failed" : detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS)
+    throw generativeqc::Error(status, detail.empty() ? "generated DF response failed" : detail);
+  if (gradient.size() != data.raw.ncoord)
+    throw std::runtime_error("generated DF response has invalid coordinate dimensions");
 #else
   (void)system;
   (void)final_state;
@@ -608,6 +610,10 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
         system, data.one_electron, *options.preliminary_guess, diagnostic, eigen);
   } catch (const std::bad_alloc&) {
     throw;
+  } catch (const generativeqc::Error& error) {
+    if (error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+    diagnostic.outcome = initial_guess::PreliminaryOutcome::PreparationFailed;
+    diagnostic.work_counters_complete = false;
   } catch (const std::exception&) {
     diagnostic.outcome = initial_guess::PreliminaryOutcome::PreparationFailed;
     diagnostic.work_counters_complete = false;
@@ -689,7 +695,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
       snapshot.candidate.spins.resize(density.size());
     }
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
     if ((reference_validation && snapshot.density != density) ||
         token.identity.occupied != occupied ||
         token.identity.model.metric_relative_threshold !=
@@ -728,6 +734,8 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
            identity.model.spec.spin == FockSpin::Unrestricted},
       options.compute_forces, force, reference_validation ? nullptr : &operations);
   if (selected.status == solver::FinalStateStatus::OutOfMemory) throw std::bad_alloc();
+  if (!selected.state && selected.provider_exception)
+    std::rethrow_exception(selected.provider_exception);
   if (!selected.state) throw std::runtime_error(selected.detail);
   if (options.export_physical_reference && selected.state->fock[0].empty()) {
     selected.state->fock =
@@ -740,7 +748,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     const auto status = read_cuda_density_fitting_final_state(
         plan, CudaDfFinalStateToken{1, selected.state->identity}, snapshot, detail, false);
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
     selected.state->orbitals = std::move(snapshot.candidate.spins);
   }
   runtime::df_progress::number("final_fock_evaluations", selected.fock_evaluations);
@@ -822,10 +830,11 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
         status = execute_item_rhf_jk(densities[0], coulomb, exchange, detail);
       }
       if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-      if (status != GENERATIVEQC_STATUS_SUCCESS || coulomb.size() != n * n ||
-          exchange.size() != n * n)
-        throw std::runtime_error(detail.empty() ? "strict CUDA DF physical J/K evaluation failed"
-                                                : detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS)
+        throw generativeqc::Error(
+            status, detail.empty() ? "strict CUDA DF physical J/K evaluation failed" : detail);
+      if (coulomb.size() != n * n || exchange.size() != n * n)
+        throw std::runtime_error("strict CUDA DF physical J/K dimensions are invalid");
       ++result.fock_builds;
       auto fock = data.one_electron.hcore;
       for (std::size_t k = 0; k < fock.size(); ++k) fock[k] += coulomb[k] - .5 * exchange[k];
@@ -2439,6 +2448,15 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       while (diis.size() > slot_before) diis.pop_back();
       previous_energies.resize(slot_before);
       outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    } catch (const generativeqc::Error& error) {
+      source_indices.resize(slot_before);
+      data.resize(slot_before);
+      orthogonalizers.resize(slot_before);
+      densities.resize(slot_before);
+      orbitals.resize(slot_before);
+      while (diis.size() > slot_before) diis.pop_back();
+      previous_energies.resize(slot_before);
+      outputs[source].status = error.status();
     } catch (...) {
       source_indices.resize(slot_before);
       data.resize(slot_before);
@@ -2497,6 +2515,9 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       for (const std::size_t source : source_indices) {
         outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
+      return false;
+    } catch (const generativeqc::Error& error) {
+      for (const std::size_t source : source_indices) outputs[source].status = error.status();
       return false;
     } catch (...) {
       for (const std::size_t source : source_indices) {
@@ -2557,6 +2578,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     } catch (const std::invalid_argument&) {
       outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    } catch (const generativeqc::Error& error) {
+      outputs[source].status = error.status();
     } catch (...) {
       outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
@@ -2632,9 +2655,9 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           options.energy_tolerance, options.density_tolerance, device_final_density, device_records,
           device_detail, overlap, cuda_df_iteration_diis_history(options));
     });
-    if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
-      for (const auto source : source_indices)
-        outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
+        device_status == GENERATIVEQC_STATUS_CUDA_ERROR) {
+      for (const auto source : source_indices) outputs[source].status = device_status;
       return outputs;
     }
     runtime::df_progress::number("compact_dispatch_status", device_status);
@@ -2673,6 +2696,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
         } catch (const std::invalid_argument&) {
           outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+        } catch (const generativeqc::Error& error) {
+          outputs[source].status = error.status();
         } catch (...) {
           outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
         }
@@ -2755,6 +2780,10 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
         active[slot] = false;
         --active_count;
+      } catch (const generativeqc::Error& error) {
+        outputs[source].status = error.status();
+        active[slot] = false;
+        --active_count;
       } catch (...) {
         outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
         active[slot] = false;
@@ -2784,6 +2813,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       outputs[source].status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     } catch (const std::invalid_argument&) {
       outputs[source].status = GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    } catch (const generativeqc::Error& error) {
+      outputs[source].status = error.status();
     } catch (...) {
       outputs[source].status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
@@ -3350,9 +3381,8 @@ void retry_df_huckel_items(
     auto& item = results[source];
     auto diagnostic = item.scf.preliminary_guess;
     if (diagnostic.outcome != initial_guess::PreliminaryOutcome::Used ||
-        item.status == GENERATIVEQC_STATUS_SUCCESS ||
-        item.status == GENERATIVEQC_STATUS_CUDA_ERROR ||
-        item.status == GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+        (item.status != GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+         item.status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED))
       continue;
     if (cached_plan && *cached_plan) {
       destroy_cuda_density_fitting_jk_plan(*cached_plan);

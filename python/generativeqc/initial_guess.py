@@ -495,9 +495,13 @@ def _huckel_numeric_capacity(
     """Mirror native Huckel assembly/admission plus one serialized atomic owner."""
     from generativeqc_compiler.common.resources import byte_product, checked_bytes
 
-    if any(
-        type(value) is not int or value <= 0
-        for value in (dimension, atomic_aos, atoms, primitives)
+    if (
+        any(
+            type(value) is not int or value <= 0
+            for value in (dimension, atoms, primitives)
+        )
+        or type(atomic_aos) is not int
+        or atomic_aos < 0
     ):
         raise ValueError("invalid Huckel target/atomic topology")
     return checked_bytes(

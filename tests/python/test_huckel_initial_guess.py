@@ -8,7 +8,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, GridSpec, InitialGuessSpec, KsOptions, _native
+from generativeqc import (
+    Calculator,
+    GridSpec,
+    InitialGuessSpec,
+    KsOptions,
+    Primitive,
+    ResourceBudget,
+    Shell,
+    _native,
+)
 from generativeqc.initial_guess import _huckel_numeric_capacity
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -188,3 +197,30 @@ def test_huckel_numeric_cap_preserves_bounded_core_fallback() -> None:
     assert actual.initial_guess["outcome"] == "budget_skipped"
     assert actual.initial_guess["preliminary_fock_builds"] == 0
     assert actual.initial_guess["target_attempts"] == 1
+
+
+@pytest.mark.parametrize("guess", ["auto", InitialGuessSpec("huckel")])
+def test_empty_atomic_subspace_preserves_budgeted_core_fallback(guess: object) -> None:
+    """A valid target without atomic occupied channels still has a bounded fallback."""
+    atoms = [("He", (0, 0, 0))]
+    basis = (Shell(0, 1, (Primitive(1.0, 1.0),)),)
+    baseline = Calculator("rhf", basis, device="cpu", initial_guess=None).singlepoint(
+        atoms
+    )
+    calc = Calculator("rhf", basis, device="cpu", initial_guess=guess)
+    peak = calc.estimate_resources([atoms]).peak_bytes["host"]
+    bounded = Calculator(
+        "rhf",
+        basis,
+        device="cpu",
+        initial_guess=guess,
+        resource_budget=ResourceBudget(host_bytes=peak),
+    )
+    actual = bounded.singlepoint(atoms)
+    assert actual.converged and baseline.converged
+    assert actual.energy == pytest.approx(baseline.energy, abs=1e-12)
+    assert actual.initial_guess["outcome"] == "preparation_failed"
+    assert actual.initial_guess["target_attempts"] == 1
+    assert actual.initial_guess[
+        "preparation_numeric_capacity"
+    ] == _huckel_numeric_capacity(3, 0, 1, 1, 8)

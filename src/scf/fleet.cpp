@@ -12,6 +12,7 @@
 #include <tuple>
 #include <utility>
 
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -43,6 +44,8 @@ generativeqc_status exception_status() {
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::invalid_argument&) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const generativeqc::Error& error) {
+    return error.status();
   } catch (const std::exception&) {
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   } catch (...) {

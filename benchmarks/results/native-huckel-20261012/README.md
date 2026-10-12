@@ -2,11 +2,17 @@
 
 This reviewed copy retains compact scalar gates, exact timing samples, scientific
 work counts and the measured production patch. `qualification.json.gz` contains
-the compact records; `recovery.json` binds their original full records and source
+the compact records; `recovery.json.gz` binds their original full records and source
 audit to existing Git history, preserving exact bytes without exceeding the
 checkout evidence budget. Dense density exports remain in ignored local run
 storage; regenerate them for a full replay audit. The historical policy is superseded
 by the later user-authorized default/DF decision.
+
+Retained `.gz` files decode byte-for-byte to their original payloads. Read them
+with `gzip -dc <path.gz>`; decompress patches/scripts before applying or running
+them. The [storage inventory](../default-huckel-df-20261012/storage.json) binds
+both encoded and decoded identities. Recovery inventory paths still name the
+original files at the historical revision, not their current gzip containers.
 
 This campaign measures the native provider, not the earlier PySCF-backed
 Modified-Hückel experiment. It qualifies the frozen source described here,
@@ -19,9 +25,9 @@ not the complete dirty checkout or the subsequent CUDA HF integration.
 - Library SHA-256:
   `61c6a2f222b11b8a5b679b38683a70b1fd9cbc4b6b9ecfb2450b65977449b9fb`.
 - The recoverable `source-audit.json` hashes the complete production inventory
-  and identifies all 15 changed production files. `measured-production.patch`
+  and identifies all 15 changed production files. `measured-production.patch.gz`
   retains the final built production source. The complete measured-source patch
-  and exact runner/tests are recoverable through `recovery.json`.
+  and exact runner/tests are recoverable through `recovery.json.gz`.
 - Build jobs 7806 and 7810; dedicated endpoint jobs 7830 (48 atoms) and 7831
   (96 atoms), node1/n1, one Slurm-assigned RTX 5090 and eight CPU cores each.
   Device visibility is preserved, finite limits are 15/25 minutes, and each
@@ -80,7 +86,7 @@ AO/XC census and complete analytic-force work records.
 ## Evidence and reproduction
 
 The original 20 JSON gzip records, independent references and full work ledger
-are recoverable byte-for-byte from the revision and hashes in `recovery.json`.
+are recoverable byte-for-byte from the revision and hashes in `recovery.json.gz`.
 The exact runner is also `benchmarks/pbe0_initial_guesses.py` in this checkout;
 its historical identity is retained in every sample. The original local run
 retains 18 lossless NumPy gzip density exports. Recover/regenerate them into a
@@ -94,7 +100,7 @@ python -m benchmarks.pbe0_initial_guesses summarize --native-huckel-only \
 
 For any listed original payload, use
 `git show <git_revision>:<path> > <scratch-path>` and verify its SHA-256 from
-`recovery.json` before replay. Transient endpoint/build scripts and compiler-cache
+`recovery.json.gz` before replay. Transient endpoint/build scripts and compiler-cache
 receipts remain in local run storage, not this retained copy.
 Adapt only machine-local environment paths for reproduction. Real-device replay
 must remain inside a compatible finite `srun`, preserve its assigned visibility,

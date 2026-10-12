@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "dft/xc.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -368,6 +369,10 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
     density = prepare_preliminary_density(target, *options.preliminary_guess, diagnostic, eigen);
   } catch (const std::bad_alloc&) {
     throw;
+  } catch (const generativeqc::Error& error) {
+    if (error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+    diagnostic.outcome = PreliminaryOutcome::PreparationFailed;
+    diagnostic.work_counters_complete = false;
   } catch (const std::exception&) {
     diagnostic.outcome = PreliminaryOutcome::PreparationFailed;
     diagnostic.work_counters_complete = false;
@@ -391,6 +396,9 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
     discarded_work = result.dft_diagnostic.coulomb_exchange_work;
   } catch (const std::bad_alloc&) {
     throw;
+  } catch (const generativeqc::Error& error) {
+    if (error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+    diagnostic.work_counters_complete = false;
   } catch (const std::runtime_error&) {
     // One numerical retry only; a repeated target failure remains visible.
     diagnostic.work_counters_complete = false;

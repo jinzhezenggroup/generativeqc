@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "dft/xc.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/minao.hpp"
@@ -325,6 +326,43 @@ void check() {
     throw std::runtime_error("allocation failure swallowed");
   } catch (const std::bad_alloc&) {
     require(calls == 1, "allocation failure retried");
+  }
+  for (const auto kind : {PreliminaryKind::Minao, PreliminaryKind::Huckel}) {
+    auto typed_controls = controls;
+    typed_controls.preliminary_guess->kind = kind;
+    for (const auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                              GENERATIVEQC_STATUS_NOT_IMPLEMENTED}) {
+      calls = 0;
+      try {
+        (void)run_with_preliminary_guess(
+            plan, typed_controls, nullptr, 0, [&](const auto*) -> scf::ScfResult {
+              ++calls;
+              throw generativeqc::Error(status, "typed target failure");
+            });
+        throw std::logic_error("typed target failure swallowed");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == status && calls == 1,
+                "terminal target status was changed or retried");
+      }
+      calls = 0;
+      const EigenOperation failed_eigen = [&](const auto&, const auto*, const auto*,
+                                              auto) -> scf::reference::EigenResult {
+        throw generativeqc::Error(status, "typed seed admission failure");
+      };
+      try {
+        (void)run_with_preliminary_guess(
+            plan, typed_controls, nullptr, 0,
+            [&](const auto*) {
+              ++calls;
+              return baseline;
+            },
+            failed_eigen);
+        throw std::logic_error("typed seed failure swallowed");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == status && calls == 0,
+                "terminal seed status started an Hcore target");
+      }
+    }
   }
   auto force = controls;
   force.compute_forces = true;

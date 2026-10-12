@@ -39,7 +39,7 @@ and 1e-8. These are independent numerical gates, not only agreement with Hcore.
 
 ## Validation and source identity
 
-`validation.json` retains the actual final command receipt: Slurm job 7915,
+`validation.json.gz` retains the actual final command receipt: Slurm job 7915,
 210 passing Python tests (CPU and CUDA coverage), no failures/skips, and four
 successful native executables. The DF tests cover RHF/PBE/PBE0 energy, analytic
 force, final density, physical residual, warm precedence, preparation caps and
@@ -47,7 +47,7 @@ bounded retries on both backends. Local host checks add 411 tests and 22 subtest
 two source-owner DF retry regressions also pass. Compiler-cache statistics retain
 actual before/after receipts, not an inferred cache-hit rate.
 
-`summary.json` factors common provenance out of all 18 samples but retains exact
+`summary.json.gz` factors common provenance out of all 18 samples but retains exact
 scalar/timing/work/isolation fields and SHA-bound original JSON identities.
 The source digest hashes the sorted relative source paths/content under
 `src`, `include`, `python` and `cmake` using the measured root harness algorithm.
@@ -68,3 +68,24 @@ rejects foreign GPU processes and source/library changes.
 
 See the [default decision](../../../.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md)
 and the [current user contract](../../../docs/user/initial_guesses.md).
+
+## Lossless storage
+
+Use `gzip -dc summary.json.gz` or `gzip -dc validation.json.gz` to inspect the
+exact original JSON bytes. `storage.json` binds encoded and decoded hashes for
+this storage-only migration from `e07349607ff1b8c05d75d444222c0ae0a38d21c1`.
+All sample values, receipts and historical source identities are unchanged.
+
+For a fresh checkout after a squash merge, fetch the retained PR head before
+recovering historical payloads; the squash commit alone does not contain the
+preparatory history:
+
+```sh
+git fetch https://github.com/jinzhezenggroup/generativeqc.git refs/pull/2370/head:refs/remotes/recovery/pr-2370
+git merge-base --is-ancestor 051a4d49016bbceb818a9ac9837fd72bd6739d1a refs/remotes/recovery/pr-2370
+```
+
+Then read the relevant `recovery.json.gz`, recover each listed `git_revision:path`
+with `git show`, and verify its recorded SHA-256. This only recovers frozen
+historical evidence; it does not relabel that evidence as qualification of later
+source revisions.

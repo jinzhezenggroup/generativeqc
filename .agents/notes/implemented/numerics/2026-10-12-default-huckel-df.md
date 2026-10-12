@@ -71,7 +71,7 @@ Real-device tests exposed a remaining common CUDA DF preflight guard that still
 rejected every preliminary provider. It now admits only native Hückel, without
 granting HF/LDA/MINAO DF support or changing the molecular DF schedule. Actual
 compiler-cache receipts and final execution/JUnit counts are retained in
-`benchmarks/results/default-huckel-df-20261012/validation.json`.
+`benchmarks/results/default-huckel-df-20261012/validation.json.gz`.
 
 The separate fresh-process CUDA DF RHF energy/analytic-force campaign on Slurm
 job 7914 measures 18 independently accepted samples with spherical def2-SVP
@@ -95,12 +95,33 @@ library, harness and assigned-device identities. This is evidence for the stated
 DF RHF workloads only, not universal acceleration.
 
 The current checkout retains compact scalar gates, exact timing/work samples and
-production reconstruction patches. SHA-bound `recovery.json` inventories bind
+production reconstruction patches. SHA-bound `recovery.json.gz` inventories bind
 original full JSON records, source audits and reconstruction patches to the
 preparatory commit in the branch's existing Git history, avoiding duplicate large
 payloads in the 64 MiB checkout budget. Transient dense density exports and logs
 remain in local ignored run storage. No external publication, Release, tag or
 distribution workflow is created.
+
+## Review correction: preserve terminal provider failures
+
+The new bounded seed retry exposed legacy exception adapters that erased
+`CUDA_ERROR` into an untyped numerical failure. Preserve native statuses from
+seed admission, independent Fock/eigen providers, compact DF dispatch, final
+validation, warm-state publication and bucket/Fleet adapters. Numerical rejection
+still permits the documented Hcore retry; CUDA/OOM failures cannot start it.
+The backend-neutral final-state selector retains an opaque original exception
+alongside its failed selection so an execution owner can recover its type without
+introducing a backend dependency or changing the selector's result contract.
+
+The executable owner regression compiles the actual seed/bucket/retry functions
+with injected provider failures. On the original PR source, all ten CUDA_ERROR
+cases fail (five boundaries, owned/cached arenas); the corrected matrix passes.
+It also covers terminal OOM, failed retries, successful-neighbor preservation and
+retiring the failed arena before a per-item retry. Independent adapter and native
+selector/preliminary tests protect exception identity end to end. This mechanical
+status repair does not change numerical arithmetic or gates. The recorded GPU
+campaign remains evidence for its frozen source; local CPU/owner regression
+checks qualify this review delta rather than claiming a new GPU campaign.
 
 ## Rejected alternatives
 

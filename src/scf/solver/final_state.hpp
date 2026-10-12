@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <optional>
 #include <string>
@@ -137,6 +138,9 @@ enum class FinalStateStatus {
 struct FinalStateSelection {
   FinalStateStatus status{FinalStateStatus::NumericalFailure};
   std::string detail;
+  /** Original provider failure, retained without depending on a backend error type.
+   * Execution owners may rethrow it to preserve terminal device/resource status. */
+  std::exception_ptr provider_exception;
   unsigned fock_evaluations{}, eigen_solves{}, density_updates{}, candidate_rejections{};
   // Eigen solves above include these physical fixed-point probes. A rejected
   // probe is reused for correction, never solved twice at the same density.

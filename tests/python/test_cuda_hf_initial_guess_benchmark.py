@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import json
 from pathlib import Path
@@ -13,9 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def runner() -> object:
+def runner(tmp_path_factory: pytest.TempPathFactory) -> object:
     """Load the reader without importing CUDA or creating a device context."""
-    path = ROOT / "benchmarks/results/cuda-hf-huckel-20261012/runner.py"
+    retained = ROOT / "benchmarks/results/cuda-hf-huckel-20261012/runner.py.gz"
+    path = tmp_path_factory.mktemp("hf-guess-reader") / "runner.py"
+    path.write_bytes(gzip.decompress(retained.read_bytes()))
     spec = importlib.util.spec_from_file_location("hf_guess_benchmark", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -2,12 +2,19 @@
 
 This reviewed copy retains compact scalar gates, exact samples, scientific work
 counts and the measured production patch. `qualification.json.gz` holds the
-compact records. `recovery.json` binds original full records/source audits to
+compact records. `recovery.json.gz` binds original full records/source audits to
 existing Git history; exact bytes remain recoverable without exceeding the
 checkout evidence budget. Dense density exports and transient build/job receipts
 remain in ignored local run storage; regenerate those exports
 for a full density-replay audit. Historical policy statements below describe the
 decision at measurement time; the later default/DF decision supersedes them.
+
+Retained `.gz` files decode byte-for-byte to their original payloads. Read them
+with `gzip -dc <path.gz>`; decompress patches/scripts before applying or running
+them. The [storage inventory](../default-huckel-df-20261012/storage.json) binds
+both encoded and decoded identities. Recovery inventory paths still name the
+original files at the historical revision, not their current gzip containers.
+For replay, restore `runner.py.gz` to an ignored scratch `runner.py` first.
 
 This campaign qualifies the CUDA HF execution-owner integration, separately from
 the earlier PBE0 initial-guess campaign. It measures native atomic preparation,
@@ -18,7 +25,7 @@ not an oracle-backed seed or an isolated Hückel microbenchmark.
 - Frozen base: `ab5282f74c0acf98c18ec05b343a5494de85cf49`, plus native Hückel,
   eigenpair ordering and the CUDA HF integration. The recoverable `source-audit.json` inventories
   1,998 production/qualification files and all 24 changed production files.
-  `measured-production.patch` and the recoverable `measured-source.patch` reconstruct the actual
+  `measured-production.patch.gz` and the recoverable `measured-source.patch` reconstruct the actual
   qualified source, not the complete dirty checkout or an earlier deployment.
 - Library SHA-256:
   `d598040711420953ece33ecabeff61751c5c2651911290560d54a59959981886`.
@@ -104,13 +111,13 @@ default or a hard-coded atom-count whitelist. Other methods retain their existin
 MINAO/Hcore defaults; this HF campaign is not a CPU/KS profitability claim.
 
 There are 21 original lossless raw JSON gzip records, recoverable through the
-revision and SHA-256 inventory in `recovery.json`. For any listed payload, use
+revision and SHA-256 inventory in `recovery.json.gz`. For any listed payload, use
 `git show <git_revision>:<path> > <scratch-path>` and verify its hash before replay.
 The original run also retains 18
 lossless NumPy density gzip exports in local run storage. Recover/regenerate
 these exports and decompress the records into a temporary directory without changing bytes;
-`runner.py --summary <directory>` rechecks the large cases, and
-`runner.py --summary <directory> --atoms 3` rechecks the small case. `summary.json`
+`<restored-runner.py> --summary <directory>` rechecks the large cases, and
+`<restored-runner.py> --summary <directory> --atoms 3` rechecks the small case. `summary.json.gz`
 and the recoverable `work-ledger.json` combine accepted observations without modifying them.
 
 Job 7869 completes every measurement but exits during postprocessing: its old

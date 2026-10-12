@@ -362,9 +362,11 @@ FinalStateSelection select_final_state(
     result.status = FinalStateStatus::OutOfMemory;
     result.detail = "strict final-state allocation failed";
   } catch (const std::exception& error) {
+    result.provider_exception = std::current_exception();
     result.status = FinalStateStatus::ProviderFailure;
     result.detail = error.what();
   } catch (...) {
+    result.provider_exception = std::current_exception();
     result.status = FinalStateStatus::ProviderFailure;
     result.detail = "strict final-state provider raised an unknown exception";
   }
