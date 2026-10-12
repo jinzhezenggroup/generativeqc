@@ -6,6 +6,16 @@ valid:
     void kernel() { if (blockIdx.x == 0) { __syncthreads(); } }
   - |
     void kernel() { if (threadIdx.x == 0) { work(); } __syncthreads(); }
+  - |
+    void kernel() { if (__syncthreads_or(threadIdx.x == 0)) { __syncthreads(); } }
+  - |
+    void kernel() { if (sizeof(threadIdx.x == 0)) { __syncthreads(); } }
+  - |
+    void kernel() { if (threadIdx.x == 0 || threadIdx.x != 0) { __syncthreads(); } }
+  - |
+    void kernel() { if (blockIdx.x == 0 /* threadIdx.x == 0 */) { __syncthreads(); } }
+  - |
+    void kernel() { if (threadIdx.x == 0) { auto barrier = [] { __syncthreads(); }; } }
 invalid:
   - |
     void kernel() { if (threadIdx.x == 0) { __syncthreads(); } }
@@ -13,3 +23,9 @@ invalid:
     void kernel() { if (threadIdx.x != 0) __syncthreads(); }
   - |
     void kernel() { if (threadIdx.x == 0) { work(); __syncthreads(); } }
+  - |
+    void kernel() { if (threadIdx.x /* lane */ == 0) { __syncthreads(); } }
+  - |
+    void kernel() { if (threadIdx.x == 0) { if (ready) { __syncthreads(); } } }
+  - |
+    void kernel() { if (threadIdx.x == 0) work(); else { __syncthreads(); } }

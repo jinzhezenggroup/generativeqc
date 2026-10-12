@@ -12,6 +12,15 @@ rule:
           - kind: if_statement
           - has:
               field: condition
-              regex: 'threadIdx\.x\s*(?:==|!=)\s*0\b'
-              stopBy: end
-        stopBy: end
+              # Match the complete condition structurally. A substring may be
+              # inside a uniform block vote, sizeof, comment, or tautology.
+              any:
+                - pattern:
+                    context: "void f() { if (threadIdx.x == 0) {} }"
+                    selector: condition_clause
+                - pattern:
+                    context: "void f() { if (threadIdx.x != 0) {} }"
+                    selector: condition_clause
+        # Defining a lambda inside a branch does not execute its body there.
+        stopBy:
+          kind: lambda_expression

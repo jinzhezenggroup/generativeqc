@@ -27,6 +27,11 @@ uvx --from ast-grep-cli==0.50.0 ast-grep test --config sgconfig.yml --skip-snaps
 * **error**: `cpp-no-gets`, `cuda-no-unchecked-runtime-call`,
   `cuda-no-assert-api-status` and `cuda-no-divergent-block-barrier`
   reject unsafe constructs (subject to ordinary code review of any hit).
+  The barrier rule deliberately recognizes complete direct `threadIdx.x == 0`
+  and `threadIdx.x != 0` conditions, including barriers in nested branches.
+  It does not infer divergence from compound expressions or lambda definitions;
+  block-vote results, `sizeof`, and comments containing a lane test are not proof
+  of a divergent branch.
 * **warning**: `cpp-review-strcpy`, `cpp-review-format-string`,
   `cuda-review-device-sync`, `cuda-review-device-reset`, and
   `cuda-review-discarded-graph-launch` request human review. CUDA Graph
