@@ -16,7 +16,11 @@ from generativeqc_compiler.dft.xc_point_cuda import (
     emit_point_traversal,
 )
 
-from .automatic_point import AutomaticPointSource, emit_automatic_point
+from .automatic_point import (
+    AUTOMATIC_POINT_LAYOUTS,
+    AutomaticPointSource,
+    emit_automatic_point,
+)
 from .automatic_semilocal import automatic_functional_code
 from .density_work import DENSITY_WORK_DOMAIN, DENSITY_WORK_DOMAIN_VERSION
 from .libxc_work import LIBXC_WORK_DOMAIN, LIBXC_WORK_DOMAIN_VERSION
@@ -47,6 +51,8 @@ class AutomaticCudaPointProvider:
         if (
             self.point.backend != "cuda"
             or self.point.spin != "polarized"
+            or self.point.ingredient_mask
+            != AUTOMATIC_POINT_LAYOUTS.get(self.point.features)
             or self.point.domain != expected_domain
             or self.point.domain_version != expected_version
             or self.point.ingredient_mask != {1: 1, 4: 7, 5: 15}.get(self.feature_terms)

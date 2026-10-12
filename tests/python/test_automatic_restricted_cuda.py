@@ -135,6 +135,8 @@ def test_provider_rejects_joint_stale_domain_and_invalid_tile_contract() -> None
     for changes in (
         {"feature_terms": 4},
         {"point": replace(provider.point, outputs=((),))},
+        {"point": replace(provider.point, features=("rho_b", "rho_a"))},
+        {"point": replace(provider.point, features=("rho", "sigma"))},
     ):
         with pytest.raises(ValueError, match="restricted layout"):
             replace(provider, **changes)
