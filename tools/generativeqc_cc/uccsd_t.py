@@ -35,7 +35,7 @@ from .native_tensor_cuda import CudaCCTensorExecutor
 from .uccsd_solver import PreparedUCCSD, UCCSDResult
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from typing_extensions import Self
 
@@ -189,7 +189,8 @@ class PreparedUCCSDT:
             + sum(value.nbytes for value in prepared.feeds.values())
             + prepared.denominators.nbytes
             + 3 * full_bytes
-            + 4 * packed_bytes,
+            + 4 * packed_bytes
+            + self._extra_storage_bytes(),
             "UCCSD(T) persistent/state admission bytes",
         )
         self.replay_peak_bytes = checked_bytes(
@@ -314,10 +315,17 @@ class PreparedUCCSDT:
             minima.append(float(-largest))
         return min(minima) if minima else None
 
+    def _extra_storage_bytes(self) -> int:
+        """Additional owned storage for consumers of this shared tile planner."""
+        return 0
+
+    def _build_tile(self, channel: str, shape: tuple[int, ...]) -> TriplesTileProgram:
+        return build_tile_program(self.layout, channel, shape)
+
     def _template(
         self, channel: str, shape: tuple[int, ...], multiplicity: int
     ) -> _Template:
-        tile = build_tile_program(self.layout, channel, shape)
+        tile = self._build_tile(channel, shape)
         executor = self.prepared.executor
         _, resources = emit_cpu(
             tile.program,
@@ -466,6 +474,22 @@ class PreparedUCCSDT:
 
     def energy(self) -> UCCSDTResult:
         """Recheck the parent, then accumulate all admitted tiles transactionally."""
+        return self._evaluate_tiles()
+
+    def _evaluate_tiles(
+        self,
+        accumulate: Callable[
+            [TriplesTileProgram, tuple[tuple[int, ...], ...], Mapping], None
+        ]
+        | None = None,
+    ) -> UCCSDTResult:
+        """Shared complete-grid replay with optional transactional tile consumers.
+
+        Consumers own local unpublished buffers. A failing callback invalidates
+        the entire result just like a native failure; no prefix energy is
+        published. Admission includes the selected tile program, so response
+        consumers cannot silently run unadmitted derivative work.
+        """
         self._check_open()
         started = time.perf_counter()
         outputs = self.prepared.evaluate(self.packed_amplitudes)
@@ -514,7 +538,7 @@ class PreparedUCCSDT:
                     result = self.prepared.executor.execute(
                         template.tile.program, self._bind(template.tile, coordinates)
                     )
-                    if result.keys() != {"triples_energy"}:
+                    if result.keys() != template.tile.program.outputs.keys():
                         raise ValueError(
                             "UCCSD(T) executor returned incomplete tile outputs"
                         )
@@ -525,6 +549,8 @@ class PreparedUCCSDT:
                         )
                     if not np.isfinite(value):
                         raise FloatingPointError("nonfinite UCCSD(T) tile energy")
+                    if accumulate is not None:
+                        accumulate(template.tile, coordinates, result)
                     correction = float(value) - compensation
                     next_total = total + correction
                     compensation = (next_total - total) - correction

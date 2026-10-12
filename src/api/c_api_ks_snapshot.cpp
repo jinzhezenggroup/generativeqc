@@ -1044,8 +1044,8 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
         output[10] = xc.kinetic[1];
       };
       if (automatic) {
-        // The native SCF and stationary derivative consumers must evaluate the
-        // same AOT program, including its pinned Libxc work-domain continuation.
+        // This legacy ABI is explicitly polarized. Restricted density-work
+        // consumers use v4 so they do not apply a per-spin floor to total rho.
         const auto xc = automatic.program->evaluate(local_rho, local_gradient, local_tau);
         bool finite = std::isfinite(xc.energy);
         for (double value : xc.rho) finite = finite && std::isfinite(value);
@@ -1096,6 +1096,68 @@ generativeqc_status generativeqc_xc_point_batch_v2(std::uint32_t functional, con
                                                    std::size_t value_count) {
   return generativeqc_xc_point_batch_v3(functional, 1.0, 1.0, rho, gradient, tau, point_count,
                                         values, value_count);
+}
+
+/** Layout-aware private stationary bridge. RKS feature transport retains two
+ * equal half-density channels, but the U1 descriptor consumes their original
+ * total. Duplicating total-feature derivatives makes the existing half-channel
+ * pullback contract to the same restricted derivative, including native vtau/2.
+ * Spin is explicit producer metadata, never inferred from equal input values.
+ * Legacy domains retain their SCF's polarized-fold continuation. */
+generativeqc_status generativeqc_xc_point_batch_v4(std::uint32_t functional, std::uint32_t spins,
+                                                   double exchange_scale, double correlation_scale,
+                                                   const double* rho, const double* gradient,
+                                                   const double* tau, std::size_t point_count,
+                                                   double* values, std::size_t value_count) {
+  constexpr std::size_t stride = 11;
+  if ((spins != 1U && spins != 2U) || !rho || !gradient || !tau || !values || !point_count ||
+      point_count > std::numeric_limits<std::size_t>::max() / stride ||
+      value_count != stride * point_count)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (spins == 2U)
+    return generativeqc_xc_point_batch_v3(functional, exchange_scale, correlation_scale, rho,
+                                          gradient, tau, point_count, values, value_count);
+  for (std::size_t point = 0; point < point_count; ++point) {
+    if (rho[point] != rho[point_count + point] || tau[point] != tau[point_count + point])
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      if (gradient[point * 3 + axis] != gradient[(point_count + point) * 3 + axis])
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto automatic = generativeqc::dft::generated::automatic_libxc_entry(functional);
+  if (!automatic || automatic.program->domain_version <= 4U)
+    return generativeqc_xc_point_batch_v3(functional, exchange_scale, correlation_scale, rho,
+                                          gradient, tau, point_count, values, value_count);
+  if (exchange_scale != 1.0 || correlation_scale != 1.0)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* restricted = generativeqc::dft::generated::automatic_restricted_libxc_program(
+      automatic.program->identifier);
+  if (!restricted || restricted->domain_version != automatic.program->domain_version ||
+      restricted->ingredient_mask != automatic.program->ingredient_mask)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    generativeqc::dft::validate_semilocal_point_program(*restricted);
+    for (std::size_t point = 0; point < point_count; ++point) {
+      double total_gradient[3]{};
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        total_gradient[axis] =
+            gradient[point * 3 + axis] + gradient[(point_count + point) * 3 + axis];
+      const auto xc = restricted->evaluate(rho[point] + rho[point_count + point], total_gradient,
+                                           tau[point] + tau[point_count + point]);
+      bool finite = std::isfinite(xc.energy) && std::isfinite(xc.rho) && std::isfinite(xc.kinetic);
+      for (double coefficient : xc.gradient) finite = finite && std::isfinite(coefficient);
+      if (!finite) throw std::runtime_error("nonfinite restricted Libxc point result");
+      double* output = values + stride * point;
+      output[0] = xc.energy;
+      output[1] = output[2] = xc.rho;
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        output[3 + axis] = output[6 + axis] = xc.gradient[axis];
+      output[9] = output[10] = xc.kinetic;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
 }
 
 void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot) { delete snapshot; }

@@ -444,13 +444,13 @@ class Calculator:
 
                 method = native_dft_carrier_for_ir(electronic_ir)
 
-            from .ks import AUTOMATIC_SCF_DOMAIN, SCF_DOMAIN, KsOptions
+            from .ks import SCF_DOMAIN, KsOptions, scf_domain_for_method
 
             if ks_options is None:
                 ks_options = KsOptions(
                     composition=electronic_ir,
                     scf_domain=(
-                        AUTOMATIC_SCF_DOMAIN
+                        scf_domain_for_method(electronic_ir)
                         if automatic_libxc_resolution is not None
                         else SCF_DOMAIN
                     ),
@@ -468,7 +468,7 @@ class Calculator:
                     ks_options,
                     composition=electronic_ir,
                     scf_domain=(
-                        AUTOMATIC_SCF_DOMAIN
+                        scf_domain_for_method(electronic_ir)
                         if automatic_libxc_resolution is not None
                         else ks_options.scf_domain
                     ),

@@ -53,6 +53,15 @@ struct RunOptions {
   std::uint32_t ccsd_max_iterations{100}, ccsd_diis_history{6};
   double ccsd_energy_tolerance{1e-11}, ccsd_residual_tolerance{1e-9};
   double ccsd_denominator_threshold{1e-10}, ccsd_damping{0}, ccsd_level_shift{0};
+  // Native Cartesian geometry optimization controls; ignored by singlepoints.
+  // Empty stages chooses the automatic GFN2 / PBE / target planner.
+  std::string optimization_stages;
+  std::string preopt_basis_name;
+  std::string optimization_output;
+  std::uint32_t optimization_max_steps{80};
+  double optimization_fmax{3e-4};      // Hartree/Bohr
+  double optimization_max_step{0.35};  // Bohr per atom
+  bool optimization_plan_only{false};
 };
 
 }  // namespace generativeqc::cli

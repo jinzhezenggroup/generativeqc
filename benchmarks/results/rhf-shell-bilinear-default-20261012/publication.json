@@ -1,0 +1,58 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent numerical/refusal/lifetime and complete endpoint gates pass; interleaved stock/default timings are scoped observations only.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 3075,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "5cf556d1b4111109d17ddbec2a56ddc8df69bb0f5c68d5788d7454a8a144ec75"
+    },
+    {
+      "bytes": 10024,
+      "path": "source.patch.xz",
+      "role": "source-patch",
+      "sha256": "0f3f17f03fe40416af8c6716240605d019807b82f9219a2f61eb279e7a93ef29"
+    },
+    {
+      "bytes": 12588,
+      "path": "raw-receipts.json.xz",
+      "role": "samples",
+      "sha256": "e2e6d10d07d4fd41cfc6e5dffb9bdd1f2737ee5bda7c18255e9b7c64a6e7aaa5"
+    },
+    {
+      "bytes": 2628,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "c299de194bcf91bb51d63659171e64a55c5bb1d4517d71abbfb52efe755647dd"
+    },
+    {
+      "bytes": 2152,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "c36b1485bcea42b25fda6c06ba3317cb9aaa045621ee402fc4d98dd7871c197d"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=00:30:00",
+      "bash",
+      "reproduce.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "a50eb54f362a1b27edcb0f06353e7a04aa9979e2"
+  }
+}

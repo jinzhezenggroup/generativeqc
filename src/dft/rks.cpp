@@ -147,6 +147,7 @@ struct RksXcEvaluator {
   Direct direct{};
   CachedDirect cached_direct{};
   const dft::SemilocalPointProgram* program{};
+  const dft::RestrictedSemilocalPointProgram* restricted_program{};
   const dft::SemilocalFamilyMetadata* metadata{};
 
   RksXcEvaluator(Direct value, CachedDirect cached = nullptr)
@@ -154,13 +155,16 @@ struct RksXcEvaluator {
   RksXcEvaluator(Direct value, dft::SemilocalFamily family, CachedDirect cached = nullptr)
       : direct(value), cached_direct(cached), metadata(&dft::semilocal_family_metadata(family)) {}
   RksXcEvaluator(const dft::SemilocalPointProgram& value) : program(&value) {}
+  RksXcEvaluator(const dft::RestrictedSemilocalPointProgram& value) : restricted_program(&value) {}
 
   [[nodiscard]] unsigned ao_order() const noexcept {
+    if (restricted_program) return restricted_program->ingredient_mask == 1U ? 0U : 1U;
     if (program) return program->ingredient_mask == 1U ? 0U : 1U;
     return metadata && !metadata->requires_gradient ? 0U : 1U;
   }
 
   [[nodiscard]] std::uint32_t domain_version() const noexcept {
+    if (restricted_program) return restricted_program->domain_version;
     if (program) return program->domain_version;
     return metadata ? metadata->domain_version : 1U;
   }
@@ -173,6 +177,11 @@ struct RksXcEvaluator {
                              const Matrix& density, dft::XcDensitySource source, std::size_t tile,
                              double exchange_scale, double correlation_scale,
                              const dft::RksAoCache* cache = nullptr) const {
+    if (restricted_program) {
+      if (exchange_scale != 1.0 || correlation_scale != 1.0)
+        throw std::invalid_argument("restricted semilocal RKS does not accept legacy XC scaling");
+      return dft::integrate_semilocal_rks(basis, grid, density, *restricted_program, tile, source);
+    }
     if (program) {
       if (exchange_scale != 1.0 || correlation_scale != 1.0)
         throw std::invalid_argument("generic semilocal RKS does not accept legacy XC scaling");
@@ -1118,6 +1127,17 @@ ScfResult run_r2scan_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis
 ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                             const dft::MolecularGrid& grid, const ScfOptions& options,
                             const dft::SemilocalPointProgram& program,
+                            const std::vector<double>* initial_density) {
+  dft::validate_semilocal_point_program(program);
+  if (program.domain_version == 5U)
+    throw std::invalid_argument("density-work RKS requires an explicit restricted point program");
+  return run_rks(plan, nullptr, basis, grid, options, initial_density, RksXcEvaluator(program),
+                 program.identifier, nullptr);
+}
+
+ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const dft::RestrictedSemilocalPointProgram& program,
                             const std::vector<double>* initial_density) {
   dft::validate_semilocal_point_program(program);
   return run_rks(plan, nullptr, basis, grid, options, initial_density, RksXcEvaluator(program),
