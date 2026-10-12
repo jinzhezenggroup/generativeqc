@@ -48,7 +48,6 @@ _LOCAL_COORDINATE_ROUTES = frozenset(
     (
         DerivativeMechanism.EXPLICIT_COORDINATE_VJP,
         DerivativeMechanism.INTEGRAL_ADJOINT,
-        DerivativeMechanism.STATE_ADJOINT,
     )
 )
 
