@@ -227,6 +227,14 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
             "test_uccsd_t_lambda.py",
             "test_cc_canonical_denominators.py",
             "test_direct_order5_sources.py",
+            # The latest master inventory keeps these complete measured owners
+            # on core-c without changing any ordinary core-file parity slot.
+            "test_cuda_xc_point_contract.py",
+            "test_uccsd_solver.py",
+            "test_cc_triples_tiles.py",
+            "test_df_lambda_mixed_precision.py",
+            "test_direct_exchange_queue.py",
+            "test_df_occupied_triples.py",
         ),
     }
     tracked = set(
