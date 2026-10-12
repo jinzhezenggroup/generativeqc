@@ -1516,13 +1516,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "CPU Direct stationary D/W spin shape mismatch";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    const auto method = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
-                            ? scf::CpuStationaryGga::B3lyp
-                        : fock_.strategy().spec.exchange.present ? scf::CpuStationaryGga::Pbe0
-                                                                 : scf::CpuStationaryGga::Pbe;
     const std::span<const double> empty;
     auto candidate = scf::cpu_stationary_integral_gradient(
-        fock_, density[0], weighted_density[0], method, maximum_bytes,
+        fock_, density[0], weighted_density[0], maximum_bytes,
         spins == 2 ? std::span<const double>(density[1]) : empty,
         spins == 2 ? std::span<const double>(weighted_density[1]) : empty);
     work[3] = candidate.numeric_capacity;
