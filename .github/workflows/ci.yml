@@ -1615,6 +1615,11 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
+      - name: Check for an already-failed required CI sibling
+        if: steps.cli_scope.outputs.tier != 'skip' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/ci_required_failure_guard.py
       # Populate both compiler-flag identities before publishing one cache image.
       # The required fast CI job runs on a separate runner and cannot write here.
       - name: Seed fast CUDA CI objects in the shared cache
