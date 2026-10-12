@@ -278,6 +278,13 @@ rebalance_paths=(
   # in runs 38121450095/38121385355. Keep its core parity slot while
   # moving the whole matrix to the existing force workers.
   tests/python/test_mixed_rsh_df_forces.py
+  # PR #2329 / run 38196621228 timed out after 30 minutes with a
+  # late UCCSD tail. Keep every case, but preserve these files' core
+  # parity slots while moving complete owners to file-locality shards.
+  tests/python/test_uccsd_lambda.py
+  tests/python/test_uccsd_t_owner.py
+  tests/python/test_uccsd_physical_response.py
+  tests/python/test_uccsd_triples_response.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -395,6 +402,12 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_df_lambda_matrix.py
       tests/python/test_df_lambda_reduction.py
     )
+    # The dependent unrestricted triples-response slice has its own
+    # bounded owner and full/edge/fault matrix. Reserve a stable worker
+    # group without adding a nonexistent target on the earlier tree.
+    if git ls-files --error-unmatch -- tests/python/test_uccsd_triples_response.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_uccsd_triples_response.py)
+    fi
     ;;
   posthf)
     test_targets=(
@@ -415,6 +428,17 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_hessian_reference.py
       tests/python/test_hessian_hvp.py
     )
+    # Same-run posthf completed in 726 s; core-c exceeded 1800 s.
+    # These measured complete UCCSD owners keep all numerical/failure
+    # gates and module-local oracle caches under the existing loadfile.
+    for path in \
+      tests/python/test_uccsd_lambda.py \
+      tests/python/test_uccsd_t_owner.py \
+      tests/python/test_uccsd_physical_response.py; do
+      if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+        test_targets+=("$path")
+      fi
+    done
     ;;
   ecp-forces)
     # Full d-force qualification exceeded the 20-minute job cap when

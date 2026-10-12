@@ -16,6 +16,7 @@
 #include "api/handles.hpp"
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
+#include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/cuda_derivative.hpp"
@@ -692,6 +693,64 @@ GENERATIVEQC_API int generativeqc_posthf_df_gradient_tile_cuda_v1(
 // CUDA one-electron derivative consumer.  This private post-HF bridge borrows
 // the source's deep-copied system; it does not create a public method result or
 // materialize coordinate-by-AO derivative tensors.
+/** Explicit native-compatibility S/hcore contraction. This uses the existing
+ * CPU differentiated recurrence, not a generated one-electron kernel. Nuclear
+ * repulsion is deliberately excluded so the complete consumer adds it once. */
+GENERATIVEQC_API int generativeqc_posthf_one_electron_gradient_cpu_v1(
+    void* source, const double* overlap_weights, const double* hcore_weights,
+    std::size_t matrix_elements, double* gradient, std::size_t gradient_elements, char* error,
+    std::size_t error_size) {
+  return guarded(error, error_size, [&] {
+    if (!source || !overlap_weights || !hcore_weights || !gradient)
+      throw std::invalid_argument("invalid one-electron CPU gradient request");
+    const auto& raw = *static_cast<RawSource*>(source);
+    const auto& system = raw.orbital();
+    if (matrix_elements != generativeqc::posthf::checked_mul(raw.nbf(), raw.nbf()) ||
+        gradient_elements != generativeqc::posthf::checked_mul(system.atoms.size(), 3))
+      throw std::invalid_argument("one-electron CPU gradient dimensions differ");
+    for (const auto* weights : {overlap_weights, hcore_weights})
+      if (!std::all_of(weights, weights + matrix_elements,
+                       [](double value) { return std::isfinite(value); }))
+        throw std::invalid_argument("one-electron CPU weights are nonfinite");
+    const auto candidate = generativeqc::integrals::contract_weighted_one_electron_derivative(
+        system, std::span<const double>(overlap_weights, matrix_elements),
+        std::span<const double>(hcore_weights, matrix_elements), false);
+    if (candidate.size() != gradient_elements ||
+        !std::all_of(candidate.begin(), candidate.end(),
+                     [](double value) { return std::isfinite(value); }))
+      throw std::runtime_error("one-electron CPU gradient is incomplete or nonfinite");
+    std::copy(candidate.begin(), candidate.end(), gradient);
+  });
+}
+
+/** Packaged CPU shell contraction, with no reference-recurrence fallback.
+ * Independent slot derivatives are scattered by the caller after success. */
+GENERATIVEQC_API int generativeqc_posthf_weighted_eri_shell_gradient_cpu_v1(
+    void* source, const std::size_t* shell_indices, const double* weights,
+    std::size_t weight_elements, double* center_gradient, std::size_t gradient_elements,
+    std::uint64_t* primitive_evaluations, char* error, std::size_t error_size) {
+  return guarded(error, error_size, [&] {
+    if (!source || !shell_indices || !weights || !center_gradient || !primitive_evaluations ||
+        gradient_elements != 12)
+      throw std::invalid_argument("invalid packaged CPU ERI shell-gradient request");
+    const std::array<std::size_t, 4> shells{shell_indices[0], shell_indices[1], shell_indices[2],
+                                            shell_indices[3]};
+    const std::array<std::span<const double>, 1> channels{
+        std::span<const double>(weights, weight_elements)};
+    std::uint64_t evaluations{};
+    const auto candidate =
+        generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+            static_cast<RawSource*>(source)->orbital(), shells, channels, &evaluations,
+            generativeqc::integrals::WeightedEriDerivativeExecution::PackagedCpu)
+            .front();
+    if (!std::all_of(candidate.begin(), candidate.end(),
+                     [](double value) { return std::isfinite(value); }))
+      throw std::runtime_error("packaged CPU ERI gradient is nonfinite");
+    std::copy(candidate.begin(), candidate.end(), center_gradient);
+    *primitive_evaluations = evaluations;
+  });
+}
+
 GENERATIVEQC_API int generativeqc_posthf_one_electron_gradient_cuda_v1(
     void* source, int device, const double* overlap_weights, const double* kinetic_weights,
     const double* attraction_weights, std::size_t matrix_elements, unsigned schedule,

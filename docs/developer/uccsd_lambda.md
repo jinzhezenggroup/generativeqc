@@ -95,6 +95,12 @@ their own explicit chains. Those bindings and shared UHF orbital response are
 outside this owner's contract. Standard CCSD stationarity is enforced here;
 corrected-(T) multipliers cannot simply be supplied to this method.
 
+`qualify(result)` provides the same fresh standard-CCSD stationarity check for
+the [physical response/force owner](uccsd_physical_response.md); it returns an
+immutable packed residual dual and frozen diagnostics. The upstream owner binds
+normal ordering, raw integrals, HF energy, overlap and shared UHF relaxation;
+these do not become fixed-input Lambda semantics.
+
 ## Bounded work and storage
 
 Defaults are `max_bytes=512<<20`, `max_operator_actions=2048` and
