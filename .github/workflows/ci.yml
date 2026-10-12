@@ -1520,7 +1520,7 @@ jobs:
           )
           print(f"Verified all {len(expected)} automatic CUDA XC registrations")
           PY
-      - name: Verify all ten native CUDA stationary profiles are linked into the CLI
+      - name: Verify compiler-selected CUDA graph programs are linked into the CLI
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |

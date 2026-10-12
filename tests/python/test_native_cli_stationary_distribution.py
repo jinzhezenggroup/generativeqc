@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from tools.check_native_cli_stationary import EXPECTED_PROFILES, verify_contract
+from tools.check_native_cli_stationary import compiler_native_profiles, verify_contract
 
 
 def fixtures() -> tuple[str, str, str]:
@@ -14,12 +14,12 @@ def fixtures() -> tuple[str, str, str]:
         "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=OFF"
     )
     registry = "\n".join(
-        f"    &native_stationary_profile_{profile}()," for profile in EXPECTED_PROFILES
+        f"    &native_stationary_profile_{profile}()," for profile in compiler_native_profiles()
     )
     symbols = (
         "\n".join(
             f"00000000 T generativeqc::dft::native_stationary_profile_{profile}()"
-            for profile in EXPECTED_PROFILES
+            for profile in compiler_native_profiles()
         )
         + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"
     )
@@ -27,7 +27,7 @@ def fixtures() -> tuple[str, str, str]:
 
 
 class StandaloneCudaForceTests(unittest.TestCase):
-    def test_exact_ten_profile_static_contract(self) -> None:
+    def test_compiler_graph_inventory_static_contract(self) -> None:
         verify_contract(*fixtures())
 
     def test_disabled_native_profiles_fail(self) -> None:
@@ -59,7 +59,9 @@ class StandaloneCudaForceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "registry mismatch"):
             verify_contract(
                 cache,
-                registry.replace("&native_stationary_profile_b3lyp_uks(),", ""),
+                registry.replace(
+                    f"&native_stationary_profile_{compiler_native_profiles()[-1]}(),", ""
+                ),
                 symbols,
             )
 
@@ -70,7 +72,7 @@ class StandaloneCudaForceTests(unittest.TestCase):
                 cache,
                 registry,
                 symbols.replace(
-                    "generativeqc::dft::native_stationary_profile_r2scan_uks()",
+                    f"generativeqc::dft::native_stationary_profile_{compiler_native_profiles()[0]}()",
                     "discarded()",
                 ),
             )

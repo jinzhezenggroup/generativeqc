@@ -805,10 +805,9 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
  * Availability is deliberately context-specific, not a method-global force bit.
  * Optional compiled bindings, precise Fock coefficients, representation and
  * FP64 are prerequisites; unsupported contexts retain their existing consumer. */
-std::string_view native_cuda_stationary_profile(const NativeKsExecutionPlan& execution_plan,
-                                                const scf::ScfOptions& options,
-                                                const dft::GridSpec& grid, bool all_electron,
-                                                std::size_t maximum_angular) noexcept {
+const dft::CudaStationaryBinding* native_cuda_stationary_binding(
+    const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
+    const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular) noexcept {
   if (!all_electron || maximum_angular > 1 || grid.partition_iterations != 3 ||
       options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
       options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
@@ -840,7 +839,7 @@ std::string_view native_cuda_stationary_profile(const NativeKsExecutionPlan& exe
                                        options.semilocal_correlation_scale,
                                        exchange};
   const auto* binding = dft::cuda_stationary_binding(model);
-  return binding ? binding->profile : std::string_view{};
+  return binding;
 }
 
 class KsPreparedCalculation final : public PreparedCalculation {
@@ -918,12 +917,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
    * Corrections and graphs without a complete provider inventory remain fail-closed. */
   [[nodiscard]] bool supports_native_gga_force() const noexcept {
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
-      const auto profile = admitted_cuda_stationary_profile();
-      if (profile.empty()) return false;
+      const auto* binding = admitted_cuda_stationary_binding();
+      if (!binding) return false;
       try {
-        (void)dft::cuda_stationary_capacity(*dft::cuda_stationary_binding(profile), basis_.natom,
-                                            basis_.nao, basis_.nprimitive, grid_.point_count(),
-                                            options_.xc_tile_points);
+        (void)dft::cuda_stationary_capacity(*binding, basis_.natom, basis_.nao, basis_.nprimitive,
+                                            grid_.point_count(), options_.xc_tile_points);
         return true;
       } catch (...) {
         return false;
@@ -2100,8 +2098,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "native CUDA stationary gradient requires the exact live final-state token";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    const auto profile = admitted_cuda_stationary_profile();
-    if (profile.empty()) {
+    const auto* binding = admitted_cuda_stationary_binding();
+    if (!binding) {
       detail = "native CUDA stationary profile is unavailable for this scientific model";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
@@ -2113,7 +2111,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       }
       if (!stationary_controller_) {
         stationary_controller_ = std::make_unique<dft::CudaStationaryController>(
-            system_, basis_, grid_, profile, expected.identity.model.device,
+            system_, basis_, grid_, *binding, expected.identity.model.device,
             options_.xc_tile_points, maximum_device_bytes);
       }
       dft::CudaKsResidentDensityBinding density;
@@ -2152,7 +2150,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
-  std::string_view admitted_cuda_stationary_profile() const noexcept {
+  const dft::CudaStationaryBinding* admitted_cuda_stationary_binding() const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CUDA) return {};
     const bool all_electron = system_.ecp_terms.empty() &&
                               std::none_of(system_.atoms.begin(), system_.atoms.end(),
@@ -2160,20 +2158,20 @@ class KsPreparedCalculation final : public PreparedCalculation {
     std::size_t maximum_angular = 0;
     for (const auto& shell : system_.shells)
       maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
-    return native_cuda_stationary_profile(execution_plan_, options_, grid_.spec(), all_electron,
+    return native_cuda_stationary_binding(execution_plan_, options_, grid_.spec(), all_electron,
                                           maximum_angular);
   }
 
   generativeqc_status native_cuda_stationary_capacity(dft::CudaStationaryCapacity& capacity,
                                                       std::string& detail) const {
-    const auto profile = admitted_cuda_stationary_profile();
-    if (profile.empty()) {
+    const auto* binding = admitted_cuda_stationary_binding();
+    if (!binding) {
       detail = "native CUDA stationary capacity is unavailable for this prepared context";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     try {
       const auto candidate = dft::cuda_stationary_capacity(
-          *dft::cuda_stationary_binding(profile), basis_.natom, basis_.nao, basis_.nprimitive,
+          *binding, basis_.natom, basis_.nao, basis_.nprimitive,
           grid_.point_count(), options_.xc_tile_points);
       capacity = candidate;
       detail.clear();
@@ -3419,16 +3417,15 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
     NativeKsExecutionPlan execution_plan;
     auto options = dft_options(descriptor, GENERATIVEQC_BACKEND_CUDA, execution_plan);
     const auto grid = ks_grid_options(descriptor, options, execution_plan);
-    const auto profile = native_cuda_stationary_profile(execution_plan, options, grid,
-                                                        shape[5] == 0 && shape[6] == 0, shape[4]);
-    if (profile.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto* binding = native_cuda_stationary_binding(
+        execution_plan, options, grid, shape[5] == 0 && shape[6] == 0, shape[4]);
+    if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const auto points = runtime::size_mul(
         shape[0], runtime::size_mul(grid.radial_points,
                                     runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto candidate =
-        dft::cuda_stationary_capacity(*dft::cuda_stationary_binding(profile), shape[0], shape[1],
-                                      shape[2], shape[3], options.xc_tile_points);
+    const auto candidate = dft::cuda_stationary_capacity(
+        *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

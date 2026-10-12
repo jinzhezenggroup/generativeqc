@@ -36,11 +36,11 @@ void stationary_cuda_check(cudaError_t status) {
 
 CudaStationaryController::CudaStationaryController(const core::System& system, const AoBasis& basis,
                                                    const MolecularGrid& grid,
-                                                   std::string_view profile, int device,
+                                                   const CudaStationaryBinding& binding, int device,
                                                    std::size_t tile_points,
                                                    std::size_t maximum_device_bytes)
     : device_(device),
-      binding_(cuda_stationary_binding(profile)),
+      binding_(&binding),
       quadrature_(grid.cuda_view()),
       aos_(basis.nao),
       tile_points_(std::min(tile_points, grid.point_count())) {

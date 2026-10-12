@@ -99,7 +99,7 @@ native AOT shell and CPU derivative code is compiled into the C++ core. The Pyth
 separate from the single-executable CLI. Instead, the release preset enables
 `GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA` while leaving
 `GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF`: generated native s/p stationary
-force profiles and their registry are statically linked into the core. Shared
+force graphs and their generated registry are statically linked into the core. Shared
 SDK and Python AOT artifact semantics remain unchanged.
 
 The monolithic distribution cannot replace its linked core with a local binary
@@ -390,7 +390,11 @@ CUDA DFT forces also admit graph-matched LDA, PBE, PBE0, r²SCAN and B3LYP
 RKS/UKS in the qualified all-electron s/p, strict-FP64,
 three-partition-iteration domain. Matching uses the generated MethodIR graph,
 exact-exchange and XC coefficients, rather than a functional-name whitelist.
-The monolithic CUDA CLI includes all ten native profiles; CPU-only builds do not.
+The monolithic CUDA CLI includes the compiler-qualified graph inventory; CPU-only
+builds do not. CMake discovers that inventory at build time from MethodIR rather
+than maintaining a second ten-name list. Complete CUDA source wrappers are still
+compiled for distinct graphs pending numerical/performance qualification of a
+fully shared CUDA geometry/XC executor.
 A method listing alone never certifies forces: exact preparation and available
 resource capacity remain authoritative.
 
@@ -400,8 +404,8 @@ also remains unqualified. Unsupported `--forces` requests fail before execution
 rather than publishing incomplete gradients. Run
 `python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`
 under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
-finite-difference smoke checks. Hosted GitHub packaging CI verifies the ten
-linked profiles, but has no GPU and cannot supply numerical device evidence.
+finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
+linked symbols, but has no GPU and cannot supply numerical device evidence.
 Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
 RKS/UKS and B3LYP RKS force consumer only when every member has a qualified prepared
 context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item

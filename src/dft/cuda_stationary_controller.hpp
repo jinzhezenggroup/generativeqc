@@ -32,7 +32,7 @@ struct CudaStationaryResources {
 class CudaStationaryController {
  public:
   CudaStationaryController(const core::System& system, const AoBasis& basis,
-                           const MolecularGrid& grid, std::string_view profile, int device,
+                           const MolecularGrid& grid, const CudaStationaryBinding& binding, int device,
                            std::size_t tile_points, std::size_t maximum_device_bytes);
   ~CudaStationaryController();
   CudaStationaryController(const CudaStationaryController&) = delete;

@@ -1,4 +1,4 @@
-"""Verify that the standalone native CUDA CLI really links its ten force profiles.
+"""Verify graph-qualified CUDA force programs really survive the native CLI link.
 
 This is compile/link evidence, NOT a real-GPU numerical force qualification.
 """
@@ -8,20 +8,30 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import sys
+from functools import lru_cache
 from pathlib import Path
 
-EXPECTED_PROFILES = (
-    "lda_rks",
-    "lda_uks",
-    "pbe_rks",
-    "pbe_uks",
-    "pbe0_rks",
-    "pbe0_uks",
-    "r2scan_rks",
-    "r2scan_uks",
-    "b3lyp_rks",
-    "b3lyp_uks",
-)
+
+@lru_cache(maxsize=1)
+def compiler_native_profiles() -> tuple[str, ...]:
+    """Read the actual compiler-owned graph inventory, not a handwritten list."""
+    source = Path(__file__).resolve().parents[1]
+    generated = subprocess.run(
+        [
+            sys.executable,
+            str(source / "tools/generate_native_stationary_cuda.py"),
+            "--list-profiles",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    ).stdout.strip()
+    profiles = tuple(generated.split(";")) if generated else ()
+    if not profiles or len(profiles) != len(set(profiles)):
+        raise ValueError("invalid empty/duplicate native stationary graph inventory")
+    return profiles
 
 
 def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
@@ -37,15 +47,20 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
                 f"{option} must equal {expected} in the distribution build"
             )
 
-    linked = set(re.findall(r"&native_stationary_profile_([a-z0-9_]+)\(\)", registry))
-    expected_set = set(EXPECTED_PROFILES)
+    linked_entries = re.findall(
+        r"&native_stationary_profile_([a-z0-9_]+)\(\)", registry
+    )
+    if len(linked_entries) != len(set(linked_entries)):
+        raise ValueError("duplicate CUDA stationary graph in linked registry")
+    linked = set(linked_entries)
+    expected_set = set(compiler_native_profiles())
     if linked != expected_set:
         raise ValueError(
             f"native CUDA profile registry mismatch: missing={sorted(expected_set - linked)}, "
             f"unexpected={sorted(linked - expected_set)}"
         )
 
-    for profile in EXPECTED_PROFILES:
+    for profile in compiler_native_profiles():
         signature = f"generativeqc::dft::native_stationary_profile_{profile}()"
         if signature not in symbol_listing:
             raise ValueError(f"compiled CLI is missing native force symbol {signature}")
@@ -72,7 +87,7 @@ def main() -> int:
     ).stdout
     verify_contract(cache, registry, symbols)
     print(
-        f"Verified {len(EXPECTED_PROFILES)} native CUDA stationary profiles "
+        f"Verified {len(compiler_native_profiles())} compiler-selected CUDA graphs "
         f"statically linked in {args.cli}; real-GPU E+F still requires device tests"
     )
     return 0

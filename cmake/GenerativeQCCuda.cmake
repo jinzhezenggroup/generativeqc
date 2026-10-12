@@ -480,26 +480,27 @@ macro(generativeqc_configure_cuda_backend target)
         list(APPEND _generativeqc_native_stationary_profiles "${_native_profile}")
         set(_native_source
             "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}/native_${_native_profile}.cu")
-        generativeqc_register_generated_sources(
-          NAME "generativeqc_native_stationary_${_native_profile}_codegen"
-          GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
-          OUTPUTS "${_native_source}"
-          DEPENDS ${_generativeqc_stationary_contract_inputs}
-                  "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_runtime.cuh"
-                  "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_stationary_binding.hpp"
-          ARGS --output "${_native_source}" --profile "${_native_profile}"
-          COMMENT "Binding native stationary CUDA ${_native_profile}")
         list(APPEND _generativeqc_native_stationary_sources "${_native_source}")
       endif()
     endforeach()
     if(_generativeqc_native_stationary_profiles)
+      # One compiler process owns the complete selected MethodIR inventory.
+      # This reuses Python-side graph lowering/caches instead of executing the
+      # same import and independent source lowering once for every method.
+      generativeqc_register_generated_sources(
+        NAME generativeqc_native_stationary_codegen
+        GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
+        OUTPUTS ${_generativeqc_native_stationary_sources}
+        DEPENDS ${_generativeqc_stationary_contract_inputs}
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/native_stationary_runtime.cuh"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_stationary_binding.hpp"
+        ARGS --output-dir "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}" --all-profiles
+             --profiles ${_generativeqc_native_stationary_profiles}
+        COMMENT "Generating compiler-selected CUDA stationary force graphs")
       add_library(generativeqc_native_stationary STATIC
                   ${_generativeqc_native_stationary_sources}
                   $<TARGET_OBJECTS:generativeqc_stationary_sp_primitives>)
-      foreach(_native_profile IN LISTS _generativeqc_native_stationary_profiles)
-        add_dependencies(generativeqc_native_stationary
-                         "generativeqc_native_stationary_${_native_profile}_codegen")
-      endforeach()
+      add_dependencies(generativeqc_native_stationary generativeqc_native_stationary_codegen)
       target_include_directories(generativeqc_native_stationary PRIVATE
           "${CMAKE_CURRENT_SOURCE_DIR}/src")
       target_compile_definitions(generativeqc_native_stationary PRIVATE GENERATIVEQC_HAS_CUDA=1)
