@@ -65,7 +65,7 @@ def emit_python() -> str:
         "STATIONARY_AOT_BUILD_PROFILES = (",
     ]
     lines.extend(
-        f"    ({name!r}, {code}, {method!r}, {legacy}),"
+        f"    ({json.dumps(name)}, {code}, {json.dumps(method)}, {legacy}),"
         for name, code, method, legacy in load_profiles()
     )
     return "\n".join((*lines, ")", ""))
