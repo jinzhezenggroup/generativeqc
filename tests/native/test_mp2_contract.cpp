@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "cc/reference_input.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/cuda_derivative.hpp"
@@ -104,6 +105,17 @@ void provider_and_reference() {
               common.channels[0].occupied == ref.nocc &&
               common.channels[0].coefficients.data() == ref.coefficients.data(),
           "RHF common electronic reference copied or changed orbital ownership");
+  const auto cc_input = generativeqc::cc::prepare_canonical_reference_input(common);
+  require(cc_input.basis_functions == ref.nbf && cc_input.occupied == ref.nocc &&
+              cc_input.virtuals == ref.nbf - ref.nocc &&
+              cc_input.orbital_energies.data() == ref.orbital_energies.data() &&
+              cc_input.reference_energy == ref.energy,
+          "RCCSD adapter copied or changed canonical RHF reference inputs");
+  for (std::size_t p = 0; p < ref.nbf; ++p)
+    for (std::size_t q = 0; q < ref.nbf; ++q)
+      require(std::abs(cc_input.fock_mo[p * ref.nbf + q] -
+                       (p == q ? ref.orbital_energies[p] : 0.0)) < 1e-8,
+              "RCCSD canonical reference changed MO Fock algebra");
   generativeqc::posthf::RawSource source(system);
   generativeqc::posthf::NativeBlockProvider provider(source, ref, 256ULL << 20, 1);
   const generativeqc::posthf::MOSlots slots{{{1, 0}, {0, 1}, {1, 0}, {0, 1}}};
