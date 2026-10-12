@@ -372,7 +372,8 @@ std::unique_ptr<PreparedBatch> prepare_ump2_batch(const Capabilities& capabiliti
                                                   core::ContextState& context,
                                                   std::vector<core::System> systems,
                                                   const generativeqc_method_descriptor& descriptor,
-                                                  generativeqc_batch_flags flags, const core::System*) {
+                                                  generativeqc_batch_flags flags,
+                                                  const core::System*) {
   if (flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "UMP2 batch supports warm starts only; profiling is unavailable");

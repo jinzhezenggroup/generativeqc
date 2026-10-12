@@ -679,8 +679,8 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
 /** Own auxiliary shells and rebind centers when a batch item moves. The source
  * owner copies the result, so descriptor/temporary system lifetimes never leak
  * into a prepared calculation. An omitted auxiliary basis means the orbital basis. */
-std::optional<core::System> ks_auxiliary_template(
-    const generativeqc_method_descriptor& descriptor, const core::System* native_auxiliary) {
+std::optional<core::System> ks_auxiliary_template(const generativeqc_method_descriptor& descriptor,
+                                                  const core::System* native_auxiliary) {
   if (!descriptor.density_fitting_auxiliary_basis) return std::nullopt;
   if (native_auxiliary == nullptr)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -3282,8 +3282,7 @@ std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
   auto grid = ks_grid_options(descriptor, options, execution_plan);
   return std::make_unique<KsPreparedCalculation>(
       capabilities, system, execution_plan, std::move(options), std::move(grid),
-      context.requested_backend, context.device_id,
-      ks_auxiliary_for_system(system, auxiliary));
+      context.requested_backend, context.device_id, ks_auxiliary_for_system(system, auxiliary));
 }
 
 std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
@@ -3311,8 +3310,7 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
                         "DFT ECP density fitting is not qualified");
   }
   const auto auxiliary = ks_auxiliary_template(descriptor, auxiliary_basis);
-  if (!systems.empty())
-    validate_ks_auxiliary_geometry(systems.front(), auxiliary);
+  if (!systems.empty()) validate_ks_auxiliary_geometry(systems.front(), auxiliary);
   auto grid = ks_grid_options(descriptor, options, execution_plan);
   return std::make_unique<KsPreparedBatch>(
       capabilities, std::move(systems), execution_plan, std::move(options), std::move(grid),

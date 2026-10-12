@@ -143,9 +143,7 @@ class ExecutionContext {
 
   [[nodiscard]] core::Backend backend() const noexcept { return backend_; }
   [[nodiscard]] int device_id() const noexcept { return device_id_; }
-  [[nodiscard]] bool cuda_requested() const noexcept {
-    return backend_ == core::kCudaBackend;
-  }
+  [[nodiscard]] bool cuda_requested() const noexcept { return backend_ == core::kCudaBackend; }
 
   void observe_resource_peak(ExecutionResourceKind kind, ExecutionMemorySpace space,
                              std::size_t bytes) noexcept {

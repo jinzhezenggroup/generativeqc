@@ -6,9 +6,9 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
-#include "api/native_method_inputs.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
+#include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"

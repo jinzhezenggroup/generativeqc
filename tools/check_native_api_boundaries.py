@@ -36,8 +36,12 @@ def audit_native_api_boundaries(root: Path = ROOT) -> list[str]:
         relative = path.relative_to(root).as_posix()
         for line_number, line in enumerate(source.splitlines(), 1):
             if HANDLE_INCLUDE.match(line):
-                errors.append(f"{relative}:{line_number}: methods must not include API handles")
-            if HANDLE_DEREFERENCE.search(line) and not line.lstrip().startswith(("//", "*")):
+                errors.append(
+                    f"{relative}:{line_number}: methods must not include API handles"
+                )
+            if HANDLE_DEREFERENCE.search(line) and not line.lstrip().startswith(
+                ("//", "*")
+            ):
                 errors.append(
                     f"{relative}:{line_number}: method must use a native auxiliary system"
                 )

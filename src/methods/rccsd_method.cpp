@@ -1141,7 +1141,8 @@ std::unique_ptr<PreparedBatch> prepare_rccsd_batch(const Capabilities& capabilit
                                                    core::ContextState& context,
                                                    std::vector<core::System> systems,
                                                    const generativeqc_method_descriptor& descriptor,
-                                                   generativeqc_batch_flags flags, const core::System*) {
+                                                   generativeqc_batch_flags flags,
+                                                   const core::System*) {
   constexpr auto supported_flags =
       static_cast<generativeqc_batch_flags>(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
   if ((flags & ~supported_flags) != 0)

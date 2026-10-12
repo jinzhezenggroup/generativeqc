@@ -3,9 +3,9 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
-#include "api/native_method_inputs.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
+#include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
 #include "generativeqc/generativeqc.h"
@@ -96,10 +96,9 @@ generativeqc_status generativeqc_calculation_prepare(
   try {
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
-    candidate->plan =
-        generativeqc::methods::prepare_calculation(
-            context->state, system->data, *descriptor,
-            generativeqc::api::native_auxiliary_basis(*descriptor));
+    candidate->plan = generativeqc::methods::prepare_calculation(
+        context->state, system->data, *descriptor,
+        generativeqc::api::native_auxiliary_basis(*descriptor));
     *calculation = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {

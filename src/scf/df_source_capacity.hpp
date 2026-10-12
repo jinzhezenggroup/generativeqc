@@ -40,8 +40,7 @@ inline Shape shape(const core::System& system) {
     const auto cart = (l + 1) * (l + 2) / 2;
     p.cartesian_aos = add(p.cartesian_aos, cart);
     p.public_aos =
-        add(p.public_aos,
-            system.basis_representation == core::kSphericalBasis ? 2 * l + 1 : cart);
+        add(p.public_aos, system.basis_representation == core::kSphericalBasis ? 2 * l + 1 : cart);
     p.primitives = add(p.primitives, shell.primitives.size());
   }
   p.system_bytes = add(p.system_bytes, mul(p.primitives, sizeof(core::Primitive)));
