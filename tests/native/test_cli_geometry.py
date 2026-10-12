@@ -59,6 +59,21 @@ def main(executable: str, xyz: str) -> None:
         "pbe0-rks",
     ]
 
+    # Explicit xTB target must retain the requested device: only preliminary
+    # xTB stages are automatically scheduled on CPU.
+    xtb_target = invoke(
+        executable,
+        xyz,
+        "--method",
+        "gfn2-xtb",
+        "--backend",
+        "cuda",
+        "--plan-only",
+    )
+    assert xtb_target.returncode == 0, xtb_target.stderr
+    xtb_plan = json.loads(xtb_target.stdout)["stages"]
+    assert len(xtb_plan) == 1 and xtb_plan[0]["backend"] == "cuda"
+
     custom = invoke(
         executable, xyz, "--method", "rhf", "--stages", "rhf", "--plan-only"
     )
