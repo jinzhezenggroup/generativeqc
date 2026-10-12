@@ -67,7 +67,10 @@ future work; there is no fully GPU-resident multi-basis claim.
 H2 uses physical spherical cc-pVDZ/cc-pVTZ and the lower-basis correction. Water
 uses a **synthetic pair** and STO-3G correction with nonzero triples; it tests
 algebra/analytic derivatives, not predictive molecular CBS accuracy. The native
-CCSD(T) force domain still limits the correction calculation to 12 public AOs.
+CCSD(T) force admission allows the correction calculation through 56 public AOs,
+subject to its numerical and resource gates. The separate standalone RCCSD force
+limit is 12 AOs; it is not the CCSD(T) or CBS correction limit. These records
+qualify their small correction cases, not a new complete CBS E+F run at 56 AOs.
 
 ## Semantic work
 
