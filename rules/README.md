@@ -24,11 +24,18 @@ uvx --from ast-grep-cli==0.50.0 ast-grep scan --config sgconfig.yml src include
 uvx --from ast-grep-cli==0.50.0 ast-grep test --config sgconfig.yml --skip-snapshot-tests
 ```
 
-* **error**: `cpp-no-gets` is forbidden.
+* **error**: `cpp-no-gets`, `cuda-no-unchecked-runtime-call`,
+  `cuda-no-assert-api-status` and `cuda-no-divergent-block-barrier`
+  reject unsafe constructs (subject to ordinary code review of any hit).
 * **warning**: `cpp-review-strcpy`, `cpp-review-format-string`,
-  `cuda-review-device-sync`, and `cuda-review-device-reset` need human
-  review. Warnings do **not** fail pre-commit. In particular, a synchronization
-  or reset may be required for lifetime and correctness.
+  `cuda-review-device-sync`, `cuda-review-device-reset`, and
+  `cuda-review-discarded-graph-launch` request human review. CUDA Graph
+  device-tail relaunches intentionally ignore a status in some existing
+  callers; confirm failure propagation before changing the code.
+* The native lint hook uses ast-grep's GitHub annotation format and
+  `verbose: true` so warnings are **visible even when CI passes**.
+  In particular, a synchronization or reset may be required for lifetime
+  and correctness. Warnings do **not** fail pre-commit.
 * No rule has an automatic rewrite. Replacing these calls blindly can change
   numerical behavior, synchronization, or memory safety.
 
