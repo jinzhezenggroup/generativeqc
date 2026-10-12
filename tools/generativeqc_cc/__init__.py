@@ -161,6 +161,10 @@ from .uccsd_physical_response import (
 )
 from .uccsd_solver import PreparedUCCSD, UCCSDIteration, UCCSDResult
 from .uccsd_t import PreparedUCCSDT, UCCSDTOptions, UCCSDTResult
+from .uccsd_triples_response import (
+    PreparedUCCSDTriplesResponse,
+    UCCSDTriplesResponseResult,
+)
 
 __all__ = [
     "TRIPLES_RESPONSE_INPUTS",
@@ -207,6 +211,7 @@ __all__ = [
     "PreparedUCCSDLambda",
     "PreparedUCCSDPhysicalResponse",
     "PreparedUCCSDT",
+    "PreparedUCCSDTriplesResponse",
     "RCCSDResult",
     "RCCSDTBatchItemResult",
     "RCCSDTCapabilities",
@@ -232,6 +237,7 @@ __all__ = [
     "UCCSDResult",
     "UCCSDTOptions",
     "UCCSDTResult",
+    "UCCSDTriplesResponseResult",
     "accumulate_tile_triples_vjp",
     "amplitude_layouts",
     "batch_energy",
