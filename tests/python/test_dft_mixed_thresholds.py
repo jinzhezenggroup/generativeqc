@@ -172,3 +172,136 @@ def test_sample_timeout_is_retained(tmp_path: Path) -> None:
         0.1,
     )
     assert result == "timeout"
+
+
+@pytest.mark.parametrize("role", ["native", "oracle", "scan"])
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_cli_rejects_retained_output_before_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    role: str,
+    destination_kind: str,
+) -> None:
+    from benchmarks import _retention, dft_mixed_thresholds
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: Any) -> None:
+        pytest.fail("retained output reached benchmark work")
+
+    for name in ("native_sample", "oracle_sample", "scan"):
+        monkeypatch.setattr(dft_mixed_thresholds, name, forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "dft_mixed_thresholds",
+            role,
+            "--source-commit",
+            "recorded-source",
+            "--output",
+            str(destination / existing.name),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        dft_mixed_thresholds.main()
+    assert error.value.code == 2
+    assert "argument --output:" in capsys.readouterr().err
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert sorted(retained.iterdir()) == [existing]
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("role", ["native", "oracle", "scan"])
+def test_cli_accepts_scratch_output_with_unchanged_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, role: str
+) -> None:
+    import json
+
+    from benchmarks import _retention, dft_mixed_thresholds
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    destination = tmp_path / ".artifacts/benchmarks/mixed.json"
+    captured = []
+    result = {"records": [], "retained_status": "synthetic receipt"}
+
+    def capture(args: Any) -> dict[str, Any]:
+        captured.append(args)
+        return result
+
+    def forbidden(*args: Any) -> None:
+        pytest.fail("scratch output selected a different benchmark role")
+
+    handler = {"native": "native_sample", "oracle": "oracle_sample", "scan": "scan"}
+    for name in handler.values():
+        monkeypatch.setattr(dft_mixed_thresholds, name, forbidden)
+    monkeypatch.setattr(dft_mixed_thresholds, handler[role], capture)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "dft_mixed_thresholds",
+            role,
+            "--source-commit",
+            "recorded-source",
+            "--output",
+            str(destination),
+            "--forces",
+            "--lifecycle",
+            "--repeats",
+            "2",
+        ],
+    )
+    dft_mixed_thresholds.main()
+    assert len(captured) == 1
+    args = captured[0]
+    assert args.output == destination
+    assert args.role == role and args.source_commit == "recorded-source"
+    assert args.forces and args.lifecycle and args.repeats == 2
+    assert args.energy_tolerance == 1e-10 and args.density_tolerance == 1e-8
+    assert json.loads(destination.read_text(encoding="utf-8")) == result
+    assert not (tmp_path / "benchmarks").exists()
+
+
+def test_direct_script_rejects_retained_output_without_optional_dependencies(
+    tmp_path: Path,
+) -> None:
+    import subprocess
+
+    runner = Path(__file__).resolve().parents[2] / "benchmarks/dft_mixed_thresholds.py"
+    destination = runner.parent / "results/argument-parsing-must-not-write.json"
+    env = dict(os.environ)
+    for variable in ("PYTHONPATH", "SLURM_JOB_ID", "CUDA_VISIBLE_DEVICES"):
+        env.pop(variable, None)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(runner),
+            "native",
+            "--source-commit",
+            "recorded-source",
+            "--output",
+            str(destination),
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    assert completed.returncode == 2, completed.stderr
+    assert "argument --output:" in completed.stderr
+    assert "raw_output_path" in completed.stderr
+    assert not destination.exists()

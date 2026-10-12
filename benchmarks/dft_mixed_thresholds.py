@@ -20,6 +20,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 ROOT = Path(__file__).resolve().parents[1]
 INPUTS = ROOT / "tools/dft_mp_v1/inputs"
 
@@ -573,7 +578,7 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--sample-timeout", type=float, default=600.0)
     parser.add_argument("--include-legacy", action="store_true")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.oracle_threads < 1:
         parser.error("--oracle-threads must be positive")
