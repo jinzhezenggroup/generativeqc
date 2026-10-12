@@ -350,6 +350,7 @@ void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
         <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
             batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
             screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
+  check_md_j_cuda(cudaGetLastError());
 }
 
 }  // namespace
