@@ -403,6 +403,7 @@ def test_fresh_native_HF_to_converged_CCSD(name: typing.Any) -> None:
         np.testing.assert_allclose(result.t1, t1, atol=1e-8, rtol=1e-8)
         np.testing.assert_allclose(result.t2, t2, atol=1e-8, rtol=1e-8)
 
+
 @pytest.mark.parametrize("name", ["h2", "h2o"])
 def test_native_cpu_ccsd_full_endpoint_matches_pinned_and_oracle(
     name: str, tmp_path: typing.Any, monkeypatch: typing.Any
@@ -424,7 +425,9 @@ def test_native_cpu_ccsd_full_endpoint_matches_pinned_and_oracle(
     interpreter = module.execute
     checked_expanded = 0
 
-    def only_independent_oracle(program: typing.Any, *args: typing.Any, **kw: typing.Any) -> typing.Any:
+    def only_independent_oracle(
+        program: typing.Any, *args: typing.Any, **kw: typing.Any
+    ) -> typing.Any:
         nonlocal checked_expanded
         assert program.logical_hash != primal.logical_hash, (
             "native iterative RCCSD executed the NumPy TensorIR interpreter"
@@ -457,13 +460,16 @@ def test_native_cpu_ccsd_full_endpoint_matches_pinned_and_oracle(
         np.testing.assert_array_equal(first[output], second[output])
     assert native.artifact_count == 1
     assert (
-        max(float(np.max(np.abs(first[k]))) for k in ("singles_residual", "doubles_residual"))
+        max(
+            float(np.max(np.abs(first[k])))
+            for k in ("singles_residual", "doubles_residual")
+        )
         <= options.residual_tolerance
     )
 
 
 def test_native_cpu_ccsd_resource_rejections_precede_integral_reads(
-    tmp_path: typing.Any
+    tmp_path: typing.Any,
 ) -> None:
     from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
 
