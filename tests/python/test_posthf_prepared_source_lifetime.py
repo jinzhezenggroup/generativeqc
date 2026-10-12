@@ -123,7 +123,9 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ].split("      Result result;", 1)[0]
     # This probe owns the primary MP2 force transition. HF companions have
     # their own force branch and are exercised by the native CBS tests.
-    primary_force = mp2[mp2.index("      std::optional<mp2::ConventionalForceResult>") :]
+    primary_force = mp2[
+        mp2.index("      std::optional<mp2::ConventionalForceResult>") :
+    ]
     force_prefix = primary_force.split("      if (compute_forces) {", 1)[1].split(
         "        response::GmresOptions response_options;", 1
     )[0]
