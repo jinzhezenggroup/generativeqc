@@ -25,7 +25,19 @@
       "8c38de23913f771055ac93b69e5090519be7d956c9d11a4044d8eed04834cce7"
     ],
     "max_energy_difference": 0,
-    "max_force_difference": 0
+    "max_force_difference": 0,
+    "raw_replicas": [
+      {
+        "path": "replicas/first.json",
+        "bytes": 29845,
+        "sha256": "560107f812a00c87834c688517f5622d28cd07f2766c325661b6f2c0edfd0ff9"
+      },
+      {
+        "path": "replicas/second.json",
+        "bytes": 29846,
+        "sha256": "8c38de23913f771055ac93b69e5090519be7d956c9d11a4044d8eed04834cce7"
+      }
+    ]
   },
   "preserved_test_gates": {
     "energy_abs_hartree": 1e-9,

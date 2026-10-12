@@ -1,0 +1,1364 @@
+{
+  "inputs": {
+    "atoms": [
+      [
+        "He",
+        [
+          0.1,
+          -0.2,
+          -0.7
+        ]
+      ],
+      [
+        "H",
+        [
+          -0.3,
+          0.4,
+          0.8
+        ]
+      ]
+    ],
+    "basis": {
+      "H": [
+        [
+          0,
+          [
+            1.2,
+            1
+          ]
+        ]
+      ],
+      "He": [
+        [
+          0,
+          [
+            1.5,
+            0.8
+          ],
+          [
+            0.4,
+            -0.1
+          ]
+        ],
+        [
+          1,
+          [
+            0.7,
+            1
+          ]
+        ],
+        [
+          2,
+          [
+            0.8,
+            1
+          ]
+        ],
+        [
+          3,
+          [
+            0.6,
+            1
+          ]
+        ]
+      ]
+    },
+    "displacement_atom": 1,
+    "displacement_axis": 0,
+    "displacements_bohr": [
+      0,
+      0.013
+    ],
+    "energy_unit": "Hartree",
+    "force_definition": "negative analytic nuclear gradient",
+    "force_unit": "Hartree/Bohr",
+    "packages": {
+      "h5py": "3.16.0",
+      "numpy": "2.3.5",
+      "pyscf": "2.14.0",
+      "scipy": "1.17.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "precision": "float64",
+    "representations": [
+      "cartesian",
+      "spherical"
+    ],
+    "scf": {
+      "conv_tol": 1e-13,
+      "conv_tol_grad": 1e-11,
+      "init_guess": "1e"
+    },
+    "schema": "generativeqc.cpu-hf-high-l.inputs.v1",
+    "source": {
+      "commit": "f22deaaccc2424f5bab1ab3bcb6a9c1d1c6bd33c",
+      "git_blob": "4642475eae150ba402422d0942d0a8d291a2724f",
+      "path": "tests/python/test_cpu_hf_high_l.py",
+      "repository": "jinzhezenggroup/generativeqc",
+      "sha256": "621a0b72cc21e65e6d08c92de7c021dcf32ded43b0166d9090cf6112eb4f61d2"
+    },
+    "states": [
+      {
+        "charge": 1,
+        "method": "rhf",
+        "spin": 0
+      },
+      {
+        "charge": 0,
+        "method": "uhf",
+        "spin": 1
+      }
+    ],
+    "unit": "Bohr"
+  },
+  "process_id": 2435,
+  "provenance": {
+    "configuration": {
+      "policy": "explicit-empty-regular-file",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "execution": {
+      "checkout_sha": "3c490a652b2844fe88b26379c97ea4992b23e7c7",
+      "github_repository": "njzjz-bot/vibeqc",
+      "github_run_attempt": "1",
+      "github_run_id": "38217314542",
+      "github_sha": "3c490a652b2844fe88b26379c97ea4992b23e7c7"
+    },
+    "generator_sha256": "4cf7e4ea8a54cbe3e5bfaef768476278355f3691742e26137c54c7362ea76180",
+    "inputs_sha256": "45594fc201c4ca6535a1b0d4d1d89cf69ff66e2e51d6cc7581dee63c3d14b2c9",
+    "machine": "x86_64",
+    "packages": {
+      "h5py": {
+        "installed_source_native_bytes": 17002725,
+        "installed_source_native_files": 89,
+        "installed_source_native_sha256": "ae8661606706915d759b7ca9c98c62b5cb49c5694540a7a2521b1e057c5c3c92",
+        "version": "3.16.0",
+        "wheel_record_sha256": "8174662e95b98828bdba183450be57baefb69b24c06e68639ed049c233e96c21"
+      },
+      "numpy": {
+        "installed_source_native_bytes": 53844146,
+        "installed_source_native_files": 431,
+        "installed_source_native_sha256": "c2282e1c9a05825819078287341058d942ffe98daaceed79a5431c7b6e05171c",
+        "version": "2.3.5",
+        "wheel_record_sha256": "48e12b082951654ee5ab9c495e3bc22a8bee994e05f900a36516bc82f6a27252"
+      },
+      "pyscf": {
+        "installed_source_native_bytes": 135849985,
+        "installed_source_native_files": 717,
+        "installed_source_native_sha256": "801f6d902222f1ba7ae34eca875ac3dd43e91aa485702ba166836a2dfcbe87a8",
+        "version": "2.14.0",
+        "wheel_record_sha256": "4233e4225034532142c1eb9a47b8b806a9f12db9b6d4eef3c644d7c492f25296"
+      },
+      "scipy": {
+        "installed_source_native_bytes": 103245183,
+        "installed_source_native_files": 1087,
+        "installed_source_native_sha256": "9c4925b9a7e18be9fcf3bcfebc2b21ddfc0df7aaff75a443be12d541c0d7c21c",
+        "version": "1.17.0",
+        "wheel_record_sha256": "d67cb70e9ff3bdb86c788d39649247c6bcba22ab6d74f9a1389b816f81c81e59"
+      },
+      "threadpoolctl": {
+        "installed_source_native_bytes": 50722,
+        "installed_source_native_files": 1,
+        "installed_source_native_sha256": "889df0cc67247507dbe2c94c3177412cd250d1df7d365bd4dc2f9b805d3f2521",
+        "version": "3.6.0",
+        "wheel_record_sha256": "21fd60a7b59ad0785db0d87b7f45a58b9c6961097749168c577efa5b1619e95e"
+      }
+    },
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "threadpools": [
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas64_-fdde5778.so",
+        "num_threads": 1,
+        "sha256": "ee2039cf13a45e1e89f04d0cea9585657d93ffaa425594e1935161013fdf4e12",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas-6cdc3b4a.so",
+        "num_threads": 1,
+        "sha256": "8fb864c29cac4b25f6e2c139491ea96f2724dde42d51394f84e9c4a622e34790",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": "Barcelona",
+        "internal_api": "openblas",
+        "library": "libopenblas-r0-f650aae0.3.3.so",
+        "num_threads": 1,
+        "sha256": "79ec02b53f573cd7116a89f04c397473018e7fda05720b354d43505c19d47958",
+        "user_api": "blas",
+        "version": null
+      },
+      {
+        "architecture": null,
+        "internal_api": "openmp",
+        "library": "libgomp-a34b3233.so.1.0.0",
+        "num_threads": 1,
+        "sha256": "3a7eaece7231911be2fbb1b3e7cb4cb5c2e0f84e0c2bb73739472b5a1feec8c1",
+        "user_api": "openmp",
+        "version": null
+      }
+    ]
+  },
+  "records": [
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxx  ",
+        "0 He 3dxy  ",
+        "0 He 3dxz  ",
+        "0 He 3dyy  ",
+        "0 He 3dyz  ",
+        "0 He 3dzz  ",
+        "0 He 4fxxx ",
+        "0 He 4fxxy ",
+        "0 He 4fxxz ",
+        "0 He 4fxyy ",
+        "0 He 4fxyz ",
+        "0 He 4fxzz ",
+        "0 He 4fyyy ",
+        "0 He 4fyyz ",
+        "0 He 4fyzz ",
+        "0 He 4fzzz ",
+        "1  H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "4991236a9c8de22b9578cd6f86cef1eb57846e0a50b3caf3ca41509f2d9e6a4b",
+        "shape": [],
+        "values": -2.64071149841042
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "f9554bb4a283ce61947d3b011a8106e524f4661dac2db2e2ad5858d75f833022",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            -0.01350175147908958,
+            0.02025262721863469,
+            0.050631568046588304
+          ],
+          [
+            0.013501751479089413,
+            -0.020252627218634633,
+            -0.05063156804658886
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.3,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": true,
+        "charge": 1,
+        "displacement_bohr": 0,
+        "id": "rhf-cartesian-displacement-0",
+        "method": "rhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 0,
+        "unit": "Bohr"
+      },
+      "input_sha256": "1195dcc358a90c084c97fe19d918a7018b7b4c95d9d115949b68d597091d9859",
+      "nao": 21,
+      "nelec": [
+        1,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxx  ",
+        "0 He 3dxy  ",
+        "0 He 3dxz  ",
+        "0 He 3dyy  ",
+        "0 He 3dyz  ",
+        "0 He 3dzz  ",
+        "0 He 4fxxx ",
+        "0 He 4fxxy ",
+        "0 He 4fxxz ",
+        "0 He 4fxyy ",
+        "0 He 4fxyz ",
+        "0 He 4fxzz ",
+        "0 He 4fyyy ",
+        "0 He 4fyyz ",
+        "0 He 4fyzz ",
+        "0 He 4fzzz ",
+        "1  H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "a6e3cc8a3d12d29d8991a04c67fb348b3f7484e439c1f66d53052d080a98129d",
+        "shape": [],
+        "values": -2.640883423534781
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "7b91803fd389a5e2b29da48b396fa974df8efcca1ae1e3475b19de816f8c4726",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            -0.012949755708644428,
+            0.0200771406335572,
+            0.05019285158389564
+          ],
+          [
+            0.012949755708644595,
+            -0.0200771406335572,
+            -0.05019285158389597
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.287,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": true,
+        "charge": 1,
+        "displacement_bohr": 0.013,
+        "id": "rhf-cartesian-displacement-1",
+        "method": "rhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 0,
+        "unit": "Bohr"
+      },
+      "input_sha256": "74b5c4fc839ccb151fdc6f4e3b373669914cd6b329193c140604983e61badb1b",
+      "nao": 21,
+      "nelec": [
+        1,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxy  ",
+        "0 He 3dyz  ",
+        "0 He 3dz^2 ",
+        "0 He 3dxz  ",
+        "0 He 3dx2-y2",
+        "0 He 4f-3  ",
+        "0 He 4f-2  ",
+        "0 He 4f-1  ",
+        "0 He 4f+0  ",
+        "0 He 4f+1  ",
+        "0 He 4f+2  ",
+        "0 He 4f+3  ",
+        "1 H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "2f6bae26c45989f59e98dbfd5a909e1b154c3346e5b9c9daf7333c952c515fe1",
+        "shape": [],
+        "values": -2.0815403140914546
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "7adb7cc091fcc1530fea60246cfdc9926e94501b041270222b8581af44fcf5ff",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            -0.1875236634350881,
+            0.2812854951526321,
+            0.703213737881581
+          ],
+          [
+            0.18752366343508817,
+            -0.28128549515263246,
+            -0.7032137378815804
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.3,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": false,
+        "charge": 1,
+        "displacement_bohr": 0,
+        "id": "rhf-spherical-displacement-0",
+        "method": "rhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 0,
+        "unit": "Bohr"
+      },
+      "input_sha256": "277b3236f258d002865127470a1cc055f82a0918989f86918d0b01c23e0a4478",
+      "nao": 17,
+      "nelec": [
+        1,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxy  ",
+        "0 He 3dyz  ",
+        "0 He 3dz^2 ",
+        "0 He 3dxz  ",
+        "0 He 3dx2-y2",
+        "0 He 4f-3  ",
+        "0 He 4f-2  ",
+        "0 He 4f-1  ",
+        "0 He 4f+0  ",
+        "0 He 4f+1  ",
+        "0 He 4f+2  ",
+        "0 He 4f+3  ",
+        "1 H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "26461038f17c085285c896773165abffd5f56b116c1a7c4cb2fc5836d2d07da0",
+        "shape": [],
+        "values": -2.0839437611713576
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "1aae25e06bd96802ee5dde56a534af4030c59039b39589e9ae299c14e530523d",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            -0.18222406787180107,
+            0.2825179346849637,
+            0.7062948367124086
+          ],
+          [
+            0.18222406787180107,
+            -0.2825179346849635,
+            -0.706294836712409
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.287,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": false,
+        "charge": 1,
+        "displacement_bohr": 0.013,
+        "id": "rhf-spherical-displacement-1",
+        "method": "rhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 0,
+        "unit": "Bohr"
+      },
+      "input_sha256": "46c2e2ce5fc95518ea8820e9144a2f96e72fdbb792ce9750049bf35632dc2663",
+      "nao": 17,
+      "nelec": [
+        1,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxx  ",
+        "0 He 3dxy  ",
+        "0 He 3dxz  ",
+        "0 He 3dyy  ",
+        "0 He 3dyz  ",
+        "0 He 3dzz  ",
+        "0 He 4fxxx ",
+        "0 He 4fxxy ",
+        "0 He 4fxxz ",
+        "0 He 4fxyy ",
+        "0 He 4fxyz ",
+        "0 He 4fxzz ",
+        "0 He 4fyyy ",
+        "0 He 4fyyz ",
+        "0 He 4fyzz ",
+        "0 He 4fzzz ",
+        "1  H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "75a57eb0e804557bb48a0c1e264e05c024eec9686bd4131a1608c7c16055adf2",
+        "shape": [],
+        "values": -2.6261353872662028
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "602a78af9c10decac4d1a6e268f8114451216859948059d78228318b81853316",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            0.019297705746263993,
+            -0.028946558619396462,
+            -0.07236639654848953
+          ],
+          [
+            -0.01929770574626416,
+            0.028946558619396545,
+            0.07236639654848931
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.3,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": true,
+        "charge": 0,
+        "displacement_bohr": 0,
+        "id": "uhf-cartesian-displacement-0",
+        "method": "uhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 1,
+        "unit": "Bohr"
+      },
+      "input_sha256": "3aa7f618e2f4276cdd7c924b41ff758919cd2745e412a2c2dc58d72df93aa022",
+      "nao": 21,
+      "nelec": [
+        2,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxx  ",
+        "0 He 3dxy  ",
+        "0 He 3dxz  ",
+        "0 He 3dyy  ",
+        "0 He 3dyz  ",
+        "0 He 3dzz  ",
+        "0 He 4fxxx ",
+        "0 He 4fxxy ",
+        "0 He 4fxxz ",
+        "0 He 4fxyy ",
+        "0 He 4fxyz ",
+        "0 He 4fxzz ",
+        "0 He 4fyyy ",
+        "0 He 4fyyz ",
+        "0 He 4fyzz ",
+        "0 He 4fzzz ",
+        "1  H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "4703ca23c53271594303cb869b244c366762c7974f8da30dd376700428588f93",
+        "shape": [],
+        "values": -2.625887296696832
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "2ebb788fac545f02cf7aed96612c79059053dab2a20dd42c5649274ba05cd465",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            0.01886724502140985,
+            -0.02925154266885252,
+            -0.07312885667212798
+          ],
+          [
+            -0.01886724502140974,
+            0.029251542668852437,
+            0.07312885667212832
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.287,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": true,
+        "charge": 0,
+        "displacement_bohr": 0.013,
+        "id": "uhf-cartesian-displacement-1",
+        "method": "uhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 1,
+        "unit": "Bohr"
+      },
+      "input_sha256": "0dddd25ba54be2b47ae02b5a633dfbf6abd0413bd2abb0edfd396831c8fb5893",
+      "nao": 21,
+      "nelec": [
+        2,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxy  ",
+        "0 He 3dyz  ",
+        "0 He 3dz^2 ",
+        "0 He 3dxz  ",
+        "0 He 3dx2-y2",
+        "0 He 4f-3  ",
+        "0 He 4f-2  ",
+        "0 He 4f-1  ",
+        "0 He 4f+0  ",
+        "0 He 4f+1  ",
+        "0 He 4f+2  ",
+        "0 He 4f+3  ",
+        "1 H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "0e0be06694dc5e6ac237c88e1c88e21effeb1032e5731abc479b8bf92077f926",
+        "shape": [],
+        "values": -1.835293778173116
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "0adb8e32ac0d7bb1a0683631d25566a6730f04da437194ba1cacfa5474194702",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            -0.1110455561625924,
+            0.16656833424388795,
+            0.4164208356097221
+          ],
+          [
+            0.11104555616259201,
+            -0.16656833424388895,
+            -0.4164208356097234
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.3,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": false,
+        "charge": 0,
+        "displacement_bohr": 0,
+        "id": "uhf-spherical-displacement-0",
+        "method": "uhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 1,
+        "unit": "Bohr"
+      },
+      "input_sha256": "bcb56565002d78eb4d0231573b1d477a9937afc046a734108d81682938152ec0",
+      "nao": 17,
+      "nelec": [
+        2,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    },
+    {
+      "ao_labels": [
+        "0 He 1s    ",
+        "0 He 2px   ",
+        "0 He 2py   ",
+        "0 He 2pz   ",
+        "0 He 3dxy  ",
+        "0 He 3dyz  ",
+        "0 He 3dz^2 ",
+        "0 He 3dxz  ",
+        "0 He 3dx2-y2",
+        "0 He 4f-3  ",
+        "0 He 4f-2  ",
+        "0 He 4f-1  ",
+        "0 He 4f+0  ",
+        "0 He 4f+1  ",
+        "0 He 4f+2  ",
+        "0 He 4f+3  ",
+        "1 H 1s    "
+      ],
+      "converged": true,
+      "energy": {
+        "dtype": "float64",
+        "sha256_le_f64": "6e68ed8bf2a3f3e1ed4a0adc4f9c1f9d933d0d84e468d2b8b0239d089cf793c1",
+        "shape": [],
+        "values": -1.8367182050540076
+      },
+      "forces": {
+        "dtype": "float64",
+        "sha256_le_f64": "84c41bd4d0835d6a92e362855435b89cdc5d6e80f96d6a45e2d9e2d4a40fc911",
+        "shape": [
+          2,
+          3
+        ],
+        "values": [
+          [
+            -0.10808611767681964,
+            0.16757537624313057,
+            0.41893844060782726
+          ],
+          [
+            0.10808611767681925,
+            -0.16757537624313068,
+            -0.41893844060782726
+          ]
+        ]
+      },
+      "input": {
+        "atom": [
+          [
+            "He",
+            [
+              0.1,
+              -0.2,
+              -0.7
+            ]
+          ],
+          [
+            "H",
+            [
+              -0.287,
+              0.4,
+              0.8
+            ]
+          ]
+        ],
+        "basis": {
+          "H": [
+            [
+              0,
+              [
+                1.2,
+                1
+              ]
+            ]
+          ],
+          "He": [
+            [
+              0,
+              [
+                1.5,
+                0.8
+              ],
+              [
+                0.4,
+                -0.1
+              ]
+            ],
+            [
+              1,
+              [
+                0.7,
+                1
+              ]
+            ],
+            [
+              2,
+              [
+                0.8,
+                1
+              ]
+            ],
+            [
+              3,
+              [
+                0.6,
+                1
+              ]
+            ]
+          ]
+        },
+        "cart": false,
+        "charge": 0,
+        "displacement_bohr": 0.013,
+        "id": "uhf-spherical-displacement-1",
+        "method": "uhf",
+        "scf": {
+          "conv_tol": 1e-13,
+          "conv_tol_grad": 1e-11,
+          "init_guess": "1e"
+        },
+        "spin": 1,
+        "unit": "Bohr"
+      },
+      "input_sha256": "e07b4ad3697ed47f509c1ff4edfdb6b608081c9dcaa7b8d95443a92fd6ada2fc",
+      "nao": 17,
+      "nelec": [
+        2,
+        1
+      ],
+      "resolved_scf": {
+        "conv_tol": 1e-13,
+        "conv_tol_grad": 1e-11,
+        "damp": 0,
+        "diis_space": 8,
+        "direct_scf": true,
+        "direct_scf_tol": 1e-13,
+        "init_guess": "1e",
+        "level_shift": 0,
+        "max_cycle": 50
+      }
+    }
+  ],
+  "replica": "second",
+  "schema": "generativeqc.cpu-hf-high-l.receipt.v1"
+}

@@ -18,13 +18,15 @@ expected value.
 - The generator enforces an empty regular PySCF configuration file, owned
   distribution imports, single-thread native pools, complete finite FP64
   shapes, exact case identity, and a 256 KiB cap on each receipt.
-- `reference.json` is the unchanged 30,325-byte validated receipt retrieved from
-  the job log. Its SHA-256 is
+- `reference.json` is the unchanged 30,325-byte validated receipt extracted from
+  the authenticated ZIP artifact and matched byte-for-byte to the job log. Its SHA-256 is
   `0770d91ec511fd8db30256ddbb308104afa638793947cd7014e008a5d232673d`.
 - `manifest.json` binds the input and receipt bytes to the actual generation
   commit/job, generator hash, two raw-replica hashes and the bounded ZIP artifact.
   The receipt additionally records actual installed package/native-library
   identities, AO ordering/counts, electron counts and resolved SCF settings.
+- Both original process receipts are retained unchanged under \`replicas/\`.
+  Their SHA-256s match the validated replay record and authenticated archive.
 
 The initial workflow attempt stopped before dependency installation or numerical
 execution because uv 0.10.7 does not provide Python 3.12.14. Only the interpreter
@@ -50,4 +52,7 @@ The consuming GQC tests must continue computing both energy-only and complete
 energy/force endpoints, with the original convergence/backend assertions,
 absolute energy tolerance 1e-9 Hartree, absolute force tolerance 1e-8 Hartree/Bohr,
 zero relative force tolerance, and translational sum tolerance 2e-10 Hartree/Bohr.
-This retention commit does not yet change those tests.
+The tests load these integrity-checked fixed records while retaining every GQC
+calculation and endpoint assertion. Missing or mismatched inputs fail closed;
+there is no live-PySCF fallback. Integrity and energy/force negative controls
+exercise the same loader and assertion helper used by the numerical gate.
