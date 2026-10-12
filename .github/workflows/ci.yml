@@ -1088,6 +1088,7 @@ jobs:
           path: |
             coverage-python-${{ matrix.shard }}.xml
             .artifacts/pytest-${{ matrix.shard }}.xml
+            .artifacts/pbe-point-policy-contract-report.txt
           include-hidden-files: true
           retention-days: 1
 
