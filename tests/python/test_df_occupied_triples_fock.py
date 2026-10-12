@@ -1116,9 +1116,7 @@ int main() {
         path = tmp_path / f"{label}.cpp"
         path.write_text(prefix + error_policy + owner + policy + suffix)
         binary = tmp_path / label
-        native_cxx.build_executable(
-            [path], binary, compile_args=["-std=c++17", "-O2"]
-        )
+        native_cxx.build_executable([path], binary, compile_args=["-std=c++17", "-O2"])
         result = subprocess.run(
             [str(binary)],
             check=False,
