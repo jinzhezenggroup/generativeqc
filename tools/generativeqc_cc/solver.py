@@ -21,10 +21,13 @@ from generativeqc_compiler.common.solver_region import (
     SolverRegion,
 )
 from generativeqc_compiler.tensor import Program, execute
+from generativeqc_compiler.tensor.cpu import emit_cpu
 
 from tools.generativeqc_posthf import MOBlock, ReferenceSnapshot
 from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.reference import immutable
+
+from .native_tensor_cpu import NativeCCTensorExecutor
 
 
 def _provider_blocks(
@@ -150,9 +153,10 @@ def _ccsd_programs(nocc: typing.Any, nvir: typing.Any) -> typing.Any:
 class PreparedCCSD:
     """Borrow a conventional provider and pin seven MO blocks under its budget.
 
-    max_bytes bounds the equation interpreter plus conservative logical solver
-    work/DIIS arrays. The provider has a separate budget. Neither bounds total
-    Python/BLAS RSS. Preflight occurs before any integral read.
+    max_bytes bounds the selected native/independent equation execution and
+    conservative solver/DIIS arrays. The provider has a separate budget.
+    Neither bounds total Python/BLAS RSS. Compiler preflight occurs before
+    any integral read; the expanded independent oracle remains interpreted.
     """
 
     def __init__(
@@ -162,6 +166,8 @@ class PreparedCCSD:
         options: typing.Any = None,
         t1: typing.Any = None,
         t2: typing.Any = None,
+        *,
+        executor: NativeCCTensorExecutor | None = None,
     ) -> None:
         self.options = SolverOptions() if options is None else options
         if not isinstance(self.options, SolverOptions):
@@ -177,6 +183,21 @@ class PreparedCCSD:
         self.snapshot, self.provider = snapshot, provider
         o, v = snapshot.nocc, snapshot.nmo - snapshot.nocc
         self.program, self.reference_program = _ccsd_programs(o, v)
+        if executor is not None and not isinstance(executor, NativeCCTensorExecutor):
+            raise TypeError("RCCSD requires a native CPU TensorIR executor")
+        self.executor = executor
+        self.native_required_bytes = 0
+        if executor is not None:
+            # Exact native lowering/resource admission precedes the provider's
+            # first AO read. A failed native plan never falls back to NumPy.
+            _, native_resources = emit_cpu(
+                self.program,
+                max_bytes=min(self.options.max_bytes, executor.max_bytes),
+                max_work=executor.max_work,
+                max_nodes=executor.max_nodes,
+            )
+            self.native_required_bytes = native_resources["required_bytes"]
+        self._executor_configuration = self._native_executor_configuration()
 
         def retained(p: typing.Any) -> typing.Any:
             return sum(n.spec.size * n.spec.itemsize for n in p.live_nodes) + sum(
@@ -185,7 +206,11 @@ class PreparedCCSD:
 
         amplitudes = o * v + o * o * v * v
         self.logical_required_bytes = (
-            max(retained(p) for p in (self.program, self.reference_program))
+            max(
+                self.native_required_bytes,
+                retained(self.program),
+                retained(self.reference_program),
+            )
             + (12 + 2 * self.options.diis_size) * amplitudes * 8
         )
         if self.logical_required_bytes > self.options.max_bytes:
@@ -239,6 +264,19 @@ class PreparedCCSD:
         )
         self.solver_region = _ccsd_solver_region(self)
 
+    def _native_executor_configuration(self) -> tuple | None:
+        executor = self.executor
+        if executor is None:
+            return None
+        return (
+            executor.backend,
+            executor.max_bytes,
+            executor.max_work,
+            executor.max_nodes,
+            executor.compiler,
+            executor.cache,
+        )
+
     def validate_amplitudes(self, t1: typing.Any, t2: typing.Any) -> None:
         execute(
             self.amplitude_check, {"t1": t1, "t2": t2}, max_bytes=self.options.max_bytes
@@ -252,11 +290,37 @@ class PreparedCCSD:
         if self.provider.snapshot.identity != self.snapshot.identity:
             raise ValueError("provider reference changed during CCSD")
         self.provider.source._check_open()
-        return execute(
-            self.reference_program if independent else self.program,
-            {**self.feeds, "t1": t1, "t2": t2},
-            max_bytes=self.options.max_bytes,
-        ).outputs
+        feeds = {**self.feeds, "t1": t1, "t2": t2}
+        if independent or self.executor is None:
+            # Keep the structurally expanded program as a separate CPU oracle.
+            return execute(
+                self.reference_program if independent else self.program,
+                feeds,
+                max_bytes=self.options.max_bytes,
+            ).outputs
+        if self._native_executor_configuration() != self._executor_configuration:
+            raise RuntimeError("RCCSD native executor configuration changed")
+        try:
+            outputs = self.executor.execute(self.program, feeds)
+        except ValueError as error:
+            # Native scalar arithmetic reports domain/overflow through its
+            # checked ABI. Do not misreport a failed equation as convergence.
+            if "native CPU tensor evaluation failed" in str(error):
+                raise FloatingPointError(str(error)) from error
+            raise
+        if outputs.keys() != self.program.outputs.keys():
+            raise ValueError("native RCCSD executor returned incomplete outputs")
+        for name, node in self.program.outputs.items():
+            value = np.asarray(outputs[name])
+            if (
+                value.dtype != np.float64
+                or value.shape != node.spec.shape
+                or not np.isfinite(value).all()
+            ):
+                raise FloatingPointError(
+                    f"native RCCSD executor returned invalid physical output: {name}"
+                )
+        return outputs
 
     def pack(self, t1: typing.Any, t2: typing.Any) -> typing.Any:
         return np.concatenate(
@@ -463,6 +527,7 @@ def solve(
     options: typing.Any = None,
     t1: typing.Any = None,
     t2: typing.Any = None,
+    executor: NativeCCTensorExecutor | None = None,
 ) -> typing.Any:
     """Solve conventional RCCSD from an owned RHF reference and CPU provider.
 
@@ -473,7 +538,7 @@ def solve(
     Only fresh expanded physical R1/R2 and delta-E can accept the final root;
     the implementation never calls an external coupled-cluster solver.
     """
-    prepared = PreparedCCSD(snapshot, provider, options, t1, t2)
+    prepared = PreparedCCSD(snapshot, provider, options, t1, t2, executor=executor)
     options = prepared.options
     current = prepared.initial
     diis = _DIIS(options.diis_size)
@@ -560,6 +625,12 @@ def solve(
         "integral_hash": prepared.integral_hash,
         "equation_hash": prepared.program.logical_hash,
         "independent_equation_hash": prepared.reference_program.logical_hash,
+        "equation_backend": (
+            "numpy-cpu-interpreter"
+            if prepared.executor is None
+            else prepared.executor.backend
+        ),
+        "native_program_required_bytes": prepared.native_required_bytes,
         "options": asdict(options),
         "diis_restarts": diis.restarts,
         "logical_required_bytes": prepared.logical_required_bytes,

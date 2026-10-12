@@ -154,6 +154,58 @@ This remains the internal correctness interface, with the reference/provider
 domain and failure rules above. GPU, open-shell, frozen-core, triples and
 derivative requests cannot be inferred from this CPU facade.
 
+
+## Compiler-first native CPU RCCSD residual path (#762)
+
+The original `solve(...)` / `energy(..., backend="cpu")` remains a toolchain-free
+NumPy TensorIR correctness baseline. An **explicit** `backend="cpu-native"`
+selects the same restricted `build_ccsd_program(..., form="optimized")`
+TensorIR through the existing native CPU code generator and checked C++ ABI.
+The complete physical energy, singles residual, doubles residual and energy
+components execute in that compiled program for every Jacobi/DIIS trial.
+The fully **expanded independent TensorIR** is still interpreted on the CPU
+only at convergence acceptance: removing that oracle would weaken the check.
+
+```python
+from pathlib import Path
+from tools.generativeqc_cc import energy
+
+state = energy(
+    snapshot,
+    provider,
+    backend="cpu-native",
+    compiler=Path("c++"),            # optional, defaults to CXX/c++
+    cache=Path("/tmp/rccsd-cpu-jit"),  # optional persistent native cache
+)
+assert state.converged
+assert state.state.provenance["equation_backend"] == "native-cpu-tensorir"
+```
+
+Preparation calls `emit_cpu` with the existing exact native/solver resource
+budgets *before* reading any AO block. Unsupported primitives, excessive
+work/nodes/storage and altered executor configuration fail rather than running
+NumPy in the main iteration. Native FP64 errors are reported as failed numerical
+iterations, preserving the last finite amplitude. The optional CPU compiler
+is never discovered or run for the original `backend="cpu"` baseline, and
+this change does not enable a JIT or CUDA requirement for ordinary package
+installs or other solver backends. No custom CC equations or solver loop are
+generated: the compiled graph is the original TensorIR science identity.
+
+For a CPU-only numerical check:
+
+```bash
+PYTHONPATH=.:python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \\
+  python -m pytest tests/python/test_cc_solver.py -k native_cpu_ccsd -q
+```
+
+**Promotion status:** the native CPU route is an explicit, independently
+qualified endpoint, not a claim of whole-endpoint speedup or a default-path
+change. Profile compile cold/warm, complete single-/multi-thread CPU
+endpoints, and process peak memory before considering default promotion.
+Retain the NumPy expanded equation as an independent oracle. CPU compiler
+source, the scientific TensorIR identity, runtime settings and artifact
+cache must remain versioned; no GPU performance is inferred from this path.
+
 ## Molecular evidence and reproduction
 
 `tools.generate_cc_endpoints` reuses exact #138 H2, He, H2O, NH3 and CH4 inputs.
