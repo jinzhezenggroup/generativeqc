@@ -651,6 +651,43 @@ def test_fused_scalar_storage_has_exact_admission_and_bounded_fallback(
     np.testing.assert_array_equal(refused_counts, 19)
 
 
+def test_fused_scalar_allocation_refusal_keeps_legacy_outputs(
+    native_combined_probe: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A post-preflight allocation refusal gets one smaller, exact retry."""
+    if os.environ.get("GENERATIVEQC_CUDA_ALLOCATION_LIMIT_TEST") != "1":
+        pytest.skip("requires the scheduled validation-only CUDA allocation interposer")
+    inputs, _ = case(2, 3, 4)
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    status, legacy, values, _, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1
+    )
+    assert status == 0, error
+    lower, upper = 1, 16 << 20
+    monkeypatch.setenv("GENERATIVEQC_TEST_TRIPLES_DEVICE_LIMIT", str(lower))
+    failed = run_combined(native_combined_probe, inputs, rows=1, panels=1)
+    assert failed[0] != 0
+    assert all(np.isnan(value).all() for value in (*failed[1], failed[2]))
+    while lower < upper:
+        middle = (lower + upper) // 2
+        monkeypatch.setenv("GENERATIVEQC_TEST_TRIPLES_DEVICE_LIMIT", str(middle))
+        result = run_combined(native_combined_probe, inputs, rows=1, panels=1)
+        if result[0] == 0:
+            upper = middle
+        else:
+            lower = middle + 1
+    monkeypatch.setenv("GENERATIVEQC_TEST_TRIPLES_DEVICE_LIMIT", str(upper))
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "1")
+    status, fallback, fallback_values, counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1
+    )
+    assert status == 0, error
+    assert counts[15] == 0 and counts[16] == 1
+    for actual, expected in zip(fallback, legacy, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(fallback_values[:1], values[:1])
+
+
 @pytest.mark.parametrize(
     "o,v,q,rows,panels",
     [

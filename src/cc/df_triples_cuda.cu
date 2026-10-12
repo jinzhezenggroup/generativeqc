@@ -1171,6 +1171,14 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   const double minimum = validate_inputs(o, v, q, staging_layout, host, threshold);
 
   runtime::CudaDeviceScope device_scope(device);
+  if (fused_selected) {
+    std::size_t available = 0, total = 0;
+    generativeqc_tensor::cuda_check(cudaMemGetInfo(&available, &total));
+    if (plan.fock.value.total > available) {
+      fused_selected = false;
+      plan = admitted_layout(page_capacity, plan.fock.value.panel_capacity);
+    }
+  }
   PreparedInputs prepared(staging_layout, host);
 
   DFCudaCombinedResponseResult result;
@@ -1190,11 +1198,26 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   int failed = 0;
   std::size_t response_tiles = 0;
   {
-    generativeqc_tensor::Context context;
     cudaDeviceProp properties{};
     generativeqc_tensor::cuda_check(cudaGetDeviceProperties(&properties, device));
-    context.prepare(device, properties.major, properties.minor, p.arena, p.error, p.library,
-                    blas_workspace, provider_allowance, true);
+    const auto prepare_context = [&] {
+      auto owner = std::make_unique<generativeqc_tensor::Context>();
+      owner->prepare(device, properties.major, properties.minor, p.arena, p.error, p.library,
+                     blas_workspace, provider_allowance, true);
+      return owner;
+    };
+    std::unique_ptr<generativeqc_tensor::Context> context_owner;
+    try {
+      context_owner = prepare_context();
+    } catch (const generativeqc_tensor::DeviceAllocationError&) {
+      if (!fused_selected) throw;
+      // Preflight cannot prevent a concurrent external allocation. Retire the
+      // failed owner before one bounded retry with the original page/panel plan.
+      fused_selected = false;
+      plan = admitted_layout(page_capacity, p.panel_capacity);
+      context_owner = prepare_context();
+    }
+    auto& context = *context_owner;
     auto pointer = [&](std::size_t offset) {
       return reinterpret_cast<double*>(context.arena + offset);
     };

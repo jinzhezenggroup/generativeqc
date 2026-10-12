@@ -1,0 +1,63 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Source-matched independent numerical, bounded fallback and lifetime gates pass; timings are scoped descriptive observations and Q48 is not promoted.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 5324,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "75511d93722c47fa742655bc90df992c108c3f28585c36ef2dcca19493774973"
+    },
+    {
+      "bytes": 2048,
+      "path": "summary.json.gz",
+      "role": "samples",
+      "sha256": "a76e7510c47abd1dad7857252527acc9f6336b43c7ae2ea232b7de79fe92667f"
+    },
+    {
+      "bytes": 29844,
+      "path": "raw-receipts.json.xz",
+      "role": "samples",
+      "sha256": "648e301a3687302d606a4c76402be41e0be2b35b6baa5769475b809f93837c5e"
+    },
+    {
+      "bytes": 18024,
+      "path": "source.patch.xz",
+      "role": "source-patch",
+      "sha256": "06dd42b17dbb704463f66ccd355e9bfbacd778deb8e1dedd9d9450d084d6e2ff"
+    },
+    {
+      "bytes": 2417,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "9dc99db584ed3b98e56da8aa52716473bcecfb1549b41a8af47687aba934f13a"
+    },
+    {
+      "bytes": 2178,
+      "path": "run-benchmark.sh",
+      "role": "reproduction",
+      "sha256": "f19138536f1663bcef0e2d1bbd6b73f8e9a7d8de4b9e24bf3f2e9734d9dc6462"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:55:00",
+      "bash",
+      "run-benchmark.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "2a6de26eea1f83e9fd1e8df01c189fea44058b6b"
+  }
+}
