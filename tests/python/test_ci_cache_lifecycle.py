@@ -243,7 +243,7 @@ def test_cuda_complete_snapshots_follow_both_variants_and_smoke() -> None:
     job = _job("native-cli-artifact")
     sequence = (
         "Seed fast CUDA CI objects in the shared cache",
-        "Build fully optimized precompiled C++ CUDA CLI",
+        "Build monolithic C++ CUDA CLI (release or fast PR)",
         "Smoke-test release-mode native command",
         "Save complete shared CUDA ccache on master",
         "Publish trusted master CUDA ccache snapshot",
