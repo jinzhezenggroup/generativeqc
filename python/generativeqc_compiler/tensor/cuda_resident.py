@@ -54,6 +54,50 @@ else:
 RESIDENT_SCHEMA = "generativeqc.tensor.resident/1"
 
 
+def _resident_dependency_logical_name(
+    path: typing.Any,
+    *,
+    package_root: Path | None = None,
+    checkout_root: Path | None = None,
+) -> str:
+    """Assign a location-independent identity to an owned resident dependency.
+
+    Resolve paths before checking their owners: a sibling with a common path
+    prefix, a parent traversal, or a symlink escaping an allowed root must not
+    be admitted as part of the compiler's reproducible source inventory.
+    Optional roots make the checkout/wheel layouts executable CPU contracts.
+    """
+    from generativeqc_compiler.common.paths import PACKAGE, source_root
+
+    target = Path(path).resolve()
+    package = (PACKAGE if package_root is None else Path(package_root)).resolve()
+    try:
+        relative = target.relative_to(package)
+    except ValueError:
+        pass
+    else:
+        if relative.parts and relative.parts[0] == "assets":
+            return Path(*relative.parts[1:]).as_posix()
+        return f"python/generativeqc_compiler/{relative.as_posix()}"
+
+    if checkout_root is None:
+        try:
+            checkout_root = source_root()
+        except ValueError:
+            # Installed wheels do not have a checkout. An unowned dependency
+            # must still fail closed rather than acquiring an absolute key.
+            checkout_root = None
+    if checkout_root is not None:
+        try:
+            return target.relative_to(Path(checkout_root).resolve()).as_posix()
+        except ValueError:
+            pass
+    raise ValueError(
+        f"resident dependency {path} is outside both the source"
+        " checkout and the installed package"
+    )
+
+
 def compile_resident(
     plan: typing.Any,
     compiler: typing.Any,
@@ -93,40 +137,8 @@ def compile_resident(
     # an installed wheel must both find them.
     header = asset_path("src/tensor/cuda_resident.cuh")
     paths = [*[Path(p) for p in dependencies], Path(emit_module.__file__), header]
-    # Every dependency gets a stable logical name so the identity is the same
-    # across different source-checkout prefixes, between source and installed-
-    # wheel layouts, and across platforms.  We use the same pattern as
-    # ``source_hashes(assets=...)``: files under ``PACKAGE`` are named
-    # ``python/generativeqc_compiler/<rest>``; non-package assets use their
-    # repository-relative name (``src/tensor/cuda_resident.cuh``).
-    from generativeqc_compiler.common.paths import PACKAGE as _PKG
-
-    def _logical_name(path: typing.Any) -> typing.Any:
-        # Is it under the installed package tree?
-        try:
-            rel = Path(os.path.relpath(path, _PKG)).as_posix()
-        except ValueError:
-            rel = None
-        if rel is not None and not rel.startswith(".."):
-            # Package assets carry an ``assets/`` prefix we strip so the
-            # installed key matches the checkout key for the same header.
-            if rel.startswith("assets/"):
-                rel = rel[len("assets/") :]
-            else:
-                rel = f"python/generativeqc_compiler/{rel}"
-            return rel
-        # Not under the package tree — must be under the checkout root.
-        from generativeqc_compiler.common.paths import source_root
-
-        root = source_root()
-        rel = Path(os.path.relpath(path, root)).as_posix()
-        if rel.startswith(".."):
-            raise ValueError(
-                f"resident dependency {path} is outside both the source"
-                " checkout and the installed package"
-            )
-        return rel
-
+    # Stable names are shared by source checkouts and installed-wheel assets.
+    # Keep path admission separately testable without invoking NVCC.
     identity = {
         "schema": RESIDENT_SCHEMA,
         "base": base.metadata["key"],
@@ -135,7 +147,7 @@ def compile_resident(
         "generated": canonical_hash(source),
         "extension": canonical_hash(extension),
         "sources": {
-            _logical_name(path): file_hash(path) for path in paths if path.is_file()
+            _resident_dependency_logical_name(path): file_hash(path) for path in paths if path.is_file()
         },
     }
     key = canonical_hash(identity)
