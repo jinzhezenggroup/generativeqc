@@ -1319,14 +1319,14 @@ PbeStationaryXcDerivative stationary_b3lyp_xc_derivative(
 }
 
 namespace {
-using StationaryXcKernel = PbeStationaryXcDerivative (*)(
-    const AoBasis&, const MolecularGrid&, const std::vector<std::vector<double>>&,
-    std::size_t, double, double);
+using StationaryXcKernel = PbeStationaryXcDerivative (*)(const AoBasis&, const MolecularGrid&,
+                                                         const std::vector<std::vector<double>>&,
+                                                         std::size_t, double, double);
 
-PbeStationaryXcDerivative bound_b3lyp_stationary_xc(
-    const AoBasis& basis, const MolecularGrid& grid,
-    const std::vector<std::vector<double>>& density, std::size_t tile_points,
-    double exchange_scale, double correlation_scale) {
+PbeStationaryXcDerivative bound_b3lyp_stationary_xc(const AoBasis& basis, const MolecularGrid& grid,
+                                                    const std::vector<std::vector<double>>& density,
+                                                    std::size_t tile_points, double exchange_scale,
+                                                    double correlation_scale) {
   if (exchange_scale != 1.0 || correlation_scale != 1.0)
     throw std::invalid_argument("B3LYP stationary XC requires its canonical composition");
   return stationary_b3lyp_xc_derivative(basis, grid, density, tile_points);
