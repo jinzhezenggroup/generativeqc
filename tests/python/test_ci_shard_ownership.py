@@ -283,6 +283,7 @@ def test_uccsd_owner_tail_keeps_complete_coverage_and_core_parity(
         "tests/python/test_uccsd_aaa.py",
         "tests/python/test_uccsd_lambda_next.py",
         "tests/python/test_uccsd_physical_response_next.py",
+        "tests/python/test_uccsd_t_gradient_next.py",
         "tests/python/test_uccsd_t_lambda_next.py",
         "tests/python/test_uccsd_t_owner_next.py",
         "tests/python/test_uccsd_triples_fock_response_next.py",
