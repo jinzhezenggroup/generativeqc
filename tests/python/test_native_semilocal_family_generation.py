@@ -257,7 +257,7 @@ def test_legacy_cpu_point_response_abi_slots_are_generated() -> None:
         record["code"]: record["legacy_cpu_point_response_slot"] for record in records
     }
     assert tuple(code for code, slot in slots.items() if slot is not None) == (0, 1)
-    assert set(slot for slot in slots.values() if slot is not None) == {0, 1}
+    assert {slot for slot in slots.values() if slot is not None} == {0, 1}
     assert all(
         SEMILOCAL_FAMILY_BY_CODE[code]["legacy_cpu_point_response_slot"] == slot
         for code, slot in slots.items()
