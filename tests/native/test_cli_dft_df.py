@@ -105,7 +105,6 @@ class NativeDftDfCliTests(unittest.TestCase):
 
     def test_generated_methods_reject_unsupported_graphs_and_forces(self) -> None:
         for method, flags, reason in (
-            ("b3lyp-rks", ("--forces",), "DFT forces are not exposed"),
             ("pbe-rks", ("--grid-radial-points", "64"), "require a generated"),
             ("b3lyp-rks", ("--grid-polar-points", "0"), "must be positive"),
             ("m06-2x-rks", (), "no qualified native lowerer"),
@@ -215,6 +214,15 @@ class NativeDftDfCliTests(unittest.TestCase):
                         fitting, method
                     )
 
+    def test_cpu_b3lyp_analytic_force_reconverged_finite_difference(self) -> None:
+        for fitting in ("cpu", "none"):
+            if fitting == "none" and not DIRECT_AOT_ENABLED:
+                continue
+            with self.subTest(fitting=fitting):
+                self.assert_pbe0_force_reconverged_finite_difference(
+                    fitting, "b3lyp-rks"
+                )
+
     def assert_pbe0_force_reconverged_finite_difference(
         self, fitting: str, method: str = "pbe0-rks"
     ) -> None:
@@ -257,7 +265,7 @@ class NativeDftDfCliTests(unittest.TestCase):
         self.assertEqual(int(original[0]), 2)
         displaced_energies = []
         with tempfile.TemporaryDirectory(
-            prefix="generativeqc-pbe0-force-"
+            prefix=f"generativeqc-{method}-force-"
         ) as directory:
             for sign, label in ((1.0, "plus"), (-1.0, "minus")):
                 lines = list(original)

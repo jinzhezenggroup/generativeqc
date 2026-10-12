@@ -89,7 +89,8 @@ support depend on their qualified native provider and execution context.
 
 The public native `Calculation::supported_properties()` reports
 **context-qualified** DFT analytic forces for a narrow, all-electron,
-strict-FP64 **CPU Direct or density-fitted PBE/PBE0 RKS/UKS** execution domain. The
+strict-FP64 **CPU Direct or density-fitted PBE/PBE0 RKS/UKS and B3LYP RKS**
+execution domain. B3LYP UKS remains unqualified. The
 method-global registry remains energy-only: exact source coefficients,
 spin, backend, fitting provider, basis/ECP and correction terms determine
 admission for the prepared calculation. Request
@@ -107,7 +108,7 @@ supported DFT-force path.
 
 The Direct owner requires the packaged CPU first-derivative inventory
 (`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON`, the default), all-electron
-s/p/d shells, exact full-range J and the canonical PBE/PBE0 exchange composition.
+s/p/d shells, exact full-range J and the canonical PBE/PBE0/B3LYP exchange composition.
 It contracts compiler-generated stationary AD weights with shell-local
 derivatives, sharing each primitive evaluation between J and K. It does not
 materialize a molecular coordinate-by-AO-rank-four derivative tensor, compile
@@ -141,7 +142,7 @@ than explicit `NOT_IMPLEMENTED` is an error, not permission to fall back.
 Capability is evaluated after the existing Python model/warm-state identity
 checks and does not bypass resource budgets.
 
-The CPU PBE/PBE0 force qualification includes independent reconverged
+The CPU PBE/PBE0/B3LYP force qualification includes independent reconverged
 finite-difference and PySCF moving-grid analytic comparisons. A native
 force-capability flag is not evidence of an independently validated
 method/size/backend beyond its explicitly admitted context.

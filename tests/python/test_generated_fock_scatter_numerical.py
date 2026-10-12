@@ -165,6 +165,20 @@ int main() {
     const double coefficient=direct_bilinear_density_coefficient(
         n,off,density.data(),seed.data(),i,j,k,l);
     if(std::abs(value*coefficient-bilinear)>2e-13) return 7;
+    std::vector<double> plus=density,minus=density;
+    for(size_t element=off;element<off+m;++element) {
+      plus[element]+=seed[element];
+      minus[element]-=seed[element];
+    }
+    for(double coulomb : {0.0,1.0,-2.0}) for(double exchange : {0.0,-0.5,1.3}) {
+      const double cross=direct_force_density_coefficient_scaled<false>(
+          n,off,spin,density.data(),i,j,k,l,coulomb,exchange,seed.data());
+      const double polarized=0.5*(direct_force_density_coefficient_scaled<false>(
+          n,off,spin,plus.data(),i,j,k,l,coulomb,exchange)-
+          direct_force_density_coefficient_scaled<false>(
+          n,off,spin,minus.data(),i,j,k,l,coulomb,exchange));
+      if(std::abs(cross-polarized)>2e-13) return 9;
+    }
     for(bool unrestricted : {false,true}) for(unsigned mode : {0U,1U,2U,3U}) {
       const bool coulomb_only=mode==1U, exchange_only=mode>=2U, hf_exchange=mode==3U;
       std::vector<double> actual(100), shell_actual(100), expected(100);
@@ -201,6 +215,12 @@ int main() {
     }
   }
   if(cases!=440) return 2;
+  {
+    const double density_large[]{1e100},seed_small[]{1e-100};
+    const double cross=direct_bilinear_density_coefficient(
+        1,0,density_large,seed_small,0,0,0,0);
+    if(std::abs(cross-0.5)>1e-15) return 10;
+  }
   {
     constexpr float mixed_value = 0.9876543F;
     std::vector<double> density(100), actual(100);

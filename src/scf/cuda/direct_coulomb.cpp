@@ -736,16 +736,24 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
 static cudaError_t enqueue_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
-    bool allow_spatial_default) {
+    bool allow_spatial_default, bool bilinear) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
     return cudaErrorInvalidValue;
-  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (bilinear && (unrestricted || separate_sources || p.shared->batch.batch_size != 1 ||
+                   p.shared->screening != 0.0 || beta == nullptr))
+    return cudaErrorInvalidValue;
+  // The two existing projection slots carry D and P, not spin densities.
+  // Density screening is disabled: spin bounds do not bound a signed cross term.
+  auto error = prepare_generated_exchange_density(p, unrestricted || bilinear, alpha, beta);
   if (error != cudaSuccess) return error;
 
   auto& shared = *p.shared;
-  const auto b = shared.batch;
+  auto b = shared.batch;
+  if (bilinear)
+    b.direct_force_seed = p.direct_spin + product(static_cast<std::size_t>(b.direct_nbf),
+                                                  static_cast<std::size_t>(b.direct_nbf));
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   // Total-force consumers combine the compiler-owned cotangents before AD;
   // derivative exports retain independent channels on exactly the same domain.
@@ -785,7 +793,7 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources, bool allow_spatial_default) {
+    bool separate_sources, bool allow_spatial_default, bool bilinear) {
   if (!p.shared) return cudaErrorInvalidValue;
   auto& shared = *p.shared;
   const auto& batch = shared.batch;
@@ -804,7 +812,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   } drain{shared.stream};
   auto error = enqueue_generated_full_range_energy_derivatives(
       p, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, separate_sources,
-      allow_spatial_default);
+      allow_spatial_default, bilinear);
   if (error != cudaSuccess) return error;
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);
@@ -845,7 +853,7 @@ cudaError_t consume_generated_full_range_energy_derivatives(
   } drain{shared.stream};
   const auto error = enqueue_generated_full_range_energy_derivatives(
       plan, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, true,
-      allow_spatial_default);
+      allow_spatial_default, false);
   if (error != cudaSuccess) return error;
   // Generated Direct kernels publish forces; the stationary source inventory
   // publishes energy derivatives. The consumer retains this explicit sign.

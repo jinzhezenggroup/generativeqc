@@ -3,10 +3,12 @@
 // Becke entries precede this include; compiler-emitted contraction bodies follow it.
 // This header owns only resource state, validation, transfers, launches and ABI.
 #include <chrono>
+#include <cstdlib>
 #include <limits>
 #include <vector>
 
 #include "../tensor/cuda_runtime.cuh"
+#include "becke_scaled_policy.hpp"
 #include "grid_task_view.cuh"
 #include "xc_point.hpp"
 
@@ -25,6 +27,7 @@ struct Owner {
   bool becke_primitive_requested = false, becke_primitive = false,
        becke_primitive_configured = false;
   unsigned becke_primitive_mode{};
+  bool becke_binary_scaled_requested = false, becke_binary_scaled_automatic = true;
   double geometry_tolerance{};
   unsigned long long* becke_zero_seed_points{};
   bool becke_zero_seed_requested = true, becke_zero_seed_configured = false;
@@ -48,11 +51,20 @@ struct Owner {
       becke_pair_state_evaluations{}, phased_batches{};
   uint64_t becke_primitive_batches{}, becke_primitive_reverse_pair_visits{};
   uint64_t phased_points{}, becke_profile_batches{};
+  uint64_t becke_binary_scaled_batches{}, becke_binary_scaled_points{};
   uint64_t restricted_point_batches{}, restricted_point_count{}, general_point_batches{},
       general_point_count{};
   bool retains_becke_pair_state() const {
     return bool(phased_storage) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
+  }
+  bool binary_scaled_becke_active() const {
+    static_assert(generativeqc_grid_scaled::maximum_scaled_atoms == 128);
+    return becke_binary_scaled_requested &&
+           (!becke_binary_scaled_automatic ||
+            generativeqc::dft::binary_scaled_becke_automatic(atoms)) &&
+           generativeqc::dft::binary_scaled_becke_eligible(
+               atoms, bool(phased_storage), center_pairs != nullptr, becke_primitive);
   }
   // Primitive metrics are cumulative across one reset/force execution. Admission
   // is page-local so arbitrarily many bounded pages may contribute to one force.
@@ -79,6 +91,7 @@ PhasedBeckeInput phased_input(Owner& owner, size_t points) {
   double* maximum = reinterpret_cast<double*>(zeros + owner.atoms * owner.points);
   PhasedBeckeInput input{};
   input.work = {owner.atoms, points, pair_storage, fields, zeros, maximum};
+  input.binary_scaled_products = owner.binary_scaled_becke_active();
   input.seeds = maximum + owner.points;
   input.indices = reinterpret_cast<uint2*>(input.seeds + owner.points);
   // Only the authenticated first-derivative route may elide zero cotangents.
@@ -229,6 +242,21 @@ __global__ void geometry_cooperative_kernel(
 __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
                                 double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
+// Host dispatch keeps experimental arithmetic out of incumbent device kernels.
+template <bool BinaryScaled>
+void launch_phased_becke_normalize(PhasedBeckeInput input, bool cooperative, cudaStream_t stream) {
+  if constexpr (stationary_becke_cooperative_normalize) {
+    if (cooperative) {
+      phased_becke_normalize_cooperative<BinaryScaled>
+          <<<blocks(input.work.points, stationary_becke_normalize_point_lanes),
+             dim3(stationary_becke_normalize_point_lanes,
+                  128 / stationary_becke_normalize_point_lanes),
+             0, stream>>>(input);
+      return;
+    }
+  }
+  phased_becke_normalize<BinaryScaled><<<blocks(input.work.points, 128), 128, 0, stream>>>(input);
+}
 void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridTaskView view,
                      const double* work, const int64_t* ao_atoms, const int64_t* owners,
                      size_t owner_offset, size_t points_per_atom, const double* centers, size_t na,
@@ -315,22 +343,20 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     profile_record(owner, owner.becke_events[0], stream);
     phased_becke_atom<0><<<atom_blocks, 128, 0, stream>>>(phased);
     profile_record(owner, owner.becke_events[1], stream);
-    phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
+    if (phased.binary_scaled_products)
+      phased_becke_pair<false, false, false, true><<<pair_blocks, 128, 0, stream>>>(phased);
+    else
+      phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
     profile_record(owner, owner.becke_events[2], stream);
-    phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
+    if (phased.binary_scaled_products)
+      phased_becke_atom<1, false, true><<<atom_blocks, 128, 0, stream>>>(phased);
+    else
+      phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
     profile_record(owner, owner.becke_events[3], stream);
-    if constexpr (stationary_becke_cooperative_normalize) {
-      if (owner.becke_normalize_cooperative)
-        phased_becke_normalize_cooperative<<<blocks(view.npoint,
-                                                    stationary_becke_normalize_point_lanes),
-                                             dim3(stationary_becke_normalize_point_lanes,
-                                                  128 / stationary_becke_normalize_point_lanes),
-                                             0, stream>>>(phased);
-      else
-        phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
-    } else {
-      phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
-    }
+    if (phased.binary_scaled_products)
+      launch_phased_becke_normalize<true>(phased, owner.becke_normalize_cooperative, stream);
+    else
+      launch_phased_becke_normalize<false>(phased, owner.becke_normalize_cooperative, stream);
     profile_record(owner, owner.becke_events[4], stream);
     if (owner.becke_primitive) {
       if (owner.becke_primitive_mode == 2)
@@ -345,7 +371,10 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
       ++owner.becke_primitive_batches;
       owner.becke_primitive_reverse_pair_visits += view.npoint * na * (na - 1) / 2;
     } else {
-      phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
+      if (phased.binary_scaled_products)
+        phased_becke_pair<true, false, false, true><<<pair_blocks, 128, 0, stream>>>(phased);
+      else
+        phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
       profile_record(owner, owner.becke_events[5], stream);
       phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
     }
@@ -355,6 +384,10 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     owner.launches += 7;
     ++owner.phased_batches;
     owner.phased_points += view.npoint;
+    if (phased.binary_scaled_products) {
+      ++owner.becke_binary_scaled_batches;
+      owner.becke_binary_scaled_points += view.npoint;
+    }
     if (owner.profile) {
       // Event reuse across deferred tiles is safe only after the last event.
       // This intentional per-tile fence is intrusive qualification, never a
@@ -380,6 +413,8 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
   return guarded(nullptr, error, size, [&] {
     if (!output || !max_primitive_work)
       throw std::invalid_argument("invalid stationary owner output/work budget");
+    const bool binary_scaled_requested = generativeqc::dft::binary_scaled_becke_requested(
+        std::getenv("GENERATIVEQC_STATIONARY_BECKE_SCALED_PRODUCTS"));
     size_t bytes = allocation(na, n, nprimitive, np, ntask, ns, geometry_lanes);
     if (bytes > budget) throw std::invalid_argument("stationary CUDA byte budget exceeded");
     // Reuse spare capacity only; point concurrency remains compiler-planned.
@@ -414,6 +449,9 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
       p->context.prepare(device, major, minor, bytes, bytes - 256, 0, 0, 0, false);
     }
     p->atoms = na;
+    p->becke_binary_scaled_requested = binary_scaled_requested;
+    p->becke_binary_scaled_automatic =
+        std::getenv("GENERATIVEQC_STATIONARY_BECKE_SCALED_PRODUCTS") == nullptr;
     p->aos = n;
     p->primitives = nprimitive;
     p->points = np;
@@ -535,7 +573,7 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
       cudaDeviceProp property{};
       cudaFuncAttributes attributes{};
       cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
-      cuda_check(cudaFuncGetAttributes(&attributes, phased_becke_normalize_cooperative));
+      cuda_check(cudaFuncGetAttributes(&attributes, phased_becke_normalize_cooperative<false>));
       owner->becke_normalize_supported =
           owner->atoms <= stationary_becke_normalize_max_atoms &&
           size_t(property.maxThreadsDim[0]) >= stationary_becke_normalize_point_lanes &&
@@ -543,6 +581,13 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
           property.maxThreadsPerBlock >= 128 && attributes.maxThreadsPerBlock >= 128 &&
           attributes.sharedSizeBytes <= size_t(property.sharedMemPerBlock);
       owner->becke_normalize_cooperative = owner->becke_normalize_supported;
+      if (owner->becke_binary_scaled_requested) {
+        cuda_check(cudaFuncGetAttributes(&attributes, phased_becke_normalize_cooperative<true>));
+        owner->becke_normalize_supported =
+            owner->becke_normalize_supported && attributes.maxThreadsPerBlock >= 128 &&
+            attributes.sharedSizeBytes <= size_t(property.sharedMemPerBlock);
+        owner->becke_normalize_cooperative = owner->becke_normalize_supported;
+      }
     }
     ++owner->launches;
     ++owner->synchronizations;
@@ -553,6 +598,19 @@ int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t c
   if (!owner || !output || count != 2) return 1;
   output[0] = owner->phased_bytes;
   output[1] = owner->phased_batches;
+  return 0;
+}
+/** Admission and actual launched domains, not executed pair instruction counts.
+ * Read outside timed execution; legacy artifacts may omit this optional ABI. */
+int stationary_becke_binary_scaled_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 6) return 1;
+  output[0] = owner->becke_binary_scaled_requested;
+  output[1] = owner->binary_scaled_becke_active();
+  output[2] = owner->becke_binary_scaled_batches;
+  output[3] = owner->becke_binary_scaled_points;
+  output[4] = owner->phased_bytes;
+  output[5] = owner->becke_normalize_cooperative;
   return 0;
 }
 // Qualification may compare the two schedules, but never mutate a live

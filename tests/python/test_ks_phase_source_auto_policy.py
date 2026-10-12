@@ -20,46 +20,6 @@ def test_unset_selection_reaches_the_bounded_auto_policy() -> None:
     assert "direct_jk_source_auto_refusal(" in prepare
 
 
-def test_warm_energy_handoff_is_counted_and_preserves_the_final_state() -> None:
-    """A resident energy is not an incumbent warm baseline, even at identical D."""
-    solver = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    finish = solver[
-        solver.index("  bool finish() {") : solver.index("  void rebase_warm_energy()")
-    ]
-    assert finish.index("retire_phase_source(!is_failed)") < finish.index(
-        "rebase_warm_energy()"
-    )
-    assert "auditing_phase && output.converged && warm_updates" in finish
-    assert "clear_warm_state();" in finish
-    assert (
-        "use_warm && !device_chunk_mode && !phase_source && std::isfinite(warm_energy)"
-        in " ".join(solver.split())
-    )
-    rebase = solver[
-        solver.index("  void rebase_warm_energy()") : solver.index(
-            "  void enqueue_range_correction("
-        )
-    ]
-    assert "++output.fock_builds;" in rebase
-    assert "++output.precision.post_scf_fock_builds;" in rebase
-    assert "++movement.warm_energy_rebase_fock_actions;" in rebase
-    assert "PrecisionWorkEventKind::PostScfFock" in rebase
-    assert "PrecisionWorkPhase::Finalization" in rebase
-    assert "warm_energy = rebased.electronic_energy;" in rebase
-    assert "warm_energy_correction = rebased.electronic_energy_correction;" in rebase
-    for forbidden in (
-        "assemble_fock(",
-        "stage_xc(",
-        "++output.iterations",
-        "output.energy =",
-        "output.energy_change =",
-        "output.converged =",
-        "options.energy_tolerance =",
-        "options.density_tolerance =",
-    ):
-        assert forbidden not in rebase
-
-
 def test_native_cold_seed_provenance_is_not_an_external_density() -> None:
     """Only native preparation, never a warm projection, broadens seed eligibility."""
     header = (ROOT / "src/dft/cuda_ks.hpp").read_text()

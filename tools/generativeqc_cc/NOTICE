@@ -27,3 +27,17 @@ Reserved. Author credited by upstream ccsd_t_slow.py: Qiming Sun. Licensed
 under Apache License 2.0; see LICENSE.pyscf. Upstream cites the perturbative
 triples of Raghavachari et al., JCP 94, 442 (1991), DOI:10.1063/1.460359.
 Exact upstream file URLs and SHA-256 values are in source_manifest.json.
+
+Unrestricted (T) triples tiles
+
+The real spin-orbital connected/disconnected seed expressions in
+generativeqc_compiler.cc.uccsd_triples are adapted from PySCF 2.14.0
+pyscf/cc/gccsd_t.py. The independent per-spin-channel oracle is
+pyscf/cc/uccsd_t_slow.py. Author credited by both upstream files: Qiming Sun.
+The existing PySCF Apache-2.0 notice and LICENSE.pyscf apply. Exact upstream
+URLs and SHA-256 values are recorded in uccsd_triples_source_manifest.json.
+
+GenerativeQC modifications: expand the occupied/virtual cyclic sums, eliminate
+forbidden spin assignments at graph construction, retain explicit physical
+mixed-spin signs, use exact channel multiplicities, and expose offset-independent
+tile-input bindings for shared CPU/CUDA TensorIR and subsequent cotangents.

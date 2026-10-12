@@ -178,8 +178,8 @@ generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
 generativeqc_status prepare_cuda_direct_jk_resident_layout(CudaDirectJkPlan*, std::string&) {
   return GENERATIVEQC_STATUS_SUCCESS;
 }
-std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*) {
-  return 2*direct_dimension*direct_dimension;
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins) {
+  return 2*spins*direct_dimension*direct_dimension;
 }
 generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
                                                          std::size_t, std::string&) {
@@ -209,10 +209,16 @@ CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* pl
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double*, std::size_t elements,
     double*, double*, double*, std::size_t correction, int* error, double threshold,
-    std::uint64_t* census, std::string&, bool resident) {
+    std::uint64_t* census, std::string&, bool resident,
+    const double* beta, double* beta_exchange) {
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
-          correction==2*64*64 && threshold==((mode==30 || mode==31) ? 1e12 :
-                                           (mode==20 || mode==21) ? 1e-12 : 0.0));
+          (spec.spin==FockSpin::Unrestricted ? beta!=nullptr : beta==nullptr) &&
+          (spec.spin==FockSpin::Unrestricted && spec.exchange.present
+               ? beta_exchange!=nullptr : beta_exchange==nullptr) &&
+          correction==2*(spec.spin==FockSpin::Unrestricted ? 2U : 1U)*64*64 &&
+          threshold==((mode==30 || mode==31) ? 1e12 :
+                      (mode==20 || mode==21 || mode==32) ? 1e-12 : 0.0));
+  if(mode==32) require(plan->mask==0x15U);
   if(mode==20) require(spec.exchange.coefficient==-0.125);
   *error=mode==9; census[0]=mode==10 ? 99 : 100;
   census[1]=plan->mask==(1U<<28)-1 ? mode==11 : mode==11 ? 49 : 50;
@@ -330,6 +336,38 @@ int main(int argc, char** argv) {
       require(!refused_auto.active() && creates==before);
     }
   }
+  // Compose the real partial-value owner with both spin layouts. A nontrivial
+  // mask makes an accidental mask/spin argument interchange fail admission,
+  // while the enqueue double verifies beta forwarding and correction extent.
+  mode=32;
+  direct_dimension=64;
+  for(const unsigned spins : {1U, 2U}) {
+    for(const bool own_outputs : {false, true}) {
+      scf::cuda_execution::DirectJkSourceLease source(stream);
+      require(source.prepare(0,systems,100,64,1000,16ULL<<30,"1","spin-mask-compose",
+                             false,false,1e-12,16ULL<<30,own_outputs,
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                             0x15U,spins)==GENERATIVEQC_STATUS_SUCCESS);
+      require(source.active() && source.value_bytes()==400);
+      const auto planes=2U*spins+(own_outputs ? 1U+spins : 0U);
+      require(source.device_bytes()==planes*64*64*sizeof(double)+sizeof(int)+
+                                     2*sizeof(std::uint64_t));
+      auto spec=scf::make_hf_fock_spec(spins==2 ? scf::FockSpin::Unrestricted
+                                             : scf::FockSpin::Restricted);
+      spec.derivative_order=0;
+      double matrices[5*64*64]{}; std::string detail;
+      for(const bool exchange : {false,true}) {
+        spec.exchange.present=exchange;
+        require(source.enqueue(spec,matrices,matrices+2*64*64,
+                               exchange ? matrices+3*64*64 : nullptr,nullptr,1e-12,detail,
+                               spins==2 ? matrices+64*64 : nullptr,
+                               spins==2 && exchange ? matrices+4*64*64 : nullptr)
+                ==GENERATIVEQC_STATUS_SUCCESS);
+        require(source.audit()==GENERATIVEQC_STATUS_SUCCESS);
+      }
+    }
+  }
+  require(allocations==0 && plans==0);
   setenv("GENERATIVEQC_RHF_RESIDENT_VALUES","1",1);
   setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","1",1);
   mode=0;

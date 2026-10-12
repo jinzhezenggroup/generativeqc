@@ -19,6 +19,7 @@
 
 #include "cc/df_source.hpp"
 #include "cc/rccsdt_force.hpp"
+#include "cc/reference_input.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "methods/correlated_cuda_reference.hpp"
@@ -131,27 +132,6 @@ void validate_descriptor(const generativeqc_method_descriptor& d,
                       "RCCSD requires an explicit CPU or CUDA backend");
 }
 
-std::vector<double> fock_mo(const hf::PhysicalReference& ref) {
-  const auto n = ref.nbf;
-  std::vector<double> scratch(n * n), result(n * n);
-  for (std::size_t mu = 0; mu < n; ++mu)
-    for (std::size_t q = 0; q < n; ++q) {
-      double value = 0.0;
-      for (std::size_t nu = 0; nu < n; ++nu)
-        value += ref.fock[mu * n + nu] * ref.coefficients[nu * n + q];
-      scratch[mu * n + q] = value;
-    }
-  for (std::size_t p = 0; p < n; ++p)
-    for (std::size_t q = 0; q < n; ++q) {
-      double value = 0.0;
-      for (std::size_t mu = 0; mu < n; ++mu)
-        value += ref.coefficients[mu * n + p] * scratch[mu * n + q];
-      if (!std::isfinite(value)) throw std::runtime_error("nonfinite RCCSD MO Fock matrix");
-      result[p * n + q] = value;
-    }
-  return result;
-}
-
 #if GENERATIVEQC_HAS_CUDA
 void attach_df_source(cc::Problem& problem, cc::DFSourceResult&& fitted, posthf::ProviderWork& work,
                       generativeqc_tensor::Metrics& metrics) {
@@ -203,16 +183,17 @@ cc::Problem build_problem(
   // A failed optional source may already have performed real work. Preserve
   // cumulative diagnostics, but validate the compiler schedule for this attempt.
   const auto initial_work = provider_work;
+  // All canonical orbital/Fock algebra consumes the method-neutral borrowed
+  // reference. The HF owner remains alive in RccsdNativeState; conventional
+  // AO and optional CUDA DF source adapters still use that physical owner.
+  const auto canonical = cc::prepare_canonical_reference_input(ref.electronic_reference());
   cc::Problem p;
-  p.nocc = ref.nocc;
+  p.nocc = canonical.occupied;
   p.reference_retained_bytes = retained_reference_bytes(ref);
-  p.nvir = ref.nbf - ref.nocc;
-  p.reference_energy = ref.energy;
-  const auto o = p.nocc, v = p.nvir, n = ref.nbf;
-  if (!o || !v || ref.orbital_energies.size() != n)
-    throw std::invalid_argument("invalid RCCSD canonical reference dimensions");
-
-  const auto fmo = fock_mo(ref);
+  p.nvir = canonical.virtuals;
+  p.reference_energy = canonical.reference_energy;
+  const auto o = p.nocc, v = p.nvir, n = canonical.basis_functions;
+  const auto& fmo = canonical.fock_mo;
   p.foo.resize(o * o);
   p.fov.resize(o * v);
   p.fvv.resize(v * v);
@@ -224,7 +205,7 @@ cc::Problem build_problem(
     for (std::size_t b = 0; b < v; ++b) p.fvv[a * v + b] = fmo[(o + a) * n + o + b];
 
   const auto n2 = o * o * v * v;
-  cc::initialize_canonical_denominators(p, ref.orbital_energies, options,
+  cc::initialize_canonical_denominators(p, canonical.orbital_energies, options,
                                         cuda && options.derived_denominators);
   if (correlation_auxiliary) {
 #if GENERATIVEQC_HAS_CUDA

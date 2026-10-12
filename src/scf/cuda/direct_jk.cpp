@@ -1432,8 +1432,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     const auto bytes = direct_jk_product(elements, sizeof(double));
     const auto correction_bytes = direct_jk_product(correction_elements, sizeof(double));
     direct_jk_require(correction
-                          ? (fixed && !unrestricted &&
-                             correction_elements == cuda_direct_jk_compensation_elements(plan))
+                          ? (fixed && correction_elements == cuda_direct_jk_compensation_elements(
+                                                                 plan, unrestricted ? 2U : 1U))
                           : correction_elements == 0,
                       "invalid canonical J/K compensation storage");
     if (correction) {
@@ -1446,7 +1446,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                  sizeof(std::uint64_t));
       for (const auto* owned :
            {plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange})
-        direct_jk_require_disjoint(correction, correction_bytes, owned, correction_bytes);
+        direct_jk_require_disjoint(correction, correction_bytes, owned,
+                                   cuda_direct_jk_compensation_elements(plan) * sizeof(double));
     }
     const double* inputs[]{density, beta};
     double* outputs[]{coulomb, alpha_exchange, beta_exchange};
@@ -2106,12 +2107,52 @@ bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept {
 }
 
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept {
-  // Keep the specialized SPD derivative consumer until its crossover is
-  // qualified. A through-f owner may retain a bounded shell fallback after
-  // canonical preparation; that lease is distinct from specialized coverage.
-  return plan && plan->canonical_pairs &&
-         (!(plan->generated_exchange && plan->generated_exchange->force_capability) ||
-          plan->generated_exchange->bounded_value_capability);
+  // Only the reuse-preserving shell consumer is a qualified default. Generic
+  // canonical residency alone must not displace the bounded quadratic path.
+  return plan && plan->generated_exchange && plan->generated_exchange->force_capability &&
+         plan->numerical_failure && plan->diagnostic.batch_size == 1 &&
+         plan->screening_tolerance == 0.0;
+}
+
+generativeqc_status execute_cuda_direct_shell_bilinear_derivative_device(
+    CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t matrix_elements,
+    std::vector<double>& gradient, std::string& detail) {
+  if (!plan || !plan->generated_exchange || !plan->generated_exchange->force_capability ||
+      !plan->numerical_failure) {
+    detail = "prepared Direct owner has no retained shell bilinear derivative lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan->diagnostic.batch_size == 1 && plan->diagnostic.derivative_order >= 1 &&
+                          plan->screening_tolerance == 0.0 &&
+                          matrix_elements == plan->matrix_elements,
+                      "shell bilinear derivative requires one unscreened derivative item");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    for (const auto* input : {density, seed}) {
+      direct_jk_require(input != nullptr, "null shell bilinear derivative input");
+      cudaPointerAttributes attributes{};
+      direct_jk_check(cudaPointerGetAttributes(&attributes, input));
+      direct_jk_require(
+          attributes.type == cudaMemoryTypeDevice && attributes.device == plan->device_id,
+          "shell bilinear derivative requires prepared-device buffers");
+    }
+    int failure = 0;
+    DirectJkDownloadFence fence{plan->stream};
+    direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    for (const auto* input : {density, seed})
+      launch_independent_jk_finite_kernel(plan->stream, input, matrix_elements,
+                                          plan->numerical_failure);
+    direct_jk_check(cudaGetLastError());
+    direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
+                                    cudaMemcpyDeviceToHost, plan->stream));
+    fence.complete();
+    direct_jk_require(failure == 0, "nonfinite shell bilinear derivative input");
+    std::vector<double> result;
+    direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
+        *plan->generated_exchange, false, density, seed, 1.0, -0.5, result, false, false, true));
+    direct_jk_finite_result(result);
+    gradient = std::move(result);
+  });
 }
 
 generativeqc_status execute_cuda_direct_bilinear_derivative_device(
@@ -2208,22 +2249,23 @@ generativeqc_status enqueue_cuda_direct_jk_linear_device(CudaDirectJkPlan* plan,
                                             threshold, census, detail);
 }
 
-std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan) {
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan, unsigned spins) {
+  if (spins != 1 && spins != 2) return 0;
   if (!cuda_direct_jk_linear_available(plan)) return 0;
   const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
-  return direct_jk_product(
-      2U, direct_jk_product(plan->diagnostic.batch_size, direct_jk_product(dimension, dimension)));
+  return direct_jk_product(2U * spins, direct_jk_product(plan->diagnostic.batch_size,
+                                                         direct_jk_product(dimension, dimension)));
 }
 
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t elements,
     double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
-    bool allow_resident) {
+    bool allow_resident, const double* beta, double* beta_exchange) {
   if (!std::isfinite(threshold) || threshold < 0 || !correction ||
-      spec.spin != FockSpin::Restricted ||
+      (spec.spin != FockSpin::Restricted && spec.spin != FockSpin::Unrestricted) ||
       (spec.exchange.present && direct_exchange_range(spec.exchange) != DirectCoulombRange::Full)) {
-    detail = "invalid compensated full-range restricted J/K request";
+    detail = "invalid compensated full-range J/K request";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (!cuda_direct_jk_linear_available(plan)) {
@@ -2231,7 +2273,7 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return enqueue_cuda_direct_jk_device_impl(
-      plan, spec, density, nullptr, elements, coulomb, exchange, nullptr, numerical_error, false,
+      plan, spec, density, beta, elements, coulomb, exchange, beta_exchange, numerical_error, false,
       nullptr, threshold, census, detail, correction, correction_elements, allow_resident);
 }
 

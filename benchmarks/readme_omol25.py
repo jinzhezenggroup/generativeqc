@@ -273,6 +273,93 @@ def reference_endpoint_seconds(
     return clock() - started
 
 
+def native_endpoint_record(
+    item: Any,
+    *,
+    phase: str,
+    geometry_index: int,
+    repeat: int,
+    seconds: float,
+    prepare: float,
+    owner: Any,
+    force_work: Any,
+) -> dict[str, Any]:
+    """Serialize the public endpoint, preserving absent forces and diagnostics."""
+    from benchmarks.dft_force_components import normalize_force_work
+    from benchmarks.ks_preliminary_density import read_ao_work
+
+    return {
+        "phase": phase,
+        "geometry": geometry_index,
+        "repeat": max(0, repeat - 1),
+        "energy": item.energy,
+        "forces": item.forces.tolist() if item.forces is not None else None,
+        "converged": item.converged,
+        "status": item.status,
+        "detail": item.status_message,
+        "iterations": item.iterations,
+        "fock_builds": item.fock_builds,
+        "energy_change": item.energy_change,
+        "density_rms": item.density_rms,
+        "physical_residual_rms": item.physical_residual_rms,
+        # Public execution already copied this physical history.
+        # Preserve it after timing so trajectory changes remain
+        # auditable; a warm retry describes its final attempt,
+        # while item.fock_builds retains the complete work count.
+        "native_ks_diagnostic": (
+            item.ks_diagnostic.to_payload() if item.ks_diagnostic is not None else None
+        ),
+        "warm_start_used": item.warm_start_used,
+        "warm_start_fallback": item.warm_start_fallback,
+        "seconds": seconds,
+        "prepare_seconds": prepare,
+        "complete_seconds": seconds + prepare,
+        "native_scf_ao_work": (
+            read_ao_work(owner) if item.status == 0 and item.converged else None
+        ),
+        "native_force_components": (
+            normalize_force_work(force_work) if force_work is not None else None
+        ),
+    }
+
+
+def retain_endpoint_record(
+    record: dict[str, Any],
+    row: dict[str, Any],
+    reference: dict[str, Any],
+    save: Callable[[str], None],
+) -> None:
+    """Persist the actual endpoint before rejecting its independent gate."""
+    row.update(check_record(row, reference))
+    record["records"].append(row)
+    save(record["stage"])
+    if not row["gate"]:
+        raise RuntimeError(f"independent energy/force gate failed: {row['phase']}")
+
+
+def reference_energy_forces(
+    engine: Any,
+    seed: Any,
+    *,
+    export: Callable[[Any], Any],
+    synchronize: Callable[[], None],
+    clock: Callable[[], float] = perf_counter,
+) -> tuple[float, Any, float]:
+    """Time SCF, seed copy, analytic gradient and host force export together."""
+    synchronize()
+    started = clock()
+    energy = float(engine.kernel(dm0=None if seed is None else seed.copy()))
+    if not engine.converged:
+        raise RuntimeError("GPU4PySCF SCF did not converge")
+    gradient = engine.nuc_grad_method()
+    gradient.grid_response = True
+    forces = export(-gradient.kernel())
+    seconds = reference_endpoint_seconds(
+        started=started, synchronize=synchronize, clock=clock
+    )
+    return energy, forces, seconds
+
+
 def force_execution_options(
     *,
     active_ao: bool,
@@ -430,11 +517,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         args.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
 
     def retain(row: dict[str, Any], reference: dict[str, Any]) -> None:
-        row.update(check_record(row, reference))
-        record["records"].append(row)
-        save(record["stage"])
-        if not row["gate"]:
-            raise RuntimeError(f"independent energy/force gate failed: {row['phase']}")
+        retain_endpoint_record(record, row, reference, save)
 
     owner = None
     restore_force = None
@@ -482,7 +565,6 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                 ) -> dict[str, Any]:
                     """Bind the geometry owner; density copies remain inside the timer."""
                     save(f"{phase}/{repeat}")
-                    cp.cuda.Stream.null.synchronize()
                     with (
                         reference_work_counter(engine) as work,
                         (
@@ -493,17 +575,10 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                             else nullcontext()
                         ) as domain,
                     ):
-                        started = perf_counter()
-                        energy = float(
-                            engine.kernel(dm0=None if seed is None else seed.copy())
-                        )
-                        if not engine.converged:
-                            raise RuntimeError("GPU4PySCF SCF did not converge")
-                        gradient = engine.nuc_grad_method()
-                        gradient.grid_response = True
-                        forces = cp.asnumpy(-gradient.kernel())
-                        seconds = reference_endpoint_seconds(
-                            started=started,
+                        energy, forces, seconds = reference_energy_forces(
+                            engine,
+                            seed,
+                            export=cp.asnumpy,
                             synchronize=cp.cuda.Stream.null.synchronize,
                         )
                         convergence = gpu_convergence_payload(
@@ -551,7 +626,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         baseline,
                     )
         else:
-            from benchmarks.ks_preliminary_density import prepare_seed, read_ao_work
+            from benchmarks.ks_preliminary_density import prepare_seed
 
             if force_options:
                 from generativeqc._stationary_composite_cuda import (
@@ -656,47 +731,16 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                     cp.cuda.Stream.null.synchronize()
                     seconds = perf_counter() - started
                     prepare = prepare_seconds if phase == "cold" else 0
-                    row = {
-                        "phase": phase,
-                        "geometry": geometry_index,
-                        "repeat": max(0, repeat - 1),
-                        "energy": item.energy,
-                        "forces": item.forces.tolist()
-                        if item.forces is not None
-                        else None,
-                        "converged": item.converged,
-                        "status": item.status,
-                        "detail": item.status_message,
-                        "iterations": item.iterations,
-                        "fock_builds": item.fock_builds,
-                        "energy_change": item.energy_change,
-                        "density_rms": item.density_rms,
-                        "physical_residual_rms": item.physical_residual_rms,
-                        # Public execution already copied this physical history.
-                        # Preserve it after timing so trajectory changes remain
-                        # auditable; a warm retry describes its final attempt,
-                        # while item.fock_builds retains the complete work count.
-                        "native_ks_diagnostic": (
-                            item.ks_diagnostic.to_payload()
-                            if item.ks_diagnostic is not None
-                            else None
-                        ),
-                        "warm_start_used": item.warm_start_used,
-                        "warm_start_fallback": item.warm_start_fallback,
-                        "seconds": seconds,
-                        "prepare_seconds": prepare,
-                        "complete_seconds": seconds + prepare,
-                        "native_scf_ao_work": (
-                            read_ao_work(owner)
-                            if item.status == 0 and item.converged
-                            else None
-                        ),
-                        "native_force_components": (
-                            normalize_force_work(force_work)
-                            if force_work is not None
-                            else None
-                        ),
-                    }
+                    row = native_endpoint_record(
+                        item,
+                        phase=phase,
+                        geometry_index=geometry_index,
+                        repeat=repeat,
+                        seconds=seconds,
+                        prepare=prepare,
+                        owner=owner,
+                        force_work=force_work,
+                    )
                     retain(row, baseline)
                     if repeat == 0:
                         owner.set_warm_start_updates(False)

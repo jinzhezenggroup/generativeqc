@@ -141,6 +141,26 @@ def test_full_range_derivative_shares_one_queue_and_download() -> None:
     assert "SeparateSources ? 2U : 1U" in contraction
 
 
+def test_shared_full_range_queue_preserves_bilinear_seed() -> None:
+    """Resident force transport must not change the retained response seed ABI."""
+    source = _source("src/scf/cuda/direct_coulomb.cpp")
+    enqueue = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    host = cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
+    resident = cpp_function_definition(
+        source, "consume_generated_full_range_energy_derivatives"
+    )
+    assert "bool bilinear" in host
+    assert "allow_spatial_default, bilinear" in " ".join(host.split())
+    assert "allow_spatial_default, false" in " ".join(resident.split())
+    assert "if (bilinear)" in enqueue
+    assert "b.direct_force_seed = p.direct_spin" in enqueue
+    assert "unrestricted || bilinear" in enqueue
+
+
 @pytest.mark.parametrize(
     ("before", "after"),
     (
@@ -666,15 +686,21 @@ def test_stationary_integral_layout_rejects_understated_channels(
         _assert_stationary_integral_layout(*sources)
 
 
+def _generic_cuda_integral_gradient(methods: str) -> str:
+    # Bound the single-system owner before the later batch overload. Match its
+    # braces so unrelated CPU force methods between here and execute stay out.
+    begin = methods.index("generativeqc_status cuda_integral_gradient(")
+    end = methods.index("Result execute_impl(bool compute_forces)", begin)
+    return cpp_function_definition(methods[begin:end], "cuda_integral_gradient")
+
+
 def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> None:
     methods = _source("src/methods/dft_method.cpp")
     api = _source("src/api/c_api_ks_snapshot.cpp")
     snapshot = _source("python/generativeqc/_ks_snapshot.py")
     stationary = _source("python/generativeqc/_stationary_cuda.py")
 
-    begin = methods.index("generativeqc_status cuda_integral_gradient(")
-    end = methods.index("generativeqc_status native_cuda_stationary_gradient(", begin)
-    body = methods[begin:end]
+    body = _generic_cuda_integral_gradient(methods)
     assert "const bool range_exchange = execution_plan_.range_exchange;" in body
     _assert_stationary_integral_layout(body, api, snapshot)
     assert "execute_prepared_cuda_stationary_one_electron_pair(" in body
@@ -694,3 +720,28 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     assert "records -= ao_integral_primitive_records" in stationary
     assert '"one_electron_device_peak_bytes"' in stationary
     assert "additional_device_peak_bound=peak" in stationary
+
+
+@pytest.mark.parametrize("position", ["start", "end"])
+def test_generic_stationary_cuda_rejects_method_specific_integral_policy(
+    monkeypatch: pytest.MonkeyPatch, position: str
+) -> None:
+    """Narrowing extraction must still reject family policy anywhere inside."""
+    original_source = _source
+    methods = original_source("src/methods/dft_method.cpp")
+    body = _generic_cuda_integral_gradient(methods)
+    offset = body.index("{") + 1 if position == "start" else body.rindex("}")
+    policy = (
+        "\nif (execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp) "
+        "return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;\n"
+    )
+    mutated = methods.replace(body, body[:offset] + policy + body[offset:], 1)
+
+    def source(relative: str) -> str:
+        if relative == "src/methods/dft_method.cpp":
+            return mutated
+        return original_source(relative)
+
+    monkeypatch.setattr(f"{__name__}._source", source)
+    with pytest.raises(AssertionError):
+        test_generic_stationary_cuda_reuses_complete_prepared_integral_sources()

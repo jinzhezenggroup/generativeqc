@@ -845,6 +845,7 @@ QUALIFIED_STATIONARY_AOT_PROFILE_NAMES = tuple(
 )
 STATIONARY_AOT_ASSETS = (
     "src/dft/stationary_gradient_cuda.cuh",
+    "src/dft/becke_scaled_policy.hpp",
     "src/dft/grid_task_view.cuh",
     "src/dft/xc_point.hpp",
     "src/integrals/eri_geometry.hpp",
@@ -1736,6 +1737,7 @@ def compile_stationary_cuda(
         asset_path(name)
         for name in (
             "src/dft/stationary_gradient_cuda.cuh",
+            "src/dft/becke_scaled_policy.hpp",
             "src/dft/grid_task_view.cuh",
             "src/dft/xc_point.hpp",
             "src/tensor/cuda_runtime.cuh",

@@ -43,6 +43,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
 - [generativeqc_calculation_get_scf_diagnostic](#native-c-generativeqc-calculation-get-scf-diagnostic)
 - [generativeqc_calculation_get_ks_diagnostic](#native-c-generativeqc-calculation-get-ks-diagnostic)
+- [generativeqc_calculation_get_ks_coulomb_exchange_work_v1](#native-c-generativeqc-calculation-get-ks-coulomb-exchange-work-v1)
 - [generativeqc_calculation_get_ks_transport_diagnostic](#native-c-generativeqc-calculation-get-ks-transport-diagnostic)
 - [generativeqc_calculation_get_precision_provenance](#native-c-generativeqc-calculation-get-precision-provenance)
 - [generativeqc_calculation_get_incremental_direct_jk_diagnostic](#native-c-generativeqc-calculation-get-incremental-direct-jk-diagnostic)
@@ -67,6 +68,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_batch_get_correlation_diagnostic](#native-c-generativeqc-batch-get-correlation-diagnostic)
 - [generativeqc_batch_get_cc_performance_diagnostic](#native-c-generativeqc-batch-get-cc-performance-diagnostic)
 - [generativeqc_batch_get_ks_diagnostic](#native-c-generativeqc-batch-get-ks-diagnostic)
+- [generativeqc_batch_get_ks_coulomb_exchange_work_v1](#native-c-generativeqc-batch-get-ks-coulomb-exchange-work-v1)
 - [generativeqc_batch_get_ks_transport_diagnostic](#native-c-generativeqc-batch-get-ks-transport-diagnostic)
 - [generativeqc_batch_get_ks_ao_selection_diagnostic_v1](#native-c-generativeqc-batch-get-ks-ao-selection-diagnostic-v1)
 - [generativeqc_batch_set_warm_start_updates](#native-c-generativeqc-batch-set-warm-start-updates)
@@ -1094,6 +1096,32 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 **Units.** All energy terms are Hartree; spin electron counts and residual measures follow the KS
 descriptor comments, including unavailable-stage energy_change markers.
 
+(native-c-generativeqc-calculation-get-ks-coulomb-exchange-work-v1)=
+## generativeqc_calculation_get_ks_coulomb_exchange_work_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_coulomb_exchange_work_v1 ( const generativeqc_calculation * calculation , generativeqc_ks_coulomb_exchange_work_v1 * out ) ;
+```
+
+**Behavior.** Copy observed target-KS value-provider Coulomb/exchange applications.
+
+**Inputs.** Initialize out with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+NULL out probes completed KS-record availability.
+
+**Outputs.** Copies the narrow census, including discarded target attempts. Inspect complete
+before using counts; uninstrumented paths return complete=0 and zero unavailable fields.
+
+**Errors.** Invalid owner is INVALID_ARGUMENT; invalid descriptor is ABI_MISMATCH.
+NOT_IMPLEMENTED means no completed KS record. Failure leaves output untouched.
+
+**Lifetime.** The caller owns the copied record. Keep owner/context alive during this call.
+
+**Execution.** Synchronous; serialize execution, queries and destruction on this owner/context.
+
+**Units.** Logical applications, not recurrences, FLOPs, bytes or time.
+
 (native-c-generativeqc-calculation-get-ks-transport-diagnostic)=
 ## generativeqc_calculation_get_ks_transport_diagnostic
 
@@ -1937,6 +1965,32 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** All energy terms are Hartree; spin electron counts and residual measures follow the KS
 descriptor comments, including unavailable-stage energy_change markers.
+
+(native-c-generativeqc-batch-get-ks-coulomb-exchange-work-v1)=
+## generativeqc_batch_get_ks_coulomb_exchange_work_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1 ( const generativeqc_batch * batch , uint32_t index , generativeqc_ks_coulomb_exchange_work_v1 * out ) ;
+```
+
+**Behavior.** Copy one input item's observed target-KS value-provider J/K applications.
+
+**Inputs.** Initialize out with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+index is the zero-based original input index. NULL out probes completed-record availability.
+
+**Outputs.** Copies the narrow census, including discarded target attempts. Inspect complete
+before using counts; uninstrumented paths return complete=0 and zero unavailable fields.
+
+**Errors.** Invalid owner/index is INVALID_ARGUMENT; invalid descriptor is ABI_MISMATCH.
+NOT_IMPLEMENTED means no completed KS record. Failure leaves output untouched.
+
+**Lifetime.** The caller owns the copied record. Keep owner/context alive during this call.
+
+**Execution.** Synchronous; serialize execution, queries and destruction on this owner/context.
+
+**Units.** Logical applications, not recurrences, FLOPs, bytes or time.
 
 (native-c-generativeqc-batch-get-ks-transport-diagnostic)=
 ## generativeqc_batch_get_ks_transport_diagnostic

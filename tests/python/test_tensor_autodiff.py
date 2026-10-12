@@ -116,12 +116,17 @@ def _check_case(
     return forward, reverse, result
 
 
-def test_primitive_rules_and_dot_products() -> None:
+@pytest.mark.parametrize("normal_draws", [0, 2170])
+def test_primitive_rules_and_dot_products(normal_draws: int) -> None:
+    # The second stream offset reproduces the original core-c division failure.
+    # A local stream keeps both cases independent of xdist scheduling.
+    rng = np.random.default_rng(151)
+    rng.normal(size=normal_draws)
     i = _axis("i", 4)
     x, y = _parameter("x", (i,)), _parameter("y", (i,))
-    xv, yv = RNG.normal(size=4), RNG.normal(size=4)
-    tx, ty = RNG.normal(size=4), RNG.normal(size=4)
-    w = RNG.normal(size=4)
+    xv, yv = rng.normal(size=4), rng.normal(size=4)
+    tx, ty = rng.normal(size=4), rng.normal(size=4)
+    w = rng.normal(size=4)
 
     program = Program({"out": add(x, y, coefficients=("1/2", "3/4"))})
     forward, reverse, _ = _check_case(
@@ -145,6 +150,13 @@ def test_primitive_rules_and_dot_products() -> None:
     np.testing.assert_allclose(reverse.input_cotangents["x"], w * yv)
     np.testing.assert_allclose(reverse.input_cotangents["y"], w * xv)
 
+    # For f(t)=(x+t*tx)/(y+t*ty), central FD is f'(0)/(1-(h*ty/y)**2).
+    # Bound |ty/y| <= 1 and |f'(0)| <= 2 so the fixed h <= 1e-3 steps
+    # have truncation error <= 2*h**2/(1-h**2), independent of RNG order.
+    yv = np.copysign(
+        1.0 + np.maximum.reduce((np.abs(yv), np.abs(xv), np.abs(tx), np.abs(ty))),
+        yv,
+    )
     program = Program({"out": divide(x, y)})
     forward, reverse, _ = _check_case(
         program,
@@ -161,9 +173,9 @@ def test_primitive_rules_and_dot_products() -> None:
     j, k = _axis("j", 3), _axis("k", 4)
     matrix = _parameter("matrix", (j, k))
     value, tangent, cotangent = (
-        RNG.normal(size=(3, 4)),
-        RNG.normal(size=(3, 4)),
-        RNG.normal(size=(4, 3)),
+        rng.normal(size=(3, 4)),
+        rng.normal(size=(3, 4)),
+        rng.normal(size=(4, 3)),
     )
     forward, reverse, _ = _check_case(
         Program({"out": transpose(matrix, (1, 0))}),
@@ -187,7 +199,7 @@ def test_primitive_rules_and_dot_products() -> None:
     )
 
     tile = slice_tensor(matrix, ((1, 3), (2, 4)))
-    tile_cotangent = RNG.normal(size=(2, 2))
+    tile_cotangent = rng.normal(size=(2, 2))
     forward, reverse, _ = _check_case(
         Program({"out": tile}),
         {"matrix": value},
@@ -201,9 +213,9 @@ def test_primitive_rules_and_dot_products() -> None:
 
     vector = _parameter("vector", (j,))
     gathered = gather(vector, 0, (2, 0, 2, 1))
-    vector_value = RNG.normal(size=3)
-    vector_tangent = RNG.normal(size=3)
-    gather_cotangent = RNG.normal(size=4)
+    vector_value = rng.normal(size=3)
+    vector_tangent = rng.normal(size=3)
+    gather_cotangent = rng.normal(size=4)
     forward, reverse, _ = _check_case(
         Program({"out": gathered}),
         {"vector": vector_value},
@@ -221,9 +233,9 @@ def test_primitive_rules_and_dot_products() -> None:
 
     block = _parameter("block", (i, j, k))
     reduced = reduce_sum(block, (1,))
-    block_value = RNG.normal(size=(4, 3, 4))
-    block_tangent = RNG.normal(size=(4, 3, 4))
-    reduced_cotangent = RNG.normal(size=(4, 4))
+    block_value = rng.normal(size=(4, 3, 4))
+    block_tangent = rng.normal(size=(4, 3, 4))
+    reduced_cotangent = rng.normal(size=(4, 4))
     forward, reverse, _ = _check_case(
         Program({"out": reduced}),
         {"block": block_value},
@@ -242,9 +254,9 @@ def test_primitive_rules_and_dot_products() -> None:
     source_i, source_j = _axis("source_i", 2), _axis("source_j", 3)
     source = _parameter("source", (source_i, source_j))
     expanded = broadcast(source, (source_j, batch, source_i), (2, 0))
-    expanded_cotangent = RNG.normal(size=(3, 4, 2))
-    source_value = RNG.normal(size=(2, 3))
-    source_tangent = RNG.normal(size=(2, 3))
+    expanded_cotangent = rng.normal(size=(3, 4, 2))
+    source_value = rng.normal(size=(2, 3))
+    source_tangent = rng.normal(size=(2, 3))
     forward, reverse, _ = _check_case(
         Program({"out": expanded}),
         {"source": source_value},
@@ -262,6 +274,30 @@ def test_primitive_rules_and_dot_products() -> None:
                 assert (
                     forward.output_tangents["out"][jv, bv, iv] == source_tangent[iv, jv]
                 )
+
+
+@pytest.mark.parametrize(
+    "denominator", [0.01842704123226797, -0.01842704123226797, 1e-6, -1e-6]
+)
+def test_divide_near_zero_matches_analytic_adjoints(denominator: float) -> None:
+    # Keep near-pole coverage without imposing a coarse fixed-step FD oracle.
+    i = _axis("i", 2)
+    x, y = _parameter("x", (i,)), _parameter("y", (i,))
+    xv = np.array([0.7933145115437826, -1.6195825064440723])
+    yv = np.array([denominator, -2 * denominator])
+    tx = np.array([-0.042041961609508204, -0.7830907763796635])
+    ty = np.array([-0.925590677851132, 0.8160643963732147])
+    w = np.array([0.05928786998513676, -1.2282218678134307])
+    program = Program({"out": divide(x, y)})
+    feeds, tangents, cotangents = {"x": xv, "y": yv}, {"x": tx, "y": ty}, {"out": w}
+    forward, reverse = jvp(program, feeds, tangents), vjp(program, feeds, cotangents)
+    np.testing.assert_allclose(
+        forward.output_tangents["out"], (tx * yv - xv * ty) / yv**2
+    )
+    np.testing.assert_allclose(reverse.input_cotangents["x"], w / yv)
+    np.testing.assert_allclose(reverse.input_cotangents["y"], -w * xv / yv**2)
+    result = dot_test(program, feeds, tangents, cotangents)
+    assert result.passed, result
 
 
 def test_einsum_matrix_product_matches_analytic_adjoints() -> None:

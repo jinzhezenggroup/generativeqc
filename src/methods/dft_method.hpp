@@ -9,6 +9,7 @@
 #include "dft/cuda_ks_final_state.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/cuda_stationary_controller.hpp"
+#include "dft/grid.hpp"
 #include "methods/method.hpp"
 
 namespace generativeqc::methods::detail {
@@ -46,12 +47,21 @@ struct KsDerivativeSnapshot {
   std::vector<double> overlap, packed_basis, points, weights;
   std::vector<std::uint32_t> grid_owners;
   std::vector<double> atomic_weights;
+  dft::CudaMolecularGridView resident_grid;
   std::uint64_t export_d2h_bytes{}, export_reads{}, export_synchronizations{};
 };
 
 generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t index,
                                               const dft::CudaKsFinalStateToken& expected,
                                               KsDerivativeSnapshot& output, std::string& detail);
+
+/** Borrow the current owner's immutable XC/integral geometry sources without
+ * exporting D/F/C/W again. Callers must already own a verified stationary
+ * snapshot and use its D/W, or the same token's resident device weights. This
+ * checks freshness but never supplies a new final-state proof by itself. */
+generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_t index,
+                                                const dft::CudaKsFinalStateToken& expected,
+                                                KsDerivativeSnapshot& output, std::string& detail);
 
 /** Private #2151 single-calculation stationary integral-source bridge.
  * Reuses the exact converged owner and the already qualified DF (CPU/CUDA)

@@ -62,6 +62,12 @@ endfunction()
 
 macro(generativeqc_add_native_tests)
   enable_testing()
+  # Algorithmic tests need no CUDA, native solver, Python, or external oracle.
+  generativeqc_native_test(generativeqc_geometry_optimizer_tests
+                       tests/native/test_geometry_optimizer.cpp
+                       NO_GENERATIVEQC NO_SRC_INCLUDE)
+  target_include_directories(generativeqc_geometry_optimizer_tests PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/include")
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
                        tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)

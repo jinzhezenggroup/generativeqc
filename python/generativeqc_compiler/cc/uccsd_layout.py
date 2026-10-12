@@ -217,6 +217,62 @@ class UCCSDBlock:
             full[j, i, a, b] = full[i, j, b, a] = -value
         return full
 
+    def pack_dual(self, full: np.ndarray) -> np.ndarray:
+        """Apply the transpose of amplitude expansion to a full cotangent.
+
+        Cotangents need not be antisymmetric. Sum all four signed same-spin
+        orbit members, rather than selecting a representative or projecting
+        with an implicit factor. Repeated-index cotangents act on no excitation.
+        """
+        full = _fp64(full, self.spec.shape)
+        count = self.packed_layout.storage_elements
+        if not self.same_spin:
+            return full.ravel(order="C").copy()
+        if not count:
+            return np.empty(0, dtype=np.float64)
+        occupied_first, occupied_second = np.triu_indices(self.spec.shape[0], 1)
+        virtual_first, virtual_second = np.triu_indices(self.spec.shape[2], 1)
+        with np.errstate(over="raise", invalid="raise"):
+            packed = (
+                full[
+                    occupied_first[:, None],
+                    occupied_second[:, None],
+                    virtual_first,
+                    virtual_second,
+                ]
+                - full[
+                    occupied_second[:, None],
+                    occupied_first[:, None],
+                    virtual_first,
+                    virtual_second,
+                ]
+            ) + (
+                full[
+                    occupied_second[:, None],
+                    occupied_first[:, None],
+                    virtual_second,
+                    virtual_first,
+                ]
+                - full[
+                    occupied_first[:, None],
+                    occupied_second[:, None],
+                    virtual_second,
+                    virtual_first,
+                ]
+            )
+        packed = packed.ravel(order="C")
+        return _fp64(packed, (count,))
+
+    def unpack_dual(self, packed: np.ndarray) -> np.ndarray:
+        """Lift an excitation dual to its minimum-norm full Frobenius dual.
+
+        If amplitude expansion is U and U*U has diagonal orbit weight w,
+        this is U/w, so pack_dual(unpack_dual(packed)) equals packed. Physical
+        Lambda arrays instead use ordinary unpack; their residual seeds use
+        this lift and therefore include the same-spin factor one quarter.
+        """
+        return self.unpack(packed) / self.full_metric_weight
+
 
 @dataclass(frozen=True)
 class UCCSDLayout:
@@ -274,5 +330,24 @@ class UCCSDLayout:
         slices = self.block_slices
         return {
             block.name: block.unpack(packed[slices[block.name]])
+            for block in self.blocks
+        }
+
+    def pack_dual(self, full: typing.Mapping[str, np.ndarray]) -> np.ndarray:
+        """Return U* times all five arbitrary full-block cotangents."""
+        if set(full) != set(BLOCK_NAMES):
+            raise ValueError(
+                "exactly the five named UCCSD cotangent blocks are required"
+            )
+        return np.concatenate(
+            [block.pack_dual(full[block.name]) for block in self.blocks]
+        )
+
+    def unpack_dual(self, packed: np.ndarray) -> dict[str, np.ndarray]:
+        """Lift unweighted physical excitation duals to full residual seeds."""
+        packed = _fp64(packed, (self.packed_size,))
+        slices = self.block_slices
+        return {
+            block.name: block.unpack_dual(packed[slices[block.name]])
             for block in self.blocks
         }

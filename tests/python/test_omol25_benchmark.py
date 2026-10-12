@@ -2,25 +2,27 @@
 
 from __future__ import annotations
 
-import ast
 import copy
 import hashlib
-import inspect
 import json
 import sys
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, NoReturn
 
+import numpy as np
 import pytest
 from generativeqc import GridSpec, import_bse, load_basis
 
 from benchmarks.readme_omol25 import (
     SCHEMA,
     check_record,
-    main,
+    native_endpoint_record,
     protocol,
+    reference_energy_forces,
     require_force_endpoint,
+    retain_endpoint_record,
     source_hashes,
 )
 from benchmarks.readme_wb97mv import reference_vv10_domain
@@ -105,23 +107,108 @@ def test_protocol_preserves_diffuse_basis_and_hf_geometries() -> None:
 
 def test_reference_force_export_precedes_endpoint_clock_stop() -> None:
     """HF includes GPU4PySCF's force D2H transfer, not just gradient kernels."""
-    reference = next(
-        node
-        for node in ast.walk(ast.parse(inspect.getsource(main)))
-        if isinstance(node, ast.FunctionDef) and node.name == "execute_reference"
+    events = []
+    gradient_values = np.arange(9).reshape(3, 3)
+    seed_copy = object()
+
+    def seed_copy_event() -> object:
+        events.append("seed-copy")
+        return seed_copy
+
+    def scf(*, dm0: object) -> float:
+        assert dm0 is seed_copy
+        events.append("scf")
+        return -76.0
+
+    gradient = SimpleNamespace(grid_response=False)
+
+    def gradient_kernel() -> np.ndarray:
+        assert gradient.grid_response is True
+        events.append("gradient")
+        return gradient_values
+
+    gradient.kernel = gradient_kernel
+    engine = SimpleNamespace(
+        kernel=scf, converged=True, nuc_grad_method=lambda: gradient
     )
-    assignments = {
-        target.id: node
-        for node in ast.walk(reference)
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
-    export = assignments["forces"]
-    assert isinstance(export.value, ast.Call)
-    assert isinstance(export.value.func, ast.Attribute)
-    assert export.value.func.attr == "asnumpy"
-    assert export.lineno < assignments["seconds"].lineno
+
+    def export(values: np.ndarray) -> np.ndarray:
+        events.append("export")
+        np.testing.assert_array_equal(values, -gradient_values)
+        return values.copy()
+
+    def clock() -> float:
+        events.append("clock")
+        return 10.0 if events.count("clock") == 1 else 14.5
+
+    energy, forces, seconds = reference_energy_forces(
+        engine,
+        SimpleNamespace(copy=seed_copy_event),
+        export=export,
+        synchronize=lambda: events.append("synchronize"),
+        clock=clock,
+    )
+    assert events == [
+        "synchronize",
+        "clock",
+        "seed-copy",
+        "scf",
+        "gradient",
+        "export",
+        "synchronize",
+        "clock",
+    ]
+    assert energy == -76.0 and seconds == 4.5
+    np.testing.assert_array_equal(forces, -gradient_values)
+
+
+@pytest.mark.parametrize("failure", ["convergence", "gradient", "export"])
+def test_reference_endpoint_propagates_failure(failure: str) -> None:
+    events = []
+
+    def kernel(*, dm0: Any) -> float:
+        assert dm0 is None
+        return -76.0
+
+    def gradient_kernel() -> np.ndarray:
+        events.append("gradient")
+        if failure == "gradient":
+            raise RuntimeError("gradient failed")
+        return np.zeros((3, 3))
+
+    def export(values: np.ndarray) -> NoReturn:
+        events.append("export")
+        raise RuntimeError("export failed")
+
+    engine = SimpleNamespace(
+        kernel=kernel,
+        converged=failure != "convergence",
+        nuc_grad_method=lambda: SimpleNamespace(kernel=gradient_kernel),
+    )
+    with pytest.raises(
+        RuntimeError,
+        match={
+            "convergence": "SCF did not converge",
+            "gradient": "gradient failed",
+            "export": "export failed",
+        }[failure],
+    ):
+        reference_energy_forces(
+            engine,
+            None,
+            export=export,
+            synchronize=lambda: events.append("synchronize"),
+            clock=lambda: events.append("clock") or 10.0,
+        )
+    assert (
+        events
+        == ["synchronize", "clock"]
+        + {
+            "convergence": [],
+            "gradient": ["gradient"],
+            "export": ["gradient", "export"],
+        }[failure]
+    )
 
 
 def test_source_identity_includes_public_and_geometry_consumers() -> None:
@@ -501,73 +588,47 @@ def test_native_failure_is_journaled_without_a_force_work_record(
     failure: str, has_diagnostic: bool
 ) -> None:
     """Execute the real row/retention code with a failed strict=False endpoint."""
-    from types import CodeType, FunctionType
-
-    from benchmarks.dft_force_components import normalize_force_work
-
-    tree = ast.parse(inspect.getsource(main))
-    row = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        and isinstance(node.value, ast.Dict)
-        and any(
-            isinstance(key, ast.Constant) and key.value == "native_force_components"
-            for key in node.value.keys
-        )
-    )
-    retain = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "retain"
-    )
-    wrapper = ast.parse("def exercise():\n    pass").body[0]
-    wrapper.body = [retain, row] + ast.parse("retain(row, baseline)").body
-    code = compile(
-        ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[])),
-        "<native benchmark retention>",
-        "exec",
-    )
-    compiled = next(value for value in code.co_consts if isinstance(value, CodeType))
     record = {"records": [], "stage": "cold/0"}
     saved = []
     # Preserve any available solver history even if the later force stage fails.
     # Missing diagnostics remain null instead of synthesizing an empty history.
     diagnostic = {"history": [{"iteration": 1, "energy_change": None}]}
-    scope = {
-        "Any": object,
-        "record": record,
-        "save": saved.append,
-        "check_record": check_record,
-        "normalize_force_work": normalize_force_work,
-        "force_work": None,
-        "phase": "cold",
-        "geometry_index": 0,
-        "repeat": 0,
-        "seconds": 2.5,
-        "prepare": 0.2,
-        "baseline": sample("cold", 0),
-        "item": SimpleNamespace(
-            energy=-76.0,
-            forces=None,
-            converged=failure != "SCF did not converge",
-            status=5,
-            status_message=failure,
-            iterations=100,
-            fock_builds=101,
-            energy_change=0.1,
-            density_rms=0.2,
-            physical_residual_rms=0.3,
-            ks_diagnostic=SimpleNamespace(to_payload=lambda: copy.deepcopy(diagnostic))
-            if has_diagnostic
-            else None,
-            warm_start_used=False,
-            warm_start_fallback=False,
-        ),
-    }
+    item = SimpleNamespace(
+        energy=-76.0,
+        forces=None,
+        converged=failure != "SCF did not converge",
+        status=5,
+        status_message=failure,
+        iterations=100,
+        fock_builds=101,
+        energy_change=0.1,
+        density_rms=0.2,
+        physical_residual_rms=0.3,
+        ks_diagnostic=SimpleNamespace(to_payload=lambda: copy.deepcopy(diagnostic))
+        if has_diagnostic
+        else None,
+        warm_start_used=False,
+        warm_start_fallback=False,
+    )
+    row = native_endpoint_record(
+        item,
+        phase="cold",
+        geometry_index=0,
+        repeat=0,
+        seconds=2.5,
+        prepare=0.2,
+        owner=None,
+        force_work=None,
+    )
+
+    def save(stage: str) -> None:
+        assert stage == "cold/0"
+        assert record["records"] == [row]
+        saved.append(copy.deepcopy(record))
+
     with pytest.raises(RuntimeError, match="independent energy/force gate failed"):
-        FunctionType(compiled, scope)()
-    assert saved == ["cold/0"]
+        retain_endpoint_record(record, row, sample("cold", 0), save)
+    assert saved == [record]
     assert len(record["records"]) == 1
     failed = record["records"][0]
     assert failed["detail"] == failure and failed["status"] == 5
@@ -576,3 +637,44 @@ def test_native_failure_is_journaled_without_a_force_work_record(
     assert failed["physical_residual_rms"] == 0.3
     assert failed["native_ks_diagnostic"] == (diagnostic if has_diagnostic else None)
     assert failed["gate"] is False
+    assert failed["forces"] is None
+    assert failed["native_scf_ao_work"] is None
+    assert failed["complete_seconds"] == 2.7
+
+
+@pytest.mark.parametrize(
+    "mutation", [None, "energy", "force", "shape", "nan", "convergence", "status"]
+)
+def test_retention_uses_independent_gate_before_journaling(
+    mutation: str | None,
+) -> None:
+    row = sample("warm", 0)
+    oracle = sample("cold", 0)
+    if mutation == "energy":
+        row["energy"] += 2e-8
+    elif mutation == "force":
+        row["forces"] = [[2e-7, 0.0, 0.0]] * 3
+    elif mutation == "shape":
+        row["forces"] = [[0.0, 0.0, 0.0]]
+    elif mutation == "nan":
+        row["forces"] = [[float("nan"), 0.0, 0.0]] * 3
+    elif mutation == "convergence":
+        row["converged"] = False
+    elif mutation == "status":
+        row["status"] = 5
+    record = {"stage": "warm/0", "records": []}
+    saved = []
+
+    def save(stage: str) -> None:
+        assert stage == "warm/0"
+        assert row["gate"] is (mutation is None)
+        saved.append(copy.deepcopy(record))
+
+    if mutation is None:
+        retain_endpoint_record(record, row, oracle, save)
+        assert row["energy_error"] == row["force_error"] == 0.0
+    else:
+        with pytest.raises(RuntimeError, match="independent energy/force gate failed"):
+            retain_endpoint_record(record, row, oracle, save)
+    assert saved == [record]
+    assert record["records"] == [row]

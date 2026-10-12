@@ -57,6 +57,15 @@ single-system path raises rather than returning an energy-only success for a
 failed force request. Hessian/response admission, convergence and byte-budget
 failures likewise do not publish a partial Cartesian derivative as success.
 
+All DFT `singlepoint` output selections use the same prepared-batch SCF owner
+and optimization selection. Energy-only omits the stationary derivative
+consumer; it does not select an independent SCF implementation. Derivatives
+consume that owner's token-verified final D/W, resident quadrature and qualified
+integral sources. XC response borrows the same resident D/grid without a second
+final-state export or density upload. Missing XC geometry jets and two-electron
+derivative integrals still require their proper derivative computations; a
+cached potential or ordinary ERI value is not a substitute.
+
 (python-calculation-ownership)=
 ## Calculation lifetime and concurrency
 

@@ -17,15 +17,19 @@ provider selections before an explicit force replay. Failed requests or replays
 do not replace its previously accepted plan. Other contexts, including ECP,
 retain their existing defaults and conservative capacity reservations.
 
-Qualified CPU Direct/DF PBE/PBE0 RKS/UKS requests use the source-complete prepared C++
-owner described in the [native SDK derivative contract](../user/native_cpp.md#density-fitting-and-derivative-boundary),
+Qualified CPU Direct/DF PBE/PBE0 RKS/UKS and B3LYP RKS requests use the
+source-complete prepared C++ owner described in the
+[native SDK derivative contract](../user/native_cpp.md#density-fitting-and-derivative-boundary),
 not this Python scientific scheduler. `StationaryGradientPlan` still owns the
 integral adjoint weights: `generate_stationary_integral_weights.py` specializes
-that same TensorIR AD into portable scalar bindings for one or two spin blocks.
-UKS combines both spins in generated weights and charges its compact flattened
-D/W buffers; an empty beta population still supplies explicit zero matrices.
-It reuses the existing two-spin XC/DF derivative, moving-grid, token and final
-publication owners rather than copying force equations. The native streamed
+that same TensorIR AD into portable scalar bindings for one or two spin blocks,
+including the B3LYP-specific RKS exchange coefficient. The XC geometry response
+shares the analytic GGA AO/Becke pullback while evaluating B3LYP's own generated
+semilocal point program. B3LYP UKS remains unqualified. PBE/PBE0 UKS combines
+both spins in generated weights and charges its compact flattened D/W buffers;
+an empty beta population still supplies explicit zero matrices. It reuses the
+existing two-spin XC/DF derivative, moving-grid, token and final publication
+owners rather than copying force equations. The native streamed
 shell contraction consumes compiler-owned center/axis dispatch metadata for
 the existing packaged first-derivative kernels; it shares J/K primitive work
 and retains the independent reference recurrence for oracle/legacy consumers.

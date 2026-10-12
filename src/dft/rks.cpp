@@ -135,6 +135,7 @@ struct RksEvaluation {
   double energy{};
   dft::EnergyComponents components;
   dft::XcDensityDiagnostic density_diagnostic;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 
 struct RksXcEvaluator {
@@ -509,12 +510,14 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(density);
   RksEvaluation result;
+  result.coulomb_exchange_work = jk.coulomb_exchange_work;
   result.fock = assemble_fock(strategy, ints.hcore, jk).alpha;
   const auto primary_energy = contract_fock_energy_components(strategy, jk, density);
   double exact_exchange = primary_energy.exchange;
   DirectJkMatrices correction_jk;
   if (long_range_correction) {
     correction_jk = long_range_correction->build(density);
+    result.coulomb_exchange_work.add(correction_jk.coulomb_exchange_work);
     const auto& correction_strategy = long_range_correction->strategy();
     if (correction_jk.exchange_alpha.size() != result.fock.size())
       throw std::runtime_error("RSH correction exchange dimensions do not match the Fock matrix");
@@ -665,6 +668,7 @@ ScfResult run_rks(
   }
   Diis diis(options.diis_history, true);
   ScfResult result;
+  result.dft_diagnostic.coulomb_exchange_work = CoulombExchangeWork::empty();
   result.initial_density_used = initial_density != nullptr;
   auto& ks = result.dft_diagnostic;
   ks.occupations = {occupied, occupied};
@@ -791,6 +795,7 @@ ScfResult run_rks(
                      options.xc_tile_points, options.semilocal_exchange_scale,
                      options.semilocal_correlation_scale, nonlocal_correlation, nonlocal_domain,
                      ao_cache ? &*ao_cache : nullptr, std::move(xc_override));
+    result.dft_diagnostic.coulomb_exchange_work.add(physical.coulomb_exchange_work);
     const auto& record = physical.density_diagnostic;
     if (record.executed == dft::XcDensityRoute::OccupiedOrbitals)
       ++diagnostic.orbital_calls;
@@ -1006,8 +1011,24 @@ ScfResult run_rks(
                          ks.physical_residual < residual_tolerance &&
                          (!ordinary_primary || residual_max_abs(final_residual) <=
                                                    std::min(1.0e-8, options.density_tolerance));
-      runtime::sample_cpu_capacity(runtime::add_capacity(
-          retained_capacity(density), runtime::vector_capacities(final.fock, final_residual)));
+      if (result.converged && evaluate_xc.program) {
+        // Export diagonalizes this last F[D], not the pre-rebuild operator.
+        // Certify its projector now so a rejected closure can spend the
+        // unused SCF budget instead of publishing an unexportable state.
+        orbitals = generalized_eigen(final.fock, orthogonalizer, n);
+        projected = density_from_orbitals(orbitals.vectors, n, occupied, 2.0);
+        const double canonical_change = density_rms(projected, density);
+        double maximum_change = 0.0;
+        for (std::size_t index = 0; index < density.size(); ++index)
+          maximum_change = std::max(maximum_change, std::abs(projected[index] - density[index]));
+        result.density_rms = std::max(result.density_rms, canonical_change);
+        ks.density_change = result.density_rms;
+        result.converged = canonical_change < std::min(1.0e-8, options.density_tolerance) &&
+                           maximum_change <= 1.0e-8;
+      }
+      runtime::sample_cpu_capacity(
+          runtime::add_capacity(retained_capacity(density),
+                                runtime::vector_capacities(final.fock, final_residual, projected)));
       result.energy = final.energy;
       if (result.converged && options.retain_ks_state)
         result.ks_physical_fock = std::move(final.fock);

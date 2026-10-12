@@ -27,7 +27,7 @@ def test_trusted_cuda_snapshot_is_scoped_to_successful_master_ci_pushes() -> Non
 def test_trusted_cuda_snapshot_failures_fall_back_instead_of_gating_ci() -> None:
     discovery = _step("Locate trusted master CUDA ccache snapshot")
     download = _step("Restore trusted master CUDA ccache snapshot")
-    fallback = _step("Restore CUDA ccache")
+    fallback = _step("Restore shared Linux CUDA ccache")
     publish = _step("Publish trusted master CUDA ccache snapshot")
 
     assert 'if runs_payload="$(gh api --method GET' in discovery

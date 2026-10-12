@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "cc/reference_input.hpp"
 #include "dft/ks_final_state.hpp"
 #include "dft/semilocal_family.hpp"
 #include "scf/reference/mean_field.hpp"
@@ -222,6 +223,14 @@ void analytic_rks_and_uks() {
               rks_reference.channels[0].coefficients.data() == gradient.orbitals[0].vectors.data(),
           "RKS common electronic reference copied or changed orbital ownership");
 
+  const auto rks_input = cc::prepare_canonical_reference_input(rks_reference);
+  require(rks_input.occupied == 1 && rks_input.virtuals == 1 &&
+              rks_input.orbital_energies.data() == gradient.orbitals[0].values.data() &&
+              rks_input.reference_energy == gradient.diagnostic.component_energy,
+          "validated RKS reference did not satisfy the common canonical input contract");
+  near(rks_input.fock_mo[0], -1, "RKS common MO Fock occupied diagonal");
+  near(rks_input.fock_mo[3], 3, "RKS common MO Fock virtual diagonal");
+
   Fixture cpu;
   // Resolve the complete CPU strategy, including its schedule; relabeling a
   // CUDA backend alone must remain invalid under the shared provider contract.
@@ -254,6 +263,13 @@ void analytic_rks_and_uks() {
                 uks_reference.channels[1].occupied == beta,
             "UKS common electronic reference lost spin occupations");
 
+    bool restricted_only = false;
+    try {
+      (void)cc::prepare_canonical_reference_input(uks_reference);
+    } catch (const std::invalid_argument&) {
+      restricted_only = true;
+    }
+    require(restricted_only, "RCCSD accepted a two-spin UKS reference");
     Fixture cpu_uks = uks;
     cpu_uks.id.determinant.model =
         resolve_fock_build(cpu_uks.id.determinant.model.spec, FockBackend::Cpu);

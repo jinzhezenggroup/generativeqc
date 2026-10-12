@@ -146,14 +146,14 @@ generativeqc_status enqueue_cuda_direct_jk_linear_device(
     double* coulomb, double* exchange, int* numerical_error, double threshold,
     std::uint64_t* census, std::string& detail);
 
-/** Required caller-owned elements for two restricted canonical correction
+/** Required caller-owned elements for the J/K canonical correction
  * planes. The canonical Cartesian dimension may exceed the public AO count.
  * Zero denotes unavailable canonical storage; no CUDA work or allocation. */
-std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan);
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan, unsigned spins = 1);
 
-/** Accuracy-qualified restricted full-range fixed-mask action. Same stream,
+/** Accuracy-qualified full-range fixed-mask action. Same stream,
  * lifetime, census and finite-error contract as the linear action above.
- * correction must have exactly cuda_direct_jk_compensation_elements(plan)
+ * correction must have exactly cuda_direct_jk_compensation_elements(plan, spins)
  * doubles, disjoint from all inputs, outputs and diagnostic slots. It is reset
  * per action and folded before canonical-to-public projection. A compatible mask
  * may reuse admitted resident values unless allow_resident is false (the
@@ -164,11 +164,11 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
     double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
-    bool allow_resident = true);
+    bool allow_resident = true, const double* beta = nullptr, double* beta_exchange = nullptr);
 
-/** Eligibility for the explicitly requested canonical bilinear experiment.
- * Specialized SPD derivative leases retain the caller's bounded polarization
- * schedule until a measured crossover is qualified. This is not a default. */
+/** Eligibility for the default reuse-preserving shell bilinear derivative.
+ * Canonical residency alone does not admit this schedule. No device work is
+ * submitted; unavailable shell storage preserves bounded polarization. */
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept;
 
 /** One unscreened canonical traversal of P:(J'(D)-K'(D)/2).

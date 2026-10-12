@@ -1,0 +1,58 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All complete endpoint numerical/work gates pass; observations distinguish fusion speed from scratch capacity and do not promote either default.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 3070,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "0b9964adc840708eb8f96cd4fcde0256323d8b10ad9e39041485dc661896604b"
+    },
+    {
+      "bytes": 7796,
+      "path": "source.patch.xz",
+      "role": "source-patch",
+      "sha256": "733ad5cc05bc5a4018d67e5e8ba2a05dadc6646016d7cb5bc9e8cf06d137ff31"
+    },
+    {
+      "bytes": 10100,
+      "path": "raw-receipts.json.xz",
+      "role": "samples",
+      "sha256": "a9916bdd6c717e5dd23926bc3bc03a10c0d74ef91e1c04fe41d5b5e6ccedad1f"
+    },
+    {
+      "bytes": 2416,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "5227cf747d5e8cef1008ec3d8468c69429302e29f66967486c87920f35d5cb31"
+    },
+    {
+      "bytes": 2415,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "2d4da378f7330ce121266eff9c83e6a03e5b4bc8b4c1730027281a4d0ceb8641"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=01:15:00",
+      "bash",
+      "reproduce.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "531364e133ae145097b402d66fec5036ed051365"
+  }
+}

@@ -7,10 +7,12 @@
   },
   "files": [
     {
-      "bytes": 79441,
-      "path": "pairs-48.json.gz",
+      "bytes": 47816,
+      "path": "pairs-48.json.xz",
       "role": "samples",
-      "sha256": "44c5feb2423b5b5705517b5c53238b1e49d4d68bacf81d9fb48bc98f40c6548f"
+      "sha256": "ec400c52d092380cab5fa0a230e4cd5b1e09dca379ee895d81fb42c0b9753183",
+      "decoded_bytes": 888189,
+      "decoded_sha256": "1dd57254381def0dc734d73ac68e7178abf791130383060a3dd0f8d0e5cfd10c"
     },
     {
       "bytes": 18541,
@@ -19,10 +21,12 @@
       "sha256": "f527651200f09cbb598217ac9a73862567cf0c5ebbd27168802d1d867eb11c6e"
     },
     {
-      "bytes": 124953,
-      "path": "pairs-96.json.gz",
+      "bytes": 72696,
+      "path": "pairs-96.json.xz",
       "role": "samples",
-      "sha256": "31c38b27c234910af33947ace7be8b969421956bdd7f215b36e5253f4e3346e7"
+      "sha256": "636e37daa08715c8ae09bc655e00131eb9f81c58b3a3e5ae1ac315046fafbca0",
+      "decoded_bytes": 1166003,
+      "decoded_sha256": "f033b10dc2dd269739dda721cde12c7e466bb76dc6f26a50ea59425bf2574587"
     },
     {
       "bytes": 31677,
@@ -37,10 +41,12 @@
       "sha256": "f555439759f430c11cd4c923ae94d24fc2b86ffdf2c22edf6100c0b385ee87a7"
     },
     {
-      "bytes": 43656,
-      "path": "source.patch",
+      "bytes": 11540,
+      "path": "source.patch.xz",
       "role": "source-patch",
-      "sha256": "b3579f45fdccc40a8b30d54237a33d791e0d2b8e33a9851a5b926aeb5a6d6a40"
+      "sha256": "af1d6ea7bb5f688ee9c6e87dde6159918cdae8c85ac33bcbc605462225be2f13",
+      "decoded_bytes": 43656,
+      "decoded_sha256": "b3579f45fdccc40a8b30d54237a33d791e0d2b8e33a9851a5b926aeb5a6d6a40"
     },
     {
       "bytes": 4605,
@@ -55,16 +61,18 @@
       "sha256": "e49accc3c9e5f91bd9d2a6f3a602902fb1aeb759e61698171d77096734dcbfee"
     },
     {
-      "bytes": 44106,
-      "path": "integration-source.patch",
+      "bytes": 11624,
+      "path": "integration-source.patch.xz",
       "role": "source-patch",
-      "sha256": "78a1d22767f94cc6d1ce03367a004934d5b53dd6c9f0061a0dba195b945e22e6"
+      "sha256": "5fccd00358db2698499c432b35319b1f5f458ba168f7c68269b52644946473bf",
+      "decoded_bytes": 44106,
+      "decoded_sha256": "78a1d22767f94cc6d1ce03367a004934d5b53dd6c9f0061a0dba195b945e22e6"
     },
     {
       "bytes": 9362,
       "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "e4dac24f4ee584281c348e1514f9474971b9e32739408d38f2b7e601c3287737"
+      "sha256": "3e2ee4c6cf3c9a5fb59fc99a3f83190d1c97ae16ee7adfa247e15e10d72e6621"
     }
   ],
   "reproduction": {
@@ -73,7 +81,7 @@
       "benchmarks/results/becke-normalize-20261006/reproduce.sh"
     ],
     "prerequisites": "n2/main gpu:pro6000:1 (sm_120), CUDA 12.9, ccache, compute-sanitizer, compiler Python dependencies, CuPy and GPU4PySCF 1.8.1 for a fresh independent reference",
-    "source_restore": "Check out source.revision, apply source.patch, verify source-files.sha256; retain publication outside restored checkout. Qualification tests/docs added later are not timed scientific work."
+    "source_restore": "Check out source.revision, decompress source.patch.xz with xz -dc and apply the resulting patch, verify source-files.sha256; retain publication outside restored checkout. Qualification tests/docs added later are not timed scientific work."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

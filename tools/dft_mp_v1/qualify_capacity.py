@@ -325,10 +325,10 @@ STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
 )
 # Explicit strict pairing retains the fixed native counter-array arities.
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "135d534e3b9c2205a13dcb21268f1a83c5281eeabc14ec3595cef56cea817a57"
+    "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
-    "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
+    "0b158358e77b94d84b845b388a3403769b9ae30b6b6ad5172ca30e0f329b1143"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
@@ -391,6 +391,9 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Exact maps reserve only their finite numeric owner, including both offset
 # mirrors and compact AO scratch; bind the helper and endpoint independently.
 # Entering the original prepared lease preserves all admission and work bounds.
+# Resident AO selection is tested through the production-loop execution probe.
+# This legacy capacity audit still binds endpoint/call wiring; its remaining
+# whole-owner fingerprints are separate migration debt under #2296.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
     "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
 )
@@ -418,14 +421,16 @@ BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256 = (
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
+# Bind the existing capacity audit to semantic MethodIR/KSOptions identity.
+# Token, metadata-domain, coefficient/spin and exact-grid gates are unchanged.
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
+    "1e0187f1c237fe9d774c06b96e792ff74a14dbbed8ae2b2b13757a6f8a6cef85"
 )
 # Audited capability-driven electronic projection and molecular-nonlocal proof.
 # Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 # Strict pairing of the three export counters changes source identity only.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "c6f25b0a324bd9532d22a6ce4120bcab758a97ba3ff42db016a5bbfc617746d4"
+    "2d829eb55b69d1e3b34b9210bf062f960b90baeaf968db7f6ee83d2b94e18bfc"
 )
 # The fitted reserve is valid only for a current, known native DF snapshot.
 NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
@@ -440,13 +445,13 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
+    "ddca5ed4b429304cf051b9c28d4c3d5f88d805b0c94c08fbbe1e3955c8e944a1"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
-    "6f53897b29a59fadd01d991eb1b9e8bd8dffec88cadb6ce52ecf2ad529e613c4"
+    "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
 )
 NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
     "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
@@ -458,7 +463,7 @@ NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256 = (
     "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
 )
 NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256 = (
-    "82ce3a72f5c936129f9ca82d2db03690288026aa3f2c4ff050de0c0014ad4558"
+    "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
 )
 NATIVE_BECKE_ZERO_SEED_CONFIGURATION_CONTRACT_SHA256 = (
     "cbdd375e3c81bb1a6473186ca5fc9b190bae96c7b96bf8ccad651955a6f295aa"
@@ -493,7 +498,7 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "9716c5ab6a7e91e7cd990769132d517d581143f9393fe0b58d696cbd705d8062"
+    "db6d58dc0396444c56402217f9562438d6f286a25bfccf7f4676846dcf842520"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
@@ -503,7 +508,18 @@ NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
     "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
 )
 NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
-    "89c3159ed18cb971b9056aa0f30291539de95996a6e0d913d1c879e7efd23489"
+    "17e3c81d7c019ca5c1809d051bb50c891fd08eefab3338e518630a53aba83482"
+)
+# Binary-scaled admission and the out-of-line normalization dispatch are part
+# of the reviewed owner contract, including the incumbent fallback schedule.
+BECKE_SCALED_POLICY_CONTRACT_SHA256 = (
+    "201fa31bb36d8a3331200e48abf63977727e6825ac301f1e6a6a9fb2c07499c0"
+)
+NATIVE_BECKE_NORMALIZE_DISPATCH_CONTRACT_SHA256 = (
+    "94a74e1093603c69cb24ee1c2a6732e413f94bc82c25f734b011fcbd2a612e1e"
+)
+NATIVE_BECKE_BINARY_SCALED_METRICS_CONTRACT_SHA256 = (
+    "89e7d6e1d62e133b1bd48500024013c426aaede9688fdb248ee32d2c453cccae"
 )
 NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256 = (
     "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
@@ -1268,7 +1284,15 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     )
     if exact_ao_map_digest != EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA exact AO map resource contract changed")
+    scaled_policy_digest = _lf_sha256(
+        (repository / "src/dft/becke_scaled_policy.hpp").read_bytes()
+    )
+    if scaled_policy_digest != BECKE_SCALED_POLICY_CONTRACT_SHA256:
+        raise RuntimeError(
+            "stationary CUDA binary-scaled Becke policy contract changed"
+        )
     page_contract = {
+        "becke_scaled_policy_sha256": scaled_policy_digest,
         "exact_ao_map_resources_sha256": exact_ao_map_digest,
         "public_wrapper_sha256": wrapper_digest,
         "geometry_resources_sha256": resource_digest,
@@ -1396,6 +1420,14 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_phased_becke_admission_sha256": (
             "int stationary_configure_phased_becke_v1(",
             NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256,
+        ),
+        "native_becke_normalize_dispatch_sha256": (
+            "void launch_phased_becke_normalize(",
+            NATIVE_BECKE_NORMALIZE_DISPATCH_CONTRACT_SHA256,
+        ),
+        "native_becke_binary_scaled_metrics_sha256": (
+            "int stationary_becke_binary_scaled_metrics_v1(",
+            NATIVE_BECKE_BINARY_SCALED_METRICS_CONTRACT_SHA256,
         ),
         "native_becke_normalize_configuration_sha256": (
             "int stationary_configure_becke_normalize_v1(",

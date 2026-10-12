@@ -58,6 +58,7 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
 ) -> None:
     copied: list[int] = []
     destroyed: list[int] = []
+    method_ir = object()
 
     def create(
         batch: typing.Any,
@@ -89,12 +90,23 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         generativeqc_ks_snapshot_destroy_v1=destroy,
     )
 
+    class Options:
+        @property
+        def method_ir(self) -> object:
+            return method_ir
+
+        @property
+        def scf_domain(self) -> str:
+            return domain()
+
     class Batch:
         system_count = 1
         _batch = None
         _context = None
         _calculator = SimpleNamespace(
-            _method_name="test-selector", _density_fitting_mode=0
+            _method_name="irrelevant-display-name",
+            _density_fitting_mode=0,
+            ks_options=Options(),
         )
         _library = library
 
@@ -114,7 +126,7 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
     def check(library: typing.Any, status: int, **kwargs: typing.Any) -> None:
         assert status == 0
 
-    def domain(method: str) -> str:
+    def domain() -> str:
         assert code < 0x30000, "automatic selectors must use their producer version"
         return {
             0: "curated-1",
@@ -125,6 +137,10 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
             0x10001: "split-hybrid",
         }.get(code, "unregistered-domain")
 
+    def native_code(semantic_method: object) -> int:
+        assert semantic_method is method_ir
+        return code
+
     namespace = {
         "__builtins__": builtins.__dict__,
         "ct": ct,
@@ -132,8 +148,7 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         "np": np,
         "PreparedBatch": Batch,
         "_native": SimpleNamespace(check=check, DENSITY_FITTING_NONE=0),
-        "native_xc_functional_code": lambda method: code,
-        "scf_domain_for_method": domain,
+        "_native_semilocal_code": native_code,
         "SPLIT_HYBRID_SCF_DOMAIN": "split-hybrid",
         "_SCF_DOMAIN_VERSION_BY_DOMAIN": {
             "curated-1": 1,

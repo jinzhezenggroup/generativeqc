@@ -13,6 +13,27 @@ if typing.TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _host_becke_dependencies() -> str:
+    """Keep extracted owners bound to the real generated representation and policy."""
+    from generativeqc_compiler.xc.becke_scaled_products import emit_binary_scaled_becke
+    from generativeqc_compiler.xc.grid_native import (
+        emit_grid_adjoint,
+        emit_grid_partials,
+    )
+    from generativeqc_compiler.xc.grid_phased import emit_phased_becke
+
+    return (
+        "#include <cstdlib>\n"
+        + '#include "'
+        + (ROOT / "src/dft/becke_scaled_policy.hpp").as_posix()
+        + '"\n'
+        + emit_grid_adjoint()
+        + emit_grid_partials()
+        + emit_phased_becke()
+        + emit_binary_scaled_becke()
+    )
+
+
 def _block(source: str, marker: str) -> str:
     start = source.index(marker)
     opening = source.index("{", start)
@@ -62,7 +83,8 @@ def test_native_task_budget_is_per_page_not_cumulative(
     )
     layout = _runtime_layout_cuda(plan).replace("__host__ __device__", "")
     source.write_text(
-        PREAMBLE
+        _host_becke_dependencies()
+        + PREAMBLE
         + layout
         + "using namespace generativeqc_stationary_cuda;\n"
         + "\n".join(pieces)
@@ -229,7 +251,6 @@ using std::size_t;
 struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 namespace generativeqc_stationary_cuda {}
-namespace generativeqc_grid_adjoint { struct CenterPair; }
 namespace generativeqc::runtime {
 template <class Element> struct OwnedCudaBuffer {
   explicit operator bool() const { return false; }

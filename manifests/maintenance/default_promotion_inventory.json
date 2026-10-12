@@ -89,17 +89,19 @@
         "src/scf/cuda/direct_jk_source_policy.hpp",
         "src/scf/cuda/direct_jk_source_lease.cpp"
       ],
-      "rationale": "Unset/auto selects phase-local full-range values only for admitted cold restricted exact FP64 Global-Hybrid KS. Explicit 0 restores the incumbent schedule. Positive-mask through-d candidates retain a 16-GiB value ceiling; generic f-shell auto retains 8 GiB and forced selection remains capped at 16 GiB. Complete consumer/source admission and the prepared Schwarz predicate remain mandatory. Warm/external-seeded auto skips cloning and sorting. A successful cold source charges one incumbent fixed-density warm-energy handoff after source retirement; this does not modify the returned physical state or relax convergence. Eligibility and an iteration limit are not profitability predictions. Values use compact incumbent geometry-only rows, not density-dependent screening. Public ledgers retain their incumbent path because no quartic allowance is reserved. Sources retire before derivatives or another solve; RSH, DF, UKS, mixed and incremental routes are excluded. The retained 96-atom endpoint campaign is bounded evidence, not a universal performance claim.",
-      "revisit_condition": "Reserve optional quartic storage in the complete public planner and renew source-matched cold/warm/seeded/budget-refusal E+F evidence with independent energy/force gates and semantic work counts before widening eligibility. Broaden resource-cliff, quickly converged cold, hardware and crossover coverage; retain explicit 0 rollback and separate historical opt-in from true unset-default evidence.",
+      "rationale": "Unset/auto selects bounded full-range values for admitted cold exact FP64 Direct RKS/UKS, including Coulomb-only and compatible nonlocal compositions. Explicit 0 restores the incumbent schedule. Positive-mask through-d candidates retain a 16-GiB value ceiling; generic f-shell auto retains 8 GiB and forced selection remains capped at 16 GiB. Complete consumer/source admission and the prepared Schwarz predicate remain mandatory. Warm/external-seeded auto skips cloning and sorting. A successful source charges one incumbent fixed-density warm-energy handoff by bypassing the retained source; the returned physical state and convergence gates remain unchanged. Completed actions are audited and captured borrowers retired before values remain with the converged owner for post-SCF value consumers. Ordinary values never replace derivative integrals, and restart/failure/destruction retires the source. Public ledgers retain their incumbent path because no quartic allowance is reserved. RSH, DF, mixed and incremental routes are excluded. Independent RKS/UKS endpoints, signed-spin J/K, lifetime and compiled resource/policy gates qualify this boundary; registration alone is not a promotion or profitability prediction.",
+      "revisit_condition": "Reserve optional quartic storage in the complete public planner and renew source-matched cold/warm/seeded/budget-refusal E+F evidence with independent energy/force gates and semantic work counts before widening the current source domain further. Broaden resource-cliff, quickly converged cold, hardware and crossover coverage; retain explicit 0 rollback and distinguish value from derivative capabilities.",
       "evidence": [
         "docs/developer/scf_module_boundaries.md",
         ".agents/notes/implemented/performance/2026-10-10-hybrid-phase-source-lease.md",
         ".agents/notes/implemented/performance/2026-10-10-screened-hybrid-phase-source.md",
         ".agents/notes/implemented/performance/2026-10-11-screened-hybrid-cold-auto.md",
         ".agents/notes/implemented/performance/2026-10-11-hybrid-phase-source-default.md",
+        ".agents/notes/implemented/architecture/2026-10-12-dft-prepared-energy-derivative-owner.md",
         "benchmarks/results/hybrid-phase-source-default-20261011/README.md",
         "tests/python/test_ks_phase_source_auto_policy.py",
         "tests/python/test_ks_phase_resident_values_cuda.py",
+        "tests/python/test_dft_shared_prepared_owner.py",
         "tests/python/test_rhf_resident_values_lifetime.py"
       ]
     },
@@ -1206,8 +1208,8 @@
       ]
     },
     {
-      "id": "response.canonical-bilinear-derivative",
-      "classification": "negative-evidence",
+      "id": "response.retained-shell-bilinear-derivative",
+      "classification": "already-default",
       "controls": [
         "response-option:bilinear_derivative"
       ],
@@ -1216,14 +1218,42 @@
       ],
       "sources": [
         "src/hf/rhf_frame_response.hpp",
-        "benchmarks/results/rhf-orbital-response-20261004/README.md"
+        "src/scf/cuda/direct_jk.cpp",
+        "docs/developer/df_ccsdt_gradient.md"
       ],
-      "rationale": "The one-pass canonical P:G'(D) experiment is numerically qualified at the retained endpoint but loses shell-level reuse: the measured nuclear two-electron phase regresses from 155.771 s to 258.643 s. The qualified two-pass shell schedule remains the default.",
-      "revisit_condition": "Do not retune or promote the unchanged canonical traversal. Revisit only after a materially different source/work decomposition restores shell/component reuse and demonstrates a complete-endpoint win.",
+      "rationale": "The default requests one retained-shell P:G'(D) traversal using the compiler-owned product rule without losing shell/component reuse. Admission requires one unscreened derivative item, the generated shell force lease and numerical audit storage. Missing admission preserves bounded symmetric two-pass polarization; canonical residency alone never selects the slower historical generic experiment. Explicit opt-out and legacy validation schedules remain available.",
+      "revisit_condition": "Retain source-matched complete-endpoint, independent force/residual and real-device lifetime gates for changes to the shell schedule or its admission. Do not automatically promote the unchanged generic canonical traversal, whose retained historical endpoint regressed.",
       "evidence": [
         "issue:#1972",
+        ".agents/notes/implemented/performance/2026-10-12-rhf-shell-bilinear-default.md",
+        "tests/python/test_rhf_frame_response_cuda.py",
+        "tests/python/test_direct_shell_derivative_host_lifetime.py",
         "benchmarks:benchmarks/results/rhf-orbital-response-20261004/README.md"
       ]
+    },
+    {
+      "id": "response.stationary-orbital-relaxation",
+      "classification": "scientific-choice",
+      "controls": [
+        "response-option:relax_orbitals"
+      ],
+      "owner_issues": [1972],
+      "sources": ["src/hf/rhf_frame_response.hpp"],
+      "rationale": "Orbital relaxation is required for stationary molecular forces. Explicitly disabling it exposes fixed-frame nuclear and metric weights for validation, not a faster scientifically interchangeable molecular-force method.",
+      "revisit_condition": "Preserve the distinction between stationary forces and fixed-frame validation; do not promote an omitted physical response as a performance optimization.",
+      "evidence": ["tests/python/test_rhf_frame_response_cuda.py"]
+    },
+    {
+      "id": "response.bounded-symmetric-polarization",
+      "classification": "already-default",
+      "controls": [
+        "response-option:symmetric_polarization"
+      ],
+      "owner_issues": [1972],
+      "sources": ["src/hf/rhf_frame_response.hpp"],
+      "rationale": "Symmetric two-pass polarization remains the bounded default fallback when the retained-shell cross derivative is disabled or unavailable. Explicitly disabling both controls preserves the legacy three-pass validation schedule.",
+      "revisit_condition": "Retain independent cross-weight and complete-force parity before changing fallback polarization or its numerical reduction order.",
+      "evidence": ["tests/python/test_rhf_frame_response_cuda.py"]
     },
     {
       "id": "response.df-preconditioning",

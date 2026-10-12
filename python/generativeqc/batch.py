@@ -417,7 +417,8 @@ class PreparedBatch:
                     prepare(),
                     context=(
                         self._context
-                        if calculator._method
+                        if calculator._capabilities.family == "density_functional"
+                        or calculator._method
                         in (
                             _native.METHOD_MP2,
                             _native.METHOD_UMP2,

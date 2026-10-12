@@ -116,6 +116,13 @@ elseif(NOT GENERATIVEQC_COMPILER_CACHE STREQUAL "off"
     endif()
   endif()
 endif()
+set(GENERATIVEQC_RESOLVED_COMPILER_CACHE
+    "${_generativeqc_compiler_cache}" CACHE FILEPATH
+    "Compiler cache executable selected by GenerativeQC" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_COMPILER_CACHE)
+set(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER "" CACHE FILEPATH
+    "CUDA host compiler selected by CMake" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER)
 if(_generativeqc_compiler_cache)
   get_filename_component(_generativeqc_compiler_cache_name
                          "${_generativeqc_compiler_cache}" NAME)
@@ -132,7 +139,16 @@ if(_generativeqc_compiler_cache)
   endif()
   if(NOT CMAKE_CUDA_COMPILER_LAUNCHER)
     set(CMAKE_CUDA_COMPILER_LAUNCHER "${_generativeqc_compiler_cache_launcher}")
+    set(_generativeqc_cuda_compiler_launcher_managed ON)
+  else()
+    set(_generativeqc_cuda_compiler_launcher_managed OFF)
   endif()
+  set(GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED
+      "${_generativeqc_cuda_compiler_launcher_managed}" CACHE BOOL
+      "Whether GenerativeQC selected the CUDA compiler launcher" FORCE)
+  set(GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER
+      "${CMAKE_CUDA_COMPILER_LAUNCHER}" CACHE STRING
+      "Effective CUDA compiler launcher recorded by GenerativeQC" FORCE)
   message(STATUS "GenerativeQC compiler cache: ${_generativeqc_compiler_cache}")
 endif()
 
@@ -202,6 +218,9 @@ if(GENERATIVEQC_ENABLE_CUDA)
     endif()
     set(CMAKE_CUDA_ARCHITECTURES ${_generativeqc_cuda_requested_architectures})
     enable_language(CUDA)
+    set(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER
+        "${CMAKE_CUDA_HOST_COMPILER}" CACHE FILEPATH
+        "CUDA host compiler selected by CMake" FORCE)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
@@ -424,7 +443,7 @@ if(GENERATIVEQC_BUILD_CLI)
   find_package(OpenSSL REQUIRED COMPONENTS Crypto)
   find_package(LibArchive REQUIRED)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
-                 src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
+                 src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
   set(GENERATIVEQC_CLI_BASIS_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
   generativeqc_register_generated_sources(
@@ -461,7 +480,8 @@ if(GENERATIVEQC_BUILD_CLI)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
     COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
-  target_link_libraries(generativeqc_cli PRIVATE generativeqc nlohmann_json::nlohmann_json
+  generativeqc_link_cli_core(generativeqc_cli)
+  target_link_libraries(generativeqc_cli PRIVATE nlohmann_json::nlohmann_json
                         OpenSSL::Crypto LibArchive::LibArchive ${CMAKE_DL_LIBS})
   target_include_directories(generativeqc_cli PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -519,6 +539,12 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
                          PASS_REGULAR_EXPRESSION "gfn2-xtb")
+    add_test(NAME generativeqc_cli_geometry
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_geometry.py"
+                     $<TARGET_FILE:generativeqc_cli>
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz")
+    set_tests_properties(generativeqc_cli_geometry PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cli_basis_list
              COMMAND generativeqc_cli basis list --json)
     set_tests_properties(generativeqc_cli_basis_list PROPERTIES

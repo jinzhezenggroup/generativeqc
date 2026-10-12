@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from generativeqc_compiler.xc.bulk_runtime import (
-    PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
     build_bulk_runtime_program,
+    production_candidate_domain,
 )
 from generativeqc_compiler.xc.libxc_bulk_capabilities import functional_capability
 from generativeqc_compiler.xc.production_domain_cases import (
@@ -261,7 +261,7 @@ def qualify_functional(
             capability.name,
             spin=spin,
             order=1,
-            domain=PRODUCTION_DENSITY_CANDIDATE_DOMAIN,
+            domain=production_candidate_domain(capability.name),
         )
         for spin in profile.spin_layouts
     }

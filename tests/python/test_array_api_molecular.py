@@ -82,6 +82,189 @@ def polynomial_source(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     return owners
 
 
+def test_composed_xc_methodir_identity_and_compiled_chain_rule(
+    tmp_path: Path, polynomial_source: list[Any]
+) -> None:
+    """Different user labels for the same XC science share one native source."""
+    from generativeqc import GridSpec, KsOptions
+    from generativeqc.extensions import method, xc
+
+    def composed(label: str) -> Any:
+        functional = xc.compose(
+            label,
+            {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
+            exact_exchange="1/2",
+        )
+        return method.compose(label, xc=functional)
+
+    first_ir = composed("user-pbe50-a")
+    alias_ir = composed("user-pbe50-b")
+    assert first_ir.identity == alias_ir.identity == method.named("PBE50").identity
+    grid = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
+    options = KsOptions(grid=grid, tile_points=32)
+    first = xp.MolecularModel(("H", "H"), method=first_ir, ks_options=options)
+    alias = xp.MolecularModel(("H", "H"), method=alias_ir, ks_options=options)
+    different_grid = xp.MolecularModel(
+        ("H", "H"),
+        method=alias_ir,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=25, angular_polar=8, angular_azimuth=16),
+            tile_points=32,
+        ),
+    )
+    assert first._payload() == alias._payload()
+    assert first._payload() != different_grid._payload()
+    different_xc = xp.MolecularModel(
+        ("H", "H"),
+        method=method.named("PBE0"),
+        ks_options=options,
+    )
+    assert first._payload() != different_xc._payload()
+    assert first._payload()["method_ir_identity"] == first_ir.identity
+    assert first._payload()["native_method"] == f"methodir:{first_ir.identity}"
+
+    compiled = xp.value_and_grad(
+        lambda coordinates: first(coordinates) + alias(coordinates),
+        cache=tmp_path,
+    )
+    try:
+        lowered = compiled.lower(COORDINATES)
+        assert len(lowered.provenance["molecular_sources"]) == 1
+        assert not polynomial_source
+        value, gradient = compiled(COORDINATES)
+        np.testing.assert_allclose(value, 2 * np.sum(COORDINATES * COORDINATES))
+        np.testing.assert_allclose(gradient, 4 * COORDINATES)
+        assert polynomial_source[0].calls == 1
+        diagnostics = compiled.compilation_info()["molecular_calls"]
+        assert diagnostics[0]["method"] == first_ir.identifier
+    finally:
+        compiled.close()
+    assert polynomial_source[0].closed
+
+
+def test_molecular_method_ir_and_ks_options_forward_to_calculator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not re-resolve a user MethodIR to a descriptive name or discard the grid."""
+    import generativeqc
+    from generativeqc import GridSpec, KsOptions
+    from generativeqc.extensions import method, xc
+
+    graph = method.compose(
+        "scaled-pbe",
+        xc=xc.compose(
+            "scaled-pbe",
+            {"GGA_X_PBE": "1/2", "GGA_C_PBE": 1},
+        ),
+    )
+    options = KsOptions(grid=GridSpec(radial_points=12), tile_points=48)
+    source = xp.MolecularModel(
+        ("H", "H"),
+        method=graph,
+        ks_options=options,
+        backend="cpu",
+    )
+    captured: dict[str, Any] = {}
+
+    def calculator_factory(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(generativeqc, "Calculator", calculator_factory)
+    source._calculator()
+    assert captured["method"] is graph
+    assert captured["ks_options"] is options
+    assert captured["initial_guess"] is None
+    assert captured["device"] == "cpu"
+    assert captured["precision"] == "fp64"
+
+
+def test_molecular_composed_xc_configuration_fails_closed() -> None:
+    from generativeqc import GridSpec, KsOptions
+    from generativeqc.extensions import method, xc
+
+    graph = method.compose(
+        "user-pbe",
+        xc=xc.compose(
+            "user-pbe",
+            {"GGA_X_PBE": 1, "GGA_C_PBE": 1},
+        ),
+    )
+    with pytest.raises(TypeError, match="MethodIR"):
+        xp.MolecularModel(("H", "H"), method=object())
+    with pytest.raises(TypeError, match="KsOptions"):
+        xp.MolecularModel(("H", "H"), method=graph, ks_options={"grid": "fake"})
+    with pytest.raises(ValueError, match="XC belongs to method"):
+        xp.MolecularModel(
+            ("H", "H"),
+            method=graph,
+            ks_options=KsOptions(grid=GridSpec(), composition=graph),
+        )
+
+
+@pytest.mark.parametrize(
+    ("exchange", "analytic_gradient"),
+    [
+        ("1/4", True),
+        ("1/2", False),
+    ],
+)
+def test_native_composed_xc_methodir_reuses_existing_scf(
+    tmp_path: Path, native_library: None, exchange: str, analytic_gradient: bool
+) -> None:
+    """True CPU native PBE0 E+F and PBE50 E use the unchanged Calculator science."""
+    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc.extensions import method, xc
+
+    x_weight = "3/4" if exchange == "1/4" else "1/2"
+    functional = xc.compose(
+        "custom-pbe-hybrid",
+        {"GGA_X_PBE": x_weight, "GGA_C_PBE": 1},
+        exact_exchange=exchange,
+    )
+    graph = method.compose("custom-pbe-hybrid", xc=functional)
+    standard = "PBE0" if analytic_gradient else "PBE50"
+    assert graph.identity == method.named(standard).identity
+    options = KsOptions(
+        grid=GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
+    )
+    source = xp.MolecularModel(
+        ("H", "H"),
+        method=graph,
+        basis="sto-3g",
+        ks_options=options,
+        backend="cpu",
+    )
+    compute = (
+        xp.value_and_grad(lambda coordinates: source(coordinates), cache=tmp_path)
+        if analytic_gradient
+        else xp.compile(lambda coordinates: source(coordinates), cache=tmp_path)
+    )
+    original = Calculator(
+        method=graph,
+        basis="sto-3g",
+        device="cpu",
+        ks_options=options,
+        initial_guess=None,
+        **dict(source._controls),
+    )
+    try:
+        property_names = ("energy", "forces") if analytic_gradient else ("energy",)
+        reference = original.singlepoint(
+            source._atoms(COORDINATES), properties=property_names
+        )
+        if analytic_gradient:
+            energy, nuclear_gradient = compute(COORDINATES)
+            np.testing.assert_allclose(nuclear_gradient, -reference.forces, atol=1e-9)
+        else:
+            energy = compute(COORDINATES)
+        np.testing.assert_allclose(energy, reference.energy, atol=2e-10, rtol=0)
+        assert compute.compilation_info()["molecular_calls"][0]["calls"] == 1
+    finally:
+        compute.close()
+        original.clear_cache()
+
+
 def test_lowering_is_native_free_and_configuration_is_immutable(
     tmp_path: Path, polynomial_source: list[Any]
 ) -> None:

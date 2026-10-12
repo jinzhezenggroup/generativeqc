@@ -50,6 +50,29 @@ iteration loop. The final diagnostic retains those final physical components
 and residual separately from the original historical rows.
 
 `fock_builds` includes final validation rebuilds for this solve.
+
+`KsDiagnostic.coulomb_exchange_work` is a separate, narrow target-KS
+value-provider census. CPU exact and density-fitted contractions record one
+Coulomb application on the total density and one exchange application per
+actually executed spin contraction. Even a zero-density spin or zero
+coefficient counts if its contraction runs. Counts include all final closure
+rebuilds and discarded preliminary-seeded **target** attempts, but exclude
+preliminary-method/integral preparation, derivatives, XC and other linear
+algebra. They are not ERI recurrence counts, FLOPs or performance evidence.
+
+Only `complete=True` certifies these J/K counts. Unsupported producers, lost
+attempts and overflow stay incomplete; Python exposes unavailable counts as
+`None`, not zero. Older native libraries without the additive v1 query return
+`coulomb_exchange_work=None`. Replay/validation failure clears availability
+alongside the KS record. These counters do not upgrade the separate full
+precision/operator inventory or authorize public capability promotion.
+
+Automatic CPU semilocal programs additionally certify the occupied projector
+of the last physical `F[D]` before publishing a retained final state. A rejected
+closure resumes nonlinear iterations with cleared DIIS history using only the
+unused primary iteration budget. The returned history keeps consecutive global
+iteration numbers, and `fock_builds` includes every final-closure rebuild. This
+does not certify a previously unavailable CPU precision/operator inventory.
 `initial_density_used` describes this solve's actual initial state. When the
 prepared batch retries a rejected warm attempt from a cold seed, the snapshot
 describes the final attempt; it is not a count or history of all discarded
