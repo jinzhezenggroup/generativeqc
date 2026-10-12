@@ -174,7 +174,7 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     assert tuple(map(int, job_limits.groups())) == (100, 40)
     assert "id: python_tests" in tests
     assert "continue-on-error:" not in tests
-    assert "-m pytest" in tests and '"${test_targets[@]}"' in tests
+    assert "-m pytest" in tests and '"${collection_targets[@]}"' in tests
 
 
 @pytest.mark.parametrize(
