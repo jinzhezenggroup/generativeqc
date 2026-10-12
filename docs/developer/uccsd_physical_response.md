@@ -190,3 +190,20 @@ unrestricted analytic endpoint disagrees with its own reconverged complete
 energy differences on these fixtures even with corrected Lambda; it is not a
 valid force oracle here. Open/broken branches retain the full-coordinate `2e-7`
 finite-difference gate, not a relaxed tolerance or omitted coordinate.
+
+## CI qualification scheduling
+
+The CI shell selector remains the authority for file ownership and ordinary
+marker/deselection policy. It explicitly marks the parallel, function-scoped
+unrestricted force/corrected-Lambda suites for
+`tools.pytest_ci_fresh_frontier`. This optional pytest plugin only reorders the
+already selected collection to start fresh cases at each existing worksteal
+worker's frontier. It preserves every selected case, independent fixture,
+ordinary-case relative order, worker count and timeout. Serial execution and
+dedicated loadfile owners are unchanged.
+
+Run `python -m pytest tests/python/test_ci_shard_ownership.py -q` with the
+declared test dependencies, including pytest-xdist, to check both the real
+shell selection and actual four-worker startup/selection behavior. Startup
+ordering checks do not establish that a complete hosted shard meets its
+deadline; full current-source CI remains the runtime gate.
