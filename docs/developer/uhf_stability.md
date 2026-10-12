@@ -184,6 +184,13 @@ to equivalent spin-inverted roots. Run the test with:
 
     PYTHONPATH="$PWD/python:$PWD" python -m pytest tests/python/test_uhf_recovery.py -q
 
-This dimer regression is not a molecular H2 production qualification. A native
-molecular reference exporter and independently pinned PySCF molecular oracle
-remain separate requirements before public automatic root/force selection.
+This dimer regression is not a molecular H2 production qualification. The new native CPU adapter (recover_uhf_with_native_fock_plan) requires exact,
+unscreened unrestricted HF and a source-matched, prepared FockPlan; its
+native_uhf_operator_from_scf exporter rebuilds canonical generalized-eigenstate
+frames and refuses non-idempotent or non-self-consistent final spin densities.
+A separate opt-in molecular acceptance gate reconverges H2/STO-3G with the
+**native** CPU FockPlan and compares the final energy to an independently
+converged PySCF 2.14.0 UHF reference (PySCF never runs the production SCF).
+Missing PySCF is a skip, not a scientific pass; set the environment variable
+GENERATIVEQC_REQUIRE_UHF_RECOVERY_ORACLE=1 to turn missing oracle into failure.
+This internal proof is still not a public automatic root/force selector.
