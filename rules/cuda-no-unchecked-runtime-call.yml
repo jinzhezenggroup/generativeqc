@@ -1,0 +1,11 @@
+id: cuda-no-unchecked-runtime-call
+language: Cpp
+severity: error
+message: "CUDA allocation, transfer, event record, or graph launch result is discarded; propagate or check cudaError_t."
+rule:
+  pattern:
+    context: "void f() { $API($$$ARGS); }"
+    selector: expression_statement
+constraints:
+  API:
+    regex: '^(?:cudaMalloc|cudaMallocAsync|cudaMemcpy|cudaMemcpyAsync|cudaMemset|cudaMemsetAsync|cudaEventRecord|cudaGraphLaunch)$'

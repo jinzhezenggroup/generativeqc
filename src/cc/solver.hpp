@@ -8,6 +8,14 @@
 
 namespace generativeqc::cc {
 
+/** Conservative native auto policy for the qualified contraction-dominated domain.
+ * Small/low-occupied solves retain FP64: conversion, extra launches and a fresh
+ * strict DIIS epoch cost more than their short auxiliary contractions save.
+ * This requests warmup only; the CUDA owner still admits storage and providers. */
+inline constexpr bool default_df_ccsd_mixed_precision(std::size_t nocc, std::size_t nvir) {
+  return nocc >= 9 && nvir >= 128;
+}
+
 struct SolverOptions {
   unsigned max_iterations{100};
   unsigned diis_size{6};

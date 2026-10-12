@@ -396,14 +396,16 @@ def test_refusal_stays_bounded_and_numerical_failure_propagates(
     )
 
 
-@pytest.mark.parametrize("ccsd_mixed", [False, True])
+@pytest.mark.parametrize("ccsd_mixed", [None, False, True])
+@pytest.mark.parametrize("switch_residual", [None, 1e-4])
 @pytest.mark.parametrize("lambda_mixed", [False, True])
 @pytest.mark.parametrize("triples_mixed", [False, True])
 @pytest.mark.parametrize("interval", [None, 1])
 def test_complete_endpoint_helper_keeps_selector_positions(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    ccsd_mixed: bool,
+    ccsd_mixed: bool | None,
+    switch_residual: float | None,
     lambda_mixed: bool,
     triples_mixed: bool,
     interval: int | None,
@@ -429,6 +431,7 @@ def test_complete_endpoint_helper_keeps_selector_positions(
             {},
             mixed=triples_mixed,
             ccsd_mixed=ccsd_mixed,
+            ccsd_switch_residual=switch_residual,
             lambda_mixed=lambda_mixed,
             lambda_interval=interval,
         )
@@ -437,10 +440,12 @@ def test_complete_endpoint_helper_keeps_selector_positions(
     assert len(calls) == 1
     command = calls[0]
     assert command[23] == str(int(triples_mixed))
-    if ccsd_mixed or lambda_mixed:
-        assert command[24] == str(30 if interval is None else interval)
-        assert command[25:30] == ["1", "1", "1", "0", "0"]
-        assert command[30] == str(int(ccsd_mixed))
-        assert command[31:] == (["1"] if lambda_mixed else [])
-    else:
-        assert command[24:] == ([] if interval is None else [str(interval)])
+    assert command[24] == str(30 if interval is None else interval)
+    assert command[25:30] == ["1", "1", "1", "0", "0"]
+    assert command[30] == ("auto" if ccsd_mixed is None else str(int(ccsd_mixed)))
+    expected = []
+    if lambda_mixed or switch_residual is not None:
+        expected.append(str(int(lambda_mixed)))
+    if switch_residual is not None:
+        expected.append(str(switch_residual))
+    assert command[31:] == expected

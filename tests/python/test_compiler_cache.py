@@ -162,11 +162,19 @@ def test_cpu_and_cuda_adapters_wrap_cache_miss_commands(
 ) -> None:
     launched: list[list[str]] = []
 
-    def compile_run(command: list[str], timeout: float, *, label: str) -> CompileResult:
+    def compile_run(
+        command: list[str], timeout: float, *, label: str, **kwargs: Any
+    ) -> CompileResult:
         assert timeout > 0 and label in {"C++", "NVCC"}
         launched.append(command)
+        Path(command[command.index("-o") + 1]).touch()
         return CompileResult(0, False, 0.01, "", "")
 
+    monkeypatch.setattr(
+        cpp_adapter,
+        "resolve_compiler_cache",
+        lambda _: CompilerCacheLauncher(Path("ccache"), "ccache", "test"),
+    )
     monkeypatch.setattr(cpp_adapter, "run_cached_compiler", compile_run)
     cpu = CppCompilerAdapter(Path(sys.executable))
     cpu.compile_shared(tmp_path / "x.cpp", tmp_path / "x.so")

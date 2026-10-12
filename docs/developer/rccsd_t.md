@@ -203,11 +203,15 @@ qualified RCCSD CPU dense derivative oracle and generated bounded CUDA one-
 electron / weighted-ERI consumers for the final h/g/S cotangents. CPU and CUDA
 final contractions therefore consume the same total response weights.
 
-The current qualification is restricted to real closed-shell canonical RHF,
-conventional unscreened all-electron Hamiltonians, no frozen core, no ECP or
-auxiliary basis. The native/public CCSD(T) force owner is qualified through
-56 AOs; the separate Python complete-gradient validation owner retains its
-<=12-AO boundary.
+The public conventional force route requires real closed-shell canonical RHF,
+unscreened all-electron integrals, no frozen core, no ECP or auxiliary basis.
+Native CCSD and CCSD(T) no longer reject by a fixed AO-count threshold: the
+complete resource plan, converged reference/CC/Lambda/response solutions and
+numerical stability gates determine admission. Independent native CCSD(T)
+force tests cover up to 56 AOs and standalone CCSD tests cover the earlier
+small-system domain; larger requests are executable when admitted, **not yet
+independently qualified** at arbitrary sizes. The separate Python complete-
+gradient validation owner retains its <=12-AO boundary.
 `derivative_backend="cuda"` moves only the final AO/nuclear derivative consumers
 to CUDA; it does not by itself qualify a fully resident GPU response chain.
 Failure of any RHF, CCSD, corrected-Lambda, canonical-gauge, Z-vector, identity,
@@ -230,9 +234,11 @@ The ownership rationale is recorded in
 CUDA RHF, the existing conventional MO-block preparation, resident RCCSD with
 physical residual replay, and the generated CUDA standard `(T)` evaluator.
 Energy single points and homogeneous prepared batches use this owner. Force
-requests in the qualified <=56-AO conventional all-electron domain reuse the
-same native CCSD(T) response mathematics as CPU and send the final one-/two-
+requests admitted by the conventional all-electron resource/numerical gates reuse
+the same native CCSD(T) response mathematics as CPU and send the final one-/two-
 electron nuclear derivative contractions to the existing CUDA consumers.
+The existing 56-AO independent force frontier remains the largest tested case,
+not a public AO-size rejection threshold.
 
 The shared CUDA RHF reference owner may retain unscreened s/p ERIs in device
 memory for its Fock iterations. It admits this optional cache after querying

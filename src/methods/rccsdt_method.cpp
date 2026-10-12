@@ -110,10 +110,6 @@ class RccsdtPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     last_performance_.reset();
-    if (compute_forces && molecule::ao_count(system_) > cc::kRccsdtForceMaxAOs)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "native RCCSD(T) force AO dimension exceeds its qualified domain");
-
     const auto warm_capacity =
         warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     auto state = run_rccsd_native_state(

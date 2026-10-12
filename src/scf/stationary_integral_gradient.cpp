@@ -48,27 +48,21 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
 
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
-    std::span<const double> weighted_density, CpuStationaryGga method,
-    std::size_t maximum_numeric_bytes, std::span<const double> beta_density,
-    std::span<const double> beta_weighted_density) {
-  if (method != CpuStationaryGga::Pbe && method != CpuStationaryGga::Pbe0 &&
-      method != CpuStationaryGga::B3lyp)
-    throw std::invalid_argument("unknown stationary Direct GGA method");
-  const bool hybrid = method != CpuStationaryGga::Pbe;
+    std::span<const double> weighted_density, std::size_t maximum_numeric_bytes,
+    std::span<const double> beta_density, std::span<const double> beta_weighted_density) {
   const auto& strategy = target.strategy();
+  const bool hybrid = strategy.spec.exchange.present;
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || (term.approximation == FockApproximation::Exact &&
                              term.op == FockOperator::FullRange && term.omega == 0.0);
   };
   const bool unrestricted = strategy.spec.spin == FockSpin::Unrestricted;
-  const double exchange_coefficient =
-      method == CpuStationaryGga::B3lyp ? -0.1 : (unrestricted ? -0.25 : -0.125);
-  if ((method == CpuStationaryGga::B3lyp && unrestricted) || strategy.backend != FockBackend::Cpu ||
+  if (strategy.backend != FockBackend::Cpu ||
       (strategy.spec.spin != FockSpin::Restricted && !unrestricted) ||
       !exact(strategy.spec.coulomb) || !exact(strategy.spec.exchange) ||
       !strategy.spec.coulomb.present || strategy.spec.coulomb.coefficient != 1.0 ||
-      strategy.spec.exchange.present != hybrid ||
-      (hybrid && strategy.spec.exchange.coefficient != exchange_coefficient))
+      (hybrid && (!std::isfinite(strategy.spec.exchange.coefficient) ||
+                  strategy.spec.exchange.coefficient >= 0.0)))
     throw std::invalid_argument("stationary GGA integral weights disagree with the prepared model");
   const auto& system = target.system();
   if (!cpu_stationary_direct_force_work_admitted(system, hybrid, 0, 1))
@@ -180,17 +174,16 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
                                 source_density.data(), source_weighted_density.data(), nbf, indices)
                           : generated::pbe::coulomb(source_density.data(),
                                                     source_weighted_density.data(), nbf, indices));
-                  if (method == CpuStationaryGga::Pbe0)
-                    exchange_weights.push_back(
-                        unrestricted ? generated::pbe0_uks::exact_exchange(
-                                           source_density.data(), source_weighted_density.data(),
-                                           nbf, indices)
-                                     : generated::pbe0::exact_exchange(
-                                           source_density.data(), source_weighted_density.data(),
-                                           nbf, indices));
-                  else if (method == CpuStationaryGga::B3lyp)
-                    exchange_weights.push_back(generated::b3lyp::exact_exchange(
-                        source_density.data(), source_weighted_density.data(), nbf, indices));
+                  if (hybrid) {
+                    // TensorIR cotangent for ordered (ab|cd): Fock K coefficient
+                    // / 2 * sum_spin D[a,c] D[b,d]. No named hybrid fractions.
+                    const auto ac = ao_first * nbf + ao_third;
+                    const auto bd = ao_second * nbf + ao_fourth;
+                    double pairing = source_density[ac] * source_density[bd];
+                    if (unrestricted)
+                      pairing += source_density[matrix + ac] * source_density[matrix + bd];
+                    exchange_weights.push_back(0.5 * strategy.spec.exchange.coefficient * pairing);
+                  }
                 }
           const std::array<std::span<const double>, 2> channels{coulomb_weights, exchange_weights};
           std::uint64_t evaluations = 0;
