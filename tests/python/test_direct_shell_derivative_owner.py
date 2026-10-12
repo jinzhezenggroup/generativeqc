@@ -159,6 +159,12 @@ def test_shared_full_range_queue_preserves_bilinear_seed() -> None:
     assert "if (bilinear)" in enqueue
     assert "b.direct_force_seed = p.direct_spin" in enqueue
     assert "unrestricted || bilinear" in enqueue
+    assert host.index("validate_generated_full_range_derivative_inputs(") < host.index(
+        "HostResultDrain"
+    )
+    assert resident.index(
+        "validate_generated_full_range_derivative_inputs("
+    ) < resident.index("cudaGetDevice(")
 
 
 @pytest.mark.parametrize(

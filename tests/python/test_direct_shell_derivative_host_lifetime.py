@@ -102,7 +102,14 @@ def host_lifetime_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    bodies = []
+    bodies = [
+        _extract_function(
+            source, "static cudaError_t validate_generated_full_range_derivative_inputs("
+        ),
+        _extract_function(
+            source, "static cudaError_t enqueue_generated_full_range_energy_derivatives("
+        )
+    ]
     for route in ("full_range", "rsh"):
         symbol = f"cudaError_t execute_generated_{route}_energy_derivatives("
         bodies.append(_extract_function(source, symbol))

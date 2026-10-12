@@ -733,17 +733,26 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
                               : error;
 }
 
+static cudaError_t validate_generated_full_range_derivative_inputs(
+    const GeneratedExchangePlan& plan, bool unrestricted, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources, bool bilinear) {
+  if (!plan.shared || !plan.force_capability || plan.bounded_pair_order == nullptr ||
+      plan.shell_pair_block_bounds == nullptr || plan.force == nullptr ||
+      plan.force_cursor == nullptr || !std::isfinite(coulomb_coefficient) ||
+      !std::isfinite(exchange_coefficient))
+    return cudaErrorInvalidValue;
+  if (bilinear && (unrestricted || separate_sources || plan.shared->batch.batch_size != 1 ||
+                   plan.shared->screening != 0.0 || beta == nullptr))
+    return cudaErrorInvalidValue;
+  return cudaSuccess;
+}
+
+/** Both adapters validate before entering this queue and own the failure drain.
+ * Keeping preflight outside preserves zero-work refusal for borrowed inputs. */
 static cudaError_t enqueue_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
     bool allow_spatial_default, bool bilinear) {
-  if (!p.force_capability || p.bounded_pair_order == nullptr ||
-      p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
-      !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
-    return cudaErrorInvalidValue;
-  if (bilinear && (unrestricted || separate_sources || p.shared->batch.batch_size != 1 ||
-                   p.shared->screening != 0.0 || beta == nullptr))
-    return cudaErrorInvalidValue;
   // The two existing projection slots carry D and P, not spin densities.
   // Density screening is disabled: spin bounds do not bound a signed cross term.
   auto error = prepare_generated_exchange_density(p, unrestricted || bilinear, alpha, beta);
@@ -794,7 +803,11 @@ cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
     bool separate_sources, bool allow_spatial_default, bool bilinear) {
-  if (!p.shared) return cudaErrorInvalidValue;
+  // Reject inadmissible metadata before allocating output or installing a CUDA
+  // drain: no asynchronous work exists yet, so refusal must not synchronize.
+  auto error = validate_generated_full_range_derivative_inputs(
+      p, unrestricted, beta, coulomb_coefficient, exchange_coefficient, separate_sources, bilinear);
+  if (error != cudaSuccess) return error;
   auto& shared = *p.shared;
   const auto& batch = shared.batch;
   runtime::cuda_trace::TraceOperation trace("direct_jk_force", shared.stream,
@@ -810,7 +823,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
       if (active) (void)cudaStreamSynchronize(stream);
     }
   } drain{shared.stream};
-  auto error = enqueue_generated_full_range_energy_derivatives(
+  error = enqueue_generated_full_range_energy_derivatives(
       p, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, separate_sources,
       allow_spatial_default, bilinear);
   if (error != cudaSuccess) return error;
@@ -832,6 +845,9 @@ cudaError_t consume_generated_full_range_energy_derivatives(
     double coulomb_coefficient, double exchange_coefficient,
     const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default) {
   if (!plan.shared || !consumer) return cudaErrorInvalidValue;
+  const auto input_status = validate_generated_full_range_derivative_inputs(
+      plan, unrestricted, beta, coulomb_coefficient, exchange_coefficient, true, false);
+  if (input_status != cudaSuccess) return input_status;
   auto& shared = *plan.shared;
   int device{};
   const auto device_status = cudaGetDevice(&device);
