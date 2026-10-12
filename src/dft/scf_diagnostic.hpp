@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "dft/ao_selection_work.hpp"
+#include "scf/coulomb_exchange_work.hpp"
 
 namespace generativeqc::dft {
 
@@ -68,6 +69,7 @@ struct ScfDiagnostic {
   EnergyComponents components;
   IncrementalXcDiagnostic incremental_xc;
   CudaXcAoSelectionWork cuda_ao_selection;
+  scf::CoulombExchangeWork coulomb_exchange_work{};
   std::vector<ScfIteration> history;
 };
 }  // namespace generativeqc::dft

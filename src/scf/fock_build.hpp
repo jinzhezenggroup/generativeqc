@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "runtime/provider_registry.hpp"
+#include "scf/coulomb_exchange_work.hpp"
 
 namespace generativeqc::scf {
 
@@ -163,6 +164,7 @@ struct DirectJkMatrices {
   std::vector<double> coulomb;
   std::vector<double> exchange_alpha;
   std::vector<double> exchange_beta;
+  CoulombExchangeWork coulomb_exchange_work{};
 };
 struct FockMatrices {
   std::vector<double> alpha;
