@@ -290,6 +290,8 @@ class PreparedCCSD:
         if self.provider.snapshot.identity != self.snapshot.identity:
             raise ValueError("provider reference changed during CCSD")
         self.provider.source._check_open()
+        if self._native_executor_configuration() != self._executor_configuration:
+            raise RuntimeError("RCCSD native executor configuration changed")
         feeds = {**self.feeds, "t1": t1, "t2": t2}
         if independent or self.executor is None:
             # Keep the structurally expanded program as a separate CPU oracle.
@@ -298,8 +300,6 @@ class PreparedCCSD:
                 feeds,
                 max_bytes=self.options.max_bytes,
             ).outputs
-        if self._native_executor_configuration() != self._executor_configuration:
-            raise RuntimeError("RCCSD native executor configuration changed")
         try:
             outputs = self.executor.execute(self.program, feeds)
         except ValueError as error:

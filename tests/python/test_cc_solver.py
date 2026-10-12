@@ -516,3 +516,35 @@ def test_native_cpu_ccsd_facade_and_numeric_failure(
         energy(s, p, backend="cpu-native", compiler=object())
     with pytest.raises(TypeError, match="cache"):
         energy(s, p, backend="cpu-native", cache="not-a-Path")
+
+
+@pytest.mark.parametrize("independent", [False, True])
+@pytest.mark.parametrize("change", ["clear", "budget", "cache"])
+def test_native_cpu_ccsd_configuration_changes_never_fall_back(
+    change: str, independent: bool, tmp_path: typing.Any, monkeypatch: typing.Any
+) -> None:
+    import importlib
+    import shutil
+
+    if shutil.which("c++") is None:
+        pytest.skip("a native C++ compiler is required for the explicit CPU route")
+    from tools.generativeqc_cc.native_tensor_cpu import NativeCCTensorExecutor
+
+    module = importlib.import_module("tools.generativeqc_cc.solver")
+    s, p, _meta, _a = fixture_problem()
+    native = NativeCCTensorExecutor(max_bytes=256 << 20, cache=tmp_path)
+    prepared = PreparedCCSD(s, p, executor=native)
+    if change == "clear":
+        prepared.executor = None
+    elif change == "budget":
+        native.max_bytes *= 2
+    else:
+        native.cache = tmp_path / "changed"
+
+    def forbidden_evaluation(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        pytest.fail("changed native configuration reached an equation executor")
+
+    monkeypatch.setattr(module, "execute", forbidden_evaluation)
+    monkeypatch.setattr(native, "execute", forbidden_evaluation)
+    with pytest.raises(RuntimeError, match="executor configuration changed"):
+        prepared.evaluate(*prepared.initial, independent=independent)
