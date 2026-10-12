@@ -47,7 +47,15 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     allowed_coefficients = {"exact", "native-scales"}
     allowed_exchange = {"none", "any", "canonical"}
     allowed_stationary_kernels = {"lda", "pbe", "r2scan", "composed", "wb97mv"}
+    response_slots: set[int] = set()
     for item in families:
+        response_slot = item.get("legacy_cpu_point_response_slot")
+        if response_slot is not None:
+            if type(response_slot) is not int or response_slot not in (0, 1):
+                raise ValueError("legacy CPU XC response ABI slot must be 0 or 1")
+            if response_slot in response_slots:
+                raise ValueError("duplicate legacy CPU XC response ABI slot")
+            response_slots.add(response_slot)
         fast_paths = item.get("cuda_fast_paths")
         if not isinstance(fast_paths, dict) or set(fast_paths) != set(FAST_PATH_FIELDS):
             raise ValueError(
@@ -438,6 +446,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
+            f'        "legacy_cpu_point_response_slot": {item.get("legacy_cpu_point_response_slot")!r},',
             f'        "aliases": {alias_text},',
             '        "cuda_fast_paths": {',
             *(
@@ -494,6 +503,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
         "    stationary_second_order: bool\n"
+        "    legacy_cpu_point_response_slot: int | None\n"
         "    aliases: tuple[str, ...]\n"
         "    cuda_fast_paths: dict[str, str]\n"
         "    components: tuple[tuple[str, str], ...]\n"

@@ -42,7 +42,8 @@
       "aliases": [
         "LDA_XC_PW"
       ],
-      "cpu_stationary_force_profiles": []
+      "cpu_stationary_force_profiles": [],
+      "legacy_cpu_point_response_slot": 0
     },
     {
       "symbol": "Pbe",
@@ -102,7 +103,8 @@
           "semilocal_exchange": "3/4",
           "semilocal_correlation": "1"
         }
-      ]
+      ],
+      "legacy_cpu_point_response_slot": 1
     },
     {
       "symbol": "R2scan",
@@ -143,7 +145,8 @@
       "incremental_xc": false,
       "stationary_second_order": false,
       "aliases": [],
-      "cpu_stationary_force_profiles": []
+      "cpu_stationary_force_profiles": [],
+      "legacy_cpu_point_response_slot": null
     },
     {
       "symbol": "B3lyp",
@@ -201,7 +204,8 @@
           "semilocal_exchange": "1",
           "semilocal_correlation": "1"
         }
-      ]
+      ],
+      "legacy_cpu_point_response_slot": null
     },
     {
       "symbol": "Wb97mv",
@@ -243,7 +247,8 @@
       "incremental_xc": false,
       "stationary_second_order": false,
       "aliases": [],
-      "cpu_stationary_force_profiles": []
+      "cpu_stationary_force_profiles": [],
+      "legacy_cpu_point_response_slot": null
     }
   ]
 }
