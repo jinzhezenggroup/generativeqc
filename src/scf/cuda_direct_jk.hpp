@@ -122,6 +122,14 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     std::vector<double>& derivatives, std::string& detail, bool separate_sources = true,
     bool allow_spatial_default = false);
 
+/** Contract P:G'(D) in one retained shell traversal. Both public-AO matrices
+ * are borrowed on the owner's device through completion. Requires one
+ * unscreened derivative item; unavailable shell storage returns NOT_IMPLEMENTED
+ * without publishing output so callers can retain bounded compatibility. */
+generativeqc_status execute_cuda_direct_shell_bilinear_derivative_device(
+    CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t matrix_elements,
+    std::vector<double>& gradient, std::string& detail);
+
 /** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
  * explicit omega. The retained owner performs one density transform and three
  * screened shell traversals; no public-AO quartet traversal is used. */

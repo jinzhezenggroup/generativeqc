@@ -10,6 +10,7 @@ from types import CodeType, FunctionType, SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc import _stationary_cuda as runtime
 from generativeqc_compiler.dft.indexed_layout import AoGridBlockLayout
 from generativeqc_compiler.dft.plan import plan_tiles
 from generativeqc_compiler.method.stationary_resources import (
@@ -178,7 +179,7 @@ def _geometry_loop(scope: dict[str, typing.Any]) -> None:
         "exec",
     )
     compiled = next(value for value in code.co_consts if isinstance(value, CodeType))
-    FunctionType(compiled, scope)()
+    FunctionType(compiled, {**vars(runtime), **scope})()
 
 
 @pytest.mark.parametrize("resident", [False, True])

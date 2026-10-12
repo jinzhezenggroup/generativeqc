@@ -154,6 +154,7 @@ HARNESS = r"""
 #include <string>
 #include <vector>
 #include "generativeqc/generativeqc.h"
+#include "dft/scf_diagnostic.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
@@ -250,7 +251,7 @@ struct StubKsPlan {
 struct Calculation {
   struct { unsigned iterations{}; } convergence;
   std::size_t fock_builds{};
-  std::optional<int> ks_diagnostic;
+  std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
 };
 struct BatchResult : Item { Calculation calculation; };
 struct KsItem {
@@ -264,6 +265,8 @@ Item run_dft(bool resident) {
   std::vector<KsItem> items_(1);
   items_[0].resident_warm = resident;
   std::vector<BatchResult> results(1);
+  std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
+      1, scf::CoulombExchangeWork::empty());
   results[0].warm_start_used = true;
   std::vector<bool> ready(1, true);
   std::vector<std::optional<std::vector<double>>> preliminary_seeds(1);

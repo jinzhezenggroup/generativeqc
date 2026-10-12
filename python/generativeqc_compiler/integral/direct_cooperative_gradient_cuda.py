@@ -218,7 +218,7 @@ __device__ inline void contract_cooperative_direct_pair_force(
           source, coulomb_coefficient, exchange_coefficient);
       weights[slot][source] = direct_force_density_coefficient_scaled<Unrestricted>(
           n, physical, spin, density, i[slot], j[slot], k[slot], l[slot],
-          coefficients.coulomb, coefficients.exchange);
+          coefficients.coulomb, coefficients.exchange, batch.direct_force_seed);
       admitted[slot] |= weights[slot][source] != 0.0;
     }
     any_admitted |= admitted[slot];

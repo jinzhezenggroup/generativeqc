@@ -196,7 +196,7 @@ void check_complete_probe() {
 }
 bool default_frame(const generativeqc::hf::RHFFrameResponseOptions& frame) {
   return frame.orbital_screening_tolerance == 0.0 && !frame.profile_jk &&
-         !frame.bilinear_derivative && frame.symmetric_polarization;
+         frame.bilinear_derivative && frame.symmetric_polarization;
 }
 int main() {
   check_reference_benchmark();
@@ -237,6 +237,16 @@ int main() {
      !explicit_scalar.frame.profile_jk || !explicit_scalar.frame.bilinear_derivative ||
      explicit_scalar.frame.symmetric_polarization || explicit_scalar.ccsd_batch_limit != 3 ||
      explicit_scalar.lambda_interval != 30) return 8;
+  // Both direct opt-outs must survive the promoted constructor default.
+  for(bool symmetric : {false,true}) {
+    auto opt_out = explicit_frame;
+    opt_out.bilinear_derivative = false;
+    opt_out.symmetric_polarization = symmetric;
+    const auto selected=run_df_ccsdt_native(context,system,system,descriptor,
+                                          true,true,true,true,true,8,3,opt_out);
+    if(selected.frame.bilinear_derivative ||
+       selected.frame.symmetric_polarization != symmetric) return 54;
+  }
   const auto strict_lambda=run_df_ccsdt_native(
       context,system,system,descriptor,true,true,true,true,true,8,8,{},
       true,false,true,false,false,{},1);
@@ -259,18 +269,20 @@ int main() {
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
-  for(const char* schedule : {"0","1","2"}) {
+  for(const char* schedule : {"auto","0","1","2"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
                            "6","3","1e-7","1",schedule};
     const auto frame = select(13,selected).frame;
     if(frame.orbital_screening_tolerance != 1e-7 || !frame.profile_jk ||
-       frame.bilinear_derivative != (schedule[0] == '1') ||
-       frame.symmetric_polarization != (schedule[0] == '2')) return 10;
+       frame.bilinear_derivative != (std::string(schedule) == "auto" || schedule[0] == '1') ||
+       frame.symmetric_polarization != (std::string(schedule) == "auto" || schedule[0] == '2')) return 10;
   }
-  const char* invalid_frame[]{"endpoint","input","output","1","1","1","1","8",
-                              "6","8","0","0","x"};
-  try { (void)select(13,invalid_frame);return 11; }
-  catch(const std::invalid_argument&) {}
+  for(const char* token : {"", "x", "3", "-1", "+1", "AUTO", "auto0", "1.0"}) {
+    const char* invalid_frame[]{"endpoint","input","output","1","1","1","1","8",
+                                "6","8","0","0",token};
+    try { (void)select(13,invalid_frame);return 11; }
+    catch(const std::invalid_argument&) {}
+  }
   // Every historical master DIIS choice retains its exact argument position.
   for(unsigned history = 0; history <= 20; ++history) {
     if(history == 1) continue;
@@ -296,7 +308,7 @@ int main() {
        selected.ccsd_batch_limit != (argc > 9 ? 3U : 32U) ||
        selected.frame.orbital_screening_tolerance != (argc > 10 ? 1e-7 : 0.0) ||
        selected.frame.profile_jk || !selected.frame.symmetric_polarization ||
-       selected.frame.bilinear_derivative || !selected.derived_denominators) return 14;
+       !selected.frame.bilinear_derivative || !selected.derived_denominators) return 14;
   }
   for(int index : {3,4,5,6,11,12}) {
     const char* bad[]{"endpoint","input","output","1","1","1","1","8",
@@ -337,15 +349,15 @@ int main() {
     if(direct.derived_denominators!=derived || direct.batch_limit!=5 ||
        direct.ccsd_batch_limit!=3 || direct.frame.orbital_screening_tolerance!=1e-7 ||
        !direct.frame.profile_jk || !direct.frame.bilinear_derivative) return 20;
-    for(const char* schedule : {"0","1","2"}) {
+    for(const char* schedule : {"auto","0","1","2"}) {
       const char* selected[]{"endpoint","input","output","1","1","1","1","5",
                              "4","3","1e-7","1",schedule,derived?"1":"0"};
       const auto result=select(14,selected);
       if(result.derived_denominators!=derived || result.diis_history!=4 ||
          result.batch_limit!=5 || result.ccsd_batch_limit!=3 ||
          result.frame.orbital_screening_tolerance!=1e-7 || !result.frame.profile_jk ||
-         result.frame.bilinear_derivative!=(schedule[0]=='1') ||
-         result.frame.symmetric_polarization!=(schedule[0]=='2')) return 21;
+         result.frame.bilinear_derivative!=(std::string(schedule)=="auto" || schedule[0]=='1') ||
+         result.frame.symmetric_polarization!=(std::string(schedule)=="auto" || schedule[0]=='2')) return 21;
       if(!select(13,selected).derived_denominators) return 22;
     }
   }
