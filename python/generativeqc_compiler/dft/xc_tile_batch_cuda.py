@@ -1,9 +1,12 @@
 """Batch existing mapped FP64 bodies without changing AO or reduction domains.
 
-Independent contractions write compact local matrices. A single CTA per spin
-then visits tiles in original order: overlapping global entries never race and
-no floating-point atomic, dense AO expansion, or reordered sum is introduced.
-The small-domain admission bounds the deliberately serial scatter stage.
+Independent contractions write compact local matrices. Small groups use one
+CTA per spin; large groups partition global AO rows between unique owners.
+Every owner visits tiles in original order: overlapping global entries never
+race and no floating-point atomic, dense AO expansion or reordered sum occurs.
+Ragged launches use the actual group maximum, not a full-basis panel. Every
+density block and upper-triangular potential block participates, including
+cross-block pairs. Admission and retained scratch remain explicitly bounded.
 """
 
 from .xc_contraction_cuda import DEFAULT_XC_MATRIX_SCHEDULE, XcMatrixSchedule
@@ -68,16 +71,38 @@ __global__ void batch_local_potentials(const CudaXcCompactTile* tiles, const dou
       error, nullptr, tile.active, blockIdx.z % spins);
 }
 
+__device__ I compact_row_lower_bound(const size_t* map, I active, I row) {
+  if (!map) return row < active ? row : active;
+  I first = 0, end = active;
+  while (first < end) {
+    const I middle = first + (end - first) / 2;
+    if (map[middle] < size_t(row)) first = middle + 1;
+    else end = middle;
+  }
+  return first;
+}
+
+template<bool Segmented = false>
 __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_count,
     const double* local, const double* point_totals, I batch_begin, const size_t* ids,
     I full_n, double* potential, double* totals, int* error) {
   const I spin = blockIdx.x;
-  __shared__ I group_end;
+  __shared__ I group_end, owned_begin, owned_end;
   for (I tile_index = 0; tile_index < tile_count;) {
     const auto& tile = tiles[tile_index];
     const auto* map = compact_tile_ids(tile, ids, full_n);
     const I active = tile.active;
     if (threadIdx.x == 0) {
+      // Maps are validated sorted and unique. The lower global AO row owns
+      // both symmetric entries, so row strips cannot race across CTAs.
+      if constexpr (Segmented) {
+        const I row = I(blockIdx.y) * @TILE@;
+        owned_begin = compact_row_lower_bound(map, active, row);
+        owned_end = compact_row_lower_bound(map, active, row + @TILE@);
+      } else {
+        owned_begin = 0;
+        owned_end = active;
+      }
       group_end = tile_index + 1;
       for (; group_end < tile_count; ++group_end) {
         const auto& next = tiles[group_end];
@@ -94,9 +119,10 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
     // Snapshot before the final barrier: a faster lane may start discovering
     // the next group as soon as that barrier releases the current group.
     const I next_tile = group_end;
-    // Only one CTA owns a spin output. The barrier separates overlapping maps
-    // without serializing the independent density/potential contractions.
-    for (I pair = threadIdx.x; pair < active * active; pair += blockDim.x) {
+    // Ownership stays fixed across maps and groups. No owner depends on any
+    // other CTA advancing to the same tile before it can update its entries.
+    for (I pair = owned_begin * active + threadIdx.x;
+         pair < owned_end * active; pair += blockDim.x) {
       const I mu = pair / active, nu = pair % active;
       if (mu > nu) continue;
       const I row = map ? map[mu] : mu, col = map ? map[nu] : nu;
@@ -110,7 +136,7 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
       potential[target] = value;
       potential[(spin * full_n + col) * full_n + row] = value;
     }
-    if (spin == 0 && threadIdx.x < 3) {
+    if (spin == 0 && (!Segmented || blockIdx.y == 0) && threadIdx.x < 3) {
       const I channel = threadIdx.x;
       for (I member = tile_index; member < next_tile; ++member) {
         const auto& current = tiles[member];
@@ -126,9 +152,9 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
 }
 
 inline void launch_batch_density(cudaStream_t stream, const CudaXcLayout& layout,
-    const CudaXcCompactTile* tiles, I tile_count, const double* density, const double* ao,
+    const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* density, const double* ao,
     double* work, double* features, I batch_begin, const size_t* ids, int* error) {
-  batch_density_products<<<dim3((128 + @TILE@ - 1) / @TILE@,
+  batch_density_products<<<dim3((max_active + @TILE@ - 1) / @TILE@,
       (layout.tile_points + @TILE@ - 1) / @TILE@, tile_count * layout.spins * layout.work_jets),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, density, ao, work, layout.nao, layout.spins,
       layout.work_jets, ids, error);
@@ -139,19 +165,26 @@ inline void launch_batch_density(cudaStream_t stream, const CudaXcLayout& layout
 }
 
 inline void launch_batch_potential(cudaStream_t stream, const CudaXcLayout& layout,
-    const CudaXcCompactTile* tiles, I tile_count, const double* ao, const double* coefficients,
+    const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* ao, const double* coefficients,
     const double* weights, double* work, double* local, const double* point_totals,
     I batch_begin, const size_t* ids, double* potential, double* totals, int* error) {
-  batch_potential_panels<<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * 128,
+  batch_potential_panels<<<dim3(generativeqc_tensor::blocks(layout.spins * layout.tile_points * max_active,
       128), tile_count), 128, 0, stream>>>(tiles, ao, coefficients, weights, work, batch_begin,
       layout.spins, layout.feature_terms, layout.work_jets, error);
   generativeqc_tensor::cuda_check(cudaGetLastError());
-  constexpr I columns = (128 + @TILE@ - 1) / @TILE@;
+  const I columns = (max_active + @TILE@ - 1) / @TILE@;
   batch_local_potentials<<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error);
   generativeqc_tensor::cuda_check(cudaGetLastError());
-  batch_ordered_scatter<<<layout.spins, 128, 0, stream>>>(tiles, tile_count, local, point_totals,
-      batch_begin, ids, layout.nao, potential, totals, error);
+  // Preserve small-group execution. Large groups parallelize only output
+  // ownership, with an explicit launch-domain fallback and no new scratch.
+  if (max_active > 128 && layout.nao <= size_t{65535} * @TILE@)
+    batch_ordered_scatter<true><<<dim3(layout.spins, (layout.nao + @TILE@ - 1) / @TILE@),
+        128, 0, stream>>>(tiles, tile_count, local, point_totals, batch_begin, ids,
+        layout.nao, potential, totals, error);
+  else
+    batch_ordered_scatter<<<layout.spins, 128, 0, stream>>>(tiles, tile_count, local, point_totals,
+        batch_begin, ids, layout.nao, potential, totals, error);
 }
 }  // namespace
 }  // namespace generativeqc::dft::cuda_xc_detail

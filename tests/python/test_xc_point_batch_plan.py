@@ -26,7 +26,8 @@ def test_emitted_point_batch_resource_admission(
         "struct CudaXcPointBatchPlan {\n"
         "  std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};\n"
         "  std::size_t work_elements{}, potential_elements{}, descriptor_bytes{}; bool compact{};\n"
-        "  std::size_t compact_groups{},compact_tiles{},compact_nonempty_tiles{};\n};\n"
+        "  std::size_t compact_groups{},compact_tiles{},compact_nonempty_tiles{}; bool ragged{};\n"
+        "  std::size_t compact_large_tiles{};\n};\n"
         "struct CudaXcCompactTile { std::size_t begin{},count{},active{},map_offset{},ao_offset{},work_offset{},potential_offset{}; };\n"
         + emit_native_xc_point_batch_plan()
         + r"""

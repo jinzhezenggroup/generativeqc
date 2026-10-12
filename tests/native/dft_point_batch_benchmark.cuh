@@ -1,7 +1,8 @@
 /** Fixed-density XC endpoints, not SCF/force promotion evidence.
  * Keep 256-point maps, FP64 canonical points and generated contractions in both
  * arms. Discovery, optional preparation, publication and work are explicit. */
-void point_batch_benchmark(const char* original, const char* moved, bool compact = false) {
+void point_batch_benchmark(const char* original, const char* moved, bool compact = false,
+                           bool ragged = false) {
   using namespace mapped_density_test;
   constexpr std::size_t tile = 256;
   for (unsigned geometry = 0; geometry < 2; ++geometry) {
@@ -24,7 +25,8 @@ void point_batch_benchmark(const char* original, const char* moved, bool compact
       const auto batch_started = std::chrono::steady_clock::now();
       // Isolate compact contractions from the already-default point batching.
       // The original point-batch experiment still compares against one tile.
-      plan.prepare_point_batches(route || compact ? 32 : 1, 32ULL << 20, route && compact);
+      plan.prepare_point_batches(route || compact ? 32 : 1, 32ULL << 20,
+                                 (route || ragged) && compact, route && ragged);
       batch_preparation[route] = elapsed(batch_started);
       preparation[route] = elapsed(started);
     }
@@ -111,9 +113,11 @@ void point_batch_benchmark(const char* original, const char* moved, bool compact
           << " potential_calls=" << movement.potential_calls
           << " potential_summands=" << movement.potential_summands
           << " descriptor_setup_h2d_bytes=" << batch.descriptor_bytes
-          << " point_gathers=0 descriptor_transfers_per_evaluation=0 concurrent_scatters=0"
+          << " point_gathers=0 descriptor_transfers_per_evaluation=0 overlapping_scatters=0"
           << " cold_s=" << samples[route][0] << " warm_median_s=" << ordered[3]
           << " max_energy_error=" << energy_error << " max_v_error=" << potential_error;
+      std::cout << " ragged=" << batch.ragged;
+      std::cout << " compact_large_tiles=" << batch.compact_large_tiles;
       for (std::size_t sample = 0; sample < samples[route].size(); ++sample)
         std::cout << " sample" << sample << "_s=" << samples[route][sample];
       std::cout << std::endl;

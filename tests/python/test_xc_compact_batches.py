@@ -172,6 +172,25 @@ int main() {
   assert(!compact_point_batch_admitted(layout,mixed,4,8));
   assert(partial.work_elements==8*64*(32+48+40));
   assert(partial.potential_elements==2*(32*32+48*48+40*40));
+  const auto ragged=prepare_point_batch_plan(layout,mixed,4,4<<20,true,true);
+  assert(ragged.compact && ragged.ragged && ragged.compact_groups==2);
+  assert(ragged.compact_nonempty_tiles==6);
+  assert(ragged.compact_large_tiles==1 && partial.compact_large_tiles==0);
+  assert(ragged.work_elements==8*64*(200+40+40));
+  assert(ragged.potential_elements==2*(200*200+40*40+40*40));
+  assert(prepare_point_batch_plan(layout,mixed,4,ragged.device_bytes,true,true).tiles==4);
+  assert(prepare_point_batch_plan(layout,mixed,4,ragged.device_bytes-1,true,true).tiles<4);
+  // Ragged admission is bounded independently of the available allocation.
+  layout.nao=2048;
+  const std::vector<std::size_t> wide{0,129,386,899,1923,1923,1923,1923,1923};
+  const auto wide_plan=prepare_point_batch_plan(layout,wide,4,64<<20,true,true);
+  assert(wide_plan.compact && wide_plan.ragged && wide_plan.compact_nonempty_tiles==4);
+  assert(wide_plan.compact_large_tiles==4);
+  assert(wide_plan.potential_elements==2*(129*129+257*257+513*513+1024*1024));
+  assert(!compact_point_batch_admitted(layout,{0,1025,1025},0,2,true));
+  const auto bounded=prepare_point_batch_plan(layout,wide,4,1<<20,true,true);
+  assert(bounded.device_bytes<=std::size_t(1<<20));
+  assert(!prepare_point_batch_plan(layout,wide,4,1<<20,false,true).ragged);
   layout.spins=std::numeric_limits<std::size_t>::max();
   try { prepare_point_batch_plan(layout,mixed,4,1<<20,true); assert(false); }
   catch (const std::invalid_argument&) {}
@@ -359,6 +378,16 @@ int main() {
   }
   for (std::size_t index=0;index<potential.size();++index) close(potential[index],expected[index]);
   for (I channel=0;channel<3;++channel) assert(totals[channel]==reference_totals[channel]);
+  const auto serial_potential=potential;
+  const std::array<double,3> serial_totals{totals[0],totals[1],totals[2]};
+  std::fill(potential.begin(),potential.end(),0.0);
+  std::fill(std::begin(totals),std::end(totals),0.0);
+  launch({2,4,1},{128,1,1},[&] {
+    batch_ordered_scatter<true>(tiles.data(),4,local.data(),point_totals.data(),0,ids.data(),full_n,
+                                potential.data(),totals,&error);
+  });
+  assert(potential==serial_potential);
+  for (I channel=0;channel<3;++channel) assert(totals[channel]==serial_totals[channel]);
   assert(error==0);
 }
 """

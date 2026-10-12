@@ -12,6 +12,7 @@
 #include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "tensor/cuda_error.hpp"
 
@@ -375,7 +376,7 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
 }
 
 void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget,
-                                       bool compact) {
+                                       bool compact, bool ragged) {
   check_device();
   if (evaluation_started_ || point_batch_arena_)
     throw std::logic_error("XC point batching requires an unused unbatched owner");
@@ -392,7 +393,7 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   compact = compact && !(density_provider_ && density_provider_->enabled()) &&
             !(potential_binding_ && potential_binding_->diagnostic().provider_allowance);
   const auto plan = cuda_xc_detail::prepare_point_batch_plan(layout_, ao_offsets_, requested_tiles,
-                                                             device_budget, compact);
+                                                             device_budget, compact, ragged);
   if (plan.tiles == 1) return;
   const auto launcher = cuda_xc_detail::resolve_point_batch_launcher(layout_.functional);
   double* arena = nullptr;
@@ -418,7 +419,7 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
         if (tile % plan.tiles == 0) {
           ao_offset = work_offset = potential_offset = 0;
           grouped = cuda_xc_detail::compact_point_batch_admitted(
-              layout_, ao_offsets_, tile, std::min(tile_count, tile + plan.tiles));
+              layout_, ao_offsets_, tile, std::min(tile_count, tile + plan.tiles), plan.ragged);
         }
         const auto begin = tile * layout_.tile_points;
         const auto count = std::min(layout_.tile_points, layout_.npoint - begin);
@@ -451,6 +452,16 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
     transfers_.setup_h2d_bytes += plan.descriptor_bytes;
     ++transfers_.synchronizations;
   }
+  runtime::df_progress::Scope trace("cuda_xc_batch_plan", "host_prepared");
+  runtime::df_progress::Scope::number("tiles_per_batch", plan.tiles);
+  runtime::df_progress::Scope::number("compact", plan.compact);
+  runtime::df_progress::Scope::number("ragged", plan.ragged);
+  runtime::df_progress::Scope::number("device_bytes", plan.device_bytes);
+  runtime::df_progress::Scope::number("compact_groups", plan.compact_groups);
+  runtime::df_progress::Scope::number("compact_tiles", plan.compact_tiles);
+  runtime::df_progress::Scope::number("compact_nonempty_tiles", plan.compact_nonempty_tiles);
+  runtime::df_progress::Scope::number("compact_large_tiles", plan.compact_large_tiles);
+  runtime::df_progress::Scope::number("max_active", ao_selection_work().max_active);
 }
 
 void CudaXcPlan::prepare_potential(std::size_t provider_budget) {

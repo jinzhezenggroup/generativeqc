@@ -867,10 +867,10 @@ void variational_and_state(const AoBasis& basis, const MolecularGrid& grid,
 
 void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned functional,
                    bool unrestricted, std::size_t tile = 9, const CudaXcAoTiles* maps = nullptr,
-                   std::size_t point_batch_tiles = 1, bool compact = false) {
+                   std::size_t point_batch_tiles = 1, bool compact = false, bool ragged = false) {
   Fixture captured(basis, grid, functional, unrestricted, tile, CudaXcAoPrecision::Fp64, false, 1.0,
                    1.0, maps);
-  captured.plan->prepare_point_batches(point_batch_tiles, 32 * 1024 * 1024, compact);
+  captured.plan->prepare_point_batches(point_batch_tiles, 32 * 1024 * 1024, compact, ragged);
   auto d = density(basis.nao, unrestricted ? 2 : 1);
   check(cudaMemcpyAsync(captured.density, d.data(), d.size() * sizeof(double),
                         cudaMemcpyHostToDevice, captured.stream));
@@ -1062,6 +1062,15 @@ int main(int argc, char** argv) {
     }
     if (argc == 4 && std::string(argv[1]) == "--compact-batch-benchmark") {
       point_batch_benchmark(argv[2], argv[3], true);
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--ragged-batches") {
+      point_batch_cases(true);
+      std::cout << "CUDA XC ragged batches: independent E/V, cross-block maps and replay passed\n";
+      return 0;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--ragged-batch-benchmark") {
+      point_batch_benchmark(argv[2], argv[3], true, true);
       return 0;
     }
     if (argc == 4 && std::string(argv[1]) == "--indexed-potential-benchmark") {
