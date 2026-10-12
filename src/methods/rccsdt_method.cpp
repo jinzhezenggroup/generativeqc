@@ -503,7 +503,7 @@ generativeqc_status validate_rccsdt_system(generativeqc_method method, const cor
 
 std::unique_ptr<PreparedCalculation> prepare_rccsdt_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System*) {
   runtime::ExecutionContext execution(context);
   if (execution.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
       execution.backend() != GENERATIVEQC_BACKEND_CUDA)
@@ -520,7 +520,7 @@ std::unique_ptr<PreparedCalculation> prepare_rccsdt_calculation(
 std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(
     const Capabilities& capabilities, core::ContextState& context,
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
-    generativeqc_batch_flags flags) {
+    generativeqc_batch_flags flags, const core::System*) {
   const bool warm_starts_enabled = (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0;
   constexpr auto supported_flags =
       static_cast<generativeqc_batch_flags>(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);

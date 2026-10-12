@@ -320,7 +320,7 @@ generativeqc_status validate_ump2_system(generativeqc_method, const core::System
 
 std::unique_ptr<PreparedCalculation> prepare_ump2_calculation(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System*) {
   if (context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "UMP2 requires the CPU backend");
   if (descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
@@ -372,7 +372,7 @@ std::unique_ptr<PreparedBatch> prepare_ump2_batch(const Capabilities& capabiliti
                                                   core::ContextState& context,
                                                   std::vector<core::System> systems,
                                                   const generativeqc_method_descriptor& descriptor,
-                                                  generativeqc_batch_flags flags) {
+                                                  generativeqc_batch_flags flags, const core::System*) {
   if (flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "UMP2 batch supports warm starts only; profiling is unavailable");

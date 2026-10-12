@@ -1122,7 +1122,7 @@ generativeqc_status validate_rccsd_system(generativeqc_method, const core::Syste
 
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System*) {
   runtime::ExecutionContext execution(context);
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
@@ -1141,7 +1141,7 @@ std::unique_ptr<PreparedBatch> prepare_rccsd_batch(const Capabilities& capabilit
                                                    core::ContextState& context,
                                                    std::vector<core::System> systems,
                                                    const generativeqc_method_descriptor& descriptor,
-                                                   generativeqc_batch_flags flags) {
+                                                   generativeqc_batch_flags flags, const core::System*) {
   constexpr auto supported_flags =
       static_cast<generativeqc_batch_flags>(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
   if ((flags & ~supported_flags) != 0)
