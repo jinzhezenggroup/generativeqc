@@ -1,8 +1,9 @@
 """Reproducible CPU-only public Hessian/HVP endpoint timing and parity receipt.
 
-Use a fresh process for each *independent* process-first trial. The first call
-within a process is NOT automatically a compiler-cold trial: the persistent JIT
-cache may already contain artifacts. No sample is filtered from the receipt.
+First calls are endpoint-first, not independent process-first trials: HVP runs
+before full Hessian in one process and shares its persistent JIT cache. Use a
+fresh process and empty cache for separate compiler-cold qualification. Every
+successful timing sample is numerically validated and retained.
 """
 
 from __future__ import annotations
@@ -13,12 +14,14 @@ import platform
 import statistics
 import subprocess
 import time
-from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _fixture(case: str) -> tuple[list[tuple[str, tuple[float, ...]]], Any, np.ndarray]:
@@ -86,6 +89,7 @@ def _source_sha() -> str | None:
         return subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
             text=True,
+            cwd=Path(__file__).resolve().parents[1],
             timeout=5,
             stderr=subprocess.DEVNULL,
         ).strip()
@@ -93,25 +97,41 @@ def _source_sha() -> str | None:
         return None
 
 
-def _validate_pair(hvp: Any, hessian: Any, direction: np.ndarray) -> dict[str, float]:
+def _validate_pair(hvp: Any, hessian: Any, direction: np.ndarray) -> dict[str, Any]:
     """Check raw analytic outputs without symmetrizing the reported Hessian."""
-    vector = direction.ravel()
-    hv = np.asarray(hvp.value, dtype=np.float64).ravel()
-    matrix = np.asarray(hessian.matrix, dtype=np.float64)
-    if hv.shape != vector.shape or matrix.shape != (len(vector), len(vector)):
+    direction = np.asarray(direction)
+    hv = np.asarray(hvp.value)
+    matrix = np.asarray(hessian.matrix)
+    if any(np.iscomplexobj(value) for value in (direction, hv, matrix)):
+        raise ValueError("public Hessian/HVP outputs and direction must be real")
+    if (
+        direction.ndim != 2
+        or direction.shape[0] == 0
+        or direction.shape[1] != 3
+        or hv.shape != direction.shape
+        or matrix.shape != (direction.size, direction.size)
+    ):
         raise ValueError("public Hessian/HVP output layout mismatch")
-    if not np.isfinite(hv).all() or not np.isfinite(matrix).all():
+    direction = np.asarray(direction, dtype=np.float64)
+    hv = np.asarray(hv, dtype=np.float64)
+    matrix = np.asarray(matrix, dtype=np.float64)
+    if not all(np.isfinite(value).all() for value in (direction, hv, matrix)):
         raise FloatingPointError("nonfinite CPU Hessian/HVP")
-    residual = float(np.max(np.abs(matrix @ vector - hv)))
-    scale = float(max(1.0, np.max(np.abs(hv)), np.max(np.abs(matrix @ vector))))
-    symmetry = float(np.max(np.abs(matrix - matrix.T)))
+    with np.errstate(over="raise", invalid="raise"):
+        projected = matrix @ direction.ravel()
+        residual = float(np.max(np.abs(projected - hv.ravel())))
+        scale = float(max(1.0, np.max(np.abs(hv)), np.max(np.abs(projected))))
+        symmetry = float(np.max(np.abs(matrix - matrix.T)))
+        norm = float(np.linalg.norm(matrix))
+    if not np.isfinite(projected).all() or not np.isfinite(norm):
+        raise FloatingPointError("nonfinite CPU Hessian/HVP validation")
     if residual > 1e-6 * scale:
         raise ArithmeticError("complete public HVP and full Hessian disagree")
     return {
         "hvp_full_max_abs_error": residual,
         "hvp_full_relative_gate_scale": scale,
         "raw_symmetry_max_abs_error": symmetry,
-        "raw_hessian_frobenius_norm": float(np.linalg.norm(matrix)),
+        "raw_hessian_frobenius_norm": norm,
         "posthoc_symmetrization": False,
     }
 
@@ -120,6 +140,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     """Run matched public CPU calls with one retained method and fixed controls."""
     from generativeqc import Calculator, GridSpec, KsOptions
 
+    if type(args.repeats) is not int or args.repeats < 1:
+        raise ValueError("repeats must be a positive integer")
     atoms, basis, direction = _fixture(args.case)
     moved = _moved(atoms, direction, args.displacement)
     calculator = Calculator(
@@ -158,23 +180,27 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             strategy=args.strategy,
         )
 
-    # Both timed public calls include a fresh SCF and live response preparation.
+    # Each pair uses matched geometry, with HVP preceding full Hessian. The
+    # latter is endpoint-first only: the preceding HVP has already warmed this
+    # process and shared persistent cache.
     first_hvp, t_first_hvp = _sample(lambda: hvp(atoms))
-    warm_hvp_times = []
-    for _ in range(args.repeats):
-        _, elapsed = _sample(lambda: hvp(atoms))
-        warm_hvp_times.append(elapsed)
-    changed_hvp, t_changed_hvp = _sample(lambda: hvp(moved))
-
     first_hessian, t_first_hessian = _sample(lambda: hessian(atoms))
+    original_validation = _validate_pair(first_hvp, first_hessian, direction)
+    warm_hvp_times = []
     warm_hessian_times = []
+    warm_validation = []
     for _ in range(args.repeats):
-        _, elapsed = _sample(lambda: hessian(atoms))
-        warm_hessian_times.append(elapsed)
+        warm_hvp, hvp_elapsed = _sample(lambda: hvp(atoms))
+        warm_hessian, hessian_elapsed = _sample(lambda: hessian(atoms))
+        warm_validation.append(_validate_pair(warm_hvp, warm_hessian, direction))
+        warm_hvp_times.append(hvp_elapsed)
+        warm_hessian_times.append(hessian_elapsed)
+    changed_hvp, t_changed_hvp = _sample(lambda: hvp(moved))
     changed_hessian, t_changed_hessian = _sample(lambda: hessian(moved))
+    changed_validation = _validate_pair(changed_hvp, changed_hessian, direction)
 
     receipt = {
-        "schema": "generativeqc.cpu-hessian-endpoint.v1",
+        "schema": "generativeqc.cpu-hessian-endpoint.v2",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "git_head": _source_sha(),
         "runtime": {
@@ -188,6 +214,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "method": args.method,
             "case": args.case,
             "atoms_bohr": atoms,
+            "changed_atoms_bohr": moved,
+            "max_iterations": 200,
+            "energy_tolerance": 1e-13,
+            "density_tolerance": 1e-11,
             "direction": direction.tolist(),
             "displacement_bohr": args.displacement,
             "grid": {
@@ -203,28 +233,36 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         },
         "timing_scope": (
             "complete public Calculator calls including fresh SCF, CPKS, "
-            "integral HVP and publication; process-first may have a warm "
-            "persistent JIT artifact cache"
+            "integral HVP and publication; endpoint-first samples share one "
+            "process and persistent JIT artifact cache"
         ),
+        "measurement_order": {
+            "endpoints_per_pair": ["hvp", "full_hessian"],
+            "endpoint_first_prior_public_calls": {"hvp": 0, "full_hessian": 1},
+            "shared_process_and_cache": True,
+            "compiler_cold_claim": False,
+        },
         "timings": {
             "hvp": {
-                "process_first": _summary([t_first_hvp]),
+                "endpoint_first": _summary([t_first_hvp]),
                 "same_geometry": _summary(warm_hvp_times),
                 "changed_geometry": _summary([t_changed_hvp]),
             },
             "full_hessian": {
-                "process_first": _summary([t_first_hessian]),
+                "endpoint_first": _summary([t_first_hessian]),
                 "same_geometry": _summary(warm_hessian_times),
                 "changed_geometry": _summary([t_changed_hessian]),
             },
         },
         "validation": {
-            "original": _validate_pair(first_hvp, first_hessian, direction),
-            "changed_geometry": _validate_pair(changed_hvp, changed_hessian, direction),
+            "original": original_validation,
+            "same_geometry": warm_validation,
+            "changed_geometry": changed_validation,
         },
         "notes": [
             "No CUDA or GPU acceptance is used.",
             "Same geometry calls rebuild live SCF/response, not a persistent CPKS.",
+            "Every timing sample has a validated paired HVP/full-Hessian result.",
             "No timing samples are filtered or marked compiler-cold.",
             "This script does not replace independent gradient-difference oracles.",
         ],

@@ -96,14 +96,17 @@ PYTHONPATH=python:. python tools/benchmark_cpu_hessian.py \\
   --output benchmarks/results/hessian-cpu-h2.json
 ```
 
-The JSON retains every full-call first-in-process, same-geometry, and
+The JSON retains every full-call endpoint-first, same-geometry, and
 changed-geometry timing sample for both HVP and raw full-Hessian paths. Each
-full call includes fresh SCF and stationary response; the script also checks
-`H @ v` against the independently requested complete HVP and records *raw*
-full-matrix asymmetry without post-hoc symmetrization. No CUDA acceptance is
-required. The first-in-process sample **does not** establish a compiler-cold
-measurement if its persistent JIT cache already contains generated artifacts;
-use a fresh process *and* an independently empty cache directory for that claim.
+full call includes fresh SCF and stationary response. Every timed pair, including
+all same-geometry repeats, must pass finite real shape and `H @ v` parity checks;
+raw full-matrix asymmetry is recorded without post-hoc symmetrization.
+No CUDA acceptance is required. HVP precedes full Hessian in each pair in one
+shared process/cache, and the receipt records that ordering. In particular,
+the first full-Hessian call has already been warmed by one HVP; it is **not** an
+independent process-first trial. Neither endpoint-first sample establishes a
+compiler-cold measurement. Use separate fresh processes *and* independently
+empty cache directories for independent compiler-cold qualification.
 For large-domain compilation investigations, opt in with `--case he13`:
 this uses the 13-Cartesian-AO single-He `s+d+d` fixture from the existing
 resource-bound test. Its generated second-integral CPU C++ cold-JIT path has
