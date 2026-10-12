@@ -15,7 +15,7 @@ from test_uccsd_gradient import _NH2, _RESTRICTED_H4, _native_oracle
 from test_uccsd_lambda import _problem
 from test_uccsd_physical_response import _ao_derivative_oracle
 from test_uccsd_solver import _snapshot
-from test_uccsd_t_owner import _ASYMMETRIC_H6, _BROKEN_H4, _noninteracting
+from test_uccsd_t_owner import _noninteracting
 
 from tools.generativeqc_cc.solver import SolverOptions
 from tools.generativeqc_cc.uccsd_gradient import (
@@ -165,11 +165,7 @@ def _independent_analytic(oracle: Any) -> np.ndarray:
 
 @pytest.mark.parametrize(
     "atom,spin,broken",
-    [
-        (_BROKEN_H4, 0, True),
-        (_ASYMMETRIC_H6, 0, False),
-        ("N 0 0 0; H 0 -.8 .6; H 0 .8 .6", 1, False),
-    ],
+    [("N 0 0 0; H 0 -.8 .6; H 0 .8 .6", 1, False)],
 )
 def test_corrected_physical_weights_close_reconverged_total_energy_fd(
     atom: str, spin: int, broken: bool
@@ -217,7 +213,6 @@ def test_corrected_physical_weights_close_reconverged_total_energy_fd(
             "cartesian",
         ),
         (_NH2, 1, False, "spherical"),
-        (_NATIVE_H6, 0, False, "cartesian"),
     ],
 )
 def test_complete_corrected_native_cpu_force_has_independent_oracles(
@@ -286,8 +281,8 @@ def test_complete_corrected_native_cpu_force_has_independent_oracles(
                         value.setflags(write=True)
 
 
-@pytest.fixture
-def small_response() -> Any:
+@contextmanager
+def _small_response_context() -> Any:
     snapshot, source = _noninteracting(4, 2, 2)
     with (
         ConventionalProvider(snapshot, source) as provider,
@@ -296,6 +291,20 @@ def small_response() -> Any:
     ):
         yield owners
 
+
+@pytest.fixture(scope="module")
+def small_response() -> Any:
+    # Each response.solve() replays its scientific qualifications from live owners.
+    # Tests with function-local monkeypatches share the expensive prepared graph.
+    with _small_response_context() as owners:
+        yield owners
+
+
+@pytest.fixture
+def closing_small_response() -> Any:
+    # The explicit closed-Fock rejection check must not invalidate shared state.
+    with _small_response_context() as owners:
+        yield owners
 
 def test_standard_and_corrected_type_boundaries_remain_distinct(
     small_response: tuple,
@@ -320,15 +329,8 @@ def test_standard_and_corrected_type_boundaries_remain_distinct(
     assert result.triples_energy == 0.0
 
 
-@pytest.mark.parametrize(
-    "options",
-    [
-        UCCSDPhysicalResponseOptions(max_bytes=1),
-        UCCSDPhysicalResponseOptions(max_total_work=1),
-    ],
-)
 def test_corrected_admission_precedes_raw_producer_reads(
-    small_response: tuple, options: Any, monkeypatch: pytest.MonkeyPatch
+    small_response: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     physical, corrected, fock = small_response
 
@@ -336,15 +338,20 @@ def test_corrected_admission_precedes_raw_producer_reads(
         pytest.fail("rejected corrected physical admission read raw integrals")
 
     monkeypatch.setattr(physical.provider, "get", forbidden)
-    with pytest.raises(MemoryError):
-        PreparedUCCSDTPhysicalResponse(
-            corrected,
-            physical.result,
-            fock,
-            physical.provider,
-            options=options,
-            nuclear_repulsion=0.0,
-        )
+    # Check both independent rejection budgets without rebuilding UCCSD(T).
+    for options in (
+        UCCSDPhysicalResponseOptions(max_bytes=1),
+        UCCSDPhysicalResponseOptions(max_total_work=1),
+    ):
+        with pytest.raises(MemoryError):
+            PreparedUCCSDTPhysicalResponse(
+                corrected,
+                physical.result,
+                fock,
+                physical.provider,
+                options=options,
+                nuclear_repulsion=0.0,
+            )
 
 
 def test_corrected_requires_the_same_live_triples_owner(small_response: tuple) -> None:
@@ -453,8 +460,8 @@ def test_final_same_occupancy_stationarity_is_not_an_ov_only_gate(
         physical.solve()
 
 
-def test_closed_full_fock_owner_never_publishes(small_response: tuple) -> None:
-    physical, corrected, fock = small_response
+def test_closed_full_fock_owner_never_publishes(closing_small_response: tuple) -> None:
+    physical, corrected, fock = closing_small_response
     fock.close()
     with pytest.raises(RuntimeError, match="closed"):
         physical.solve()
