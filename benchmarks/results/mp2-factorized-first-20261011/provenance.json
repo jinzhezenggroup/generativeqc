@@ -1,0 +1,60 @@
+{
+  "baseline_commit": "637466c624c4c4c4dd4eb7c511a2c88675744325",
+  "exact_LF_baseline_archive_sha256": "af2baa707ed021c7287e6942173e25e3141b5c7154e0fdcfdd115001ed7d6afd",
+  "qualified_files": {
+    "src/posthf/mp2_derivative_common.cpp": "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657",
+    "src/posthf/mp2_derivative_common.hpp": "877332e87e8889570b2056be8bb23de18a8f47a9d611e843d0d92191a15b50a9",
+    "tests/native/mp2_derivative_pullback_probe.cpp": "a66370233c5c437d6bf84fd62e69293659489722f5d28fdb48c91b04efbf612a",
+    "tests/python/test_mp2_derivative_pullback_probe.py": "ee63166c4450f7aded511f01993ee059b80c384fe7da0f9f7d54befa90f8d1af"
+  },
+  "published_files": {
+    "src/posthf/mp2_derivative_common.cpp": "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657",
+    "src/posthf/mp2_derivative_common.hpp": "877332e87e8889570b2056be8bb23de18a8f47a9d611e843d0d92191a15b50a9",
+    "tests/native/mp2_derivative_pullback_probe.cpp": "a66370233c5c437d6bf84fd62e69293659489722f5d28fdb48c91b04efbf612a",
+    "tests/python/test_mp2_derivative_pullback_probe.py": "ae988985cdd2628521ce314e69f473be24e08fb89899e334524f83bb4a2f17ad"
+  },
+  "post_qualification_delta": "Only Python test type annotations, canonical LF disposition metadata, evidence and tracker formatting changed after qualification. Common C++/header/native probe remain byte-identical. Published artifact hashes distinguish formatting from executed source hashes. After upstream integration, source-bound instrumentation is opt-in (GENERATIVEQC_MP2_WORK_PROBE=1); default CI retains unmodified C++ independent-oracle, fallback and molecular tests.",
+  "source_inventory": "cmake/GenerativeQCSourceIdentity.json",
+  "measurement_scope": "Source-matched completed CPU endpoint pairs in cpu-summary.json.gz; no CUDA-device execution. Raw overall/resource gates remain FAIL at the documented unmeasured sentinel. Uncompleted matrix cases remain unqualified.",
+  "checks": {
+    "native_probe": "32 baseline / 48 candidate PASS",
+    "build": "both verified-sccache CPU CMake builds exit0",
+    "static": "63 PASS",
+    "canonical_materialization": "PASS; six retained sites",
+    "lint": "PASS",
+    "hpc": "GCC 11.4.0; baseline 34 / candidate 50 tests PASS; both CPU Release builds completed through sccache 0.16.0"
+  },
+  "artifacts": {
+    "common-receipts.json": "3f257b09bf8adea9aa864f2e18f681b9ba194c31ef0a86748e34dea858e743d3",
+    "endpoint.py": "e3c632692d3ad43a11c4723b0f7ed9b3d0d2973cdc13a13f478ca4608ccfb109",
+    "h2-records.json.gz": "33293a9c9cf781e885dc5dbd0294d19cc8d614fbf58438bc3bb9fa52ddfa58f4",
+    "payload.cpp": "87752931e661c087c4aa84f47f6f18e962e2cd185219a4952ecd19a37a40f72a",
+    "cpu-endpoints.json.gz": "deba94d2f528a17adb671c935cbf533b985cfb42779e8aab1756891c3074c6f3",
+    "cpu-summary.json.gz": "7d7f061062492912f1b214c2d4f10ec93d90899bc5bf04e3c84eb04570063f1b"
+  },
+  "tracker": {
+    "source_sha256": "f38cb4761a689c8452cd86ad9fd988efb97528c9f121f4cada454928da01cb14",
+    "loaded_shared_library_sha256": "454d1a127aa7283309b3a3ce34c4380d9b188e81bd442f8208c836ec7f38a0e4",
+    "scope": "ordinary global C++ new/new[] only; untracked timing is separate",
+    "source_revision": "cf9c6870ffe0b6f718f2f010f3ac01d6cc627394",
+    "published_source_sha256": "87752931e661c087c4aa84f47f6f18e962e2cd185219a4952ecd19a37a40f72a",
+    "publication_delta": "pre-commit.ci be594163 changed only payload.cpp formatting; source_sha256 remains the actually executed tracker. Both executed source texts are retained in cpu-endpoints.json.gz.",
+    "hpc_loaded_shared_library_sha256": "7f0656c481756f8efc2d43c0e6ac44eebbf7bb8e7b509566fccecfa50c518539"
+  },
+  "summary_storage": {
+    "encoding": "gzip",
+    "decoded_bytes": 20850,
+    "decoded_sha256": "7c938b8085450268568a5e548119f5d372b12fc09270dbf5fe5102649ea19164",
+    "reason": "Lossless storage compaction after merging newer upstream evidence; all summary records unchanged."
+  },
+  "upstream_integration": {
+    "commit": "1ac537e67b60b4e0e733de42783d4d5f755e3f5e",
+    "base": "8504566587a58613e408c40d55d19509469e03f1",
+    "scope": "Published MP2 common/header/native probe bytes unchanged. The broader production inventory changed; historical loaded-library identities and endpoint receipts qualify the original measured snapshots, not the integrated build. Latest-head build and endpoint qualification must be assessed separately."
+  },
+  "latest_integration": {
+    "upstream_commit": "61a0e715fde35566722870389af8e137036232db",
+    "production_source_identity": "97278d8cb40b46b29f547d0e38d0e32d49a6da11a9451a5c36ce9e47e6dabe1d",
+    "scope": "The common/header/native probe and published tests remain byte-identical. The full production inventory changed; prior endpoint bundles retain original source/library identities. Resolved six-site materialization bindings and aggregate retention were verified; current-source Linux native/PySCF and installed-library qualification remain pending required CI/independent acceptance."
+  }
+}

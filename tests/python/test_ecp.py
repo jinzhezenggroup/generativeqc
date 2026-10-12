@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from _ecp_raw_matrix_reference import load_reference
 from generativeqc import (
     Atom,
     BasisProvenance,
@@ -65,6 +66,17 @@ def fixture(
         cart=representation == "cartesian",
         verbose=0,
     )
+    record = _record_from_resolved_basis(basis, ecp, representation)
+    return atoms, record, mol
+
+
+def _record_from_resolved_basis(
+    basis: typing.Any,
+    ecp: typing.Any,
+    representation: typing.Any,
+    *,
+    frozen: bool = False,
+) -> typing.Any:
     elements = []
     for symbol, z in (("Na", 11), ("H", 1)):
         shells = []
@@ -73,9 +85,10 @@ def fixture(
             shells.append(
                 BasisShell(
                     angular,
-                    tuple(str(r[0]) for r in rows),
+                    tuple(str(float(r[0])) if frozen else str(r[0]) for r in rows),
                     tuple(
-                        tuple(str(r[c]) for r in rows) for c in range(1, len(rows[0]))
+                        tuple(str(float(r[c])) if frozen else str(r[c]) for r in rows)
+                        for c in range(1, len(rows[0]))
                     ),
                 )
             )
@@ -108,14 +121,22 @@ def fixture(
         "LANL2DZ-Na/STO-3G-H test oracle",
         tuple(elements),
         BasisProvenance(
-            "PySCF test-only installed basis library",
+            (
+                "Retained independent PySCF basis/ECP receipt"
+                if frozen
+                else "PySCF test-only installed basis library"
+            ),
             "2.14.0",
-            "upstream external test data; not redistributed",
+            (
+                "Resolved external test data retained with acquisition provenance"
+                if frozen
+                else "upstream external test data; not redistributed"
+            ),
             canonical_hash({"basis": basis, "ecp": ecp}),
         ),
         representation=representation,
     )
-    return atoms, record, mol
+    return record
 
 
 def reference(mol: typing.Any) -> typing.Any:
@@ -128,10 +149,21 @@ def reference(mol: typing.Any) -> typing.Any:
 def test_raw_matrices_libcint_and_quadrature(
     representation: typing.Any, d_shell: typing.Any
 ) -> None:
-    atoms, basis, mol = fixture(representation=representation, d_shell=d_shell)
+    atoms, resolved_basis, resolved_ecp, expected = load_reference(
+        representation=representation, d_shell=d_shell
+    )
+    basis = _record_from_resolved_basis(
+        resolved_basis, resolved_ecp, representation, frozen=True
+    )
     actual = ecp_integrals(atoms, basis)
     refined = ecp_integrals(atoms, basis, radial_points=224, polar_points=44)
-    np.testing.assert_allclose(actual.matrix, reference(mol), atol=2e-9, rtol=1e-9)
+    _assert_raw_matrix_results(actual, refined, expected)
+
+
+def _assert_raw_matrix_results(
+    actual: typing.Any, refined: typing.Any, expected: typing.Any
+) -> None:
+    np.testing.assert_allclose(actual.matrix, expected, atol=2e-9, rtol=1e-9)
     np.testing.assert_allclose(actual.local, refined.local, atol=2e-9, rtol=1e-9)
     np.testing.assert_allclose(
         actual.nonlocal_, refined.nonlocal_, atol=2e-9, rtol=1e-9

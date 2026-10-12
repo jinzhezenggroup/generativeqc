@@ -93,7 +93,9 @@ also accept `--cross-size-arena`; the selection covers all outputs from one
 invocation. Use the CMake option rather than replacing individual generated
 files in a production build.
 
-`cc::LambdaOptions::serial_scratch_reuse` is a separate default-off owner candidate.
+`cc::LambdaOptions::serial_scratch_reuse` remains default-off for standalone owners.
+The complete native DF molecular-force owner requests it by default and accepts an
+explicit false selector for the separate-arena oracle.
 Conventional Lambda shares fresh-replay and response scratch. DF Lambda shares
 expanded, staged, matrix, primal-replay and independent-audit scratch on its
 existing single stream. Every borrowed result is consumed before another producer
@@ -112,7 +114,8 @@ no GPU synchronization or scientific work is added.
 The internal `run_df_ccsdt_native` accepts the
 `lambda_serial_scratch_reuse` selector after its reference-experiment pointer,
 followed by the independent default-off CCSD and Lambda mixed-precision selectors.
-`benchmarks/df_ccsdt_force_endpoint.cpp` accepts that `0`/`1` selector at argument 28 and records
+`benchmarks/df_ccsdt_force_endpoint.cpp` accepts that `0`/`1`/`auto` selector at argument 28
+(default enabled) and records
 `lambda_serial_scratch_reuse_requested`. Existing Lambda numeric-capacity and
 owned-device-byte fields describe the selected layout. `df_audit_arena_bytes`
 remains a logical audit/replay capacity requirement, not an additional allocation
@@ -124,8 +127,10 @@ auxiliary bases use the displaced geometry. These calls rebuild native scientifi
 owners; they are not prepared force replay. Recycle selection remains separate. Arguments 30 and 31 select CCSD and Lambda
 mixed warmup; the scratch and lifecycle positions remain unchanged.
 
-Cross-size arena reuse is qualified independently of serial scratch; serial
-scratch remains experimental because it can change warm cache/provider admission.
+Cross-size arena reuse is qualified independently of serial scratch. Promotion in
+the complete DF force owner does not promote standalone conventional Lambda or
+authorize concurrent consumers of borrowed scratch. Sharing can change warm
+cache/provider admission, so those owners retain their independent qualification.
 Static capacity reductions, source equivalence, host tests or CUDA compilation
 alone do not justify promotion. Promotion requires same-source FP64 numerical and
 independent-audit gates, complete cold/warm/moved-warm E+F noninferiority, matching

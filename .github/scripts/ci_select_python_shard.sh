@@ -290,6 +290,15 @@ rebalance_paths=(
   # keep their core slots so every unrelated file retains its owner.
   tests/python/test_cc_native_tensor_cpu.py
   tests/python/test_uccsd_native.py
+  # Make room for complete corrected forces on parallel core-b workers.
+  # Keep the full-Fock file's original core slot before its bounded
+  # complete-file transfer to the existing compiler lane.
+  tests/python/test_uccsd_triples_fock_response.py
+  # The observed complete UCCSD / corrected UCCSD(T) gradient suites took
+  # 150-309s per numerical case on PR #2362. Preserve their historical core
+  # modulo slots while routing both full files to one parallel worksteal job.
+  tests/python/test_uccsd_gradient.py
+  tests/python/test_uccsd_t_gradient.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -309,19 +318,22 @@ nightly_hessian_paths=(
 # originally totaled about 0.7k observed worker-seconds per group. Later
 # dedicated-shard transfers take precedence over these historical core pins.
 # Keep all scientific tests and all existing nightly-only qualifications.
+# Dedicated UCCSD force tests no longer occupy the broad core queues;
+# corrected Lambda stays an independent prioritized core-c owner.
+core_fresh_frontier_c=(
+  tests/python/test_uccsd_t_lambda.py
+)
 core_hotspots_a=(
   tests/python/test_mixed_rsh_df_forces.py
-  # PR #2329 / run 38202660731 left only two gradient cases at timeout.
-  # Keep this measured long tail parallel on the lighter core-a workers;
-  # its >1751 worker-seconds must not become one serial loadfile task.
-  tests/python/test_uccsd_gradient.py
   # Keep complete high-angular HF parallel with its original core slot;
   # the native TensorIR CPU file now has a dedicated compiler transfer.
   tests/python/test_cpu_hf_high_l.py
 )
 core_hotspots_b=(
-  # Keep the independent full-Fock matrix on its measured parallel owner.
-  tests/python/test_uccsd_triples_fock_response.py
+  # The added restricted-CUDA test shifted this complete response file
+  # into core-c's corrected-Lambda tail. Retain parallel core-b ownership
+  # and its original enumeration slot; all cases stay selected.
+  tests/python/test_uccsd_response.py
   tests/python/test_df_lambda_core_reuse.py
   tests/python/test_df_lambda_frontier.py
   tests/python/test_df_triples_distinct_moments.py
@@ -330,7 +342,7 @@ core_hotspots_b=(
 core_hotspots_c=(
   # The gradient and corrected-Lambda families must not share one late tail.
   # Fresh function-scoped owners remain parallel, with every case retained.
-  tests/python/test_uccsd_t_lambda.py
+  "${core_fresh_frontier_c[@]}"
   tests/python/test_cc_canonical_denominators.py
   tests/python/test_direct_order5_sources.py
 )
@@ -359,11 +371,12 @@ case "${GENERATIVEQC_CI_SHARD}" in
       pinned_core_owner["${path}"]=2
     done
     case "${GENERATIVEQC_CI_SHARD}" in
-      core-a) target_bucket=0 ;;
-      core-b) target_bucket=1 ;;
-      core-c) target_bucket=2 ;;
+      core-a) target_bucket=0; fresh_frontier_paths=() ;;
+      core-b) target_bucket=1; fresh_frontier_paths=() ;;
+      core-c) target_bucket=2; fresh_frontier_paths=("${core_fresh_frontier_c[@]}") ;;
     esac
     test_targets=()
+    declare -A selected_core=()
     core_index=0
     while IFS= read -r path; do
       if [[ -n "${slow_lookup[${path}]:-}" ]]; then
@@ -380,11 +393,49 @@ case "${GENERATIVEQC_CI_SHARD}" in
       fi
       if (( owner == target_bucket )); then
         test_targets+=("${path}")
+        selected_core["${path}"]=1
       fi
     done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)
     if (( ${#test_targets[@]} == 0 )); then
       echo "::error::core shard selected no tests"
       exit 2
+    fi
+    # Metadata changes only the final collection order. Seed fresh cases in
+    # each contiguous worksteal queue instead of concentrating them in one
+    # frontloaded file; never admit an unselected/absent future suite.
+    fresh_frontier_args=()
+    for path in "${fresh_frontier_paths[@]}"; do
+      if [[ -n "${selected_core[${path}]:-}" ]]; then
+        fresh_frontier_args+=("--ci-fresh-priority=${path}")
+      fi
+    done
+    if (( ${#fresh_frontier_args[@]} > 0 )); then
+      extra_args+=(-p tools.pytest_ci_fresh_frontier "${fresh_frontier_args[@]}")
+    fi
+    ;;
+  uccsd-forces)
+    # One additional runner, not two: move the two measured 21-29 minute
+    # force/gradient tails out of the broad core queues without removing a
+    # single molecular oracle, independent finite difference, or failure gate.
+    # Each test is function-scoped, so worksteal (not loadfile) parallelizes
+    # these multi-minute complete-oracle parameterizations across four workers.
+    # Seed both frontiers across workers; naive collection order would cluster
+    # the first several expensive cases on one worker instead.
+    dist_mode=worksteal
+    test_targets=()
+    force_priorities=()
+    for path in \
+      tests/python/test_uccsd_gradient.py \
+      tests/python/test_uccsd_t_gradient.py; do
+      # Select tracked files even when missing on disk, to fail closed; avoid
+      # inventing future files on pre-merge branches or synthetic inventories.
+      if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+        test_targets+=("$path")
+        force_priorities+=("--ci-fresh-priority=$path")
+      fi
+    done
+    if (( ${#force_priorities[@]} > 0 )); then
+      extra_args+=(-p tools.pytest_ci_fresh_frontier "${force_priorities[@]}")
     fi
     ;;
   runtime-heavy)
@@ -517,11 +568,12 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_dft_mp_v1_capacity.py
       tests/python/test_df_lambda_frontier.py
     )
-    # Both complete native files have bounded serial cost and fresh
-    # function-local owners. Do not admit absent or untracked paths.
+    # Complete native and full-Fock files retain every numerical/fault case.
+    # Select tracked missing paths too, so incomplete checkouts fail closed.
     for path in \
       tests/python/test_cc_native_tensor_cpu.py \
-      tests/python/test_uccsd_native.py; do
+      tests/python/test_uccsd_native.py \
+      tests/python/test_uccsd_triples_fock_response.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")
       fi

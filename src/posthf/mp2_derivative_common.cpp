@@ -59,21 +59,50 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
                                 const std::vector<std::size_t>& offsets, std::size_t si,
                                 std::span<const double> first,
                                 const EriShellDerivativeAccumulate& eri_shell,
-                                std::vector<double>& derivative, bool canonical_shells) {
+                                std::vector<double>& derivative, bool canonical_shells,
+                                bool compact_first) {
   const auto n = reference.nbf;
   const auto di = offsets[si + 1] - offsets[si];
   for (std::size_t sj = 0; sj < system.shells.size(); ++sj) {
     if (canonical_shells && sj > si) continue;
     const auto dj = offsets[sj + 1] - offsets[sj];
     std::vector<double> second(posthf::checked_mul(posthf::checked_mul(di, dj), square(n)), 0.0);
-    for (std::size_t iu = 0; iu < di; ++iu)
-      for (std::size_t jv = 0; jv < dj; ++jv)
-        for (std::size_t r = 0; r < n; ++r)
-          for (std::size_t s = 0; s < n; ++s)
-            for (std::size_t q = 0; q < n; ++q)
-              second[((iu * dj + jv) * n + r) * n + s] +=
-                  reference.coefficients[(offsets[sj] + jv) * n + q] *
-                  first[((iu * n + q) * n + r) * n + s];
+    if (compact_first) {
+      const auto occupied = reference.nocc, virtuals = n - occupied;
+      const auto exchange_offset = di * n * occupied;
+      const auto correlation_offset = 2 * exchange_offset;
+      for (std::size_t iu = 0; iu < di; ++iu)
+        for (std::size_t jv = 0; jv < dj; ++jv)
+          for (std::size_t r = 0; r < occupied; ++r)
+            for (std::size_t s = 0; s < n; ++s) {
+              auto& target = second[((iu * dj + jv) * n + r) * n + s];
+              const auto nu = offsets[sj] + jv;
+              if (s == r) {
+                for (std::size_t q = 0; q < n; ++q)
+                  target += reference.coefficients[nu * n + q] * first[(iu * n + q) * occupied + r];
+              } else {
+                target += reference.coefficients[nu * n + r] *
+                          first[exchange_offset + (iu * occupied + r) * n + s];
+              }
+              // The occupied exchange slot precedes all virtual correlation
+              // slots in the original q reduction. Keep that order, including
+              // its overlapping diagonal in the Coulomb region above.
+              if (s >= occupied)
+                for (std::size_t a = 0; a < virtuals; ++a)
+                  target += reference.coefficients[nu * n + occupied + a] *
+                            first[correlation_offset +
+                                  ((iu * virtuals + a) * occupied + r) * virtuals + s - occupied];
+            }
+    } else {
+      for (std::size_t iu = 0; iu < di; ++iu)
+        for (std::size_t jv = 0; jv < dj; ++jv)
+          for (std::size_t r = 0; r < n; ++r)
+            for (std::size_t s = 0; s < n; ++s)
+              for (std::size_t q = 0; q < n; ++q)
+                second[((iu * dj + jv) * n + r) * n + s] +=
+                    reference.coefficients[(offsets[sj] + jv) * n + q] *
+                    first[((iu * n + q) * n + r) * n + s];
+    }
     for (std::size_t sk = 0; sk < system.shells.size(); ++sk) {
       if (canonical_shells && sk > si) continue;
       const auto dk = offsets[sk + 1] - offsets[sk];
@@ -121,7 +150,7 @@ std::vector<double> conventional_derivative_accumulate(
     const core::System& system, const hf::PhysicalReference& reference,
     const LagrangianWeights& weights, const OneElectronDerivativeContract& one_electron,
     const EriShellDerivativeAccumulate& eri_shell,
-    const std::function<void(std::span<double>)>& finalize) {
+    const std::function<void(std::span<double>)>& finalize, FactorizedFirstLayout first_layout) {
   const auto n = reference.nbf;
   bool dense_two = false;
   if (!weights.two_electron.empty())
@@ -167,7 +196,19 @@ std::vector<double> conventional_derivative_accumulate(
   const auto& shell_contract = trace.enabled() ? measured_shell : eri_shell;
   for (std::size_t si = 0; si < system.shells.size(); ++si) {
     const auto di = offsets[si + 1] - offsets[si];
-    std::vector<double> first(posthf::checked_mul(di, posthf::checked_mul(n, square(n))), 0.0);
+    const auto first_elements = posthf::checked_mul(di, posthf::checked_mul(n, square(n)));
+    const auto occupied = reference.nocc, virtuals = n - occupied;
+    const auto compact_elements =
+        factorized_two
+            ? posthf::checked_mul(
+                  di, posthf::checked_mul(occupied, posthf::checked_add(posthf::checked_mul(2, n),
+                                                                        square(virtuals))))
+            : first_elements;
+    // Never enlarge the admitted legacy staging footprint. The explicit staged
+    // route remains available to bounded consumers and independent validation.
+    const bool compact_first = factorized_two && first_layout == FactorizedFirstLayout::automatic &&
+                               compact_elements < first_elements;
+    std::vector<double> first(compact_first ? compact_elements : first_elements, 0.0);
     if (dense_two) {
       for (std::size_t iu = 0; iu < di; ++iu)
         for (std::size_t q = 0; q < n; ++q)
@@ -179,7 +220,8 @@ std::vector<double> conventional_derivative_accumulate(
                     symmetric_eri_weight(weights.two_electron, n, p, q, r, s);
     } else {
       const auto& factors = weights.two_electron_factors;
-      const auto occupied = factors.occupied, virtuals = n - occupied;
+      const auto exchange_offset = di * n * occupied;
+      const auto correlation_offset = 2 * exchange_offset;
       auto g_index = [occupied, virtuals](std::size_t i, std::size_t j, std::size_t a,
                                           std::size_t b) {
         return ((i * occupied + j) * virtuals + a) * virtuals + b;
@@ -193,8 +235,13 @@ std::vector<double> conventional_derivative_accumulate(
             const double weight = factors.fock[p * n + q];
             if (weight == 0.0) continue;
             for (std::size_t i = 0; i < occupied; ++i) {
-              first[((iu * n + q) * n + i) * n + i] += 2.0 * coefficient * weight;
-              first[((iu * n + i) * n + i) * n + q] -= coefficient * weight;
+              const auto coulomb =
+                  compact_first ? (iu * n + q) * occupied + i : ((iu * n + q) * n + i) * n + i;
+              const auto exchange = !compact_first ? ((iu * n + i) * n + i) * n + q
+                                    : q == i       ? (iu * n + i) * occupied + i
+                                                   : exchange_offset + (iu * occupied + i) * n + q;
+              first[coulomb] += 2.0 * coefficient * weight;
+              first[exchange] -= coefficient * weight;
             }
           }
         }
@@ -203,14 +250,18 @@ std::vector<double> conventional_derivative_accumulate(
           if (coefficient == 0.0) continue;
           for (std::size_t j = 0; j < occupied; ++j)
             for (std::size_t a = 0; a < virtuals; ++a)
-              for (std::size_t b = 0; b < virtuals; ++b)
-                first[((iu * n + occupied + a) * n + j) * n + occupied + b] +=
-                    coefficient * factors.correlation_iajb[g_index(i, j, a, b)];
+              for (std::size_t b = 0; b < virtuals; ++b) {
+                const auto correlation =
+                    compact_first
+                        ? correlation_offset + ((iu * virtuals + a) * occupied + j) * virtuals + b
+                        : ((iu * n + occupied + a) * n + j) * n + occupied + b;
+                first[correlation] += coefficient * factors.correlation_iajb[g_index(i, j, a, b)];
+              }
         }
       }
     }
     transform_remaining_shells(system, reference, offsets, si, first, shell_contract, derivative,
-                               dense_two);
+                               dense_two, compact_first);
   }
   const auto finalize_started = now();
   if (finalize) finalize(derivative);
@@ -242,15 +293,18 @@ std::vector<double> conventional_derivative(const core::System& system,
                                             const hf::PhysicalReference& reference,
                                             const LagrangianWeights& weights,
                                             const OneElectronDerivativeContract& one_electron,
-                                            const EriShellDerivativeContract& eri_shell) {
+                                            const EriShellDerivativeContract& eri_shell,
+                                            FactorizedFirstLayout first_layout) {
   if (!eri_shell) throw std::invalid_argument("missing conventional ERI derivative consumer");
   return conventional_derivative_accumulate(
-      system, reference, weights, one_electron, [&](const auto& shells, auto local, auto gradient) {
+      system, reference, weights, one_electron,
+      [&](const auto& shells, auto local, auto gradient) {
         const auto center = eri_shell(shells, local);
         for (std::size_t slot = 0; slot < 4; ++slot)
           for (std::size_t axis = 0; axis < 3; ++axis)
             gradient[3 * system.shells[shells[slot]].atom_index + axis] += center[3 * slot + axis];
-      });
+      },
+      {}, first_layout);
 }
 
 }  // namespace generativeqc::mp2::detail
