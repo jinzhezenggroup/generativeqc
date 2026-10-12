@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "cc/df_source_response.hpp"
@@ -101,6 +102,8 @@ struct DFCCSDTResult {
  * lambda_resident_krylov is a default-off storage binding of the same physical
  * Lambda actions. Its admission includes both providers and the DF device
  * ceiling; refusal retains the existing host-vector response schedule.
+ * ccsd_mixed_precision defaults to the qualified native DF auto policy. Explicit
+ * true/false override shape selection but never physical convergence gates.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -114,8 +117,10 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
-    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false);
+    bool lambda_serial_scratch_reuse = false,
+    std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
+    bool lambda_resident_krylov = false,
+    double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

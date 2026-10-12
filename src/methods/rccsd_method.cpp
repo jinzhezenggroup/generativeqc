@@ -1023,7 +1023,7 @@ RccsdNativeState run_rccsd_native_state(
     std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
     bool retain_df_response, bool df_matrix_gemm, scf::CudaRhfBucketPlan** cuda_reference_plan,
     std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis,
-    bool df_mixed_precision) {
+    std::optional<bool> df_mixed_precision, double df_mixed_precision_switch_residual) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -1051,7 +1051,13 @@ RccsdNativeState run_rccsd_native_state(
   solver_options.df_auxiliary_batch_limit = df_auxiliary_batch_limit;
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;
-  solver_options.df_mixed_precision = df_mixed_precision;
+  const auto nbf = molecule::ao_count(system);
+  const auto nocc = static_cast<std::size_t>(system.electron_count / 2);
+  solver_options.df_mixed_precision =
+      execution.cuda_requested() && correlation_auxiliary &&
+      df_mixed_precision.value_or(nbf > nocc &&
+                                  cc::default_df_ccsd_mixed_precision(nocc, nbf - nocc));
+  solver_options.df_mixed_precision_switch_residual = df_mixed_precision_switch_residual;
   // Retaining DF response inputs changes source lifetime, not the CC equations.
   // Every observed state and the independent final physical replay stay fresh.
   solver_options.diis_input_residual = execution.cuda_requested() && correlation_auxiliary;
