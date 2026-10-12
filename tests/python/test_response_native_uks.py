@@ -381,7 +381,9 @@ def test_meta_gga_snapshot_cannot_be_interpreted_as_pbe(restricted: bool) -> Non
             )
             shape = (1,) if restricted else (2, 1)
             rho, gradient = np.ones(shape), np.zeros((*shape, 3))
-            with pytest.raises(NotImplementedError, match="LDA/PBE"):
+            with pytest.raises(
+                NotImplementedError, match="qualified unscaled legacy XC"
+            ):
                 evaluate(True, rho, gradient, rho, gradient)
         finally:
             source.close()

@@ -132,8 +132,8 @@ struct NativeKsExecutionPlan {
   unsigned spin_channels{1}, functional{1}, domain{4};
   bool range_exchange{}, nonlocal_correlation{}, d4_correction{};
 };
-unsigned xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.functional; }
-unsigned scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }
+unsigned ks_xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.functional; }
+unsigned ks_scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }
 """
         + admission
         + r"""

@@ -281,7 +281,7 @@ int main() {
                 assert(route.generic_exchange == (want_k && !expected && !canonical));
                 assert(route.generated_coulomb == (want_j && expected_shell && !mixed_j));
                 assert(route.canonical_coulomb ==
-                       (want_j && !route.generated_coulomb && canonical && !mixed_j));
+                       (want_j && !route.generated_coulomb && canonical));
                 assert(route.generic_coulomb ==
                        (want_j && !route.generated_coulomb && !route.canonical_coulomb));
                 assert(int(route.generated_coulomb) + int(route.canonical_coulomb) +
@@ -533,7 +533,11 @@ int main() {
            int(both.generic_coulomb) == int(j));
     assert(int(both.generated_exchange) + int(both.canonical_exchange) +
            int(both.generic_exchange) == int(k));
-    if (mixed) assert(!both.generated_coulomb && !both.canonical_coulomb);
+    if (mixed) {
+      assert(!both.generated_coulomb);
+      assert(both.canonical_coulomb == (j && canonical));
+      assert(both.generic_coulomb == (j && !canonical));
+    }
     const auto ordinary = device_dispatch(generated_j, generated_k, j, k, mixed,
                                            canonical, false);
     assert(ordinary.generated_coulomb == both.generated_coulomb);

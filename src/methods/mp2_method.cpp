@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "api/handles.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
@@ -412,7 +413,9 @@ generativeqc_status item_exception_status() {
   }
 }
 
-class Mp2PreparedBatch final : public PreparedBatch {
+class Mp2PreparedBatch final : public PreparedBatch,
+                               public BatchWarmStarts,
+                               public BatchCorrelationDiagnostics {
  public:
   Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
                    std::vector<core::System> systems,
@@ -522,25 +525,6 @@ class Mp2PreparedBatch final : public PreparedBatch {
   }
 
   void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
-  [[nodiscard]] std::optional<std::vector<DirectShellClassProfileEntry>>
-  last_direct_shell_class_profile() const override {
-    return std::nullopt;
-  }
-  [[nodiscard]] std::optional<DirectPppsQueueProfile> last_direct_ppps_queue_profile()
-      const override {
-    return std::nullopt;
-  }
-  [[nodiscard]] std::vector<EigensolverDiagnostic> last_eigensolver_diagnostics() const override {
-    return {};
-  }
-  [[nodiscard]] std::vector<scf::CudaDensityFittingMetricDiagnostic>
-  last_density_fitting_metric_diagnostics() const override {
-    return {};
-  }
-  [[nodiscard]] std::vector<InactiveEigensolverProfileEntry> last_inactive_eigensolver_profile()
-      const override {
-    return {};
-  }
 
  private:
   Capabilities capabilities_;

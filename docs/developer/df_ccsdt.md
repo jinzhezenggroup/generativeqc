@@ -7,17 +7,28 @@ correlation-only-DF variant. Prepared batches remain unsupported.
 
 ## First supported method definition
 
-### Internal mixed-precision preconvergence
+### Native mixed-precision preconvergence
 
-The CUDA DF-CCSD solver has an opt-in `SolverOptions.df_mixed_precision`
-schedule. It evaluates the existing auxiliary primal graph with FP32 storage,
+Native CUDA DF endpoints default to automatic CCSD warmup selection. The
+contraction-dominated domain with at least 9 occupied and 128 virtual orbitals
+requests mixed warmup; smaller and low-occupied systems retain FP64 to avoid
+conversion, launch and strict-history-restart overhead. The existing CUDA owner
+still admits the actual workspace and contraction providers under the complete
+budget, falling back to FP64 on resource refusal. CPU and conventional CCSD
+remain unchanged. The internal native `std::optional<bool>` request defaults to
+`std::nullopt` (auto); explicit `true` and `false` retain mixed and strict
+ablations at every size. Supplied-Hamiltonian `SolverOptions.df_mixed_precision`
+remains an explicit opt-in independent of the native default policy.
+
+The mixed schedule evaluates the existing auxiliary primal graph with FP32 storage,
 pedantic FP32 GEMMs and round-to-nearest scalar arithmetic during warmup.
 Immutable factor conversions are owner-local; amplitudes and tau are converted
 for each evaluation. Every auxiliary contribution is widened before the
 original ordered FP64 Q accumulation. Energy, retained-core contractions,
 Jacobi denominators, amplitudes and DIIS remain FP64.
 
-At `df_mixed_precision_switch_residual` (default `1e-7`), or after at most
+At `df_mixed_precision_switch_residual` (default `100.0 * 1e-9`, approximately
+`1e-7`), or after at most
 `df_mixed_precision_max_evaluations` (default 24) warmup graph calls, the controller clears
 mixed DIIS history and permanently switches to the original FP64 auxiliary graph.
 When the original supplied guess admitted restricted-pair coordinates and the
@@ -35,19 +46,34 @@ Neither mixed residuals nor rounded cuts can certify convergence: the original
 energy/residual tolerances and independent expanded FP64 replay still apply.
 The strict Lambda solve, parameter/factor VJPs, (T), orbital response and nuclear
 derivatives remain FP64 consumers. Resource refusal retains strict execution; numerical
-failure is reported, not hidden by a retry. This is an internal candidate, not
-a new public method precision policy or a default performance claim.
+failure is reported, not hidden by a retry. Warmup need not converge to either
+its FP32 rounding floor or the final physical tolerance. Only strict iterations
+and independent FP64 replay may certify the published state. This changes the
+native iteration schedule, not the public method's physical precision tier.
 
 The developer `df_ccsdt_force_endpoint` benchmark accepts a
-`CCSD_MIXED_PRECISION_0_OR_1` argument at position 30, after the existing
+`CCSD_MIXED_PRECISION_AUTO_OR_0_OR_1` argument at position 30, after the existing
 `LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1` (28) and `LIFECYCLE_0_OR_1` (29) controls.
 The separate `LAMBDA_MIXED_PRECISION_0_OR_1` flag is position 31. Positions count
-from `argv[0]`; all four controls default to off. Historical benchmark runners
+from `argv[0]`; CCSD defaults to `auto`, while the serial-scratch, lifecycle and
+Lambda mixed controls remain off. Historical benchmark runners
 are tied to their recorded source and retain their original argument layout.
 Its diagnostics distinguish FP32 GEMMs, casts, warmup evaluations and the
 precision switch from FP64 work. Use complete cold E+F timing and independent
 energy/force gates rather than treating a GEMM throughput gain as endpoint
 qualification.
+
+The optional `CCSD_MIXED_SWITCH_RESIDUAL` argument at position 32 follows
+`LAMBDA_MIXED_PRECISION_0_OR_1` (31). It changes only the warmup boundary, not
+the final physical convergence tolerances or response precision. The
+`benchmarks/ccsd_mixed_thresholds.py` runner compares fresh-process FP64 and
+mixed endpoints with alternating mode order, retains source/binary/input
+identities and work counters, and rejects failed FP64 residual or response
+certificates. Use `--forces` for complete energy-and-force qualification and
+multiple repeats before selecting a threshold. `--auto` also compares the native
+default against explicit mixed and FP64 controls. An energy-only screen is not
+evidence for force-endpoint default promotion. Run it through a finite Slurm
+GPU allocation while preserving the allocation's device visibility.
 
 The Lambda owner shares matrix scratch across solver/parameter stages, fresh
 primal replay and the independent audit. Their generated equations and pinned

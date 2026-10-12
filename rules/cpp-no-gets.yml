@@ -1,0 +1,8 @@
+id: cpp-no-gets
+language: Cpp
+severity: error
+message: "gets() is unsafe: use an input API with an explicit buffer bound."
+rule:
+  pattern:
+    context: "void f() { gets($BUFFER); }"
+    selector: call_expression

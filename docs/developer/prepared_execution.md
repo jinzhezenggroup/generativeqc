@@ -132,12 +132,18 @@ legitimate scientific or backend-specific owners.
 | Family | Endpoint adapter | Scientific/resource owners intentionally retained |
 | --- | --- | --- |
 | HF CPU/CUDA | `src/methods/hf_method.cpp` | `PreparedFockPlan`, CPU Fock/overlap owners, native CUDA RHF/DF buckets and original solve generations |
-| XC/KS CPU/CUDA | `src/methods/dft_method.cpp` | Native semilocal/grid/XC, `CudaKsPlan`, source/grid leases, physical final-state validation and stationary force artifact lease |
+| XC/KS CPU/CUDA | `src/methods/dft_method_preparation.cpp` (descriptor/grid/spin admission), `src/methods/dft_method.cpp` (prepared owners), `src/methods/dft_method_{final_state,derivative}_adapter.cpp` (token-checked forwarding) | Native semilocal/grid/XC, `CudaKsPlan`, source/grid leases, physical final-state validation and stationary force artifact lease |
 | MP2/UMP2 | `src/methods/mp2_method.cpp`, `src/methods/ump2_method.cpp` | Reference/correlation source admission, phase-local providers, precision policy and last-good reference seed; unsupported targets still reject |
 | CC | `src/methods/rccsd_method.cpp`, `src/methods/rccsdt_method.cpp`, `src/methods/df_rccsdt_method.cpp` | CC equations, physical residuals, shared response Krylov, source admission, provider streams and bounded fallbacks |
 | GFN | `src/methods/xtb_method.cpp` | Context-owned `Gfn2RuntimeBridge`, native CPU/CUDA SCC owners and provider handle preparation/destruction |
 | Tensor capture | `src/runtime/cuda_graph_region.cuh` | Original graph executable, stream/arena/library binding and capture eligibility; graph submission is not an endpoint completion fence |
 | Explicit generated D3 | `python/generativeqc_compiler/geometry/d3_cuda.py` | Existing artifact lease, topology/switch-state guards and native tensor owner; rebuild after failure remains explicit |
+
+The KS adapters cross-cast to private `KsSingleOwnerPort` and
+`KsBatchOwnerPort` interfaces. These interfaces only forward requests to the
+original prepared calculation/batch: they do **not** allocate resources,
+retain final-state tokens, or extend borrowed CUDA pointer lifetimes. Descriptor
+admission completes before construction of the mutable scientific owner.
 
 Seeded post-HF batch calls and native ragged KS scheduling remain inside the
 fleet transaction; they do not create fake per-item scalar lifecycle records.

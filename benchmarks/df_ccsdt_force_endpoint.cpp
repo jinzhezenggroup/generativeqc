@@ -35,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 32)
+    if (argc < 4 || argc > 33)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
@@ -49,8 +49,9 @@ int main(int argc, char** argv) {
           "[LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 "
           "[LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1 "
           "[LAMBDA_SERIAL_SCRATCH_REUSE_0_OR_1 [LIFECYCLE_0_OR_1 "
-          "[CCSD_MIXED_PRECISION_0_OR_1 "
-          "[LAMBDA_MIXED_PRECISION_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]]]");
+          "[CCSD_MIXED_PRECISION_AUTO_OR_0_OR_1 "
+          "[LAMBDA_MIXED_PRECISION_0_OR_1 "
+          "[CCSD_MIXED_SWITCH_RESIDUAL]]]]]]]]]]]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -104,14 +105,26 @@ int main(int argc, char** argv) {
       frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
     const bool parallel_gap_reduction = argc <= 19 || selector(19);
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
-    const bool fused_triples_scalar_response = argc > 22 && selector(22);
+    const bool fused_triples_scalar_response =
+        argc <= 22 || std::string(argv[22]) == "auto" || selector(22);
     const bool lambda_core_reuse = selector(25);
     const bool lambda_audit_matrix = selector(26);
     const bool lambda_primal_matrix = argc <= 27 || selector(27);
-    const bool lambda_serial_scratch_reuse = argc > 28 && selector(28);
+    const bool lambda_serial_scratch_reuse =
+        argc <= 28 || std::string(argv[28]) == "auto" || selector(28);
     const bool triples_w_fp32 = argc > 23 && selector(23);
-    const bool ccsd_mixed_precision = argc > 30 && selector(30);
+    std::optional<bool> ccsd_mixed_precision;
+    if (argc > 30 && std::string(argv[30]) != "auto") ccsd_mixed_precision = selector(30);
     const bool lambda_mixed_precision = argc > 31 && selector(31);
+    double ccsd_mixed_switch_residual =
+        generativeqc::cc::SolverOptions{}.df_mixed_precision_switch_residual;
+    if (argc > 32) {
+      const std::string token(argv[32]);
+      std::size_t consumed = 0;
+      ccsd_mixed_switch_residual = std::stod(token, &consumed);
+      if (consumed != token.size() || !std::isfinite(ccsd_mixed_switch_residual))
+        throw std::invalid_argument("invalid CCSD mixed switch residual");
+    }
     // The complete DF force owner defaults to amortized FP64 Lambda checks.
     // Explicit interval 1 retains the historical per-iteration control.
     const auto lambda_true_residual_interval = unsigned_argument(24, 30);
@@ -182,7 +195,7 @@ int main(int argc, char** argv) {
           parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
           admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix,
           lambda_primal_matrix, nullptr, lambda_serial_scratch_reuse, ccsd_mixed_precision,
-          lambda_mixed_precision);
+          lambda_mixed_precision, false, ccsd_mixed_switch_residual);
       const char* suffix = repetition == 2 ? ".moved-warm.json" : repetition ? ".warm.json" : "";
       std::ofstream output(std::string(argv[2]) + suffix);
       if (!output) throw std::runtime_error("cannot open completed force output");
@@ -229,7 +242,14 @@ int main(int argc, char** argv) {
       work_field("source_seconds", result.primal.problem_seconds);
       work_field("ccsd_seconds", result.primal.solver_seconds);
       field("ccsd_matrix_gemm", result.solver.df_matrix_gemm ? 1 : 0);
-      field("ccsd_mixed_precision_requested", ccsd_mixed_precision);
+      if (ccsd_mixed_precision)
+        field("ccsd_mixed_precision_requested", *ccsd_mixed_precision);
+      else
+        field("ccsd_mixed_precision_requested", "null");
+      field(
+          "ccsd_mixed_precision_policy",
+          std::quoted(ccsd_mixed_precision ? (*ccsd_mixed_precision ? "mixed" : "fp64") : "auto"));
+      field("ccsd_mixed_switch_residual", ccsd_mixed_switch_residual);
       field("ccsd_mixed_precision", result.solver.df_mixed_precision);
       field("ccsd_mixed_precision_refused", result.solver.df_mixed_precision_refused);
       output << "  \"ccsd_mixed_program_hash\": "

@@ -102,7 +102,7 @@ repos:
         pass_filenames: false
         always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.10
+    rev: v0.17.0
     hooks:
       # Generated parameter Python is byte-for-byte qualified against its source.
       - id: ruff
@@ -122,7 +122,29 @@ repos:
         types_or: [python, pyi, jupyter]
         exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v23.1.2
+    rev: v23.1.3
     hooks:
       - id: clang-format
         types_or: [c++, c, cuda]
+  - repo: local
+    hooks:
+      # Pin ast-grep in a managed Python hook environment.  GitHub Actions
+      # uses prek + uv, while external pre-commit.ci runs plain pre-commit
+      # without uvx on PATH; both install additional_dependencies themselves.
+      # No native compilation, CUDA toolkit, or GPU is required to scan.
+      - id: ast-grep-native
+        name: Structural lint for maintained C++/CUDA
+        # Publish non-blocking warnings as inline GitHub Actions annotations.
+        entry: ast-grep scan --config sgconfig.yml --format github
+        language: python
+        additional_dependencies: [ast-grep-cli==0.50.0]
+        types: [file]
+        files: ^(?:src|include)/.*\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx|cu|cuh)$
+        verbose: true
+      - id: ast-grep-rule-tests
+        name: Test structural lint rules
+        entry: ast-grep test --config sgconfig.yml --skip-snapshot-tests
+        language: python
+        additional_dependencies: [ast-grep-cli==0.50.0]
+        pass_filenames: false
+        files: ^(?:sgconfig\.yml|rules/|rule-tests/)

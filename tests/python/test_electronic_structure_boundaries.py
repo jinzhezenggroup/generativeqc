@@ -174,24 +174,37 @@ def test_posthf_cannot_add_new_scf_dependency(tmp_path: typing.Any) -> None:
     ) in errors[0]
 
 
+@pytest.mark.parametrize("header", ["mean_field.hpp", "cuda_density_fitting.hpp"])
 def test_known_posthf_scf_edge_is_a_ceiling_not_an_exemption(
     tmp_path: typing.Any,
+    header: str,
 ) -> None:
     source = tmp_path / "src"
     (source / "posthf").mkdir(parents=True)
     (source / "scf").mkdir()
-    (source / "scf/mean_field.hpp").write_text("// existing debt\n")
+    (source / "scf" / header).write_text("// existing debt\n")
     (source / "scf/new_driver.hpp").write_text("// new driver\n")
     consumer = source / "posthf/bridge.cpp"
-    consumer.write_text('#include "scf/mean_field.hpp"\n')
-    assert audit_electronic_structure_boundaries(tmp_path)["errors"] == []
+    consumer.write_text(f'#include "scf/{header}"\n')
+    report = audit_electronic_structure_boundaries(tmp_path)
+    assert report["errors"] == []
+    assert len(report["posthf_scf_edges"]) == 1
+    assert report["posthf_scf_edges"][0]["known_debt"]
 
-    consumer.write_text(
-        '#include "scf/mean_field.hpp"\n#include "scf/new_driver.hpp"\n'
-    )
+    consumer.write_text(f'#include "scf/{header}"\n#include "scf/new_driver.hpp"\n')
     errors = audit_electronic_structure_boundaries(tmp_path)["errors"]
     assert len(errors) == 1
     assert "forbidden post-HF dependency" in errors[0]
+
+    # The existing bridge edge does not authorize the same dependency elsewhere.
+    consumer.write_text(f'#include "scf/{header}"\n')
+    (source / "posthf/new_consumer.cpp").write_text(f'#include "scf/{header}"\n')
+    errors = audit_electronic_structure_boundaries(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert (
+        f"posthf/new_consumer.cpp:1: forbidden post-HF dependency on SCF-owned scf/{header}"
+        in errors[0]
+    )
 
 
 def test_known_cc_cuda_solver_debt_may_shrink_but_not_grow(

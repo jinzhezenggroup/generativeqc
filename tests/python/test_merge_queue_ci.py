@@ -19,7 +19,13 @@ def _job(source: str, name: str) -> str:
 
 def test_required_merge_group_jobs_use_the_liveness_gate() -> None:
     expected = {
-        "ci.yml": ("cpu", "cuda-compile", "cuda-resources", "python"),
+        "ci.yml": (
+            "cpu",
+            "cuda-compile",
+            "cuda-resources",
+            "cuda-direct-aot",
+            "python",
+        ),
         "cumetal-cuda.yml": ("cuda-tests",),
     }
     for filename, jobs in expected.items():

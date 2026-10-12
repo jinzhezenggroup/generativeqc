@@ -1,0 +1,9 @@
+id: cuda-review-device-sync
+valid:
+  - |
+    void f(cudaEvent_t event) { cudaEventSynchronize(event); }
+  - |
+    void f(cudaStream_t stream) { cudaStreamSynchronize(stream); }
+invalid:
+  - |
+    void f() { cudaDeviceSynchronize(); }

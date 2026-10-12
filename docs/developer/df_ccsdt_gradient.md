@@ -339,7 +339,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 [LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_AUTO_OR_0_LEGACY_1_BILINEAR_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_AUTO_OR_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 [LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1 [LAMBDA_SERIAL_SCRATCH_REUSE_AUTO_OR_0_OR_1 [LIFECYCLE_0_OR_1 [CCSD_MIXED_PRECISION_0_OR_1 [LAMBDA_MIXED_PRECISION_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to thirty-two,
@@ -375,15 +375,16 @@ not by itself block these defaults; its strict numerical gates remain unchanged.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
 
-Argument twenty-two opts into bounded primal/W/V scalar-tile fusion (`0` or
-`1`, default `0`), after the existing RHF tolerance argument twenty-one. Use
+Argument twenty-two selects bounded primal/W/V scalar-tile fusion (`0`, `1`,
+or `auto`, default enabled), after the existing RHF tolerance argument twenty-one. Use
 `auto` at argument twenty-one to retain the ordinary `1e-12` energy / `1e-11`
 density criteria when selecting fusion. The internal complete-force owner
-forwards the same explicit
+forwards the same
 `fused_triples_scalar_response` control to the joint triples response owner.
 It applies only when argument twenty is `0`: a fixed-canonical consumer asking
-for epsilon cotangents retains the all-output schedule. Public method defaults
-are unchanged.
+for epsilon cotangents retains the all-output schedule. The complete molecular-force
+owner requests fusion by default; the lower-level response API remains an explicit
+unfused oracle unless requested otherwise.
 
 Argument twenty-three admits the compiler-owned FP32 forward-W experiment
 (`0` or `1`, default `0`). It preserves all prior positional controls and uses
@@ -449,7 +450,11 @@ unmaterialized.
 
 Fusion retains six V seed cubes instead of reusing one. Complete preflight
 charges the extra five virtual cubes and falls back to the unfused schedule
-before reducing admitted page/panel residency. The standalone energy,
+before reducing admitted page/panel residency. Free-device-memory refusal also
+preserves that original residency. A typed CUDA/provider allocation failure during
+preparation destroys the partial owner before one bounded unfused retry; driver,
+submission and numerical failures propagate without being classified as OOM.
+The standalone energy,
 pullback, and full-Fock APIs remain independent qualification controls.
 Endpoint JSON records requested/selected/fallback state, compiler schedule
 identity, actual scalar-region launches, seed workspace, modeled scalar input

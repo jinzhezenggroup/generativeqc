@@ -138,6 +138,23 @@ void launch_canonical_jk_kernel(
     double* coulomb_correction = nullptr, double* exchange_correction = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max());
 
+/** Shared whole-shell FP32 recurrence with FP64 contraction/products/scatter. */
+void launch_materialized_canonical_mixed_j_kernel(
+    cudaStream_t stream, DeviceBatch batch, unsigned angular_order, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool unrestricted, double screening, const double* bounds,
+    const double* density, const std::uint8_t* active, double* coulomb, std::uint64_t* work_count,
+    std::uint64_t* mixed_work);
+
+/** Angular-bucketed recurrence-only FP32 J with FP64 density/scatter/projection. */
+void launch_canonical_mixed_j_kernel(
+    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
+    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool same_bucket, bool unrestricted, double screening,
+    const double* bounds, const double* density, double* coulomb, std::uint64_t* work_census,
+    std::uint64_t* mixed_coulomb_work_count, double* coulomb_correction = nullptr);
+
 /** Reuse the canonical orbit scatter with an immutable full-range value source.
  * No integral recurrence is instantiated in this replay kernel. */
 void launch_resident_canonical_jk_kernel(

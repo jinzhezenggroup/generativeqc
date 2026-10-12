@@ -217,6 +217,19 @@ def _kind(index: Index) -> str:
 
 
 def _dim(index: Index) -> str:
+    if index.space.kind in ("occupied", "virtual") and index.space.spin in (
+        "alpha",
+        "beta",
+    ):
+        if index.start != 0 or index.stop != index.space.size:
+            raise ValueError(f"unsupported unrestricted index slice: {index}")
+        if index.space.name.startswith("tile_"):
+            if index.space.size != 1:
+                raise ValueError("native unrestricted triples require singleton tiles")
+            return "tile_extent"
+        return ("o" if index.space.kind == "occupied" else "v") + (
+            "a" if index.space.spin == "alpha" else "b"
+        )
     if index.space.kind in ("occupied", "virtual"):
         return "o" if _kind(index) == "occupied" else "v"
     if index.space.kind == "batch":
@@ -887,6 +900,7 @@ def _cpu_function(
     output_fields: tuple[str, ...] | None = None,
     reuse_plan: IterationReusePlan | None = None,
     reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
+    dimension_names: tuple[str, ...] = ("o", "v"),
 ) -> str:
     names = _prepare_program(program)
     if (reuse_plan is None) != (reuse_phase is None):
@@ -895,12 +909,16 @@ def _cpu_function(
     retained_ids = {id(node) for node in retained}
     arena_plan = _arena_plan(program, retained_nodes=retained)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
-    dimensions = "std::size_t o,std::size_t v"
+    dimensions = ",".join(f"std::size_t {name}" for name in dimension_names)
     if batch_dim:
         dimensions += ",std::size_t q"
     lines = [
         f"inline {output_type} {function_name}({dimensions},{signature},double* arena,std::size_t arena_elements){{",
-        "  const std::size_t n=checked_add(o,v);",
+        *(
+            ["  const std::size_t n=checked_add(o,v);"]
+            if dimension_names == ("o", "v")
+            else []
+        ),
         *(
             [_occupied_pair_declaration(checked=True)]
             if _uses_occupied_pairs(program)
@@ -1007,6 +1025,7 @@ def _required_function(
     batch_dim: bool = False,
     retained_nodes: tuple[typing.Any, ...] = (),
     storage_slice: slice | None = None,
+    dimension_names: tuple[str, ...] = ("o", "v"),
 ) -> str:
     pieces = _arena_plan(program, retained_nodes=retained_nodes).sizes
     if storage_slice is not None:
@@ -1016,7 +1035,7 @@ def _required_function(
     body = "std::size_t required=0;"
     for piece in pieces:
         body += f"required=checked_add(required,{piece});"
-    dimensions = "std::size_t o,std::size_t v"
+    dimensions = ",".join(f"std::size_t {name}" for name in dimension_names)
     if batch_dim:
         dimensions += ",std::size_t q"
     pair_extent = (
@@ -1026,7 +1045,12 @@ def _required_function(
     )
     return (
         f"inline std::size_t {name}({dimensions}){{"
-        f"[[maybe_unused]] const std::size_t n=checked_add(o,v);{pair_extent}{body}return required;}}"
+        + (
+            "[[maybe_unused]] const std::size_t n=checked_add(o,v);"
+            if dimension_names == ("o", "v")
+            else ""
+        )
+        + f"{pair_extent}{body}return required;}}"
     )
 
 

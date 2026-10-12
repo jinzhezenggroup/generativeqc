@@ -1,0 +1,42 @@
+{
+  "README.md": {
+    "sha256": "d42b6beeaae5a500b6ed0139444ec88b08a6feb978909a49450a216a4745ab3e",
+    "bytes": 19518
+  },
+  "final-validation.json": {
+    "sha256": "9b6f43afa3129d60b934760def4193e5c73cb3d1de4fb2c8ab9d41dba9a7acb6",
+    "bytes": 2142
+  },
+  "fix-captures.json.xz": {
+    "sha256": "1be979d12b053aba5062470bc5dffd5565d5ac6402354d4f1eedcf80b1566e66",
+    "bytes": 60076
+  },
+  "fix-summary.json.xz": {
+    "sha256": "784f616d0f43ae11c910a244bdde89dbde65319354016311a4c0b613295655da",
+    "bytes": 3912
+  },
+  "history.json": {
+    "sha256": "f51851165b400ef2aa96fbed100a5495262262f1ec0b21be6d75a6d5822fddce",
+    "bytes": 594
+  },
+  "large-captures.json.xz": {
+    "sha256": "bf1163e770c3b256a5902e483ca39059d5386a490a9256f232880a3f04dde57e",
+    "bytes": 43988
+  },
+  "large-summary.json.xz": {
+    "sha256": "b6a386c175fc5ebc71cd90023b2d1b3525c34ec79e67075d842a2b85f7abe7fe",
+    "bytes": 3212
+  },
+  "native.patch": {
+    "sha256": "a65ed744b68d1fd0bbc06d18e4771fd4a064998c4b97060187ae3045e2c7fef3",
+    "bytes": 7637
+  },
+  "qualified-source.patch": {
+    "sha256": "f807b4d887cd4aaf875367a0910f31ecfe747a23d88ac12273a52cc4f23b6fe1",
+    "bytes": 8000
+  },
+  "summary.json.xz": {
+    "sha256": "cfe22f586eb34927875acc1bd0bbf172248f90758850a4bdc6650e5dc1c085e6",
+    "bytes": 12320
+  }
+}

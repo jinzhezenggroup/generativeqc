@@ -7,7 +7,7 @@ import typing
 
 import pytest
 
-from tools.check_vendor_boundaries import MANIFEST, audit_vendor_boundaries
+from tools.check_vendor_boundaries import MANIFEST, ROOT, audit_vendor_boundaries
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -52,6 +52,25 @@ def _fixture(
 
 def test_repository_inventory_is_complete() -> None:
     assert audit_vendor_boundaries()["errors"] == []
+
+
+def test_df_metric_and_density_science_use_provider_boundary() -> None:
+    """Retired method-local GEMMs cannot silently return in later refactors."""
+    inventory = audit_vendor_boundaries()["inventory"]
+    consumers = (
+        "src/scf/cuda/df_generated_tiles.hpp",
+        "src/scf/cuda/df_scf_factor.cpp",
+    )
+    for path in consumers:
+        assert path not in inventory
+    manifest = json.loads((ROOT / MANIFEST).read_text())
+    provider = manifest["files"]["src/scf/cuda/df_scf_library.cpp"]
+    assert provider["classification"] == "provider"
+    assert "cublasDgemm" in provider["references"]
+    # Setup still owns prepared-handle lifetime and one batched GEMM;
+    # only its six ordinary GEMMs have moved behind the shared adapter.
+    setup = "src/scf/cuda/df_plan_setup.cpp"
+    assert "cublasDgemm" not in inventory.get(setup, {})
 
 
 @pytest.mark.parametrize(

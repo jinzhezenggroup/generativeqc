@@ -2582,10 +2582,16 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
+    # Preserve the original frozen ABI digest: the exact ks_grid_options
+    # source span (including its trailing blank line) is now in preparation.
+    # Changing to _cpp_block_sha256 would silently alter the audit oracle.
+    preparation_source = (
+        repository / "src/methods/dft_method_preparation.cpp"
+    ).read_text(encoding="utf-8")
     native_abi_digest = _source_span_sha256(
-        route_source,
+        preparation_source,
         begin="dft::GridSpec ks_grid_options(",
-        end="Result adapt_result(",
+        end="void validate_ks_spin_state(",
         label="native GridSpec ABI lowerer",
     )
     header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
@@ -3211,6 +3217,7 @@ def _build_report(
         "src/dft/cuda_quadrature.cu",
         "src/dft/stationary_gradient_cuda.cuh",
         "src/methods/dft_method.cpp",
+        "src/methods/dft_method_preparation.cpp",
         "cmake/GenerativeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)

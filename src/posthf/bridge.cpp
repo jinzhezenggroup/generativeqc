@@ -22,6 +22,7 @@
 #include "posthf/cuda_derivative.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/raw_source.hpp"
+#include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_df_gradient.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "scf/cuda_weighted_eri.hpp"

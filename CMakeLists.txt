@@ -412,6 +412,10 @@ else()
   target_compile_definitions(generativeqc PUBLIC GENERATIVEQC_HAS_CUDA=0)
 endif()
 
+# Keep the public library/CLI/wheel artifact unchanged while isolating CPU-only
+# solver and basis objects behind their own incremental compile boundaries.
+generativeqc_add_cpu_component_object_targets(generativeqc)
+
 set_target_properties(generativeqc PROPERTIES OUTPUT_NAME generativeqc)
 if(NOT GENERATIVEQC_PYTHON_WHEEL)
   # Native SDK installs retain the normal SONAME chain. Wheel archives often

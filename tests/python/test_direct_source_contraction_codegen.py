@@ -84,8 +84,14 @@ def test_materialized_canonical_sources_reuse_range_and_scatter_owners() -> None
 def test_materialized_recurrence_retains_qualified_order_bounds() -> None:
     """Multi-packet canonical reuse retains the established scientific owner."""
     source = emit_direct_source_contraction_header()
-    assert "AngularOrder >= 3 && AngularOrder <= kMaximumCoulombOrder" in source
+    assert "AngularOrder <= kMaximumCoulombOrder" in source
+    assert "template <unsigned AngularOrder, typename Scalar = double>" in source
     assert "sizeof(MaterializedDirectPairRecurrence<12>) <= (48U << 10)" in source
+    native = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text(encoding="utf-8")
+    assert (
+        "MixedJ ? AngularOrder <= 12 : (AngularOrder >= 3 && AngularOrder <= 9)"
+        in native
+    )
 
 
 def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> None:
@@ -103,6 +109,9 @@ def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> Non
     assert "std::min(first_count, maximum_blocks)" in native
     assert "std::min(second_count, maximum_blocks)" in native
     assert "std::min(dense_upper_bound, maximum_blocks)" in native
+    preparation = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text(encoding="utf-8")
+    assert "direct_jk_product(order.size(), 7 * sizeof(std::uint64_t))" in preparation
+    assert "angular_order = 0; angular_order <= 12" in preparation
 
 
 def test_order_three_axis_owners_borrow_only_published_geometry() -> None:

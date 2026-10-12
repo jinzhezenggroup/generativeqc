@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "cc/df_source_response.hpp"
@@ -74,9 +75,14 @@ struct DFCCSDTResult {
  * reduction and omits diagonal gap cotangents because full-Fock response
  * replaces them. Serial/all-output execution remains available explicitly for
  * matched validation; neither selector weakens numerical acceptance gates.
- * fused_triples_scalar_response is an opt-in generated primal/W/V region for
+ * fused_triples_scalar_response defaults to a generated primal/W/V region for
  * gap-free force response. Optional seed storage is admitted before allocation;
- * a tight budget retains the original schedule without changing output demand.
+ * a tight budget or device allocation refusal retains the original schedule
+ * without changing output demand. Explicit false preserves the matched oracle.
+ * lambda_serial_scratch_reuse defaults to one stream-ordered scratch lease;
+ * persistent cuts, seeds, outputs and immutable core storage remain disjoint.
+ * Explicit false retains the separate-arena layout. Standalone Lambda defaults
+ * are unchanged by this complete-force policy.
  * admitted_triples_w is an internal experimental forward-W admission only;
  * RHF, CCSD, reverse contractions, Lambda and orbital/nuclear response remain
  * FP64. It never changes the public precision mode or numerical gates.
@@ -101,6 +107,8 @@ struct DFCCSDTResult {
  * lambda_resident_krylov is a default-off storage binding of the same physical
  * Lambda actions. Its admission includes both providers and the DF device
  * ceiling; refusal retains the existing host-vector response schedule.
+ * ccsd_mixed_precision defaults to the qualified native DF auto policy. Explicit
+ * true/false override shape selection but never physical convergence gates.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -109,13 +117,15 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_batch_limit = 32, std::size_t ccsd_batch_limit = 0,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
-    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
+    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = true,
     runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
     bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
     DFCCSDTReferenceExperiment* reference_experiment = nullptr,
-    bool lambda_serial_scratch_reuse = false, bool ccsd_mixed_precision = false,
-    bool lambda_mixed_precision = false, bool lambda_resident_krylov = false);
+    bool lambda_serial_scratch_reuse = true,
+    std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
+    bool lambda_resident_krylov = false,
+    double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.
