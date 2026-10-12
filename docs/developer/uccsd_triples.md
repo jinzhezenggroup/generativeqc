@@ -147,17 +147,56 @@ Fock resolvent moments from `d D^-1 = -D^-1 (dD) D^-1`. A diagonal eps pullback
 alone does not supply these moments; dividing an occupied/virtual internal
 orbital gap is not a valid replacement at degeneracies. The shared restricted
 implementation describes this contract in
-`python/generativeqc_compiler/cc/triples_fock_response.py`. Until that full
-unrestricted chain is qualified, the standard physical-response owner
-intentionally rejects corrected owners/results. Its standard Lambda
-qualification is not disabled or relabelled.
+`python/generativeqc_compiler/cc/triples_fock_response.py`. The unrestricted
+full-Fock owner below supplies this missing denominator chain separately;
+corrected Lambda parameter requests retain their fixed-canonical-input scope.
+Complete corrected Hamiltonian/UHF/nuclear composition is not implemented.
+The standard physical-response owner intentionally still rejects corrected
+owners/results. Its standard Lambda qualification is not disabled or relabelled.
+
+## Complete Same-Space Fock Moments
+
+`PreparedUCCSDTriplesFockResponse` borrows a live bounded triples-response owner.
+`response()` first freshly replays the parent and all source bars, then computes
+the complete same-space denominator response on the same native CPU/CUDA
+executor. The shared nine-term compiler exposes bounded `X=C/D` and
+`Y=(C+V)/D` tiles; it does not introduce another triples equation inventory.
+Each of the six occupied/virtual slots contributes a paired contraction over
+five identical physical coordinates. Occupied moments have negative signs,
+virtual moments positive signs, and the original channel factors remain
+`1/36` for aaa/bbb and `1/4` for aab/abb.
+
+Triangular open-axis page pairs are scattered to both off-diagonal matrix
+blocks exactly once. At most two X/Y pages are retained; right pages are
+recomputed instead of retaining a complete open-axis grid. For `n` open-axis
+pages and `m` common-coordinate tiles, both vector-page evaluations and moment
+calls number `m*n*(n+1)/2`. All axes/channels, response replay, recomputation
+work, gather/native staging, compensated accumulation and immutable publication
+are admitted before execution. Numeric fallback may shrink pages but cannot
+evade total pair or semantic-work gates. Logical numeric bounds are not RSS,
+opaque compiler/cache/context allocation or performance guarantees.
+
+`UCCSDTriplesFockResponseResult.hamiltonian_cotangents()` **replaces** the old
+diagonal-only denominator pullback by these full moments; it does not add both
+and double-count the diagonal. Every completed response independently checks
+its diagonal against freshly differentiated eps bars at the bounded configured
+tolerance. No occupied/occupied or virtual/virtual energy gap is divided, so
+exact internal degeneracies remain supported. Late vector, moment, output or
+diagonal-gate failures expose neither partial moments nor prefix correction
+energies/source bars. Closing this consumer leaves borrowed owners open.
+
+This is covariant canonical-reference triples Hamiltonian response, not a
+normal-ordering, corrected orbital response or nuclear-force endpoint. A future
+physical consumer must explicitly combine fresh full moments with freshly
+qualified corrected Lambda and retain the complete all-rotation gate.
 
 ## Qualification
 
 ```sh
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=python:. \
   python -m pytest tests/python/test_uccsd_triples.py \
-  tests/python/test_uccsd_triples_response.py tests/python/test_uccsd_t_lambda.py -q
+  tests/python/test_uccsd_triples_response.py tests/python/test_uccsd_t_lambda.py \
+  tests/python/test_uccsd_triples_fock_response.py -q
 ```
 
 Random-amplitude Li/OH/H6 and broken-symmetry H4 cases compare every channel with the
