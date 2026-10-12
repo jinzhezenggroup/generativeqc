@@ -2590,11 +2590,13 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
-    native_abi_digest = _source_span_sha256(
-        route_source,
-        begin="dft::GridSpec ks_grid_options(",
-        end="Result adapt_result(",
-        label="native GridSpec ABI lowerer",
+    # The GridSpec ABI lowerer now lives in the immutable preparation unit.
+    # Hash its complete function, not neighboring validation/helpers.
+    preparation_source = (
+        repository / "src/methods/dft_method_preparation.cpp"
+    ).read_text(encoding="utf-8")
+    native_abi_digest = _cpp_block_sha256(
+        preparation_source, "dft::GridSpec ks_grid_options("
     )
     header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
     point_count_digest = _source_span_sha256(
@@ -3219,6 +3221,7 @@ def _build_report(
         "src/dft/cuda_quadrature.cu",
         "src/dft/stationary_gradient_cuda.cuh",
         "src/methods/dft_method.cpp",
+        "src/methods/dft_method_preparation.cpp",
         "cmake/GenerativeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)
