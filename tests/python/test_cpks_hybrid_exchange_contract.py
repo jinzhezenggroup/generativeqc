@@ -4,9 +4,9 @@ These are independent tiny AO algebra tests, not native PBE0/B3LYP or
 molecular Hessian qualification. No CUDA runtime is required.
 """
 
+import typing
 from dataclasses import replace
 from fractions import Fraction
-import typing
 
 import numpy as np
 import pytest
