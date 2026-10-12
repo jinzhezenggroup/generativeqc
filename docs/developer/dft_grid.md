@@ -338,6 +338,27 @@ runner `python -m benchmarks.readme_pbe0_indexed_becke` with
 
 ### Generated Becke atom adjoints
 
+Ordinary phased CUDA first derivatives use binary-scaled Becke products by
+default for 96–128-atom owners with center geometry, already-admitted phase
+storage, and no primitive-adjoint selection. The lowering retains
+ordered switch products as a mantissa and integer exponent instead of sums
+of logarithms. It preserves exact-zero factors and the single-zero excluded
+product derivative, and uses correctly rounded division rather than an
+approximate reciprocal. It does not change SCF quadrature, convergence
+tolerances, the canonical switch/ratio AD, or the geometric gather.
+
+`GENERATIVEQC_STATIONARY_BECKE_SCALED_PRODUCTS=0|1` is captured when the native
+stationary owner is created; `0` explicitly retains logarithmic products.
+An unset control requests binary-scaled products only above the conservative
+automatic crossover. Explicit `1` admits smaller owners too, subject to the
+same resource/topology checks. Unsupported topology, missing phase storage,
+and primitive-adjoint scratch aliases retain the
+ordinary route without acquiring more storage. Admission and actual launched
+batches/points are exposed by `stationary_becke_binary_scaled_metrics_v1`;
+older artifacts may omit that optional metrics ABI. This is a first-derivative
+lowering, not a Hessian/response representation change. See the
+[binary-scaled product decision](../../.agents/notes/implemented/performance/2026-10-12-becke-binary-scaled-products.md).
+
 `GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE=normalized-adjoints` selects an
 experimental lowering of the authenticated equal-radius normalized-product AD
 composition. The canonical scalar graph emits the exp pullback with its primal
