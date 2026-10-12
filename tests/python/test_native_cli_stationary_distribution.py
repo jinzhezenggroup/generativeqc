@@ -8,12 +8,10 @@ from tools.check_native_cli_stationary import EXPECTED_PROFILES, verify_contract
 
 
 def fixtures() -> tuple[str, str, str]:
-    cache = "\n".join(
-        (
-            "GENERATIVEQC_MONOLITHIC_CLI:BOOL=ON",
-            "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA:BOOL=ON",
-            "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=OFF",
-        )
+    cache = (
+        "GENERATIVEQC_MONOLITHIC_CLI:BOOL=ON\n"
+        "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA:BOOL=ON\n"
+        "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=OFF"
     )
     registry = "\n".join(
         f"    &native_stationary_profile_{profile}()," for profile in EXPECTED_PROFILES

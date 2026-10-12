@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify that the standalone native CUDA CLI really links its ten force profiles.
 
 This is compile/link evidence, NOT a real-GPU numerical force qualification.

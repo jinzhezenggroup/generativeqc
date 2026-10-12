@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run all ten native CUDA DFT energy+force CLI endpoints on a real NVIDIA GPU.
 
 Run with the *installed* standalone CLI under a Slurm GPU allocation. This
