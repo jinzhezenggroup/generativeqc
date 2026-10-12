@@ -79,16 +79,16 @@ struct HostXcExecutors {
 };
 const auto kHostXcExecutors = [] {
   std::array<HostXcExecutors, kSemilocalFamilyMetadata.size()> result{};
-  result[semilocal_family_code(SemilocalFamily::Lda)] =
-      {integrate_lda_xc_pw_rks, integrate_lda_xc_pw_uks};
-  result[semilocal_family_code(SemilocalFamily::Pbe)] =
-      {integrate_pbe_rks_with_tail, integrate_pbe_uks};
-  result[semilocal_family_code(SemilocalFamily::R2scan)] =
-      {integrate_r2scan_rks, integrate_r2scan_uks};
-  result[semilocal_family_code(SemilocalFamily::B3lyp)] =
-      {integrate_b3lyp_rks, integrate_b3lyp_uks};
-  result[semilocal_family_code(SemilocalFamily::Wb97mv)] =
-      {integrate_wb97mv_rks, integrate_wb97mv_uks};
+  result[semilocal_family_code(SemilocalFamily::Lda)] = {integrate_lda_xc_pw_rks,
+                                                         integrate_lda_xc_pw_uks};
+  result[semilocal_family_code(SemilocalFamily::Pbe)] = {integrate_pbe_rks_with_tail,
+                                                         integrate_pbe_uks};
+  result[semilocal_family_code(SemilocalFamily::R2scan)] = {integrate_r2scan_rks,
+                                                            integrate_r2scan_uks};
+  result[semilocal_family_code(SemilocalFamily::B3lyp)] = {integrate_b3lyp_rks,
+                                                           integrate_b3lyp_uks};
+  result[semilocal_family_code(SemilocalFamily::Wb97mv)] = {integrate_wb97mv_rks,
+                                                            integrate_wb97mv_uks};
   return result;
 }();
 
