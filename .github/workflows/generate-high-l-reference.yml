@@ -37,11 +37,11 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.10.7"
-          python-version: "3.12.14"
+          python-version: "3.12.12"
           enable-cache: false
       - name: Install only the pinned independent reference dependencies
         run: |
-          uv venv --python 3.12.14 .oracle-venv
+          uv venv --python 3.12.12 .oracle-venv
           uv pip install --python .oracle-venv/bin/python --only-binary=:all: \
             pyscf==2.14.0 numpy==2.3.5 scipy==1.17.0 h5py==3.16.0 threadpoolctl==3.6.0
       - name: Generate twice in independent CPU-only interpreters
