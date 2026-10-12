@@ -6,9 +6,8 @@ from typing import Any
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, Primitive, Shell
-
 from _cpu_hf_high_l_reference import load_reference
+from generativeqc import Calculator, Primitive, Shell
 
 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))

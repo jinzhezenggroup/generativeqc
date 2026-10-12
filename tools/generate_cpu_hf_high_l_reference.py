@@ -34,7 +34,9 @@ def digest(data: bytes) -> str:
 
 
 def canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -54,20 +56,26 @@ def cases(inputs: dict[str, Any]) -> list[dict[str, Any]]:
     for state in inputs["states"]:
         for representation in inputs["representations"]:
             for index, displacement in enumerate(inputs["displacements_bohr"]):
-                atoms = [[element, list(position)] for element, position in inputs["atoms"]]
-                atoms[inputs["displacement_atom"]][1][inputs["displacement_axis"]] += displacement
-                result.append({
-                    "id": f'{state["method"]}-{representation}-displacement-{index}',
-                    "atom": atoms,
-                    "basis": inputs["basis"],
-                    "unit": inputs["unit"],
-                    "method": state["method"],
-                    "charge": state["charge"],
-                    "spin": state["spin"],
-                    "cart": representation == "cartesian",
-                    "displacement_bohr": displacement,
-                    "scf": inputs["scf"],
-                })
+                atoms = [
+                    [element, list(position)] for element, position in inputs["atoms"]
+                ]
+                atoms[inputs["displacement_atom"]][1][inputs["displacement_axis"]] += (
+                    displacement
+                )
+                result.append(
+                    {
+                        "id": f"{state['method']}-{representation}-displacement-{index}",
+                        "atom": atoms,
+                        "basis": inputs["basis"],
+                        "unit": inputs["unit"],
+                        "method": state["method"],
+                        "charge": state["charge"],
+                        "spin": state["spin"],
+                        "cart": representation == "cartesian",
+                        "displacement_bohr": displacement,
+                        "scf": inputs["scf"],
+                    }
+                )
     if len(result) != 8 or len({case["id"] for case in result}) != 8:
         raise ValueError("expected exactly eight distinct fixed cases")
     return result
@@ -128,7 +136,12 @@ def execution_identity() -> dict[str, str]:
     if re.fullmatch(r"[0-9a-f]{40}", checkout) is None:
         raise ValueError("invalid checkout identity")
     result = {"checkout_sha": checkout}
-    for name in ("GITHUB_REPOSITORY", "GITHUB_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"):
+    for name in (
+        "GITHUB_REPOSITORY",
+        "GITHUB_SHA",
+        "GITHUB_RUN_ID",
+        "GITHUB_RUN_ATTEMPT",
+    ):
         value = os.environ.get(name)
         if value is not None:
             result[name.lower()] = value
@@ -149,8 +162,14 @@ def module_inventory(inputs: dict[str, Any]) -> dict[str, set[Path]]:
             for entry in distribution.files or ()
         }
         spec = importlib.util.find_spec(name)
-        if spec is None or spec.origin is None or Path(spec.origin).resolve() not in owned:
-            raise ValueError(f"scientific import is outside its pinned distribution: {name}")
+        if (
+            spec is None
+            or spec.origin is None
+            or Path(spec.origin).resolve() not in owned
+        ):
+            raise ValueError(
+                f"scientific import is outside its pinned distribution: {name}"
+            )
         result[name] = owned
     return result
 
@@ -162,7 +181,9 @@ def check_imported_modules(inventory: dict[str, set[Path]]) -> None:
             continue
         filename = getattr(module, "__file__", None)
         if filename is None or Path(filename).resolve() not in inventory[package]:
-            raise ValueError(f"loaded scientific module is outside pinned files: {name}")
+            raise ValueError(
+                f"loaded scientific module is outside pinned files: {name}"
+            )
         for directory in getattr(module, "__path__", ()):
             if Path(directory).resolve() != Path(filename).resolve().parent:
                 raise ValueError(f"unowned scientific package search path: {name}")
@@ -187,8 +208,11 @@ def generate(inputs: dict[str, Any], input_path: Path, replica: str) -> dict[str
 
 
 def _generate(
-    inputs: dict[str, Any], input_path: Path, replica: str,
-    config: Path, inventory: dict[str, set[Path]],
+    inputs: dict[str, Any],
+    input_path: Path,
+    replica: str,
+    config: Path,
+    inventory: dict[str, set[Path]],
 ) -> dict[str, Any]:
     # This process has no import of the implementation under test.
     import numpy as np
@@ -211,45 +235,69 @@ def _generate(
     with pyscf.lib.with_omp_threads(1):
         for case in cases(inputs):
             molecule = pyscf.gto.M(
-                atom=case["atom"], unit=case["unit"], basis=case["basis"],
-                charge=case["charge"], spin=case["spin"], cart=case["cart"], verbose=0,
+                atom=case["atom"],
+                unit=case["unit"],
+                basis=case["basis"],
+                charge=case["charge"],
+                spin=case["spin"],
+                cart=case["cart"],
+                verbose=0,
             )
             reference = (
                 pyscf.scf.RHF(molecule)
-                if case["method"] == "rhf" else pyscf.scf.UHF(molecule)
+                if case["method"] == "rhf"
+                else pyscf.scf.UHF(molecule)
             )
             for name, value in case["scf"].items():
                 setattr(reference, name, value)
             reference.kernel()
             if not reference.converged:
-                raise ValueError(f'SCF did not converge: {case["id"]}')
+                raise ValueError(f"SCF did not converge: {case['id']}")
             forces = np.asarray(-reference.nuc_grad_method().kernel(), dtype=np.float64)
             if forces.shape != (2, 3):
                 raise ValueError("unexpected analytic-force shape")
-            records.append({
-                "input": case,
-                "input_sha256": digest(canonical(case)),
-                "nao": molecule.nao_nr(),
-                "ao_labels": molecule.ao_labels(),
-                "nelec": list(molecule.nelec),
-                "converged": bool(reference.converged),
-                "resolved_scf": {
-                    name: getattr(reference, name)
-                    for name in (
-                        "init_guess", "conv_tol", "conv_tol_grad", "max_cycle",
-                        "diis_space", "direct_scf", "direct_scf_tol", "level_shift", "damp",
-                    )
-                },
-                "energy": array_record(float(reference.e_tot), []),
-                "forces": array_record(forces.tolist(), [2, 3]),
-            })
+            records.append(
+                {
+                    "input": case,
+                    "input_sha256": digest(canonical(case)),
+                    "nao": molecule.nao_nr(),
+                    "ao_labels": molecule.ao_labels(),
+                    "nelec": list(molecule.nelec),
+                    "converged": bool(reference.converged),
+                    "resolved_scf": {
+                        name: getattr(reference, name)
+                        for name in (
+                            "init_guess",
+                            "conv_tol",
+                            "conv_tol_grad",
+                            "max_cycle",
+                            "diis_space",
+                            "direct_scf",
+                            "direct_scf_tol",
+                            "level_shift",
+                            "damp",
+                        )
+                    },
+                    "energy": array_record(float(reference.e_tot), []),
+                    "forces": array_record(forces.tolist(), [2, 3]),
+                }
+            )
         pools = []
         for pool in threadpool_info():
             path = Path(pool["filepath"])
-            pools.append({
-                key: pool.get(key)
-                for key in ("user_api", "internal_api", "version", "num_threads", "architecture")
-            } | {"library": path.name, "sha256": digest(path.read_bytes())})
+            pools.append(
+                {
+                    key: pool.get(key)
+                    for key in (
+                        "user_api",
+                        "internal_api",
+                        "version",
+                        "num_threads",
+                        "architecture",
+                    )
+                }
+                | {"library": path.name, "sha256": digest(path.read_bytes())}
+            )
         if any(pool["num_threads"] != 1 for pool in pools):
             raise ValueError("a native thread pool is not single-threaded")
     check_imported_modules(inventory)
@@ -289,7 +337,8 @@ def validate(receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path) 
         raise ValueError("invalid interpreter process identity")
     provenance = receipt["provenance"]
     if provenance["configuration"] != {
-        "policy": "explicit-empty-regular-file", "sha256": digest(b""),
+        "policy": "explicit-empty-regular-file",
+        "sha256": digest(b""),
     }:
         raise ValueError("scientific configuration identity mismatch")
     for name, value in (
@@ -320,8 +369,13 @@ def validate(receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path) 
         if type(pool["num_threads"]) is not int or pool["num_threads"] != 1:
             raise ValueError("native thread-pool limit mismatch")
         if set(pool) != {
-            "user_api", "internal_api", "version", "num_threads", "architecture",
-            "library", "sha256",
+            "user_api",
+            "internal_api",
+            "version",
+            "num_threads",
+            "architecture",
+            "library",
+            "sha256",
         }:
             raise ValueError("incomplete native thread-pool identity")
         for key in ("user_api", "internal_api", "library"):
@@ -359,8 +413,15 @@ def validate(receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path) 
             raise ValueError("electron count or convergence mismatch")
         resolved = record["resolved_scf"]
         if set(resolved) != {
-            "init_guess", "conv_tol", "conv_tol_grad", "max_cycle", "diis_space",
-            "direct_scf", "direct_scf_tol", "level_shift", "damp",
+            "init_guess",
+            "conv_tol",
+            "conv_tol_grad",
+            "max_cycle",
+            "diis_space",
+            "direct_scf",
+            "direct_scf_tol",
+            "level_shift",
+            "damp",
         }:
             raise ValueError("incomplete resolved SCF controls")
         for name in ("max_cycle", "diis_space"):
@@ -380,7 +441,10 @@ def validate(receipt: dict[str, Any], inputs: dict[str, Any], input_path: Path) 
             if name == "forces" and (
                 not isinstance(array["values"], list)
                 or len(array["values"]) != 2
-                or any(not isinstance(row, list) or len(row) != 3 for row in array["values"])
+                or any(
+                    not isinstance(row, list) or len(row) != 3
+                    for row in array["values"]
+                )
             ):
                 raise ValueError("incorrect force dimensions")
             if array != array_record(array["values"], shape):
@@ -393,21 +457,40 @@ def verify(
     first, second = [read_json(path) for path in paths]
     for receipt in (first, second):
         validate(receipt, inputs, input_path)
-    if first["replica"] == second["replica"] or first["process_id"] == second["process_id"]:
+    if (
+        first["replica"] == second["replica"]
+        or first["process_id"] == second["process_id"]
+    ):
         raise ValueError("replay must come from two separate interpreter processes")
     if first["provenance"] != second["provenance"]:
         raise ValueError("replay provenance mismatch")
     max_energy = 0.0
     max_force = 0.0
     for left, right in zip(first["records"], second["records"], strict=True):
-        for field in ("input", "input_sha256", "nao", "ao_labels", "nelec", "converged", "resolved_scf"):
+        for field in (
+            "input",
+            "input_sha256",
+            "nao",
+            "ao_labels",
+            "nelec",
+            "converged",
+            "resolved_scf",
+        ):
             if left[field] != right[field]:
                 raise ValueError(f"replay metadata mismatch: {field}")
-        max_energy = max(max_energy, abs(left["energy"]["values"] - right["energy"]["values"]))
-        for row_a, row_b in zip(left["forces"]["values"], right["forces"]["values"], strict=True):
-            max_force = max(max_force, *(abs(a - b) for a, b in zip(row_a, row_b, strict=True)))
+        max_energy = max(
+            max_energy, abs(left["energy"]["values"] - right["energy"]["values"])
+        )
+        for row_a, row_b in zip(
+            left["forces"]["values"], right["forces"]["values"], strict=True
+        ):
+            max_force = max(
+                max_force, *(abs(a - b) for a, b in zip(row_a, row_b, strict=True))
+            )
     if max_energy > 1e-12 or max_force > 1e-11:
-        raise ValueError(f"independent replay disagrees: energy={max_energy}, force={max_force}")
+        raise ValueError(
+            f"independent replay disagrees: energy={max_energy}, force={max_force}"
+        )
     first["replay"] = {
         "schema": "generativeqc.independent-process-replay.v1",
         "receipt_sha256": [digest(path.read_bytes()) for path in paths],
@@ -427,7 +510,9 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--replica", choices=("first", "second"))
     parser.add_argument("--verify", type=Path, nargs=2)
-    parser.add_argument("--emit", action="store_true", help="emit the bounded validated receipt")
+    parser.add_argument(
+        "--emit", action="store_true", help="emit the bounded validated receipt"
+    )
     args = parser.parse_args()
     inputs = read_json(args.inputs)
     if args.verify:
@@ -436,7 +521,9 @@ def main() -> None:
         result = generate(inputs, args.inputs, args.replica)
     else:
         parser.error("provide --replica or --verify")
-    raw = (json.dumps(result, sort_keys=True, indent=2, allow_nan=False) + "\n").encode()
+    raw = (
+        json.dumps(result, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    ).encode()
     if len(raw) > MAX_BYTES:
         raise ValueError("receipt exceeds the strict byte cap")
     args.output.parent.mkdir(parents=True, exist_ok=True)

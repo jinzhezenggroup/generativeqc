@@ -12,7 +12,6 @@ from typing import Any
 
 import numpy as np
 import pytest
-
 from _cpu_hf_high_l_reference import REFERENCE_DIR, load_reference
 from test_cpu_hf_high_l import _assert_results_match_reference
 
@@ -51,8 +50,11 @@ def test_all_eight_fixed_references_load_without_pyscf(
             for displacement in (0.0, 0.013):
                 arguments = _arguments()
                 arguments.update(
-                    method=method, charge=charge, spin=spin,
-                    representation=representation, displacement=displacement,
+                    method=method,
+                    charge=charge,
+                    spin=spin,
+                    representation=representation,
+                    displacement=displacement,
                 )
                 arguments["atoms"][-1][1][0] += displacement
                 energy, forces = load_reference(**arguments)
@@ -71,7 +73,9 @@ def test_missing_fixed_reference_fails_closed(tmp_path: Path, name: str) -> None
 
 
 @pytest.mark.parametrize("name", ("inputs.json", "reference.json"))
-def test_modified_fixed_reference_bytes_fail_checksum(tmp_path: Path, name: str) -> None:
+def test_modified_fixed_reference_bytes_fail_checksum(
+    tmp_path: Path, name: str
+) -> None:
     _copy_reference(tmp_path)
     path = tmp_path / name
     path.write_bytes(path.read_bytes() + b" ")
@@ -79,7 +83,9 @@ def test_modified_fixed_reference_bytes_fail_checksum(tmp_path: Path, name: str)
         load_reference(**_arguments(), root=tmp_path)
 
 
-@pytest.mark.parametrize("field", ("atom", "basis", "state", "displacement", "representation"))
+@pytest.mark.parametrize(
+    "field", ("atom", "basis", "state", "displacement", "representation")
+)
 def test_changed_scientific_input_has_no_nearby_fallback(field: str) -> None:
     arguments = _arguments()
     if field == "atom":
@@ -132,10 +138,14 @@ def test_endpoint_gate_rejects_numerical_mutants(field: str) -> None:
         converged=True, executed_backend="cpu", energy=reference_energy
     )
     complete = SimpleNamespace(
-        converged=True, executed_backend="cpu", energy=reference_energy,
+        converged=True,
+        executed_backend="cpu",
+        energy=reference_energy,
         forces=np.array(reference_forces, dtype=np.float64),
     )
-    _assert_results_match_reference(energy, complete, reference_energy, reference_forces)
+    _assert_results_match_reference(
+        energy, complete, reference_energy, reference_forces
+    )
     if field == "energy_only":
         energy.energy += 1e-6
     elif field == "complete_energy":
@@ -146,7 +156,9 @@ def test_endpoint_gate_rejects_numerical_mutants(field: str) -> None:
         complete.forces[0, 0] += 1e-5
         complete.forces[1, 0] -= 1e-5
     with pytest.raises(AssertionError):
-        _assert_results_match_reference(energy, complete, reference_energy, reference_forces)
+        _assert_results_match_reference(
+            energy, complete, reference_energy, reference_forces
+        )
 
 
 def test_oversized_receipt_fails_before_json_parsing(tmp_path: Path) -> None:
