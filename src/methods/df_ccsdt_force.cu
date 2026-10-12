@@ -110,7 +110,7 @@ generativeqc_correlation_diagnostic mp2_diagnostic(
   diagnostic.same_spin_energy = mp2.same_spin;
   diagnostic.minimum_absolute_denominator = mp2.minimum_absolute_denominator;
   diagnostic.numeric_capacity_bytes =
-      std::max(reference.numeric_capacity_bytes, mp2.numeric_capacity_bytes);
+      std::max<std::uint64_t>(reference.numeric_capacity_bytes, mp2.numeric_capacity_bytes);
   diagnostic.mo_host_staging = 1;
   const std::string_view hash(mp2.equation_hash);
   std::copy_n(hash.begin(), std::min<std::size_t>(64, hash.size()), diagnostic.equation_hash);

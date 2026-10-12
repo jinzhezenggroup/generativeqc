@@ -27,6 +27,7 @@ PRELUDE = r"""
 #include <vector>
 #include "cc/df_source.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/df_source_capacity.hpp"
@@ -167,6 +168,8 @@ std::size_t external(const core::System& o, const core::System& a, const hf::Phy
 }
 int main(int argc, char** argv) {
   if (argc!=2) return 1;
+  // Count scientific source storage with the real diagnostic scope disabled.
+  unsetenv("GENERATIVEQC_DF_PROGRESS_TRACE");
   const int mode=std::atoi(argv[1]);
   scf::cuda_execution::CudaDfSourcePolicy policy;
   std::string detail;

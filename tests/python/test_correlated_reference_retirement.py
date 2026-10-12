@@ -392,10 +392,12 @@ def test_actual_cc_provider_and_solver_callbacks_preserve_retry_state(
         "    posthf::ProviderWork provider_work;",
         "    const double problem_seconds =",
     )
+    # Extract the CC solve callback inside the shared CC/DF-MP2 dispatcher.
+    # Its rollback contract remains independent of the sibling MP2 evaluator.
     solver = _between(
-        method[method.index('    allocation_stage = "CC resident solve";') :],
-        "    run_with_cuda_reference_budget(",
-        "    const double solver_seconds =",
+        method[method.index("    const auto solver_started =") :],
+        "      run_with_cuda_reference_budget(",
+        "\n    }\n    const double solver_seconds =",
     )
     code = (
         PLAN_STANDINS
@@ -412,7 +414,7 @@ void provider_probe(int failure, bool resident) {
   auto reference = std::make_shared<hf::PhysicalReference>();
   cc::SolverOptions solver_options, correlation_options;
   solver_options.max_bytes = 100;
-  const bool cuda = true, retain_df_response = true;
+  const bool cuda = true, retain_df_response = true, df_mp2_mode = false;
   const core::System* correlation_auxiliary = nullptr;
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr;
   ProbeExecution execution;
@@ -650,8 +652,10 @@ struct ProbeState {
 cc::Problem build_problem(const core::System&, const integrals::ElectronInteractionSource* source,
     const hf::PhysicalReference&, const cc::SolverOptions& options, bool, int,
     posthf::ProviderWork& work, generativeqc_tensor::Metrics& metrics, const core::System*,
-    cc::DFSourceResult* retained, const scf::cuda_execution::CudaDfSourcePolicy*) {
+    cc::DFSourceResult* retained, const scf::cuda_execution::CudaDfSourcePolicy*,
+    bool df_mp2_mode) {
   PhaseOwner partial_problem;
+  assert(!df_mp2_mode);
   assert(source && source->nbf() == 2 && retained && !retained->response_state);
   build_budgets.push_back(options.max_bytes);
   ++work.source_scans; work.source_values += 3; ++metrics.input_ms;

@@ -28,6 +28,8 @@ _SHIM = r"""
 #include <string>
 #include <vector>
 #include "runtime/execution_precision.hpp"
+__DF_CORRELATION_DEMAND__
+DFCorrelationDemand expected_demand;
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point x) {
   return std::chrono::duration<double>(Clock::now() - x).count();
@@ -97,6 +99,7 @@ struct RccsdNativeState {
   struct Solved {
     bool converged() const { return true; }
   } solved;
+  bool df_mp2_mode{};
   std::size_t budget{};
   std::unique_ptr<ResourceOwner> resource;
   int reference{}, reference_work{};
@@ -135,11 +138,13 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::
                                         const generativeqc_method_descriptor& d, void*, const std::vector<double>*,
                                         void*, std::size_t reserve, const core::System*, bool, bool,
                                         void*, std::size_t, bool, bool packed_diis,
-                                        bool ccsd_mixed_precision) {
+                                        bool ccsd_mixed_precision, bool df_mp2_mode) {
   assert(packed_diis == expected_packed);
   assert(ccsd_mixed_precision == expected_ccsd_mixed);
+  assert(df_mp2_mode == expected_demand.mp2);
   ++calls;
   RccsdNativeState s;
+  s.df_mp2_mode = df_mp2_mode;
   s.resource = std::make_unique<ResourceOwner>();
   s.budget = d.limit - reserve;
   if (s.budget < 50) throw std::length_error("primal capacity");
@@ -177,6 +182,8 @@ assert(lambda_mixed_precision == expected_lambda_mixed);
 assert(lambda_serial_scratch_reuse == expected_serial_scratch);
 assert(lambda_resident_krylov == expected_resident_krylov);
 assert(lambda_primal_matrix == (physical_replay == nullptr));
+assert(demand.mp2 == expected_demand.mp2);
+assert(demand.companions == expected_demand.companions);
 later_phase(state.budget);
 DFCCSDTResult result;
 result.total_seconds = elapsed(started);
@@ -194,12 +201,15 @@ int main() {
   opts.recycling = &cache;
   current_cache = &cache;
   auto call = [&] {
-    return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
+    return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, !expected_demand.mp2, true, true,
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
                                expected_w, expected_lambda_interval, true, true, true, nullptr,
-                               expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov);
+                               expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
+                               expected_demand);
   };
+  for (bool mp2 : {false, true})
+  for (unsigned companions : {0U, 1U})
   for (bool mixed_lambda : {false, true})
   for (bool mixed_ccsd : {false, true})
   for (bool serial_scratch : {false, true})
@@ -209,6 +219,7 @@ int main() {
   for (bool selected_packed : {false, true})
   for (bool parallel_gap : {false, true})
   for (bool gap_cotangents : {false, true}) {
+  expected_demand = {mp2, companions};
   using generativeqc::runtime::PrecisionDtype;
   expected_w = mixed_w
       ? runtime::PrecisionDirective{PrecisionDtype::Fp32, PrecisionDtype::Fp32,
@@ -302,10 +313,11 @@ int main() {
   reset();
   DFCCSDTReferenceExperiment experiment;
   r = run_df_ccsdt_native(
-      execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
+      execution, system, auxiliary, descriptor, true, !expected_demand.mp2, true, true, true, 8, 8, opts,
       true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
       expected_w, expected_lambda_interval, true, true, true, &experiment,
-      expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov);
+      expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
+      expected_demand);
   assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
   assert(preparations == 1 && calls == 2 && clears == 1 &&
          r.recycling_discarded_primal_attempt);
@@ -313,10 +325,11 @@ int main() {
   // admission. Exercise that reservation without changing the retry wrapper.
   auto diagnostic_call = [&](DFPhysicalResponseComparison& comparison) {
     return run_df_ccsdt_native_attempt(
-        execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
+        execution, system, auxiliary, descriptor, true, !expected_demand.mp2, true, true, true, 8, 8, opts,
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
         nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval,
-        true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov);
+        true, true, false, nullptr, expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
+        expected_demand);
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();
@@ -364,6 +377,16 @@ def test_retained_cache_retry_covers_late_phases_once(tmp_path: Path) -> None:
     start = source.index(marker)
     end = source.index("\n  DFCCSDTResult result;", start)
     prefix = source[start:end]
+    # These cold-attempt resource probes receive a native state matching their
+    # demand. Companion conversion of an existing CC replay is a separate
+    # numerical boundary, never entered by this fixture.
+    replay_start = prefix.index("  if (demand.mp2 && !state.df_mp2_mode) {")
+    replay_end = prefix.index("  if (!state.solved.converged())", replay_start)
+    prefix = (
+        prefix[:replay_start]
+        + "  assert(state.df_mp2_mode == demand.mp2);\n"
+        + prefix[replay_end:]
+    )
     wrapper = source[
         source.index(public, end) : source.rindex(
             "}  // namespace generativeqc::methods::detail"
@@ -376,7 +399,11 @@ def test_retained_cache_retry_covers_late_phases_once(tmp_path: Path) -> None:
         )
     ]
     probe = tmp_path / "retry.cpp"
-    probe.write_text(_SHIM + checked_add + prefix + _TAIL + wrapper + _MAIN)
+    header = (ROOT / "src/methods/df_ccsdt_force.hpp").read_text()
+    demand_start = header.index("struct DFCorrelationDemand {")
+    demand = header[demand_start : header.index("\n};", demand_start) + 3]
+    shim = _SHIM.replace("__DF_CORRELATION_DEMAND__", demand)
+    probe.write_text(shim + checked_add + prefix + _TAIL + wrapper + _MAIN)
     binary = tmp_path / "retry"
     compile_owner(compiler, tmp_path, [probe], binary)
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)

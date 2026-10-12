@@ -77,6 +77,7 @@ using SolverOptions = generativeqc::cc::SolverOptions;
 SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 std::size_t admitted_q_batch=0;
 bool admitted_derived_denominators=false;
+bool admitted_df_mp2_mode=false;
 scf::CudaRhfBucketPlan** admitted_reference_plan=nullptr;
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
@@ -85,10 +86,11 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::S
                                       std::unique_ptr<scf::PreparedFockPlan>*, const core::System*,
                                       bool retain_df_response,
                                       const scf::cuda_execution::CudaDfSourcePolicy*,
-                                      scf::CudaRhfBucketPlan** reference_plan) {
+                                      scf::CudaRhfBucketPlan** reference_plan, bool df_mp2_mode) {
   admitted_q_batch=options.df_auxiliary_batch_limit;
   admitted_derived_denominators=options.derived_denominators;
   admitted_reference_plan=reference_plan;
+  admitted_df_mp2_mode=df_mp2_mode;
   ++executions;
   retained_response=retain_df_response;
   return {p != nullptr,0,{80}};
@@ -125,22 +127,29 @@ int main(int argc,char** argv) {
       return executions || allocations || retained_response ? 12 : 0;
     }
   }
-  if (mode == 7 || mode == 8) {
+  if (mode >= 7 && mode <= 10) {
     execution.cuda=true;
     core::System auxiliary;
     scf::CudaRhfBucketPlan resident;
     auto* reference_plan=&resident;
+    // CC and correlation-only MP2 share admission, with independent response
+    // retention. Exercise MP2 energy-only and response-bearing forwarding.
+    const bool mp2_mode=mode >= 9, retain_response=mode != 9;
+    const bool derived_denominators=mode != 8;
     (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,
-                                 &auxiliary,true,true,&reference_plan,3,mode==7);
+                                 &auxiliary,retain_response,true,&reference_plan,3,
+                                 derived_denominators,false,false,mp2_mode);
     if(admitted_q_batch!=3 || admitted_reference_plan!=&reference_plan ||
-       reference_plan!=&resident || admitted_derived_denominators!=(mode==7)) return 14;
-    return !retained_response || executions != 1 || allocations || cache ? 13 : 0;
+       reference_plan!=&resident || admitted_derived_denominators!=derived_denominators ||
+       admitted_df_mp2_mode!=mp2_mode) return 14;
+    return retained_response!=retain_response || executions != 1 || allocations || cache ? 13 : 0;
   }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
                                         nullptr,nullptr,0,nullptr,false,true,nullptr);
     if (mode < 2) return 2;
-    if(admitted_q_batch!=8 || admitted_reference_plan || !admitted_derived_denominators) return 15;
+    if(admitted_q_batch!=8 || admitted_reference_plan || !admitted_derived_denominators ||
+       admitted_df_mp2_mode) return 15;
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;
     if (result.cached != expect_cache) return 3;
@@ -208,7 +217,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         text=True,
         timeout=30,
     )
-    for mode in range(9):
+    for mode in range(11):
         result = subprocess.run(
             [str(executable), str(mode)],
             capture_output=True,
