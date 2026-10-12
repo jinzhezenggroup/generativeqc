@@ -42,8 +42,12 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     options.profile_jk = true;
     if (const auto* resident = std::getenv("GENERATIVEQC_TEST_RHF_RESIDENT_JK_BYTES"))
       options.resident_jk_maximum_bytes = std::stoull(resident);
-    options.bilinear_derivative = nuclear_schedule == 1;
-    options.symmetric_polarization = nuclear_schedule == 2;
+    if (nuclear_schedule < 3) {
+      options.bilinear_derivative = nuclear_schedule == 1;
+      options.symmetric_polarization = nuclear_schedule == 2;
+    } else if (nuclear_schedule != 3) {
+      throw std::invalid_argument("invalid nuclear derivative schedule");
+    }
     options.relax_orbitals = relax;
     options.maximum_bytes = budget;
     // This probe's scalar ablation uses a real resource constraint. The public
@@ -96,7 +100,9 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
                               result.screened_jk_actions,
                               result.prepared_contractions,
                               result.contraction_binding_bytes,
-                              result.prepared_contraction_summands};
+                              result.prepared_contraction_summands,
+                              result.shell_derivative_passes,
+                              result.generic_derivative_passes};
     std::copy(std::begin(stats), std::end(stats), counts);
     diagnostics[0] = result.orbital_residual;
     diagnostics[1] = result.maximum_stationarity;
@@ -344,12 +350,12 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
   }
 }
 
-// Force the canonical bilinear API even on SPD so small dense oracles qualify
-// the coefficient separately from production's specialized-shell preference.
-extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density,
-                                             const double* seed, double* output,
-                                             std::uint64_t* counts, char* error,
-                                             std::size_t error_size) noexcept {
+namespace {
+// Force each derivative API independently so a fallback cannot mask a broken
+// shell route when the same signed-density libcint oracle qualifies both.
+int run_bilinear_derivative_probe(void* opaque, const double* density, const double* seed,
+                                  double* output, std::uint64_t* counts, char* error,
+                                  std::size_t error_size, bool shell) noexcept {
   using namespace generativeqc;
   scf::CudaDirectJkPlan* plan = nullptr;
   try {
@@ -372,10 +378,16 @@ extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density
       runtime::cuda_resource_check(cudaMemcpyAsync(storage.get() + nn, seed, nn * sizeof(double),
                                                    cudaMemcpyHostToDevice, stream));
       std::vector<double> result;
-      check(scf::execute_cuda_direct_bilinear_derivative_device(
-          plan, storage.get(), storage.get() + nn, nn, result, census.get(), detail));
-      runtime::cuda_resource_check(cudaMemcpyAsync(counts, census.get(), 2 * sizeof(std::uint64_t),
-                                                   cudaMemcpyDeviceToHost, stream));
+      if (shell) {
+        check(scf::execute_cuda_direct_shell_bilinear_derivative_device(
+            plan, storage.get(), storage.get() + nn, nn, result, detail));
+        counts[0] = counts[1] = 0;
+      } else {
+        check(scf::execute_cuda_direct_bilinear_derivative_device(
+            plan, storage.get(), storage.get() + nn, nn, result, census.get(), detail));
+        runtime::cuda_resource_check(cudaMemcpyAsync(
+            counts, census.get(), 2 * sizeof(std::uint64_t), cudaMemcpyDeviceToHost, stream));
+      }
       runtime::cuda_resource_check(cudaStreamSynchronize(stream));
       std::copy(result.begin(), result.end(), output);
     }
@@ -386,4 +398,21 @@ extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density
     if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
     return 1;
   }
+}
+}  // namespace
+
+extern "C" int rhf_bilinear_derivative_probe(void* opaque, const double* density,
+                                             const double* seed, double* output,
+                                             std::uint64_t* counts, char* error,
+                                             std::size_t error_size) noexcept {
+  return run_bilinear_derivative_probe(opaque, density, seed, output, counts, error, error_size,
+                                       false);
+}
+
+extern "C" int rhf_shell_bilinear_derivative_probe(void* opaque, const double* density,
+                                                   const double* seed, double* output,
+                                                   std::uint64_t* counts, char* error,
+                                                   std::size_t error_size) noexcept {
+  return run_bilinear_derivative_probe(opaque, density, seed, output, counts, error, error_size,
+                                       true);
 }
