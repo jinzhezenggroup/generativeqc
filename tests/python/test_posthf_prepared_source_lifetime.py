@@ -26,6 +26,7 @@ PREFIX = r"""
 #include <utility>
 int plan_live=0, view_live=0, raw_live=0;
 int source_failure=0;
+bool observed_df_mp2_mode=false;
 std::size_t plan_bytes=64;
 namespace integrals {
 struct ElectronInteractionSource {
@@ -84,7 +85,11 @@ struct Execution { int device_id() const { return 0; } };
 Problem build_problem(int system, const integrals::ElectronInteractionSource* source,
                       int,SolverOptions,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
                       int* retained_df_response,
-                      const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy) {
+                      const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy,
+                      bool df_mp2_mode) {
+  observed_df_mp2_mode=df_mp2_mode;
+  if (df_mp2_mode && !correlation_auxiliary)
+    throw std::logic_error("DF-MP2 requires its correlation auxiliary");
   if (correlation_auxiliary) {
     if (system!=43 || source || plan_live || view_live || raw_live || !correlation_policy)
       throw std::logic_error("DF must build directly from System without an exact source");
@@ -129,9 +134,14 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     force_prefix = primary_force.split("      if (compute_forces) {", 1)[1].split(
         "        response::GmresOptions response_options;", 1
     )[0]
-    cc_handoff = cc.split("    std::unique_ptr<posthf::RawSource> raw_source;", 1)[
-        1
-    ].split('    allocation_stage = "CC resident solve";', 1)[0]
+    # Stop at the next phase assignment independently of its diagnostic label.
+    # index() fails closed if that boundary disappears; split() otherwise
+    # silently includes unrelated solvers and the rest of the translation unit.
+    cc_start = cc.index("    std::unique_ptr<posthf::RawSource> raw_source;") + len(
+        "    std::unique_ptr<posthf::RawSource> raw_source;"
+    )
+    cc_end = cc.index("\n    allocation_stage =", cc_start)
+    cc_handoff = cc[cc_start:cc_end]
     helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
     helper = helper[
         helper.index("template <class Operation>") : helper.index("/** Method-layer")
@@ -164,7 +174,8 @@ int mp2_case(bool prepared,bool compute_forces) {
   } else if (prepared && (!plan_live || raw_live)) return 4;
   return 0;
 }
-int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=false,bool df=false) {
+int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=false,bool df=false,
+            bool df_mp2_mode=false) {
   std::unique_ptr<scf::PreparedFockPlan> owner;
   if (prepared && !optional_cuda) owner=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=owner.get();
@@ -199,6 +210,7 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=f
   if (state.problem.provider_peak_bytes != (kept ? 174u : df ? 110u : 126u)) return 6;
   if (raw_live || view_live || plan_live != int(kept)) return 7;
   if (provider_work != (failure ? 2 : 1) || provider_metrics != provider_work) return 11;
+  if (observed_df_mp2_mode != df_mp2_mode) return 14;
   return 0;
 }
 int main(int argc,char** argv) {
@@ -215,13 +227,14 @@ int main(int argc,char** argv) {
   else if(mode<10) result=cc_case(true,true,mode-7);
   else if(mode<13) result=cc_case(true,true,mode-10,true);
   else if(mode==13) result=cc_case(false,true,0,false,true);
-  else {
+  else if(mode<16) {
     // Only memory errors may release optional storage and retry.
     try { (void)cc_case(true,true,3,mode==15); return 12; }
     catch (const std::runtime_error& error) {
       if (std::string(error.what())!="provider numerical failure") return 13;
     }
   }
+  else result=cc_case(false,true,0,false,true,true);
   if (plan_live || view_live || raw_live) return 10;
   return result;
 }
@@ -250,7 +263,7 @@ int main(int argc,char** argv) {
 
 
 def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
-    for mode in range(16):
+    for mode in range(17):
         process = subprocess.run(
             [str(source_probe), str(mode)],
             capture_output=True,
