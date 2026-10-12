@@ -2590,13 +2590,17 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
-    # The GridSpec ABI lowerer now lives in the immutable preparation unit.
-    # Hash its complete function, not neighboring validation/helpers.
+    # Preserve the original frozen ABI digest: the exact ks_grid_options
+    # source span (including its trailing blank line) is now in preparation.
+    # Changing to _cpp_block_sha256 would silently alter the audit oracle.
     preparation_source = (
         repository / "src/methods/dft_method_preparation.cpp"
     ).read_text(encoding="utf-8")
-    native_abi_digest = _cpp_block_sha256(
-        preparation_source, "dft::GridSpec ks_grid_options("
+    native_abi_digest = _source_span_sha256(
+        preparation_source,
+        begin="dft::GridSpec ks_grid_options(",
+        end="void validate_ks_spin_state(",
+        label="native GridSpec ABI lowerer",
     )
     header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
     point_count_digest = _source_span_sha256(
