@@ -842,7 +842,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [core-a, core-b, core-c, runtime-heavy, posthf, compiler-heavy, ecp-forces]
+        shard: [core-a, core-b, core-c, uccsd-forces, runtime-heavy, posthf, compiler-heavy, ecp-forces]
     runs-on: ubuntu-24.04
     # Full nightly/manual qualification includes expensive Hessian and Au replay.
     # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
@@ -1294,6 +1294,10 @@ jobs:
             file: coverage/coverage-python-core-c.xml
             flag: python
             name: code-coverage/python-core-c
+          - artifact: coverage-report-python-uccsd-forces
+            file: coverage/coverage-python-uccsd-forces.xml
+            flag: python
+            name: code-coverage/python-uccsd-forces
           - artifact: coverage-report-python-runtime-heavy
             file: coverage/coverage-python-runtime-heavy.xml
             flag: python
