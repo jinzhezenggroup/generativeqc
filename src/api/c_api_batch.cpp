@@ -6,6 +6,7 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/native_method_inputs.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
@@ -79,7 +80,8 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     candidate->ks_diagnostics.resize(system_count);
     candidate->initial_guesses.resize(system_count);
     candidate->plan = generativeqc::methods::prepare_batch(
-        context->state, std::move(native_systems), *descriptor, flags);
+        context->state, std::move(native_systems), *descriptor, flags,
+        generativeqc::api::native_auxiliary_basis(*descriptor));
     *batch = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {

@@ -4,6 +4,7 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/native_method_inputs.hpp"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 #include "runtime/context.hpp"
@@ -22,7 +23,7 @@ generativeqc_status generativeqc_context_create(const generativeqc_context_descr
   try {
     auto candidate = std::make_unique<generativeqc_context>();
     candidate->state.device_id = descriptor->device_id;
-    candidate->state.requested_backend = descriptor->backend;
+    candidate->state.requested_backend = generativeqc::api::native_backend(descriptor->backend);
     const generativeqc_status status =
         generativeqc::runtime::initialize_context(candidate->state, candidate->last_detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -75,10 +76,10 @@ generativeqc_status generativeqc_system_create(generativeqc_context* context,
     auto candidate = std::make_unique<generativeqc_system>();
     candidate->data.charge = descriptor->charge;
     candidate->data.multiplicity = descriptor->multiplicity;
-    candidate->data.basis_representation =
+    candidate->data.basis_representation = generativeqc::api::native_basis_representation(
         descriptor->struct_size >= sizeof(generativeqc_system_descriptor)
             ? descriptor->basis_representation
-            : GENERATIVEQC_BASIS_CARTESIAN;
+            : GENERATIVEQC_BASIS_CARTESIAN);
     candidate->data.atoms.reserve(descriptor->atom_count);
     for (std::uint32_t i = 0; i < descriptor->atom_count; ++i) {
       const generativeqc_atom& atom = descriptor->atoms[i];
