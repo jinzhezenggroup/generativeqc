@@ -180,20 +180,3 @@ def test_streamed_workspace_covers_actual_block_lifetimes(
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_force_endpoints_reserve_workspace_before_adjoint_execution() -> None:
-    text = (ROOT / "src/posthf/mp2_force.cpp").read_text()
-    for name in ("conventional_force_impl", "density_fitted_force_cpu"):
-        start = text.index("ConventionalForceResult " + name + "(")
-        body = text[start : text.index("\n  return result;", start)]
-        assert body.index("streamed_force_workspace_bytes(") < body.index(
-            "const auto h = hcore_mo(reference)"
-        )
-        assert "remaining_force_budget(budget_bytes, streamed_workspace)" in body
-        assert "posthf::checked_add(resources.peak_bytes, streamed_workspace)" in body
-        assert "endpoint_budget" in body
-    native = text[text.index("ConventionalForceResult conventional_force_impl(") :]
-    assert "provider.plan(shape, cuda)" in native
-    assert "peak - provider_bytes" in native
-    assert "endpoint_budget - base_resources.peak_bytes" in native

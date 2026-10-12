@@ -1,6 +1,50 @@
 // Included after the independent full-AO and masked-column CPU references.
 // Compare schedules bitwise as well as against those independent E/V oracles.
-void point_batch_cases() {
+void ragged_extent_cases() {
+  auto molecule = system(0, true);
+  for (unsigned shell = 0; shell < 1098; ++shell)
+    molecule.shells.push_back({shell % 2, 0, {{0.18 + 0.001 * shell, 1.0}}});
+  const AoBasis basis(molecule);
+  const MolecularGrid grid(molecule, {1, 1, 4, 8, 3, 1e-12});
+  constexpr std::size_t tile_points = 32;
+  require(grid.point_count() == 2 * tile_points, "ragged boundary grid shape");
+  // The independent small-domain bilinears below qualify the shared bodies.
+  // Here full incumbent matrices expose missing far-away cross-block pairs,
+  // upper-bound launch truncation, spin strides and the >1024 fallback.
+  for (std::size_t extent : {129U, 257U, 513U, 1024U, 1025U})
+    for (bool uks : {false, true}) {
+      CudaXcAoTiles maps;
+      maps.derivative_order = 1;
+      maps.offsets.push_back(0);
+      for (unsigned tile = 0; tile < 2; ++tile) {
+        for (std::size_t ao = 0; ao < extent; ++ao) maps.indices.push_back(ao + 11 + 26 * tile);
+        maps.offsets.push_back(maps.indices.size());
+      }
+      Fixture batched(basis, grid, 1U, uks, tile_points, CudaXcAoPrecision::Fp64, false, 0.75, 1.0,
+                      &maps);
+      batched.plan->prepare_point_batches(2, 64ULL << 20, true, true);
+      const auto& batch = batched.plan->point_batch_plan();
+      require(batch.compact == (extent <= 1024), "ragged extent admission boundary");
+      require(batch.device_bytes <= (64ULL << 20), "ragged extent exceeded its allowance");
+      auto density_matrix = density(basis.nao, uks ? 2U : 1U);
+      Fixture serial(basis, grid, 1U, uks, tile_points, CudaXcAoPrecision::Fp64, false, 0.75, 1.0,
+                     &maps);
+      for (unsigned replay = 0; replay < 2; ++replay) {
+        batched.submit(density_matrix);
+        serial.submit(density_matrix);
+        require(batched.scalars().error == 0 && serial.scalars().error == 0,
+                "ragged extent produced invalid values");
+        require(batched.scalars().energy == serial.scalars().energy &&
+                    batched.potential() == serial.potential(),
+                "ragged extent lost cross-block contributions");
+        for (auto& value : density_matrix) value *= 0.73;
+      }
+      batched.canary();
+    }
+}
+
+void point_batch_cases(bool ragged = false) {
+  if (ragged) ragged_extent_cases();
   // The compact candidate needs independently qualified small shared-memory
   // domains. The last 32-point tile and overlapping nonidentity maps exercise
   // packed strides, empty tiles and ordered writeback without a dense oracle
@@ -11,6 +55,9 @@ void point_batch_cases() {
     molecule.shells.push_back({1, 3, {{0.32, 1.0}}});
     molecule.shells.push_back({1, 3, {{0.21, 1.0}}});
     molecule.shells.push_back({1, 2, {{0.27, 1.0}}});
+    if (ragged)
+      for (unsigned shell = 0; shell < 24; ++shell)
+        molecule.shells.push_back({shell % 2, 2, {{0.11 + 0.013 * shell, 1.0}}});
     const AoBasis basis(molecule);
     const MolecularGrid grid(molecule, {1, 3, 4, 6, 3, 1e-12});
     constexpr std::size_t tile_points = 56;
@@ -29,8 +76,11 @@ void point_batch_cases() {
           const auto* selected = indexed ? &maps : nullptr;
           Fixture batched(basis, grid, functional, uks, tile_points, CudaXcAoPrecision::Fp64, false,
                           1.0, 1.0, selected);
-          batched.plan->prepare_point_batches(16, 32 * 1024 * 1024, true);
+          batched.plan->prepare_point_batches(16, 32 * 1024 * 1024, true, ragged);
           require(batched.plan->point_batch_plan().compact, "compact batch candidate rejected");
+          require(!ragged || (basis.nao > 128 && batched.plan->point_batch_plan().ragged &&
+                              batched.plan->point_batch_plan().compact_large_tiles > 0),
+                  "ragged batch did not exercise a large AO domain");
           auto d = density(basis.nao, uks ? 2U : 1U);
           for (unsigned replay = 0; replay < 2; ++replay) {
             if (indexed)
@@ -47,7 +97,7 @@ void point_batch_cases() {
           }
           batched.canary();
         }
-    graph_capture(basis, grid, 2U, true, tile_points, &maps, 16, true);
+    graph_capture(basis, grid, 2U, true, tile_points, &maps, 16, true, ragged);
     const MolecularGrid mixed_grid(molecule, {1, 8, 4, 7, 3, 1e-12});
     CudaXcAoTiles mixed_maps;
     mixed_maps.derivative_order = 1;
@@ -60,7 +110,7 @@ void point_batch_cases() {
     }
     Fixture mixed(basis, mixed_grid, 1U, true, tile_points, CudaXcAoPrecision::Fp64, false, 1.0,
                   1.0, &mixed_maps);
-    mixed.plan->prepare_point_batches(4, 32 * 1024 * 1024, true);
+    mixed.plan->prepare_point_batches(4, 32 * 1024 * 1024, true, ragged);
     require(mixed.plan->point_batch_plan().compact_groups == 1 &&
                 mixed.plan->point_batch_plan().compact_tiles == 4,
             "unsupported group disabled independent compact groups");

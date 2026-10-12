@@ -113,8 +113,12 @@ def channel_possible(layout: UCCSDLayout, channel: str) -> bool:
     )
 
 
-def build_tile_program(
-    layout: UCCSDLayout, channel: str, shape: tuple[int, ...]
+def _build_tile_program(
+    layout: UCCSDLayout,
+    channel: str,
+    shape: tuple[int, ...],
+    *,
+    resolvents: bool = False,
 ) -> TriplesTileProgram:
     """Lower one scalar (T) tile with independent alpha/beta populations.
 
@@ -244,14 +248,19 @@ def build_tile_program(
         denominators.append(broadcast(node, output_indices, (position,)))
     denominator = add(*denominators, coefficients=(1, 1, 1, -1, -1, -1))
     factor = Fraction(comb(3, channel.count("a")) ** 2, 36)
+    resolved_left = divide(connected, denominator)
+    complete = add(connected, disconnected)
     energy = einsum(
         "ijkabc,ijkabc->",
-        divide(connected, denominator),
-        add(connected, disconnected),
+        resolved_left,
+        complete,
         coefficient=factor,
     )
+    outputs = {"triples_energy": energy}
+    if resolvents:
+        outputs.update(x=resolved_left, y=divide(complete, denominator))
     program = Program(
-        {"triples_energy": energy},
+        outputs,
         provenance={
             "method": "UCCSD(T)",
             "spin_channel": channel,
@@ -275,6 +284,18 @@ def build_tile_program(
         channel,
         shape,
     )
+
+
+def build_tile_program(
+    layout: UCCSDLayout, channel: str, shape: tuple[int, ...]
+) -> TriplesTileProgram:
+    """Lower the canonical nine-term scalar tile without physical offsets.
+
+    Six local occupied/virtual lengths must be positive and within their
+    actual spin populations. Coordinate coverage, finite denominator gates
+    and complete endpoint work/storage admission remain caller responsibilities.
+    """
+    return _build_tile_program(layout, channel, shape)
 
 
 def build_tile_response_program(

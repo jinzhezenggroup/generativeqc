@@ -12,6 +12,7 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_state.hpp"
 #include "scf/cuda/final_validation_kernels.hpp"
+#include "tensor/cuda_square_linalg.hpp"
 
 namespace generativeqc::scf::cuda_df {
 namespace {
@@ -103,15 +104,13 @@ Matrix packed(const Matrix& a, std::size_t n) {
 void gemm(CudaDensityFittingJkPlan& plan, const double* a, const double* b, double* out,
           bool ta = false, bool tb = false, int rank = -1, double scale = 1) {
   const int n = static_cast<int>(plan.nbf);
-  const double zero = 0;
   if (rank == 0) {
     check(cudaMemsetAsync(out, 0, plan.nbf * plan.nbf * sizeof(double), plan.stream),
           "zero empty occupied product");
     return;
   }
-  const auto status =
-      cublasDgemm(plan.blas, ta ? CUBLAS_OP_T : CUBLAS_OP_N, tb ? CUBLAS_OP_T : CUBLAS_OP_N, n, n,
-                  rank < 0 ? n : rank, &scale, a, n, b, n, &zero, out, n);
+  const auto status = tensor::cuda::square_panel_product(plan.blas, n, rank < 0 ? n : rank, a, ta,
+                                                         b, tb, out, scale);
   if (status != CUBLAS_STATUS_SUCCESS)
     throw std::runtime_error("cuBLAS final-validation product failed: " + std::to_string(status));
 }

@@ -241,13 +241,13 @@ density products, density features, weighted AO panels and local Vxc
 contractions. The compiler keeps each original active-AO map throughout; it
 does not union maps or expand intermediate AO/density tensors to the full
 basis. Only the final public potential is full-basis. A compact group needs at
-least two tiles, with each nonempty tile having 32–128 active AOs and at least
+least two tiles, with each nonempty tile having 32–1024 active AOs and at least
 32 points. Empty tiles remain legal. Other original groups keep point-only
 batching; one large or tiny AO domain does not disable independent small groups.
 Response, mixed arithmetic and optional library-provider
 execution retain their existing paths. `GENERATIVEQC_CUDA_XC_COMPACT_BATCH=0`
 disables compact contractions while preserving point batching. The small-domain
-bound is a resource/ordered-scatter constraint, not a universal profitability
+bound is a resource/launch constraint, not a universal profitability
 threshold. The automatic compiled-resource envelope includes every compact
 stage and its retained fallback; explicit incumbent-only evidence cannot qualify
 automatic execution.
@@ -255,7 +255,10 @@ automatic execution.
 The candidate reuses the incumbent FP64 bodies but masks density output-tail
 lanes and non-authoritative/padded Vxc pairs while all lanes continue to reach
 shared-memory barriers. Authoritative reduction order, coefficients, weights
-and selected scientific summands are unchanged. One CTA per spin performs
+and selected scientific summands are unchanged. Large groups use unique owners
+of global AO row strips for the upper triangle and its symmetric mirrors;
+each matrix element retains the original tile and addition order without
+floating-point atomics. Small groups use one CTA per spin for
 ordered scatter; consecutive equal AO maps keep the running potential in
 registers and write once per map group, preserving every per-tile addition.
 Different overlapping maps are separated by a block barrier, never atomics.
@@ -266,6 +269,15 @@ and features once per tile, including empty tiles. AO collocation still submits
 once per nonempty original tile. Noncompact groups
 retain the original density/feature/Vxc submission counts; the native work census
 reports actual `compact_groups`, `compact_tiles` and `compact_nonempty_tiles`.
+
+`GENERATIVEQC_CUDA_XC_RAGGED_BATCH=0` restores the original 32–128-AO admission.
+Unset or a nonzero value permits larger groups. Density/panel/potential launches
+use each group's actual maximum extent and include every cross-block term.
+The existing additional byte cap includes retained panels, local potentials,
+features and descriptors; shrinking groups and bounded fallbacks remain active.
+Preparation trace `cuda_xc_batch_plan` reports `compact_large_tiles` separately
+from execution counts. The [default decision](../../.agents/notes/implemented/performance/2026-10-12-ragged-xc-default.md)
+retains complete-endpoint evidence and its cold/moved versus warm limitations.
 
 Retained work panels, compact local matrices and immutable device descriptors
 share the same **additional** XC byte cap as point batching. Descriptors are

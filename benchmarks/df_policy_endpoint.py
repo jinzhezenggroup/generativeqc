@@ -17,6 +17,7 @@ import subprocess
 import time
 import typing
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +62,26 @@ def _screening_feature_scope(enabled: bool) -> typing.Iterator[None]:
             os.environ.pop(name, None)
         else:
             os.environ[name] = previous
+
+
+def execute_endpoint(
+    batch: typing.Any,
+    *,
+    energy_only: bool = False,
+    cold: bool = False,
+    screening_features: bool = False,
+) -> typing.Any:
+    """Time the complete endpoint, excluding diagnostic control changes."""
+    with _screening_feature_scope(screening_features):
+        start = time.perf_counter()
+        result = batch.execute(
+            strict=True,
+            properties=("energy",)
+            if energy_only and not cold
+            else ("energy", "forces"),
+        )
+        seconds = time.perf_counter() - start
+    return result, seconds
 
 
 def independent_reference(
@@ -440,20 +461,7 @@ def main() -> None:
         """Keep raw numerical evidence even if a subsequent gate fails."""
         args.output.write_text(json.dumps(payload, indent=2) + "\n")
 
-    def execute(
-        batch: typing.Any, *, cold: typing.Any = False, screening_features: bool = False
-    ) -> typing.Any:
-        """Time the complete endpoint, excluding diagnostic control changes."""
-        with _screening_feature_scope(screening_features):
-            start = time.perf_counter()
-            result = batch.execute(
-                strict=True,
-                properties=("energy",)
-                if args.energy_only and not cold
-                else ("energy", "forces"),
-            )
-            seconds = time.perf_counter() - start
-        return result, seconds
+    execute = partial(execute_endpoint, energy_only=args.energy_only)
 
     select_policy(args.policies[0])
     previous_controls = {name: os.environ.get(name) for name in cold_controls}

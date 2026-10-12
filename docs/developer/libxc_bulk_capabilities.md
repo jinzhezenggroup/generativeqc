@@ -307,7 +307,20 @@ RKS. Restricted calls reject unequal channels and fail explicitly when the
 native library lacks v4 or its matching restricted descriptor. Legacy work
 domains retain the same spin-fold continuation as their SCF. This point bridge
 does not qualify a complete molecular force endpoint or the automatic CUDA RKS
-provider.
+provider. The static automatic CUDA provider independently binds the canonical
+U1 density-work Graph for RKS and the P2 Graph for UKS. Both single and compact
+batched launchers restore the original total density from paired transport
+channels before evaluating U1 work floors; they duplicate its scalar potential
+for the existing half-channel contraction. Equal-input UKS remains P2.
+`GENERATIVEQC_CUDA_XC_EQUAL_SPIN=0` disables scalar sharing for the legacy
+GGA/meta-GGA continuation, not the density-only U1 normalization. Density-only
+descriptors report exact domain version 5; other ingredient families retain
+version 4. The unchanged private native descriptor binds both explicit
+mathematical/derivative layouts through a combined expression identity, and the
+provider's version-2 source identity additionally binds both emitted bodies,
+traversal and launcher bytes. Old P2-only source receipts do not establish this
+new provider contract. These executable point products still grant neither
+automatic CUDA KS/force admission nor installed AOT/backend promotion.
 The compiled-CPU receipt includes restricted interior, vacuum and active
 `[floor, 2*floor)` smoke cases in addition to polarized E/vxc. The molecular
 producer verifies the actual native registry's restricted expression identity
