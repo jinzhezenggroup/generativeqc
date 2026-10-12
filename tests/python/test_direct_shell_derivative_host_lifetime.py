@@ -104,11 +104,13 @@ def host_lifetime_probe(
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     bodies = [
         _extract_function(
-            source, "static cudaError_t validate_generated_full_range_derivative_inputs("
+            source,
+            "static cudaError_t validate_generated_full_range_derivative_inputs(",
         ),
         _extract_function(
-            source, "static cudaError_t enqueue_generated_full_range_energy_derivatives("
-        )
+            source,
+            "static cudaError_t enqueue_generated_full_range_energy_derivatives(",
+        ),
     ]
     for route in ("full_range", "rsh"):
         symbol = f"cudaError_t execute_generated_{route}_energy_derivatives("
