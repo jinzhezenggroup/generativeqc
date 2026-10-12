@@ -391,8 +391,11 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Exact maps reserve only their finite numeric owner, including both offset
 # mirrors and compact AO scratch; bind the helper and endpoint independently.
 # Entering the original prepared lease preserves all admission and work bounds.
+# Resident AO selection delegates to its behaviorally tested feature-lease helper.
+# This legacy capacity audit still binds endpoint/call wiring; its remaining
+# whole-owner fingerprints are separate migration debt under #2296.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
+    "bd50019aad09080e4481510b1676839c24421bc379ee747b3b8c5558ad9470ac"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -972,9 +975,8 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
                 "max_active_fraction=resident_ao_max_active_fraction)"
             ),
             (
-                "feature_lease = (ao.feature_task_device_points(point_pointer, "
-                "end - begin, None, ingredients) if ao_maps is None else "
-                "ao_maps.feature_task(ao, ao_maps.domain, begin, end - begin, ingredients))"
+                "feature_lease = _stationary_resident_feature_task("
+                "ao, resident_grid, ao_maps, begin, end, ingredients)"
             ),
             "task.layout.require_derivative_order(2 if needs_first else 1)",
         ),
