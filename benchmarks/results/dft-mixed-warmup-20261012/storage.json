@@ -3,6 +3,10 @@
     "sha256": "d42b6beeaae5a500b6ed0139444ec88b08a6feb978909a49450a216a4745ab3e",
     "bytes": 19518
   },
+  "final-validation.json": {
+    "sha256": "9b6f43afa3129d60b934760def4193e5c73cb3d1de4fb2c8ab9d41dba9a7acb6",
+    "bytes": 2142
+  },
   "fix-captures.json.xz": {
     "sha256": "1be979d12b053aba5062470bc5dffd5565d5ac6402354d4f1eedcf80b1566e66",
     "bytes": 60076
