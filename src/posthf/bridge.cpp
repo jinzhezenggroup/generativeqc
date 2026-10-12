@@ -698,8 +698,8 @@ GENERATIVEQC_API int generativeqc_posthf_df_gradient_tile_cuda_v1(
  * repulsion is deliberately excluded so the complete consumer adds it once. */
 GENERATIVEQC_API int generativeqc_posthf_one_electron_gradient_cpu_v1(
     void* source, const double* overlap_weights, const double* hcore_weights,
-    std::size_t matrix_elements, double* gradient, std::size_t gradient_elements,
-    char* error, std::size_t error_size) {
+    std::size_t matrix_elements, double* gradient, std::size_t gradient_elements, char* error,
+    std::size_t error_size) {
   return guarded(error, error_size, [&] {
     if (!source || !overlap_weights || !hcore_weights || !gradient)
       throw std::invalid_argument("invalid one-electron CPU gradient request");
@@ -730,17 +730,19 @@ GENERATIVEQC_API int generativeqc_posthf_weighted_eri_shell_gradient_cpu_v1(
     std::size_t weight_elements, double* center_gradient, std::size_t gradient_elements,
     std::uint64_t* primitive_evaluations, char* error, std::size_t error_size) {
   return guarded(error, error_size, [&] {
-    if (!source || !shell_indices || !weights || !center_gradient ||
-        !primitive_evaluations || gradient_elements != 12)
+    if (!source || !shell_indices || !weights || !center_gradient || !primitive_evaluations ||
+        gradient_elements != 12)
       throw std::invalid_argument("invalid packaged CPU ERI shell-gradient request");
     const std::array<std::size_t, 4> shells{shell_indices[0], shell_indices[1], shell_indices[2],
-                                           shell_indices[3]};
+                                            shell_indices[3]};
     const std::array<std::span<const double>, 1> channels{
         std::span<const double>(weights, weight_elements)};
     std::uint64_t evaluations{};
-    const auto candidate = generativeqc::integrals::contract_weighted_eri_shell_derivatives(
-        static_cast<RawSource*>(source)->orbital(), shells, channels, &evaluations,
-        generativeqc::integrals::WeightedEriDerivativeExecution::PackagedCpu).front();
+    const auto candidate =
+        generativeqc::integrals::contract_weighted_eri_shell_derivatives(
+            static_cast<RawSource*>(source)->orbital(), shells, channels, &evaluations,
+            generativeqc::integrals::WeightedEriDerivativeExecution::PackagedCpu)
+            .front();
     if (!std::all_of(candidate.begin(), candidate.end(),
                      [](double value) { return std::isfinite(value); }))
       throw std::runtime_error("packaged CPU ERI gradient is nonfinite");
