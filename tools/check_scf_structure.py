@@ -34,6 +34,17 @@ ALLOWED = {
         "runtime/",
     ),
 }
+# The native atomic Hückel provider is production preparation, not an oracle.
+# Keep its exact-Fock/DIIS/scalar-eigen ownership specific to this file; MINAO
+# projection and all reference modules retain their narrower dependency rules.
+SOURCE_EXACT_ALLOWED = {
+    "scf/initial_guess/huckel.cpp": (
+        "molecule/basis.hpp",
+        "scf/fock_prepared.hpp",
+        "scf/solver/cpu_target_eigen.hpp",
+        "scf/solver/diis.hpp",
+    ),
+}
 # CUDA planning and linear algebra have separate rebuild ownership. Enumerate
 # these extracted owners rather than exempting all historical cuda/ fragments.
 CUDA_MODULES = {
@@ -620,6 +631,7 @@ CUDA_ALLOWED["cuda_direct_jk_source_lease"] = (
 # implementation includes out of C++.
 CUDA_MODULES["cuda_hf_driver"] = ("scf/cuda_rhf.cpp",)
 CUDA_ALLOWED["cuda_hf_driver"] = (
+    "scf/cuda/hf_initial_guess.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",
     "solver/cuda/symmetric_eigen_workspace.hpp",
     # Public ECP device consumer only; quadrature kernels remain in integrals.
@@ -691,6 +703,18 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/direct_task_layout.hpp",
     "scf/generated_shell_task.hpp",
     "solver/iteration_control.hpp",
+)
+CUDA_MODULES["cuda_hf_initial_guess"] = ("hf_initial_guess",)
+CUDA_ALLOWED["cuda_hf_initial_guess"] = (
+    "scf/cuda/hf_initial_guess.hpp",
+    "scf/cuda/rhf_bucket_internal.hpp",
+    "scf/cuda/eigensolver.hpp",
+    "scf/preliminary_guess.hpp",
+    "scf/solver/eigen_frame.hpp",
+    "scf/types.hpp",
+    "runtime/resource_usage.hpp",
+    "integrals/s_integrals.hpp",
+    "generativeqc/generativeqc.hpp",
 )
 # Upstream physical-reference export is a host bridge for post-HF clients.
 CUDA_ALLOWED["cuda_hf_driver"] += (
@@ -790,9 +814,11 @@ def audit_scf_structure(root: Path = ROOT) -> dict:
                 except ValueError:
                     continue
                 edges.append({"from": relative, "to": target})
-                if target not in CUDA_EXACT_ALLOWED.get(
-                    owner, ()
-                ) and not target.startswith(allowed):
+                if (
+                    target not in SOURCE_EXACT_ALLOWED.get(relative, ())
+                    and target not in CUDA_EXACT_ALLOWED.get(owner, ())
+                    and not target.startswith(allowed)
+                ):
                     line = text.count("\n", 0, match.start()) + 1
                     errors.append(
                         f"{relative}:{line}: forbidden {owner} dependency on {target}"

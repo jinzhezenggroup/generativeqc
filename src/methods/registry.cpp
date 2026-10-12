@@ -155,19 +155,22 @@ void validate_preliminary_system(const generativeqc_method_descriptor& descripto
                                  const core::System& system) {
   if (!descriptor.initial_guess) return;
   // Automatic domain misses belong to each prepared item, not shared batch admission.
-  if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU) return;
+  if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ||
+      descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU)
+    return;
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2 ||
       !system.ecp_terms.empty() ||
       std::any_of(system.atoms.begin(), system.atoms.end(),
                   [](const auto& atom) { return atom.ecp_core != 0; }))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "initial-density preparation requires an all-electron restricted singlet");
-  if (descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO &&
+  if ((descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO ||
+       descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL) &&
       std::any_of(system.atoms.begin(), system.atoms.end(), [](const auto& atom) {
         return !scf::initial_guess::automatic_minao_element_eligible(atom.atomic_number);
       }))
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "MINAO initial guess is currently qualified for H-Ar");
+                      "MINAO/Huckel initial guess is currently qualified for H-Ar");
 }
 
 void validate_option_family(const MethodDefinition& definition,
@@ -175,12 +178,18 @@ void validate_option_family(const MethodDefinition& definition,
                             generativeqc_backend backend) {
   if (descriptor.initial_guess) {
     const auto family = definition.provider.domain.family;
-    const bool automatic = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+    const bool automatic =
+        descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ||
+        descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU;
     const bool minao = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO;
+    const bool huckel = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL;
     const bool admitted =
         automatic ? backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
                         (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
                          family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
+        : huckel  ? scf::initial_guess::automatic_huckel_model_eligible(
+                        descriptor.method, family, backend, descriptor.precision_mode,
+                        descriptor.density_fitting_mode, true, false)
         : minao   ? scf::initial_guess::automatic_minao_model_eligible(
                         descriptor.method, family, backend, descriptor.precision_mode,
                         descriptor.density_fitting_mode, true, false)
@@ -194,6 +203,7 @@ void validate_option_family(const MethodDefinition& definition,
     if (!admitted)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         automatic ? "automatic per-system initial guess requires CPU HF/KS"
+                        : huckel  ? "Huckel requires FP64 restricted CPU/CUDA HF/KS"
                         : minao   ? "MINAO requires FP64 exact restricted CPU HF/KS or CUDA KS"
                                   : "preliminary SCF requires CPU FP64 exact restricted HF/KS");
   }

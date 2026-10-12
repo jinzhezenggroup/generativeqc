@@ -37,7 +37,12 @@ def test_immutable_typed_policy_and_native_snapshot() -> None:
     minao = InitialGuessSpec("minao")
     assert hf.grid is None and lda.grid == GridSpec(8, 6, 12) and minao.grid is None
     assert hf.max_iterations == 32
-    for policy, kind in ((hf, 1), (lda, 2), (minao, 3)):
+    for policy, kind in (
+        (hf, 1),
+        (lda, 2),
+        (minao, 3),
+        (InitialGuessSpec("huckel"), 4),
+    ):
         native = policy.native()
         assert native.struct_size == ctypes.sizeof(native)
         assert native.abi_version == _native.ABI_VERSION
@@ -64,6 +69,7 @@ def test_immutable_typed_policy_and_native_snapshot() -> None:
         {"maximum_numeric_bytes": 2**63},
         {"kind": "hf", "grid": GridSpec(8, 6, 12)},
         {"kind": "minao", "grid": GridSpec(8, 6, 12)},
+        {"kind": "huckel", "grid": GridSpec(8, 6, 12)},
         {"kind": "lda", "grid": False},
         {"kind": "lda", "grid": GridSpec(48, 16, 32)},
         {"kind": "lda", "grid": GridSpec(8, 6, 12, element_radii=((8, 2.0),))},
@@ -332,7 +338,7 @@ def test_complete_native_energy_and_fallbacks(
         calc.singlepoint(WATER, properties=("energy", "forces"))
 
 
-@pytest.mark.parametrize("kind", ["hf", "lda", "minao"])
+@pytest.mark.parametrize("kind", ["hf", "lda", "minao", "huckel"])
 def test_existing_and_imported_warm_density_is_authoritative(
     native: None, tmp_path: typing.Any, kind: str
 ) -> None:
@@ -371,7 +377,7 @@ def test_runtime_policy_change_requires_repreparation(native: None) -> None:
             batch.execute()
 
 
-@pytest.mark.parametrize("kind", ["hf", "lda", "minao"])
+@pytest.mark.parametrize("kind", ["hf", "lda", "minao", "huckel"])
 def test_linked_global_budget_observes_preparation(native: None, kind: str) -> None:
     policy = InitialGuessSpec(kind)
     probe = calculator("pbe0-rks", policy).estimate_resources([WATER])
@@ -394,7 +400,7 @@ def test_linked_global_budget_observes_preparation(native: None, kind: str) -> N
         assert not observation["complete_plan_peak"]
 
 
-@pytest.mark.parametrize("kind", ["hf", "lda", "minao"])
+@pytest.mark.parametrize("kind", ["hf", "lda", "minao", "huckel"])
 @pytest.mark.parametrize(
     "basis,representation,atoms,charge",
     [

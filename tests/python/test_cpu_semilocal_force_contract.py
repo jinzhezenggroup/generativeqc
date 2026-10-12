@@ -219,7 +219,7 @@ def test_automatic_guess_uses_supported_native_schema(
     )
     options = {} if selection == "omitted" else {"initial_guess": "auto"}
     automatic = Calculator(method=method, **options)
-    assert automatic.initial_guess == InitialGuessSpec("minao")
+    assert automatic.initial_guess == InitialGuessSpec("huckel")
     assert (
         automatic._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 3
     )

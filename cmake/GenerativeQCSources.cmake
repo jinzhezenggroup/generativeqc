@@ -167,6 +167,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/reference/mean_field.cpp
     src/scf/initial_guess/density.cpp
     src/scf/initial_guess/minao.cpp
+    src/scf/initial_guess/huckel.cpp
     src/scf/preliminary_guess.cpp
     src/tensor/symmetric_matrix_function.cpp
     src/scf/cuda/df_source_domain.cpp
@@ -209,6 +210,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_eigensolver_probe.cu
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
+      src/scf/cuda/hf_initial_guess.cpp
       src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
       src/scf/cuda/rhf_resident_values.cpp

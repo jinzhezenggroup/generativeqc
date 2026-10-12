@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-07
 
+Native Modified Hückel supersedes this default on positively capable libraries;
+see [the default/DF decision](../numerics/2026-10-12-default-huckel-df.md). The MINAO
+decision remains the compatibility policy for older libraries and its historical
+evidence is unchanged.
+
 ## Problem
 
 The repaired GPU provider has profitable complete cold E+force endpoints,

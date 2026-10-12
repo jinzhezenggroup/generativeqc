@@ -13,6 +13,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/automatic_policy.hpp"
+#include "scf/initial_guess/huckel.hpp"
 #include "scf/initial_guess/minao.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
@@ -35,7 +36,8 @@ bool preliminary_target_common_eligible(const core::System& system,
   return strategy.spec.spin == FockSpin::Restricted &&
          options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
              GENERATIVEQC_PRECISION_FP64 &&
-         exact(strategy.spec.coulomb) && exact(strategy.spec.exchange) &&
+         (options.preliminary_guess->kind == PreliminaryKind::Huckel ||
+          (exact(strategy.spec.coulomb) && exact(strategy.spec.exchange))) &&
          system.ecp_terms.empty() &&
          std::none_of(system.atoms.begin(), system.atoms.end(),
                       [](const auto& atom) { return atom.ecp_core != 0; }) &&
@@ -79,6 +81,8 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
                                                 PreliminaryDiagnostic& diagnostic,
                                                 const EigenOperation& eigen) {
   const auto& system = target.system();
+  if (policy.kind == PreliminaryKind::Huckel)
+    return prepare_huckel_initial_density(system, target.one_electron(), policy, diagnostic, eigen);
   // The CPU integral provider admits g, but the LDA AO-grid primitive only
   // admits through f. Decline before building an unusable extra integral owner.
   if (policy.kind == PreliminaryKind::Lda &&
@@ -156,12 +160,32 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
   return density;
 }
 
+std::optional<std::vector<double>> prepare_huckel_initial_density(
+    const core::System& system, const integrals::IntegralData& target,
+    const PreliminaryOptions& policy, PreliminaryDiagnostic& diagnostic,
+    const EigenOperation& eigen) {
+  validate_preliminary_options(policy);
+  if (policy.kind != PreliminaryKind::Huckel)
+    throw std::invalid_argument("Huckel preparation requires its explicit provider kind");
+  diagnostic.preparation_numeric_capacity = preliminary_numeric_capacity(system, policy);
+  if (diagnostic.preparation_numeric_capacity > policy.maximum_numeric_bytes) {
+    diagnostic.outcome = PreliminaryOutcome::BudgetSkipped;
+    return std::nullopt;
+  }
+  auto candidate = huckel_density(system, target, policy, diagnostic);
+  solver::validate_seed(target.overlap, candidate.density, target.nbf,
+                        {static_cast<unsigned>(system.electron_count)}, 2.0, eigen);
+  diagnostic.outcome = PreliminaryOutcome::Used;
+  return std::move(candidate.density);
+}
+
 void validate_preliminary_options(const PreliminaryOptions& options) {
   if (options.kind != PreliminaryKind::HartreeFock && options.kind != PreliminaryKind::Lda &&
-      options.kind != PreliminaryKind::Minao)
+      options.kind != PreliminaryKind::Minao && options.kind != PreliminaryKind::Huckel)
     throw std::invalid_argument("unknown preliminary initial-density provider");
-  if (options.automatic_cpu && options.kind != PreliminaryKind::Minao)
-    throw std::invalid_argument("automatic CPU policy requires the MINAO provider");
+  if (options.automatic_cpu && options.kind != PreliminaryKind::Minao &&
+      options.kind != PreliminaryKind::Huckel)
+    throw std::invalid_argument("automatic CPU policy requires the MINAO or Huckel provider");
   if (!options.max_iterations || options.max_iterations > 64 || !options.diis_history ||
       options.diis_history > 16 || !(options.energy_tolerance > 0) ||
       !std::isfinite(options.energy_tolerance) || !(options.density_tolerance > 0) ||
@@ -181,9 +205,12 @@ std::optional<PreliminaryOptions> preliminary_options(
       descriptor->abi_version != GENERATIVEQC_ABI_VERSION)
     throw std::invalid_argument("preliminary SCF descriptor ABI mismatch");
   PreliminaryOptions options;
-  options.automatic_cpu = descriptor->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
-  options.kind = options.automatic_cpu ? PreliminaryKind::Minao
-                                       : static_cast<PreliminaryKind>(descriptor->kind);
+  options.automatic_cpu = descriptor->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ||
+                          descriptor->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU;
+  options.kind = descriptor->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ? PreliminaryKind::Minao
+                 : descriptor->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU
+                     ? PreliminaryKind::Huckel
+                     : static_cast<PreliminaryKind>(descriptor->kind);
   if (descriptor->max_iterations) options.max_iterations = descriptor->max_iterations;
   if (descriptor->diis_history) options.diis_history = descriptor->diis_history;
   if (descriptor->energy_tolerance != 0) options.energy_tolerance = descriptor->energy_tolerance;
@@ -196,9 +223,10 @@ std::optional<PreliminaryOptions> preliminary_options(
   if (descriptor->radial_points) options.radial_points = descriptor->radial_points;
   if (descriptor->angular_polar) options.angular_polar = descriptor->angular_polar;
   if (descriptor->angular_azimuth) options.angular_azimuth = descriptor->angular_azimuth;
-  if ((options.kind == PreliminaryKind::HartreeFock || options.kind == PreliminaryKind::Minao) &&
+  if ((options.kind == PreliminaryKind::HartreeFock || options.kind == PreliminaryKind::Minao ||
+       options.kind == PreliminaryKind::Huckel) &&
       (descriptor->radial_points || descriptor->angular_polar || descriptor->angular_azimuth))
-    throw std::invalid_argument("HF/MINAO initial guesses do not accept a grid");
+    throw std::invalid_argument("HF/MINAO/Huckel initial guesses do not accept a grid");
   validate_preliminary_options(options);
   return options;
 }
@@ -210,6 +238,23 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   const auto checked_mul = [](std::size_t a, std::size_t b) { return runtime::size_mul(a, b); };
   const auto n = molecule::ao_count(system);
   const auto n2 = checked_mul(n, n);
+  if (options.kind == PreliminaryKind::Huckel) {
+    const auto atomic = huckel_maximum_atomic_aos(system);
+    const auto atomic2 = checked_mul(atomic, atomic);
+    // Assembly/admission, cached atomic frames, and one serialized atomic owner.
+    auto bytes = checked_add(16U << 20, checked_mul(256, n2));
+    bytes = checked_add(bytes, checked_mul(24, checked_mul(atomic2, atomic2)));
+    bytes =
+        checked_add(bytes, checked_mul(8, checked_mul(atomic2, 200 + 2 * options.diis_history)));
+    std::size_t primitives = 0;
+    for (const auto& shell : system.shells)
+      primitives = checked_add(primitives, shell.primitives.size());
+    bytes = checked_add(bytes, checked_mul(512, checked_add(n, system.atoms.size())));
+    bytes = checked_add(bytes, checked_mul(128, primitives));
+    if (bytes > static_cast<std::uint64_t>(INT64_MAX))
+      throw std::overflow_error("Huckel capacity exceeds portable int64 scope");
+    return bytes;
+  }
   if (options.kind == PreliminaryKind::Minao)
     return minao_numeric_capacity_shape(n, system.atoms.size(), minao_source_ao_count(system),
                                         minao_source_primitive_count(system));
@@ -274,10 +319,12 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
   if (!options.preliminary_guess) return;
   validate_preliminary_options(*options.preliminary_guess);
   const bool common = preliminary_target_common_eligible(system, strategy, options);
-  if (options.preliminary_guess->kind == PreliminaryKind::Minao) {
+  if (options.preliminary_guess->kind == PreliminaryKind::Minao ||
+      options.preliminary_guess->kind == PreliminaryKind::Huckel) {
     if (!common || !minao_elements_eligible(system))
       throw std::invalid_argument(
-          "MINAO requires an FP64 all-electron restricted H-Ar exact endpoint");
+          "MINAO/Huckel requires an FP64 all-electron restricted H-Ar endpoint; MINAO is "
+          "exact-only");
     return;
   }
   if (!common || strategy.backend != FockBackend::Cpu || options.compute_forces)
@@ -301,7 +348,8 @@ void resolve_automatic_preliminary_guess(const core::System& system,
 
 ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOptions& options,
                                      const std::vector<double>* initial_density,
-                                     std::size_t retained_target_bytes, const TargetSolve& solve) {
+                                     std::size_t retained_target_bytes, const TargetSolve& solve,
+                                     const EigenOperation& eigen) {
   if (!options.preliminary_guess) return solve(initial_density);
   validate_preliminary_target(target.system(), target.strategy(), options);
   PreliminaryDiagnostic diagnostic;
@@ -317,7 +365,7 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
   const auto started = Clock::now();
   try {
     runtime::CpuRetainedCapacity retained(retained_target_bytes);
-    density = prepare_preliminary_density(target, *options.preliminary_guess, diagnostic);
+    density = prepare_preliminary_density(target, *options.preliminary_guess, diagnostic, eigen);
   } catch (const std::bad_alloc&) {
     throw;
   } catch (const std::exception&) {

@@ -442,9 +442,10 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
         r'initial_guess:\s*InitialGuessSpec\s*\|\s*typing\.Literal\["auto"\]\s*\|\s*None\s*=\s*"auto"',
         calculator,
     ):
-        raise ValueError("initial-guess default drifted from guarded automatic MINAO")
+        raise ValueError("initial-guess default drifted from guarded automatic Huckel")
     result["initial-guess:preliminary-scf"] = calculator_relative.as_posix()
     result["initial-guess:minao-auto"] = calculator_relative.as_posix()
+    result["initial-guess:huckel-auto"] = calculator_relative.as_posix()
 
     progressive_relative = Path("python/generativeqc/progressive.py")
     progressive = _read(root / progressive_relative)

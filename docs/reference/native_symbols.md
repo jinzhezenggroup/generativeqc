@@ -15,6 +15,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_initial_guess_capabilities_v1](#native-c-generativeqc-initial-guess-capabilities-v1)
 - [generativeqc_initial_guess_auto_kind_v1](#native-c-generativeqc-initial-guess-auto-kind-v1)
 - [generativeqc_initial_guess_auto_system_kind_v1](#native-c-generativeqc-initial-guess-auto-system-kind-v1)
+- [generativeqc_initial_guess_auto_kind_v2](#native-c-generativeqc-initial-guess-auto-kind-v2)
+- [generativeqc_initial_guess_auto_system_kind_v2](#native-c-generativeqc-initial-guess-auto-system-kind-v2)
 - [generativeqc_calculation_get_initial_guess_diagnostic](#native-c-generativeqc-calculation-get-initial-guess-diagnostic)
 - [generativeqc_batch_get_initial_guess_diagnostic](#native-c-generativeqc-batch-get-initial-guess-diagnostic)
 - [generativeqc_get_abi_version](#native-c-generativeqc-get-abi-version)
@@ -196,7 +198,7 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_capabilities_v1 ( void ) ;
 ```
 
-**Behavior.** Return additive HF, LDA, MINAO, and CPU automatic-policy capability bits.
+**Behavior.** Return additive provider, target-domain, and CPU automatic-policy capability bits.
 
 **Outputs.** Ignore unknown bits. A positive bit does not waive the provider-specific backend,
 spin, basis, derivative, and resource admission checks documented with
@@ -253,6 +255,51 @@ otherwise zero (Hcore). This shape query does not waive seed-budget or density g
 
 **Errors.** Uses the model query's status codes; invalid populations return INVALID_ARGUMENT.
 Preserves output on failure, including an empty system request.
+
+**Execution.** Synchronous, allocation-free, context-free discovery; no device or science work.
+
+(native-c-generativeqc-initial-guess-auto-kind-v2)=
+## generativeqc_initial_guess_auto_kind_v2
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v2 ( const generativeqc_initial_guess_auto_policy * request , uint32_t * resolved_kind ) ;
+```
+
+**Behavior.** Resolve the guarded native Modified Huckel default without changing the v1 policy.
+
+**Inputs.** Uses the same request and validation contract as generativeqc_initial_guess_auto_kind_v1.
+
+**Outputs.** On SUCCESS, writes HUCKEL for FP64 all-electron restricted CPU/CUDA HF/KS,
+including density fitting, or zero (Hcore). Model-only admission does not waive basis,
+population, preparation-budget, or density gates. HF requires the RHF method.
+
+**Lifetime.** Borrows the request and atomic_numbers for this call only; retains nothing.
+
+**Errors.** Uses the v1 model query status codes and preserves output on failure.
+
+**Execution.** Synchronous, allocation-free discovery; no context, device, or scientific work.
+
+(native-c-generativeqc-initial-guess-auto-system-kind-v2)=
+## generativeqc_initial_guess_auto_system_kind_v2
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind_v2 ( const generativeqc_initial_guess_auto_policy * request , int64_t electron_count , uint32_t multiplicity , uint32_t * resolved_kind ) ;
+```
+
+**Behavior.** Resolve automatic Huckel or Hcore for one system, including its population.
+
+**Inputs.** Uses the v1 system query request and population validation contract.
+
+**Outputs.** On SUCCESS, writes HUCKEL only for an eligible positive even-electron singlet,
+otherwise zero (Hcore). This shape query does not waive seed-budget or density gates.
+
+**Lifetime.** Borrows the request and atomic_numbers for this call only; retains nothing.
+
+**Errors.** Uses the v1 system query status codes and preserves output on failure.
 
 **Execution.** Synchronous, allocation-free, context-free discovery; no device or science work.
 

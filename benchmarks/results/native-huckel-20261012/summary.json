@@ -1,0 +1,195 @@
+{
+  "schema": "generativeqc.pbe0-initial-guesses.v1.summary",
+  "minimum_repeats": 3,
+  "wall_reduction_gate": 0.05,
+  "density_gate": 1e-08,
+  "arms": [
+    "core",
+    "minao",
+    "huckel"
+  ],
+  "cases": {
+    "48": {
+      "core": {
+        "complete_seconds": [
+          43.499739058315754,
+          43.682297974824905,
+          43.71087638288736
+        ],
+        "median_complete_seconds": 43.682297974824905,
+        "numerical_gate": true,
+        "maximum_paired_density_error": 0.0,
+        "candidate_used": true,
+        "comparisons": {
+          "core": {
+            "wall_reduction": 0.0,
+            "performance_gate": false,
+            "screening_gate": false
+          },
+          "minao": {
+            "wall_reduction": -0.16209335836384353,
+            "performance_gate": false,
+            "screening_gate": false
+          }
+        },
+        "oracle_backed_seed": false,
+        "native_admission_gate": false,
+        "automatic_policy_changed": false
+      },
+      "minao": {
+        "complete_seconds": [
+          37.58931901678443,
+          37.54061899334192,
+          37.86580216512084
+        ],
+        "median_complete_seconds": 37.58931901678443,
+        "numerical_gate": true,
+        "maximum_paired_density_error": 1.9570678411184872e-11,
+        "candidate_used": true,
+        "comparisons": {
+          "core": {
+            "wall_reduction": 0.1394839383576385,
+            "performance_gate": true,
+            "screening_gate": true
+          },
+          "minao": {
+            "wall_reduction": 0.0,
+            "performance_gate": false,
+            "screening_gate": false
+          }
+        },
+        "oracle_backed_seed": false,
+        "native_admission_gate": true,
+        "automatic_policy_changed": false
+      },
+      "huckel": {
+        "complete_seconds": [
+          34.15417344868183,
+          34.132271125912666,
+          34.25592016801238
+        ],
+        "median_complete_seconds": 34.15417344868183,
+        "numerical_gate": true,
+        "maximum_paired_density_error": 3.9141800911579594e-11,
+        "candidate_used": true,
+        "comparisons": {
+          "core": {
+            "wall_reduction": 0.21812324369094194,
+            "performance_gate": true,
+            "screening_gate": true
+          },
+          "minao": {
+            "wall_reduction": 0.09138621443417827,
+            "performance_gate": true,
+            "screening_gate": true
+          }
+        },
+        "oracle_backed_seed": false,
+        "native_admission_gate": true,
+        "automatic_policy_changed": false
+      }
+    },
+    "96": {
+      "core": {
+        "complete_seconds": [
+          112.4102836176753,
+          112.77717105671763,
+          112.98359442874789
+        ],
+        "median_complete_seconds": 112.77717105671763,
+        "numerical_gate": true,
+        "maximum_paired_density_error": 0.0,
+        "candidate_used": true,
+        "comparisons": {
+          "core": {
+            "wall_reduction": 0.0,
+            "performance_gate": false,
+            "screening_gate": false
+          },
+          "minao": {
+            "wall_reduction": -0.2779035976238877,
+            "performance_gate": false,
+            "screening_gate": false
+          }
+        },
+        "oracle_backed_seed": false,
+        "native_admission_gate": false,
+        "automatic_policy_changed": false
+      },
+      "minao": {
+        "complete_seconds": [
+          88.03639921918511,
+          88.2517047971487,
+          107.08745810762048
+        ],
+        "median_complete_seconds": 88.2517047971487,
+        "numerical_gate": true,
+        "maximum_paired_density_error": 5.475886410977182e-11,
+        "candidate_used": true,
+        "comparisons": {
+          "core": {
+            "wall_reduction": 0.2174683584431697,
+            "performance_gate": true,
+            "screening_gate": true
+          },
+          "minao": {
+            "wall_reduction": 0.0,
+            "performance_gate": false,
+            "screening_gate": false
+          }
+        },
+        "oracle_backed_seed": false,
+        "native_admission_gate": true,
+        "automatic_policy_changed": false
+      },
+      "huckel": {
+        "complete_seconds": [
+          86.05967357009649,
+          89.81294193863869,
+          86.21363159269094
+        ],
+        "median_complete_seconds": 86.21363159269094,
+        "numerical_gate": true,
+        "maximum_paired_density_error": 3.1948665935033205e-11,
+        "candidate_used": true,
+        "comparisons": {
+          "core": {
+            "wall_reduction": 0.23554004072923074,
+            "performance_gate": true,
+            "screening_gate": true
+          },
+          "minao": {
+            "wall_reduction": 0.023093867808473334,
+            "performance_gate": false,
+            "screening_gate": false
+          }
+        },
+        "oracle_backed_seed": false,
+        "native_admission_gate": false,
+        "automatic_policy_changed": false
+      }
+    }
+  },
+  "raw_sha256": {
+    "core-48-0.json": "b1a1c2e6992ba330d1a7f276cc79d83f1902a54d08ee764ee387f888cb2b795e",
+    "core-48-1.json": "955679e57dee1ef7e099ac756e9e980a91645e1ad3cb627eb9d229e51ac73746",
+    "core-48-2.json": "a8fb664a6a58fac6cd2adfded90a0ab29a94a42b5dc014f2a303eed0ff7768ef",
+    "core-96-0.json": "9c1b37fdee20a498c577a0901d973182b5a9041c98a8964b717a06160c4e0554",
+    "core-96-1.json": "e56a83dd2c5d53386e2ea60bf7ef9392b5040826ae63f9b74c701f20fe913abe",
+    "core-96-2.json": "c934646cbdea7af0f184d762f2b11ae8964105c4711bd3c8d06eb0317798de5a",
+    "huckel-48-0.json": "4de607800d5c26e455bebe20a35d1b4e690aebf0834267ed5902b9d4a4819436",
+    "huckel-48-1.json": "89b5765491db8d8063b4de05058755dff34eaecf04276e8469ec8ba87cad7f8e",
+    "huckel-48-2.json": "0657858ba6871ceb2dfc72c4cd39aba007cdd8d01e6c48ce9d73d0c135120285",
+    "huckel-96-0.json": "1529673e3d5d7f3fdc204f664c7646878db280f2a2598faed59fdc62e465693e",
+    "huckel-96-1.json": "1a0952513928450f92a4bec18b8fbc157fd42f7eeee1c2dbf67ae98d625cf9c2",
+    "huckel-96-2.json": "374543ee086328c49acd2705c2a2210528c9f048f959a34073dfe934820b4032",
+    "minao-48-0.json": "ebee3bdde246e40d105cc9189c7ae2d0b3b367dcc4c76d43b85832ad8764a213",
+    "minao-48-1.json": "f705c41838199aa38efc030af290907234ebac4add57b458b04f0145facc796b",
+    "minao-48-2.json": "393ea9453689ee133dcbedcdb0857f64977693c841f5779e4c39d5c7d45274cf",
+    "minao-96-0.json": "27568c2d942c7fa5dbaebb955fe658f19bbd6f2cf6ba94f4e70e76d584f7fb30",
+    "minao-96-1.json": "9726b30b71a34641380ab16986b41744160f17f67f238294dd0ba514a69eb9d4",
+    "minao-96-2.json": "de3f41f044f83ab7c64f5be5da6aa36ffbc955a28392a8b1f7405447138380f6",
+    "reference-48.json": "4610b33ca161b243691c57b63e51b9facb390f775470f9f4f7ef4539ad18f7d9",
+    "reference-96.json": "965ef69a68746e12ab03bf92bfe10e021a5e3d80c82cdbb02a43e58a0d099f4e"
+  }
+}

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "generated_df_hf_response_contract.hpp"
+#include "generativeqc/generativeqc.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -564,7 +566,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
                                        result.vectors, diagnostic, detail, system_index);
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status != GENERATIVEQC_STATUS_SUCCESS)
-    throw std::runtime_error(detail.empty() ? "CUDA DF eigensolve failed" : detail);
+    throw generativeqc::Error(status, detail.empty() ? "CUDA DF eigensolve failed" : detail);
   return result;
 }
 
@@ -578,6 +580,52 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
                               std::size_t) {
     return device_df_eigen(matrix, overlap, x, plan, system_index);
   };
+}
+
+/** Native atomic preparation borrows the already prepared DF target's overlap
+ * and eigen owner. Only the seed uses atomic exact RHF: no auxiliary basis,
+ * metric threshold, target approximation or derivative policy is replaced. */
+[[maybe_unused]] std::optional<Matrix> prepare_df_huckel_density(
+    const core::System& system, const DensityFittingScfData& data, const ScfOptions& options,
+    const Matrix* caller_density, initial_guess::PreliminaryDiagnostic& diagnostic,
+    const initial_guess::EigenOperation& eigen, std::size_t retained_bytes) {
+  if (!options.preliminary_guess) return std::nullopt;
+  const auto strategy = options.resolved_fock_build.value_or(resolve_fock_build(
+      make_hf_fock_spec(FockSpin::Restricted, FockApproximation::DensityFitted), FockBackend::Cuda,
+      options.screening_tolerance, options.density_fitting_relative_threshold));
+  initial_guess::validate_preliminary_target(system, strategy, options);
+  diagnostic.requested_kind = static_cast<std::uint32_t>(options.preliminary_guess->kind);
+  diagnostic.target_attempts = 1;
+  if (caller_density) {
+    diagnostic.outcome = initial_guess::PreliminaryOutcome::ExplicitDensity;
+    return std::nullopt;
+  }
+  const auto started = std::chrono::steady_clock::now();
+  std::optional<Matrix> candidate;
+  try {
+    runtime::CpuRetainedCapacity retained(retained_bytes);
+    candidate = initial_guess::prepare_huckel_initial_density(
+        system, data.one_electron, *options.preliminary_guess, diagnostic, eigen);
+  } catch (const std::bad_alloc&) {
+    throw;
+  } catch (const std::exception&) {
+    diagnostic.outcome = initial_guess::PreliminaryOutcome::PreparationFailed;
+    diagnostic.work_counters_complete = false;
+  }
+  diagnostic.preparation_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  return candidate;
+}
+
+/** Retained host tensors coexist with serialized atomic work. GPU arenas are
+ * already charged by their target owner and are never duplicated for a seed. */
+[[maybe_unused]] std::size_t df_seed_retained_capacity(const DensityFittingScfData& data) {
+  const auto& one = data.one_electron;
+  return runtime::vector_capacities(
+      one.overlap, one.hcore, one.eri, one.overlap_derivative, one.hcore_derivative,
+      one.eri_derivative, one.nuclear_repulsion_derivative, data.raw.metric, data.raw.three_center,
+      data.raw.metric_derivative, data.raw.three_center_derivative, data.three_center.values,
+      data.three_center.auxiliary_major_values);
 }
 
 /** The host DIIS retry changes SCF orchestration, not the eigen provider.
@@ -778,6 +826,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
           exchange.size() != n * n)
         throw std::runtime_error(detail.empty() ? "strict CUDA DF physical J/K evaluation failed"
                                                 : detail);
+      ++result.fock_builds;
       auto fock = data.one_electron.hcore;
       for (std::size_t k = 0; k < fock.size(); ++k) fock[k] += coulomb[k] - .5 * exchange[k];
       return solver::PhysicalFockFrame{current, true, {std::move(fock)}};
@@ -801,12 +850,14 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     // sequence and derivative convention; it does not share retained state.
     final_fock =
         build_density_fitting_rhf_fock(data.one_electron.hcore, data.three_center, density);
+    ++result.fock_builds;
     orbitals = host_trace::with_reason(host_trace::EigenReason::final_fock, [&] {
       return final_df_eigen(final_fock, data.one_electron.overlap, orthogonalizer, n, nullptr, 0);
     });
     density = density_from_orbitals(orbitals.vectors, n, occupied);
     final_fock =
         build_density_fitting_rhf_fock(data.one_electron.hcore, data.three_center, density);
+    ++result.fock_builds;
     result.energy = electronic_energy(density, data.one_electron.hcore, final_fock) +
                     data.one_electron.nuclear_repulsion;
   }
@@ -1148,12 +1199,21 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOpti
   if (options.preliminary_guess) {
     ScfOptions target_options = options;
     target_options.preliminary_guess.reset();
+    auto seed_eigen = target_eigen;
+    auto scalar_hf = make_hf_fock_spec(FockSpin::Restricted);
+    scalar_hf.derivative_order = strategy.spec.derivative_order;
+    if (!seed_eigen && strategy.backend == FockBackend::Cuda && strategy.spec == scalar_hf &&
+        options.preliminary_guess->kind == initial_guess::PreliminaryKind::Huckel) {
+      // Independent CUDA Fock execution already owns host SCF algebra. Use
+      // the shared native scalar HF owner, not an implicit reference retry.
+      seed_eigen = solver::cpu_target_eigen;
+    }
     return initial_guess::run_with_preliminary_guess(
         plan, options, initial_density, plan.cpu_observation_capacity(),
         [&](const std::vector<double>* seed) {
-          return run_prepared_fock_strategy(plan, target_options, seed, overlap_cache,
-                                            target_eigen);
-        });
+          return run_prepared_fock_strategy(plan, target_options, seed, overlap_cache, seed_eigen);
+        },
+        seed_eigen);
   }
   ScfResult result = strategy.spec.spin == FockSpin::Unrestricted
                          ? run_uhf_host_plan(system, options, plan.one_electron(), plan,
@@ -1926,11 +1986,11 @@ std::vector<std::optional<DensityFittingScfData>> prepare_cuda_density_fitting_b
   return prepared;
 }
 
-ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system,
-                                            const core::System& auxiliary_system,
-                                            const ScfOptions& options, int device_id,
-                                            const std::vector<double>* initial_density,
-                                            initial_guess::OverlapOrthogonalizer* overlap_cache) {
+ScfResult run_rhf_density_fitting_cuda_impl(
+    const core::System& system, const core::System& auxiliary_system, const ScfOptions& options,
+    int device_id, const std::vector<double>* initial_density,
+    initial_guess::OverlapOrthogonalizer* overlap_cache,
+    initial_guess::PreliminaryDiagnostic* seed_diagnostic = nullptr) {
   host_trace::Region endpoint_trace("run_rhf_density_fitting_cuda_impl");
   reject_cuda_df_preliminary_guess(options);
   if (options.hooks || options.strict_initial_density)
@@ -1950,13 +2010,24 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system,
   const Matrix orthogonalizer = initial_guess::prepare_overlap_orthogonalizer(
       system, data.one_electron.overlap, n, overlap_cache, eigen);
   std::optional<EigenResult> initial_orbitals;
-  Matrix density =
-      prepare_initial_density(system, data.one_electron, orthogonalizer, occupied, initial_density,
-                              initial_orbitals, df_initial_orbital_request(), eigen);
+  initial_guess::PreliminaryDiagnostic diagnostic;
+  auto candidate = prepare_df_huckel_density(
+      system, data, options, initial_density, diagnostic, eigen,
+      runtime::add_capacity(cuda_density_fitting_seed_host_numeric_bytes(plan.get()),
+                            runtime::add_capacity(df_seed_retained_capacity(data),
+                                                  runtime::vector_bytes(orthogonalizer))));
+  if (seed_diagnostic) *seed_diagnostic = diagnostic;
+  // Accepted cold seeds are already strictly admitted; warm normalization
+  // would change the validated candidate and invalidate its provenance.
+  Matrix density = candidate ? std::move(*candidate)
+                             : prepare_initial_density(system, data.one_electron, orthogonalizer,
+                                                       occupied, initial_density, initial_orbitals,
+                                                       df_initial_orbital_request(), eigen);
   // Device SCF consumes D/X/S; fallback computes its own first Fock frame.
   EigenResult orbitals = std::move(initial_orbitals).value_or(EigenResult{});
   ScfResult result;
   result.initial_density_used = initial_density != nullptr;
+  result.preliminary_guess = diagnostic;
 
   if (data.resolved_budget.value_bytes != 0U) {
     discard_density_fitting_tensor_storage(data);
@@ -1979,8 +2050,14 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system,
           cuda_df_iteration_diis_history(options));
     });
     runtime::df_progress::number("compact_dispatch_status", device_status);
+    if (device_records.size() == 1)
+      result.fock_builds += device_records.front().iterations;
+    else if (options.preliminary_guess)
+      result.preliminary_guess.work_counters_complete = false;
     // A resource rejection must not trigger an undisclosed host SCF retry.
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+    if (device_status == GENERATIVEQC_STATUS_CUDA_ERROR)
+      throw generativeqc::Error(device_status, detail);
     if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == 1 &&
         device_records.front().converged) {
       density = std::move(device_final_density);
@@ -2015,8 +2092,10 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system,
     std::string detail;
     const generativeqc_status status =
         execute_cuda_density_fitting_rhf_jk(plan.get(), density, coulomb, exchange, detail);
+    ++result.fock_builds;
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
-      throw std::runtime_error(detail.empty() ? "CUDA density-fitting RHF J/K failed" : detail);
+      throw generativeqc::Error(status,
+                                detail.empty() ? "CUDA density-fitting RHF J/K failed" : detail);
     }
     Matrix fock = data.one_electron.hcore;
     for (std::size_t element = 0; element < fock.size(); ++element) {
@@ -2446,6 +2525,17 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           overlap_caches ? (*overlap_caches)[source] : nullptr, eigen);
       const auto occupied = static_cast<std::size_t>(systems[source].electron_count / 2);
       std::optional<EigenResult> initial;
+      std::size_t retained_bytes = cuda_density_fitting_seed_host_numeric_bytes(plan);
+      for (std::size_t retained_slot = 0; retained_slot < data.size(); ++retained_slot) {
+        retained_bytes = runtime::add_capacity(
+            retained_bytes,
+            runtime::add_capacity(df_seed_retained_capacity(data[retained_slot]),
+                                  runtime::vector_capacities(orthogonalizers[retained_slot],
+                                                             densities[retained_slot])));
+      }
+      auto candidate =
+          prepare_df_huckel_density(systems[source], data[slot], options, initial_densities[source],
+                                    outputs[source].scf.preliminary_guess, eigen, retained_bytes);
       const bool retained_warm =
           initial_densities[source] && data.size() == 1 &&
           cuda_density_fitting_rhf_warm_matches(
@@ -2455,7 +2545,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
       // Exact accepted same-geometry D already passed electron-trace and
       // determinant checks. Normalizing it again breaks its retained frame.
       densities[slot] =
-          retained_warm
+          candidate ? std::move(*candidate)
+          : retained_warm
               ? *initial_densities[source]
               : prepare_initial_density(systems[source], data[slot].one_electron,
                                         orthogonalizers[slot], occupied, initial_densities[source],
@@ -2551,6 +2642,16 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
         device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == data.size() &&
         std::all_of(device_records.begin(), device_records.end(),
                     [](const CudaDensityFittingDeviceScfItem& item) { return item.converged; });
+    unsigned device_rounds = 0;
+    for (const auto& record : device_records)
+      device_rounds = std::max(device_rounds, record.iterations);
+    for (std::size_t slot = 0; slot < data.size(); ++slot) {
+      auto& result = outputs[source_indices[slot]].scf;
+      if (device_records.size() == data.size())
+        result.fock_builds += device_rounds;
+      else if (options.preliminary_guess)
+        result.preliminary_guess.work_counters_complete = false;
+    }
     if (device_converged) {
       for (std::size_t slot = 0; slot < data.size(); ++slot) {
         const std::size_t source = source_indices[slot];
@@ -2599,6 +2700,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
     std::string detail;
     const generativeqc_status jk_status =
         execute_cuda_density_fitting_rhf_jk(plan, batch_density, coulomb, exchange, detail);
+    // This provider evaluates inactive lanes too; count all semantic work.
+    for (const auto source : source_indices) ++outputs[source].scf.fock_builds;
     if (jk_status != GENERATIVEQC_STATUS_SUCCESS) {
       for (std::size_t slot = 0; slot < source_indices.size(); ++slot) {
         if (active[slot]) outputs[source_indices[slot]].status = jk_status;
@@ -3201,9 +3304,89 @@ ScfResult run_rhf_density_fitting_cuda(const core::System& system,
                                        const ScfOptions& options, int device_id,
                                        const std::vector<double>* initial_density,
                                        initial_guess::OverlapOrthogonalizer* overlap_cache) {
-  return run_rhf_density_fitting_cuda_impl(system, auxiliary_system, options, device_id,
-                                           initial_density, overlap_cache);
+  initial_guess::PreliminaryDiagnostic diagnostic;
+  ScfResult result;
+  try {
+    result = run_rhf_density_fitting_cuda_impl(system, auxiliary_system, options, device_id,
+                                               initial_density, overlap_cache, &diagnostic);
+    if (result.converged || diagnostic.outcome != initial_guess::PreliminaryOutcome::Used)
+      return result;
+    diagnostic.discarded_target_iterations = result.iterations;
+    diagnostic.discarded_target_fock_builds = result.fock_builds;
+    diagnostic.work_counters_complete = result.preliminary_guess.work_counters_complete;
+  } catch (const std::bad_alloc&) {
+    throw;
+  } catch (const generativeqc::Error& error) {
+    if (diagnostic.outcome != initial_guess::PreliminaryOutcome::Used ||
+        error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE)
+      throw;
+    diagnostic.work_counters_complete = false;
+  } catch (const std::runtime_error&) {
+    if (diagnostic.outcome != initial_guess::PreliminaryOutcome::Used) throw;
+    diagnostic.work_counters_complete = false;
+  }
+  // The failed call has released its arena. Never overlap it with a retry,
+  // rerun atomic preparation, or replace the requested DF target by exact HF.
+  auto cold_options = options;
+  cold_options.preliminary_guess.reset();
+  diagnostic.outcome = initial_guess::PreliminaryOutcome::TargetRetried;
+  diagnostic.target_attempts = 2;
+  result = run_rhf_density_fitting_cuda_impl(system, auxiliary_system, cold_options, device_id,
+                                             nullptr, overlap_cache);
+  result.preliminary_guess = diagnostic;
+  return result;
 }
+
+namespace {
+/** Retry only failed seeded items, after retiring the shared bucket arena.
+ * Successful neighbors keep their results; CUDA/OOM errors remain terminal. */
+void retry_df_huckel_items(
+    std::vector<RhfBucketItem>& results, const std::vector<core::System>& systems,
+    const std::optional<core::System>& auxiliary_template, const ScfOptions& options, int device_id,
+    CudaDensityFittingJkPlan** cached_plan,
+    const std::vector<initial_guess::OverlapOrthogonalizer*>* overlap_caches) {
+  if (!options.preliminary_guess) return;
+  for (std::size_t source = 0; source < results.size(); ++source) {
+    auto& item = results[source];
+    auto diagnostic = item.scf.preliminary_guess;
+    if (diagnostic.outcome != initial_guess::PreliminaryOutcome::Used ||
+        item.status == GENERATIVEQC_STATUS_SUCCESS ||
+        item.status == GENERATIVEQC_STATUS_CUDA_ERROR ||
+        item.status == GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+      continue;
+    if (cached_plan && *cached_plan) {
+      destroy_cuda_density_fitting_jk_plan(*cached_plan);
+      *cached_plan = nullptr;
+    }
+    diagnostic.discarded_target_iterations = item.scf.iterations;
+    diagnostic.discarded_target_fock_builds = item.scf.fock_builds;
+    if (item.status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
+      diagnostic.work_counters_complete = false;
+    diagnostic.outcome = initial_guess::PreliminaryOutcome::TargetRetried;
+    diagnostic.target_attempts = 2;
+    auto cold_options = options;
+    cold_options.preliminary_guess.reset();
+    try {
+      const auto auxiliary =
+          density_fitting_auxiliary_for_geometry(auxiliary_template, systems[source]);
+      item.scf = run_rhf_density_fitting_cuda_impl(
+          systems[source], auxiliary, cold_options, device_id, nullptr,
+          overlap_caches ? (*overlap_caches)[source] : nullptr);
+      item.status =
+          item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
+    } catch (const std::bad_alloc&) {
+      item.status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    } catch (const generativeqc::Error& error) {
+      item.status = error.status();
+      diagnostic.work_counters_complete = false;
+    } catch (...) {
+      item.status = GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+      diagnostic.work_counters_complete = false;
+    }
+    item.scf.preliminary_guess = diagnostic;
+  }
+}
+}  // namespace
 
 ScfResult run_uhf_density_fitting_cuda(const core::System& system,
                                        const core::System& auxiliary_system,
@@ -3218,9 +3401,11 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket(
     const std::vector<core::System>& systems, const std::optional<core::System>& auxiliary_template,
     const ScfOptions& options, const std::vector<const std::vector<double>*>& initial_densities,
     int device_id, std::vector<CudaDensityFittingMetricDiagnostic>* diagnostics) {
-  return run_rhf_density_fitting_cuda_bucket_impl(systems, auxiliary_template, options,
-                                                  initial_densities, device_id, diagnostics,
-                                                  nullptr, nullptr, nullptr);
+  auto results = run_rhf_density_fitting_cuda_bucket_impl(systems, auxiliary_template, options,
+                                                          initial_densities, device_id, diagnostics,
+                                                          nullptr, nullptr, nullptr);
+  retry_df_huckel_items(results, systems, auxiliary_template, options, device_id, nullptr, nullptr);
+  return results;
 }
 
 std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_cached(
@@ -3230,9 +3415,12 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_cached(
     std::vector<CudaDensityFittingMetricDiagnostic>* diagnostics,
     std::vector<std::optional<DensityFittingScfData>>* prepared_cache,
     const std::vector<initial_guess::OverlapOrthogonalizer*>* overlap_caches) {
-  return run_rhf_density_fitting_cuda_bucket_impl(systems, auxiliary_template, options,
-                                                  initial_densities, device_id, diagnostics, plan,
-                                                  prepared_cache, overlap_caches);
+  auto results = run_rhf_density_fitting_cuda_bucket_impl(systems, auxiliary_template, options,
+                                                          initial_densities, device_id, diagnostics,
+                                                          plan, prepared_cache, overlap_caches);
+  retry_df_huckel_items(results, systems, auxiliary_template, options, device_id, plan,
+                        overlap_caches);
+  return results;
 }
 
 std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket(

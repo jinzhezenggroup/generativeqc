@@ -741,6 +741,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (std::size_t row = 0; row < n; ++row)
       for (std::size_t column = row + 1; column < n; ++column)
         std::swap(frame.vectors[row * n + column], frame.vectors[column * n + row]);
+    // Large zero/two occupation clusters can contain provider-order inversions
+    // at roundoff scale. Reorder pairs, then retain every original physical gate.
+    (void)scf::solver::order_eigenpairs(frame.values, frame.vectors, n);
     scf::solver::EigenFrameDiagnostic diagnostic;
     std::string detail;
     if (!scf::solver::validate_eigen_frame(input, nullptr, frame.values, frame.vectors, n,

@@ -15,12 +15,15 @@ from . import _native
 
 @dataclass(frozen=True)
 class InitialGuessSpec:
-    """An opt-in HF, coarse-LDA, or projected MINAO cold start.
+    """A bounded HF, coarse-LDA, MINAO, or native Modified Huckel cold start.
 
     HF/LDA retain the CPU FP64 all-electron restricted exact energy domain.
     MINAO is a zero-Fock occupied-ANO projection for all-electron H-Ar targets
     followed by a bounded metric-occupation admission step, and additionally
     admits CUDA restricted KS energy/force endpoints.
+    Huckel additionally admits restricted CUDA RHF and CPU/CUDA DF HF/KS,
+    using native CPU spherical atomic RHF and updated GWH assembly rather
+    than an external reference-oracle provider.
     Existing explicit/imported/retained densities take precedence. Preparation
     never changes the target basis, grid, functional, precision or tolerances.
     A failed preliminary solve or exhausted preparation budget keeps the core
@@ -41,8 +44,10 @@ class InitialGuessSpec:
 
     def __post_init__(self) -> None:
         """Validate guess controls and resolve the admitted coarse grid for LDA."""
-        if self.kind not in ("hf", "lda", "minao"):
-            raise ValueError("initial guess kind must be 'hf', 'lda', or 'minao'")
+        if self.kind not in ("hf", "lda", "minao", "huckel"):
+            raise ValueError(
+                "initial guess kind must be 'hf', 'lda', 'minao', or 'huckel'"
+            )
         for name, low, high in (
             ("max_iterations", 1, 64),
             ("diis_history", 1, 16),
@@ -59,9 +64,9 @@ class InitialGuessSpec:
                 or value <= 0
             ):
                 raise ValueError(f"{name} must be finite and positive")
-        if self.kind in ("hf", "minao"):
+        if self.kind in ("hf", "minao", "huckel"):
             if self.grid is not None:
-                raise ValueError("HF/MINAO initial guesses do not use a grid")
+                raise ValueError("HF/MINAO/Huckel initial guesses do not use a grid")
             return
         grid = GridSpec(8, 6, 12) if self.grid is None else self.grid
         if not isinstance(grid, GridSpec):
@@ -88,15 +93,21 @@ class InitialGuessSpec:
         """Marshal controls; an admitted CPU default delegates per-item selection.
 
         Explicit policies keep their provider ID. Automatic execution requires
-        positive native capability discovery and the MINAO candidate policy.
+        positive native capability discovery and a MINAO or Huckel candidate.
         """
-        if automatic_cpu and self.kind != "minao":
-            raise ValueError("automatic CPU execution requires a MINAO candidate")
+        if automatic_cpu and self.kind not in ("minao", "huckel"):
+            raise ValueError(
+                "automatic CPU execution requires a MINAO or Huckel candidate"
+            )
         grid = self.grid
         return _native.InitialGuessOptionsDescriptor(
             ctypes.sizeof(_native.InitialGuessOptionsDescriptor),
             _native.ABI_VERSION,
-            4 if automatic_cpu else {"hf": 1, "lda": 2, "minao": 3}[self.kind],
+            (
+                {"minao": 4, "huckel": 6}[self.kind]
+                if automatic_cpu
+                else {"hf": 1, "lda": 2, "minao": 3, "huckel": 5}[self.kind]
+            ),
             self.max_iterations,
             self.diis_history,
             self.energy_tolerance,
@@ -137,6 +148,26 @@ def supports_automatic_minao(library: object) -> bool:
     return bool(query() & _native.INITIAL_GUESS_CAPABILITY_MINAO)
 
 
+def supports_automatic_huckel(
+    library: object, *, cuda_rhf: bool = False, density_fitting: bool = False
+) -> bool:
+    """Discover provider and target-domain bits; schema alone proves neither."""
+    schema = getattr(library, "generativeqc_initial_guess_options_version", None)
+    query = getattr(library, "generativeqc_initial_guess_capabilities_v1", None)
+    if schema is None or query is None:
+        return False
+    schema.argtypes, schema.restype = [], ctypes.c_uint32
+    if schema() != 1:
+        return False
+    query.argtypes, query.restype = [], ctypes.c_uint32
+    required = _native.INITIAL_GUESS_CAPABILITY_HUCKEL
+    if cuda_rhf:
+        required |= _native.INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF
+    if density_fitting:
+        required |= _native.INITIAL_GUESS_CAPABILITY_HUCKEL_DF
+    return query() & required == required
+
+
 def _native_automatic_minao_eligible(
     calculator: typing.Any,
     *,
@@ -145,6 +176,7 @@ def _native_automatic_minao_eligible(
     atomic_numbers: typing.Sequence[int] = (),
     electron_count: int | None = None,
     multiplicity: int | None = None,
+    kind: str = "minao",
 ) -> bool | None:
     """Marshal policy facts, leaving selection to the shared native owner.
 
@@ -155,11 +187,12 @@ def _native_automatic_minao_eligible(
     system_query = electron_count is not None or multiplicity is not None
     if system_query and (electron_count is None or multiplicity is None):
         raise ValueError("automatic system policy requires the complete population")
+    version = 2 if kind == "huckel" else 1
     query = getattr(
         library,
-        "generativeqc_initial_guess_auto_system_kind_v1"
+        f"generativeqc_initial_guess_auto_system_kind_v{version}"
         if system_query
-        else "generativeqc_initial_guess_auto_kind_v1",
+        else f"generativeqc_initial_guess_auto_kind_v{version}",
         None,
     )
     if query is None:
@@ -194,9 +227,10 @@ def _native_automatic_minao_eligible(
         arguments += [electron_count, multiplicity]
     arguments += [ctypes.byref(resolved)]
     _native.check(library, query(*arguments))
-    if resolved.value not in (0, 3):
+    provider_id = 5 if kind == "huckel" else 3
+    if resolved.value not in (0, provider_id):
         raise RuntimeError("unsupported native automatic initial-guess policy")
-    return resolved.value == 3
+    return resolved.value == provider_id
 
 
 def _uses_native_automatic_cpu(calculator: typing.Any) -> bool:
@@ -207,12 +241,21 @@ def _uses_native_automatic_cpu(calculator: typing.Any) -> bool:
     ):
         return False
     library = getattr(calculator, "_library", None)
-    if not supports_automatic_minao(library):
+    policy = getattr(calculator, "_initial_guess", None)
+    huckel = policy is not None and policy.kind == "huckel"
+    supports = supports_automatic_huckel if huckel else supports_automatic_minao
+    if not supports(library):
         return False
     query = library.generativeqc_initial_guess_capabilities_v1
-    if not query() & _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU:
+    capability = (
+        _native.INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU
+        if huckel
+        else _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU
+    )
+    if not query() & capability:
         return False
-    if not hasattr(library, "generativeqc_initial_guess_auto_system_kind_v1"):
+    version = 2 if huckel else 1
+    if not hasattr(library, f"generativeqc_initial_guess_auto_system_kind_v{version}"):
         raise RuntimeError("native automatic CPU capability lacks its system query")
     return True
 
@@ -238,6 +281,33 @@ def _automatic_minao_model_eligible(
         and calculator._capabilities.family in ("hartree_fock", "density_functional")
         and supports_automatic_minao(calculator._library)
     )
+
+
+def automatic_initial_guess_candidate(
+    calculator: typing.Any, *, restricted: bool, has_ecp: bool
+) -> InitialGuessSpec | None:
+    """Select Huckel through native v2; preserve MINAO/Hcore on older libraries."""
+    if supports_automatic_huckel(
+        calculator._library,
+        cuda_rhf=calculator._device_name == "cuda"
+        and calculator._method == _native.METHOD_RHF,
+        density_fitting=calculator._density_fitting_mode
+        != _native.DENSITY_FITTING_NONE,
+    ):
+        admitted = _native_automatic_minao_eligible(
+            calculator, restricted=restricted, has_ecp=has_ecp, kind="huckel"
+        )
+        if admitted is None:
+            raise RuntimeError(
+                "native Huckel capability lacks its automatic policy query"
+            )
+        if admitted:
+            return InitialGuessSpec("huckel")
+    if _automatic_minao_model_eligible(
+        calculator, restricted=restricted, has_ecp=has_ecp
+    ):
+        return InitialGuessSpec("minao")
+    return None
 
 
 def read_initial_guess_diagnostic(
@@ -273,12 +343,12 @@ def read_initial_guess_diagnostic(
         "budget_skipped",
         "target_retried",
     )
-    if out.requested_kind not in (1, 2, 3) or out.outcome >= len(outcomes):
+    if out.requested_kind not in (1, 2, 3, 5) or out.outcome >= len(outcomes):
         raise RuntimeError("invalid initial-guess diagnostic")
     if not math.isfinite(out.preparation_seconds) or out.preparation_seconds < 0:
         raise RuntimeError("invalid preliminary SCF preparation time")
     return {
-        "kind": {1: "hf", 2: "lda", 3: "minao"}[out.requested_kind],
+        "kind": {1: "hf", 2: "lda", 3: "minao", 5: "huckel"}[out.requested_kind],
         "outcome": outcomes[out.outcome],
         "work_counters_complete": bool(out.work_counters_complete),
         **{
@@ -385,7 +455,7 @@ def initial_guess_for_systems(
 ) -> InitialGuessSpec | None:
     """Delegate qualified CPU defaults; retain conservative old-library/CUDA behavior.
 
-    AUTO_CPU lets each native prepared item resolve its own MINAO/Hcore policy.
+    Native CPU automatic kinds resolve their provider or Hcore per prepared item.
     Compatibility batches share an explicit descriptor, so an unsupported item
     keeps that whole batch on Hcore. Explicit choices remain fail-closed.
     """
@@ -408,6 +478,7 @@ def initial_guess_for_systems(
             restricted=True,
             has_ecp=has_ecp,
             atomic_numbers=tuple(atom.atomic_number for atom in atoms),
+            kind=policy.kind,
         )
         if admitted is False:
             return None
@@ -416,6 +487,27 @@ def initial_guess_for_systems(
         ):
             return None
     return policy
+
+
+def _huckel_numeric_capacity(
+    dimension: int, atomic_aos: int, atoms: int, primitives: int, diis_history: int
+) -> int:
+    """Mirror native Huckel assembly/admission plus one serialized atomic owner."""
+    from generativeqc_compiler.common.resources import byte_product, checked_bytes
+
+    if any(
+        type(value) is not int or value <= 0
+        for value in (dimension, atomic_aos, atoms, primitives)
+    ):
+        raise ValueError("invalid Huckel target/atomic topology")
+    return checked_bytes(
+        (16 << 20)
+        + byte_product(256, dimension, dimension)
+        + byte_product(24, atomic_aos, atomic_aos, atomic_aos, atomic_aos)
+        + byte_product(8, atomic_aos, atomic_aos, 200 + 2 * diis_history)
+        + byte_product(512, dimension + atoms)
+        + byte_product(128, primitives)
+    )
 
 
 def with_initial_guess_resources(
@@ -439,6 +531,100 @@ def with_initial_guess_resources(
         "initial_guess": policy.to_payload(),
     }
     identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
+    if policy.kind == "huckel":
+        from generativeqc_compiler.common.resources import (
+            ResourceEstimate,
+            byte_product,
+            checked_bytes,
+        )
+
+        from ._api_types import Atom
+        from .basis import BasisSet
+        from .calculator import _snapshot_basis
+
+        items = json.loads(request.identity.topology)["items"]
+        if len(items) != len(systems):
+            raise ValueError("Huckel topology does not match the batch")
+        selected = _snapshot_basis(calculator._basis, calculator._representation_name)
+        retained = 0
+        largest_workspace = 0
+        automatic_cpu = _uses_native_automatic_cpu(calculator)
+        resolved_kinds = []
+        for system, item in zip(systems, items, strict=True):
+            atoms = tuple(Atom.from_value(atom) for atom in system)
+            if automatic_cpu:
+                electrons = item["electrons"]
+                admitted = _native_automatic_minao_eligible(
+                    calculator,
+                    restricted=electrons["multiplicity"] == 1,
+                    has_ecp=any(electrons["ecp_core_electrons"])
+                    or bool(item["orbital"].get("ecp_terms", 0)),
+                    atomic_numbers=tuple(atom.atomic_number for atom in atoms),
+                    electron_count=electrons["electron_count"],
+                    multiplicity=electrons["multiplicity"],
+                    kind="huckel",
+                )
+                resolved_kinds.append(5 if admitted else 0)
+                if not admitted:
+                    continue
+            if any(not 1 <= atom.atomic_number <= 18 for atom in atoms):
+                return replace(
+                    request,
+                    identity=identity,
+                    candidates=(),
+                    unsupported_reason="Huckel initial guess is currently qualified for H-Ar",
+                )
+            shells = (
+                selected.shells_for(atoms)
+                if isinstance(selected, BasisSet)
+                else selected
+            )
+            atomic_aos = [0] * len(atoms)
+            for shell in shells:
+                number = atoms[shell.atom_index].atomic_number
+                if shell.angular_momentum == 0 or (
+                    shell.angular_momentum == 1 and number >= 5
+                ):
+                    atomic_aos[shell.atom_index] += 2 * shell.angular_momentum + 1
+            dimension = item["orbital"]["nbf"]
+            seed = byte_product(8, dimension, dimension)
+            capacity = _huckel_numeric_capacity(
+                dimension,
+                max(atomic_aos),
+                len(atoms),
+                sum(len(shell.primitives) for shell in shells),
+                policy.diis_history,
+            )
+            retained = checked_bytes(retained + seed)
+            largest_workspace = max(largest_workspace, capacity - seed)
+        if automatic_cpu:
+            schedule["initial_guess_execution"] = "native-auto-huckel-cpu-v1"
+            schedule["initial_guess_resolved_kinds"] = resolved_kinds
+            identity = replace(
+                request.identity, schedule=json.dumps(schedule, sort_keys=True)
+            )
+            if not retained:
+                return replace(request, identity=identity)
+        extra = (
+            ResourceEstimate(
+                "all retained Huckel cold seeds", retained, "pageable", 0, 0
+            ),
+            ResourceEstimate(
+                "largest serialized Huckel preparation workspace",
+                largest_workspace,
+                "pageable",
+                0,
+                0,
+            ),
+        )
+        return replace(
+            request,
+            identity=identity,
+            candidates=tuple(
+                replace(candidate, estimates=(*candidate.estimates, *extra))
+                for candidate in request.candidates
+            ),
+        )
     if policy.kind == "minao":
         from generativeqc_compiler.common.resources import ResourceEstimate
 
