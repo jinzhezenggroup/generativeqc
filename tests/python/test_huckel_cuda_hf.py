@@ -262,7 +262,7 @@ def test_warm_failure_uses_one_budgeted_core_retry(tmp_path: Path) -> None:
 
 
 def test_cuda_hf_default_and_unqualified_domains_stay_guarded() -> None:
-    assert calculator(initial_guess="auto").initial_guess is None
+    assert calculator(initial_guess="auto").initial_guess == InitialGuessSpec("huckel")
     with pytest.raises(NotImplementedError):
         calculator(initial_guess=InitialGuessSpec("minao"))
     with pytest.raises(NotImplementedError):

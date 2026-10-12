@@ -41,7 +41,7 @@ def test_immutable_typed_policy_and_native_snapshot() -> None:
         (hf, 1),
         (lda, 2),
         (minao, 3),
-        (InitialGuessSpec("huckel"), 4),
+        (InitialGuessSpec("huckel"), 5),
     ):
         native = policy.native()
         assert native.struct_size == ctypes.sizeof(native)

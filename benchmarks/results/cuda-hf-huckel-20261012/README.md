@@ -1,8 +1,11 @@
 # Native Modified Hückel on exact CUDA RHF
 
-This reviewed copy retains scalar/force records, exact samples, source patches
-and the work ledger. The original dense density exports and transient build/job
-receipts remain in ignored local run storage, not Git; regenerate those exports
+This reviewed copy retains compact scalar gates, exact samples, scientific work
+counts and the measured production patch. `qualification.json.gz` holds the
+compact records. `recovery.json` binds original full records/source audits to
+existing Git history; exact bytes remain recoverable without exceeding the
+checkout evidence budget. Dense density exports and transient build/job receipts
+remain in ignored local run storage; regenerate those exports
 for a full density-replay audit. Historical policy statements below describe the
 decision at measurement time; the later default/DF decision supersedes them.
 
@@ -13,9 +16,9 @@ not an oracle-backed seed or an isolated Hückel microbenchmark.
 ## Source and numerical qualification
 
 - Frozen base: `ab5282f74c0acf98c18ec05b343a5494de85cf49`, plus native Hückel,
-  eigenpair ordering and the CUDA HF integration. `source-audit.json` inventories
+  eigenpair ordering and the CUDA HF integration. The recoverable `source-audit.json` inventories
   1,998 production/qualification files and all 24 changed production files.
-  `measured-production.patch` and `measured-source.patch` reconstruct the actual
+  `measured-production.patch` and the recoverable `measured-source.patch` reconstruct the actual
   qualified source, not the complete dirty checkout or an earlier deployment.
 - Library SHA-256:
   `d598040711420953ece33ecabeff61751c5c2651911290560d54a59959981886`.
@@ -100,20 +103,23 @@ the existing >5% gate; two favorable larger water cases do not justify a global
 default or a hard-coded atom-count whitelist. Other methods retain their existing
 MINAO/Hcore defaults; this HF campaign is not a CPU/KS profitability claim.
 
-There are 21 lossless raw JSON gzip records. The original run also retains 18
+There are 21 original lossless raw JSON gzip records, recoverable through the
+revision and SHA-256 inventory in `recovery.json`. For any listed payload, use
+`git show <git_revision>:<path> > <scratch-path>` and verify its hash before replay.
+The original run also retains 18
 lossless NumPy density gzip exports in local run storage. Recover/regenerate
 these exports and decompress the records into a temporary directory without changing bytes;
 `runner.py --summary <directory>` rechecks the large cases, and
 `runner.py --summary <directory> --atoms 3` rechecks the small case. `summary.json`
-and `work-ledger.json` combine the accepted observations without modifying them.
+and the recoverable `work-ledger.json` combine accepted observations without modifying them.
 
 Job 7869 completes every measurement but exits during postprocessing: its old
 reader accidentally parses the initially empty redirected `summary.json`.
 The fixed reader selects measurement filenames only and validates the retained
 records on the host. Source/library/harness before/after hashes still match.
-The exact measured large-case runner is retained losslessly as
+The exact measured large-case runner is recoverable losslessly as
 `receipts/measured-large-runner.py.gz`; its digest matches every large record.
-`receipts/checker-update-audit.json` proves the timed and independent verification
+The recoverable `receipts/checker-update-audit.json` proves the timed and independent verification
 functions are unchanged in the current runner. Only reader handling and the
 explicit 3-atom CLI/summary selection change. Small job 7873 then completes with
 the corrected reader. Expired final Slurm queries are retained as query errors,

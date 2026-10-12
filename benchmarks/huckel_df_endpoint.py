@@ -4,6 +4,8 @@ Run each arm/repeat in a separate finite Slurm invocation or process within one
 allocation. The timer covers prepare/execute and synchronized analytic forces;
 oracle work and final-density export are explicitly outside it. This diagnostic
 does not claim to qualify DF KS performance or change the production policy.
+The def2-SVP auxiliary set stays within the current CUDA DF angular admission;
+it is an explicit benchmark input, not a change to the production auxiliary basis.
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ def measure(args: argparse.Namespace) -> None:
     from gpu4pyscf.scf import RHF
     from pyscf import gto
 
-    from benchmarks.pbe0_water_buckets import load_case
+    from benchmarks.readme_hf_scaling import scaling_cases
 
     atoms = (
         [
@@ -49,7 +51,7 @@ def measure(args: argparse.Namespace) -> None:
             ("H", (0, 1.43233673, 1.10715266)),
         ]
         if args.atoms == 3
-        else load_case(f"cold{args.atoms}").atoms
+        else scaling_cases()[f"water-{args.atoms}"].atoms
     )
 
     def native_basis(name: str) -> tuple:
@@ -91,7 +93,7 @@ def measure(args: argparse.Namespace) -> None:
             "backend": "cuda",
             "density_fitting": "cuda",
             "basis": "def2-svp",
-            "auxiliary_basis": "def2-universal-jkfit",
+            "auxiliary_basis": "def2-svp",
             "representation": "spherical",
             "precision": "fp64",
             "energy_tolerance": 1e-12,
@@ -114,22 +116,37 @@ def measure(args: argparse.Namespace) -> None:
             "pci_bus_id": bus,
             "driver_version": cp.cuda.runtime.driverGetVersion(),
         }
-        record["nvidia_processes"] = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-compute-apps=gpu_uuid,pid,process_name",
-                "--format=csv,noheader",
-            ],
-            check=True,
-            text=True,
-            capture_output=True,
-            timeout=10,
-        ).stdout.splitlines()
+
+        def isolation() -> dict:
+            """Reject shared-device timings, without changing scheduler visibility."""
+            processes = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--id",
+                    bus,
+                    "--query-compute-apps=pid,process_name",
+                    "--format=csv,noheader",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+                timeout=10,
+            ).stdout.splitlines()
+            foreign = [
+                line
+                for line in processes
+                if int(line.split(",", 1)[0].strip()) != os.getpid()
+            ]
+            if foreign:
+                raise RuntimeError(f"shared assigned GPU: {foreign}")
+            return {"processes": processes, "only_current_process": True}
+
+        record["gpu_isolation_before"] = isolation()
         calc = Calculator(
             "rhf",
             native_basis("def2-svp"),
             device="cuda",
-            auxiliary_basis=native_basis("def2-universal-jkfit"),
+            auxiliary_basis=native_basis("def2-svp"),
             basis_representation="spherical",
             density_fitting="cuda",
             energy_tolerance=1e-12,
@@ -162,7 +179,7 @@ def measure(args: argparse.Namespace) -> None:
         )
         _native.check(owner._library, query(owner._batch, 0, ctypes.byref(descriptor)))
         molecule = gto.M(atom=atoms, basis="def2-svp", unit="Bohr", verbose=0)
-        oracle = RHF(molecule).density_fit(auxbasis="def2-universal-jkfit")
+        oracle = RHF(molecule).density_fit(auxbasis="def2-svp")
         oracle.conv_tol, oracle.conv_tol_grad, oracle.max_cycle = 1e-13, 1e-10, 100
         oracle.kernel()
         if not oracle.converged:
@@ -195,6 +212,7 @@ def measure(args: argparse.Namespace) -> None:
             "tolerances": gates,
             "gate": all(errors[key] <= limit for key, limit in gates.items()),
         }
+        record["gpu_isolation_after"] = isolation()
         if not record["acceptance"]["gate"]:
             raise RuntimeError("independent DF endpoint gate failed")
         if digest(library) != record["library_sha256"] or any(

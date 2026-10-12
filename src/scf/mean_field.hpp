@@ -45,7 +45,8 @@ struct Vv10Parameters;
 
 namespace generativeqc::scf {
 
-/** Reject explicit preliminary guesses before resident CUDA DF resource allocation.
+/** Reject unqualified providers before resident CUDA DF resource allocation.
+ * Native Huckel changes only the cold density; other providers remain exact-only.
  * Applied by the common dispatch and direct native single/batch entry points. */
 void reject_cuda_df_preliminary_guess(const ScfOptions& options);
 

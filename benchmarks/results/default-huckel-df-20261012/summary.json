@@ -1,0 +1,977 @@
+{
+  "schema": "generativeqc.huckel-df-qualification.v1",
+  "date": "2026-10-12",
+  "scope": "CUDA restricted DF RHF only; not DF KS performance evidence",
+  "provenance": {
+    "host": "node1",
+    "slurm_job_id": "7914",
+    "cuda_visible_devices": "3",
+    "source_identity_sha256": "5b468396b152a0eb56a8239075f6d05f491734da68e281b08c5c6bb5adee416e",
+    "library_sha256": "e15c5505ae954603f90b66825e8d68f904c41b9d16fc4b2fff4336e228d427c3",
+    "harness_sha256": "54c7216c64a6385f7e642a39ce79ef97fc7dfeb85a43727780804102b60ff39f",
+    "protocol": {
+      "method": "rhf",
+      "backend": "cuda",
+      "density_fitting": "cuda",
+      "basis": "def2-svp",
+      "auxiliary_basis": "def2-svp",
+      "representation": "spherical",
+      "precision": "fp64",
+      "energy_tolerance": 1e-12,
+      "density_tolerance": 1e-10,
+      "screening_tolerance": 1e-12,
+      "metric_relative_threshold": 1e-10,
+      "max_iterations": 100,
+      "properties": [
+        "energy",
+        "forces"
+      ]
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5090",
+      "pci_bus_id": "0000:61:00.0",
+      "driver_version": 13000
+    }
+  },
+  "production_source_file_count": 1518,
+  "measurement": "Fresh process per arm/repeat; prepare_batch + execute energy/analytic forces + device synchronization. Atomic preparation included. Independent GPU4PySCF oracle and final-density export excluded. Calculator construction, imports and process startup excluded. Three alternating-order repetitions per arm. Assigned GPU checked for foreign processes before and after.",
+  "reference_versions": {
+    "python": "3.13.9",
+    "pyscf": "2.14.0",
+    "gpu4pyscf-cuda12x": "1.8.1",
+    "cupy-cuda12x": "13.6.0",
+    "numpy": "2.4.6"
+  },
+  "fixture_owner": "benchmarks.readme_hf_scaling.scaling_cases for 48/96; explicit water geometry in benchmarks.huckel_df_endpoint for 3",
+  "auxiliary_basis_limit": "def2-SVP is an explicit controlled benchmark input within current CUDA DF angular support. Universal-JKFIT/Weigend oxygen g shells were rejected, not truncated or substituted in production.",
+  "cases": [
+    {
+      "atoms": 3,
+      "median_complete_seconds": {
+        "core": 0.3725545145571232,
+        "huckel": 0.37905964627861977
+      },
+      "median_wall_reduction_percent": -1.746088550082292,
+      "paired_wall_reduction_percent": [
+        0.42026321551238455,
+        -2.647492561835771,
+        -3.075830582429856
+      ],
+      "strictly_over_five_percent": false,
+      "target_iterations": {
+        "core": [
+          15,
+          15,
+          15
+        ],
+        "huckel": [
+          14,
+          14,
+          14
+        ]
+      },
+      "huckel_preparation_median_seconds": 0.001651653
+    },
+    {
+      "atoms": 48,
+      "median_complete_seconds": {
+        "core": 2.2421925216913223,
+        "huckel": 2.242727316915989
+      },
+      "median_wall_reduction_percent": -0.02385144092189595,
+      "paired_wall_reduction_percent": [
+        0.38216799040107935,
+        0.6157871238345586,
+        -0.47996431927448496
+      ],
+      "strictly_over_five_percent": false,
+      "target_iterations": {
+        "core": [
+          21,
+          21,
+          21
+        ],
+        "huckel": [
+          18,
+          18,
+          18
+        ]
+      },
+      "huckel_preparation_median_seconds": 0.110424024
+    },
+    {
+      "atoms": 96,
+      "median_complete_seconds": {
+        "core": 14.500007562339306,
+        "huckel": 13.387533135712147
+      },
+      "median_wall_reduction_percent": 7.672233423633346,
+      "paired_wall_reduction_percent": [
+        7.85437656775003,
+        7.581573990138302,
+        7.7094203850588086
+      ],
+      "strictly_over_five_percent": true,
+      "target_iterations": {
+        "core": [
+          25,
+          25,
+          25
+        ],
+        "huckel": [
+          18,
+          18,
+          18
+        ]
+      },
+      "huckel_preparation_median_seconds": 0.744293133
+    }
+  ],
+  "maximum_errors": {
+    "energy": 4.6838977141305804e-11,
+    "force": 6.0742522123291565e-12,
+    "density": 7.104317134576377e-11,
+    "physical_residual_rms": 1.8494919475512796e-12
+  },
+  "semantic_work_limit": "Target SCF iterations and native initial-guess preparation/discarded-work counters are retained. Public CUDA DF target_fock_builds is unavailable (null); target Fock counts are not inferred from iterations.",
+  "retention": "All scalar/timing/work/isolation fields retained with shared provenance factored out. Force arrays omitted after recording independent max-error gates. SHA-bound original full JSON remains in ignored local storage /tmp/default-huckel-final-evidence and n1:/data/jzzeng/default-huckel-df-20261012/df-endpoints; no new external publication.",
+  "samples": [
+    {
+      "arm": "core",
+      "repeat": 0,
+      "atoms": 3,
+      "gpu_isolation_before": {
+        "processes": [
+          "504436, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 0.3791867271065712,
+      "energy": -76.17928141899769,
+      "iterations": 15,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 1.9895196601282805e-13,
+          "force": 5.912159650733884e-12,
+          "density": 7.104317134576377e-11,
+          "physical_residual_rms": 1.8494919475512796e-12
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "504436, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-3-0.json",
+      "original_bytes": 2180,
+      "original_sha256": "2e88b24d1c77791ee55113f6ae1e7a94bafda3b4eedc23a89d947ef656b48f78"
+    },
+    {
+      "arm": "core",
+      "repeat": 1,
+      "atoms": 3,
+      "gpu_isolation_before": {
+        "processes": [
+          "504706, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 0.36928290873765945,
+      "energy": -76.17928141899769,
+      "iterations": 15,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 1.9895196601282805e-13,
+          "force": 5.908606937055083e-12,
+          "density": 7.104317134576377e-11,
+          "physical_residual_rms": 1.8494919475512796e-12
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "504706, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-3-1.json",
+      "original_bytes": 2183,
+      "original_sha256": "6f755409e5e7b0ef792656ed656865eeb58687b6bed321808a35ee8ff7302cd6"
+    },
+    {
+      "arm": "core",
+      "repeat": 2,
+      "atoms": 3,
+      "gpu_isolation_before": {
+        "processes": [
+          "504749, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 0.3725545145571232,
+      "energy": -76.17928141899769,
+      "iterations": 15,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 1.9895196601282805e-13,
+          "force": 5.912159650733884e-12,
+          "density": 7.104317134576377e-11,
+          "physical_residual_rms": 1.8494919475512796e-12
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "504749, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-3-2.json",
+      "original_bytes": 2182,
+      "original_sha256": "25d1c63ff79611247daaa6b46e9b358b40cae1511ae8b84353dbbee167046526"
+    },
+    {
+      "arm": "core",
+      "repeat": 0,
+      "atoms": 48,
+      "gpu_isolation_before": {
+        "processes": [
+          "505041, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 2.2513311840593815,
+      "energy": -1219.176218800322,
+      "iterations": 21,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 7.275957614183426e-12,
+          "force": 4.629185923477053e-12,
+          "density": 2.2397826648923314e-11,
+          "physical_residual_rms": 4.1421445620281497e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "505041, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-48-0.json",
+      "original_bytes": 6596,
+      "original_sha256": "46ed7151e710ec116d16d61beacb80d30746ec2c2dc7eb480955398553719f11"
+    },
+    {
+      "arm": "core",
+      "repeat": 1,
+      "atoms": 48,
+      "gpu_isolation_before": {
+        "processes": [
+          "505567, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 2.2421925216913223,
+      "energy": -1219.176218800322,
+      "iterations": 21,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 7.275957614183426e-12,
+          "force": 5.6132876125047915e-12,
+          "density": 2.5899539457530096e-11,
+          "physical_residual_rms": 4.142144564180348e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "505567, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-48-1.json",
+      "original_bytes": 6597,
+      "original_sha256": "77d117855563914144a800697153f64e20a11bead2dd903b0ca6a7af7ff86674"
+    },
+    {
+      "arm": "core",
+      "repeat": 2,
+      "atoms": 48,
+      "gpu_isolation_before": {
+        "processes": [
+          "505755, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 2.2381857447326183,
+      "energy": -1219.176218800322,
+      "iterations": 21,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 6.821210263296962e-12,
+          "force": 3.5367264672458987e-12,
+          "density": 1.6311507700095262e-11,
+          "physical_residual_rms": 4.1421445797759065e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "505755, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-48-2.json",
+      "original_bytes": 6593,
+      "original_sha256": "735d7ee5ed2c48e52d1b1a6c66cbd45da361b98890d89d3114cc2e7c9a9f14dd"
+    },
+    {
+      "arm": "core",
+      "repeat": 0,
+      "atoms": 96,
+      "gpu_isolation_before": {
+        "processes": [
+          "506109, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 14.500007562339306,
+      "energy": -2438.3541410542557,
+      "iterations": 25,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 4.5929482439532876e-11,
+          "force": 6.0742522123291565e-12,
+          "density": 1.5682177778586492e-11,
+          "physical_residual_rms": 2.8411132456695847e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "506109, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-96-0.json",
+      "original_bytes": 11315,
+      "original_sha256": "e84f2cc9e3d95da3ec26b12027a41a53e31e3e804b6fa1f6a3456d4fc41468cd"
+    },
+    {
+      "arm": "core",
+      "repeat": 1,
+      "atoms": 96,
+      "gpu_isolation_before": {
+        "processes": [
+          "507473, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 14.485783532261848,
+      "energy": -2438.3541410542557,
+      "iterations": 25,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 4.6838977141305804e-11,
+          "force": 5.95523630408934e-12,
+          "density": 1.5682288800888955e-11,
+          "physical_residual_rms": 2.841113244878536e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "507473, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-96-1.json",
+      "original_bytes": 11302,
+      "original_sha256": "9a1c13de11d1d8349444a140d5326a62d91e85607bd8741b700d6b7e923802c8"
+    },
+    {
+      "arm": "core",
+      "repeat": 2,
+      "atoms": 96,
+      "gpu_isolation_before": {
+        "processes": [
+          "507987, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 14.544071149080992,
+      "energy": -2438.3541410542557,
+      "iterations": 25,
+      "target_fock_builds": null,
+      "initial_guess": null,
+      "acceptance": {
+        "errors": {
+          "energy": 4.6838977141305804e-11,
+          "force": 4.567901612517744e-12,
+          "density": 1.5190428775957443e-11,
+          "physical_residual_rms": 2.841113244956327e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "507987, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "core-96-2.json",
+      "original_bytes": 11302,
+      "original_sha256": "81df3f613aae2d1010771649c7594af521269c5d1b9214c41fa2d46265bb6aa0"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 0,
+      "atoms": 3,
+      "gpu_isolation_before": {
+        "processes": [
+          "504476, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 0.37759314477443695,
+      "energy": -76.17928141899768,
+      "iterations": 14,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 17238744,
+        "preparation_seconds": 0.001698593
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 1.8474111129762605e-13,
+          "force": 5.718980844449106e-12,
+          "density": 6.348610526174525e-11,
+          "physical_residual_rms": 9.4798922852281e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "504476, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-3-0.json",
+      "original_bytes": 2516,
+      "original_sha256": "98238e17b7c524bc126265891f3d2205175b02c6bb561fb3fb45f5e4be63c7bb"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 1,
+      "atoms": 3,
+      "gpu_isolation_before": {
+        "processes": [
+          "504592, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 0.37905964627861977,
+      "energy": -76.17928141899768,
+      "iterations": 14,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 17238744,
+        "preparation_seconds": 0.001643109
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 1.8474111129762605e-13,
+          "force": 5.718980844449106e-12,
+          "density": 6.348610526174525e-11,
+          "physical_residual_rms": 9.4798922852281e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "504592, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-3-1.json",
+      "original_bytes": 2518,
+      "original_sha256": "324f6bf97da4be9ac68a9004c81bef868bdc24a84b1ae8b47892d2bd49bce293"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 2,
+      "atoms": 3,
+      "gpu_isolation_before": {
+        "processes": [
+          "504939, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 0.38401366025209427,
+      "energy": -76.17928141899768,
+      "iterations": 14,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 17238744,
+        "preparation_seconds": 0.001651653
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 1.8474111129762605e-13,
+          "force": 5.720757201288507e-12,
+          "density": 6.348610526174525e-11,
+          "physical_residual_rms": 9.4798922852281e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "504939, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-3-2.json",
+      "original_bytes": 2516,
+      "original_sha256": "bc6bfcaed2a2ad174414be940e89e7693d012f35348da25a567f97d589d5d943"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 0,
+      "atoms": 48,
+      "gpu_isolation_before": {
+        "processes": [
+          "505186, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 2.242727316915989,
+      "energy": -1219.1762188003224,
+      "iterations": 18,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 55089624,
+        "preparation_seconds": 0.109353476
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 6.821210263296962e-12,
+          "force": 5.361044941309956e-12,
+          "density": 2.2704282898189376e-11,
+          "physical_residual_rms": 5.876016929225287e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "505186, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-48-0.json",
+      "original_bytes": 6938,
+      "original_sha256": "0eeba5bab31cccf0e51614b8261b02d4d6b57a8fdfe3f9fbd8fee9f5d85211db"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 1,
+      "atoms": 48,
+      "gpu_isolation_before": {
+        "processes": [
+          "505357, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 2.2283853888511658,
+      "energy": -1219.1762188003224,
+      "iterations": 18,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 55089624,
+        "preparation_seconds": 0.114641877
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 7.73070496506989e-12,
+          "force": 4.722444657545566e-12,
+          "density": 1.9435342224483065e-11,
+          "physical_residual_rms": 5.876016931821022e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "505357, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-48-1.json",
+      "original_bytes": 6929,
+      "original_sha256": "8cdca4d270603e30baeb809d3be60ffad4042f0a749d4ca51cace8120535967e"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 2,
+      "atoms": 48,
+      "gpu_isolation_before": {
+        "processes": [
+          "505887, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 2.248928237706423,
+      "energy": -1219.1762188003224,
+      "iterations": 18,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 55089624,
+        "preparation_seconds": 0.110424024
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 8.640199666842818e-12,
+          "force": 5.03597163969971e-12,
+          "density": 2.096478546320668e-11,
+          "physical_residual_rms": 5.876016925798669e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "505887, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-48-2.json",
+      "original_bytes": 6925,
+      "original_sha256": "b80326d06c04ec0e8707fa5402c7448e5f46b66a2c1dbb34c5596d9d6781558a"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 0,
+      "atoms": 96,
+      "gpu_isolation_before": {
+        "processes": [
+          "506706, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 13.361122366040945,
+      "energy": -2438.3541410542557,
+      "iterations": 18,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 0.740940281
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 4.6838977141305804e-11,
+          "force": 5.016875803676157e-12,
+          "density": 1.7791879081130446e-11,
+          "physical_residual_rms": 4.2340971058330953e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "506706, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-96-0.json",
+      "original_bytes": 11654,
+      "original_sha256": "9118e6589eff6b687b1574b68c2b95eb855a01adc6931c96a3974c3c5406bd90"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 1,
+      "atoms": 96,
+      "gpu_isolation_before": {
+        "processes": [
+          "507116, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 13.387533135712147,
+      "energy": -2438.3541410542557,
+      "iterations": 18,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 0.750008557
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 4.6838977141305804e-11,
+          "force": 5.1811888113206805e-12,
+          "density": 1.9735990619551558e-11,
+          "physical_residual_rms": 4.234097101662028e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "507116, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-96-1.json",
+      "original_bytes": 11643,
+      "original_sha256": "afb93de56839a8683f6bfb14fc3144613af2e42ffbc298ad0daf068ddb985e68"
+    },
+    {
+      "arm": "huckel",
+      "repeat": 2,
+      "atoms": 96,
+      "gpu_isolation_before": {
+        "processes": [
+          "508400, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "complete_seconds": 13.422807563096285,
+      "energy": -2438.3541410542557,
+      "iterations": 18,
+      "target_fock_builds": null,
+      "initial_guess": {
+        "kind": "huckel",
+        "outcome": "used",
+        "work_counters_complete": true,
+        "preliminary_iterations": 7,
+        "preliminary_fock_builds": 7,
+        "target_attempts": 1,
+        "discarded_target_iterations": 0,
+        "discarded_target_fock_builds": 0,
+        "preparation_numeric_capacity": 168602072,
+        "preparation_seconds": 0.744293133
+      },
+      "acceptance": {
+        "errors": {
+          "energy": 4.501998773775995e-11,
+          "force": 5.0675019735990645e-12,
+          "density": 1.779199010343291e-11,
+          "physical_residual_rms": 4.2340971009137193e-13
+        },
+        "tolerances": {
+          "energy": 1e-08,
+          "force": 1e-07,
+          "density": 1e-08,
+          "physical_residual_rms": 1e-08
+        },
+        "gate": true
+      },
+      "gpu_isolation_after": {
+        "processes": [
+          "508400, /home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+        ],
+        "only_current_process": true
+      },
+      "status": "measured",
+      "original_filename": "huckel-96-2.json",
+      "original_bytes": 11650,
+      "original_sha256": "3d6d4199eae9476d1a830f94591e279bb89ca3cd5ef2fdcdc6829d920e4bc1bc"
+    }
+  ]
+}

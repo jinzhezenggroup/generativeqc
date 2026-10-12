@@ -1,9 +1,11 @@
 # Native Modified Hückel complete-endpoint qualification
 
-This reviewed copy retains scalar/force records, exact samples, source patches
-and the work ledger. Original dense density exports and transient build/job
-receipts remain in ignored local run storage; regenerate the exports for a full
-replay audit. The policy decision recorded here is historical and is superseded
+This reviewed copy retains compact scalar gates, exact timing samples, scientific
+work counts and the measured production patch. `qualification.json.gz` contains
+the compact records; `recovery.json` binds their original full records and source
+audit to existing Git history, preserving exact bytes without exceeding the
+checkout evidence budget. Dense density exports remain in ignored local run
+storage; regenerate them for a full replay audit. The historical policy is superseded
 by the later user-authorized default/DF decision.
 
 This campaign measures the native provider, not the earlier PySCF-backed
@@ -16,10 +18,10 @@ not the complete dirty checkout or the subsequent CUDA HF integration.
   eigenpair-presentation repair and native Hückel implementation.
 - Library SHA-256:
   `61c6a2f222b11b8a5b679b38683a70b1fd9cbc4b6b9ecfb2450b65977449b9fb`.
-- `source-audit.json` hashes the complete production inventory and identifies
-  all 15 changed production files. `measured-production.patch` and
-  `measured-source.patch` retain the final built source, not the earlier,
-  superseded deployment patch. The latter includes the exact runner and tests.
+- The recoverable `source-audit.json` hashes the complete production inventory
+  and identifies all 15 changed production files. `measured-production.patch`
+  retains the final built production source. The complete measured-source patch
+  and exact runner/tests are recoverable through `recovery.json`.
 - Build jobs 7806 and 7810; dedicated endpoint jobs 7830 (48 atoms) and 7831
   (96 atoms), node1/n1, one Slurm-assigned RTX 5090 and eight CPU cores each.
   Device visibility is preserved, finite limits are 15/25 minutes, and each
@@ -72,14 +74,16 @@ Hückel preparation/admission medians are 0.129302 / 0.927277 seconds versus
 MINAO's 0.317283 / 2.359682 seconds. Every Hückel preparation counts seven
 atomic iterations/Fock builds; hydrogen performs no J/K. Native construction is
 already cheaper in both cases, but the 96-atom target work does not consistently
-decrease. `work-ledger.json` retains all phase timings, atomic and target work,
+decrease. The recoverable `work-ledger.json` retains all phase timings, atomic and target work,
 AO/XC census and complete analytic-force work records.
 
 ## Evidence and reproduction
 
-The 20 JSON gzip records are lossless, including independent references and all
-successful observations. The original local run also retains 18 lossless NumPy
-gzip density exports. Recover/regenerate them and decompress the records into a
+The original 20 JSON gzip records, independent references and full work ledger
+are recoverable byte-for-byte from the revision and hashes in `recovery.json`.
+The exact runner is also `benchmarks/pbe0_initial_guesses.py` in this checkout;
+its historical identity is retained in every sample. The original local run
+retains 18 lossless NumPy gzip density exports. Recover/regenerate them into a
 scratch directory without renaming the resulting records; density
 hashes refer to the original `.npy` bytes. Summary generation is host-only:
 
@@ -88,8 +92,10 @@ python -m benchmarks.pbe0_initial_guesses summarize --native-huckel-only \
   --directory /path/to/decompressed-records --output /path/to/summary.json
 ```
 
-`runner.py` is the exact measured runner. `endpoints.sh`, build/qualification
-scripts and environment/compiler-cache receipts document the recorded setup.
+For any listed original payload, use
+`git show <git_revision>:<path> > <scratch-path>` and verify its SHA-256 from
+`recovery.json` before replay. Transient endpoint/build scripts and compiler-cache
+receipts remain in local run storage, not this retained copy.
 Adapt only machine-local environment paths for reproduction. Real-device replay
 must remain inside a compatible finite `srun`, preserve its assigned visibility,
 and set `RUN_GPU_ENDPOINTS=1`; run summarization only after both case jobs finish.

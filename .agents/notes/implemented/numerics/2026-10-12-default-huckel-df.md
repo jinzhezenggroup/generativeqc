@@ -64,10 +64,43 @@ It also protects batch/single execution, warm precedence, provider/domain gates,
 preparation caps and failure, and bounded target retries. Existing native atomic
 fixtures, CUDA HF tests and default/ABI tests remain independent qualifications.
 
-Retained benchmark records omit transient dense density exports and build/test
-logs from Git; the original unmodified payloads remain in the task's local ignored
-run storage. Compact records retain scalar gates, exact samples and reproduction
-inputs. No external publication, Release, tag or distribution workflow is created.
+The final source-bound CUDA qualification on finite Slurm job 7915 passes all
+210 Python cases (CPU/CUDA, no failures/skips) and four native executables. Local
+host checks pass 411 cases plus 22 subtests; two source-owner DF retry cases pass.
+Real-device tests exposed a remaining common CUDA DF preflight guard that still
+rejected every preliminary provider. It now admits only native Hückel, without
+granting HF/LDA/MINAO DF support or changing the molecular DF schedule. Actual
+compiler-cache receipts and final execution/JUnit counts are retained in
+`benchmarks/results/default-huckel-df-20261012/validation.json`.
+
+The separate fresh-process CUDA DF RHF energy/analytic-force campaign on Slurm
+job 7914 measures 18 independently accepted samples with spherical def2-SVP
+orbital and auxiliary sets. Median Hcore→Hückel times for 3/48/96 atoms are
+0.372555→0.379060, 2.242193→2.242727 and 14.500008→13.387533 seconds: wall
+reductions of -1.75%, -0.02% and 7.67%. Target iterations fall 15→14, 21→18 and
+25→18; preparation medians are 0.001652/0.110424/0.744293 seconds. All seeded
+samples use seven atomic iterations/Fock builds and one target attempt. The
+public DF target-Fock count is unavailable, not inferred from iterations. The
+96-atom paired reductions are 7.85%, 7.58%, 7.71%; smaller cases do not clear 5%.
+No DF KS performance claim is made, and no profitability whitelist is inferred.
+
+The DF auxiliary choice is an explicit benchmark input within current CUDA
+angular admission. Universal-JKFIT/Weigend oxygen g shells were correctly
+rejected; production admission and requested auxiliary sets remain unchanged.
+The 48/96 fixtures are the nested water structures owned by
+`benchmarks.readme_hf_scaling`, not the historical exact PBE0 fixtures. Independent
+GPU4PySCF gates bound energy/force/density/physical residual errors; the summary
+retains every full-precision timing, gate and work sample and frozen source,
+library, harness and assigned-device identities. This is evidence for the stated
+DF RHF workloads only, not universal acceleration.
+
+The current checkout retains compact scalar gates, exact timing/work samples and
+production reconstruction patches. SHA-bound `recovery.json` inventories bind
+original full JSON records, source audits and reconstruction patches to the
+preparatory commit in the branch's existing Git history, avoiding duplicate large
+payloads in the 64 MiB checkout budget. Transient dense density exports and logs
+remain in local ignored run storage. No external publication, Release, tag or
+distribution workflow is created.
 
 ## Rejected alternatives
 
