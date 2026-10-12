@@ -19,7 +19,7 @@ def main(executable, xyz):
     payload = json.loads(plan.stdout)
     assert payload["status"] == "plan_only"
     assert [s["method"] for s in payload["stages"]] == [
-        "gfn2-xtb", "pbe-rks", "ccsd(t)"
+        "gfn2-xtb", "pbe-rks", "rccsd(t)"
     ]
     assert payload["stages"][0]["backend"] == "cpu"
     assert payload["stages"][-1]["force_tolerance"] < payload["stages"][0]["force_tolerance"]
