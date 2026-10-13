@@ -184,6 +184,17 @@ def cpp_function_definition(
     return source[start:end]
 
 
+def cpp_function_definition_signature(source: str, name: str) -> str:
+    """Extract a definition's signature for a header-checked host test double.
+
+    Unlike a declaration, this cannot repeat defaults already supplied by the
+    included production header. The normal contract matcher still rejects
+    missing/ambiguous functions and ignores braces in comments or literals.
+    """
+    start, opening = _unique(_function_matches(source, name, declaration=False), name)
+    return source[start:opening].strip()
+
+
 def cpp_record_definition(source: str, name: str) -> str:
     """Extract one struct's genuine definition, ignoring forward declarations."""
     code = _code_only(source)

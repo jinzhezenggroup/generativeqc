@@ -10,6 +10,15 @@ struct EigenFrameDiagnostic {
   double maximum_eigen_residual{}, scaled_eigen_residual{}, maximum_metric_error{};
   int solver_info{};
 };
+/** Restore ascending presentation of finite row-major eigenpairs in place.
+ * Successful device solves can return roundoff-scale inversions in large
+ * degenerate eigenspaces. Move entire coefficient columns with their values;
+ * never round, clamp or recompute either. Equal values retain provider order.
+ * Malformed/nonfinite/aliased storage returns false without mutation. This is
+ * not numerical acceptance: callers must check solver info and validate the
+ * reordered frame against the original inputs. Scratch storage is O(n). */
+bool order_eigenpairs(std::vector<double>& eigenvalues, std::vector<double>& coefficients,
+                      std::size_t dimension);
 /** Apply the common absolute/scaled gates to finite backend-produced evidence.
  * Product overflow must be reported by the producer before calling this gate. */
 bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& detail,

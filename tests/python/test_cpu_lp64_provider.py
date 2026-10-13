@@ -285,7 +285,12 @@ def _contract_region(source: str, region: dict[str, object]) -> str:
     return body
 
 
-def test_reviewed_scientific_and_admission_contracts() -> None:
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_AUDIT_LP64_MIGRATION") != "1",
+    reason="historical source fingerprint audit is opt-in; live contracts execute below",
+)
+def test_historical_lp64_source_preservation() -> None:
+    """Audit the frozen migration snapshot without pinning current source bodies."""
     contract = json.loads(
         (ROOT / "tests/data/cpu_lp64_source_contract.json").read_text()
     )
@@ -296,6 +301,24 @@ def test_reviewed_scientific_and_admission_contracts() -> None:
         source = (ROOT / region["path"]).read_text()
         body = _contract_region(source, region)
         assert hashlib.sha256(body.encode()).hexdigest() == region["sha256"], region
+
+
+def test_live_eigen_frame_ordering_and_physical_admission(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Compile the real owner against analytic frames and malformed-input gates."""
+    binary = required_native_cxx.build_executable(
+        [
+            ROOT / "tests/native/test_eigen_frame.cpp",
+            ROOT / "src/scf/solver/eigen_frame.cpp",
+            ROOT / "src/scf/reference/linalg.cpp",
+        ],
+        tmp_path / "eigen-frame",
+        compile_args=["-std=c++20", "-O2", "-I" + str(ROOT / "src")],
+    )
+    subprocess.run(
+        [str(binary)], check=True, capture_output=True, text=True, timeout=15
+    )
 
 
 def test_cpu_bindings_are_not_gpu_consumers() -> None:

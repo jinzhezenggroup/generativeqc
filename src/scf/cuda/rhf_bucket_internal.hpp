@@ -232,6 +232,7 @@ inline bool compatible_hf_bucket_options(const CudaRhfBucketPlan& plan,
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
     CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
     const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
-    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling);
+    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics = nullptr);
 
 }  // namespace generativeqc::scf

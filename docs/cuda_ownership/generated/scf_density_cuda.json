@@ -4,5 +4,5 @@
     "generated/generated_scf_density_cuda.cuh"
   ],
   "owner": "python/generativeqc_compiler/tensor/scf_cuda.py",
-  "scope": "Build-time CUDA lowering of canonical SCF plain and energy-weighted density TensorIR for RHF/UHF integer occupations. Plain density contracts one upper-triangle AO pair and mirrors the completed value; weighted density retains full-square evaluation to preserve its qualified FP64 multiplication order. Native code retains launch, stream, active-item, warm-start and solver/runtime ownership."
+  "scope": "Build-time CUDA lowering of canonical SCF plain and energy-weighted density TensorIR for ordinary HF/KS and DF-SCF. DF binds the same plain-density kernel with a runtime scalar weight and size_t dimensions. Canonical weights mirror only complete DF launch domains; other weights and clipped domains preserve full-square product orientation. Weighted density retains its qualified full-square FP64 multiplication order. Native code owns launches, streams, active masks, warm starts and solver state."
 }

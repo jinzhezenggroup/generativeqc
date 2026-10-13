@@ -76,7 +76,7 @@ def test_failure_restores_members_and_manifest(
             fail_once()
         if (
             failure == "retire-evidence"
-            and path == publication / "campaign/evidence.json"
+            and Path(target) == publication / "campaign/evidence.json"
         ):
             fail_once()
         return replace(path, target)
@@ -154,17 +154,26 @@ def test_failed_rollback_retains_original_backup(
     manifest_bytes = manifest.read_bytes()
     replace = Path.replace
 
+    unlink = Path.unlink
+
     def blocked_replace(path: Path, target: Path) -> Path:
-        if Path(target) == manifest:
-            raise OSError("injected manifest commit failure")
-        if path.name.startswith("old-") and Path(target) == evidence:
+        if path.name.startswith("old-") and Path(target) == manifest:
             raise OSError("injected rollback rename failure")
         return replace(path, target)
 
+    def blocked_unlink(path: Path, missing_ok: bool = False) -> None:
+        if path == evidence:
+            raise OSError("injected original retirement failure")
+        unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", blocked_unlink)
     monkeypatch.setattr(Path, "replace", blocked_replace)
     with pytest.raises(RuntimeError, match="rollback incomplete") as caught:
         compact.compact_publication("campaign/publication.json")
-    assert manifest.read_bytes() == manifest_bytes
+    assert any(
+        path.read_bytes() == manifest_bytes
+        for path in publication.glob("campaign/.evidence-stage-*/old-*")
+    )
     recovery = list(publication.glob("campaign/.evidence-stage-*"))
     assert len(recovery) == 1
     assert any(path.read_bytes() == original for path in recovery[0].glob("old-*"))

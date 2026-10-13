@@ -18,6 +18,39 @@ from tools.generativeqc_validation.record import (
 from tools.generativeqc_validation.retention import digest
 
 
+def test_df_warm_reference_storage_and_shared_reader() -> None:
+    """Retained independent references remain complete and hash-bound offline."""
+    root = Path(__file__).resolve().parents[2]
+    directory = root / "benchmarks/results/df-one-step-warm-20260926"
+    summary = load_json(directory / "summary.json")
+    parts = {part["path"]: part for part in summary["parts"]}
+    for name, part in parts.items():
+        stored = (directory / name).read_bytes()
+        assert len(stored) == part["bytes"]
+        assert digest(stored) == part["sha256"]
+
+    part = parts["references.json.gz"]
+    assert part["encoding"] == "gzip"
+    path = directory / part["path"]
+    stored = path.read_bytes()
+    assert stored[4:8] == bytes(4)  # No run timestamp in the gzip header.
+    raw = gzip.decompress(stored)
+    assert len(raw) == part["decoded_bytes"]
+    assert digest(raw) == part["decoded_sha256"]
+    references = load_json(path)
+    assert references == json.loads(raw)
+    assert {(row["aos"], row["route"]) for row in references} == {
+        (aos, route)
+        for aos in (24, 48, 96, 192, 384, 768)
+        for route in ("direct", "df")
+    }
+    assert all(len(row["independent_references"]) == 2 for row in references)
+    assert (
+        sum(len(row["samples"]) for row in references)
+        == summary["reference_endpoint_samples"]
+    )
+
+
 @pytest.mark.parametrize("reader", [load_json, load_record])
 def test_weighted_eri_gzip_preserves_original_endpoint_bytes(
     reader: typing.Any,

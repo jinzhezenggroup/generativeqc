@@ -155,6 +155,43 @@ void known_frame(std::size_t n, std::size_t batch) {
   std::cout << "checked ordinary FP64 n=" << n << " batch=" << batch << '\n';
 }
 
+void density_projector(std::size_t dimension) {
+  const auto occupied = 5 * dimension / 24;
+  const double pi = std::acos(-1.0);
+  Matrix orbitals(dimension * occupied), projector(dimension * dimension);
+  for (std::size_t row = 0; row < dimension; ++row)
+    for (std::size_t column = 0; column < occupied; ++column)
+      orbitals[row * occupied + column] = std::sqrt((column ? 2.0 : 1.0) / dimension) *
+                                          std::cos(pi * (row + .5) * column / dimension);
+  // A closed-shell seed has large zero/two eigenspaces, unlike the pairwise
+  // degeneracy in Fixture. Use an analytic DCT projector, not a CPU eigensolve.
+  for (std::size_t row = 0; row < dimension; ++row)
+    for (std::size_t column = 0; column <= row; ++column) {
+      double value = 0;
+      for (std::size_t orbital = 0; orbital < occupied; ++orbital)
+        value += 2 * orbitals[row * occupied + orbital] * orbitals[column * occupied + orbital];
+      projector[row * dimension + column] = projector[column * dimension + row] = value;
+    }
+  auto plan = make_plan(dimension, 1);
+  Matrix values, coefficients;
+  CudaDfEigenDiagnostic diagnostic;
+  std::string detail;
+  for (unsigned repeat = 0; repeat < 3; ++repeat) {
+    reference_solves = 0;
+    require(solve_cuda_density_fitting_eigen(plan.get(), projector, nullptr, nullptr, values,
+                                             coefficients, diagnostic,
+                                             detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    require(reference_solves == 0 && diagnostic.solver_calls == 1 && diagnostic.solver_info == 0,
+            "density projector solve used an oracle or hid a provider failure");
+    require(std::is_sorted(values.begin(), values.end()),
+            "density projector spectrum is unordered");
+    for (std::size_t column = 0; column < dimension; ++column)
+      require(std::abs(values[column] - (column < dimension - occupied ? 0.0 : 2.0)) < 1e-10,
+              "density projector spectrum differs from its analytic zero/two occupations");
+  }
+}
+
 void rejected_allocation_and_info() {
   Fixture fixture(6);
   auto plan = make_plan(6, 1);
@@ -178,8 +215,8 @@ void rejected_allocation_and_info() {
           detail);
   for (int info : {-1, 1}) {
     diagnostic.solver_info = info;
-    require(!solver::validate_eigen_frame(fixture.f, &fixture.s, values, coefficients, fixture.n,
-                                          diagnostic, detail),
+    require(!scf::solver::validate_eigen_frame(fixture.f, &fixture.s, values, coefficients,
+                                               fixture.n, diagnostic, detail),
             "nonzero solver info accepted a stale successful frame");
   }
   auto bad_f = fixture.f;
@@ -326,6 +363,7 @@ void physical_reference_export() {
 int main() {
   reference::observation::active = &observer;
   try {
+    for (const auto dimension : {384U, 768U}) density_projector(dimension);
     rejected_allocation_and_info();
     device_overlap_cutoff();
     physical_reference_export();
