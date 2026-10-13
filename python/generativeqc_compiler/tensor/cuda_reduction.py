@@ -9,7 +9,7 @@ axis. Without a binding the qualified generated implementation remains active.
 from __future__ import annotations
 
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import prod
 from typing import Literal
 
@@ -255,3 +255,121 @@ def streamed_reduction_fusion_groups(
     return tuple(
         sorted(groups, key=lambda group: (group.steps, group.shared_virtual_steps))
     )
+
+
+def executable_streamed_reduction_groups(
+    plan: typing.Any,
+) -> tuple[StreamedReductionFusionGroup, ...]:
+    """Select bounded disjoint groups without changing the allocated lifetimes.
+
+    Execute at the first sibling. All materialized leaves must already exist,
+    and early outputs must not overlap any storage live before their original
+    execution. Descriptive overlapping candidates are never a launch partition.
+    Prepared alternative reduction recipes retain their qualified unfused path.
+    """
+    if not plan.schedule.shared_streamed_reductions:
+        return ()
+    selected = []
+    claimed: set[int] = set()
+    candidates = sorted(
+        streamed_reduction_fusion_groups(plan),
+        key=lambda group: (-len(group.shared_virtual_steps), group.steps),
+    )
+    bounded = []
+    for candidate in candidates:
+        for begin in range(0, len(candidate.steps), 4):
+            members = candidate.steps[begin : begin + 4]
+            if len(members) >= 2:
+                bounded.append(replace(candidate, steps=members))
+    for candidate in bounded:
+        members = tuple(index for index in candidate.steps if index not in claimed)
+        if len(members) < 2:
+            continue
+        group = replace(candidate, steps=members)
+        if (
+            len(group.steps) > 4
+            or len(group.shared_virtual_steps) > 32
+            or claimed.intersection(group.steps)
+            or not prod(group.output_shape)
+            or any(index in plan.lowering_by_step for index in group.steps)
+        ):
+            continue
+        first = group.steps[0]
+        leaves: set[int] = set()
+        pending = [child for index in group.steps for child in plan.steps[index].inputs]
+        seen: set[int] = set()
+        while pending:
+            child = pending.pop()
+            if child in seen:
+                continue
+            seen.add(child)
+            if plan.steps[child].virtual:
+                pending.extend(plan.steps[child].inputs)
+            else:
+                leaves.add(child)
+        if any(child >= first for child in leaves):
+            continue
+        # Bound emitted scalar expansion, including duplicated pointwise
+        # paths around a cached ancestor. A node count alone misses a diamond
+        # DAG whose recursive inline spelling grows exponentially.
+        cached = set(group.shared_virtual_steps)
+        reaches, expansion, depths = [], [], []
+        for index, step in enumerate(plan.steps):
+            preserved = step.node.op in ELEMENTWISE or step.node.op in (
+                "cast",
+                "reshape",
+            )
+            reach = index in cached or (
+                step.virtual
+                and preserved
+                and any(reaches[child] for child in step.inputs)
+            )
+            reaches.append(reach)
+            depths.append(
+                1 + max((depths[child] for child in step.inputs), default=0)
+                if reach and index not in cached
+                else 0
+            )
+            expansion.append(
+                min(
+                    513,
+                    1
+                    + len(step.inputs)
+                    + sum(expansion[child] for child in step.inputs),
+                )
+                if reach and index not in cached
+                else 0
+            )
+        scalar_expansion = sum(
+            1
+            + len(plan.steps[index].inputs)
+            + sum(expansion[child] for child in plan.steps[index].inputs)
+            for index in (*group.steps, *group.shared_virtual_steps)
+        )
+        if scalar_expansion > 512 or max(depths, default=0) > 64:
+            continue
+        safe = True
+        for index in group.steps:
+            output = plan.steps[index]
+            begin = output.offset
+            end = begin + output.node.spec.size * output.node.spec.itemsize
+            for other_index, other in enumerate(plan.steps):
+                if other_index == index or other.virtual or not other.node.spec.size:
+                    continue
+                if other_index > index or other.last_use < first:
+                    continue
+                other_end = (
+                    other.offset + other.node.spec.size * other.node.spec.itemsize
+                )
+                if begin < other_end and other.offset < end:
+                    safe = False
+                    break
+            if not safe:
+                break
+        shared = len(group.steps) * cooperative_reduction_shared_bytes(plan, first)
+        if safe and shared <= min(
+            plan.target.shared_memory_per_block, plan.target.tuning_maximum_shared_bytes
+        ):
+            selected.append(group)
+            claimed.update(group.steps)
+    return tuple(selected)

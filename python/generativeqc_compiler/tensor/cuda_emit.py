@@ -8,19 +8,23 @@ including general einsums and denominators, executes on the allocated GPU.
 from __future__ import annotations
 
 import typing
+from functools import cache
 from math import prod
 
 from .cuda_dtype import scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_plan import (
     ALIGNMENT,
+    ELEMENTWISE,
     TensorPlan,
     _index_table_values,
     aligned,
     static_data_slices,
     strides,
 )
-from .cuda_reduction import cooperative_reduction_provider
+from .cuda_reduction import (
+    cooperative_reduction_provider,
+)
 from .ir import TRANSCENDENTALS
 from .scaled_arithmetic import emit_scaled_bilinear
 
@@ -111,6 +115,7 @@ def _einsum_reduction_term(
     *,
     logical: str = "z",
     reduction: str = "r",
+    read: typing.Callable = _read,
 ) -> tuple[str, int]:
     """Return one einsum reduction term and its flattened reduction extent."""
 
@@ -135,7 +140,7 @@ def _einsum_reduction_term(
         for axis, label in enumerate(reduced)
     )
     values = [
-        _read(
+        read(
             child,
             _flat(
                 [mapping[label] for label in labels],
@@ -163,7 +168,13 @@ def _convert(value: str, source: typing.Any, target: typing.Any) -> str:
     raise ValueError("unsupported TensorIR CUDA precision conversion")
 
 
-def _value(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.Any:
+def _value(
+    plan: typing.Any,
+    i: typing.Any,
+    prefix: typing.Any = "",
+    *,
+    read: typing.Callable = _read,
+) -> typing.Any:
     """Emit scalar evaluation with each original arithmetic error boundary."""
     step = plan.steps[i]
     node, a, args = step.node, step.node.attrs, step.inputs
@@ -185,7 +196,7 @@ def _value(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.A
     if node.op == "cast":
         child = args[0]
         source = scalar_type(plan.steps[child].node.spec.dtype)
-        value = _read(child, "z", prefix)
+        value = read(child, "z", prefix)
         # FP32 -> FP64 is exact; FP64 -> FP32 is explicit RN conversion.
         converted = _convert(value, source, scalar)
         return f"return finite({converted}, error, {i});"
@@ -193,18 +204,18 @@ def _value(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.A
         lines = [f"{ty} value = {scalar.zero};"]
         for child, factor in zip(args, a["coefficients"], strict=True):
             lines.append(
-                f"value = {add}(value, {mul}({scalar.literal(factor)}, {_read(child, 'z', prefix)}));"
+                f"value = {add}(value, {mul}({scalar.literal(factor)}, {read(child, 'z', prefix)}));"
             )
         return "\n".join(lines + [f"return finite(value, error, {i});"])
     if node.op == "multiply":
-        return f"return finite({mul}({_read(args[0], 'z', prefix)}, {_read(args[1], 'z', prefix)}), error, {i});"
+        return f"return finite({mul}({read(args[0], 'z', prefix)}, {read(args[1], 'z', prefix)}), error, {i});"
     if node.op == "divide":
-        return f"return quotient({_read(args[0], 'z', prefix)}, {_read(args[1], 'z', prefix)}, error, {i});"
+        return f"return quotient({read(args[0], 'z', prefix)}, {read(args[1], 'z', prefix)}, error, {i});"
     if node.op == "scaled_bilinear":
-        operands = ", ".join(_read(child, "z", prefix) for child in args)
+        operands = ", ".join(read(child, "z", prefix) for child in args)
         return f"return {prefix}scaled_bilinear({operands}, error, {i});"
     if node.op in TRANSCENDENTALS:
-        lines = [f"const {ty} x = {_read(args[0], 'z', prefix)};"]
+        lines = [f"const {ty} x = {read(args[0], 'z', prefix)};"]
         if node.op in ("log", "power", "sqrt"):
             predicate = "x >= 0.0" if node.op == "sqrt" else "x > 0.0"
             lines.append(
@@ -217,7 +228,7 @@ def _value(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.A
         lines.append(f"return finite(::{function}({arguments}), error, {i});")
         return "\n".join(lines)
     if node.op == "einsum":
-        term, reduction_size = _einsum_reduction_term(plan, i, prefix)
+        term, reduction_size = _einsum_reduction_term(plan, i, prefix, read=read)
         accumulated_term = _convert(term, scalar, accumulator)
         narrowed = _convert(f"finite(value, error, {i})", accumulator, scalar)
         scaled = f"{mul}({narrowed}, {scalar.literal(a['coefficient'])})"
@@ -234,7 +245,7 @@ return finite({scaled}, error, {i});"""
         error_code = -(2 * len(plan.steps) + i + 1)
         for ordinal, (axis, mapping) in enumerate(zip(a["axes"], maps, strict=True)):
             variable = f"runtime_index_{ordinal}"
-            lines.append(f"const I {variable} = {_read(mapping, domain, prefix)};")
+            lines.append(f"const I {variable} = {read(mapping, domain, prefix)};")
             lines.append(
                 f"if ({variable} < 0 || {variable} >= {_integer(source_shape[axis])}) "
                 f"{{ atomicCAS(error, 0, {error_code}); return {scalar.zero}; }}"
@@ -248,9 +259,7 @@ return finite({scaled}, error, {i});"""
             else:
                 coordinates.append(c[output_axis])
                 output_axis += 1
-        lines.append(
-            f"return {_read(child, _flat(coordinates, source_shape), prefix)};"
-        )
+        lines.append(f"return {read(child, _flat(coordinates, source_shape), prefix)};")
         return "\n".join(lines)
     if node.op in ("runtime_cartesian_select", "runtime_cartesian_scatter_add"):
         child, maps = args[0], args[1:]
@@ -266,7 +275,7 @@ return finite({scaled}, error, {i});"""
                     f"for (I {position} = 0; {position} < {_integer(source_shape[axis])}; ++{position}) {{"
                 )
             variable = f"runtime_index_{ordinal}"
-            lines.append(f"const I {variable} = {_read(mapping, position, prefix)};")
+            lines.append(f"const I {variable} = {read(mapping, position, prefix)};")
             extent = source_shape[axis] if select else shape[axis]
             lines.append(
                 f"if ({variable} < 0 || {variable} >= {_integer(extent)}) "
@@ -275,7 +284,7 @@ return finite({scaled}, error, {i});"""
             coordinates[axis] = variable if select else position
             if not select:
                 lines.append(f"if ({variable} == {c[axis]}) {{")
-        contribution = _read(child, _flat(coordinates, source_shape), prefix)
+        contribution = read(child, _flat(coordinates, source_shape), prefix)
         if select:
             lines.append(f"return {contribution};")
         else:
@@ -319,7 +328,7 @@ return finite({scaled}, error, {i});"""
             f"const I begin = index[{target}], end = index[{target} + 1];\n"
             f"{reduction_pragma}for (I q = begin; q < end; ++q) {{\n"
             f"    const I r = index[{target_extent + 1}LL + q];\n"
-            f"    value = {add}(value, {_read(child, _flat(source, source_shape), prefix)});\n"
+            f"    value = {add}(value, {read(child, _flat(source, source_shape), prefix)});\n"
             "}\n"
             f"return finite(value, error, {i});"
         )
@@ -333,11 +342,11 @@ return finite({scaled}, error, {i});"""
 const I begin = reinterpret_cast<const I*>(p + {table})[{segment}];
 const I end = reinterpret_cast<const I*>(p + {table})[{segment} + 1];
 {reduction_pragma}for (I r = begin; r < end; ++r)
-    value = {add}(value, {_read(child, _flat(source, source_shape), prefix)});
+    value = {add}(value, {read(child, _flat(source, source_shape), prefix)});
 return finite(value, error, {i});"""
     elif node.op == "reduce":
         source_index, reduction_size = _reduce_source_index(node)
-        contribution = _convert(_read(child, source_index, prefix), scalar, accumulator)
+        contribution = _convert(read(child, source_index, prefix), scalar, accumulator)
         result = _convert("value", accumulator, scalar)
         return f"""{acc_ty} value = {accumulator.zero};
 {reduction_pragma}for (I r = 0; r < {_integer(reduction_size)}; ++r)
@@ -345,7 +354,7 @@ return finite(value, error, {i});"""
 return finite({result}, error, {i});"""
     else:
         raise ValueError(f"unsupported CUDA primitive: {node.op}")
-    return f"return {_read(child, index, prefix)};"
+    return f"return {read(child, index, prefix)};"
 
 
 def _arithmetic_error_expression(plan: typing.Any, legacy: typing.Any) -> typing.Any:
@@ -484,7 +493,11 @@ def _cooperative_reduce(plan: typing.Any, i: int) -> bool:
 
 
 def _cooperative_reduction_expression(
-    plan: typing.Any, i: int, prefix: typing.Any = ""
+    plan: typing.Any,
+    i: int,
+    prefix: typing.Any = "",
+    *,
+    read: typing.Callable = _read,
 ) -> tuple[str, int, str]:
     """Return contribution, extent and checked output for one block reduction."""
 
@@ -495,12 +508,12 @@ def _cooperative_reduction_expression(
     if node.op == "reduce":
         source_index, reduction_size = _reduce_source_index(node)
         contribution = _convert(
-            _read(step.inputs[0], source_index, prefix), scalar, accumulator
+            read(step.inputs[0], source_index, prefix), scalar, accumulator
         )
         result = _convert("value", accumulator, scalar)
         return contribution, reduction_size, f"finite({result}, error, {i})"
     if node.op == "einsum":
-        term, reduction_size = _einsum_reduction_term(plan, i, prefix)
+        term, reduction_size = _einsum_reduction_term(plan, i, prefix, read=read)
         contribution = _convert(term, scalar, accumulator)
         narrowed = _convert(f"finite(value, error, {i})", accumulator, scalar)
         scaled = (
@@ -608,11 +621,120 @@ def _cooperative_reduce_kernel(
     raise ValueError("cooperative reduction kernel requested for an ordinary step")
 
 
+def _shared_streamed_kernel(plan: TensorPlan, group: typing.Any, prefix: str) -> str:
+    """Reuse proved producer values per (output, reduction) coordinate.
+
+    Each sibling keeps the incumbent lane accumulation and warp-tree order.
+    Only flat-index-preserving paths are inlined around cached values; opaque
+    producers retain their original checked scalar evaluator.
+    """
+    shared = set(group.shared_virtual_steps)
+    indices: dict[int, str] = {}
+
+    def preserved(index: int) -> bool:
+        return plan.steps[index].node.op in ELEMENTWISE or plan.steps[
+            index
+        ].node.op in ("cast", "reshape")
+
+    @cache
+    def reaches_shared(index: int) -> bool:
+        if index in shared:
+            return True
+        return (
+            plan.steps[index].virtual
+            and preserved(index)
+            and any(reaches_shared(child) for child in plan.steps[index].inputs)
+        )
+
+    def local_read(child: int, index: str, namespace: str = "") -> str:
+        if child in shared:
+            return f"shared_{child}"
+        if reaches_shared(child):
+            ty = scalar_type(plan.steps[child].node.spec.dtype).ctype
+            body = _value(plan, child, namespace, read=local_read)
+            return f"([&](I z) -> {ty} {{ {body} }})({index})"
+        return _read(child, index, namespace)
+
+    def root_read(child: int, index: str, namespace: str = "") -> str:
+        pending = [child]
+        while pending:
+            current = pending.pop()
+            if current in shared:
+                indices.setdefault(current, index)
+            if plan.steps[current].virtual and preserved(current):
+                pending.extend(plan.steps[current].inputs)
+        return local_read(child, index, namespace)
+
+    expressions = [
+        _cooperative_reduction_expression(plan, index, prefix, read=root_read)
+        for index in group.steps
+    ]
+    declarations = []
+    for index in group.shared_virtual_steps:
+        ty = scalar_type(plan.steps[index].node.spec.dtype).ctype
+        body = _value(plan, index, prefix, read=local_read)
+        declarations.append(
+            f"const {ty} shared_{index} = ([&](I z) -> {ty} {{ {body} }})({indices[index]});"
+        )
+    accumulator = scalar_type(group.accumulation_dtype)
+    scalar = scalar_type(group.dtype)
+    add = accumulator.intrinsic("add")
+    warps = (plan.schedule.threads + 31) // 32
+    initializes, accumulates, reductions = [], [], []
+    for ordinal, (index, (contribution, _, result)) in enumerate(
+        zip(group.steps, expressions, strict=True)
+    ):
+        initializes.append(f"{accumulator.ctype} value_{ordinal} = {accumulator.zero};")
+        accumulates.append(f"value_{ordinal} = {add}(value_{ordinal}, {contribution});")
+        step = plan.steps[index]
+        target = _physical_index(step.layout, "z")
+        # Bind the existing checked publication expression to this sibling's
+        # accumulator without editing its arithmetic or error boundaries.
+        reductions.append(f"""{{
+            {accumulator.ctype} value = value_{ordinal};
+            for (int offset = 16; offset > 0; offset >>= 1)
+                value = {add}(value, __shfl_down_sync(0xffffffffu, value, offset));
+            if (lane == 0) partial[{ordinal}][warp] = value;
+            __syncthreads();
+            if (warp == 0) {{
+                value = lane < {warps} ? partial[{ordinal}][lane] : {accumulator.zero};
+                for (int offset = 16; offset > 0; offset >>= 1)
+                    value = {add}(value, __shfl_down_sync(0xffffffffu, value, offset));
+                if (lane == 0)
+                    reinterpret_cast<{scalar.ctype}*>(p + {step.offset})[{target}] = {result};
+            }}
+            __syncthreads();
+        }}""")
+    pragma = (
+        ""
+        if plan.schedule.reduction_unroll == 1
+        else (f"#pragma unroll {plan.schedule.reduction_unroll}\n")
+    )
+    return f"""__global__ void {prefix}shared_kernel_{group.steps[0]}(unsigned char* p, int* error) {{
+    __shared__ {accumulator.ctype} partial[{len(group.steps)}][{warps}];
+    const int lane = int(threadIdx.x) & 31;
+    const int warp = int(threadIdx.x) >> 5;
+    for (I z = I(blockIdx.x); z < {prod(group.output_shape)}LL; z += I(gridDim.x)) {{
+        {" ".join(initializes)}
+{pragma}        for (I r = threadIdx.x; r < {group.reduction_extent}LL; r += blockDim.x) {{
+            {" ".join(declarations)}
+            {" ".join(accumulates)}
+        }}
+        {" ".join(reductions)}
+    }}
+}}"""
+
+
 def _launch(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.Any:
     step, threads = plan.steps[i], plan.schedule.threads
     node = step.node
     if step.virtual or node.op in ("input", "constant") or not node.spec.size:
         return ""
+    for group in plan.executable_reduction_groups:
+        if i in group.steps:
+            if i != group.steps[0]:
+                return ""
+            return f"ctx.section(profile, metrics.kernel_ms, [&] {{ {prefix}shared_kernel_{i}<<<blocks({node.spec.size}LL, 1), {threads}, 0, ctx.stream>>>(p, ctx.error); cuda_check(cudaGetLastError()); }});"
     scalar = scalar_type(node.spec.dtype)
     ty = scalar.ctype
     pointer = f"reinterpret_cast<{ty}*>(p + {step.offset})"
@@ -790,6 +912,8 @@ __global__ void {prefix}kernel_{i}(unsigned char* p, int* error) {{
 }}""")
             elif step.gemm == "packed":
                 parts.append(_packing_kernels(plan, i, prefix))
+    for group in plan.executable_reduction_groups:
+        parts.append(_shared_streamed_kernel(plan, group, prefix))
     copies_in = []
     for slot, i in enumerate(plan.inputs):
         step = plan.steps[i]
