@@ -503,7 +503,8 @@ int main(int argc, char** argv) {
     std::cout
         << "scoped independent E/V, policy equivalence, response, ragged capacity and rejection "
            "contracts passed\n";
-    std::cout << "weighted MethodIR response consistency and independent Dirac exchange checks passed\n";
+    std::cout
+        << "weighted MethodIR response consistency and independent Dirac exchange checks passed\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
