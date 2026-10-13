@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
   const std::size_t system = 0;
   const bool precision_item_mixed = false;
   const bool scf_force_ready_state = false, reuse_converged_fock = false;
-  const std::vector<std::uint32_t> host_iterations{5}, host_mixed_iterations{0};
+  const std::vector<std::uint32_t> host_iterations{5}, host_pre_refinement_iterations{0};
   const std::vector<std::uint64_t> host_mixed_item_census{0};
   const std::vector<double> host_mixed_item_threshold{0};
   const std::vector<std::uint8_t> host_failed{static_cast<std::uint8_t>(failed)};
