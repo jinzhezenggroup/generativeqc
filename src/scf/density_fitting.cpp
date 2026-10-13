@@ -1321,8 +1321,8 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
                                                          std::size_t source_device_bytes,
                                                          bool allow_zero_rank_coulomb) {
   if (!budget.feasible || !budget.live_resource || budget.requested_bytes ||
-      !budget.response_bytes || (!restricted_rank && !allow_zero_rank_coulomb) ||
-      restricted_rank > nbf)
+      budget.response_override_bytes || !budget.response_bytes ||
+      (!restricted_rank && !allow_zero_rank_coulomb) || restricted_rank > nbf)
     return budget;
   const long double basis_count = nbf, auxiliary_count = naux, occupied_rank = restricted_rank;
   // The generated singleton response stages four metric matrices, density/AO

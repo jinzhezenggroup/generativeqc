@@ -465,6 +465,12 @@ int main() {
       force_ready_split.value_bytes,100ULL<<20,true,0,true);
   if (force_ready_values.value_storage.rank_capacity != 160 ||
       force_ready_values.automatic_rhf_rank != 0) return 18;
+  // Diagnostic response caps are part of owner identity, even with a zero
+  // public total request. Automatic resident promotion must preserve them.
+  auto explicit_response = split;
+  explicit_response.response_override_bytes = explicit_response.response_bytes;
+  if (resolve_method_owned_df_resident_budget(
+          explicit_response,768,3712,160,100ULL<<20) != explicit_response) return 27;
   return 0;
 }
 """)
