@@ -57,6 +57,8 @@ void require(bool condition,const char* message) {if(!condition)throw std::runti
 struct Consumer {
   bool incremental_direct_jk=true, incremental_anchored=false, pending_incremental_delta=false;
   bool incremental_energy_refinement=false;
+  bool nonlocal_provisional_delta_chain=false, nonlocal_seed_stage=false,
+      nonlocal_frozen_stage=false;
   unsigned incremental_energy_full_builds=0;
   bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=false;
   unsigned incremental_delta_updates=0;
@@ -108,6 +110,28 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="provisional") {
+      Consumer probe;
+      probe.nonlocal_provisional_delta_chain=true;
+      probe.nonlocal_seed_stage=true;
+      // The independent linear oracle in build() checks reconstructed J/K.
+      for(unsigned i=0;i<12;++i) {
+        probe.build(false);
+        require(probe.incremental_delta_updates<=8,"unbounded provisional delta chain");
+      }
+      require(probe.output.incremental_direct_jk.periodic_rebuilds>0,
+              "provisional policy never refreshed its screened anchor");
+      probe.nonlocal_seed_stage=false;
+      require(!probe.incremental_delta_admitted(),"physical anchor reused provisional J/K");
+      probe.build(false);
+      probe.nonlocal_frozen_stage=true;
+      require(probe.incremental_delta_admitted(),"frozen provisional stage lost delta proposal");
+      probe.build(false);
+      probe.nonlocal_frozen_stage=false;
+      require(!probe.incremental_delta_admitted(),"target tail admitted screened delta chain");
+      probe.build(true);
+      return 0;
+    }
     if(std::string(argv[1])=="refinement") {
       Consumer probe;
       probe.build(false);
@@ -202,6 +226,20 @@ def test_stationary_density_refines_full_energy_without_relaxing_its_gate(
     """Blocked delta energy must not prevent full-operator convergence work."""
     result = subprocess.run(
         [str(controller_probe), "refinement"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_provisional_delta_chain_is_bounded_and_cannot_certify_target(
+    controller_probe: Path,
+) -> None:
+    """Approximate proposal work must end at every full physical target anchor."""
+    result = subprocess.run(
+        [str(controller_probe), "provisional"],
         check=False,
         capture_output=True,
         text=True,

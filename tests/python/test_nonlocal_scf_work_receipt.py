@@ -96,6 +96,7 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "0")
     monkeypatch.setenv("GENERATIVEQC_VV10_INCREMENTAL_SEED", "0")
     monkeypatch.setenv("GENERATIVEQC_VV10_CONTINUE_INNER_DIIS", "0")
+    monkeypatch.setenv("GENERATIVEQC_VV10_PROVISIONAL_DELTA_CHAIN", "0")
     monkeypatch.setenv(
         "GENERATIVEQC_VV10_NATIVE_SEED", str(int(native_seed == "semilocal"))
     )
@@ -148,12 +149,13 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
 @pytest.mark.parametrize(
-    "frozen_range,incremental,continued_diis",
+    "frozen_range,incremental,continued_diis,provisional_delta_chain",
     [
-        (False, False, False),
-        (True, False, False),
-        (False, True, False),
-        (False, True, True),
+        (False, False, False, False),
+        (True, False, False, False),
+        (False, True, False, False),
+        (False, True, True, False),
+        (False, True, False, True),
     ],
 )
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
@@ -162,6 +164,7 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     frozen_range: bool,
     incremental: bool,
     continued_diis: bool,
+    provisional_delta_chain: bool,
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -177,6 +180,9 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     monkeypatch.setenv("GENERATIVEQC_VV10_INCREMENTAL_SEED", str(int(incremental)))
     monkeypatch.setenv(
         "GENERATIVEQC_VV10_CONTINUE_INNER_DIIS", str(int(continued_diis))
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_VV10_PROVISIONAL_DELTA_CHAIN", str(int(provisional_delta_chain))
     )
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
@@ -219,8 +225,8 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
             assert diagnostic.physical_residual_max < 1e-10
             assert diagnostic.density_change_max < 1e-10
             if incremental:
-                # The screened lower retains one delta between full refreshes,
-                # and its final force-capable state receives a full-density audit.
+                # Provisional operators cannot replace the full-density audit
+                # of the final force-capable physical target.
                 receipt = result.incremental_direct_jk
                 assert receipt["active"] and receipt["delta_builds"] > 0
                 assert receipt["post_scf_full_builds"] > 0

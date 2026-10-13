@@ -346,6 +346,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // target operator, consecutive physical energy checks and original budget.
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
   bool nonlocal_freeze_range{}, nonlocal_continue_inner_diis{};
+  bool nonlocal_provisional_delta_chain{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1424,6 +1425,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!incremental_direct_jk || incremental_seed_requested) && !use_warm &&
         options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    const auto* provisional_delta = std::getenv("GENERATIVEQC_VV10_PROVISIONAL_DELTA_CHAIN");
+    nonlocal_provisional_delta_chain =
+        nonlocal_outer_active && incremental_direct_jk && provisional_delta &&
+        std::string_view(provisional_delta) == "1";
     const auto* continued_diis = std::getenv("GENERATIVEQC_VV10_CONTINUE_INNER_DIIS");
     nonlocal_continue_inner_diis =
         nonlocal_outer_active && continued_diis && std::string_view(continued_diis) == "1";
@@ -2147,8 +2152,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
         final_closure || strict_refinement)
       return false;
-    if (incremental_direct_jk_policy.effective_rebuild_interval != 0U &&
-        incremental_delta_updates >= incremental_direct_jk_policy.effective_rebuild_interval)
+    // A longer screened-delta chain is confined to an explicitly provisional
+    // initializer. Its accumulated omissions cannot certify an anchor: every
+    // physical target starts from a fresh full-density J/K, even before the
+    // ordinary consecutive-full final audit. The chain itself remains bounded.
+    if (nonlocal_provisional_delta_chain && !nonlocal_seed_stage && !nonlocal_frozen_stage)
+      return false;
+    const unsigned rebuild_interval = nonlocal_provisional_delta_chain
+                                          ? 8U
+                                          : incremental_direct_jk_policy.effective_rebuild_interval;
+    if (rebuild_interval != 0U && incremental_delta_updates >= rebuild_interval)
       return false;
     if (incremental_direct_jk_policy.density_rms_threshold > 0.0 &&
         (!output.iterations || !std::isfinite(output.density_rms) ||
