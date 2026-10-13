@@ -1940,15 +1940,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto* selection = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
     const std::string schedule = selection ? selection : "";
     const int* mismatch = nullptr;
-    if (nonlocal_cache_enabled && nonlocal_cache_ready && schedule == nonlocal_cache_schedule) {
-      nlc::enqueue_vv10_force_key_compare_cuda(
-          stream, xc_layout.npoint, nonlocal_correlation->parameters(), nonlocal_effective_weights,
-          nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_workspace,
-          nonlocal_domain_error, nonlocal_pair_error, nonlocal_cache_mismatch);
-      mismatch = nonlocal_cache_mismatch;
-    }
-    if (nonlocal_cache_enabled)
-      nlc::enqueue_vv10_cache_work_cuda(stream, mismatch, nonlocal_cache_counters);
+    run_resident_nonlocal_cuda([&] {
+      if (nonlocal_cache_enabled && nonlocal_cache_ready && schedule == nonlocal_cache_schedule) {
+        nlc::enqueue_vv10_force_key_compare_cuda(
+            stream, xc_layout.npoint, nonlocal_correlation->parameters(), nonlocal_effective_weights,
+            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_workspace,
+            nonlocal_domain_error, nonlocal_pair_error, nonlocal_cache_mismatch);
+        mismatch = nonlocal_cache_mismatch;
+      }
+      if (nonlocal_cache_enabled)
+        nlc::enqueue_vv10_cache_work_cuda(stream, mismatch, nonlocal_cache_counters);
+    });
     nonlocal_cache_ready = false;
     run_resident_nonlocal_cuda([&] {
       nlc::enqueue_vv10_cuda_device(
@@ -1958,9 +1960,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
           nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error, mismatch);
     });
     if (nonlocal_cache_enabled) {
-      nlc::enqueue_vv10_store_force_key_cuda(
-          stream, xc_layout.npoint, nonlocal_effective_density, nonlocal_workspace,
-          nonlocal_domain_error, nonlocal_domain_error, nonlocal_pair_error);
+      run_resident_nonlocal_cuda([&] {
+        nlc::enqueue_vv10_store_force_key_cuda(
+            stream, xc_layout.npoint, nonlocal_effective_density, nonlocal_workspace,
+            nonlocal_domain_error, nonlocal_domain_error, nonlocal_pair_error);
+      });
       nonlocal_cache_schedule = schedule;
       nonlocal_cache_ready = true;
     }
