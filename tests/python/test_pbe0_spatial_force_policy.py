@@ -137,7 +137,14 @@ int main() {
   reject([](auto& value) { value.fock_.strategy_value.spec.derivative_order = 1; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.present = false; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.coefficient = 0.5; });
-  reject([](auto& value) { value.fock_.strategy_value.spec.exchange.present = false; });
+  // Pure J remains valid when an independent D4/gCP owner adds its force.
+  Method pure_j;
+  pure_j.fock_.strategy_value.spec.exchange.present = false;
+  assert(pure_j.qualified_spatial_force_default());
+  pure_j.execution_plan_.d4_correction = true;
+  assert(pure_j.qualified_spatial_force_default());
+  pure_j.execution_plan_.nonlocal_correlation = true;
+  assert(!pure_j.qualified_spatial_force_default());
   for (double coefficient : {0.0, 0.25, -0.500001, std::numeric_limits<double>::infinity()})
     reject([coefficient](auto& value) { value.fock_.strategy_value.spec.exchange.coefficient = coefficient; });
   // Semilocal XC composition is orthogonal to the exact Direct J/K recurrence.
