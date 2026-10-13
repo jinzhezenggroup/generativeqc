@@ -283,6 +283,13 @@ def test_invalid_context_never_requests_api(
         b'{"repository": {}, "repository": {}}',
         b"x" * (guard.MAX_RESPONSE_BYTES + 1),
     ],
+    ids=[
+        "null-json",
+        "truncated-json",
+        "missing-fields",
+        "duplicate-fields",
+        "oversized-event",
+    ],
 )
 def test_malformed_event_does_not_request_api(
     monkeypatch: pytest.MonkeyPatch, env: dict[str, str], raw: bytes
@@ -417,6 +424,16 @@ def test_transport_uses_exact_attempt_one_get_and_bounded_timeout(
         {"raw": b"x" * (guard.MAX_RESPONSE_BYTES + 1)},
         {"raw": b"null"},
     ],
+    ids=[
+        "http-error",
+        "unexpected-url",
+        "pagination-link",
+        "malformed-link",
+        "truncated-json",
+        "duplicate-fields",
+        "oversized-response",
+        "null-json",
+    ],
 )
 def test_transport_uncertainty_warns_and_runs_full_qualification(
     monkeypatch: pytest.MonkeyPatch,
@@ -483,7 +500,11 @@ def test_deadline_kills_and_reaps_native_blocked_lookup(
         sentinel.wait(timeout=5)
 
 
-@pytest.mark.parametrize("output,code", [(b"null", 0), (b"malformed", 0), (b"", 2)])
+@pytest.mark.parametrize(
+    "output,code",
+    [(b"null", 0), (b"malformed", 0), (b"", 2)],
+    ids=["null-json", "malformed-json", "worker-error"],
+)
 def test_worker_error_or_bad_output_runs_qualification(
     monkeypatch: pytest.MonkeyPatch,
     env: dict[str, str],
