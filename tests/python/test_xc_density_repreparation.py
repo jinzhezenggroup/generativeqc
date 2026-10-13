@@ -117,8 +117,8 @@ struct CudaXcAoTiles {
 };
 struct Bound { std::size_t device_bytes{64}, host_peak_bytes{64}, max_entries{9}, tiles{3}; };
 Bound cuda_xc_ao_selection_resources(const Layout&) { return {}; }
-Layout cuda_xc_local_ao_layout(Layout l, const CudaXcAoTiles& maps) {
-  if (maps.derivative_order != (l.jets == 1 ? 0 : 1))
+Layout cuda_xc_local_ao_layout_shape(Layout l, std::size_t, int derivative_order) {
+  if (derivative_order != (l.jets == 1 ? 0 : 1))
     throw std::invalid_argument("discovery lost derivative capability");
   l.local_ao = true; return l;
 }
