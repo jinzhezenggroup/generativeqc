@@ -329,6 +329,9 @@ def test_wb97mv_capacity_is_not_promoted_to_executed_pair_or_quartet_work() -> N
         "nonlocal_dense_pair_capacity": 10000,
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
         "geometry_point_visits": 200,
+        "nonlocal_pair_cache_probes": 1,
+        "nonlocal_pair_cache_hits": 1,
+        "nonlocal_pair_sweeps": 0,
     }
 
     record = normalize_force_work(work)
@@ -340,6 +343,9 @@ def test_wb97mv_capacity_is_not_promoted_to_executed_pair_or_quartet_work() -> N
     assert counts["screened"] == {}
     assert counts["compacted"] == {}
     assert counts["observed"]["nonlocal_geometry_point_visits_scheduled"] == 200
+    assert counts["observed"]["nonlocal_pair_cache_probes"] == 1
+    assert counts["observed"]["nonlocal_pair_cache_hits"] == 1
+    assert counts["observed"]["nonlocal_pair_sweeps"] == 0
     note = record["work_count_notes"]["stationary_integral_derivatives"]
     assert "capacity bounds" in note
     assert "inside the derivative kernel" in note
