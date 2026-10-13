@@ -241,12 +241,6 @@ def resident_nonlocal_geometry(
         "nonlocal_feature_collection_point_visits": 0 if snapshot_seeded else count,
         "nonlocal_feature_d2h_bytes": 0,
         "nonlocal_seed_h2d_bytes": 0,
-        "nonlocal_pair_cache_probes": final_pair_work.pair_cache_probes
-        - initial_pair_work.pair_cache_probes,
-        "nonlocal_pair_cache_hits": final_pair_work.pair_cache_hits
-        - initial_pair_work.pair_cache_hits,
-        "nonlocal_pair_sweeps": final_pair_work.pair_evaluations
-        - initial_pair_work.pair_evaluations,
         "grid_owner_source": "implicit-atom-major-index",
         "grid_owner_h2d_bytes": 0,
         "grid_point_source": "exact-native-resident-grid",
@@ -265,6 +259,15 @@ def resident_nonlocal_geometry(
         "nonlocal_stationary_source_d2h_bytes": 3 * 3 * sources.natom * 8,
         "stationary_source_full_arena_d2h_bytes_avoided": 6 * 3 * sources.natom * 8,
     }
+    for label, field in (
+        ("nonlocal_pair_cache_probes", "pair_cache_probes"),
+        ("nonlocal_pair_cache_hits", "pair_cache_hits"),
+        ("nonlocal_pair_sweeps", "pair_evaluations"),
+    ):
+        before = getattr(initial_pair_work, field)
+        after = getattr(final_pair_work, field)
+        if before is not None and after is not None:
+            work[label] = after - before
     if ao_maps is not None:
         work["active_ao_maps"] = ao_maps.work
     # Detailed profiling deliberately uses the retained explicit-owner / host
