@@ -1,12 +1,15 @@
 """Check resident VV10 host admission before any device-side effect."""
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from test_nonlocal_host_staging_lifetime import PREFIX
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -47,10 +50,9 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def parameter_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def parameter_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
+) -> Path:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     body = source.split("Vv10CudaDeviceLayout vv10_cuda_device_layout(", 1)[1]
     body = (
@@ -61,12 +63,8 @@ def parameter_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp("vv10-parameter-admission")
     unit, binary = folder / "probe.cpp", folder / "probe"
     unit.write_text(PREFIX + body + DRIVER)
-    subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(unit), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [unit], binary, compile_args=["-std=c++20", "-O0"], compile_timeout=30
     )
     return binary
 

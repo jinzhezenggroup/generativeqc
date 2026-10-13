@@ -192,9 +192,10 @@ print(first.energies)
 ## Benchmarks
 
 Complete **HF and DFT energy + analytic forces** on an RTX 5090, measured on
-2026-10-13. The report combines the original #2401 observations with qualified
+2026-10-13–14. The report combines the original #2401 observations with qualified
 benchmark issue fixes, including complete direct and DF r²SCAN-3c populations
-through 96 atoms. Each point retains its actual source and build identity.
+through 96 atoms and direct ωB97M-V at 48 atoms. Each point retains its actual
+source and build identity.
 Cold includes construction, preparation
 and the first calculation; warm reuses a fixed converged density. Compiler
 caches are retained.
@@ -222,6 +223,24 @@ See the [direct](benchmarks/results/readme-dft-20261013/timings.md) and
 [DF timing tables](benchmarks/results/readme-dft-20261013/df-timings.md), and
 [measurement protocol, accuracy and limitations](benchmarks/results/readme-dft-20261013/README.md).
 DF coverage and unsupported combinations are listed in that report.
+
+**DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
+
+![Complete GPU full-DF CCSD(T)/CBS energy-plus-force timings](benchmarks/results/readme-cbs-full-20261014/df-cbs.svg)
+
+MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
+DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
+gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
+correlation within each basis group. Timings cover the
+complete two-group E+F endpoint, not just SCF or summed component timings.
+Filled markers pass independent constituent/composite energy and two-step
+directional-force checks; open markers are unchecked. Incomplete or failed
+E+F has no plotted time. See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-full-20261014/timings.md)
+and [inputs, protocol and limitations](benchmarks/results/readme-cbs-full-20261014/README.md).
+The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
+is retained separately: its fitting model differs, so the two series are not
+identical-Hamiltonian speedup measurements.
+
 Other dated measurements are retained in the [benchmark archive](benchmarks/results/README.md).
 
 ## Documentation

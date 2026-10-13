@@ -334,14 +334,6 @@
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
     },
     {
-      "path": "benchmarks/results/df-one-step-warm-20260926/work.json",
-      "family": "df-one-step-warm-20260926",
-      "bytes": 202052,
-      "sha256": "729c2687009cdd6e197dce27ea02507cc5cb4b2367b3cf56d2a59902d1f228f3",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All grouped semantic work counters for eight DF workloads; profiler launch arrays remain ignored."
-    },
-    {
       "bytes": 485607,
       "classification": "required-compact-accepted-evidence",
       "family": "ecp-consumers-171",
@@ -510,22 +502,6 @@
       "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
     },
     {
-      "bytes": 148102,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json",
-      "role": "scientific-record",
-      "sha256": "025d97701a9c47aacf436214beb3ead641e4938f2a0ca7464823d47e32f9f7b5"
-    },
-    {
-      "bytes": 148094,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-thread.json",
-      "role": "scientific-record",
-      "sha256": "5caca21fb3c48a5e185821603750cf6041331c0f9e67f35255f61f25dc9f3780"
-    },
-    {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
       "bytes": 756252,
@@ -592,8 +568,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 187647,
-      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276",
+      "bytes": 188038,
+      "sha256": "25495fc732456523690f805e53867341966a4db118dddc460f1a82affd1c38c5",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -606,10 +582,26 @@
       "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
     },
     {
+      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 188504,
+      "sha256": "13bb87dd942052cb82ca9e2559a413197594e454c223b20cb2485a3fcb163711",
+      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/manifest.json",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 152279,
+      "sha256": "7ec32ca1750958466d2d98eb945d92b296786857aa09037c26afa46769b1d961",
+      "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 397852,
-      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d",
+      "bytes": 378576,
+      "sha256": "1533e88585902765935ac3a4c26789b7050460d2220af44e75e96629fcde4e7c",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },

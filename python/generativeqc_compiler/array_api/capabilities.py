@@ -216,6 +216,7 @@ _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
 # backend here (which would introduce a compiler-package import cycle).
 _NATIVE_CPU_OPERATIONS = frozenset(
     {
+        "where",
         "add",
         "equal",
         "not_equal",
@@ -271,6 +272,7 @@ _NATIVE_CPU_BOOLEAN_OPERATIONS = (
 )
 
 _NATIVE_CPU_NOTES: dict[str, str] = {
+    "where": "one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands; forward-only",
     **{
         name: "finite-float64-operands; one-byte-bool-result; non-differentiable"
         for name in _OPERATION_GROUPS["real-comparison"]
@@ -357,9 +359,10 @@ def capabilities() -> dict[str, object]:
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
         "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
-        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD-only; no-generated-public-AD-or-native",
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD-only; no-generated-public-AD",
+        "where_native_scope": "materializing-cpu-forward-only; one-byte-bool-condition; finite-generic-float64-branches; eager-all-live-operands",
         "boolean_native_lowering": True,
-        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views; no-AD-or-where",
+        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views-and-forward-where; no-AD",
         "astype_devices": "device-none-only-cpu-reference",
         "uniform_creation": "typed-bool-or-exact-real-scalar-tensorir-broadcast",
         "creation_devices": "device-none-only-cpu-reference",
