@@ -187,8 +187,7 @@ __global__ void admit_molecular_pair_domain_kernel(std::size_t npoint, const dou
                                                    const double* kappa, const double* domega_drho,
                                                    const double* domega_dsigma,
                                                    const double* dkappa_drho,
-                                                   const double* weighted_density, int* rejected,
-                                                   bool reject_positive_zero = false) {
+                                                   const double* weighted_density, int* rejected) {
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= npoint) return;
   const double factor = weighted_density[i];
@@ -199,9 +198,7 @@ __global__ void admit_molecular_pair_domain_kernel(std::size_t npoint, const dou
                         fabs(factor) <= 0x1p64 && fabs(density[i]) <= 0x1p128 &&
                         fabs(domega_drho[i]) <= 0x1p128 && fabs(domega_dsigma[i]) <= 0x1p128 &&
                         fabs(dkappa_drho[i]) <= 0x1p128;
-  // The unordered owner visits the compact nonzero domain. Positive-zero
-  // rows still have observable derivatives, so keep their ordered fallback.
-  if (!admitted || (reject_positive_zero && factor == 0.0)) atomicExch(rejected, 1);
+  if (!admitted) atomicExch(rejected, 1);
 }
 
 template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows,
@@ -710,7 +707,7 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
     runtime::cuda_resource_check(cudaMemsetAsync(bounds_rejected, 0, sizeof(int), stream));
     admit_molecular_pair_domain_kernel<<<blocks, threads, 0, stream>>>(
         npoint, points_xyz, density, omega, kappa, domega_drho, domega_dsigma, dkappa_drho,
-        weighted_density, bounds_rejected, parallel_pairs);
+        weighted_density, bounds_rejected);
     runtime::cuda_resource_check(cudaGetLastError());
   }
 

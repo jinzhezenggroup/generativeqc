@@ -33,8 +33,10 @@ consumers with the molecular row mask. `GENERATIVEQC_VV10_PAIR_SCHEDULE=ordered`
 retains the incumbent; explicit `parallel` also permits small diagnostic grids.
 Selection never bypasses numerical or output-lease admission. Existing bounds,
 coefficient limits and the original ordered fallback remain. Positive-zero
-weighted rows require fallback because their feature/weight derivatives remain
-observable although the compact partner list excludes zeros. Negative-zero
+weighted rows retain observable feature/weight derivatives. Finalization evaluates
+these rows once against the compact nonzero partner list, using existing generated
+one-leg roots; their zero density factor has no back reaction on partner rows.
+Negative-zero
 screened rows retain the molecular mask contract. Other variants and public
 unmasked fixed-grid consumers retain their established schedules.
 
@@ -57,6 +59,27 @@ checks, plus 98 parallel cases under each of memcheck and synccheck (zero errors
 Initial fixture prerequisite/architecture failures are retained separately.
 Complete molecular E/F, changed-geometry and fixed-seed
 replays at original deadlines are still required before claiming issue closure.
+
+## Rejected initial admission and live-route evidence
+
+The first production candidate rejected positive-zero weights. Nsight Systems
+on frozen integration `de4d7f564` showed all 34 feature sweeps and 12 geometry
+sweeps taking the general ordered fallback (219/277 ms per sweep); the parallel
+kernels returned after about 1 microsecond. This made prototype gains vacuous
+on real molecules and also lost the incumbent admitted reciprocal closure.
+Five independent complete molecular gates and small 3/12-atom populations
+passed correctness, but do not qualify candidate throughput. The long 48-atom
+attempt was stopped explicitly after this diagnosis, not recorded as a timeout.
+
+The correction retains the stable nonzero compaction, bounded workspace and
+ordered extreme-input fallback. For N nonzero live rows, Z positive-zero live
+rows and tile lengths m_t, pair work is
+`(N*N + sum(m_t*m_t))/2 + Z*N`. No zero row is silently screened. Device tests
+now exercise positive-zero derivatives in the admitted schedule, including an
+all-positive-zero population; independent molecular tests and live profiling
+must be repeated before promoting the corrected candidate. The corrected
+generated kernels passed 220 real-device cases, and all 110 parallel cases
+passed memcheck and synccheck with zero errors; 139 host checks also passed.
 
 ## Invariants and revisit conditions
 

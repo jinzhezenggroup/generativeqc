@@ -139,7 +139,25 @@ __global__ void parallel_pair_finalize(ParallelPairInputs input, ParallelPairOut
   if (row >= input.point_count) return;
   const double factor = input.weighted_density[row];
   if (factor == 0.0 && signbit(factor)) return;
-  const double phi = output.energy_terms[row], w = output.vrho[row], k = output.vsigma[row];
+  double phi = output.energy_terms[row], w = output.vrho[row], k = output.vsigma[row];
+  // Positive-zero integration weights have observable feature/weight response,
+  // but exert no back reaction on nonzero partners. Evaluate these rows once
+  // against the compact nonzero list; they are absent from bilateral atomics.
+  // The density-screened negative-zero domain returned above remains excluded.
+  if (factor == 0.0) {
+    for (std::uint64_t slot = 0; slot < *input.active_count; ++slot) {
+      const auto j = input.indices[slot];
+      const double dx = input.points[3*j] - input.points[3*row];
+      const double dy = input.points[3*j+1] - input.points[3*row+1];
+      const double dz = input.points[3*j+2] - input.points[3*row+2];
+      const auto pair = pair_values_vv10_admitted<false>(
+          dx*dx+dy*dy+dz*dz, input.omega[row], input.omega[j], input.kappa[row], input.kappa[j]);
+      const double partner = input.weighted_density[j];
+      phi += partner * pair.phi;
+      w += partner * pair.dphi_domega;
+      k += partner * pair.dphi_dkappa;
+    }
+  }
   const double rho = input.density[row];
   output.energy_terms[row] = input.coefficient * factor * (input.beta + 0.5 * phi);
   row_feature_values(phi, w, k, rho, input.domega_drho[row], input.domega_dsigma[row],

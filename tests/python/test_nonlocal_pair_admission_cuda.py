@@ -66,7 +66,7 @@ void launch(size_t n, const double* x, const uint64_t* indices,
   if constexpr (Mask && Admit) {
     cudaMemsetAsync(rejected,0,sizeof(int));
     admit_molecular_pair_domain_kernel<<<(n+127)/128,128>>>(
-      n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,rejected,use_parallel);
+      n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,rejected);
     gate=rejected;
   }
   pair_kernel_ordered<Vv10Variant::vv10,true,Geometry,Mask,false>
@@ -179,6 +179,7 @@ extern "C" int run(size_t n, int geometry, int mask, int stage,
         "oversized_weight",
         "nonzero",
         "masked_nonzero",
+        "positive_zero",
     ],
 )
 def test_admitted_rows_keep_order_at_partial_tiles(
@@ -193,6 +194,8 @@ def test_admitted_rows_keep_order_at_partial_tiles(
     # screened only when the explicit molecular row-mask contract is selected.
     if domain not in ("nonzero", "masked_nonzero"):
         weighted[::11] = 0.0
+    if domain == "positive_zero":
+        weighted[:] = 0.0
     if domain == "masked_nonzero":
         weighted[::5] = -0.0
     if domain == "sparse":
