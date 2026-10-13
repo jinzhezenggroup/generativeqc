@@ -16,6 +16,106 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Bounded class-major counterpart of the fixed-topology whole-shell owner.
+ * A 64-bit grid-stride domain cannot overflow a 32-bit queue head. All lanes
+ * retire the shared recurrence before the next task is published, including
+ * inactive systems and shell/AO-screened tasks. No AO tile repeats preparation.
+ */
+template <bool Unrestricted, unsigned AngularOrder>
+__global__ void bounded_materialized_fock_kernel(DeviceBatch batch,
+                                                 const GeneratedShellPairStream* topology_pointer,
+                                                 unsigned bra_class, unsigned ket_class,
+                                                 double screening_tolerance,
+                                                 const double* schwarz_bounds,
+                                                 const double* density, const std::uint8_t* active,
+                                                 double* fock, unsigned long long* work_count) {
+  constexpr unsigned lanes = canonical_materialized_component_lanes(AngularOrder);
+  constexpr unsigned slots = canonical_materialized_component_slots(AngularOrder);
+  __shared__ MaterializedDirectPairRecurrence<AngularOrder> recurrence;
+  __shared__ ActiveShellQuartetTile task;
+  __shared__ bool keep;
+  const auto& topology = *topology_pointer;
+  const std::size_t stride = static_cast<std::size_t>(topology.batch_size) + 1U;
+  const auto* density_bounds =
+      reinterpret_cast<const ShellPairDensityBounds*>(topology.shell_pair_density_bounds);
+  for (std::int32_t system = 0; system < topology.batch_size; ++system) {
+    if (active && !active[system]) continue;
+    const auto bra_begin = topology.pair_class_offsets[bra_class * stride + system];
+    const auto ket_begin = topology.pair_class_offsets[ket_class * stride + system];
+    const std::size_t bra_count =
+        topology.pair_class_offsets[bra_class * stride + system + 1U] - bra_begin;
+    const std::size_t ket_count =
+        topology.pair_class_offsets[ket_class * stride + system + 1U] - ket_begin;
+    const bool same_class = bra_class == ket_class;
+    const auto count = same_class ? bra_count * (bra_count + 1U) / 2U : bra_count * ket_count;
+    for (std::size_t ordinal = blockIdx.x; ordinal < count; ordinal += gridDim.x) {
+      if (threadIdx.x == 0) {
+        std::size_t bra{}, ket{};
+        if (same_class)
+          decode_lower_triangle(ordinal, bra, ket);
+        else {
+          bra = ordinal / ket_count;
+          ket = ordinal % ket_count;
+        }
+        const auto first = topology.pair_order[bra_begin + bra];
+        const auto second = topology.pair_order[ket_begin + ket];
+        task = {max(first, second), min(first, second), 0U};
+        keep = direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Fock>(
+            batch, task.first_pair, task.second_pair, screening_tolerance,
+            topology.shell_pair_bounds, density_bounds, nullptr);
+        if (keep && work_count) atomicAdd(work_count, 1ULL);
+      }
+      __syncthreads();
+      if (keep)
+        contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, slots, lanes>(
+            batch, task, screening_tolerance, schwarz_bounds, density, active, fock, nullptr,
+            recurrence);
+      __syncthreads();
+    }
+  }
+}
+
+cudaError_t launch_bounded_materialized_fock(
+    bool unrestricted, unsigned shell_class, cudaStream_t stream, unsigned worker_blocks,
+    DeviceBatch batch, const GeneratedShellPairStream* topology, double screening_tolerance,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* fock,
+    unsigned long long* work_count) {
+  if (shell_class >= detail::kDirectQuartetShellClassCount || !worker_blocks || !topology ||
+      !batch.shell_primitive_pairs || !batch.shell_pair_primitive_offsets)
+    return cudaErrorInvalidValue;
+  const auto pairs = detail::decode_direct_triangular_class(shell_class);
+  const auto order = detail::direct_quartet_shell_class_angular_order(shell_class);
+#define GENERATIVEQC_MATERIALIZED_FOCK_CASE(order_value)                                         \
+  case order_value:                                                                              \
+    if (unrestricted)                                                                            \
+      bounded_materialized_fock_kernel<true, order_value>                                        \
+          <<<worker_blocks, canonical_materialized_component_lanes(order_value), 0, stream>>>(   \
+              batch, topology, pairs[0], pairs[1], screening_tolerance, schwarz_bounds, density, \
+              active, fock, work_count);                                                         \
+    else                                                                                         \
+      bounded_materialized_fock_kernel<false, order_value>                                       \
+          <<<worker_blocks, canonical_materialized_component_lanes(order_value), 0, stream>>>(   \
+              batch, topology, pairs[0], pairs[1], screening_tolerance, schwarz_bounds, density, \
+              active, fock, work_count);                                                         \
+    break
+  switch (order) {
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(3);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(4);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(5);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(6);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(7);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(8);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(9);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(10);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(11);
+    GENERATIVEQC_MATERIALIZED_FOCK_CASE(12);
+    default:
+      return cudaErrorInvalidValue;
+  }
+#undef GENERATIVEQC_MATERIALIZED_FOCK_CASE
+  return cudaPeekAtLastError();
+}
+
 /** Fixed-capacity wrapper retained for high-register angular orders. */
 template <bool Unrestricted, unsigned AngularOrder, typename EvalScalar = double>
 __global__ void build_fock_direct_quartet_kernel(

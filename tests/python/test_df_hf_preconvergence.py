@@ -20,6 +20,16 @@ from benchmarks.df_hf_preconvergence import (
 from tools.generativeqc_validation.record import load_publication_record
 
 
+def test_qm7_input_requires_pinned_dataset(tmp_path: Path) -> None:
+    """Reject absent/unverified geometries before importing the offline oracle."""
+    with pytest.raises(ValueError, match="requires the pinned"):
+        prepare_case("qm7-c7h16-tz", tmp_path / "output.input")
+    unverified = tmp_path / "qm7.mat"
+    unverified.write_bytes(b"not the reference dataset")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        prepare_case("qm7-c7h16-tz", tmp_path / "output.input", qm7=unverified)
+
+
 def test_lossless_default_evidence_retains_original_receipt() -> None:
     directory = (
         Path(__file__).resolve().parents[2]
