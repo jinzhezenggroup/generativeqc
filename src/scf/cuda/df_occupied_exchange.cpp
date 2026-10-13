@@ -238,8 +238,8 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     // contracted AO index directly, retaining U[mu,i,Q] in one existing
     // buffer. Flattening (i,Q) then sums every auxiliary contribution inside
     // GEMM: K = w U U^T. This also works for nonsymmetric diagnostic B.
-    const auto n = static_cast<int>(plan.nbf), a = static_cast<int>(plan.naux);
-    const auto r = static_cast<int>(rank), ar = a * r;
+    const auto n = plan.nbf, a = plan.naux;
+    const auto r = rank, ar = a * r;
     const double one = 1, zero = 0;
     const auto* b = plan.three_center + system * plan.stored_tensor_elements_per_system;
     auto* u = plan.auxiliary_tile_values;

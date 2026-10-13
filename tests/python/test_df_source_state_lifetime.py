@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,7 +38,7 @@ enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
 int current_device = 1, owner_device = 0, allocations = 0, queries = 0, selections = 0;
 int synchronizations = 0, source_destroys = 0, stream_destroys = 0;
 int binding_destroys = 0, expected_binding_destroys = 0, binding_layout = 0;
-bool stream_alive = false, blas_alive = false, query_fails = false;
+bool stream_alive = false, blas_alive = false, eigen_alive = false, query_fails = false;
 struct PreparedBinding {
   ~PreparedBinding() {
     assert(current_device == owner_device && stream_alive && blas_alive);
@@ -73,7 +72,7 @@ cudaError_t cudaStreamDestroy(cudaStream_t stream) {
 }
 void cublasDestroy(void*) {
   assert(current_device == owner_device && stream_alive && blas_alive);
-  assert(binding_destroys == expected_binding_destroys);
+  assert(binding_destroys == expected_binding_destroys && !eigen_alive);
   blas_alive = false;
 }
 namespace generativeqc::runtime {
@@ -97,6 +96,37 @@ cudaError_t resource_cuda_free(void* data) {
 }
 """
 
+EIGEN_VENDOR = r"""
+#include <cusolverDn.h>
+#include <cassert>
+#include <cstdlib>
+extern int current_device, owner_device, binding_destroys, expected_binding_destroys;
+extern int allocations, source_destroys;
+extern bool stream_alive, blas_alive, eigen_alive;
+cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t* handle) {
+  assert(current_device == owner_device && stream_alive && blas_alive && !eigen_alive);
+  *handle = reinterpret_cast<cusolverDnHandle_t>(4);
+  eigen_alive = true;
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnDestroy(cusolverDnHandle_t handle) {
+  assert(handle == reinterpret_cast<cusolverDnHandle_t>(4));
+  assert(current_device == owner_device && stream_alive && blas_alive && eigen_alive);
+  assert(binding_destroys == expected_binding_destroys && !allocations && source_destroys == 1);
+  eigen_alive = false;
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t, cudaStream_t) { std::abort(); }
+cusolverStatus_t cusolverDnCreateParams(cusolverDnParams_t*) { std::abort(); }
+cusolverStatus_t cusolverDnDestroyParams(cusolverDnParams_t) { std::abort(); }
+cusolverStatus_t cusolverDnCreateSyevjInfo(syevjInfo_t*) { std::abort(); }
+cusolverStatus_t cusolverDnDestroySyevjInfo(syevjInfo_t) { std::abort(); }
+cusolverStatus_t cusolverDnXsyevjSetTolerance(syevjInfo_t, double) { std::abort(); }
+cusolverStatus_t cusolverDnXsyevjSetMaxSweeps(syevjInfo_t, int) { std::abort(); }
+cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t, int) { std::abort(); }
+"""
+
+
 DESTROY_STUBS = r"""
 void destroy_persistent_scf_state(void*) {}
 void destroy_ordinary_eigensystem(void*) {}
@@ -119,6 +149,7 @@ std::shared_ptr<cc::DFSourceState> create_state(bool coefficients = true) {
   state->plan->integral_source = reinterpret_cast<void*>(2);
   state->plan->blas = reinterpret_cast<void*>(3);
   stream_alive = blas_alive = true;
+  assert(state->plan->eigen_handles.create() == 0);
   if (binding_layout == 0) {
     state->plan->charge_contraction = std::make_unique<PreparedBinding>();
     state->plan->coulomb_contraction = std::make_unique<PreparedBinding>();
@@ -160,7 +191,7 @@ int main(int argc, char** argv) {
     current_device = caller_device;
     allocations = queries = selections = synchronizations = source_destroys = stream_destroys = 0;
     binding_destroys = expected_binding_destroys = 0;
-    stream_alive = blas_alive = query_fails = false;
+    stream_alive = blas_alive = eigen_alive = query_fails = false;
     if (mode == 6) {
       cc::PlanDelete{}(nullptr);
       assert(!queries && !selections && current_device == caller_device);
@@ -222,9 +253,14 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     lifetime = (ROOT / "src/scf/cuda/df_plan_lifetime.cpp").read_text()
     plan = (ROOT / "src/scf/cuda/df_plan.cpp").read_text()
     release = _definition(lifetime, "void release(")
+    release_blas = _definition(
+        (ROOT / "src/scf/cuda/df_scf_library.cpp").read_text(), "void release_df_blas("
+    )
     # Keep the actual release body as well as the CC owner/deleter. Only unused
     # plan data and CUDA APIs are mocked; do not model their device transitions.
-    fields = sorted(set(re.findall(r"plan\.(\w+)", release)) - {"device_id"})
+    fields = sorted(
+        set(re.findall(r"plan\.(\w+)", release + release_blas)) - {"device_id"}
+    )
     owned_fields = {
         "charge_contraction",
         "coulomb_contraction",
@@ -251,7 +287,7 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         else f"void* {field}{{}};\n"
         for field in fields
     )
-    unit += "};\n" + DESTROY_STUBS + release + "\n"
+    unit += "};\n" + DESTROY_STUBS + release_blas + "\n" + release + "\n"
     unit += _definition(plan, "void destroy_cuda_density_fitting_jk_plan(")
     unit += "\n}\nnamespace generativeqc::cc {\n"
     unit += _definition(source, "struct PlanDelete") + ";\n"
@@ -260,7 +296,13 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     (directory / "cuda_runtime_api.h").write_text(
         "#pragma once\nusing cudaStream_t = void*;\n"
     )
-    eigen_units = empty_eigen_owner_units(directory)
+    shutil.copyfile(
+        ROOT / "tests/native/fixtures/shared_eigen_provider/cusolverDn.h",
+        directory / "cusolverDn.h",
+    )
+    vendor = directory / "eigen_vendor.cpp"
+    vendor.write_text(EIGEN_VENDOR)
+    eigen_units = (ROOT / "src/solver/cuda/symmetric_eigen_handles.cpp", vendor)
     cpp, executable = directory / "state.cpp", directory / "state"
     cpp.write_text(unit)
     objects = []
