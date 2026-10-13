@@ -1,12 +1,14 @@
 """Execute native host admission with CUDA side effects explicitly stubbed out."""
 
 import re
-import shutil
 import subprocess
 import typing
 from pathlib import Path
 
 import pytest
+
+if typing.TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,13 +50,8 @@ def _block(source: str, marker: str) -> str:
 
 @pytest.mark.parametrize("method", ("PBE", "PBE0"))
 def test_native_task_budget_is_per_page_not_cumulative(
-    tmp_path: Path, method: str
+    tmp_path: Path, method: str, native_cxx: "NativeCxx"
 ) -> None:
-    compiler = shutil.which("c++")
-    cache = shutil.which("sccache") or shutil.which("ccache")
-    if compiler is None or cache is None:
-        pytest.skip("C++ compiler and compiler cache required")
-    subprocess.run([cache, "--version"], check=True, capture_output=True)
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     pieces = [
         _block(header, "struct Owner {") + ";",
@@ -94,12 +91,8 @@ def test_native_task_budget_is_per_page_not_cumulative(
         + MAIN
     )
     binary = tmp_path / "admission"
-    subprocess.run(
-        [cache, compiler, "-std=c++17", "-O2", str(source), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    native_cxx.build_executable(
+        [source], binary, compile_args=["-std=c++17", "-O2"], compile_timeout=60
     )
     result = subprocess.run(
         [str(binary)], check=False, capture_output=True, text=True, timeout=10
@@ -252,8 +245,11 @@ PREAMBLE = r"""
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <new>
 #include <stdexcept>
 using std::size_t;
+struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 namespace generativeqc_stationary_cuda {}
 namespace generativeqc::runtime {
 template <class Element> struct OwnedCudaBuffer {
@@ -317,5 +313,13 @@ int main() {
     task[1]=source;
     if(page()==0 || !p.failed || p.primitive_count!=0) return 13;
   }
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw DeviceAllocationError("device OOM");})!=2 || !p.failed)
+    return 14;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw std::bad_alloc();})!=3 || !p.failed) return 15;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw DeviceRuntimeError("driver failure");})!=4 || !p.failed)
+    return 16;
 }
 """

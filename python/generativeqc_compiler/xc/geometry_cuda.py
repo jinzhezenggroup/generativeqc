@@ -5,7 +5,6 @@ from dataclasses import replace
 from fractions import Fraction
 
 from generativeqc_compiler.dft.ao import jet_indices
-from generativeqc_compiler.integral.expr import AlgebraForm
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 from ._generated_native_semilocal import (
@@ -14,10 +13,8 @@ from ._generated_native_semilocal import (
 )
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .coefficients import jet_pullback_program
-from .equal_spin import equal_spin_roots
 from .grid_native import emit_grid_adjoint, emit_grid_partials
-from .semilocal_codegen import emit_polarized_semilocal
-from .semilocal_family import energy_expression
+from .semilocal_codegen import emit_polarized_semilocal, emit_r2scan_program
 from .spec import FunctionalSpec
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
 
@@ -369,94 +366,73 @@ def _emit_stationary_point(
         raise ValueError(
             "R2SCAN stationary geometry requires its canonical semilocal components and parameters"
         )
-    graph, energy, feature_variables = energy_expression(spec, production=True)
-    roots = (
-        energy,
-        *(graph.differentiate(energy, value) for value in feature_variables),
+    # Use the SCF owner's component work-domain policy, including empty spins;
+    # differentiating the unfloored interior graph is singular at rho_s=tau_s=0.
+    body = emit_r2scan_program(
+        value_type="StationaryR2scanRaw",
+        function_name="stationary_r2scan_raw",
+        identity_constant="kStationaryR2scanIdentity",
+        qualifier="__device__ inline",
     )
-    graph, roots = graph.apply_algebra_form(roots, AlgebraForm.FACTORED_NARY)
-    graph, roots = graph.lower_small_integer_powers(roots)
-    variables = {
-        "rho_a": "rho[0]",
-        "rho_b": "rho[1]",
-        "sigma_aa": "sigma[0]",
-        "sigma_ab": "sigma[1]",
-        "sigma_bb": "sigma[2]",
-        "tau_a": "tau[0]",
-        "tau_b": "tau[1]",
-    }
-    emitter = ScalarCEmitter(graph, variables)
-    emitter.emit(roots)
-    refs = [emitter.reference(root) for root in roots]
-    restricted_roots = equal_spin_roots(graph, roots)
-    restricted_emitter = ScalarCEmitter(graph, variables)
-    restricted_emitter.emit(restricted_roots)
-    restricted_refs = [restricted_emitter.reference(root) for root in restricted_roots]
-    scalar_branches = []
-    for branch, selected_emitter, selected_refs in (
-        ("  if constexpr (equal_spin) {", restricted_emitter, restricted_refs),
-        ("  } else {", emitter, refs),
-    ):
-        scalar_branches.extend(
-            (
-                branch,
-                *selected_emitter.lines,
-                f"    energy = {selected_refs[0]};",
-                *(
-                    f"    derivative[{index}] = {reference};"
-                    for index, reference in enumerate(selected_refs[1:])
-                ),
-            )
-        )
-    scalar_branches.append("  }")
-    return "\n".join(
-        [
-            "struct StationaryPointValue {",
-            "  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};",
-            "  bool valid{true};",
-            "};",
-            "template <bool equal_spin = false>",
-            "__device__ inline StationaryPointValue stationary_evaluate_point(",
-            "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
-            "  StationaryPointValue out;",
-            "  const double total = rho[0] + rho[1];",
-            "  constexpr double tail_low = 1.0e-56, tail_high = 1.0e-52;",
-            "  if (total <= tail_low) return out;",
-            "  double sigma[3]{};",
-            "  for (unsigned k = 0; k < 3; ++k) {",
-            "    sigma[0] += gradient[0][k] * gradient[0][k];",
-            "    sigma[1] += gradient[0][k] * gradient[1][k];",
-            "    sigma[2] += gradient[1][k] * gradient[1][k];",
-            "  }",
-            "  double energy, derivative[7];",
-            *scalar_branches,
-            "  out.valid = isfinite(energy);",
-            "  for (double value : derivative) out.valid = out.valid && isfinite(value);",
-            "  if (!out.valid) return out;",
-            "  if (total < tail_high) {",
-            "    const double width = tail_high - tail_low;",
-            "    const double x = (total - tail_low) / width;",
-            "    const double x2 = x * x, x3 = x2 * x;",
-            "    const double scale = x3 * (10.0 + x * (-15.0 + 6.0 * x));",
-            "    const double dscale = 30.0 * x2 * (1.0 - x) * (1.0 - x) / width;",
-            "    const double unscaled = energy;",
-            "    energy *= scale;",
-            "    derivative[0] = scale * derivative[0] + dscale * unscaled;",
-            "    derivative[1] = scale * derivative[1] + dscale * unscaled;",
-            "    for (unsigned i = 2; i < 7; ++i) derivative[i] *= scale;",
-            "  }",
-            "  out.energy = energy;",
-            "  out.rho[0] = derivative[0];",
-            "  out.rho[1] = derivative[1];",
-            "  for (unsigned k = 0; k < 3; ++k) {",
-            "    out.gradient[0][k] = 2.0 * derivative[2] * gradient[0][k] + derivative[3] * gradient[1][k];",
-            "    out.gradient[1][k] = derivative[3] * gradient[0][k] + 2.0 * derivative[4] * gradient[1][k];",
-            "  }",
-            "  out.kinetic[0] = 0.5 * derivative[5];",
-            "  out.kinetic[1] = 0.5 * derivative[6];",
-            "  return out;",
-            "}",
-        ]
+    return (
+        body
+        + """
+struct StationaryPointValue {
+  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};
+  bool valid{true};
+};
+template <bool equal_spin = false>
+__device__ inline StationaryPointValue stationary_evaluate_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  StationaryPointValue out;
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    out.valid = out.valid && isfinite(rho[spin]) && rho[spin] >= 0.0 &&
+                isfinite(tau[spin]) && tau[spin] >= 0.0;
+    for (double value : gradient[spin]) out.valid = out.valid && isfinite(value);
+  }
+  if (!out.valid) return out;
+  const double total = rho[0] + rho[1];
+  constexpr double tail_low = 1.0e-56, tail_high = 1.0e-52;
+  if (total <= tail_low) return out;
+  double sigma[3]{};
+  for (unsigned k = 0; k < 3; ++k) {
+    sigma[0] += gradient[0][k] * gradient[0][k];
+    sigma[1] += gradient[0][k] * gradient[1][k];
+    sigma[2] += gradient[1][k] * gradient[1][k];
+  }
+  const auto raw = equal_spin ? stationary_r2scan_raw_equal_spin(
+      rho[0], rho[1], sigma[0], sigma[1], sigma[2], tau[0], tau[1])
+      : stationary_r2scan_raw(
+      rho[0], rho[1], sigma[0], sigma[1], sigma[2], tau[0], tau[1]);
+  double energy = raw.energy_density, derivative[7];
+  for (unsigned index = 0; index < 7; ++index) derivative[index] = raw.feature_derivative[index];
+  out.valid = isfinite(energy);
+  for (double value : derivative) out.valid = out.valid && isfinite(value);
+  if (!out.valid) return out;
+  if (total < tail_high) {
+    const double width = tail_high - tail_low;
+    const double x = (total - tail_low) / width;
+    const double x2 = x * x, x3 = x2 * x;
+    const double scale = x3 * (10.0 + x * (-15.0 + 6.0 * x));
+    const double dscale = 30.0 * x2 * (1.0 - x) * (1.0 - x) / width;
+    const double unscaled = energy;
+    energy *= scale;
+    derivative[0] = scale * derivative[0] + dscale * unscaled;
+    derivative[1] = scale * derivative[1] + dscale * unscaled;
+    for (unsigned index = 2; index < 7; ++index) derivative[index] *= scale;
+  }
+  out.energy = energy;
+  out.rho[0] = derivative[0];
+  out.rho[1] = derivative[1];
+  for (unsigned axis = 0; axis < 3; ++axis) {
+    out.gradient[0][axis] = 2.0 * derivative[2] * gradient[0][axis] + derivative[3] * gradient[1][axis];
+    out.gradient[1][axis] = derivative[3] * gradient[0][axis] + 2.0 * derivative[4] * gradient[1][axis];
+  }
+  out.kinetic[0] = 0.5 * derivative[5];
+  out.kinetic[1] = 0.5 * derivative[6];
+  return out;
+}
+"""
     )
 
 

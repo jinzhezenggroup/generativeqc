@@ -8,6 +8,7 @@
 
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
+#include "scf/cuda_derivative_sources.hpp"
 
 namespace generativeqc::scf {
 
@@ -57,6 +58,15 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     CudaDirectJkPlan* source, const double* resident_density,
     const double* resident_weighted_density, std::size_t matrix_elements, std::size_t maximum_bytes,
     std::vector<double>& hcore_gradient, std::vector<double>& pulay_gradient, std::string& detail,
+    OneElectronGradientResources* resources = nullptr);
+
+/** Consume hcore and Pulay separately before their shared scratch is reused.
+ * Both views contain energy gradients. No output staging or ordinary drain is
+ * performed; the enclosing source owner gates and publishes the complete sum. */
+generativeqc_status consume_prepared_cuda_stationary_one_electron_pair(
+    CudaDirectJkPlan* source, const double* resident_density,
+    const double* resident_weighted_density, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail,
     OneElectronGradientResources* resources = nullptr);
 
 }  // namespace generativeqc::scf

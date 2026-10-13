@@ -6,6 +6,7 @@
 
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
+#include "scf/cuda_derivative_sources.hpp"
 #include "scf/fock_build.hpp"
 
 namespace generativeqc::scf {
@@ -130,6 +131,14 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
 generativeqc_status execute_cuda_direct_shell_bilinear_derivative_device(
     CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t matrix_elements,
     std::vector<double>& gradient, std::string& detail);
+
+/** Same scientific J/K traversal with callback-scoped resident force channels.
+ * The callback enqueues use on the provider stream; no host result is staged. */
+generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    bool allow_spatial_default = false);
 
 /** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
  * explicit omega. The retained owner performs one density transform and three

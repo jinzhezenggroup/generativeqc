@@ -11,6 +11,9 @@
 #include "becke_scaled_policy.hpp"
 #include "grid_task_view.cuh"
 #include "xc_point.hpp"
+#if defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
+#include "dft/native_stationary_shared_kernels.hpp"
+#endif
 
 namespace generativeqc_stationary_cuda {
 using namespace generativeqc_tensor;
@@ -120,11 +123,26 @@ size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntas
               2 * ns * n * n) +
          (cache_center_geometry ? 48 * (na * (na - 1) / 2) : 0) + 256;
 }
+/** Preserve typed device/host allocation (2/3) and device runtime (4) failures.
+ * Invalid/numerical failures remain 1; existing nonzero-rejection callers keep
+ * their behavior while native consumers can preserve the public CUDA status. */
 template <class F>
 int guarded(Owner* owner, char* error, size_t size, F f) noexcept {
   try {
     f();
     return 0;
+  } catch (const DeviceAllocationError& e) {
+    if (owner) owner->failed = true;
+    error_text(error, size, e.what());
+    return 2;
+  } catch (const std::bad_alloc& e) {
+    if (owner) owner->failed = true;
+    error_text(error, size, e.what());
+    return 3;
+  } catch (const DeviceRuntimeError& failure) {
+    if (owner) owner->failed = true;
+    error_text(error, size, failure.what());
+    return 4;
   } catch (const std::exception& e) {
     if (owner) owner->failed = true;
     error_text(error, size, e.what());
@@ -226,7 +244,9 @@ __global__ void geometry_cooperative_kernel(
     double* phase_seeds);
 __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
                                 double* output, int* error);
+#if !defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
+#endif
 // Host dispatch keeps experimental arithmetic out of incumbent device kernels.
 template <bool BinaryScaled>
 void launch_phased_becke_normalize(PhasedBeckeInput input, bool cooperative, cudaStream_t stream) {
@@ -1476,8 +1496,13 @@ int stationary_finish_reduced(void* pointer, double* output, size_t count, char*
     check(*p);
     drain_geometry(*p);
     auto stream = p->context.stream;
+#if defined(GENERATIVEQC_NATIVE_SHARED_REDUCTION)
+    cuda_check(generativeqc::dft::launch_native_stationary_source_reduction(
+        p->sources, p->atoms, stationary_source_count, p->partial, p->context.error, stream));
+#else
     source_reduce<<<blocks(3 * p->atoms, 64), 64, 0, stream>>>(p->sources, p->atoms, p->partial,
                                                                p->context.error);
+#endif
     ++p->launches;
     finished(*p, stream);
     std::vector<double> candidate(count);

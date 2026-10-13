@@ -794,12 +794,14 @@ def emit_stationary_reduction_cuda(plan: StationaryGradientPlan) -> str:
     return "\n".join(lines)
 
 
-def emit_stationary_scientific_kernels(plan: typing.Any) -> str:
-    """Emit bounded task/primitive and XC geometry contractions for the runtime owner."""
+def emit_stationary_scientific_kernels(
+    plan: typing.Any, *, include_reduction: bool = True
+) -> str:
+    """Emit XC geometry with an optional independently compiled final reduction."""
     return (
         emit_stationary_weight_cuda(plan)
         + _STATIONARY_SCIENTIFIC_KERNELS
-        + emit_stationary_reduction_cuda(plan)
+        + (emit_stationary_reduction_cuda(plan) if include_reduction else "")
     )
 
 
@@ -1110,6 +1112,7 @@ def emit_stationary_profile_aot_wrapper_cuda(
     profile: str,
     *,
     iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+    include_reduction: bool = True,
 ) -> str:
     """Emit an exact-plan s/p wrapper for the shared, separably compiled primitives.
 
@@ -1125,6 +1128,7 @@ def emit_stationary_profile_aot_wrapper_cuda(
         functional=selected.functional,
         plan=selected.plan,
         iterations=iterations,
+        include_reduction=include_reduction,
     )
 
 
@@ -1568,6 +1572,7 @@ def emit_stationary_wrapper_cuda(
     declare_primitive: bool = True,
     primitive_shards: int | None = None,
     primitive_shard_width: int | None = None,
+    include_reduction: bool = True,
 ) -> typing.Any:
     """Emit the small method-specific TU linked against cached primitive code."""
 
@@ -1612,7 +1617,7 @@ def emit_stationary_wrapper_cuda(
         + _runtime_layout_cuda(plan)
         + emit_stationary_phased_becke_cuda(iterations=iterations)
         + '#include "dft/stationary_gradient_cuda.cuh"\n'
-        + emit_stationary_scientific_kernels(plan)
+        + emit_stationary_scientific_kernels(plan, include_reduction=include_reduction)
     )
 
 
