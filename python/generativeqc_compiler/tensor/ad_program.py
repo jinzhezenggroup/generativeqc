@@ -64,6 +64,7 @@ from .ir import (
     slice_tensor,
     sqrt,
     transpose,
+    where,
 )
 from .precision import derivative_precision_provenance
 from .program import Program
@@ -958,24 +959,52 @@ def linearize(
     outputs: typing.Any = None,
     packed: typing.Any = None,
     max_elements: int = DEFAULT_MAX_ELEMENTS,
+    allow_external_mask_where: bool = False,
 ) -> JVPProgram:
     """Generate a demand-driven forward derivative :class:`Program`.
 
     The generated program takes the original inputs plus ``d_<name>`` tangent
     inputs and returns ``d_<output>`` tangents.  Only requested tangent inputs
     and output tangents are generated.
+
+    ``allow_external_mask_where`` explicitly admits first-order fixed external
+    Boolean selectors on generic FP64 arrays. This domain retains every live
+    primal and forward-domain check, including unreturned outputs and zero
+    directions. Its native qualification is the materializing CPU owner only.
     """
     if not isinstance(program, Program):
         raise TypeError("linearize requires a Program")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
+    if type(allow_external_mask_where) is not bool:
+        raise TypeError("allow_external_mask_where must be Boolean")
     primal_hash = program.logical_hash
     program, _layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
     )
     selected_outputs = _select_names(program.outputs, outputs, "output")
     needed = _ancestors(selected_outputs.values())
-    if any(node.spec.dtype == "bool" for node in needed):
+    external_where = allow_external_mask_where and any(
+        node.op == "where" for node in program.live_nodes
+    )
+    if external_where:
+        # Reuse the reference domain proof, never widen AD_PRIMITIVES. Further
+        # restrict this consumer to the actually qualified FP64 generation domain.
+        from .autodiff import _validate_reference_context
+
+        _validate_reference_context(program)
+        if any(
+            node.spec.dtype not in ("bool", "float64") for node in program.live_nodes
+        ):
+            raise ValueError("generated external-mask JVP requires float64 real arrays")
+        if packed or any(key.startswith("precision_") for key in program.provenance):
+            raise ValueError(
+                "generated external-mask JVP does not admit packed or precision policies"
+            )
+        if program.provenance.get("external_mask_where_jvp"):
+            raise ValueError("higher-order external-mask JVP generation is unsupported")
+        needed = set(program.live_nodes)
+    elif any(node.spec.dtype == "bool" for node in needed):
         raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     inputs = _input_nodes(program)
     requested = _select_names(
@@ -996,21 +1025,42 @@ def linearize(
     for node in program.nodes:
         if node not in needed:
             continue
+        if external_where and node.spec.dtype == "bool":
+            continue
         if node.op == "input":
             tangent = tangent_nodes.get(node.attrs["name"])
+            if external_where and tangent is None:
+                tangent = _zero_like(node)
         elif node.op == "constant":
-            tangent = None
+            tangent = _zero_like(node) if external_where else None
+        elif external_where and node.op == "where":
+            condition, left, right = node.inputs
+            tangent = where(condition, tangents[left], tangents[right])
         else:
             tangent = _jvp_graph(node, [tangents[operand] for operand in node.inputs])
         tangents[node] = tangent
         if tangent is not None:
             generated_nodes.append(tangent)
+    validation = None
+    if external_where:
+        # Zero BEFORE reduction: reducing the primal itself could overflow despite
+        # every primal element being finite. Output edges retain eager validation
+        # through serialization, CSE/DCE and empty requested-output shapes.
+        guards = []
+        for root in program.outputs.values():
+            for value in (root, tangents[root]):
+                zero = _zero_like(value)
+                guards.append(reduce_sum(zero, tuple(range(len(zero.spec.indices)))))
+        validation = _combine(guards)
     derivative_outputs = {}
     output_map = {}
     for name, node in selected_outputs.items():
         tangent = tangents[node]
         if tangent is None:
             tangent = _zero_like(node)
+            generated_nodes.append(tangent)
+        if external_where:
+            tangent = add(tangent, broadcast(validation, tangent.spec.indices, ()))
             generated_nodes.append(tangent)
         derivative_name = f"{TANGENT_PREFIX}{name}"
         derivative_outputs[derivative_name] = tangent
@@ -1031,6 +1081,18 @@ def linearize(
             "packed_inputs": program.provenance.get("packed_inputs", {}),
             "generation": "demand-driven",
             **derivative_precision_provenance(program),
+            **(
+                {
+                    "external_mask_where_jvp": {
+                        "version": 1,
+                        "domain": "fixed-external-mask-generic-finite-fp64",
+                        "native_qualification": "materializing-cpu-only",
+                        "validation": "all-live-primal-and-forward-domains",
+                    }
+                }
+                if external_where
+                else {}
+            ),
         },
     )
     return JVPProgram(
