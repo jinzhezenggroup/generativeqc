@@ -925,17 +925,27 @@ def test_posthf_order_preserves_unknown_missing_and_duplicate_targets(
         assert actual[:2] == ["tests/python/test_uccsd_lambda.py"] * 2
 
 
+@pytest.mark.parametrize("parent_worker", (None, "gw0"))
 def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixtures(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, parent_worker: str | None
 ) -> None:
     """Exercise the installed xdist scheduler, not a model of its behavior."""
+    # A nested controller inherits its parent's environment but is not a worker.
+    # Exercise this even when the outer regression suite runs without xdist.
+    if parent_worker is None:
+        monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    else:
+        monkeypatch.setenv("PYTEST_XDIST_WORKER", parent_worker)
     directory = tmp_path / "tests/python"
     directory.mkdir(parents=True)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     (tmp_path / "conftest.py").write_text(
-        "import json, os\nfrom pathlib import Path\n"
+        "import json\nfrom pathlib import Path\n"
+        "worker = None\n"
+        "def pytest_configure(config):\n"
+        "    global worker\n"
+        "    worker = getattr(config, 'workerinput', {}).get('workerid')\n"
         "def pytest_runtest_logreport(report):\n"
-        "    worker = os.environ.get('PYTEST_XDIST_WORKER')\n"
         "    if worker and (report.when == 'call' or (report.when == 'setup' and report.skipped)):\n"
         "        with Path(worker + '.jsonl').open('a') as stream:\n"
         "            stream.write(json.dumps([report.nodeid, report.outcome]) + '\\n')\n",
