@@ -307,7 +307,10 @@ def _active_scopes(
         for token, pattern in (
             ("batch_potential_panels", "batch_potential_panels"),
             ("batch_local_potentials", "batch_local_potentials<double>"),
-            ("batch_ordered_scatter unsegmented", "batch_ordered_scatter<false,double>"),
+            (
+                "batch_ordered_scatter unsegmented",
+                "batch_ordered_scatter<false,double>",
+            ),
             ("batch_ordered_scatter segmented", "batch_ordered_scatter<true,double>"),
         ):
             potential += _matching(
