@@ -568,8 +568,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 187846,
-      "sha256": "7f86d25d7623e1bb95489e4f0d0e96f0d8a715ba518367f904228337354308f3",
+      "bytes": 188038,
+      "sha256": "25495fc732456523690f805e53867341966a4db118dddc460f1a82affd1c38c5",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -585,23 +585,23 @@
       "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 149660,
-      "sha256": "39cf82b1c29195f4a4cf256a3f9cd9cd0045384b294e4d6b605811e666527259",
+      "bytes": 188504,
+      "sha256": "13bb87dd942052cb82ca9e2559a413197594e454c223b20cb2485a3fcb163711",
       "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/manifest.json",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 138119,
-      "sha256": "8825bac89728792b9db5c94b2f77814d8da1c882a9f27f0f8d9de2760106c3b0",
+      "bytes": 152279,
+      "sha256": "7ec32ca1750958466d2d98eb945d92b296786857aa09037c26afa46769b1d961",
       "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 425168,
-      "sha256": "2b8eeac9ca19d68596389838a4e5ea0f6c5ce5cef3c305bde68731cd89ff8771",
+      "bytes": 378576,
+      "sha256": "1533e88585902765935ac3a4c26789b7050460d2220af44e75e96629fcde4e7c",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
