@@ -29,16 +29,11 @@ def test_cuda_density_uses_same_logical_tensor_identity_as_cpu() -> None:
     )
 
 
-def test_cuda_plain_density_is_compiler_owned_and_symmetric() -> None:
-    generated = emit_density_cuda()
+def test_cuda_plain_density_is_compiler_owned() -> None:
     source = SOURCE.read_text()
 
-    assert "template <int OccupationWeight>" in generated
-    assert "if (row > column) return;" in generated
-    assert "density[element] = value;" in generated
-    assert "density[offset + column + row * n] = value;" in generated
-    assert "if constexpr (OccupationWeight == 2)" in generated
-
+    # Arithmetic, symmetry and clipped-launch behavior are exercised by the
+    # generated-kernel host probe; only the intentional ownership seam is audited here.
     assert "__global__ void build_density_kernel" not in source
     assert "__global__ void build_spin_density_kernel" not in source
     assert "generated::occupied_density_kernel<2>" in source

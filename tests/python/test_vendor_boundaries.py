@@ -71,6 +71,15 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     # only its six ordinary GEMMs have moved behind the shared adapter.
     setup = "src/scf/cuda/df_plan_setup.cpp"
     assert "cublasDgemm" not in inventory.get(setup, {})
+    assert "cublasDgemmStridedBatched" not in inventory.get(setup, {})
+    # Exchange now borrows the same column-major FP64 views for all
+    # resident, streamed and source-backed GEMM products.
+    assert "src/scf/cuda/df_exchange.cpp" not in inventory
+    assert "src/scf/cuda/df_response_weights.cu" not in inventory
+    assert "src/scf/cuda/df_gradient_bridge.cu" not in inventory
+    assert "src/scf/cuda/df_occupied_exchange.cpp" not in inventory
+    assert "src/scf/cuda/df_plan_lifetime.cpp" not in inventory
+    assert "src/scf/cuda/df_plan_setup.cpp" not in inventory
 
 
 @pytest.mark.parametrize(

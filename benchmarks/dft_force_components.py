@@ -744,5 +744,9 @@ def normalize_force_work(
     if isinstance(work.get("component_seconds"), Mapping) or str(
         work.get("execution", "")
     ).startswith("cuda-complete-wb97mv"):
-        return _normalize_composite(work, state_export_seconds=state_export)
-    return _normalize_stationary(work, state_export_seconds=state_export)
+        result = _normalize_composite(work, state_export_seconds=state_export)
+    else:
+        result = _normalize_stationary(work, state_export_seconds=state_export)
+    if "scf_force_memory" in work:
+        result["scf_force_memory"] = dict(_mapping(work["scf_force_memory"]))
+    return result

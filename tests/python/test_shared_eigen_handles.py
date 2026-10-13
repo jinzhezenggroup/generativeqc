@@ -151,24 +151,12 @@ def test_actual_scf_teardown_bodies(handle_probe: Path, consumer: str) -> None:
     )
 
 
-def test_shared_reset_stays_inside_existing_release_scopes() -> None:
+def test_rhf_shared_reset_stays_inside_allocation_lock() -> None:
     rhf = (ROOT / "src/scf/cuda/resources.cpp").read_text()
     assert rhf.index("allocation_lock(") < rhf.index("eigen_handles_.reset()")
-    df = (ROOT / "src/scf/cuda/df_plan_lifetime.cpp").read_text()
-    release = _definition(df, "void release(")
-    ordered = (
-        "cudaSetDevice(plan.device_id)",
-        "destroy_persistent_scf_state(",
-        "destroy_ordinary_eigensystem(",
-        "runtime::resource_cuda_free(plan.exchange_density_column_major)",
-        "plan.eigen_handles.reset()",
-        "cublasDestroy(plan.blas)",
-        "cudaStreamDestroy(plan.stream)",
-        "plan = {}",
-    )
-    assert [release.index(term) for term in ordered] == sorted(
-        release.index(term) for term in ordered
-    )
+    # DF release ordering is exercised by test_df_source_state_lifetime.py:
+    # retained bindings and resources retire before eigen/BLAS handles, and
+    # all owners retire while their stream and selected device are still live.
 
 
 def test_handle_header_keeps_vendor_and_method_abi_private() -> None:

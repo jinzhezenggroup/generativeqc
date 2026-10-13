@@ -11,6 +11,7 @@
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
+#include "runtime/resource_usage.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_library.hpp"
@@ -141,6 +142,17 @@ void destroy_ordinary_eigensystem(void*& opaque) noexcept {
 }  // namespace generativeqc::scf::cuda_df
 
 namespace generativeqc::scf {
+std::size_t cuda_density_fitting_seed_host_numeric_bytes(const CudaDensityFittingJkPlan* plan) {
+  if (!plan) return 0;
+  auto bytes = runtime::vector_capacities(plan->streamed_raw_three_center,
+                                          plan->streamed_inverse_square_roots,
+                                          plan->metric_full_rank, plan->metric_response_valid);
+  const auto* eigen = static_cast<const cuda_df::OrdinaryEigensystem*>(plan->ordinary_eigensystem);
+  if (eigen) bytes = runtime::add_capacity(bytes, runtime::vector_bytes(eigen->host_workspace));
+  return runtime::add_capacity(
+      bytes, cuda_density_fitting_integral_source_host_bytes(plan->integral_source));
+}
+
 generativeqc_status solve_cuda_density_fitting_eigen(
     CudaDensityFittingJkPlan* plan, const std::vector<double>& matrix,
     const std::vector<double>* overlap, const std::vector<double>* orthogonalizer,
@@ -263,6 +275,9 @@ generativeqc_status solve_cuda_density_fitting_eigen(
     if (error != cudaSuccess) return cuda_failure(error, "download ordinary DF eigenframe", detail);
     drain.active = false;
     auto vectors = column_major(packed, n);  // Transpose the layout, not the mathematical frame.
+    // Canonicalize detached successful pairs only; nonzero info still rejects
+    // the original provider failure, and device residual/metric gates remain.
+    if (diagnostic.solver_info == 0) (void)solver::order_eigenpairs(values, vectors, n);
     {
       host::Region validation("eigenframe_validation", n);
       if (!validate_cuda_density_fitting_eigen_frame(plan, matrix, overlap, values, vectors,

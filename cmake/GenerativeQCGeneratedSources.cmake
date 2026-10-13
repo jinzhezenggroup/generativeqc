@@ -424,6 +424,7 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_SCF_ARRAY_CPU_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/array_api/scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/history_combination.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
@@ -442,9 +443,10 @@ macro(generativeqc_register_host_generated_sources target)
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/array_api/scf.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/history_combination.py"
       ARGS --backend cuda-diis --output
         "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_diis_cuda.cuh"
-      COMMENT "Generating shared ordered CUDA residual Gram contraction")
+      COMMENT "Generating shared ordered CUDA history contractions")
     generativeqc_register_generated_sources(
       NAME generativeqc_scf_density_cuda_codegen
       TARGET ${target}

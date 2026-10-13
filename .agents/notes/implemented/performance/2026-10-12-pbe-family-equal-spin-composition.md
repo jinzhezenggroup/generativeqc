@@ -87,6 +87,24 @@ identity/capacity and stationary contract v2 admission remain source matched.
 None of these host gates qualifies joint-source NVIDIA execution, production
 sm90 derivatives, dynamic local traffic or complete 48/96 E+F.
 
+## Joint qualification after the shared subnormal-ratio repair
+
+The merged #2427 header changes the shared physical and signed-response tail
+arithmetic, so the earlier six failures above remain genuine old-source results.
+Normal-density arithmetic, references, tolerances, weights and default policies
+are unchanged. The joint host ABI now compares every emitted physical route
+directly against all 87 independent points, including both spin layouts,
+generic/specialized, equal-spin off/on and serial/batched operation. It retains
+all component/error rows and requires zero new-source oracle failures. The bound
+consumer and ordinary consumers share this repaired arithmetic; baseline parity
+is no longer substituted for independent tail accuracy in this new gate.
+
+Signed-response tails remain a separate oracle contract, differentiated from
+the original energy at 450/550 digits. Previous reports, byte identities and
+negative labels are not deleted or relabeled; positive joint-source results
+require a fresh source/build/CI identity. Host repair qualification does not
+close NVIDIA dynamic traffic, production sm90 derivatives or complete 48/96 E+F.
+
 ## References
 
 - Supersedes the shared-traversal composition discussion in

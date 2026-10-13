@@ -6,9 +6,10 @@
 namespace generativeqc::scf {
 
 void reject_cuda_df_preliminary_guess(const ScfOptions& options) {
-  if (options.preliminary_guess)
+  if (options.preliminary_guess &&
+      options.preliminary_guess->kind != initial_guess::PreliminaryKind::Huckel)
     throw std::invalid_argument(
-        "explicit preliminary initial guesses are unsupported by CUDA DF resident SCF");
+        "CUDA DF resident SCF supports only the native Huckel preliminary provider");
 }
 
 ResolvedFockBuild fock_strategy_for_execution(const ScfOptions& options) {

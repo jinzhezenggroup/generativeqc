@@ -87,6 +87,15 @@ generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::size_t& bytes, std::string& detail);
 
+/** Conditional SCF-cache reclamation before a complete force consumer allocates.
+ * Receipt is requested/free-before/free-after/retired device bytes; no scientific
+ * state or final-state identity changes. This does not reserve device memory. */
+generativeqc_status dft_cuda_prepare_force_memory(PreparedBatch& batch, std::size_t index,
+                                                  const dft::CudaKsFinalStateToken& expected,
+                                                  std::size_t additional_device_bytes,
+                                                  std::array<std::uint64_t, 4>& receipt,
+                                                  std::string& detail);
+
 /** CUDA stationary integral sources: hcore, overlap/Pulay, J and full-range K,
  * or separate SR-K/LR-K for range-separated models. Direct consumers validate
  * and stage resident D/W without exporting a detached frame; the retained DF
@@ -207,13 +216,15 @@ generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index
 
 std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags);
+                                                 generativeqc_batch_flags flags,
+                                                 const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods::detail
 

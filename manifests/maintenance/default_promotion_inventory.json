@@ -5,6 +5,7 @@
   "classifications": [
     "diagnostic-test-only",
     "negative-evidence",
+    "retained-opt-in",
     "needs-qualification",
     "scientific-choice",
     "guarded-promotion-candidate",
@@ -56,7 +57,8 @@
         "ks-runtime:GENERATIVEQC_KS_RESIDENT_MAX_BYTES"
       ],
       "owner_issues": [
-        1598
+        597,
+        1895
       ],
       "sources": [
         "src/scf/cuda/direct_jk_source_policy.hpp",
@@ -71,7 +73,10 @@
         "tests/python/test_rhf_resident_retry.py",
         "tests/python/test_ks_phase_source_auto_policy.py",
         "tests/native/ks_phase_values_probe.cpp",
-        "benchmarks/selective_eri_pbe0.py"
+        "benchmarks/selective_eri_pbe0.py",
+        "issue:#597",
+        "issue:#1895",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -201,7 +206,7 @@
     },
     {
       "id": "public.precision-auto",
-      "classification": "needs-qualification",
+      "classification": "negative-evidence",
       "controls": [
         "public-policy:precision-auto"
       ],
@@ -213,13 +218,16 @@
       "sources": [
         "python/generativeqc/calculator.py"
       ],
-      "rationale": "The public precision=auto mode is explicit opt-in. HF retained evidence is not sufficient for a global default, while DFT precision has independent admission gates.",
-      "revisit_condition": "Promote only a source-identified workload domain with repeatable full-endpoint benefit, executed lower-precision work, unchanged convergence gates, and strict FP64 opt-out.",
+      "rationale": "The default-promotion decision is to retain strict FP64 and require explicit precision=auto. Source-bound DFT warmup evidence includes five alternating small-water cold/warm/changed E+force pairs that lose to FP64 and four repaired larger cold single-pair screens with FP64/AUTO ratios 0.6385, 0.7430, 0.7159 and 0.8156. Returned repaired endpoints meet their recorded numerical gates and execute mixed J, but neither those screens nor historical HF evidence qualify a general default. Large screens are not repeated promotion trials and their distinct cold guesses prevent attributing every iteration difference to arithmetic. This is a scoped negative default decision, not DFT-MP-v1 completion, a claim about every mixed workload, or a new measurement on current master.",
+      "revisit_condition": "The narrower precision owners may propose a source-identified guard only after repeatable complete cold/warm/moved endpoint benefit, observed mixed and strict work, all refinement/retry costs and unchanged independent scientific gates. #1189 still requires its frozen per-method 1.20x product result; this negative policy decision does not close or weaken that target.",
       "evidence": [
         "issue:#375",
         "issue:#528",
         "issue:#1189",
-        "issue:#1598"
+        "issue:#1598",
+        "benchmarks/results/dft-mixed-warmup-20261012/README.md",
+        "benchmarks/results/dft-mixed-warmup-20261012/fix-summary.json.xz",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -314,7 +322,7 @@
         "hf-runtime:GENERATIVEQC_DIRECT_COULOMB_REACHABLE"
       ],
       "owner_issues": [
-        1598
+        597
       ],
       "sources": [
         "python/generativeqc/resources_hf.py",
@@ -324,7 +332,9 @@
       "rationale": "Off-by-default exact Cartesian component dependency pruning. Primitive/AO counts and reserved auxiliary storage stay unchanged; recurrence state counts are not FLOPs or measured speedups.",
       "revisit_condition": "Independent full/LR derivative, sanitizer, complete same-binary cold/warm/displaced and larger-size qualification with observed work must precede promotion.",
       "evidence": [
-        "note:.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md"
+        "note:.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md",
+        "issue:#597",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -334,7 +344,7 @@
         "hf-runtime:GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION"
       ],
       "owner_issues": [
-        1598
+        597
       ],
       "sources": [
         "python/generativeqc/resources_hf.py",
@@ -344,7 +354,9 @@
       "rationale": "Default-off Cartesian pair-axis convolution for generic strict-FP64 orders five and higher. Values and derivatives have separate explicit choices; primitive/AO admission and radial ownership are unchanged. Static contribution counts are not FLOPs or endpoint predictions.",
       "revisit_condition": "Independent generated value/xyz-jet and full/LR molecular oracles, sanitizer, frozen policy/fallback checks, actual work and same-binary complete cold/warm/displaced/larger endpoint evidence before any promotion.",
       "evidence": [
-        "note:.agents/notes/proposed/2026-10-04-hermite-axis-convolution.md"
+        "note:.agents/notes/proposed/2026-10-04-hermite-axis-convolution.md",
+        "issue:#597",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -379,15 +391,17 @@
         "hf-runtime:GENERATIVEQC_PSSS_RESIDENT_BRA"
       ],
       "owner_issues": [
-        1598
+        597
       ],
       "sources": [
         "python/generativeqc/resources_hf.py"
       ],
       "rationale": "These shell-class schedule overrides remain explicit experiments/ablation controls and lack one shared qualified workload guard for normal execution.",
-      "revisit_condition": "Assign a narrower owner and reclassify each selector when complete endpoint evidence either admits a guarded default or records a durable negative decision.",
+      "revisit_condition": "The Direct scheduling owner #597 retains these shell-class experiments. Reclassify each selector only when complete endpoint evidence admits a guarded default or establishes a durable negative decision; preserve explicit comparison controls and all existing fallbacks.",
       "evidence": [
-        "issue:#1598"
+        "issue:#1598",
+        "issue:#597",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -543,7 +557,7 @@
     },
     {
       "id": "tensor.schedule-opt-ins",
-      "classification": "guarded-promotion-candidate",
+      "classification": "retained-opt-in",
       "controls": [
         "tensor-schedule:views",
         "tensor-schedule:fuse",
@@ -558,12 +572,15 @@
       "sources": [
         "python/generativeqc_compiler/tensor/cuda_plan.py"
       ],
-      "rationale": "TensorSchedule exposes explicit physical execution choices. Evidence exists for selected workloads, but normal planning must consume only identity-bound qualified winners and fail closed to the deterministic baseline.",
-      "revisit_condition": "Split/reclassify a schedule dimension when its production consumers have source/device/workload-bound evidence and normal planning encodes the exact admission guard.",
+      "rationale": "Final policy: retain explicit bounded tuning and caller-selected schedules. Ordinary plan_cuda uses BASELINE_SCHEDULE and does not load historical tuning winners. Qualified tuning returns a concrete plan/artifact and complete evidence for its exact workload, source and device; that is not a global automatic dispatcher. Positive retained layout/schedule results remain valid on their original identities. Views, fusion, recomputation, donation and layout selection are not enabled globally; direct GEMM and existing compiler legality transformations retain their separately qualified defaults.",
+      "revisit_condition": "Reopen automatic winner loading only for a complete production consumer that binds source/device/workload/artifact identity, charges preparation and cache costs, and deterministically retains the baseline on every miss or stale receipt. Keep explicit tuning available independently.",
       "evidence": [
         "issue:#508",
         "issue:#509",
-        "issue:#1598"
+        "issue:#1598",
+        "docs/developer/tensor_cuda.md",
+        "benchmarks/results/tensor-resource-scheduler-508/README.md",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -610,7 +627,7 @@
     },
     {
       "id": "tensor.cuda-graph-replay",
-      "classification": "needs-qualification",
+      "classification": "retained-opt-in",
       "controls": [
         "tensor-execution:cuda-graph"
       ],
@@ -620,11 +637,14 @@
       "sources": [
         "python/generativeqc_compiler/tensor/cuda_execute.py"
       ],
-      "rationale": "Prepared TensorIR CUDA Graph replay is explicit opt-in; ordinary execution remains the safe default while retained graph resources and repeated complete-endpoint benefit are not a universal admission rule.",
-      "revisit_condition": "Promote only through a bounded capture/resource guard with repeated-endpoint benefit, identity-safe replay invalidation, and ordinary execution as the guard-miss fallback.",
+      "rationale": "Final policy: PreparedCuda keeps ordinary execution as the default; execution_mode=cuda-graph remains explicit. Historical TensorIR replay gains qualify those workloads but do not establish automatic capture admission for arbitrary prepared consumers. In particular, a global ResourcePlan has no qualified graph retained-storage candidate and therefore uses ordinary fallback. Explicit graph invalidation, identity checks, failure fallback and existing method-owned HF graphs remain unchanged; this decision concerns TensorIR automatic promotion only.",
+      "revisit_condition": "Reopen automatic capture only with a bounded graph-storage candidate in the complete resource owner, identity-safe invalidation, repeated complete-endpoint benefit including capture, and ordinary fallback on resource/capture/identity failure.",
       "evidence": [
         "issue:#507",
-        "issue:#1598"
+        "issue:#1598",
+        "docs/developer/tensor_cuda.md",
+        "tests/python/test_cuda_graph_region.py",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -695,7 +715,7 @@
         "src/scf/cuda/direct_coulomb.cpp",
         "src/scf/cuda/direct_force_class_domains.cu"
       ],
-      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range global hybrids with at least 384 AOs, based on method/operator/precision capability rather than a PBE0 label or hard-coded exact-exchange fraction. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal/D4 exclusions and optional resources remain guarded. The 256-to-22–54 recurrence evaluation reduction and complete 384/768-AO warm/moved speedups were demonstrated on PBE0 only. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
+      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range global hybrids with at least 384 AOs, based on method/operator/precision capability rather than a PBE0 label or hard-coded exact-exchange fraction. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal/D4 exclusions and optional resources remain guarded. The 256-to-22\u201354 recurrence evaluation reduction and complete 384/768-AO warm/moved speedups were demonstrated on PBE0 only. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
       "revisit_condition": "Qualify new global hybrid variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
@@ -721,7 +741,7 @@
         "src/dft/cuda_xc.cpp",
         "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
       ],
-      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32–1024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
+      "rationale": "Ordinary native KS requests compact mapped density/features and local Vxc contractions for bounded 32\u20131024-AO groups within the existing additional XC byte cap. Original point/AO maps and ordered FP64 accumulation remain unchanged. Large groups use unique global AO-row owners without floating-point atomics. The historical 96-atom PBE0 experiment improves cold/moved complete E+F; warm changes remain below the 2% noise floor, not an all-workload promotion pass. Unsupported groups, response, mixed precision, optional providers and constrained public ledgers retain bounded fallback. Explicit zero Ragged/compact controls restore small-domain admission or disable compact batching.",
       "revisit_condition": "Refine the bounded scatter and residency domain with additional devices, methods and complete endpoints rather than molecule/device whitelists. Do not infer large-system or universal profitability from the small-domain positive population; retain zero opt-out, original selected work, numerical gates and resource fallback.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-08-xc-compact-contraction-batches.md",
@@ -746,7 +766,7 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
+      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
       "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
@@ -861,13 +881,27 @@
         "python/generativeqc/initial_guess.py",
         ".agents/notes/implemented/performance/2026-10-07-minao-default.md"
       ],
-      "rationale": "Automatic MINAO is guarded to FP64 all-electron H-Ar restricted exact CPU HF/KS and CUDA KS. Existing densities take precedence, unsupported batches retain Hcore, the additional-phase numeric cap and single Hcore retry remain bounded, and explicit None rolls back. CUDA complete cold E+force evidence supports measured benefit; CPU uses the same scientifically admitted construction without claiming the CUDA speedup.",
+      "rationale": "Automatic MINAO remains the compatibility default for older libraries without native Huckel support, guarded to its original FP64 all-electron H-Ar restricted exact CPU HF/KS and CUDA KS domains. Existing densities take precedence, unsupported batches retain Hcore and explicit None rolls back. Current libraries prefer the separately registered native Huckel default.",
       "revisit_condition": "Revisit for root/state regressions, complete-endpoint regressions, or broader provider/domain qualification. Do not turn on HF/LDA preliminary solves, DF, UKS, ECP, mixed precision, or unsupported elements through this default.",
       "evidence": [
         "pr:#2068",
         "note:.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md",
         "note:.agents/notes/implemented/performance/2026-10-07-minao-default.md"
       ]
+    },
+    {
+      "id": "initial.huckel-auto",
+      "classification": "already-default",
+      "controls": ["initial-guess:huckel-auto"],
+      "owner_issues": [192, 2052],
+      "sources": [
+        "python/generativeqc/calculator.py",
+        "python/generativeqc/initial_guess.py",
+        ".agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"
+      ],
+      "rationale": "Native Modified Huckel is the user-authorized FP64 all-electron restricted H-Ar CPU/CUDA HF/KS default, including DF. Positive additive target-domain capability bits prevent old libraries from advertising unimplemented CUDA RHF/DF integrations. Exact atomic preparation does not change the target approximation. Budget limits, strict independent numerical gates, warm precedence and one ordinary Hcore retry remain mandatory. Measured benefits are workload-specific, not a universal speedup claim.",
+      "revisit_condition": "Revisit on root/state or complete-endpoint regressions. Unsupported spin, ECP, elements, precision and resource-planner domains remain unchanged; preserve explicit None rollback and independent DF numerical validation.",
+      "evidence": ["note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"]
     },
     {
       "id": "initial.basis-projection",
@@ -980,7 +1014,8 @@
         "cc-option:lambda.serial_scratch_reuse"
       ],
       "owner_issues": [
-        1598
+        933,
+        1401
       ],
       "sources": [
         "src/cc/lambda_response.hpp",
@@ -996,7 +1031,10 @@
         ".agents/notes/implemented/performance/2026-10-12-df-force-response-defaults.md",
         "benchmarks/results/df-response-defaults-20261012/README.md",
         "tests/python/test_df_lambda_serial_scratch.py",
-        "tests/python/test_df_lambda_mixed_scratch_composition.py"
+        "tests/python/test_df_lambda_mixed_scratch_composition.py",
+        "issue:#933",
+        "issue:#1401",
+        ".agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md"
       ]
     },
     {
@@ -1241,11 +1279,17 @@
       "controls": [
         "response-option:relax_orbitals"
       ],
-      "owner_issues": [1972],
-      "sources": ["src/hf/rhf_frame_response.hpp"],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp"
+      ],
       "rationale": "Orbital relaxation is required for stationary molecular forces. Explicitly disabling it exposes fixed-frame nuclear and metric weights for validation, not a faster scientifically interchangeable molecular-force method.",
       "revisit_condition": "Preserve the distinction between stationary forces and fixed-frame validation; do not promote an omitted physical response as a performance optimization.",
-      "evidence": ["tests/python/test_rhf_frame_response_cuda.py"]
+      "evidence": [
+        "tests/python/test_rhf_frame_response_cuda.py"
+      ]
     },
     {
       "id": "response.bounded-symmetric-polarization",
@@ -1253,11 +1297,17 @@
       "controls": [
         "response-option:symmetric_polarization"
       ],
-      "owner_issues": [1972],
-      "sources": ["src/hf/rhf_frame_response.hpp"],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp"
+      ],
       "rationale": "Symmetric two-pass polarization remains the bounded default fallback when the retained-shell cross derivative is disabled or unavailable. Explicitly disabling both controls preserves the legacy three-pass validation schedule.",
       "revisit_condition": "Retain independent cross-weight and complete-force parity before changing fallback polarization or its numerical reduction order.",
-      "evidence": ["tests/python/test_rhf_frame_response_cuda.py"]
+      "evidence": [
+        "tests/python/test_rhf_frame_response_cuda.py"
+      ]
     },
     {
       "id": "response.df-preconditioning",

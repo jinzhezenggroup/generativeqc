@@ -42,6 +42,19 @@ because that ID still selects the separately qualified native D4 correction
 owner. System validation, SCF option translation, backend selection and retained
 execution state remain private to the adapter.
 
+Native DFT single calculations (including the C++ SDK and CLI) are one-item
+views of the same C++ prepared batch scheduler used by Python singlepoint and
+batch calls. Preparation, initial-guess/retry policy, backend iteration,
+stationary-force assembly and D4 completion have one native orchestration
+owner. The single-calculation view forwards final-state tokens and derivative
+source reads to that owner's retained item. Repeated native single-calculation
+calls retain warm-start behavior; Python singlepoint creates a fresh cold owner.
+Scalar failures preserve their original exceptions/status and invalidate exports;
+ragged batches continue reporting individual item failures. Energy-only requests
+skip force work. This shared entry does not expand qualified force domains:
+Python compatibility consumers remain for properties the native owner does not
+admit, and native CLI/SDK calls continue rejecting those requests.
+
 Batch features beyond execution, lifecycle and resource high waters are opt-in
 interfaces in `src/methods/batch_capabilities.hpp`: warm checkpointing,
 direct-J/K queues, CUDA eigensolver and inactive-lane profiles, DF metric
@@ -171,25 +184,41 @@ not promised until a 1.0 release.
 
 ## Native CMake target boundaries
 
-The installed SDK, Python wheel, and native CLI still use the same
-`generativeqc` public library. Two CPU-only internal OBJECT targets provide
-separate incremental compile units:
+The published library is still the sole `generativeqc` shared SDK/wheel
+artifact (or static core in the monolithic CLI). The explicitly enumerated
+host C++ code is divided into internal OBJECT targets:
 
-- `generativeqc_cpu_scf_solver`: host SCF solver safeguards, eigensystem
-  validation, warm-subspace checks, reference linear algebra, and prepared
-  spectral operations.
-- `generativeqc_cpu_basis_integrals`: host basis handling, MINAO preparation,
-  and density-fitting metric operations.
+- `generativeqc_cpu_scf_solver` (7 units): CPU solver policy and eigensystem
+  utilities, including prepared spectral operations.
+- `generativeqc_cpu_basis_integrals` (3): molecule/basis metadata, MINAO,
+  and DF metric helpers.
+- `generativeqc_host_integrals` (4): CPU integral, ECP, DF and stationary component implementations.
+- `generativeqc_host_scf` (15): shared SCF numerical components and CPU convergence helpers.
+- `generativeqc_host_dft` (12): CPU/grid/XC, dispersion and nonlocal-correlation implementations.
+- `generativeqc_host_posthf_cc` (15): host MP2, CC, and response numerical components.
 
-`cmake --build <build-dir> --target generativeqc_cpu_scf_solver
-generativeqc_cpu_basis_integrals` builds just those component objects.
-CMake injects their objects into the published library rather than linking
-separate static archives, preserving symbol inclusion in shared, wheel, and
-monolithic-CLI builds. Component compilation inherits the parent library's
-include directories, definitions, and C++ flags; PIC and optional PCH are
-preserved. Code-generated sources, CUDA objects, and device-link ownership
-remain on the existing build path. Move more sources only after auditing
-generated-header dependencies and provider-specific compile requirements.
+For example, `cmake --build build --target generativeqc_host_integrals
+generativeqc_host_scf generativeqc_host_dft generativeqc_host_posthf_cc`
+builds these host components independently. All six targets contribute
+their object files directly to `generativeqc`; no additional installed DSO
+or static archives are introduced, and the ABI/CLI/wheel contract is unchanged.
+The OBJECT targets inherit the parent compilation definitions, options,
+include paths, PIC, and optional PCH. With CUDA enabled, host compilation also
+receives CUDA toolkit headers explicitly.
+
+Some host `.cpp` sources contain conditional CUDA dispatch; they remain C++
+compilation units rather than CUDA device-code owners. Native `.cu`, generated
+translation units, CUDA device-link, API/method adapters, and CUDA-heavy
+orchestrators remain on their established owner.
+
+Each extracted component declares only its required codegen target dependencies
+in `cmake/GenerativeQCSources.cmake`, verified at configuration time. This
+avoids generated-header races in parallel builds and supports selective
+component compilation. In particular, `dft/ks_final_state.cpp` and the
+MethodIR adapter are retained by the main target: CUDA split-hybrid header
+generation currently has no separately named codegen target. Extend the
+component boundary only after giving such generated headers an explicit
+owner and checking actual incremental compile timings.
 
 ## Performance engineering
 

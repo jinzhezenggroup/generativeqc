@@ -252,37 +252,43 @@ void fixtures(const char* filename, bool restricted) {
                   << " (retained negative result; not ordinary numerical PASS)\n";
       }
     }
-    const unsigned spins = restricted ? 1 : 2;
     const unsigned terms = family == 0 ? 1 : 4;
-    std::vector<double> features(terms * spins);
-    for (unsigned spin = 0; spin < spins; ++spin) {
-      features[spin * terms] = restricted ? rho[0] + rho[1] : rho[spin];
-      for (unsigned axis = 0; axis + 1 < terms; ++axis)
-        features[spin * terms + 1 + axis] =
-            restricted ? gradient[0][axis] + gradient[1][axis] : gradient[spin][axis];
-    }
-    for (const char* equal : {"0", "1"})
-      for (const char* specialized : {"0", "1"}) {
-        policy("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", equal);
-        policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", specialized);
-        for (bool batched : {false, true}) {
-          const auto result =
-              execute(family, spins, features, false, batched, restricted ? .75 : 1);
-          require(!result.error, "independent physical domain was rejected");
-          require(result.threads == (family == 0 ? 128U : 32U), "physical launch width changed");
-          near(result.totals[0], comparison[0]);
-          for (unsigned spin = 0; spin < spins; ++spin) {
-            near(result.coefficients[spin * terms],
-                 restricted ? .5 * (comparison[1] + comparison[2]) : comparison[1 + spin]);
-            for (unsigned axis = 0; axis + 1 < terms; ++axis) {
-              const double reference = restricted
-                                           ? .5 * (comparison[3 + axis] + comparison[6 + axis])
-                                           : comparison[3 + 3 * spin + axis];
-              near(result.coefficients[spin * terms + 1 + axis], reference);
+    // The shared ratio repair now qualifies ordinary tails independently.
+    // Retain the original oracle and error rows, and require every emitted
+    // physical route to satisfy it instead of substituting baseline parity.
+    if (restricted) std::copy_n(expected, 9, comparison);
+    for (unsigned spins : {1U, 2U}) {
+      if (!restricted && spins == 1) continue;
+      std::vector<double> features(terms * spins);
+      for (unsigned spin = 0; spin < spins; ++spin) {
+        features[spin * terms] = spins == 1 ? rho[0] + rho[1] : rho[spin];
+        for (unsigned axis = 0; axis + 1 < terms; ++axis)
+          features[spin * terms + 1 + axis] =
+              spins == 1 ? gradient[0][axis] + gradient[1][axis] : gradient[spin][axis];
+      }
+      for (const char* equal : {"0", "1"})
+        for (const char* specialized : {"0", "1"}) {
+          policy("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", equal);
+          policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", specialized);
+          for (bool batched : {false, true}) {
+            const auto result =
+                execute(family, spins, features, false, batched, restricted ? .75 : 1);
+            require(!result.error, "independent physical domain was rejected");
+            require(result.threads == (family == 0 ? 128U : 32U), "physical launch width changed");
+            near(result.totals[0], comparison[0]);
+            for (unsigned spin = 0; spin < spins; ++spin) {
+              near(result.coefficients[spin * terms],
+                   spins == 1 ? .5 * (comparison[1] + comparison[2]) : comparison[1 + spin]);
+              for (unsigned axis = 0; axis + 1 < terms; ++axis) {
+                const double reference = spins == 1
+                                             ? .5 * (comparison[3 + axis] + comparison[6 + axis])
+                                             : comparison[3 + 3 * spin + axis];
+                near(result.coefficients[spin * terms + 1 + axis], reference);
+              }
             }
           }
         }
-      }
+    }
     ++rows;
   }
   require(rows == (restricted ? 87U : 97U), "independent fixture corpus was shortened");
@@ -290,6 +296,8 @@ void fixtures(const char* filename, bool restricted) {
     std::cout << "bound PBE0 independent fixture PASS: " << rows
               << "; ordinary supplemental original-formula failed rows: "
               << ordinary_original_formula_failures << "\n";
+  require(ordinary_original_formula_failures == 0,
+          "shared repaired ordinary consumer failed the independent tail oracle");
 }
 std::vector<double> pack(const std::vector<double>& serial, unsigned spins, bool batched) {
   if (!batched) return serial;

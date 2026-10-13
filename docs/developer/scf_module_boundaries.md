@@ -169,9 +169,9 @@ semilocal Coulomb-only and compatible nonlocal compositions. Eligibility
 depends on the integral/precision/resource contract, not the functional name.
 Explicit `0` retains the incumbent schedule; `1` requests a source without
 bypassing scientific or resource admission; other values are rejected.
-Automatic selection includes screened through-d cold
-candidates as well as the incumbent generic f-shell domain, with at least
-64 public/128 Cartesian AOs and eight permitted iterations. Through-d
+Automatic selection includes screened through-d cold hybrid candidates with at least
+24 public/24 Cartesian AOs, as well as the incumbent generic f-shell domain
+with at least 64 public/128 Cartesian AOs. Both need eight permitted iterations. Through-d
 candidates require a positive prepared Schwarz threshold; actual compact
 census and complete capacity admission decide whether values fit. These
 eligibility gates do not predict profitability or actual iteration count.
@@ -181,8 +181,12 @@ candidate; a moved solve carrying a warm snapshot is not. Native cold initial
 guesses retain explicit owner provenance through `CudaKsSeedOrigin`; a non-null
 density pointer alone does not distinguish a production cold guess from a
 user seed. Seed normalization and the initial-guess mathematics are unchanged.
-Forced selection still requires at least 64 public AOs, four permitted
+Pure-Coulomb KS keeps its original 64-public/128-Cartesian automatic thresholds.
+Forced hybrid KS selection requires at least 24 public AOs, four permitted
 iterations, a compatible canonical source and complete capacity admission.
+Pure KS and generic RHF source policies retain their 64-AO allowance floor. Source reuse is exact
+FP64 work reduction for ordinary Calculator calls, not a separate precision
+profile or an FP32 kernel qualification.
 
 KS keeps its prepared mathematical specification, exact-exchange coefficient,
 XC, DIIS, convergence and final-state consumers. Source replay preserves the

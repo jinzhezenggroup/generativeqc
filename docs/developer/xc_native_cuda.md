@@ -187,10 +187,13 @@ PBE comparison; UKS and supported response keep their separate family policy.
 No duplicate equal-spin kernel is introduced by the PBE switch.
 
 The compiled host policy contract applies the independent 97-point SCF gate to
-ordinary consumers. The wider 87-point subnormal gate qualifies
-`evaluate_pbe0_restricted_bound` separately at the original strict tolerance.
-Ordinary consumers retain full cross-policy parity on that wider corpus and
-report their independent errors; parity does not establish independent accuracy.
+ordinary consumers. The shared subnormal-ratio repair also applies the wider
+87-point independent gate to ordinary and equal-spin physical consumers and the
+bound PBE0 entry at the original strict tolerance. Every emitted RKS/UKS,
+generic/specialized and serial/batched route must satisfy that oracle; policy
+parity alone does not establish independent accuracy. Original failing receipts
+retain their old source identity. Signed-response tail qualification separately
+uses derivatives of the original energy at 450/550 decimal digits.
 The retained report is `.artifacts/pbe-point-policy-contract-report.txt`.
 
 The point-family campaign uses schema v2 and fixes `--equal-spin` identically

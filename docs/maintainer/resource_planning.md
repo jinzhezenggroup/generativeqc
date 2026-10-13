@@ -50,6 +50,27 @@ uses scalar layout queries from the library selected by `GENERATIVEQC_LIBRARY`,
 loaded without profile selection or a device query. Neither estimator chooses a
 GPU by free memory.
 
+## CUDA KS to force handoff
+
+CUDA KS keeps its admitted optional ERI value cache throughout SCF and after
+energy-only solves. Before a stationary force consumer allocates, the live
+final-state owner compares its additional device envelope with free memory on
+its bound device. Under pressure it drains the SCF producer and retires the
+optional value lease and its graph borrowers. Resident density, stationary
+weights, XC state, the exact final-state token and the last-good warm seed stay
+valid. The force consumer still uses the prepared derivative provider.
+
+Native stationary, Python stationary and composite force owners request this
+handoff before allocation. Compatible replays exclude retained force arenas
+from the requested headroom. Python force work reports `scf_force_memory` with
+requested, free-before, free-after and reclaimed device bytes. Resource
+accounting drops the retired provider's device and host storage.
+
+This check is advisory: it does not reserve global free memory, relax an
+explicit budget, evict other calculations, or promise that arbitrary mandatory
+storage will fit. Allocation failures remain explicit. Energy-only calls do
+not release caches for a hypothetical later force request.
+
 ## Accounting contract
 
 Host limits cover pageable plus pinned bytes; the pinned cap applies in

@@ -172,7 +172,7 @@ Matrix charge_guided_lowdin_density(const core::System& system, const integrals:
       throw std::invalid_argument("charge-guided seed shell references an invalid atom");
     }
     const std::uint64_t angular = shell.angular_momentum;
-    const std::uint64_t count64 = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL
+    const std::uint64_t count64 = system.basis_representation == core::kSphericalBasis
                                       ? 2u * angular + 1u
                                       : (angular + 1u) * (angular + 2u) / 2u;
     const std::size_t count =

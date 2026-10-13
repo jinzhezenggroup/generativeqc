@@ -114,11 +114,6 @@ def test_independent_pair_default_refuses_domain_or_capacity_drift(
         ),
         (
             "src/scf/cuda/direct_jk_source_policy.hpp",
-            "direct_nbf < 128",
-            "direct_nbf < 64",
-        ),
-        (
-            "src/scf/cuda/direct_jk_source_policy.hpp",
             "maximum_iterations < 8",
             "maximum_iterations < 4",
         ),
@@ -580,6 +575,23 @@ def test_inventory_rejects_duplicate_control_registration() -> None:
     assert any("registered by both" in error for error in errors)
 
 
+def test_unqualified_research_requires_a_specific_followup_owner() -> None:
+    """A completed policy tracker must not become the sole research backlog."""
+    payload = _payload()
+    entry = next(
+        item
+        for item in payload["entries"]
+        if item["classification"] == "needs-qualification"
+    )
+    entry["owner_issues"] = [1598]
+    assert any(
+        "requires a narrower owner" in error
+        for error in validate_inventory(payload, root=ROOT, check_sources=False)
+    )
+    entry["owner_issues"] = [1598, 597]
+    assert not validate_inventory(payload, root=ROOT, check_sources=False)
+
+
 def test_inventory_rejects_missing_audited_control() -> None:
     payload = _payload()
     candidate = copy.deepcopy(payload)
@@ -692,10 +704,7 @@ def test_tensor_schedule_classifications_preserve_existing_decisions() -> None:
         assert entry["classification"] == "negative-evidence"
         assert any("generated-reduction-h100" in item for item in entry["evidence"])
     assert entries["tensor-schedule:direct_gemm"]["classification"] == "already-default"
-    assert (
-        entries["tensor-schedule:layouts"]["classification"]
-        == "guarded-promotion-candidate"
-    )
+    assert entries["tensor-schedule:layouts"]["classification"] == "retained-opt-in"
 
 
 def test_policy_taxonomy_declares_scientific_choices() -> None:

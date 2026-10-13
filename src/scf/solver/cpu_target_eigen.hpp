@@ -11,7 +11,9 @@ std::size_t cpu_target_eigen_workspace_bytes(std::size_t n);
 /** Fixed one-thread shared-scalar target solve. The 1e-14 off-diagonal cap is a
  * stopping rule, not an error certificate; original F/S residual and metric
  * checks independently gate every returned frame. No retry or provider switch.
- * Only primary CPU HF iteration/finalization opts in; Setup and exports do not. */
+ * Primary host-scalar HF iteration/finalization opts in, including independent
+ * CUDA Fock execution with a Hückel policy. Resident CUDA targets use their GPU
+ * owner; physical-reference exports retain their independent provider. */
 reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
                                         const reference::Matrix* overlap,
                                         const reference::Matrix* orthogonalizer, std::size_t n);

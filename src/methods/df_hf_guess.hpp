@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 
 namespace generativeqc::methods::detail {
 enum class DFHFGuessOutcome {

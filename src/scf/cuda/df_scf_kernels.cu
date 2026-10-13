@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "generated_scf_density_cuda.cuh"
 #include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/scf_convergence_policy.cuh"
 
@@ -159,35 +160,6 @@ __global__ void assemble_uhf_fock_kernel(std::size_t elements, const double* hco
   if (element >= elements) return;
   alpha_fock[element] = hcore[element] + coulomb[element] - alpha_exchange[element];
   beta_fock[element] = hcore[element] + coulomb[element] - beta_exchange[element];
-}
-
-__global__ void build_device_density_kernel(std::size_t batch_size, std::size_t nbf,
-                                            const std::int32_t* occupied,
-                                            const double* coefficients, double occupation_weight,
-                                            double* density) {
-  const std::size_t matrix_elements = nbf * nbf;
-  const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (element >= batch_size * matrix_elements) return;
-  const std::size_t system = element / matrix_elements;
-  const std::size_t local = element % matrix_elements;
-  const std::size_t row = local % nbf;
-  const std::size_t column = local / nbf;
-  // Production RHF/UHF use exact power-of-two occupation weights (2 or 1).
-  // In that domain the density is symmetric, so contract each AO pair once.
-  // Mirroring can only replace a lower-triangle worker when the complete
-  // flat domain is launched. A clipped launch must retain every original write.
-  const auto launched = static_cast<std::uint64_t>(gridDim.x) * blockDim.x;
-  const bool symmetric_density = (occupation_weight == 1.0 || occupation_weight == 2.0) &&
-                                 launched >= batch_size * matrix_elements;
-  if (symmetric_density && row > column) return;
-  const std::size_t offset = system * matrix_elements;
-  double value = 0.0;
-  for (std::int32_t orbital = 0; orbital < occupied[system]; ++orbital) {
-    value += occupation_weight * coefficients[offset + row + orbital * nbf] *
-             coefficients[offset + column + orbital * nbf];
-  }
-  density[element] = value;
-  if (symmetric_density && row != column) density[offset + column + row * nbf] = value;
 }
 
 __global__ void compute_device_energy_kernel(std::size_t batch_size, std::size_t nbf,
@@ -358,8 +330,10 @@ void launch_build_device_density_kernel(dim3 grid, dim3 block, std::size_t share
                                         std::size_t nbf, const std::int32_t* occupied,
                                         const double* coefficients, double occupation_weight,
                                         double* density) {
-  build_device_density_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, nbf, occupied, coefficients, occupation_weight, density);
+  // Bind DF's existing unmasked scalar-weight view to the common TensorIR
+  // density schedule; stream, launch domain and publication remain caller-owned.
+  generated::occupied_density_kernel<0><<<grid, block, shared_bytes, stream>>>(
+      batch_size, 1, nbf, occupied, coefficients, nullptr, density, occupation_weight);
 }
 void launch_compute_device_energy_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, std::size_t batch_size,

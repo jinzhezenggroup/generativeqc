@@ -29,6 +29,7 @@ def probe(
             for path in (
                 "tests/native/minao_admission_probe.cpp",
                 "src/scf/initial_guess/minao.cpp",
+                "src/scf/initial_guess/huckel.cpp",
                 "src/scf/initial_guess/density.cpp",
                 "src/scf/reference/linalg.cpp",
                 "src/scf/solver/proposal_control.cpp",

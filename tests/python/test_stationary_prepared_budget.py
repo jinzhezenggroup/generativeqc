@@ -26,11 +26,13 @@ def test_shared_tensor_artifact_is_bound_once_without_hiding_collisions() -> Non
         runtime._unique_prepared_artifacts((first, conflicting))
 
 
-@pytest.mark.parametrize("failure", ("artifact-collision", "lease-install"))
+@pytest.mark.parametrize(
+    "failure", ("artifact-collision", "lease-install", "force-memory")
+)
 def test_prepared_artifact_resources_close_when_publication_fails(
     monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:
-    """A failed publish closes both acquired owners in reverse order, without a GPU."""
+    """Refuse before allocation, or close acquired owners when publication fails."""
     owner = runtime.PreparedStationaryCudaExecution()
     monkeypatch.setattr(owner, "_request", lambda **_kwargs: object())
     monkeypatch.setattr(runtime, "_layout", lambda _basis: (None, None, (), None))
@@ -44,11 +46,25 @@ def test_prepared_artifact_resources_close_when_publication_fails(
         }
     )
     monkeypatch.setattr(
-        runtime, "compile_stationary_cuda", lambda *_a, **_kw: stationary
+        runtime,
+        "compile_stationary_cuda",
+        lambda *_a, **_kw: (
+            pytest.fail("compilation before force-memory admission")
+            if failure == "force-memory"
+            else stationary
+        ),
     )
     monkeypatch.setattr(runtime, "compile_grid", lambda *_a, **_kw: grid)
 
     events: list[str] = []
+    memory_requests: list[int] = []
+
+    def prepare_force_memory(size: int) -> dict[str, int]:
+        events.append("force-memory")
+        memory_requests.append(size)
+        if failure == "force-memory":
+            raise RuntimeError("injected force-memory refusal")
+        return {"requested_bytes": size}
 
     @contextmanager
     def resource(name: str) -> Iterator[SimpleNamespace]:
@@ -70,11 +86,17 @@ def test_prepared_artifact_resources_close_when_publication_fails(
 
     error = ValueError if failure == "artifact-collision" else RuntimeError
     message = (
-        "conflicting binaries" if failure == "artifact-collision" else "injected lease"
+        "conflicting binaries"
+        if failure == "artifact-collision"
+        else "injected lease"
+        if failure == "lease-install"
+        else "injected force-memory refusal"
     )
     with pytest.raises(error, match=message):
         owner.ensure(
-            state=SimpleNamespace(),
+            state=SimpleNamespace(
+                _source=SimpleNamespace(cuda_prepare_force_memory=prepare_force_memory)
+            ),
             basis=SimpleNamespace(identity="geometry", natom=1, nao=1),
             contract=SimpleNamespace(),
             plan=SimpleNamespace(spin_blocks=1),
@@ -97,7 +119,12 @@ def test_prepared_artifact_resources_close_when_publication_fails(
             host_bound=1,
         )
 
-    assert events == ["enter:grid", "enter:sources", "exit:sources", "exit:grid"]
+    assert memory_requests == [100]
+    assert events == ["force-memory"] + (
+        []
+        if failure == "force-memory"
+        else ["enter:grid", "enter:sources", "exit:sources", "exit:grid"]
+    )
     assert owner._stack is None
     assert owner._lease.contract is None
 
@@ -105,11 +132,18 @@ def test_prepared_artifact_resources_close_when_publication_fails(
 @pytest.mark.parametrize(
     "failed,changed", [(False, False), (False, True), (True, False)]
 )
+@pytest.mark.parametrize("device_budget", [30, 45])
 def test_retained_host_budget_is_rechecked_before_rebind(
-    monkeypatch: pytest.MonkeyPatch, failed: bool, changed: bool
+    monkeypatch: pytest.MonkeyPatch, failed: bool, changed: bool, device_budget: int
 ) -> None:
     monkeypatch.setattr(runtime, "_basis_topology_identity", lambda basis: "topology")
-    source = SimpleNamespace(backend="cuda")
+    memory_requests = []
+    source = SimpleNamespace(
+        backend="cuda",
+        cuda_prepare_force_memory=lambda size: (
+            memory_requests.append(size) or {"requested_bytes": size}
+        ),
+    )
     identity = SimpleNamespace(
         method="pbe-rks", functional_identity="xc", regularization_identity="reg"
     )
@@ -150,7 +184,7 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         "primitive_tile": 5,
         "integral_terms": 6,
         "page_work_budget": 7,
-        "max_device_bytes": 30,
+        "max_device_bytes": device_budget,
         "max_host_bytes": 99,
         "host_bound": 80,
     }
@@ -200,10 +234,21 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         owner._lease.mark_failure()
     with pytest.raises(ValueError, match="host budget"):
         owner.ensure(**kwargs)
+    assert memory_requests == []
     # An admission failure must leave an unchanged compatible owner reusable.
     if owner._lease.failed:
         owner._lease.mark_refresh()
     kwargs["basis"] = SimpleNamespace(identity="old", packed=[], natom=0, nao=0)
     kwargs["max_host_bytes"] = 100
     owner.ensure(**kwargs)
+    assert owner._bound_basis_identity == "old"
+    assert memory_requests == [device_budget - 30]
+    assert owner.force_memory == {"requested_bytes": device_budget - 30}
+
+    def refuse_force_memory(_size: int) -> dict[str, int]:
+        raise RuntimeError("injected replay memory refusal")
+
+    source.cuda_prepare_force_memory = refuse_force_memory
+    with pytest.raises(RuntimeError, match="injected replay memory refusal"):
+        owner.ensure(**kwargs)
     assert owner._bound_basis_identity == "old"

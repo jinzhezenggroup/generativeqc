@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -89,12 +90,7 @@ def test_prepared_admission_retains_graph_and_capacity(
     )
 
     production = (ROOT / "src/methods/dft_method.cpp").read_text()
-    begin = production.index(
-        "const dft::CudaStationaryBinding* native_cuda_stationary_binding("
-    )
-    admission = production[
-        begin : production.index("\nclass KsPreparedCalculation", begin)
-    ]
+    admission = cpp_function_definition(production, "native_cuda_stationary_binding")
     source = tmp_path / "graph_admission.cpp"
     source.write_text(
         '#include "scf/types.hpp"\n'

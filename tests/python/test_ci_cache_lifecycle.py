@@ -321,7 +321,11 @@ def test_cuda_complete_snapshots_follow_both_variants_and_smoke() -> None:
         assert "ccache-cuda-v2-12.9-sm120-" in restore
         assert "ccache-native-cli-v1-cuda12.9-sm120-" in restore
     assert not _compiler_saves("cuda-compile")
-    assert "needs.cuda-compile.outputs.publish_cache_snapshot == 'true'" in job
+    assert "env.PUBLISH_CUDA_CACHE_SNAPSHOT == 'true'" in job
+    assert (
+        "PUBLISH_CUDA_CACHE_SNAPSHOT: ${{ needs.cuda-compile.outputs.publish_cache_snapshot }}"
+        in job
+    )
 
 
 @pytest.mark.parametrize("event", ["push", "schedule", "workflow_dispatch"])
