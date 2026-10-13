@@ -377,14 +377,6 @@
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
     },
     {
-      "path": "benchmarks/results/df-one-step-warm-20260926/references.json",
-      "family": "df-one-step-warm-20260926",
-      "bytes": 229005,
-      "sha256": "6342a524e0658e1a59394ccd085d5c418bdd0655937b44a5c75f0163e8702814",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All direct/DF independent original/moved force arrays and 144 reference timing/work observations."
-    },
-    {
       "path": "benchmarks/results/df-one-step-warm-20260926/work.json",
       "family": "df-one-step-warm-20260926",
       "bytes": 202052,

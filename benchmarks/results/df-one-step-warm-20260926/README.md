@@ -40,7 +40,7 @@ and use separate owners with their own converged frozen seeds.
 - RTX 5090, 32,607 MiB, driver 580.95.05, CUDA 12.9.1; eight OpenMP/OpenBLAS/MKL
   threads. Neutral RHF, spherical def2-SVP, nested water32mer prefixes with
   3–96 atoms / 24–768 AOs. DF uses cc-pVDZ-JKFIT. Exact coordinates and basis
-  identities are retained in [references.json](references.json).
+  identities are retained in [references.json.gz](references.json.gz).
 - Native energy tolerance `1e-12 Eh`, density tolerance `1e-10`, screening
   `1e-12`, maximum 100 iterations. Both native methods share finite-value FP64
   energy comparison with `16*epsilon*max(1,|E|,|previous_E|)`, density-step RMS,
@@ -86,9 +86,20 @@ and reference build-count sets, common native identity, and hashes of three file
 
 - [samples.json](samples.json): all native scalar observations in named columns;
   reconstruct each row with `dict(zip(table["columns"], row, strict=True))`.
-- [references.json](references.json): all independent original/moved force arrays,
+- [references.json.gz](references.json.gz): all independent original/moved force arrays,
   protocols, identities, raw hashes and reference timing/work samples.
 - [work.json](work.json): all grouped DF diagnostic counters, including controls.
+
+The independent reference collection is stored as lossless gzip. Its stored
+size/hash and decoded size/hash are recorded in the matching `summary.json` part.
+Decoding restores all 229,005 original bytes (SHA-256
+`6342a524e0658e1a59394ccd085d5c418bdd0655937b44a5c75f0163e8702814`)
+from the published tree at `fca37ebf7543265f62c4556e6fbf712b33b4edc1`,
+including every reference array, timing/work observation, protocol and identity.
+Use `tools.generativeqc_validation.record.load_json` with the declared part path,
+or `gzip.open(..., "rt")` with `json.load`, to read it offline. This storage change
+does not rerun or requalify the measurements; the renderer still writes ordinary
+`references.json` for fresh runs.
 
 The shared Release sm_120 HF-AOT library SHA-256 is
 `7ed5127ad22e919dbdc3e055ec8b2efd0c0725c4ebd620e80d546b8065483c3e`.
