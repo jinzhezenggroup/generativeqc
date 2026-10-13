@@ -422,6 +422,41 @@ int main() {
       {768,3712,96,1,0,true},{24ULL<<30,32ULL<<30,true},4ULL<<30);
   if (resolve_method_owned_df_resident_budget(
           j_only_explicit,768,3712,0,100ULL<<20,true) != j_only_explicit) return 20;
+  // Rank-zero eligibility cannot bypass the physical-source, singleton,
+  // explicit-layout, capacity, or live-resource boundaries.
+  const auto nonphysical = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,0,
+      j_only_split.value_bytes,100ULL<<20,false,0,true);
+  if (nonphysical.value_storage.pairs != DfPairStorage::Dense) return 21;
+  // Give a batch enough capacity for packed values, so exclusion cannot pass
+  // merely because packing would have failed its memory admission anyway.
+  const auto batch_packed = plan_packed_density_fitting_tiles(
+      2,768,3712,0,0,0,0,false);
+  const auto batch_excluded = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,2,768,3712,768,0,
+      batch_packed.peak_workspace_bytes,0,true,0,true);
+  if (batch_excluded.value_storage.pairs != DfPairStorage::Dense ||
+      batch_excluded.stores_full_three_center) return 26;
+  const auto j_dense = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Dense,1,768,3712,768,0,
+      j_only_split.value_bytes,100ULL<<20,true,0,true);
+  if (j_dense.value_storage.pairs != DfPairStorage::Dense) return 22;
+  const auto j_small = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,96,96,96,0,1ULL<<30,0,true,0,true);
+  if (!j_small.stores_full_three_center ||
+      j_small.value_storage.pairs != DfPairStorage::Dense) return 23;
+  const auto j_bounded = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,0,4ULL<<30,0,true,0,true);
+  if (j_bounded.stores_full_three_center ||
+      j_bounded.value_storage.pairs != DfPairStorage::Dense ||
+      j_bounded.peak_workspace_bytes > (4ULL<<30)) return 24;
+  for (const auto unchanged : {
+      resolve_df_budget({768,3712,96,1,0,true}, {}, 0),
+      resolve_df_budget({768,3712,96,1,0,true}, {8ULL<<30,32ULL<<30,true}, 0),
+      resolve_df_budget({768,3712,96,1,0,false}, {24ULL<<30,32ULL<<30,true}, 0)}) {
+    if (resolve_method_owned_df_resident_budget(
+            unchanged,768,3712,0,100ULL<<20,true) != unchanged) return 25;
+  }
   const auto force_ready_split = resolve_method_owned_df_resident_budget(
       resolve_df_budget({768,3712,96,1,0,true},{30ULL<<30,32ULL<<30,true},0),
       768,3712,160,100ULL<<20);

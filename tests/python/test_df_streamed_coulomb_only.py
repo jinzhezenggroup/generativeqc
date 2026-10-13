@@ -1,17 +1,12 @@
 """J-only DF response is linear in streamed panels and independent of exact K.
 
 The analytic identity is checked with nonsymmetric densities and a full-rank
-metric. The source-level check prevents accidental reintroduction of the
-quadratic P/Q traversal into the semilocal CUDA fallback; a separate native
-test exercises the real GPU producer when a CUDA device is available.
+metric. Executable host-shim tests cover the production response adapter and source
+work; the native CUDA test exercises the real producer when a device is available.
 """
-
-from pathlib import Path
 
 import numpy as np
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("tile", [1, 2, 3, 5])
@@ -43,7 +38,7 @@ def test_full_rank_j_only_panel_adjoint(tile: int) -> None:
     bar_raw = weights.sum(axis=0)
     bar_metric = -0.5 * sum(
         coefficient * np.outer(potential, potential)
-        for coefficient, potential in zip(coefficients, potentials)
+        for coefficient, potential in zip(coefficients, potentials, strict=True)
     )
 
     def energy(values: np.ndarray, m: np.ndarray) -> float:
@@ -71,40 +66,3 @@ def test_full_rank_j_only_panel_adjoint(tile: int) -> None:
             )
             expected = bar_metric[p, q] * (2 if p != q else 1)
             assert numeric == pytest.approx(expected, abs=2e-8)
-
-
-def test_semilocal_ks_selects_packed_before_streaming() -> None:
-    source = (ROOT / "src/scf/fock_prepared.cpp").read_text()
-    begin = source.index("const bool coulomb_only_packing =")
-    end = source.index("const bool needs_occupied_capacity", begin)
-    admission = source[begin:end]
-    assert "FockSpin::Restricted" in admission
-    assert "!strategy.spec.exchange.present" in admission
-    assert "reserved_rank != 0 || coulomb_only_packing" in admission
-    assert "plan_requested_density_fitting_tiles(" in admission
-
-
-def test_streamed_j_only_does_not_revisit_auxiliary_panel_pairs() -> None:
-    source = (ROOT / "src/scf/cuda/df_response_weights.cu").read_text()
-    begin = source.index("static cudaError_t contract_streamed_coulomb_response(")
-    end = source.index("static cudaError_t contract_full_rank_panels(", begin)
-    specialized = source[begin:end]
-    assert specialized.count("read_fitted(begin, count, fitted_panel);") == 1
-    assert "response_streamed_coulomb_fitted_panels" in specialized
-    assert "coulomb_metric_kernel" in specialized
-    assert "exchange_weights_kernel" not in specialized
-    dispatch = source.index("return contract_streamed_coulomb_response(")
-    assert dispatch < source.index("return contract_full_rank_panels(", dispatch)
-
-
-def test_rank_deficient_j_only_avoids_exchange_source_rereads() -> None:
-    """Keep spectral VJP but skip the exchange-only P/Q source traversal."""
-    source = (ROOT / "src/scf/cuda/df_response_weights.cu").read_text()
-    fallback = source[source.index("  const bool has_exchange = std::any_of(") :]
-    assert "if (has_exchange) {" in fallback
-    assert "if (!has_exchange) {" in fallback
-    first_exit = fallback.index("if (!has_exchange) {")
-    assert fallback.index("continue;", first_exit) < fallback.index(
-        "for (std::size_t q = 0; q < a; ++q)", first_exit
-    )
-    assert "launch_symmetric_pseudoinverse_vjp(" in fallback
