@@ -26,6 +26,9 @@ key; return the canonical executable explicitly for the object handoff.
 Actual `-H` observations guard Clang make output's slash normalization and
 unquoted tabs. Reject unsupported path spellings even with real decoys instead
 of weakening the preserved GCC parser.
+Require exact equality between Clang's make header set and opened-header trace,
+not merely trace containment. Successful but unopened `__has_include` probes are
+explicitly non-reusable because their original path cannot be witnessed by `-H`.
 
 ## Rejected alternatives
 
@@ -103,6 +106,34 @@ independent experiment directory
 A one-off old/new GCC differential additionally preserves identical recipe,
 closure payload/key and diagnostics for three ordered flag combinations; this
 is evidence, not a permanent generated-body/hash CI lock.
+
+### Superseding unopened-probe guard
+
+Further audit identified that a successful `__has_include` probe can appear in
+Clang `-M` without appearing in `-H`. Trace containment alone would not reject a
+tab-split or slash-normalized unopened probe whose decoys exist. Exact set equality
+now rejects it; this is a deliberate Clang-only support-domain restriction, not
+a claim that the preceding snapshot produced incorrect object mathematics.
+
+Source-matched real Linux requalification of this guard: **149 passed,
+22 subtests passed, no SKIP**, including successful real tab/backslash probes
+with real split/normalized decoys. Both stored-object Decimal oracles and all
+compiler/native API/docstring/Ruff gates pass again. The ordinary-cache probe on
+this same snapshot again records one replay hit and one refreshed-salt miss.
+
+The newer snapshot uses committed `a993f85cfff22b5ebf55d9d77d17ba269482a04b`, LF
+archive SHA-256 `6188aeb61fcfc9ad949b3253c11000ea12f93054cd11a4de65440dc6afa9dea6`,
+plus patch `392b270f6c1dc12b8cb26a928f2d7793e63e9524d6a01bbe6b589f19ac5fe813`.
+Collector/test SHA-256 values are
+`98f1a3cf564efa7ed7664e7982b8c461d13e26133a38769a2cad0610286ffaa0` /
+`0477d39b24c580462558766173758e3a56092beaee9e7609f5da29c76d2ff0a8`.
+Cacheable ordinary object SHA-256:
+`59986b11920e73472c03c0ee28b3734dcdfcb4ef360b2d2feea2bc17e2d5ed7e`;
+recipe/closure/counter receipt SHA-256:
+`1582f7b7a6ba8bc597c689dbd7bdfdb0a34d0069bcd5fcb4ab69844c62f2c7ce`.
+The expanded retained archive is `.cache/pr2444-probe-evidence.tar.gz`, SHA-256
+`ed872e179a18866f9bc68fd0eb43c0c26632ddfa6a7d9f9601ea983fe71a21a5`.
+It includes the preceding observations and receipts, not only the final PASS.
 
 ## Consequences and revisit conditions
 

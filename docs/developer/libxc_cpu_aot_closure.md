@@ -38,6 +38,12 @@ opened-header paths with `-E -H` and replays that trace. Backslashes, control
 characters, terminal spaces and mismatched trace paths are unsupported even if
 normalized or split decoy files exist. This does not relax the GCC grammar.
 Spaces inside paths, `#` and `$` retain real compiler/object dependency tests.
+The traced set must exactly match the depfile headers. A successful
+`__has_include` probe that never opens/includes its header appears only in Clang
+`-M`; it is deliberately non-reusable (`clang-header-trace-mismatch`). This
+also rejects ambiguous unopened probes with real normalized/split decoys.
+Ordinary include-consumed paths remain supported. Completeness is still the
+caller assertion; the trace is an identity cross-check, not a snapshot producer.
 
 ## Completeness boundary
 

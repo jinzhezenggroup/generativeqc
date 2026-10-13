@@ -454,22 +454,21 @@ def test_real_clang_poison_invalidation_and_failure(
     assert poisoned.closure.cache_key == before.closure.cache_key
     (tmp_path / "optional.h").write_text("/* never included */\n", encoding="utf-8")
     changed = collect()
-    assert not changed.reasons and changed.closure is not None
-    # Clang records successful __has_include probes in its -M dependencies.
-    assert {header.identity for header in changed.headers} == {
-        str(tmp_path / "optional.h")
-    }
-    assert changed.closure.cache_key != before.closure.cache_key
+    # Successful but unopened probes have no actual -H file identity witness;
+    # make normalization could otherwise silently select an existing decoy.
+    assert changed.reasons == ("clang-header-trace-mismatch",)
+    assert changed.closure is not None and changed.closure.cache_key is None
+    (tmp_path / "optional.h").unlink()
     reordered = collect(flags=("-O2", "-std=c99", "-fPIC"))
     assert (
         reordered.closure is not None
-        and reordered.closure.cache_key != changed.closure.cache_key
+        and reordered.closure.cache_key != before.closure.cache_key
     )
     source.write_text(text + "/* changed source */\n", encoding="utf-8")
     revised = collect()
     assert (
         revised.closure is not None
-        and revised.closure.cache_key != changed.closure.cache_key
+        and revised.closure.cache_key != before.closure.cache_key
     )
     timed = collect(timeout=0.000001)
     assert timed.reasons == ("collection-timed-out",)
@@ -514,4 +513,46 @@ def test_real_clang_entry_selection_drift(
         toolchain=manifest,
     )
     assert changed and result.reasons == ("compiler-selection-changed",)
+    assert result.closure is not None and result.closure.cache_key is None
+
+
+@pytest.mark.parametrize("kind", ["tab", "backslash"])
+def test_real_clang_unopened_probe_with_existing_decoys(
+    tmp_path: Path, real_clang: tuple, kind: str
+) -> None:
+    compiler, manifest = real_clang
+    if kind == "tab":
+        # Both tokens produced by a naive whitespace split are real absolute
+        # files, but neither identifies the successful probe's actual file.
+        decoy = tmp_path / "second.h"
+        name = "first\t" + str(decoy)
+        (tmp_path / "first").write_text("/* split decoy */\n", encoding="utf-8")
+        decoy.write_text("/* second split decoy */\n", encoding="utf-8")
+    else:
+        name = "first\\second.h"
+        decoy = tmp_path / "first" / "second.h"
+        decoy.parent.mkdir()
+        decoy.write_text("/* slash-normalized decoy */\n", encoding="utf-8")
+    actual = tmp_path / name
+    actual.parent.mkdir(parents=True, exist_ok=True)
+    actual.write_text("/* successful but unopened probe */\n", encoding="utf-8")
+    text = f'#if __has_include("{name}")\nint point(void) {{ return 2; }}\n#else\nint point(void) {{ return 1; }}\n#endif\n'
+    source = tmp_path / "point.c"
+    source.write_text(text, encoding="utf-8")
+    preprocessed = run_compiler(
+        [compiler, "--no-default-config", "-E", str(source)],
+        30,
+        label="real Clang unopened probe",
+        environment=collector.CPU_ENVIRONMENT,
+    )
+    assert preprocessed.returncode == 0 and not preprocessed.timed_out
+    assert "return 2;" in preprocessed.stdout
+    result = collector.collect_cpu_closure(
+        variant(text),
+        source,
+        compiler=compiler,
+        compiler_family="clang",
+        toolchain=manifest,
+    )
+    assert result.reasons
     assert result.closure is not None and result.closure.cache_key is None

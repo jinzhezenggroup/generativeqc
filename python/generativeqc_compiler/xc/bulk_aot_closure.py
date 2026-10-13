@@ -460,7 +460,7 @@ def collect_cpu_closure(
 
         names = scan()
         traced = clang_headers() if is_clang else set()
-        if is_clang and not traced <= set(names):
+        if is_clang and traced != set(names) - {str(source)}:
             return failure("clang-header-trace-mismatch")
         headers = tuple(
             CacheDependency("header", name, hash_input(Path(name)))
