@@ -1513,15 +1513,13 @@ jobs:
 
   native-cli-artifact:
     name: Native C++ CUDA CLI package (sm_120)
-    # Build and package affected PR/merge-group native changes before merge.
-    # Linker/package changes use release NVCC; other source changes use fast
-    # NVCC but still link and package a genuine executable.
+    # Master/tag/manual builds retain ordered CUDA qualification. Master also
+    # consumes its trusted-cache publication decision. PR/queue builds below
+    # share these package steps without waiting for the independent CUDA check.
     needs: cuda-compile
     if: >-
       needs.cuda-compile.result == 'success' &&
-      (github.event_name == 'pull_request' ||
-       github.event_name == 'merge_group' ||
-       (github.event_name == 'push' &&
+      ((github.event_name == 'push' &&
         (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
@@ -1534,7 +1532,8 @@ jobs:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
       CCACHE_MAXSIZE: 5G
-    steps:
+      PUBLISH_CUDA_CACHE_SNAPSHOT: ${{ needs.cuda-compile.outputs.publish_cache_snapshot }}
+    steps: &native_cli_package_steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -1786,7 +1785,7 @@ jobs:
       # An artifact mirrors the single master cache for ephemeral merge-group
       # refs. It does not represent an independently built compiler cache.
       - name: Publish trusted master CUDA ccache snapshot
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.cuda-compile.outputs.publish_cache_snapshot == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH_CUDA_CACHE_SNAPSHOT == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -1859,6 +1858,26 @@ jobs:
           retention-days: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 7 || 30 }}
           overwrite: true
 
+  native-cli-qualification:
+    name: Qualify native C++ CUDA CLI package (sm_120)
+    # Both required checks may begin after liveness. The full queued-range tier
+    # selector and every build/link/package check are shared with the producer.
+    needs: merge_queue_liveness
+    if: >-
+      needs.merge_queue_liveness.outputs.active != 'false' &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 210
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CUDACXX: /usr/local/cuda-12.9/bin/nvcc
+      LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
+      CCACHE_MAXSIZE: 5G
+      PUBLISH_CUDA_CACHE_SNAPSHOT: 'false'
+    steps: *native_cli_package_steps
+
   native-cli-release:
     name: Publish versioned native CLI to GitHub Releases
     needs: native-cli-artifact
@@ -1916,7 +1935,7 @@ jobs:
   pass:
     name: Pass CI checks
     timeout-minutes: 5
-    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, cuda-direct-aot, python, native-cli-artifact]
+    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, cuda-direct-aot, python, native-cli-artifact, native-cli-qualification]
     runs-on: ubuntu-slim
     if: ${{ !cancelled() && github.event_name != 'push' }}
     steps:
@@ -1927,7 +1946,7 @@ jobs:
         if: needs.merge_queue_liveness.outputs.active != 'false'
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
-          # Scheduled correctness runs intentionally do not publish CLI artifacts.
-          # Selected PR/queue/manual builds must never pass with a skipped job.
-          allowed-skips: ${{ github.event_name == 'schedule' && 'native-cli-artifact' || '' }}
+          # Only the unused event branch may skip. Scheduled correctness runs
+          # intentionally skip both; a selected PR/queue/manual build must pass.
+          allowed-skips: ${{ github.event_name == 'schedule' && 'native-cli-artifact,native-cli-qualification' || (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'native-cli-artifact' || 'native-cli-qualification' }}
           jobs: ${{ toJSON(needs) }}
