@@ -166,11 +166,11 @@ void enqueue_vv10_cache_work_cuda(cudaStream_t stream, const int* mismatch,
  * This is bitwise equality, not a tolerance or fingerprint. No allocation or
  * synchronization occurs; mismatch is a caller-owned, initially zero flag.
  */
-void enqueue_vv10_force_key_compare_cuda(
-    cudaStream_t stream, std::size_t point_count, Vv10Parameters parameters,
-    const double* weights, const double* density, const double* gradient,
-    const double* retained_workspace, const int* domain_error, const int* pair_error,
-    int* mismatch);
+void enqueue_vv10_force_key_compare_cuda(cudaStream_t stream, std::size_t point_count,
+                                         Vv10Parameters parameters, const double* weights,
+                                         const double* density, const double* gradient,
+                                         const double* retained_workspace, const int* domain_error,
+                                         const int* pair_error, int* mismatch);
 
 /** Preserve rho and validity in dead energy/index scratch after seed packing. */
 void enqueue_vv10_store_force_key_cuda(cudaStream_t stream, std::size_t point_count,

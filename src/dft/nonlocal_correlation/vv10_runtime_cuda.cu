@@ -42,10 +42,10 @@ __global__ void cache_work_kernel(const int* mismatch, std::uint64_t* counters) 
     ++counters[2];
 }
 
-__global__ void force_key_compare_kernel(
-    std::size_t n, double b, double c, const double* weights, const double* density,
-    const double* gradient, const double* retained, const int* domain_error,
-    const int* pair_error, int* mismatch) {
+__global__ void force_key_compare_kernel(std::size_t n, double b, double c, const double* weights,
+                                         const double* density, const double* gradient,
+                                         const double* retained, const int* domain_error,
+                                         const int* pair_error, int* mismatch) {
   const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (i >= n) return;
   const double rho = density[i];
@@ -57,8 +57,9 @@ __global__ void force_key_compare_kernel(
   // These are all density-dependent inputs of feature/geometry pair closures
   // and their row finalizers. Gradient direction is consumed independently by
   // the new AO geometry pass and does not enter these cached scalar seeds.
-  const double values[] = {local.omega, local.kappa, local.domega_drho,
-                           local.domega_dsigma, local.dkappa_drho, weighted, rho};
+  const double values[] = {
+      local.omega, local.kappa, local.domega_drho, local.domega_dsigma, local.dkappa_drho,
+      weighted,    rho};
   const auto prior_invalid = reinterpret_cast<const std::uint64_t*>(retained + 7 * n);
   bool same = !*domain_error && !*pair_error && *prior_invalid == 0;
   for (unsigned k = 0; k < 7; ++k)
@@ -269,7 +270,8 @@ __global__ void pair_kernel_ordered(
   // Both launch variants read the same stream-ordered device predicate. Exactly
   // one traverses pairs, with no host readback or change to reduction order.
   if (bounds_rejected != nullptr &&
-      (*bounds_rejected == 2 || ((*bounds_rejected == 0) != Prevalidated))) return;
+      (*bounds_rejected == 2 || ((*bounds_rejected == 0) != Prevalidated)))
+    return;
   const auto lane = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= row_count) return;
   const auto i = row_offset + lane;
@@ -595,13 +597,13 @@ void enqueue_vv10_store_force_key_cuda(cudaStream_t stream, std::size_t point_co
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
-void enqueue_vv10_force_key_compare_cuda(
-    cudaStream_t stream, std::size_t point_count, Vv10Parameters parameters,
-    const double* weights, const double* density, const double* gradient,
-    const double* retained_workspace, const int* domain_error, const int* pair_error,
-    int* mismatch) {
-  if (parameters.variant != Vv10Variant::vv10 || !point_count || !stream || !weights ||
-      !density || !gradient || !retained_workspace || !domain_error || !pair_error || !mismatch)
+void enqueue_vv10_force_key_compare_cuda(cudaStream_t stream, std::size_t point_count,
+                                         Vv10Parameters parameters, const double* weights,
+                                         const double* density, const double* gradient,
+                                         const double* retained_workspace, const int* domain_error,
+                                         const int* pair_error, int* mismatch) {
+  if (parameters.variant != Vv10Variant::vv10 || !point_count || !stream || !weights || !density ||
+      !gradient || !retained_workspace || !domain_error || !pair_error || !mismatch)
     throw std::invalid_argument("invalid exact VV10 force key comparison");
   runtime::cuda_resource_check(cudaMemsetAsync(mismatch, 0, sizeof(int), stream));
   force_key_compare_kernel<<<launch_blocks(point_count, 128), 128, 0, stream>>>(

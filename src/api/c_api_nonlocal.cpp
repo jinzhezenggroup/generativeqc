@@ -302,7 +302,7 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_c
         cudaMemcpyAsync(result->weights, weights, weight_count * sizeof(double),
                         cudaMemcpyHostToDevice, setup.get()));
     generativeqc::runtime::cuda_resource_check(
-          cudaMemsetAsync(result->errors.get(), 0, 10 * sizeof(int), setup.get()));
+        cudaMemsetAsync(result->errors.get(), 0, 10 * sizeof(int), setup.get()));
     setup.synchronize();
     *output = result.release();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -415,10 +415,10 @@ generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_
     const auto* selected = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
     const std::string schedule = selected ? selected : "";
     const auto* reuse = std::getenv("GENERATIVEQC_VV10_COMPONENT_REUSE");
-    const bool cache_admitted = reuse && std::string_view(reuse) == "1" &&
-                                owner->snapshot_seeded &&
-                                owner->parameters.variant == generativeqc::dft::nlc::Vv10Variant::vv10 &&
-                                owner->parameters.coefficient <= 0x1p32;
+    const bool cache_admitted =
+        reuse && std::string_view(reuse) == "1" && owner->snapshot_seeded &&
+        owner->parameters.variant == generativeqc::dft::nlc::Vv10Variant::vv10 &&
+        owner->parameters.coefficient <= 0x1p32;
     const int* cache_mismatch = nullptr;
     if (cache_admitted && owner->pair_cache_ready && schedule == owner->pair_cache_schedule) {
       generativeqc::dft::nlc::enqueue_vv10_force_key_compare_cuda(
@@ -433,9 +433,8 @@ generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_
     generativeqc::dft::nlc::enqueue_vv10_cuda_device(
         owner->layout, owner->parameters, owner->device, owner->stream, owner->coordinates,
         owner->effective_weights, owner->effective_density, owner->effective_gradient,
-        owner->workspace, owner->layout.workspace_bytes,
-        owner->workspace + 6 * owner->point_count, owner->seeds,
-        owner->seeds + owner->point_count, owner->point_derivative,
+        owner->workspace, owner->layout.workspace_bytes, owner->workspace + 6 * owner->point_count,
+        owner->seeds, owner->seeds + owner->point_count, owner->point_derivative,
         owner->seeds + 5 * owner->point_count, errors + 2, cache_mismatch);
     generativeqc::dft::nlc::enqueue_vv10_pack_force_seeds_cuda(
         owner->stream, owner->point_count, owner->effective_weights, owner->point_derivative,
@@ -446,8 +445,8 @@ generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_
       // panel without growing the arena. The six local-scale panels remain
       // intact because scalar energy was placed in energy_terms, not omega[0].
       generativeqc::dft::nlc::enqueue_vv10_store_force_key_cuda(
-          owner->stream, owner->point_count, owner->effective_density, owner->workspace,
-          errors, errors + 1, errors + 2);
+          owner->stream, owner->point_count, owner->effective_density, owner->workspace, errors,
+          errors + 1, errors + 2);
       owner->pair_cache_schedule = schedule;
       owner->pair_cache_ready = true;
     }
@@ -488,9 +487,15 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_m
   if (!owner || !values || (count != 6 && count != 9)) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(owner->context->mutex);
   const std::array<std::uint64_t, 9> metrics{
-      owner->device_bytes, owner->point_count,        owner->next_offset,
-      owner->generation,   owner->executed ? 1u : 0u, owner->stream ? 1u : 0u,
-      0, 0, 0,
+      owner->device_bytes,
+      owner->point_count,
+      owner->next_offset,
+      owner->generation,
+      owner->executed ? 1u : 0u,
+      owner->stream ? 1u : 0u,
+      0,
+      0,
+      0,
   };
   std::copy_n(metrics.begin(), count, values);
   if (count == 9) {
