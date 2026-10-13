@@ -40,8 +40,9 @@ def steps(name: str, workflow: str | None = None) -> dict[str, str]:
 
 
 def condition(body: str, indent: int = 8) -> str:
-    match = re.search(r"^" + " " * indent + r"if: (.+)$", body, re.MULTILINE)
-    return match[1] if match else "success()"
+    matches = re.findall(r"^" + " " * indent + r"if: (.+)$", body, re.MULTILINE)
+    assert len(matches) <= 1, "duplicate workflow condition"
+    return matches[0] if matches else "success()"
 
 
 def evaluate(node: ast.AST) -> str | bool:
@@ -95,6 +96,41 @@ def selected(body: str, context: dict[str, str | bool]) -> bool:
     ) and not context.get("success()", True):
         return False
     return bool(expression(value, context))
+
+
+def assert_full_coverage_step(body: str) -> None:
+    """A scientific gate remains mandatory for every non-prose/fallback case."""
+    for event in (
+        "pull_request",
+        "merge_group",
+        "push",
+        "schedule",
+        "workflow_dispatch",
+        "unknown",
+    ):
+        for outcome, scope in (
+            ("success", "full"),
+            ("success", ""),
+            ("success", "unknown"),
+            ("failure", "prose"),
+            ("", "prose"),
+        ):
+            assert selected(
+                body,
+                {
+                    "github.event_name": event,
+                    "steps.prose_scope.outcome": outcome,
+                    "steps.prose_scope.outputs.scope": scope,
+                },
+            )
+    assert not selected(
+        body,
+        {
+            "github.event_name": "pull_request",
+            "steps.prose_scope.outcome": "success",
+            "steps.prose_scope.outputs.scope": "prose",
+        },
+    )
 
 
 def instances() -> list[tuple[str, dict[str, str | bool]]]:
