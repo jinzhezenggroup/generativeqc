@@ -208,13 +208,14 @@ Both, and the separately labeled initializer trials, are retained in
 The current default initializer populations use `22ff59fd3`, library SHA256
 `242be46485a289310f0034feb5ff3f8532f8993e8f22961194f15c7f703becb3`, retained on
 [the frozen initializer source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-default-initializer-source-20261014).
-That source passes 28 receipt/budget/replay and independent molecular E/F checks;
-22 receipt/budget/replay cases also pass both memcheck and synccheck with zero
-errors. These checks use finite n4 Slurm allocations and the default initializer
-policy. A separate intrusive n1 short-iteration trace counts six actual Fock
-evaluations across a failed-seed retry, including four VV10 sweeps averaging
-81.964 s; the configured three-iteration limit is per attempt. Its 470.728 s
-execution is diagnostic only and never a benchmark sample.
+That source passes 28 receipt/budget/replay and independent molecular E/F
+checks; 22 receipt/budget/replay cases also pass both memcheck and synccheck
+with zero errors. These checks use finite n4 Slurm allocations and cover the
+default policy and explicit alternate/failure paths. A separate intrusive n1
+short-iteration trace counts six actual Fock evaluations across a failed-seed
+retry, including four VV10 sweeps averaging 81.964 s; the configured
+three-iteration limit is per attempt. Its 470.728 s execution is diagnostic
+only and never a benchmark sample.
 The PR branches can differ from these assembled snapshots; only the recorded
 snapshot identities identify a measured population.
 Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.

@@ -494,12 +494,12 @@
       "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
     },
     {
-      "bytes": 145996,
+      "bytes": 118468,
       "classification": "required-compact-accepted-evidence",
       "family": "native-memory-arena-20261011",
       "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
       "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
-      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
+      "sha256": "01dedadb0975a4359cd2c77666dc7110af82835876c39578a4adf0013fc023cd"
     },
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
@@ -542,12 +542,12 @@
       "sha256": "15ab5b8c856e6179dcba32cdca99c780e0325b41ce9123d86d8c585a782b4293"
     },
     {
-      "bytes": 401876,
+      "bytes": 338108,
       "classification": "required-compact-accepted-evidence",
       "family": "pbe0-spd-spatial-reuse-20261011",
       "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/raw-receipts.json.xz",
       "role": "decision-or-audit-record",
-      "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
+      "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
@@ -585,8 +585,8 @@
       "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 426620,
-      "sha256": "99a006395a354c34113336fc77d89e145bb6f1c0e371faa4b0bbc5babb84ad91",
+      "bytes": 421612,
+      "sha256": "da4c558a4d30c800fb9b752ba9ff46474e0c0098e9e1b476fcab05d050ea5792",
       "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
     },
     {
@@ -600,8 +600,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 443428,
-      "sha256": "1f374e6297b2c03ea312592c736a81f8944584a789339ef4abc3e74810dbaf9e",
+      "bytes": 412672,
+      "sha256": "a56e94b6f086fa3087a7bcb40e35a6dcc98d9a52b4781f02f9171db6950afcd8",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
