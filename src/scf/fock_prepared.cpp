@@ -320,10 +320,11 @@ struct PreparedFockPlan::Impl {
         const bool needs_occupied_capacity =
             tiles.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
             tiles.value_storage.rank_capacity < reserved_rank;
-        if (request == DfPairStorageRequest::Automatic && reserved_rank &&
+        if (request == DfPairStorageRequest::Automatic &&
+            (reserved_rank != 0 || coulomb_only_packing) &&
             (!tiles.stores_full_three_center || needs_occupied_capacity)) {
-          const auto resident =
-              resolve_method_owned_df_resident_budget(resolved, n, a, reserved_rank, fixed);
+          const auto resident = resolve_method_owned_df_resident_budget(
+              resolved, n, a, reserved_rank, fixed, coulomb_only_packing);
           if (resident != resolved) {
             const auto promoted = plan_requested_density_fitting_tiles(
                 request, 1, n, a, n, packed_rank, resident.value_bytes, fixed, true, 0, true);
