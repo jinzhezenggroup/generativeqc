@@ -454,22 +454,6 @@
       "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
     },
     {
-      "bytes": 153158,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/384-404.json",
-      "role": "scientific-record",
-      "sha256": "e2f5728f31e23805bbc1f2fd3b3ecc52486eaf68b82abe2c46d385b74f36c1e1"
-    },
-    {
-      "bytes": 226206,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/768-404.json",
-      "role": "scientific-record",
-      "sha256": "1ba17b6d525922968c5af89e5667fdc6ffedac9d54e8e04111d39719ea4444b9"
-    },
-    {
       "bytes": 131267,
       "classification": "required-compact-accepted-evidence",
       "family": "issue404-combined-rys",
