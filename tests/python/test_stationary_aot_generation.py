@@ -267,6 +267,9 @@ def test_stationary_packaging_profiles_are_bounded_and_deterministic(
     script = tmp_path / "profiles.cmake"
     script.write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
+        f'set(Python3_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
+        f'set(CMAKE_CURRENT_SOURCE_DIR "{ROOT.as_posix()}")\n'
+        f'set(CMAKE_CURRENT_BINARY_DIR "{tmp_path.as_posix()}")\n'
         + (
             f'set(GENERATIVEQC_STATIONARY_AOT_PROFILES "{requested}")\n'
             if requested is not None
@@ -285,7 +288,7 @@ def test_stationary_packaging_profiles_are_bounded_and_deterministic(
     )
     if requested == "unknown_rks":
         assert result.returncode != 0
-        assert "Unknown stationary CUDA AOT profile" in result.stderr
+        assert "Unknown compiler-qualified stationary CUDA AOT profile" in result.stderr
         assert not output.exists()
     else:
         assert result.returncode == 0, result.stderr

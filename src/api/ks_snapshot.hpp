@@ -11,11 +11,36 @@
 struct generativeqc_ks_snapshot;
 struct generativeqc_ks_xc_response;
 struct generativeqc_nonlocal_cuda_force;
+struct generativeqc_fock_plan;
+
+/** Private versioned scalar controls for the native resident CPKS endpoint.
+ * Host workspace and complete owned device capacity are independent budgets. */
+struct generativeqc_ks_response_controls {
+  std::uint64_t struct_size;
+  double rtol, atol, breakdown_tolerance, stagnation_tolerance;
+  std::uint64_t restart, max_iterations, max_workspace_bytes, reorthogonalize;
+  std::uint64_t true_residual_every, stagnation_window;
+};
 namespace generativeqc::dft {
 struct GridTaskView;
 }
 
 extern "C" {
+/** Solve one authenticated closed-shell CPKS RHS in native resident GMRES.
+ * No AO matrix or Krylov vector is transferred during iteration. The only
+ * dimension-sized result transfer is final publication. Work has ten entries:
+ * solver status/iterations/restarts/actions, host workspace, owned device bytes,
+ * H2D bytes, D2H bytes, synchronizations and BLAS calls. Residual has two entries.
+ * A host-workspace refusal publishes diagnostics but leaves solution untouched;
+ * other failures publish neither solution nor diagnostics. */
+generativeqc_status generativeqc_ks_response_solve_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    generativeqc_ks_xc_response* response, generativeqc_fock_plan* fock,
+    const generativeqc_ks_response_controls* controls, const double* rhs, std::size_t count,
+    const double* guess, std::size_t guess_count, std::size_t device_budget_bytes, double* solution,
+    std::size_t solution_count, double* residual, std::size_t residual_count, std::uint64_t* work,
+    std::size_t work_count);
+
 /** Private, explicitly partial #2151 native single-system derivative bridge.
  * Only a successfully executed prepared KS calculation with a current verified
  * final state may provide source-major [H', Pulay, J', K'] +dE/dR blocks.

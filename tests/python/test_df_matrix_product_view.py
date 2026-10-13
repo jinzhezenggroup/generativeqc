@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from _cpp_source_support import cpp_function_definition
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -31,6 +31,14 @@ def product_probe(
         ("src/scf/cuda/df_scf_library.cpp", "scf_matrix_product_view"),
     ):
         bodies.append(cpp_function_definition((ROOT / path).read_text(), name))
+    header = (ROOT / "src/scf/cuda/df_scf_library.hpp").read_text()
+    bodies.insert(0, cpp_record_definition(header, "ScfMatrixBatchView") + ";")
+    bodies.append(
+        cpp_function_definition(
+            (ROOT / "src/scf/cuda/df_scf_library.cpp").read_text(),
+            "scf_matrix_product_batched_view",
+        )
+    )
     (folder / "df_matrix_product.inc").write_text("\n".join(bodies))
     (folder / "cuda_runtime_api.h").write_text(
         "#pragma once\nstruct cudaStream; using cudaStream_t = cudaStream*;\n"
@@ -51,6 +59,17 @@ def product_probe(
     )
 
 
-@pytest.mark.parametrize("mode", ("products", "invalid", "failures"))
+@pytest.mark.parametrize(
+    "mode",
+    (
+        "products",
+        "invalid",
+        "failures",
+        "batched",
+        "batched_overlap",
+        "batched_overflow",
+        "batched_invalid",
+    ),
+)
 def test_df_matrix_product_contract(product_probe: Path, mode: str) -> None:
     subprocess.run([str(product_probe), mode], check=True, timeout=15)

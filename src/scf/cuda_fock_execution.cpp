@@ -248,29 +248,48 @@ generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
-    const PreparedFockPlan& plan, const double* density, const double* beta,
-    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail,
-    bool separate_sources, bool allow_spatial_default) {
+static bool prepared_full_range_derivative_domain(const PreparedFockPlan& plan,
+                                                  std::size_t matrix_elements) {
   const auto binding = prepared_cuda_direct_derivative_binding(plan);
   auto* source = plan.cuda_direct_source();
   const auto& strategy = plan.strategy();
   const auto& spec = strategy.spec;
-  const bool valid =
-      binding && source && strategy.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
-      spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact &&
-      spec.coulomb.op == FockOperator::FullRange &&
-      (!spec.exchange.present || (spec.exchange.approximation == FockApproximation::Exact &&
-                                  spec.exchange.op == FockOperator::FullRange)) &&
-      matrix_elements == binding.nbf * binding.nbf;
-  if (!valid) {
+  return binding && source && strategy.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
+         spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact &&
+         spec.coulomb.op == FockOperator::FullRange &&
+         (!spec.exchange.present || (spec.exchange.approximation == FockApproximation::Exact &&
+                                     spec.exchange.op == FockOperator::FullRange)) &&
+         matrix_elements == binding.nbf * binding.nbf;
+}
+
+generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail,
+    bool separate_sources, bool allow_spatial_default) {
+  if (!prepared_full_range_derivative_domain(plan, matrix_elements)) {
     detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
+  const auto& spec = plan.strategy().spec;
   return execute_cuda_direct_shell_full_range_derivatives_device(
-      source, spec.spin, spec.coulomb.coefficient,
+      plan.cuda_direct_source(), spec.spin, spec.coulomb.coefficient,
       spec.exchange.present ? spec.exchange.coefficient : 0.0, density, beta, matrix_elements,
       derivatives, detail, separate_sources, allow_spatial_default);
+}
+
+generativeqc_status consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    bool allow_spatial_default) {
+  if (!prepared_full_range_derivative_domain(plan, matrix_elements)) {
+    detail = "prepared CUDA shell derivative has incompatible full-range scientific identity";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  const auto& spec = plan.strategy().spec;
+  return consume_cuda_direct_shell_full_range_derivatives_device(
+      plan.cuda_direct_source(), spec.spin, spec.coulomb.coefficient,
+      spec.exchange.present ? spec.exchange.coefficient : 0.0, density, beta, matrix_elements,
+      consumer, detail, allow_spatial_default);
 }
 
 generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,

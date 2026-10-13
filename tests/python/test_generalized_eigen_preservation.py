@@ -206,7 +206,14 @@ def _host_definitions() -> tuple[str, str]:
     runtime = (ROOT / "src/scf/cuda/df_runtime.cpp").read_text()
     bodies += "namespace df {\n"
     bodies += _definition(runtime, "generativeqc_status blas_failure(") + "\n"
-    for name in ("scf_gemm_strided", "scf_gemm", "scf_generalized_transform"):
+    library_header = (ROOT / "src/scf/cuda/df_scf_library.hpp").read_text()
+    bodies += _definition(library_header, "struct ScfMatrixBatchView {") + "\n"
+    for name in (
+        "scf_matrix_product_batched_view",
+        "scf_gemm_strided",
+        "scf_gemm",
+        "scf_generalized_transform",
+    ):
         bodies += _definition(library, "generativeqc_status " + name + "(") + "\n"
     bodies += "}\n" + _canonical_regions()
     return definitions, bodies

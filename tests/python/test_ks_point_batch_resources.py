@@ -182,6 +182,7 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
         "void generativeqc_resource_ledger_destroy_v1(",
         "int generativeqc_resource_ledger_bind_v1(",
         "int generativeqc_resource_ledger_read_v1(",
+        "int generativeqc_resource_ks_cuda_v2(",
         "int generativeqc_resource_ks_cuda_v1(",
         "int generativeqc_resource_quadrature_cuda_v1(",
     ):
@@ -398,6 +399,10 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         ctypes.c_size_t,
     ]
     probe.generativeqc_resource_ks_cuda_v1.restype = ctypes.c_int
+    probe.generativeqc_resource_ks_cuda_v2.argtypes = (
+        probe.generativeqc_resource_ks_cuda_v1.argtypes
+    )
+    probe.generativeqc_resource_ks_cuda_v2.restype = ctypes.c_int
     probe.fleet.argtypes = (
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
@@ -461,6 +466,34 @@ def _request(
         **options,
     )
     return request, library
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_point_program_inventory_preserves_v1_and_charges_tau(
+    native_probe: Any, spins: int
+) -> None:
+    """Execute both ABI versions with the allocator's actual point-program traits."""
+    inventories = []
+    for functional in (0, 1, 2, 3):
+        output = (ctypes.c_uint64 * 3)()
+        shape = (2, 2, 2, 6, 49152, 8, spins, functional, 256)
+        assert native_probe.generativeqc_resource_ks_cuda_v2(*shape, output, 3) == 0
+        inventories.append(tuple(output))
+        if functional <= 1:
+            legacy = (ctypes.c_uint64 * 3)()
+            assert native_probe.generativeqc_resource_ks_cuda_v1(*shape, legacy, 3) == 0
+            assert tuple(legacy) == tuple(output)
+    assert inventories[2][1] > inventories[1][1]
+    assert inventories[3][1] == inventories[1][1]
+    assert len({(item[0], item[2]) for item in inventories}) == 1
+    output = (ctypes.c_uint64 * 3)(17, 19, 23)
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v2(
+            2, 2, 2, 6, 49152, 8, spins, 0xFFFFFFFF, 256, output, 3
+        )
+        != 0
+    )
+    assert tuple(output) == (17, 19, 23)
 
 
 @pytest.mark.parametrize("count,workspace", [(1, 512 << 20), (1024, 128 << 20)])

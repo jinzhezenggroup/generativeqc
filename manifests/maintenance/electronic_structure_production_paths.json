@@ -813,12 +813,14 @@
       "status": "production"
     },
     {
-      "artifact": "Native CUDA J/XC actions with installed CPKS contract and host orbital/Krylov vectors",
+      "artifact": "Native resident single-RHS CPKS with retained host-vector compatibility adapters",
       "backend": "cuda",
       "blocker": null,
-      "domain": "lda-pbe-rks-fixed-grid",
+      "domain": "graph-qualified-rks-fixed-grid",
       "evidence": [
         "tests/python/test_response_native_cuda.py",
+        "tests/python/test_resident_cpks_cuda.py",
+        "tests/python/test_scaled_xc_point_response.py",
         "benchmarks/results/response-contract/2026-10-11/qualification.json"
       ],
       "evidence_levels": {
@@ -871,11 +873,11 @@
         }
       },
       "exception": {
-        "missing_capability": "Resident orbital transforms/Krylov/reconstruction for production native CPKS; native GPU AO/XC alone is not a resident molecular HVP.",
+        "missing_capability": "Resident multi-RHS/reconstruction and complete nuclear/HVP sources remain unqualified; the native resident scalar endpoint does not retire host-vector compatibility adapters.",
         "owner": "python/generativeqc/rks_response.py",
-        "retirement_condition": "Bind the existing stationary/response logical request to fully resident native execution without per-action vector transfers and qualify endpoint sources/resources."
+        "retirement_condition": "Extend the shared native resident scalar owner to the remaining multi-RHS/reconstruction consumers and qualify complete nuclear/HVP sources/resources."
       },
-      "execution_owner": "python/generativeqc/rks_response.py",
+      "execution_owner": "src/api/c_api_ks_snapshot.cpp",
       "id": "dft-response-cuda-semilocal-cpks",
       "method_family": "dft",
       "product": "response",
