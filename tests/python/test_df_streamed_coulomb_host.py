@@ -18,6 +18,7 @@ import pytest
 from _cpp_source_support import (
     cpp_function_definition,
     cpp_function_definition_signature,
+    cpp_record_definition,
 )
 
 if TYPE_CHECKING:
@@ -267,6 +268,18 @@ def streamed_probe(
     source = (ROOT / "src/scf/cuda/df_response_weights.cu").read_text()
     generated = emit_df_hf_response_cuda()
     pieces = [_SHIM]
+    # The production response now forwards BLAS through borrowed TensorIR
+    # views. Execute those real forwarding adapters against the queued host
+    # providers above, so strides and failure propagation stay covered.
+    tensor = (ROOT / "src/tensor/cuda_runtime.cuh").read_text()
+    pieces.append("namespace generativeqc_tensor {\n")
+    for record, submit in (
+        ("ColumnGemmView", "submit_column_gemm"),
+        ("ColumnGemvView", "submit_column_gemv"),
+    ):
+        pieces.append(cpp_record_definition(tensor, record) + ";")
+        pieces.append(cpp_function_definition(tensor, submit))
+    pieces.append("}\n")
     pieces.append(_host_launches(emit_symmetric_matrix_function_vjp_cuda()))
     pieces.append("namespace generativeqc::scf {\nnamespace generated {\n")
     pieces.append(cpp_function_definition(generated, "df_rhf_charge_contract"))
