@@ -125,12 +125,11 @@ fresh bounded CPU process, writes `NOT_RUN` for failed Direct 48 attempts,
 retains timeouts/crashes and all per-pair `INCOMPLETE` or accepted summaries,
 and never converts a platform `SUCCEEDED` state into scientific acceptance.
 The small retained evidence under `evidence/` preserves the raw JSON byte count
-and SHA-256. Native/oracle/profile records use deterministic gzip; summaries
-remain readable JSON. Grid NPZ exports and full trace streams stay in the
+and SHA-256. Native/oracle/profile records use deterministic gzip; pair summaries retain their original JSON bytes in deterministic gzip. Grid NPZ exports and full trace streams stay in the
 ignored task-owned qz experiment directory.
 GitHub may collapse these generated JSON diffs; expand an individual record or
 run `verify_evidence.py` to inspect/check every full-precision value.
-`evidence/platform/job-metrics.json` retains the platform's one-minute Pod
+`evidence/platform/job-metrics.json.gz` retains the platform's one-minute Pod
 samples, including GPU memory usage rate. Its sampled maximum is not a
 per-process measured peak and cannot replace the provider allocation ledger.
 

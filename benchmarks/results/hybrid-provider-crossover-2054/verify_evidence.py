@@ -39,7 +39,7 @@ def digest(path: Path) -> str:
 
 
 def required_paths() -> set[str]:
-    paths = {"platform/job-metrics.json"}
+    paths = {"platform/job-metrics.json.gz"}
     for case in CASES:
         paths.add(f"native/{case}-df-j-exact-k.json.gz")
         for arm in SUPPORTED:
@@ -49,7 +49,7 @@ def required_paths() -> set[str]:
                 if case != "water-48" or arm != "direct":
                     paths.add(f"oracles/{case}-{arm}-{repeat}.json.gz")
         for repeat in (0, 1):
-            paths.add(f"summaries/{case}-pair{repeat}.json")
+            paths.add(f"summaries/{case}-pair{repeat}.json.gz")
     return paths
 
 
@@ -79,7 +79,7 @@ def verify() -> dict:
             ).hexdigest() != row.get("content_sha256"):
                 raise ValueError(f"#2054 decompressed evidence mismatch: {relative}")
 
-    metrics = read(EVIDENCE / "platform/job-metrics.json")
+    metrics = read(EVIDENCE / "platform/job-metrics.json.gz")
     if (
         metrics.get("success") is not True
         or metrics.get("data", {}).get("name") != "i2054-h200-48-holdout"
@@ -131,7 +131,7 @@ def verify() -> dict:
                 for arm in SUPPORTED
             ]
             recomputed = summarize(native, oracles, profiles)
-            stored = read(EVIDENCE / f"summaries/{case}-pair{repeat}.json")
+            stored = read(EVIDENCE / f"summaries/{case}-pair{repeat}.json.gz")
             if recomputed != stored:
                 raise ValueError(
                     f"#2054 {case} pair{repeat} summary differs from raw evidence"

@@ -18,9 +18,9 @@
     "build_profile": "portable"
   },
   "gates": {
-    "energy_abs_hartree": 1e-8,
-    "force_max_abs_hartree_per_bohr": 3e-7,
-    "physical_residual_rms": 1e-8
+    "energy_abs_hartree": 1e-08,
+    "force_max_abs_hartree_per_bohr": 3e-07,
+    "physical_residual_rms": 1e-08
   },
   "decision": {
     "status": "inconclusive",
@@ -142,9 +142,11 @@
       "content_sha256": "9ff729b1d23f0b29ea695d64635db2e615d912a081d9deda34e61383c3a30a93"
     },
     {
-      "path": "platform/job-metrics.json",
-      "bytes": 1265,
-      "sha256": "d1a8955502b9f3720948967f308d4df9f15bfd69775901ca589d5db2c57efcee"
+      "path": "platform/job-metrics.json.gz",
+      "bytes": 426,
+      "sha256": "e22094e7fb452dd1e4ec6622cb2c53824e0fc130e995ff890a231283d4c70cb7",
+      "content_bytes": 1265,
+      "content_sha256": "d1a8955502b9f3720948967f308d4df9f15bfd69775901ca589d5db2c57efcee"
     },
     {
       "path": "profiles/formaldehyde-df-jk-occupied-profile.json.gz",
@@ -175,24 +177,32 @@
       "content_sha256": "f0b0ef69f5ab21123d991e1b468377f91ecbfd8aaa5ab967949e8ad2f3f11ec5"
     },
     {
-      "path": "summaries/formaldehyde-pair0.json",
-      "bytes": 26675,
-      "sha256": "f3af657f54244ba972bb74d208ee5634cebe0e4db40396b9fd1b883675eec932"
+      "path": "summaries/formaldehyde-pair0.json.gz",
+      "bytes": 2464,
+      "sha256": "0c8dd40daaf429257636ba83a3e5609ebc7d2fb86dee8f92c74d546a079fa8a2",
+      "content_bytes": 26675,
+      "content_sha256": "f3af657f54244ba972bb74d208ee5634cebe0e4db40396b9fd1b883675eec932"
     },
     {
-      "path": "summaries/formaldehyde-pair1.json",
-      "bytes": 26680,
-      "sha256": "5947c4748e64333f1d64be7aba93ab852af9ce7556ca4b8aa903008dc0b8fe48"
+      "path": "summaries/formaldehyde-pair1.json.gz",
+      "bytes": 2465,
+      "sha256": "d1798cd90aeb94495ff65eb340ea55864c3ee0de3ec7bce9794ef89e51259939",
+      "content_bytes": 26680,
+      "content_sha256": "5947c4748e64333f1d64be7aba93ab852af9ce7556ca4b8aa903008dc0b8fe48"
     },
     {
-      "path": "summaries/water-48-pair0.json",
-      "bytes": 31416,
-      "sha256": "6d971f2cbc6af6d5419b56d3c779d3713d661176662f49c287f40543c6bb4fe4"
+      "path": "summaries/water-48-pair0.json.gz",
+      "bytes": 2557,
+      "sha256": "3b408a93b5ffa961b414a7a6a9f7629126872ac041d780fe1a37d284cc6a58f8",
+      "content_bytes": 31416,
+      "content_sha256": "6d971f2cbc6af6d5419b56d3c779d3713d661176662f49c287f40543c6bb4fe4"
     },
     {
-      "path": "summaries/water-48-pair1.json",
-      "bytes": 31412,
-      "sha256": "018ad33f0a1ef078e85cf99e04879a4906a5742091bf0740b7df73873f1de88b"
+      "path": "summaries/water-48-pair1.json.gz",
+      "bytes": 2549,
+      "sha256": "71ea49b27765ba7905d62a48f39d332f751a0d2daf0539f0e163b55c8fb705b9",
+      "content_bytes": 31412,
+      "content_sha256": "018ad33f0a1ef078e85cf99e04879a4906a5742091bf0740b7df73873f1de88b"
     }
   ]
 }
