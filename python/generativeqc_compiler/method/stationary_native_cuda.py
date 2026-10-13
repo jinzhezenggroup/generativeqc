@@ -113,7 +113,8 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
         ("generativeqc_stationary_cuda", "StationaryPointValue", "ao_pullback")
     )
     identifiers.update(
-        (
+        f"{name}{suffix}"
+        for name in (
             "local_ratio_geometry",
             "local_ratio_prepared",
             "local_norm",
@@ -121,6 +122,7 @@ def emit_native_stationary_profile_cuda(profile: str) -> str:
             "local_log",
             "local_becke",
         )
+        for suffix in ("", "_fp32")
     )
     prefix = f"generativeqc_native_{profile}_"
     aliases = "\n".join(

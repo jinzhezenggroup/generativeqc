@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import re
 import subprocess
 from pathlib import Path
@@ -19,11 +20,48 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     emit_native_stationary_registry_cpp,
     native_stationary_model,
 )
+from generativeqc_compiler.xc.grid_native import emit_grid_partials
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_typed_geometry_helpers_link_across_native_profiles(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Exercise external linkage, including float helpers hidden by one-profile builds."""
+    units = []
+    for index, profile in enumerate(("pbe0_rks", "pbe_rks")):
+        wrapper = emit_stationary_profile_aot_wrapper_cuda(
+            profile, include_reduction=False
+        )
+        native = emit_native_stationary_profile_cuda(profile)
+        aliases = "\n".join(
+            line
+            for line in native.partition(wrapper)[0].splitlines()
+            if line.startswith("#define ")
+        )
+        unit = tmp_path / f"profile_{index}.cpp"
+        unit.write_text(
+            "#include <array>\n#include <cmath>\n#define __device__\n"
+            + aliases
+            + "\n"
+            + emit_grid_partials(device=True)
+            + emit_grid_partials(device=True, scalar_type="float", suffix="_fp32")
+            + f'extern "C" double probe_{index}() {{\n'
+            + "  return local_norm(3.0, 4.0, 0.0)[0] + local_norm_fp32(3.0f, 4.0f, 0.0f)[0];\n}\n"
+        )
+        units.append(unit)
+    binary = tmp_path / "profiles.so"
+    native_cxx.build_shared(units, binary, compile_args=("-std=c++17", "-O2"))
+    library = ctypes.CDLL(str(binary))
+    for index in range(len(units)):
+        probe = getattr(library, f"probe_{index}")
+        probe.argtypes = ()
+        probe.restype = ctypes.c_double
+        assert probe() == 10.0
 
 
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
