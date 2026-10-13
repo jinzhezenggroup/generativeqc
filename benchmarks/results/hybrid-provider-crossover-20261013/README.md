@@ -1,10 +1,12 @@
 # Installed RTX 5090 hybrid-provider evidence, 2026-10-13
 
 This campaign records complete native 48-atom endpoints and independently
-accepted non-water coverage. It does not close #2054: both Direct 48 independent
+accepted non-water coverage. Its conclusion for #2054 is that no qualified
+large-system crossover is established under this protocol: both Direct 48 independent
 references failed to converge, both 96-atom Direct force attempts ran out of
 memory, both DF-JK 96 attempts were rejected by the frozen 1 GiB workspace limit,
-and DF-J/exact-K remains unsupported. No crossover or default-provider change is claimed.
+and DF-J/exact-K remains unsupported. The bounded study can conclude with these
+negative/incomplete results. No crossover or default-provider change is claimed.
 
 ## Frozen scientific and build identity
 
@@ -102,11 +104,23 @@ retain these losing records, and rerun matched populations. Node2's PRO 6000
 cannot directly load this core: the core requires GLIBC 2.38 while node2
 provides 2.35, so reusing this installed binary there is not an available shortcut.
 
-Before closing #2054, obtain converged independent Direct 48 references, finish
-the 96-atom supported endpoint/reference population, complete memory/work
-decomposition, and review the approximation contract and
-all source-matched comparisons. No performance or default claim is inferred
-from missing results.
+Before making a positive crossover claim, obtain converged independent Direct
+48 references, finish the supported 96-atom endpoint/reference population,
+complete memory/work decomposition, and review the approximation contract and
+all source-matched comparisons. These are prerequisites for that claim, not a
+requirement to repair every failed arm before concluding this bounded study.
+The original issue requests DF-J/exact-K only where supported; implementing it
+is not inherited benchmark work. No performance or default claim is inferred
+from missing results. The broader large-system performance problem remains
+under #1895.
+
+This disposition supersedes the initial assessment that #2054 had to remain
+open until every arm succeeded. All pair statuses, oracle gates, raw receipts
+and missing-counter classifications are unchanged. Revisit the study when
+provider support, auxiliary accuracy, resource admission or the independent
+reference changes materially, rather than repeating this unchanged population.
+The [decision note](../../../.agents/notes/implemented/performance/2026-10-13-bounded-negative-study-closeout.md)
+explains the distinction between finishing a study and qualifying a promotion.
 
 ## Reproduction and integrity
 
