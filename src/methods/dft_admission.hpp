@@ -46,12 +46,21 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   if (!code) return GENERATIVEQC_STATUS_SUCCESS;
   if (input->spin_channels != 1 && input->spin_channels != 2)
     return reject(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid KS spin channel count");
+  // XC point evaluation is independent of the full-range J/K approximation.
+  // Only a manifest-qualified complete fitted J/K and force consumer may be
+  // substituted for Direct; other registered hybrids remain Direct-only.
+  const bool direct_jk = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE;
+  const bool fitted_jk =
+      (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
+       descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO) &&
+      dft::generated::split_hybrid_cuda_df_energy_force(code);
   if (backend != GENERATIVEQC_BACKEND_CUDA ||
       descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
-      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+      (!direct_jk && !fitted_jk) ||
       input->xc_execution_schedule != GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED)
     return reject(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                  "split-global-hybrid KS requires CUDA, direct J/K, device-fused XC and FP64");
+                  "split-global-hybrid KS requires CUDA, qualified Direct/DF J/K, "
+                  "device-fused XC and FP64");
   if (first.coefficient != 1.0 || second.coefficient != 1.0 ||
       input->semilocal_range_omega != 0.0 || input->has_nonlocal_correlation != 0 ||
       descriptor.method == GENERATIVEQC_METHOD_PBE_D4_RKS)

@@ -921,6 +921,7 @@ class Calculator:
             cuda_mixed_density_fitted_force_eligible,
             cuda_nonlocal_force_basis_eligible,
             mixed_density_fitted_force_eligible,
+            split_hybrid_df_force_admitted,
         )
 
         cuda_hybrid_force = (
@@ -949,6 +950,11 @@ class Calculator:
             and self._automatic_libxc_name is None
             and self._dispersion_method_ir is None
             and self._ks_options is not None
+            and split_hybrid_df_force_admitted(
+                self._ks_options.method_ir,
+                backend=self._device_name,
+                xc_schedule=self._ks_options.xc_schedule,
+            )
             and (
                 (
                     self._ks_options.execution_plan.nonlocal_correlation is None

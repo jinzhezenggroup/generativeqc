@@ -427,6 +427,23 @@ def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     return None
 
 
+def split_hybrid_df_force_admitted(
+    method_ir: MethodIR, *, backend: str, xc_schedule: str
+) -> bool:
+    """Match the generated DF E+F provider without widening other hybrid routes.
+
+    Existing non-split KS graphs retain their own provider admission. The
+    native boundary checks exact K fraction, FP64, metric and spin contracts;
+    the caller separately checks precision, Hamiltonian and resource budgets.
+    """
+    record = _split_hybrid_record(method_ir)
+    return record is None or (
+        record["cuda_df_energy_force"]
+        and backend == "cuda"
+        and xc_schedule == "device_fused"
+    )
+
+
 def mixed_density_fitted_force_eligible(method_ir: MethodIR, *, backend: str) -> bool:
     """Admit fitted primary plus exact-LR forces by graph/provider capabilities.
 

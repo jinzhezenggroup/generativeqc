@@ -4,5 +4,8 @@
   "methods": [
     "M06-2X",
     "MN15"
+  ],
+  "cuda_df_energy_force": [
+    "M06-2X"
   ]
 }
