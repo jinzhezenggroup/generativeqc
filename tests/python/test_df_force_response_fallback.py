@@ -1,0 +1,257 @@
+"""Run the production response dispatcher with injected device/bridge failures.
+
+The bridge is a boundary double; this qualifies dispatch, lease consumption and
+bounded retry rather than CUDA arithmetic. Public response/token types are real.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
+
+ROOT = Path(__file__).resolve().parents[2]
+
+SHIM = r"""
+#pragma once
+#include <algorithm>
+#include <cassert>
+#include <cstring>
+#include <optional>
+#include "scf/cuda_density_fitting.hpp"
+#include "scf/cuda_density_fitting_final_state.hpp"
+#include "scf/cuda_df_gradient.hpp"
+#include "scf/density_fitting.hpp"
+using cudaStream_t = void*;
+constexpr int cudaSuccess=0, cudaMemcpyDeviceToHost=1, cudaMemcpyHostToDevice=2;
+constexpr int cudaErrorMemoryAllocation=2, cudaErrorLaunchFailure=3;
+int pending_error=0,error_clears=0;
+int cudaPeekAtLastError() { return pending_error; }
+int cudaGetLastError() { ++error_clears; const int result=pending_error; pending_error=0; return result; }
+int cudaSetDevice(int) { return 0; }
+int cudaMemcpyAsync(void* out,const void* in,std::size_t n,int,void*) {
+  std::memcpy(out,in,n); return 0;
+}
+int cudaMemsetAsync(void* out,int value,std::size_t n,void*) {
+  std::memset(out,value,n); return 0;
+}
+int cudaStreamSynchronize(void*) { return 0; }
+namespace generativeqc::runtime::cuda_trace {
+struct TraceShape { std::size_t systems,nbf,naux; bool source,streamed; std::size_t offset; };
+struct TraceOperation { TraceOperation(const char*,void*,TraceShape) {} };
+void trace_counter(const char*,std::uint64_t) {}
+}
+namespace generativeqc::scf {
+CudaDfFinalStateToken current;
+int mode=0;
+struct CudaDensityFittingJkPlan {
+  std::size_t nbf=2,naux=8,batch_size=1,matrix_elements=4,tensor_elements_per_system=32;
+  std::size_t row_tile=2,auxiliary_tile=8,stored_pair_count=3,stored_tensor_elements_per_system=24;
+  std::size_t projection_capacity=16,panel_capacity=32,factor_basis_identity=1;
+  std::size_t completed_occupied_projection_rank=1;
+  int device_id=0;
+  void* stream=reinterpret_cast<void*>(1);
+  void* blas=reinterpret_cast<void*>(1);
+  bool streamed=false,occupied_scf_reserved=true,resident_exchange_enabled=true,resident_raw_valid=false;
+  DfValueStorageOptions value_storage{DfPairStorage::SymmetricLowerSingle,1};
+  CudaDensityFittingIntegralSource* integral_source=reinterpret_cast<CudaDensityFittingIntegralSource*>(1);
+  double values[64]{};
+  double *three_center=values,*auxiliary_tile_values=values,*inverse_square_roots=values;
+  double *metric_eigenvectors=values,*metric_eigenvalues=values,*primary_density=values;
+  double *exchange_intermediate=values,*exchange_contributions=values,*packed_raw=nullptr;
+  const double* response_host_raw=nullptr;
+  const core::Atom *response_orbital_atoms=nullptr,*response_auxiliary_atoms=nullptr;
+  const core::Shell *response_orbital_shells=nullptr,*response_auxiliary_shells=nullptr;
+  generativeqc_basis_representation response_orbital_representation{},response_auxiliary_representation{};
+  double metric_relative_threshold=1e-10;
+  std::vector<std::uint8_t> metric_full_rank{1},metric_response_valid{1};
+  void* persistent_scf_state=nullptr;
+  std::optional<CudaDfFinalStateToken> final_projection_token;
+  void revoke_projection_leases() { final_projection_token.reset(); completed_occupied_projection_rank=0; }
+};
+namespace cuda_df {
+struct PersistentScfState {
+  bool unrestricted=false,occupied_exchange=true,final_frames_available=true;
+  std::size_t alpha_factor_rank=1,beta_factor_rank=1;
+  std::vector<std::size_t> factor_alpha_ranks{1},factor_beta_ranks{1},final_iterations{0};
+  std::uint32_t generation=0;
+  std::uint32_t *d_alpha_factor_generation=&generation,*d_beta_factor_generation=&generation;
+  double density[4]{2,0,0,0},factor[2]{1,0};
+  double *d_alpha_density=density,*d_beta_density=density,*d_density=density;
+  double *d_alpha_factor=factor,*d_beta_factor=factor,*d_final_alpha_coefficients=factor;
+};
+bool qualified_resident_rhf_exchange(const CudaDensityFittingJkPlan&,std::size_t) { return false; }
+bool qualified_value_rhf_exchange(const CudaDensityFittingJkPlan&,std::size_t rank) { return rank==1; }
+generativeqc_status cuda_failure(int error,const char*,std::string&) {
+  return error==cudaErrorMemoryAllocation ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_CUDA_ERROR;
+}
+generativeqc_status factor_density_for_exchange(CudaDensityFittingJkPlan&,PersistentScfState&,
+    const double*,bool&,std::size_t&,std::string&) { return GENERATIVEQC_STATUS_NOT_IMPLEMENTED; }
+}
+generativeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkPlan*,
+    std::size_t,CudaDfFinalStateToken& result,std::string&) { if(mode==14 || mode==15) pending_error=mode==14 ? cudaErrorMemoryAllocation : cudaErrorLaunchFailure;
+  if(mode==11 || mode==14 || mode==15 || mode==17) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  result=current; return GENERATIVEQC_STATUS_SUCCESS; }
+bool cuda_density_fitting_integral_source_geometry_matches(const CudaDensityFittingIntegralSource*,
+    std::size_t,const core::System&,const core::System&) noexcept { return true; }
+DensityFittingMetricFactor factor_density_fitting_metric(const std::vector<double>&,std::size_t,double) { return {}; }
+}
+namespace generativeqc::molecule {
+std::size_t ao_count(const core::System& system) noexcept { return system.atoms.size()==1 ? 2 : 8; }
+}
+"""
+
+DRIVER = r"""
+#include "src/scf/cuda/df_force_response.cpp"
+namespace generativeqc::scf {
+int occupied_calls=0,panel_calls=0;
+CudaDensityFittingJkPlan* active=nullptr;
+generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingIntegralSource*,
+    std::size_t,const core::System&,const core::System&,std::span<const double>,
+    const std::vector<double>&,const std::vector<double>&,
+    std::span<const DensityFittingDensityResponse>,double,unsigned,std::size_t,std::size_t,
+    std::vector<double>& output,std::string&,DfGradientResources*,const CudaDfMetricView*,void*,
+    const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView*,
+    const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*) {
+  assert(!active->final_projection_token); // The lease is consumed before any response attempt.
+  if (occupied) {
+    ++occupied_calls;
+    assert(occupied->final_fitted_occupied_projection==active->auxiliary_tile_values);
+    if(mode==12 || mode==13) pending_error=mode==12 ? cudaErrorMemoryAllocation : cudaErrorLaunchFailure;
+    if(mode==16) return GENERATIVEQC_STATUS_CUDA_ERROR;
+    if(mode==2) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    if(mode!=0) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } else {
+    ++panel_calls;
+    assert(pending_error==0);
+    if(mode==3 || mode==17 || mode==18) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  output={42}; return GENERATIVEQC_STATUS_SUCCESS;
+}
+}
+int main(int argc,char** argv) {
+  using namespace generativeqc;
+  using namespace scf;
+  assert(argc==2); mode=std::atoi(argv[1]);
+  CudaDensityFittingJkPlan plan; active=&plan;
+  cuda_df::PersistentScfState state; plan.persistent_scf_state=&state;
+  current.identity.occupied={1}; current.identity.factor.density_generation=1;
+  plan.final_projection_token=current;
+  auto requested=current;
+  auto density=std::vector<double>(state.density,state.density+4);
+  core::System orbital,auxiliary; orbital.atoms.resize(1); auxiliary.atoms.resize(2);
+  DensityFittingDensityResponse term{density,1.0,.25};
+  CudaDfBorrowedFittedProjection borrowed{0,state.factor,plan.auxiliary_tile_values,2,8,1,plan.stream};
+  const CudaDfBorrowedFittedProjection* lease=nullptr;
+  if(mode==4) lease=&borrowed;
+  if(mode==5) { setenv("GENERATIVEQC_DF_RESPONSE_SPACE","occupied",1); setenv("GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE","fitted",1); }
+  if(mode==6) setenv("GENERATIVEQC_DF_FINAL_PROJECTION","off",1);
+  if(mode==7) ++requested.identity.factor.density_generation;
+  if(mode==8 || mode==18) density[0]=1.5;
+  if(mode==9) plan.metric_full_rank[0]=0;
+  if(mode==10) plan.final_projection_token.reset();
+  std::vector<double> output{-1}; std::string detail;
+  auto status=execute_cuda_density_fitting_generated_force_response(&plan,0,orbital,auxiliary,{},
+      {},{&term,1},0,4096,0,output,detail,nullptr,&requested,lease,nullptr);
+  const auto expected_status=mode==2 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
+      : (mode==3 || mode==5 || mode==17 || mode==18) ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+      : (mode==13 || mode==15 || mode==16) ? GENERATIVEQC_STATUS_CUDA_ERROR
+      : GENERATIVEQC_STATUS_SUCCESS;
+  assert(status==expected_status);
+  assert(occupied_calls==int(mode<=5 || mode==12 || mode==13 || mode==16));
+  assert(panel_calls==int(mode!=0 && mode!=2 && mode!=5 && mode!=13 && mode!=15 && mode!=16));
+  assert(error_clears==int(mode==12 || mode==14));
+  if(mode==13 || mode==15) assert(pending_error==cudaErrorLaunchFailure);
+  if(status==GENERATIVEQC_STATUS_SUCCESS) assert(output==std::vector<double>{42});
+  if(status!=GENERATIVEQC_STATUS_SUCCESS) assert(output==std::vector<double>{-1});
+  assert(!plan.final_projection_token);
+  if(mode==0) { // Repeated response cannot borrow the consumed projection again.
+    status=execute_cuda_density_fitting_generated_force_response(&plan,0,orbital,auxiliary,{},
+        {},{&term,1},0,4096,0,output,detail,nullptr,&requested,nullptr,nullptr);
+    assert(status==GENERATIVEQC_STATUS_SUCCESS && occupied_calls==1 && panel_calls==1);
+  }
+}
+"""
+
+
+@pytest.fixture(scope="module")
+def response_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    directory = tmp_path_factory.mktemp("df-response-fallback")
+    (directory / "shim.hpp").write_text(SHIM)
+    for name in (
+        "runtime/cuda_component_trace.hpp",
+        "scf/cuda/df_plan_internal.hpp",
+        "scf/cuda/df_runtime.hpp",
+        "scf/cuda/df_scf_factor.hpp",
+        "scf/cuda/df_scf_state.hpp",
+    ):
+        header = directory / name
+        header.parent.mkdir(parents=True, exist_ok=True)
+        header.write_text('#include "shim.hpp"\n')
+    source = directory / "probe.cpp"
+    source.write_text(DRIVER)
+    executable = directory / "probe"
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-I" + str(directory),
+            "-I" + str(ROOT),
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
+        ),
+    )
+    return executable
+
+
+@pytest.mark.parametrize(
+    "mode",
+    range(19),
+    ids=(
+        "success-and-repeat",
+        "occupied-oom",
+        "numerical-failure",
+        "persistent-oom",
+        "borrowed-dft-oom",
+        "explicit-fitted-oom",
+        "projection-off",
+        "stale-token",
+        "corrected-density",
+        "truncated-metric",
+        "consumed-lease",
+        "provenance-oom",
+        "device-allocation-error",
+        "pending-device-error",
+        "provenance-allocation-error",
+        "provenance-pending-error",
+        "compute-error",
+        "provenance-and-panel-oom",
+        "corrected-density-panel-oom",
+    ),
+)
+def test_fitted_response_failure_and_lease_fallback(
+    response_probe: Path, mode: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in (
+        "GENERATIVEQC_DF_RESPONSE_SPACE",
+        "GENERATIVEQC_DF_RESPONSE_STORAGE",
+        "GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE",
+        "GENERATIVEQC_DF_FINAL_PROJECTION",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    result = subprocess.run(
+        [str(response_probe), str(mode)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

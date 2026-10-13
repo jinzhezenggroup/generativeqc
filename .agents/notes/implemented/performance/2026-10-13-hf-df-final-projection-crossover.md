@@ -63,3 +63,22 @@ Five real-device regression cases cover automatic final projection reuse,
 explicit RHF/UHF controls and independent M06-2X DF endpoints; the native DF
 regression also passes its 48 weighted finite-difference force gates. The
 capacity crossover retains the explicit-cap and unsupported-state fallbacks.
+
+## Automatic resource fallback hardening
+
+The fitted occupied bridge retains all-Q rank-squared workspaces and can exhaust
+an allowance that still admits bounded fitted panels. Review found that its
+existing retry covered a borrowed DFT lease but omitted the new automatic RHF
+route. Both now retry once on allocation failure after consuming the lease;
+explicit occupied diagnostics and non-allocation errors still surface. Optional
+canonical-provenance staging allocation failure declines reuse directly. A
+pending CUDA allocation error is consumed before fallback, while any other
+pending device error remains visible. Once provenance has declined into panels,
+a panel allocation failure is terminal rather than a second panel attempt.
+
+A cached host compilation of the complete production dispatcher, using real
+public token/response contracts and device/bridge boundary doubles, covers 19
+success, stale/corrected state, lease-consumption, allocation and non-allocation
+failure cases. The unchanged head fails the new fallback controls; the repaired
+source passes. This is executable ownership/error-path coverage, not additional
+GPU numerical or endpoint performance evidence.

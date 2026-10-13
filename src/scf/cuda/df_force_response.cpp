@@ -39,6 +39,18 @@ void bind_cuda_density_fitting_response_source(CudaDensityFittingJkPlan* plan,
 }
 
 namespace {
+/** Clear only the allocation error handled by an optional response fallback.
+ * A different pending device error must remain visible instead of becoming
+ * an apparently successful panel retry.
+ */
+generativeqc_status clear_optional_response_allocation_error(std::string& detail) {
+  const auto error = cudaPeekAtLastError();
+  if (error != cudaSuccess && error != cudaErrorMemoryAllocation)
+    return cuda_failure(error, "DF occupied response fallback", detail);
+  if (error == cudaErrorMemoryAllocation) (void)cudaGetLastError();
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 /** Validate a method-authorized canonical density before lending SCF factors.
  * Tokens bind owner/geometry, epoch, system, model and occupations. Exact
  * comparison with the actual device density excludes corrected determinants;
@@ -586,7 +598,15 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         // source within its independent bounded response allowance.
         const auto selected = select_occupied_response_factors(
             *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
-        if (selected != GENERATIVEQC_STATUS_SUCCESS) return selected;
+        if (selected != GENERATIVEQC_STATUS_SUCCESS) {
+          if (!automatic_fitted_occupied || selected != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+            return selected;
+          const auto cleared = clear_optional_response_allocation_error(detail);
+          if (cleared != GENERATIVEQC_STATUS_SUCCESS) return cleared;
+          // Optional provenance staging must not turn an otherwise bounded
+          // panel response into a resource failure. No factor lease is lent.
+          streamed_factors = {};
+        }
       }
       if (!borrowed_fitted_occupied && !streamed_factors.owner_identity && space == "occupied") {
         const auto corrected = select_corrected_occupied_response_factor(
@@ -605,8 +625,10 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       // A stale or corrected canonical density cannot borrow the final U.
       // Automatic selection retains the exact bounded fitted-panel fallback;
       // an explicit fitted request still reports failed qualification below.
-      if (automatic_fitted_occupied && !streamed_factors.owner_identity)
+      if (automatic_fitted_occupied && !streamed_factors.owner_identity) {
         fitted_occupied_requested = false;
+        automatic_fitted_occupied = false;
+      }
       // The fitted route projects forward B before applying
       // the second metric root. Preserve the validated view only on that path;
       // legacy source-occupied response continues to read physical raw A.
@@ -629,12 +651,15 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
         streamed_factors.owner_identity ? &streamed_factors : nullptr,
         select_borrowed_density ? borrowed_response_density : nullptr);
-    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && borrowed_fitted_occupied &&
-        space == "auto" && occupied_source == "auto") {
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+        (borrowed_fitted_occupied || automatic_fitted_occupied) && space == "auto" &&
+        occupied_source == "auto") {
       // The optional all-Q occupied factors may exceed an allowance that still
       // fits ordinary bounded panels. The failed bridge has drained/freed its
       // arena, and the one-shot lease was already revoked above. Retry exactly
       // once without it; explicit occupied/source diagnostics retain their gate.
+      const auto cleared = clear_optional_response_allocation_error(detail);
+      if (cleared != GENERATIVEQC_STATUS_SUCCESS) return cleared;
       return execute_cuda_density_fitting_generated_force_response(
           plan, system, orbital, auxiliary, raw_a, raw_metric, terms, schedule, maximum_bytes,
           maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr,
