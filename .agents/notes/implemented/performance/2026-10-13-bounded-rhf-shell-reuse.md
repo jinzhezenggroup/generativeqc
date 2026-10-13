@@ -139,6 +139,104 @@ All device execution, including profilers and sanitizers, uses finite Slurm
 allocations. Complete endpoint timing must be distinguished from the bounded
 two-iteration, nonconverged profiling probe.
 
+## Tuned-profile follow-up: value-only f-shell Rys
+
+The stock sm120 manifest covers 21 s/p/d Fock classes but no f-containing Fock
+class (`fpps` is force-only). With whole-shell reuse enabled, uncovered f classes
+still dominate the tuned C7 trace. Extend the existing value-only component-lane
+Rys decoder, not its force decoder: f Cartesian axis counts reuse the compiler's
+existing axis table, and unraised second-center HRR already supports cubic
+order. No new quadrature tables or recurrence equations are introduced.
+
+Promote 22 value-only Fock recipes in the sm120 manifest: `fsss fsps fspp fsds
+fsdp fsfs fpss fppp fpds fpdp fpfs fpfp fdss fdps fdpp fdds fdfs ffss ffps ffpp
+ffds fffs`. Keep the existing `fpps` force owner unchanged. Eligibility retains
+the 2--5-root limit, at most p on the fourth center, and one complete Cartesian
+component tile per block (at most 1024 lanes). Thus `fddp` (1080 components),
+`fsdd`/`dddd` (fourth-center d), and higher-root combinations still use their
+previous generated or bounded owners. The change is target-profile-specific;
+other architectures retain portable dispatch rather than inheriting unmeasured
+sm120 schedules. Existing force derivative admission is not widened.
+
+### Same-device complete endpoints
+
+All C7 runs below use node4's RTX 5090
+`GPU-5430ba2e-194a-b6d1-f12c-6b99f6d34efd`, driver 580.178.04, 575-W limit, the
+same pinned input, strict tolerances, FP64 and exactly zero screening. Times
+include setup through native physical-reference publication, not only kernels.
+
+| Build / route | Slurm job | Complete RHF seconds | Iterations / exact Focks |
+| --- | --- | ---: | ---: |
+| Portable clean base | 805 | 2719.522267755 | 29 / 29 |
+| Portable whole-shell reuse | 807 | 1348.633152803 | 29 / 29 |
+| Stock tuned, old fallback ablation | 810 | 1579.959116925 | 29 / 29 |
+| Stock tuned, whole-shell reuse | 809 | 859.523261330 | 29 / 29 |
+| Tuned, whole-shell reuse + f-value Rys | 811 | 552.299426638 | 29 / 29 |
+
+The tuned old-fallback control is the same stock-tuned candidate binary with
+`GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=0`, not a separately rebuilt base.
+The final endpoint is 2.8607x faster than that tuned rollback control, 1.5563x
+faster than stock tuned whole-shell reuse, and 2.4419x faster than the earlier
+46.5-s/iteration portable result. It averages 19.04 s/iteration including setup.
+These are single complete C7 runs, not medians or a claim of optimal RHF speed.
+
+All five runs retain 29 exact Fock actions, zero extra final Focks, no discarded
+attempts/retries, no provisional DF cycles and no oracle seed. The unchanged
+unscreened topology contains 96,070,591 shell quartets per exact Fock; the
+two-iteration profiling census contains 192,141,182. Timers on generated primary
+pages and uncovered classes now both report their actual work, rather than
+mistaking empty overflow pages for zero generated work.
+
+The final C7 errors versus the independent oracle are 5.68e-14 Eh (energy),
+2.41e-11 (maximum density), and 7.69e-11 Eh (orbital energies). The commutator,
+canonical-density drift, eigen residual and orthogonality error are respectively
+6.02e-12, 8.33e-12, 4.09e-13 and 2.07e-13. All stated acceptance gates pass.
+The tuned rollback control also passes: E/D/orbital errors 1.71e-13 Eh,
+1.65e-11 and 6.89e-11 Eh.
+
+Node4 job 812 checks the natural resident-source ethane/cc-pVTZ path in ABBA
+order (stock tuned / f-Rys / f-Rys / stock tuned): 3.858450399 / 3.832204289 /
+3.843332765 / 3.823447398 s. All retain 13 provisional DF iterations and 12 exact
+iterations/Focks, with identical oracle errors E/D/orbital = 6.96e-13 Eh /
+1.43e-11 / 4.17e-11 Eh. There is no meaningful small-case speedup or regression.
+
+### Qualification and provenance
+
+- Node5 job 1504 passes all 3168 independent Libcint fixed-density GPU cases:
+  all 22 new classes, Cartesian/coincident/reversed pairs, RHF/UHF, J/K/HF-K/
+  combined consumers, task tails 1/33/129, and ordinary/compensated reductions.
+- The same job passes 24 complete E+F/post-HF tests: 16 automatic/bounded
+  RHF/UHF cases with batched/warm/moved geometry, plus eight existing native
+  DF-MP2/DF-CBS correctness and reuse gates. No force equations change.
+- Node5 job 1506 passes filtered memcheck on all 22 new RHF kernels with
+  compensated 129-task tails (zero errors), and focused `fffs` racecheck
+  (zero hazards). This is not a claim of exhaustive sanitizer coverage.
+- Stock tuned whole-shell reuse separately passes eight RHF/UHF E+F tests
+  (job 1501) and eight DF-MP2/DF-CBS tests (job 1502). The DF cases were skipped
+  in job 1501 because its opt-in flag was absent; only job 1502 is their pass.
+- Stock tuned library SHA256:
+  `c45693c96560586a74ab1e5dc96c7841bf75291fd2f41a873f6e2b5d77ace092`.
+- Final f-Rys library SHA256:
+  `44dce75cdd99d6c3df25c430fc33ce597609eb1f49c001a933cae47e8601d3a7`.
+- The measured experimental manifest SHA256 is
+  `88566329b10dc90324f96ae0c702a4da5fe3a46feae399a29588499ffd105698`.
+  The checked-in promotion has identical parsed fields and ordering. All ten
+  generated registry/shard files from the canonical manifest are byte-identical
+  to the files compiled into the measured library; formatting/path differences
+  are not substituted for source-matched qualification.
+
+Builds use CUDA 12.9.1, Release sm120, eight stable AOT shards, fast-compile off,
+separable compilation off, direct device link on, and verified sccache 0.16.0
+launchers. One earlier shared-cache server exit required local compiler fallback;
+do not label all compilation as cache hits. Frozen qualified libraries and raw
+receipts remain in ignored local/remote qualification storage.
+
+This measurement ends at the C7 RHF reference, **not** full C7 CBS E+F. It does
+not convert the reference to DF-RHF or claim that large-basis C7 CCSD(T) is now
+feasible. Remaining expensive classes include `fddp dddd fddd fdfp fsdd fpdd
+fpps`; improving those requires separate bounded schedules/endpoint evidence,
+not relaxing precision, screening, physical checks, or the memory guard.
+
 ## Revisit
 
 Profile actual generated-class gaps on tuned builds before changing their

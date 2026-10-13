@@ -18,11 +18,13 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("method", ("rhf", "uhf"))
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
 @pytest.mark.parametrize("screening", (1e-14, 1e-10))
+@pytest.mark.parametrize("bounded", (False, True), ids=("automatic", "bounded"))
 def test_bounded_whole_shell_force_and_geometry_replay(
     monkeypatch: pytest.MonkeyPatch,
     method: str,
     representation: str,
     screening: float,
+    bounded: bool,
 ) -> None:
     """Cover f-containing classes, both spins, batch offsets and graph retirement.
 
@@ -76,7 +78,10 @@ def test_bounded_whole_shell_force_and_geometry_replay(
         assert solver.converged
         expected.append((energy, -solver.nuc_grad_method().kernel()))
 
-    monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
+    if bounded:
+        monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
+    else:
+        monkeypatch.delenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", raising=False)
     monkeypatch.setenv("GENERATIVEQC_RHF_RESIDENT_VALUES", "0")
     for reuse in ("0", "1"):
         monkeypatch.setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", reuse)

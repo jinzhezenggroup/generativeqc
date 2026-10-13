@@ -350,7 +350,7 @@ def test_manifest_rys_root_count_comes_from_integral_ir(tmp_path: Path) -> None:
 
 
 def test_existing_production_rows_default_to_subset_wick() -> None:
-    """Keep only explicitly promoted force rows on fixed-root Rys."""
+    """Honor explicit Rys promotions; unannotated rows retain subset Wick."""
 
     repository_root = Path(__file__).resolve().parents[2]
     manifest = (
@@ -384,32 +384,10 @@ def test_existing_production_rows_default_to_subset_wick() -> None:
     )
     assert all(recurrences[name] == "rys2" for name in ("psps", "ppss", "dsss"))
     assert all(recurrences[name] == "rys5" for name in ("dddp", "dddd"))
-    assert all(
-        selection.recurrence == "subset_wick"
-        for selection in selections
-        if selection.spec.name
-        not in {
-            "dppp",
-            "dpdp",
-            "dpds",
-            "ddpp",
-            "ddps",
-            "ddds",
-            "ppps",
-            "dpps",
-            "dpss",
-            "dsps",
-            "dspp",
-            "dsds",
-            "ddss",
-            "pppp",
-            "psps",
-            "ppss",
-            "dsss",
-            "dddp",
-            "dddd",
-        }
-    )
+    rows = json.loads(manifest.read_text())["architectures"]["sm_120"]["kernels"]
+    assert recurrences == {
+        row["shell_class"]: row.get("recurrence", "subset_wick") for row in rows
+    }
     assert (
         next(
             selection for selection in selections if selection.spec.name == "ppps"

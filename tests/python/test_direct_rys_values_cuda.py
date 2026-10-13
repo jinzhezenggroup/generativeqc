@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.integral.ir import KernelConsumer
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.production_rys_tasks import (
     direct_rys_task_candidates,
@@ -25,20 +26,24 @@ from generativeqc_compiler.integral.production_rys_values import (
 
 # Qualify the complete compiled inventory, rather than using the earlier six
 # arithmetic fixtures as a production class allowlist.
-CLASSES = tuple(
-    item.spec.name
-    for item in (
-        direct_rys_task_candidates
-        if os.environ.get("GENERATIVEQC_RYS_VALUE_FAMILY") == "task"
-        else direct_rys_value_candidates
-    )(
-        resolve_production_profile(
-            Path(__file__).resolve().parents[2]
-            / "python/generativeqc_compiler/integral/production_shell_classes.json",
-            "sm_120",
-        )
-    )
+PROFILE = resolve_production_profile(
+    Path(__file__).resolve().parents[2]
+    / "python/generativeqc_compiler/integral/production_shell_classes.json",
+    "sm_120",
 )
+FAMILY = os.environ.get("GENERATIVEQC_RYS_VALUE_FAMILY")
+if FAMILY == "primary":
+    SELECTIONS = tuple(
+        item
+        for item in PROFILE.selections
+        if item.consumers == (KernelConsumer.FOCK,)
+        and item.recurrence.startswith("rys")
+    )
+else:
+    SELECTIONS = (
+        direct_rys_task_candidates if FAMILY == "task" else direct_rys_value_candidates
+    )(PROFILE)
+CLASSES = tuple(item.spec.name for item in SELECTIONS)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
