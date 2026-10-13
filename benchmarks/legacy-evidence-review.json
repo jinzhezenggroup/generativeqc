@@ -321,52 +321,12 @@
       "sha256": "72a9be35a2b0edca1d772a797b0ca2ee86e1e329c2c3adeae4ce1865b6977d1d"
     },
     {
-      "bytes": 295040,
+      "bytes": 796419,
       "classification": "test-reference-input",
       "family": "density-candidates",
-      "path": "benchmarks/results/density-candidates/inputs/water8_svp/LDA_XC_PW_potential.npy",
+      "path": "benchmarks/results/density-candidates/inputs/water8_svp.npz",
       "role": "reference-input",
-      "sha256": "06df78eb0bf140c863ed9f2afa3e5a7ec49d7eec5ade6426640a1ebe0d65a0e7"
-    },
-    {
-      "bytes": 295040,
-      "classification": "test-reference-input",
-      "family": "density-candidates",
-      "path": "benchmarks/results/density-candidates/inputs/water8_svp/PBE_potential.npy",
-      "role": "reference-input",
-      "sha256": "050e3c053d60bd31fdd428f8ef1d98d83de311c4c171e24b971667d70cc53bcd"
-    },
-    {
-      "bytes": 589952,
-      "classification": "test-reference-input",
-      "family": "density-candidates",
-      "path": "benchmarks/results/density-candidates/inputs/water8_svp/density_spin.npy",
-      "role": "reference-input",
-      "sha256": "147b127d91be96d0096a4306df786ced1b4ce25df011d04c050fde1b39a2653a"
-    },
-    {
-      "bytes": 589952,
-      "classification": "test-reference-input",
-      "family": "density-candidates",
-      "path": "benchmarks/results/density-candidates/inputs/water8_svp/points.npy",
-      "role": "reference-input",
-      "sha256": "8160e20563861e90f9102c981ad0ce006a54cf8e0a0397e12ad03e6076ed3d79"
-    },
-    {
-      "bytes": 393344,
-      "classification": "test-reference-input",
-      "family": "density-candidates",
-      "path": "benchmarks/results/density-candidates/inputs/water8_svp/sample_jets.npy",
-      "role": "reference-input",
-      "sha256": "fc6fb902b9d568b7da47a7a8953597545392a281881f403a13adcf42e8ebc3c9"
-    },
-    {
-      "bytes": 196736,
-      "classification": "test-reference-input",
-      "family": "density-candidates",
-      "path": "benchmarks/results/density-candidates/inputs/water8_svp/weights.npy",
-      "role": "reference-input",
-      "sha256": "d83095e047374f6329fa226309688215dfcabe9ac9190e8fe8210a5436d83707"
+      "sha256": "ea31c1b46cfb03c8101e169d8cb756dd30f4296661a5bbbdda47a95d75477d76"
     },
     {
       "bytes": 135945,
