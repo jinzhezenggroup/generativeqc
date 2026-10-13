@@ -29,23 +29,35 @@ failed or incomplete phases have no successful timing. No timeout was increased.
 | [#2421](https://github.com/jinzhezenggroup/generativeqc/issues/2421) | [#2437](https://github.com/jinzhezenggroup/generativeqc/pull/2437) adds automatic HF/DF value-response planning and exact-state final occupied projection reuse. All 12 calls pass at 96 atoms. Warm: 59.318 → 3.201 s; new cold 32.994 s, moved 28.670 s. |
 
 Direct WB97M-V passes all 12 calls at 48 atoms within 1800 s with
-[#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454) and automatic
-exact force-component reuse in [#2462](https://github.com/jinzhezenggroup/generativeqc/pull/2462):
-cold 578.966 s, warm 39.029 s, moved 409.380 s, moved-warm 38.951 s. Warm drops
-42.4% from the preceding bilateral source's 67.707 s. Its maximum energy/force
-errors are 4.548e-12 Eh / 6.526e-11 Eh/Bohr. Each frozen replay records one exact
-force-pair hit and zero force-pair sweeps; SCF and remaining force work still run.
-Small 3/12-atom default populations also pass all 12 calls. The 96-atom endpoint
-remains unresolved, so #2426 stays open.
+[#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454), automatic exact
+force reuse [#2462](https://github.com/jinzhezenggroup/generativeqc/pull/2462),
+automatic exact SCF reuse [#2467](https://github.com/jinzhezenggroup/generativeqc/pull/2467),
+and the composite phased-Becke budget repair
+[#2468](https://github.com/jinzhezenggroup/generativeqc/pull/2468). Cold/warm/moved/moved-warm are
+575.813 / 15.548 / 405.620 / 15.580 s. The warm median moves from 67.707 s
+(bilateral source) to 39.029 s (force reuse), 18.435 s (SCF reuse), then 15.548 s
+(correctly budgeted Becke); all four complete populations remain retained.
+Maximum current 48-atom energy/force errors are 4.320e-12 Eh / 6.520e-11 Eh/Bohr.
+Every frozen replay records zero SCF and force VV10 pair sweeps, while physical
+Focks and remaining work still run. Both geometry owners allocate 41,706,304
+phased bytes and actually visit all 1,179,648 points in 1,152 phase batches.
+The preceding source had zero phased bytes/batches despite requesting the path.
 
-The first 3-atom default cold observation is retained at 16.330 s, including
-10.812 s of force preparation. Separate fresh-process controls with retained
-caches give 6.378 s (automatic reuse) and 6.409 s (explicit opt-out), versus
-1.132 s of force preparation in a later SCF-reuse control. This locates the
-startup difference without attributing all preparation to compilation. The
-later controls do not replace the first cold point or enter plotted medians.
-Experimental SCF component reuse and native initializers are disabled in the
-plotted source; their validation does not relabel those timings.
+Both new default rounds pass all 36 calls at 3/12/48 atoms. The figure uses the
+latest complete round at all three sizes, including its slower 29.237-s 3-atom
+cold point; it does not choose the faster 16.172-s cold point from the preceding
+SCF-only round. Earlier startup/cache controls and superseded observations remain
+in the receipts. Experimental initializers and explicit device-final-validation
+are disabled in the plotted source. The 96-atom endpoint remains unresolved.
+
+Default-off initializer trials are retained separately: one 96-atom cold returns
+in 1562.126 s, and its revised inner solve regresses to 1629.527 s. Both hit the
+original 1800-second whole-point limit during warm replays. The revised 48-atom
+initializer completes in 411.440 / 18.234 / 313.692 / 18.256 s, but it is not a
+default result. Freezing range exchange as well increases small-system iteration
+counts and is not promoted. Its original null gates remain unchanged; an offline
+comparison with the identical independent protocol is retained separately.
+Neither partial 96-atom trial closes #2426.
 
 These are before/after complete endpoint observations, not isolated attribution
 of every source change. The newer integration uses the current native public
@@ -170,6 +182,13 @@ Both are ancestors of the frozen
 Automatic exact force reuse is qualified on `9aabd59a3` with library SHA256
 `4c7b6ace6f07466af7967c0cc1f4453a7ff09a03c0ebcf13316527105e6779c7`, retained on
 [its frozen source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-automatic-source-20261014).
+Automatic SCF reuse is qualified on `3b15b73d7`, and the plotted phased-budget
+round uses `948fb1058` with library SHA256
+`4a5ccdabd0a3c67eeab53281a52ae4d0c556e364f9e421d0d29b1f2f16fb5e39`.
+Both, and the separately labeled initializer trials, are retained in
+[the frozen source ancestry](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-scf-phased-source-20261014).
+The PR branches can differ from these assembled snapshots; only the recorded
+snapshot identities identify a measured population.
 Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
@@ -191,6 +210,13 @@ receipts, the compiler-forbidden control, source audits, the DF geometry-rebuild
 diagnosis and the rejected reciprocal probe. Failed fixtures and missing-library setup attempts remain
 labelled as failures, rather than being rewritten as final acceptance. Native
 arrays, build products and full trial logs stay in ignored local storage.
+
+The optional small-grid regression attempts retain real absolute-reference
+failures: coarse sto-3g water-48 differs by about 9.883e-7 Eh on both unphased
+and phased sources, and two hydrogen-cluster grids differ by 1.353e-8 and
+1.017e-8 Eh. They are not accepted E/F fixtures. The unchanged original-grid
+water-48 population and two-step reconverged energy derivatives qualify the
+budget repair; neither the benchmark grid nor acceptance gate was relaxed.
 
 ## Reproduction
 
