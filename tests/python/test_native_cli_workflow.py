@@ -48,6 +48,18 @@ def _evaluate(node: ast.AST) -> str | bool:
 
 @pytest.mark.parametrize("tier", ["skip", "fast", "release"])
 @pytest.mark.parametrize(
+    ("event", "ref"),
+    [
+        ("push", "refs/heads/master"),
+        ("push", "refs/heads/feature"),
+        ("push", "refs/tags/v1.0.0"),
+        ("pull_request", "refs/pull/1/merge"),
+        ("merge_group", "refs/heads/gh-readonly-queue/master/pr-1"),
+        ("workflow_dispatch", "refs/heads/master"),
+        ("schedule", "refs/heads/master"),
+    ],
+)
+@pytest.mark.parametrize(
     "step_name",
     [
         "Restore shared Linux CUDA ccache",
@@ -58,7 +70,7 @@ def _evaluate(node: ast.AST) -> str | bool:
     ],
 )
 def test_native_cli_tier_admits_all_selected_build_stages(
-    tier: str, step_name: str
+    tier: str, event: str, ref: str, step_name: str
 ) -> None:
     step = (
         _job("native-cli-artifact")
@@ -67,8 +79,20 @@ def test_native_cli_tier_admits_all_selected_build_stages(
     )
     condition = re.search(r"^        if: (.+)$", step, re.MULTILINE)
     assert condition is not None
-    expression = condition.group(1).replace("steps.cli_scope.outputs.tier", repr(tier))
-    assert _evaluate(ast.parse(expression, mode="eval").body) == (tier != "skip")
+    expression = (
+        condition.group(1)
+        .replace("steps.cli_scope.outputs.tier", repr(tier))
+        .replace("github.event_name", repr(event))
+        .replace("github.ref", repr(ref))
+        .replace("&&", " and ")
+        .replace("||", " or ")
+    )
+    expected = tier != "skip"
+    if step_name == "Seed fast CUDA CI objects in the shared cache":
+        # Cache production is master-only; consumer build/test stages still run
+        # for every selected fast/release tier on PR and merge-queue events.
+        expected = expected and event == "push" and ref == "refs/heads/master"
+    assert _evaluate(ast.parse(expression, mode="eval").body) == expected
 
 
 @pytest.mark.parametrize(
