@@ -683,19 +683,27 @@ enum {
   GENERATIVEQC_INITIAL_GUESS_HF = 1,
   GENERATIVEQC_INITIAL_GUESS_LDA = 2,
   GENERATIVEQC_INITIAL_GUESS_MINAO = 3,
-  GENERATIVEQC_INITIAL_GUESS_AUTO_CPU = 4
+  GENERATIVEQC_INITIAL_GUESS_AUTO_CPU = 4,
+  GENERATIVEQC_INITIAL_GUESS_HUCKEL = 5,
+  GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU = 6
 };
 
 /** Bounded cold-start policy. AUTO_CPU resolves MINAO or Hcore independently
  * for each CPU HF/KS system; discover its capability before requesting it.
  * Unsupported MINAO systems retain Hcore without weakening target admission.
- * Explicit HF/LDA/MINAO choices never silently change provider.
+ * AUTO_HUCKEL_CPU similarly resolves Huckel or Hcore per CPU exact/DF system.
+ * Explicit HF/LDA/MINAO/Huckel choices never silently change provider.
  * HF/LDA retain their CPU FP64,
  * all-electron restricted exact energy-only domain. MINAO is a zero-Fock
  * occupied-ANO projection qualified for all-electron restricted H-Ar targets;
  * it may seed CUDA exact KS and force endpoints. Zero-valued controls select
  * 32 iterations, DIIS 8, tolerances 1e-6/1e-4 and 256 MiB. LDA uses an
- * independent v1 coarse grid (defaults 8/6/12); HF/MINAO have no grid.
+ * independent v1 coarse grid (defaults 8/6/12); HF/MINAO/Huckel have no grid.
+ * Huckel uses native CPU spherical-average atomic RHF and the updated GWH
+ * rule, and additionally supports restricted CUDA RHF and CPU/CUDA DF HF/KS.
+ * This changes only the cold density, never the target's fitted Hamiltonian.
+ * Identical atomic basis problems
+ * are reused within preparation; all atomic work is charged to the endpoint.
  * maximum_numeric_bytes bounds preliminary numeric payloads, excluding object
  * headers/allocator/runtime overhead and the retained target owner. Compose
  * both owners through ResourceBudget for a whole-endpoint host capacity bound.
@@ -750,10 +758,14 @@ enum {
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF = 1U << 0,
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA = 1U << 1,
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO = 1U << 2,
-  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU = 1U << 3
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU = 1U << 3,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL = 1U << 4,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF = 1U << 5,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_DF = 1U << 6,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU = 1U << 7
 };
 /** @native-contract generativeqc_initial_guess_capabilities_v1
- * @behavior Return additive HF, LDA, MINAO, and CPU automatic-policy capability bits.
+ * @behavior Return additive provider, target-domain, and CPU automatic-policy capability bits.
  * @outputs Ignore unknown bits. A positive bit does not waive the provider-specific backend,
  * spin, basis, derivative, and resource admission checks documented with
  * generativeqc_initial_guess_options.
@@ -811,6 +823,32 @@ GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v1(
  * @execution Synchronous, allocation-free, context-free discovery; no device or science work.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, int64_t electron_count,
+    uint32_t multiplicity, uint32_t* resolved_kind);
+
+/** @native-contract generativeqc_initial_guess_auto_kind_v2
+ * @behavior Resolve the guarded native Modified Huckel default without changing the v1 policy.
+ * @inputs Uses the same request and validation contract as generativeqc_initial_guess_auto_kind_v1.
+ * @outputs On SUCCESS, writes HUCKEL for FP64 all-electron restricted CPU/CUDA HF/KS,
+ * including density fitting, or zero (Hcore). Model-only admission does not waive basis,
+ * population, preparation-budget, or density gates. HF requires the RHF method.
+ * @lifetime Borrows the request and atomic_numbers for this call only; retains nothing.
+ * @errors Uses the v1 model query status codes and preserves output on failure.
+ * @execution Synchronous, allocation-free discovery; no context, device, or scientific work.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v2(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* resolved_kind);
+
+/** @native-contract generativeqc_initial_guess_auto_system_kind_v2
+ * @behavior Resolve automatic Huckel or Hcore for one system, including its population.
+ * @inputs Uses the v1 system query request and population validation contract.
+ * @outputs On SUCCESS, writes HUCKEL only for an eligible positive even-electron singlet,
+ * otherwise zero (Hcore). This shape query does not waive seed-budget or density gates.
+ * @lifetime Borrows the request and atomic_numbers for this call only; retains nothing.
+ * @errors Uses the v1 system query status codes and preserves output on failure.
+ * @execution Synchronous, allocation-free, context-free discovery; no device or science work.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind_v2(
     const generativeqc_initial_guess_auto_policy* request, int64_t electron_count,
     uint32_t multiplicity, uint32_t* resolved_kind);
 

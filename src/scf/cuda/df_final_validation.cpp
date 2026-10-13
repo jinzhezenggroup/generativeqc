@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -37,11 +38,12 @@ struct Workspace {
 void check(cudaError_t status, const char* operation) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
-    throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR,
+                              std::string(operation) + ": " + cudaGetErrorString(status));
 }
 void check(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
 }
 Workspace& prepare(CudaDensityFittingJkPlan& plan) {
   check(cudaSetDevice(plan.device_id), "select final-validation device");
@@ -111,8 +113,10 @@ void gemm(CudaDensityFittingJkPlan& plan, const double* a, const double* b, doub
   }
   const auto status = tensor::cuda::square_panel_product(plan.blas, n, rank < 0 ? n : rank, a, ta,
                                                          b, tb, out, scale);
+  if (status == CUBLAS_STATUS_ALLOC_FAILED) throw std::bad_alloc();
   if (status != CUBLAS_STATUS_SUCCESS)
-    throw std::runtime_error("cuBLAS final-validation product failed: " + std::to_string(status));
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR,
+                              "cuBLAS final-validation product failed: " + std::to_string(status));
 }
 ValidationInputs inputs(CudaDensityFittingJkPlan& plan, Workspace& w,
                         const solver::FinalFrameCandidate* frame, std::size_t spin, double weight) {

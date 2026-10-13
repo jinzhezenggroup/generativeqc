@@ -537,6 +537,13 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
       return density;
     } catch (const std::bad_alloc&) {
       throw;
+    } catch (const generativeqc::Error& error) {
+      if (error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+      diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::PreparationFailed;
+      diagnostic.work_counters_complete = false;
+      diagnostic.preparation_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return std::nullopt;
     } catch (const std::exception&) {
       diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::PreparationFailed;
       diagnostic.work_counters_complete = false;
