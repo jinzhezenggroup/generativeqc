@@ -107,6 +107,12 @@ control artifacts, resources and finite compiler lifetime. Forward and
 derivative programs pass the same backend admission. Native CPU supports float64
 contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
 `sqrt` and exact `pow`; CUDA admits float32 and float64 for these scalar functions.
+The materializing CPU backend also accepts one-byte Boolean inputs, constants,
+shape/static-index views and six comparisons of finite float64 operands.
+Programs containing Boolean data use a separate checked byte ABI; pure float64
+programs retain their existing ABI. FP32 comparison operands, Boolean AD,
+`where`, nonfinite comparison semantics and native CUDA Boolean data remain
+unsupported. This subset does not establish complete Array API conformance.
 Other operations fail closed; full eager conformance does
 not imply full compiler coverage. Higher-order public transforms are unsupported.
 
