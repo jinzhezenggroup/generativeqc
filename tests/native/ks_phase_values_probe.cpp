@@ -260,8 +260,8 @@ void raw_range_oracle(const Fixture& fixture) {
               source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
                              4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle",
                              false, false, screening, 8ULL << 30, false,
-                             scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f, buckets,
-                             spins) == GENERATIVEQC_STATUS_SUCCESS &&
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+                             buckets, spins) == GENERATIVEQC_STATUS_SUCCESS &&
                   source.active(),
               source.reason());
           auto spec = scf::make_global_hybrid_fock_spec(
@@ -274,11 +274,19 @@ void raw_range_oracle(const Fixture& fixture) {
             return source.enqueue(request, alpha, nullptr, ka, error.get(), threshold, detail,
                                   spins == 2 ? beta : nullptr, spins == 2 ? kb : nullptr);
           };
-          for (unsigned mismatch = 0; mismatch < 3; ++mismatch) {
+          for (unsigned mismatch = 0; mismatch < 4; ++mismatch) {
             auto wrong = spec;
-            if (mismatch == 0) wrong.exchange.op = scf::FockOperator::FullRange;
+            // Keep each radial request valid in isolation so rejection tests
+            // the immutable lease identity, not ordinary argument validation.
+            if (mismatch == 0)
+              wrong.exchange.op = range == 0 ? scf::FockOperator::LongRange
+                                            : scf::FockOperator::ShortRange;
             if (mismatch == 1) wrong.exchange.omega = 0.4;
             if (mismatch == 2) wrong.coulomb.present = true;
+            if (mismatch == 3) {
+              wrong.exchange.op = scf::FockOperator::FullRange;
+              wrong.exchange.omega = 0.0;
+            }
             require(execute(wrong, screening) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                     "range source accepted a different radial consumer");
           }
