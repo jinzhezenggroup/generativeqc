@@ -44,7 +44,7 @@ profiling are separate. These individual ablations must not be added together.
 
 Screening includes off, 1e-8, 1e-6 and 1e-4, with five repeats each. Complete
 raw samples, all forces, independent errors, iteration/residual diagnostics,
-resource diagnostics and separate component records are in `*-404.json`,
+resource diagnostics and separate component records are in `*-404.json.gz`,
 `*-406.json`, and `*-407.json`. `timings.json` is a derived convenience table.
 
 The retained U already occupies 754974720 bytes at 768 AO. Reuse adds no U
@@ -149,3 +149,19 @@ including stale/failed solve lease revocation. See `validation.json` for
 test/sanitizer evidence and [`ownership.json` (historical snapshot)](https://github.com/jinzhezenggroup/vibeqc/blob/e215b30685f8a36ef0cc5772c9166837527f64a2/benchmarks/results/issue404-407-df/ownership.json) for the
 reviewed native CUDA delta. Mathematical assumptions, exact fallbacks and
 decisions are in the [note](../../../.agents/notes/implemented/performance/2026-09-16-df-tuning-and-projection.md).
+
+## Lossless endpoint storage
+
+The 384- and 768-AO derivative-policy records are stored as deterministic gzip
+([384-404.json.gz](384-404.json.gz) and [768-404.json.gz](768-404.json.gz)).
+[storage.json](storage.json) binds both stored and decoded sizes and SHA-256
+hashes to the original files in Git commit
+`445c0cc2fd3e9e3658340487014131b7ffa46e80`. Decoding restores every original
+byte, including all 20 clean samples, four diagnostic records, full forces,
+controls, timings and existing source/device/scheduler provenance. No values
+or scientific acceptance decisions were changed or newly measured.
+
+Read offline with `tools.generativeqc_validation.record.load_json` or
+`gzip.open(path, "rt")` and `json.load`. The two original plain files remain
+recoverable from the named Git commit. Other historical snapshot instructions
+and limitations above still apply.
