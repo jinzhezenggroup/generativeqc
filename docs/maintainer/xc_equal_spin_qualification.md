@@ -109,6 +109,7 @@ reference dependencies installed:
 
 ```bash
 PYTHONPATH=python:. OMP_NUM_THREADS=1 python -m pytest -q \
+  tests/python/test_scalar_branch_coalescing.py \
   tests/python/test_automatic_equal_spin_cuda.py \
   tests/python/test_equal_spin_xc_codegen.py \
   tests/python/test_functional_independent_xc_optimization.py \
