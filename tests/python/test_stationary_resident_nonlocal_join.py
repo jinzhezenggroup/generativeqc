@@ -93,9 +93,13 @@ def fixture(
             pointer=4096, stride=6, stream=seed_stream, generation=7
         )
 
-        def diagnostic(self) -> SimpleNamespace:
+        def diagnostic(self, *, include_work: bool = False) -> SimpleNamespace:
             return SimpleNamespace(
-                executed=self.executed, collected_points=self.collected_points
+                executed=self.executed,
+                collected_points=self.collected_points,
+                pair_cache_probes=0,
+                pair_cache_hits=0,
+                pair_evaluations=0,
             )
 
         def reset(self) -> None:
