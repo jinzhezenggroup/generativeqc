@@ -494,14 +494,6 @@
       "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
     },
     {
-      "bytes": 118468,
-      "classification": "required-compact-accepted-evidence",
-      "family": "native-memory-arena-20261011",
-      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
-      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
-      "sha256": "01dedadb0975a4359cd2c77666dc7110af82835876c39578a4adf0013fc023cd"
-    },
-    {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
       "family": "pbe0-cuda-schedule-20261006",
       "bytes": 756252,
@@ -594,7 +586,7 @@
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
       "bytes": 228746,
-      "sha256": "847e580a9604eb3fe4a7e8065b0c8bfb3377970b8152b8d930967e00c0e65b98",
+      "sha256": "7be5edb3f8c928a046b8f6415fead044c5160bb566117a657da5e41631c14610",
       "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
     },
     {
