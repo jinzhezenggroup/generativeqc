@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import runpy
-from functools import lru_cache
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +18,7 @@ PYTHON_COMPAT_OUTPUT = (
     ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
 )
 SCHEMA = "generativeqc.native-semilocal-families.v3"
-LIBXC_HYBRIDS = (
-    ROOT / "python/generativeqc_compiler/method/_generated_libxc_methods.py"
-)
+LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/method/_generated_libxc_methods.py"
 FAST_PATH_FIELDS = (
     "component_scaling",
     "mixed_ao_precision",
@@ -54,7 +52,9 @@ def _resolve_libxc_hybrid(item: dict[str, Any]) -> None:
     if not isinstance(identifier, str) or not identifier:
         raise ValueError("native Libxc hybrid identifier must be a nonempty string")
     record = _pinned_libxc_hybrid_methods().get(identifier)
-    if record is None or record.get("registration") != "HYB_GGA_XC_" + identifier.replace("-", "_"):
+    if record is None or record.get(
+        "registration"
+    ) != "HYB_GGA_XC_" + identifier.replace("-", "_"):
         raise ValueError("native hybrid has no matching generated Libxc registration")
     if (
         record.get("family") != "hyb_gga"
@@ -71,7 +71,9 @@ def _resolve_libxc_hybrid(item: dict[str, Any]) -> None:
     item["cuda_global_hybrid_exact_exchange"] = str(exact)
     for profile in item.get("cpu_stationary_force_profiles", []):
         if profile["exact_exchange"] != "libxc":
-            raise ValueError("native Libxc hybrid CPU force coefficient must be source-derived")
+            raise ValueError(
+                "native Libxc hybrid CPU force coefficient must be source-derived"
+            )
         profile["exact_exchange"] = str(exact)
 
 

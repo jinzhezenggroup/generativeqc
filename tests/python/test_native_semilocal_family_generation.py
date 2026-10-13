@@ -5,7 +5,6 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
-
 from generativeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
     SEMILOCAL_FAMILIES,
@@ -285,12 +284,13 @@ def test_b3lyp_fractions_are_source_derived_from_pinned_libxc(tmp_path: Path) ->
     assert b3lyp["libxc_hybrid_method"] == "B3LYP"
     assert b3lyp["cpu_stationary_force_profiles"][0]["exact_exchange"] == "libxc"
 
-    resolved = next(item for item in generator.load_manifest() if item["symbol"] == "B3lyp")
-    assert Fraction(resolved["cuda_global_hybrid_exact_exchange"]) == Fraction(1, 5)
-    assert (
-        Fraction(resolved["cpu_stationary_force_profiles"][0]["exact_exchange"])
-        == Fraction(1, 5)
+    resolved = next(
+        item for item in generator.load_manifest() if item["symbol"] == "B3lyp"
     )
+    assert Fraction(resolved["cuda_global_hybrid_exact_exchange"]) == Fraction(1, 5)
+    assert Fraction(
+        resolved["cpu_stationary_force_profiles"][0]["exact_exchange"]
+    ) == Fraction(1, 5)
     b3lyp["components"][1][1] = "71/100"
     invalid = tmp_path / "wrong-libxc-components.json"
     invalid.write_text(json.dumps(manifest), encoding="utf-8")
