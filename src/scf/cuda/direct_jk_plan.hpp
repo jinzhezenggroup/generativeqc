@@ -28,8 +28,7 @@ constexpr DirectJkValueDispatch direct_jk_value_dispatch(
     bool want_exchange, bool mixed_coulomb, bool canonical_available = false) noexcept {
   const bool generated_coulomb = generated_coulomb_available && want_coulomb && !mixed_coulomb;
   const bool generated_exchange = generated_exchange_available && want_exchange;
-  const bool canonical_coulomb =
-      canonical_available && want_coulomb && !generated_coulomb && !mixed_coulomb;
+  const bool canonical_coulomb = canonical_available && want_coulomb && !generated_coulomb;
   const bool canonical_exchange = canonical_available && want_exchange && !generated_exchange;
   return {generated_coulomb,
           generated_exchange,

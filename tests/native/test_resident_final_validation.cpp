@@ -38,7 +38,7 @@ void analytic_frames(cudaStream_t stream, MatrixLibraryResources library, std::s
   const auto partial_count = resident_final_validation_partial_count(dimension);
   runtime::OwnedCudaBuffer<double> input(0, 6 * matrix, stream), values(0, dimension, stream),
       scratch(0, 4 * (matrix + 2), stream);
-  runtime::OwnedCudaBuffer<int> info(0, 1, stream);
+  runtime::OwnedCudaBuffer<int> info(0, 2, stream);
   runtime::OwnedCudaBuffer<std::uint64_t> generation(0, 1, stream);
   runtime::OwnedCudaBuffer<scf::cuda_df::ValidationPartial> partial(0, partial_count + 2, stream);
   std::vector<double> host(6 * matrix), energies(dimension);
@@ -112,12 +112,16 @@ void analytic_frames(cudaStream_t stream, MatrixLibraryResources library, std::s
     channel.physical_fock = true;
   }
   scf::solver::FinalStateDiagnostic diagnostic;
+  ResidentFinalValidationTransfers transfers;
   std::string detail;
   const auto evaluate = [&] {
     return resident_final_state_products(library, std::span(channels.data(), spin_count), workspace,
-                                         true, .3, diagnostic, detail);
+                                         true, .3, diagnostic, detail, &transfers);
   };
   if (!evaluate()) throw std::runtime_error("analytic resident products failed: " + detail);
+  require(transfers.device_to_host_bytes == spin_count * sizeof(scf::cuda_df::ValidationPartial) &&
+              transfers.synchronizations == 1,
+          "resident proof omitted observed transport");
   require(std::abs(diagnostic.energy - expected_energy) < 1e-12,
           "resident energy differs from independent analytic trace");
   for (double error : {diagnostic.maximum_density_error, diagnostic.maximum_canonical_error,
@@ -127,6 +131,16 @@ void analytic_frames(cudaStream_t stream, MatrixLibraryResources library, std::s
   require(diagnostic.eigenframes.size() == spin_count, "resident products lost a spin");
   for (const auto& frame : diagnostic.eigenframes)
     require(scf::solver::accept_eigen_frame(frame, detail), "analytic resident eigen gate failed");
+
+  for (const auto offset : {std::size_t{0}, matrix, 3 * matrix}) {
+    const double asymmetric = host[offset + 1] + 1e-4;
+    check(
+        cudaMemcpy(input.get() + offset + 1, &asymmetric, sizeof(double), cudaMemcpyHostToDevice));
+    rejects(evaluate);
+    check(cudaMemcpy(input.get() + offset + 1, host.data() + offset + 1, sizeof(double),
+                     cudaMemcpyHostToDevice));
+    require(evaluate(), "restored resident operator failed");
+  }
 
   diagnostic.maximum_commutator = 99;
   require(evaluate() && diagnostic.maximum_commutator < 1e-12,
@@ -159,6 +173,8 @@ void analytic_frames(cudaStream_t stream, MatrixLibraryResources library, std::s
   workspace = saved_workspace;
   --workspace.partial_count;
   rejects(evaluate);
+  require(transfers.device_to_host_bytes == 0 && transfers.synchronizations == 0,
+          "rejected resident resources submitted work");
   workspace = saved_workspace;
   ++channels[0].expected_generation;
   rejects(evaluate);
@@ -166,6 +182,9 @@ void analytic_frames(cudaStream_t stream, MatrixLibraryResources library, std::s
   const int failed_solver = 1;
   check(cudaMemcpy(info.get(), &failed_solver, sizeof(int), cudaMemcpyHostToDevice));
   rejects(evaluate);
+  require(transfers.device_to_host_bytes == spin_count * sizeof(scf::cuda_df::ValidationPartial) &&
+              transfers.synchronizations == 1,
+          "rejected resident solver evidence hid completed transport");
   check(cudaMemset(info.get(), 0, sizeof(int)));
   check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
   rejects(evaluate);
@@ -195,6 +214,24 @@ void analytic_frames(cudaStream_t stream, MatrixLibraryResources library, std::s
       std::memcmp(&observed_packets.front(), &packet_host.front(), sizeof(packet_host[0])) == 0 &&
           std::memcmp(&observed_packets.back(), &packet_host.back(), sizeof(packet_host[0])) == 0,
       "resident reduction scratch canary changed");
+  auto* weights_status = info.get() + 1;
+  check(cudaMemsetAsync(weights_status, 0, sizeof(int), stream));
+  scf::cuda_df::launch_validation_weights_status(stream, matrix, input.get() + 3 * matrix,
+                                                 input.get() + matrix, weights_status);
+  int observed_status = -1;
+  check(cudaMemcpyAsync(&observed_status, weights_status, sizeof(int), cudaMemcpyDeviceToHost,
+                        stream));
+  check(cudaStreamSynchronize(stream));
+  require(observed_status == 0, "finite stationary weights failed");
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  check(
+      cudaMemcpyAsync(input.get() + matrix, &nan, sizeof(double), cudaMemcpyHostToDevice, stream));
+  scf::cuda_df::launch_validation_weights_status(stream, matrix, input.get() + 3 * matrix,
+                                                 input.get() + matrix, weights_status);
+  check(cudaMemcpyAsync(&observed_status, weights_status, sizeof(int), cudaMemcpyDeviceToHost,
+                        stream));
+  check(cudaStreamSynchronize(stream));
+  require(observed_status != 0, "nonfinite stationary weights passed");
 }
 }  // namespace
 
@@ -210,6 +247,9 @@ int main() {
     for (const auto dimension : {2U, 37U})
       for (const auto spins : {1U, 2U})
         analytic_frames(stream.get(), library.view(), dimension, spins);
+    for (const auto dimension : {2U, 37U})
+      for (const auto spins : {1U, 2U})
+        analytic_frames(stream.get(), {stream.get()}, dimension, spins);
     std::cout << "resident final-state validation tests passed\n";
     return 0;
   } catch (const std::exception& error) {

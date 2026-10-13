@@ -91,7 +91,12 @@ def _problem(atom: str, spin: int, broken: bool = False) -> tuple:
 def test_complete_cpu_lambda_against_independent_pyscf(
     atom: str, spin: int, broken: bool
 ) -> None:
-    snapshot, source, _, _, expected = _problem(atom, spin, broken)
+    if (atom, spin, broken) == ("Li 0 0 0", 1, False):
+        from _li_uhf_lambda_reference import frozen_problem
+
+        snapshot, source, expected = frozen_problem()
+    else:
+        snapshot, source, _, _, expected = _problem(atom, spin, broken)
     with (
         ConventionalProvider(snapshot, source) as provider,
         PreparedUCCSD(

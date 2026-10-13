@@ -23,6 +23,7 @@ def read_correlation_result(
     *,
     index: int | None = None,
     context: ctypes.c_void_p | None = None,
+    mp2_component: bool = False,
 ) -> CorrelationResult | None:
     """Decode the optional post-HF diagnostic ABI into a stable record."""
 
@@ -31,6 +32,10 @@ def read_correlation_result(
         if index is None
         else "generativeqc_batch_get_correlation_diagnostic"
     )
+    if mp2_component:
+        if index is not None:
+            raise ValueError("MP2 companions are single-system results")
+        name = "generativeqc_calculation_get_mp2_component_diagnostic_v1"
     getter = getattr(library, name)
     diag = _native.CorrelationDiagnostic()
     diag.struct_size = ctypes.sizeof(diag)

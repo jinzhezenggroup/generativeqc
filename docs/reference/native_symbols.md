@@ -41,6 +41,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
 - [generativeqc_calculation_get_supported_properties_v1](#native-c-generativeqc-calculation-get-supported-properties-v1)
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
+- [generativeqc_calculation_execute_components_v1](#native-c-generativeqc-calculation-execute-components-v1)
+- [generativeqc_calculation_get_mp2_component_diagnostic_v1](#native-c-generativeqc-calculation-get-mp2-component-diagnostic-v1)
 - [generativeqc_calculation_get_scf_diagnostic](#native-c-generativeqc-calculation-get-scf-diagnostic)
 - [generativeqc_calculation_get_ks_diagnostic](#native-c-generativeqc-calculation-get-ks-diagnostic)
 - [generativeqc_calculation_get_ks_coulomb_exchange_work_v1](#native-c-generativeqc-calculation-get-ks-coulomb-exchange-work-v1)
@@ -1021,6 +1023,63 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 **Units.** Energy and energy_change are Hartree; forces are -dE/dR in Hartree/Bohr. Coordinates
 are Bohr; SCF density change and physical commutator residuals are distinct quantities.
 
+(native-c-generativeqc-calculation-execute-components-v1)=
+## generativeqc_calculation_execute_components_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute_components_v1 ( generativeqc_calculation * calculation , generativeqc_result_descriptor * result , generativeqc_result_descriptor * hf , generativeqc_result_descriptor * mp2 ) ;
+```
+
+**Behavior.** Execute conventional MP2 or RCCSD(T) with optional same-reference companions.
+
+**Inputs.** Initialize every supplied result with its full struct_size and GENERATIVEQC_ABI_VERSION.
+MP2 supports HF; RCCSD(T) supports HF and MP2. NULL companion descriptors omit
+that work. All supplied descriptors must request the same energy/force mode,
+have disjoint output storage, and satisfy calculation_execute's buffer rules.
+One converged RHF state and exact interaction owner serve the complete group.
+Force companions are analytic, not finite differences or reference-oracle work.
+
+**Outputs.** With companions requested, outputs are published together only after every
+requested component succeeds. With neither requested, preserves calculation_execute.
+
+**Errors.** With companions requested, nonconvergence and any failure leave every scientific
+output untouched. Unsupported methods return NOT_IMPLEMENTED; invalid/aliased force
+storage or inconsistent output modes return INVALID_ARGUMENT.
+The existing per-endpoint numeric budget also bounds simultaneously live
+companion inputs, outputs and workspace; it is not a process-RSS limit.
+
+**Lifetime.** Borrowed buffers must remain alive for the call. The caller owns successful copies.
+
+**Execution.** Synchronous; serialize execution/query/destruction on the owner/context.
+
+**Units.** Energy is Hartree; forces are minus the gradient in Hartree/Bohr.
+
+(native-c-generativeqc-calculation-get-mp2-component-diagnostic-v1)=
+## generativeqc_calculation_get_mp2_component_diagnostic_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_mp2_component_diagnostic_v1 ( const generativeqc_calculation * calculation , generativeqc_correlation_diagnostic * out ) ;
+```
+
+**Behavior.** Read the completed same-reference MP2 companion diagnostic.
+
+**Inputs.** NULL out probes availability; otherwise initialize its full struct_size and abi_version.
+
+**Outputs.** Copies only the record from a successful current component execution.
+
+**Errors.** NOT_IMPLEMENTED before execution or after a legacy, rejected or failed replay.
+Invalid owner/ABI returns INVALID_ARGUMENT/ABI_MISMATCH without writes.
+
+**Lifetime.** Host-only copy; the owner and context must outlive the query.
+
+**Execution.** Synchronous; serialize with execution and destruction.
+
+**Units.** Correlation energies are Hartree; force/response units follow the standard diagnostic.
+
 (native-c-generativeqc-calculation-get-scf-diagnostic)=
 ## generativeqc_calculation_get_scf_diagnostic
 
@@ -1307,9 +1366,9 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_cc_performance_diagnostic ( const generativeqc_calculation * calculation , generativeqc_cc_performance_diagnostic * out ) ;
 ```
 
-Most recent RCCSD/RCCSD(T) phase/work record; NULL out probes availability.
+Most recent native coupled-cluster phase/work record; NULL out probes availability.
 
-**Behavior.** Read the latest RCCSD/RCCSD(T) phase and work evidence.
+**Behavior.** Read the latest native coupled-cluster phase and work evidence.
 
 **Inputs.** Initialize every supplied versioned descriptor with sizeof(its complete type) and
 GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
@@ -1907,7 +1966,7 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_cc_performance_diagn
 
 Input-ordered counterpart of generativeqc_calculation_get_cc_performance_diagnostic.
 
-**Behavior.** Read the latest RCCSD/RCCSD(T) phase and work evidence.
+**Behavior.** Read the latest native coupled-cluster phase and work evidence.
 
 **Inputs.** Initialize every supplied versioned descriptor with sizeof(its complete type) and
 GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out

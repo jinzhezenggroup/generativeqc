@@ -56,6 +56,12 @@ struct DFCCSDTResult {
   cc::triples::DFCudaFockResult triples_fock;
 };
 
+/** Scientific correlation demand; companions share the original frame/source. */
+struct DFCorrelationDemand {
+  bool mp2{};
+  unsigned companions{};
+};
+
 /** Cold normalized geometry -> exact native CUDA RHF -> DF source -> CCSD(T)
  * -> complete nuclear forces. Retains the exact source/frame only when forces
  * are requested, and consumes it before either input geometry can change.
@@ -125,7 +131,16 @@ DFCCSDTResult run_df_ccsdt_native(
     bool lambda_serial_scratch_reuse = true,
     std::optional<bool> ccsd_mixed_precision = std::nullopt, bool lambda_mixed_precision = false,
     bool lambda_resident_krylov = false,
-    double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual);
+    double ccsd_mixed_switch_residual = cc::SolverOptions{}.df_mixed_precision_switch_residual,
+    DFCorrelationDemand demand = {});
+
+/** Native DF-MP2 or DF-CCSD(T) group, never a DF-HF reference or an oracle replay.
+ * The CC parent inherits the complete owner's guarded fusion/scratch defaults;
+ * the MP2 demand omits both triples and Lambda regardless of those policies. */
+DFCCSDTResult run_df_correlation_group_native(runtime::ExecutionContext&, const core::System&,
+                                              const core::System&,
+                                              const generativeqc_method_descriptor&, bool forces,
+                                              DFCorrelationDemand);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

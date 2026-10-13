@@ -93,11 +93,15 @@ def _assert_full_range_derivative_layout(body: str) -> None:
     normalized = " ".join(body.split())
     assert "bool separate_sources" in normalized
     assert (
-        "std::vector<double> result((separate_sources ? 2U : 1U) * coordinates)"
+        "std::vector<double> result((separate_sources ? 2U : 1U) * batch.total_atoms * 3U)"
         in normalized
     )
     assert (
-        "cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream)"
+        "const auto output_elements = (separate_sources ? 2U : 1U) * coordinates"
+        in normalized
+    )
+    assert (
+        "cudaMemsetAsync(p.force, 0, output_elements * sizeof(double), shared.stream)"
         in normalized
     )
     assert (
@@ -109,12 +113,23 @@ def _assert_full_range_derivative_layout(body: str) -> None:
 def test_full_range_derivative_shares_one_queue_and_download() -> None:
     """Work reduction is source reuse, not removal of an observable component."""
     source = _source("src/scf/cuda/direct_coulomb.cpp")
-    body = source.split(
-        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
-    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    enqueue = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    host = cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
+    resident = cpp_function_definition(
+        source, "consume_generated_full_range_energy_derivatives"
+    )
+    body = enqueue + host
     _assert_full_range_derivative_layout(body)
     assert body.count("launch_bounded_shell_energy_derivative(") == 1
     assert body.count("cudaMemcpyAsync(") == 1
+    assert "enqueue_generated_full_range_energy_derivatives(" in host
+    assert "enqueue_generated_full_range_energy_derivatives(" in resident
+    assert "cudaMemcpyAsync(" not in enqueue + resident
+    assert "CudaDerivativeConvention::Force" in resident
     assert "for (unsigned source" not in body
     dispatcher = _source("src/scf/cuda/direct_bounded_fallback.cu")
     assert "DirectRangeOperator::FullSources" in dispatcher
@@ -124,6 +139,32 @@ def test_full_range_derivative_shares_one_queue_and_download() -> None:
     contraction = _source("src/scf/cuda/direct_force_quartet.cuh")
     assert "if (coefficient == 0.0 && exchange_weight == 0.0) return;" in contraction
     assert "SeparateSources ? 2U : 1U" in contraction
+
+
+def test_shared_full_range_queue_preserves_bilinear_seed() -> None:
+    """Resident force transport must not change the retained response seed ABI."""
+    source = _source("src/scf/cuda/direct_coulomb.cpp")
+    enqueue = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    host = cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
+    resident = cpp_function_definition(
+        source, "consume_generated_full_range_energy_derivatives"
+    )
+    assert "bool bilinear" in host
+    assert "allow_spatial_default, bilinear" in " ".join(host.split())
+    assert "allow_spatial_default, false" in " ".join(resident.split())
+    assert "if (bilinear)" in enqueue
+    assert "b.direct_force_seed = p.direct_spin" in enqueue
+    assert "unrestricted || bilinear" in enqueue
+    assert host.index("validate_generated_full_range_derivative_inputs(") < host.index(
+        "HostResultDrain"
+    )
+    assert resident.index(
+        "validate_generated_full_range_derivative_inputs("
+    ) < resident.index("cudaGetDevice(")
 
 
 @pytest.mark.parametrize(
@@ -138,9 +179,12 @@ def test_full_range_derivative_layout_rejects_understated_storage(
     before: str, after: str
 ) -> None:
     source = _source("src/scf/cuda/direct_coulomb.cpp")
-    body = source.split(
-        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
-    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    body = cpp_function_definition(
+        source, "enqueue_generated_full_range_energy_derivatives"
+    )
+    body += cpp_function_definition(
+        source, "execute_generated_full_range_energy_derivatives"
+    )
     assert before in body
     with pytest.raises(AssertionError):
         _assert_full_range_derivative_layout(body.replace(before, after))
@@ -237,7 +281,7 @@ int main() {
                 assert(route.generic_exchange == (want_k && !expected && !canonical));
                 assert(route.generated_coulomb == (want_j && expected_shell && !mixed_j));
                 assert(route.canonical_coulomb ==
-                       (want_j && !route.generated_coulomb && canonical && !mixed_j));
+                       (want_j && !route.generated_coulomb && canonical));
                 assert(route.generic_coulomb ==
                        (want_j && !route.generated_coulomb && !route.canonical_coulomb));
                 assert(int(route.generated_coulomb) + int(route.canonical_coulomb) +
@@ -489,7 +533,11 @@ int main() {
            int(both.generic_coulomb) == int(j));
     assert(int(both.generated_exchange) + int(both.canonical_exchange) +
            int(both.generic_exchange) == int(k));
-    if (mixed) assert(!both.generated_coulomb && !both.canonical_coulomb);
+    if (mixed) {
+      assert(!both.generated_coulomb);
+      assert(both.canonical_coulomb == (j && canonical));
+      assert(both.generic_coulomb == (j && !canonical));
+    }
     const auto ordinary = device_dispatch(generated_j, generated_k, j, k, mixed,
                                            canonical, false);
     assert(ordinary.generated_coulomb == both.generated_coulomb);

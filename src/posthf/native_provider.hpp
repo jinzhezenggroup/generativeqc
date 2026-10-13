@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <span>
 #include <vector>
 
 #include "hf/reference.hpp"
@@ -16,6 +17,14 @@ struct SpinMOSlots {
   std::array<unsigned, 4> spins{};
 };
 inline constexpr std::size_t padded_mo = static_cast<std::size_t>(-1);
+
+/** Borrowed ordered chemist-notation block in the provider's exact RHF frame.
+ * A true axis selects virtual orbitals, false selects occupied orbitals.
+ * Caller owns the values and charges their capacity beside provider workspace. */
+struct BorrowedMOBlock {
+  std::array<bool, 4> virtual_axes;
+  std::span<const double> values;
+};
 
 /** Candidate AO-tile extent, independent of the source's recurrence scratch.
  * Shell preserves existing consumers' small-tile admission contracts. Basis
@@ -59,6 +68,10 @@ class MOBlockProvider {
  * all-zero coefficient column marks an energy tail, never a frozen orbital. */
 class NativeBlockProvider final : public MOBlockProvider {
  public:
+  /** Bind a complete ERI symmetry cover from this same canonical reference.
+   * Values must outlive this provider and every synchronous read. Validation
+   * precedes binding; no ownership, allocation or cross-frame conversion occurs. */
+  void bind_borrowed_blocks(std::span<const BorrowedMOBlock> blocks);
   NativeBlockProvider(const integrals::ElectronInteractionSource& source,
                       const hf::PhysicalReference& reference, std::size_t budget,
                       unsigned axis_tile = 2, AOTileDomain tile_domain = AOTileDomain::Shell);
@@ -105,6 +118,13 @@ class NativeBlockProvider final : public MOBlockProvider {
   std::size_t nbf_{};
   std::size_t budget_, source_bytes_, reference_bytes_;
   std::array<std::size_t, 4> tile_;
+  struct BorrowedRoute {
+    std::span<const double> values;
+    std::array<std::size_t, 4> shape;
+    std::array<unsigned, 4> permutation;
+  };
+  std::array<BorrowedRoute, 16> borrowed_routes_{};
+  bool borrowed_blocks_bound_{};
 };
 
 /** CPU factorized two-electron provider for the RI-MP2 response path.

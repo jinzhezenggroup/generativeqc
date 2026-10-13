@@ -510,6 +510,11 @@ jobs:
           python3 -m pytest -q \
             tests/python/test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources \
             --basetemp build/ao-radial-compile
+          # Runtime provenance fingerprints nvcc and its sibling ptxas.
+          # The shared adapter retains compiler caching for this real toolchain.
+          GENERATIVEQC_NVCC="$CUDACXX" python3 -m pytest -q \
+            tests/python/test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device \
+            --basetemp build/grid-wheel-compile
       # This consumer never publishes an incomplete or branch-scoped cache.
       # The trusted full CUDA CLI producer saves after both compile variants.
       - name: Check Fock and proposal preflight without a GPU
@@ -1030,7 +1035,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
-      # All seven Python shards consume the same master CPU compiler cache;
+      # All eight Python shards consume the same master CPU compiler cache;
       # no test shard races to publish an immutable partial snapshot.
       - name: Install GenerativeQC editable package
         run: |
@@ -1068,12 +1073,12 @@ jobs:
       - name: Summarize compiler cache
         if: always()
         run: python3 tools/report_ci_ccache.py --label "Python native ${{ matrix.shard }}"
-      # Test-only probe objects are not produced by the master CMake seed.
+      # Test-only probe and scientific CPU JIT objects are not produced by the
+      # master CMake seed. Every Python shard can compile these test objects.
       # Retain their small ref-scoped overlay; never import it into shared caches.
       # Merge-group refs are ephemeral, so they restore but never publish caches.
       - name: Restore native Python probes
         id: python_probe_ccache
-        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache-python-probes
@@ -1128,8 +1133,26 @@ jobs:
             "${extra_args[@]}"
       # Preserve valid probe compilations after test failures without freezing
       # the immutable complete key or promoting a PR snapshot to master.
-      - name: Save native Python probes
+      # A stats-only directory must not freeze an empty immutable snapshot.
+      - name: Inspect native Python probe cache
+        id: python_probe_contents
+        shell: bash
         if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != ''
+        timeout-minutes: 1
+        continue-on-error: true
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
+        run: |
+          ccache --print-stats --format=json | python3 -c '
+          import json, sys
+          count = json.load(sys.stdin)["files_in_cache"]
+          if type(count) is not int or count < 0:
+              raise ValueError("invalid ccache files_in_cache count")
+          print("has-entries=" + str(count > 0).lower())
+          ' >> "$GITHUB_OUTPUT"
+      - name: Save native Python probes
+        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != '' && steps.python_probe_contents.outcome == 'success' && steps.python_probe_contents.outputs.has-entries == 'true'
         timeout-minutes: 2
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1523,10 +1546,12 @@ jobs:
         shell: bash
         env:
           CLI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          CLI_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
         run: |
           set -euo pipefail
           tier="$(python3 tools/native_cli_ci_scope.py \
-            --event "$GITHUB_EVENT_NAME" --base-sha "$CLI_BASE_SHA" --head-sha "$GITHUB_SHA")"
+            --event "$GITHUB_EVENT_NAME" --base-sha "$CLI_BASE_SHA" --head-sha "$GITHUB_SHA" \
+            --target-ref="$CLI_TARGET_REF")"
           echo "tier=$tier" >> "$GITHUB_OUTPUT"
           echo "Native CLI build tier: $tier"
       - name: Validate semantic version tag before building
@@ -1580,11 +1605,12 @@ jobs:
           sudo install -m 0755 "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
           ccache --version
-      - name: Test deterministic native CLI packager
+      - name: Test deterministic native CLI packager and static-force contracts
         if: steps.cli_scope.outputs.tier != 'skip'
         run: |
           python3 -m unittest discover -s tests/python -p test_native_cli_package.py
           python3 -m unittest discover -s tests/python -p test_native_cli_ci_scope.py
+          python3 -m unittest discover -s tests/python -p test_native_cli_stationary_distribution.py
       - name: Restore shared Linux CUDA ccache
         if: steps.cli_scope.outputs.tier != 'skip'
         id: cli_ccache
@@ -1604,6 +1630,8 @@ jobs:
         shell: bash
         run: |
           ccache --zero-stats
+          echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
+            echo "::warning::Unable to record compiler-cache statistics boundary"
           cmake --preset cuda-release-sm120 \
             -DGENERATIVEQC_BUILD_TESTS=ON \
             -DGENERATIVEQC_CUDA_FAST_COMPILE=ON \
@@ -1611,13 +1639,24 @@ jobs:
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build --preset cuda-release-sm120 \
             --target generativeqc_cuda_runtime_tests --parallel 3
+      - name: Report fast CUDA seed compiler cache
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.fast_cuda_seed.outputs.cache_stats_reset == 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: >-
+          python3 tools/report_ci_ccache.py
+          --label "CUDA native CLI fast seed (shared library)"
+          --verbose --build-dir build/cuda-release-sm120
       - name: Build monolithic C++ CUDA CLI (release or fast PR)
+        id: native_cli_build
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         env:
           CLI_FAST_COMPILE: ${{ steps.cli_scope.outputs.tier == 'fast' && 'ON' || 'OFF' }}
         run: |
           ccache --zero-stats
+          echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
+            echo "::warning::Unable to record compiler-cache statistics boundary"
           # PCH calls bypass strict ccache. Disable only this CI preset use;
           # retain normal header/macro validation instead of cache sloppiness.
           cmake --preset cuda-release-cli-sm120 \
@@ -1625,7 +1664,7 @@ jobs:
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
       - name: Show detailed CLI compiler cache statistics
-        if: always() && steps.cli_scope.outputs.tier != 'skip'
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true
         run: ccache --show-stats --verbose
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
@@ -1662,6 +1701,13 @@ jobs:
           )
           print(f"Verified all {len(expected)} automatic CUDA XC registrations")
           PY
+      - name: Verify compiler-selected CUDA graph programs are linked into the CLI
+        if: steps.cli_scope.outputs.tier != 'skip'
+        shell: bash
+        run: |
+          python3 tools/check_native_cli_stationary.py \
+            --build-tree build/cuda-release-cli-sm120 \
+            --cli build/cuda-release-cli-sm120/generativeqc
       - name: Smoke-test release-mode native command
         id: cli_smoke
         if: steps.cli_scope.outputs.tier != 'skip'
@@ -1681,9 +1727,28 @@ jobs:
           fi
           ldd "$cli"
           ccache --show-stats
+      # GitHub-hosted ubuntu-24.04 builders do not have a GPU. On an attached
+      # compatible Blackwell device, run the actual CLI E+F matrix; otherwise
+      # report the missing device instead of mislabeling link checks as GPU QA.
+      - name: Exercise ten CLI CUDA E+F endpoints on an attached sm_120 GPU
+        if: steps.cli_scope.outputs.tier != 'skip'
+        shell: bash
+        run: |
+          if command -v nvidia-smi >/dev/null 2>&1 && \
+             nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | grep -Eq '^12[.]'; then
+            python3 tests/native/test_cli_cuda_stationary.py \
+              build/cuda-release-cli-sm120/generativeqc
+          else
+            echo "::notice::No sm_120 GPU on hosted CI: ten-method CLI E+F device test NOT RUN; run tests/native/test_cli_cuda_stationary.py under a real sm_120 Slurm allocation."
+          fi
       - name: Summarize compiler cache
-        if: always() && steps.cli_scope.outputs.tier != 'skip'
-        run: python3 tools/report_ci_ccache.py --label "CUDA native CLI"
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: >-
+          python3 tools/report_ci_ccache.py
+          --label "CUDA native CLI monolithic build"
+          --build-dir build/cuda-release-cli-sm120
       - name: Save complete shared CUDA ccache on master
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_ccache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -1714,7 +1779,7 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 1
-      - name: Install and package native command, AOT plug-ins and notices
+      - name: Install and package native command and notices
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         env:

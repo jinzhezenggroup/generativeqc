@@ -258,6 +258,38 @@ __device__ __forceinline__ double direct_bilinear_density_coefficient(
 """
 
 
+def emit_direct_coulomb_density_admission() -> str:
+    """Admit an ERI only if its Coulomb orbit can contribute to a matrix.
+
+    Both pair orientations matter for nonsymmetric response densities. UKS
+    admission uses the same FP64 total-spin density as the scatter, including
+    exact alpha/beta cancellation; no magnitude screening is introduced.
+    """
+
+    return """/** Exact zero-work predicate for the Coulomb eightfold orbit. */
+template <bool Unrestricted>
+__device__ __forceinline__ bool direct_coulomb_density_active(
+    std::size_t dimension, std::size_t physical_offset, std::size_t spin_offset,
+    const double* density, std::size_t first, std::size_t second,
+    std::size_t third, std::size_t fourth) {
+  const std::size_t indices[]{matrix_index(first, second, dimension),
+                              matrix_index(second, first, dimension),
+                              matrix_index(third, fourth, dimension),
+                              matrix_index(fourth, third, dimension)};
+  for (const auto index : indices) {
+    if constexpr (Unrestricted) {
+      if (density[spin_offset + index] +
+              density[spin_offset + dimension * dimension + index] != 0.0)
+        return true;
+    } else if (density[physical_offset + index] != 0.0) {
+      return true;
+    }
+  }
+  return false;
+}
+"""
+
+
 def emit_direct_fock_accumulation_header() -> str:
     """Emit the native fallback adapter from the same compiler-owned equations."""
 
@@ -307,6 +339,7 @@ def emit_direct_fock_accumulation_header() -> str:
 namespace generativeqc::scf::cuda_execution {{
 
 {function}
+{emit_direct_coulomb_density_admission()}
 {emit_direct_force_density_coefficient()}
 {emit_direct_force_component_weight()}
 {emit_direct_bilinear_density_coefficient()}

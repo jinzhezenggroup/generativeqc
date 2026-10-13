@@ -68,6 +68,25 @@ guards. Independent reference, resource admission and runtime-selection cache
 integrity coverage remains. Compilation requires a verified native compiler
 cache; a missing local fixture is an explicit skip, never a numerical pass.
 
+## Composition with weighted native stationary response
+
+The merged native stationary controller passes MethodIR exchange/correlation
+weights through the shared point traversal. Preserve both weights through
+`CuratedPointEvaluator<static_family>` and its canonical response call; carrying
+the family alone would silently restore unit-weight response. Generic `-1`,
+specialized PBE, physical batches and shared equal-spin identity remain intact.
+The canonical response avoids evaluating a zero-weight singular component.
+
+The host ABI contract checks weighted response consistency at two finite-
+difference steps across both spin layouts and family/equal-spin policies.
+Those differences use the same physical algebra and are consistency evidence.
+A separate Dirac exchange derivative checks the empty-spin, zero-correlation
+boundary independently. The inherited Libxc weighted-response oracle remains
+a separate prerequisite-sensitive gate; a missing oracle is a skip. Graph
+identity/capacity and stationary contract v2 admission remain source matched.
+None of these host gates qualifies joint-source NVIDIA execution, production
+sm90 derivatives, dynamic local traffic or complete 48/96 E+F.
+
 ## References
 
 - Supersedes the shared-traversal composition discussion in

@@ -12,6 +12,10 @@
     "generativeqc.BasisShell": "generativeqc/basis.py:BasisShell",
     "generativeqc.BatchItemResult": "generativeqc/batch.py:BatchItemResult",
     "generativeqc.BatchResult": "generativeqc/batch.py:BatchResult",
+    "generativeqc.CBSBasis": "generativeqc/cbs.py:CBSBasis",
+    "generativeqc.CBSComponent": "generativeqc/cbs.py:CBSComponent",
+    "generativeqc.CBSResult": "generativeqc/cbs.py:CBSResult",
+    "generativeqc.CCSDTCBSCalculator": "generativeqc/cbs.py:CCSDTCBSCalculator",
     "generativeqc.Calculator": "generativeqc/calculator.py:Calculator",
     "generativeqc.ContributionLedger": "generativeqc/force_aware_numerics.py:ContributionLedger",
     "generativeqc.CorrelationResult": "generativeqc/_api_types.py:CorrelationResult",
@@ -105,6 +109,10 @@
     "generativeqc.TransferOperation": "generativeqc/progressive_controller.py:TransferOperation",
     "generativeqc.assemble_fixed_density_exchange": "generativeqc/mean_field.py:assemble_fixed_density_exchange",
     "generativeqc.basis_capability": "generativeqc/basis_capabilities.py:basis_capability",
+    "generativeqc.cbs.CBSBasis": "generativeqc/cbs.py:CBSBasis",
+    "generativeqc.cbs.CBSComponent": "generativeqc/cbs.py:CBSComponent",
+    "generativeqc.cbs.CBSResult": "generativeqc/cbs.py:CBSResult",
+    "generativeqc.cbs.CCSDTCBSCalculator": "generativeqc/cbs.py:CCSDTCBSCalculator",
     "generativeqc.compare_observables": "generativeqc/accuracy.py:compare_observables",
     "generativeqc.cross_overlap": "generativeqc/overlap.py:cross_overlap",
     "generativeqc.electron_state": "generativeqc/elements.py:electron_state",
@@ -1417,6 +1425,17 @@
         "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
       }
     },
+    "generativeqc/calculator.py:Calculator.singlepoint_components": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/ccsdt_cbs.md#python-cbs-backends",
+        "errors": "docs/user/ccsdt_cbs.md#python-cbs-errors",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values"
+      }
+    },
     "generativeqc/calculator.py:method_capabilities": {
       "kind": "function",
       "profile": "execution",
@@ -1426,6 +1445,75 @@
         "errors": "docs/reference/python_execution_contracts.md#python-calculation-errors",
         "ownership": "docs/reference/python_execution_contracts.md#python-calculation-ownership",
         "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
+      }
+    },
+    "generativeqc/cbs.py:CBSBasis": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership"
+      }
+    },
+    "generativeqc/cbs.py:CBSBasis.__post_init__": {
+      "kind": "function",
+      "profile": "validation",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "errors": "docs/user/ccsdt_cbs.md#python-cbs-errors"
+      }
+    },
+    "generativeqc/cbs.py:CBSComponent": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership"
+      }
+    },
+    "generativeqc/cbs.py:CBSResult": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership"
+      }
+    },
+    "generativeqc/cbs.py:CCSDTCBSCalculator": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "errors": "docs/user/ccsdt_cbs.md#python-cbs-errors",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership",
+        "backends": "docs/user/ccsdt_cbs.md#python-cbs-backends"
+      }
+    },
+    "generativeqc/cbs.py:CCSDTCBSCalculator.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "errors": "docs/user/ccsdt_cbs.md#python-cbs-errors",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership",
+        "backends": "docs/user/ccsdt_cbs.md#python-cbs-backends"
+      }
+    },
+    "generativeqc/cbs.py:CCSDTCBSCalculator.singlepoint": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/ccsdt_cbs.md#python-cbs-values",
+        "errors": "docs/user/ccsdt_cbs.md#python-cbs-errors",
+        "ownership": "docs/user/ccsdt_cbs.md#python-cbs-ownership",
+        "backends": "docs/user/ccsdt_cbs.md#python-cbs-backends"
       }
     },
     "generativeqc/dispersion.py:D3CorrectionBatch": {
@@ -6722,6 +6810,17 @@
       }
     },
     "generativeqc/rks_response.py:NativeRKSResponse.solve_many": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_contracts.md#python-response-backends",
+        "errors": "docs/reference/python_contracts.md#python-response-errors",
+        "ownership": "docs/reference/python_contracts.md#python-response-ownership",
+        "values": "docs/reference/python_contracts.md#python-response-values"
+      }
+    },
+    "generativeqc/rks_response.py:NativeRKSResponse.solve_resident": {
       "kind": "function",
       "profile": "execution",
       "facets": {

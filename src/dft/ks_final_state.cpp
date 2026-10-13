@@ -204,6 +204,60 @@ core::ElectronicReferenceView electronic_reference(const VerifiedKsFinalState& s
   return view;
 }
 
+namespace {
+bool valid_evidence_metadata(const KsFinalStateIdentity& current,
+                             const KsFinalStateEvidence& evidence,
+                             const scf::solver::FinalStateLimits& limits, std::string& detail) {
+  if (!valid_model(current)) {
+    detail =
+        "invalid KS final-state model for functional " + std::to_string(current.model.functional);
+    return false;
+  }
+  if (evidence.identity != current || !evidence.physical_origin ||
+      evidence.fock_density_generation != current.determinant.factor.density_generation) {
+    detail = "invalid KS final-state physical identity or generation";
+    return false;
+  }
+  if (!finite_components(evidence.components) || !std::isfinite(evidence.reported_energy) ||
+      !std::isfinite(evidence.physical_residual)) {
+    detail = "nonfinite KS final-state physical evidence";
+    return false;
+  }
+  const double energy_error = std::abs(evidence.components.total() - evidence.reported_energy);
+  const double residual_gate = std::min(1e-9, limits.density_tolerance);
+  if (energy_error > limits.energy_tolerance || evidence.physical_residual < 0.0 ||
+      evidence.physical_residual > residual_gate) {
+    detail = "KS final state failed component-energy or physical-residual consistency";
+    return false;
+  }
+  return true;
+}
+}  // namespace
+
+bool validate_ks_final_state_evidence(const KsFinalStateIdentity& current, std::size_t dimension,
+                                      const KsFinalStateEvidence& evidence,
+                                      const scf::solver::FinalStateLimits& limits,
+                                      const scf::solver::FinalStateDiagnostic& products,
+                                      KsFinalStateDiagnostic& output, std::string& detail) {
+  output = {};
+  detail.clear();
+  if (!limits.require_canonicality) {
+    detail = "resident KS final-state evidence requires canonical products";
+    return false;
+  }
+  if (!valid_evidence_metadata(current, evidence, limits, detail) ||
+      !scf::solver::accept_final_state_products(current.determinant, dimension, limits, products,
+                                                detail))
+    return false;
+  auto determinant = products;
+  determinant.energy = evidence.components.total();
+  determinant.energy_change = 0;
+  output = {std::move(determinant), evidence.components.total(),
+            std::abs(evidence.components.total() - evidence.reported_energy),
+            evidence.physical_residual};
+  return true;
+}
+
 bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::reference::Matrix& overlap,
                              const scf::reference::Matrix& hcore, const KsPhysicalState& physical,
@@ -214,9 +268,7 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::solver::FinalStateOperations* operations) {
   output = {};
   detail.clear();
-  if (!valid_model(current) || physical.identity != current || candidate.identity != current ||
-      !physical.physical || !finite_components(physical.components) ||
-      !std::isfinite(physical.reported_energy) || !std::isfinite(physical.physical_residual) ||
+  if (physical.identity != current || candidate.identity != current || !physical.physical ||
       physical.density.size() != current.model.spins ||
       physical.fock.size() != current.model.spins ||
       candidate.spins.size() != current.model.spins ||
@@ -225,14 +277,15 @@ bool validate_ks_final_state(const KsFinalStateIdentity& current,
     return false;
   }
 
+  const KsFinalStateEvidence evidence{current,
+                                      candidate.fock_density_generation,
+                                      candidate.physical_origin,
+                                      physical.components,
+                                      physical.reported_energy,
+                                      physical.physical_residual};
+  if (!valid_evidence_metadata(current, evidence, limits, detail)) return false;
   const double component_energy = physical.components.total();
   const double energy_error = std::abs(component_energy - physical.reported_energy);
-  const double residual_gate = std::min(1e-9, limits.density_tolerance);
-  if (energy_error > limits.energy_tolerance || physical.physical_residual < 0.0 ||
-      physical.physical_residual > residual_gate) {
-    detail = "KS final state failed component-energy or physical-residual consistency";
-    return false;
-  }
 
   scf::solver::PhysicalFockFrame fock{current.determinant, true, physical.fock};
   scf::solver::FinalFrameCandidate orbitals{candidate.identity.determinant,

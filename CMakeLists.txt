@@ -44,7 +44,10 @@ set(GENERATIVEQC_CUTLASS_ROOT "" CACHE PATH "Root of an external CUTLASS 3.9.2 s
 option(GENERATIVEQC_ENABLE_AOT_SHELLS
        "Build generated shell kernels in addition to the generic CUDA path" ON)
 option(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT
-       "Build packaged stationary CUDA force artifacts" ON)
+       "Build Python-consumer stationary CUDA force shared artifacts" ON)
+option(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
+       "Link graph-qualified native CUDA stationary force profiles into the C++ core"
+       ${GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT})
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
@@ -409,6 +412,10 @@ else()
   target_compile_definitions(generativeqc PUBLIC GENERATIVEQC_HAS_CUDA=0)
 endif()
 
+# Keep the public library/CLI/wheel artifact unchanged while isolating CPU-only
+# solver and basis objects behind their own incremental compile boundaries.
+generativeqc_add_cpu_component_object_targets(generativeqc)
+
 set_target_properties(generativeqc PROPERTIES OUTPUT_NAME generativeqc)
 if(NOT GENERATIVEQC_PYTHON_WHEEL)
   # Native SDK installs retain the normal SONAME chain. Wheel archives often
@@ -458,12 +465,23 @@ if(GENERATIVEQC_BUILD_CLI)
     COMMENT "Generating Python-free CLI basis catalog")
   set(GENERATIVEQC_CLI_METHOD_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_method_catalog.hpp")
+  # Bulk MethodIR provenance hashes these families, including modules the
+  # generator never imports. Import-only depfiles cannot invalidate those rows.
+  file(GLOB_RECURSE _generativeqc_cli_capability_inputs CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/*.json"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/*.json"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/*.json")
   generativeqc_register_generated_sources(
     NAME generativeqc_cli_method_codegen
     TARGET generativeqc_cli
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
     OUTPUTS "${GENERATIVEQC_CLI_METHOD_HEADER}"
     DEPENDS
+      ${_generativeqc_cli_capability_inputs}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/ks_execution.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/bulk_ks.py"

@@ -136,6 +136,20 @@ def work_journal(calc: Calculator, arguments: dict) -> dict:
     return {
         "completed_source_work": counters,
         "routing": routing,
+        "companion_reuse": {
+            record["key"]: record["value"]
+            for record in records
+            if record["event"] == "VALUE"
+            and record["name"] == "ccsdt_endpoint"
+            and record["key"].startswith("mp2_companion_")
+        },
+        "reused_mo_block_reads": sum(
+            record["value"]
+            for record in records
+            if record["event"] == "VALUE"
+            and record["name"] == "borrowed_mo_blocks"
+            and record["key"] == "mo_block_reuses"
+        ),
         "discarded_scopes": discarded,
     }
 
@@ -302,6 +316,7 @@ def main() -> None:
                 "GENERATIVEQC_MP2_REFERENCE_SOURCE",
                 "GENERATIVEQC_MP2_ENERGY_SOURCE_TILING",
                 "GENERATIVEQC_MP2_FORCE_SOURCE_TILING",
+                "GENERATIVEQC_MP2_FORCE_MO_CACHE",
             )
         },
         "requested_cases": cases,

@@ -36,7 +36,10 @@ one RMS.
 
 Each `KsIteration` describes a physical E/F/D state and its proposed density
 change. `energy_change` is `None` on the first iteration, because no preceding
-energy exists. Later entries retain the measured absolute energy difference.
+energy exists. The first strict FP64 iteration after an approximate warmup also
+starts a new energy epoch and reports `None`; an approximate energy cannot be
+the baseline of a strict stopping test. Other entries retain the measured
+absolute energy difference.
 CUDA KS retains both words of its compensated electronic-energy reductions
 when computing that difference. The fixed nuclear energy cancels analytically;
 large component and total energies are not rounded before subtraction. Thus
@@ -50,6 +53,86 @@ iteration loop. The final diagnostic retains those final physical components
 and residual separately from the original historical rows.
 
 `fock_builds` includes final validation rebuilds for this solve.
+
+## Bounded CUDA mixed-precision warmup
+
+The public precision default remains strict FP64. An explicitly requested
+`precision="auto"` can use only the component-wise lower-precision schedules
+already admitted by the selected CUDA KS method/provider. It must return a
+strictly refined FP64 state, not a converged FP32 state.
+
+Two diagnostic environment controls permit early handoff without changing the
+physical method, final tolerances, screening or operator precision admission:
+
+| Control | Meaning |
+| --- | --- |
+| `GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL` | Finite nonnegative threshold on the current pre-DIIS maximum absolute AO commutator entry. A positive value requests handoff once satisfied after at least two approximate observations. Unset/`0` disables this additional trigger. |
+| `GENERATIVEQC_KS_MIXED_MAX_ITERATIONS` | Unsigned cap on approximate observations, bounded by the user's `max_iterations`. Unset/`0` retains the original approximate iteration budget. |
+
+Positive controls currently require a restricted CUDA KS owner. UKS rejects
+early-handoff requests explicitly pending independent open-shell qualification;
+unset/zero controls retain its incumbent AUTO handoff criteria. This restriction
+does not disable existing component-wise AUTO or strict-FP64 UKS execution.
+
+Approximate convergence and budget exhaustion remain handoff triggers. Both
+controls unset/zero preserve these incumbent *handoff criteria*, not the old
+cross-precision energy comparison. The prepared CUDA owner snapshots the controls
+when it resolves a lower-precision schedule; set them before preparation and
+create a new owner to change them. Malformed controls fail explicitly. An
+explicit strict-FP64 request does not parse or obey approximate controls.
+The handoff threshold is not the per-spin RMS quantity exposed as
+`ks_diagnostic.physical_residual_max`.
+
+Handoff clears DIIS and occupation-stabilization history, starts a fresh strict
+energy epoch and retains the original full FP64 iteration budget. Neither a
+small approximate residual nor the warmup cap certifies convergence. Existing
+strict final-state audits, bounded nonfinite retries and resource refusals remain
+authoritative. Inspect `precision`'s mixed/strict Fock timeline and actual
+operator work rather than interpreting an AUTO label as proof that every
+operator used FP32. Exact exchange and density/XC contraction do not acquire new
+lower-precision capabilities from these controls.
+
+Recurrence-only mixed Direct J uses the provider's budgeted symmetry-canonical
+angular buckets when available, rather than recomputing every ordered AO quartet.
+When budgeted whole-shell metadata is present, one bounded shared Hermite/Coulomb
+recurrence supplies all admitted Cartesian components for each primitive-pair
+product. This includes low orders and the complete s/p/d/f domain; primitive
+contraction sums remain FP64. Missing whole-shell metadata retains the component
+canonical source, and missing canonical metadata retains the ordered fallback.
+The shared compiler evaluates `MixedPrecisionFloat` ERI sources; density
+transforms, density-by-integral products, accumulation and output projection
+remain FP64. Exact exchange is dispatched independently through its strict
+provider. Exact-zero total-density orbits and Schwarz-screened sources perform
+no mixed recurrence work. If optional canonical storage is unavailable, the
+independent ordered-AO fallback remains explicit. Work provenance counts actual
+admitted source evaluations, not the former dense ordered-quartet upper bound.
+
+After handoff, a cold trajectory may prepare the same optional, budgeted FP64
+resident-value lease as a strict solve. Mixed J never consumes these values.
+Warm or external seeds retain their original automatic admission restrictions;
+allocation refusal retains exact Direct refinement. Lease construction and
+strict replay work remain part of the endpoint and precision/resource ledgers.
+This does not enable device chunks or graph replay for an AUTO trajectory.
+
+`benchmarks/dft_mixed_thresholds.py` provides an exploratory, source-matched
+threshold screen using frozen DFT-MP-v1 geometries and grids. It measures public
+energy or complete energy+force calls in fresh processes, retains failures, and
+optionally separates cold, same-owner warm and changed-geometry calls. Prebuild
+the requested stationary force AOT artifacts beside the native library and warm
+any scientific artifact caches **outside** measured trials. Every real-GPU run
+requires a finite Slurm allocation with its assigned visibility preserved.
+Independent PySCF energy/directional finite-difference work is a separate oracle
+role and is never injected into the production endpoint. A faster handoff than
+convergence-only AUTO is not proof of acceleration over strict FP64. Native
+samples flush preparation/execution progress outside the timed regions; a
+partial progress log is not a completed endpoint or an observed Fock count.
+The oracle's `--oracle-threads` option defaults to one and changes only CPU
+parallelism. Its bounded larger export tiles retain the exact frozen quadrature
+and reference stopping targets; they do not change production SCF work. Default
+promotion still requires the complete
+[DFT-MP-v1 acceptance contract](../maintainer/dft_mp_v1_contract.md).
+
+## KS work inventory
 
 `KsDiagnostic.coulomb_exchange_work` is a separate, narrow target-KS
 value-provider census. CPU exact and density-fitted contractions record one
@@ -113,10 +196,10 @@ Python result storage is owned by the caller.
 
 ## Internal final-state handoff
 
-The native CPU RKS and resident CUDA RKS/UKS owners provide an internal,
-versioned final-state handoff for issue #163. CPU UKS and CPU ECP handoffs
-remain unsupported. This interface is deliberately absent from the public
-C/Python result ABI and does not make public force requests supported.
+The native CPU and resident CUDA RKS/UKS owners provide an internal,
+versioned final-state handoff for issue #163. CPU ECP handoffs remain
+unsupported. This interface is deliberately absent from the public C/Python
+result ABI; a handoff alone does not qualify a public force request.
 
 After a converged solve, `methods/dft_method.hpp` can return an eligibility
 token for either a prepared single calculation or one prepared batch item. The
@@ -140,6 +223,106 @@ after every gate passes. A stale token is rejected before matrix transfer.
 explicit handoff from ordinary energy execution. The existing public
 `matrix_d2h_bytes` total still includes snapshot matrices, so legacy transport
 accounting remains conservative without an ABI change.
+
+### Resident CUDA stationary weights
+
+`CudaKsPlan::prepare_resident_final_stationary_weights` admits the exact current
+token on an ordinary stream, canonicalizes the physical final Fock on device,
+and computes validation products using the existing matrix provider or its
+bounded native kernel. The shared `accept_final_state_products` and
+`validate_ks_final_state_evidence` policies apply the same eigenframe, density,
+trace, idempotency, commutator, canonicality and KS component-energy gates as the
+detached read. Device validation also checks the symmetry and finiteness of
+F/S/H/D. No host matrix algebra or D/F/C/orbital-energy export occurs in this
+operation.
+
+Only an accepted proof stages resident total D/W using the existing weighted
+projector and spin-sum owners. UKS retains separate spin occupations, including
+explicit empty-beta storage, while the one-electron consumer borrows their
+totals. A bounded finite-status read precedes publication. The validation packet
+storage is included in `cuda_ks_state_bytes`, including tiny AO domains without
+a BLAS allowance; iteration matrices provide serialized, phase-local scratch.
+Repeated leases perform no work or transfer and do not overwrite published
+storage. A preceding validated weighted detached read can be borrowed unchanged.
+Stale admission submits no work; a failed proof revokes final eligibility while
+preserving the independently retained warm seed.
+
+The uncached prepared Direct integral-derivative consumer uses this operation
+instead of manufacturing a host snapshot. The existing DF response contract
+still explicitly consumes host D/W. `resident_final_validations` counts device
+proofs, and `scalar_d2h_bytes`/`final_state_d2h_bytes` charge their bounded packets;
+`final_state_reads` and `matrix_d2h_bytes` do not increase for a resident proof.
+Energy-only/default validation policy and per-model force capability are
+unchanged. This lease is not a complete native CUDA force controller: XC,
+moving-grid/Becke, nuclear assembly and complete publication remain separate
+consumers. Numeric arena checks alone do not establish complete endpoint RSS or
+library/context allocation bounds.
+
+The private `dft_cuda_native_stationary_gradient` qualification endpoint now
+composes the complete all-electron Direct semilocal/global-hybrid source inventory in
+C++. Statically isolated bindings reuse the existing compiler-emitted profile
+and shared primitive objects; there is no runtime artifact loader or compiler.
+The native grid owner consumes the accepted resident spin density and lends
+generation-checked device tasks. Callback-scoped one-electron/Pulay and separate
+J/K sources are copied into plan-owned source slots before provider scratch can
+be reused. Native J/K forces are explicitly converted to energy derivatives.
+The emitted ordered reduction gates publication on complete contiguous grid
+coverage, all integral/nuclear sources, finite device status and the unchanged
+final token. Failed requests leave the caller's previous output untouched.
+
+The prepared SDK/batch force consumer uses the same complete controller for
+compiled strict-FP64, all-electron s/p Direct RKS/UKS contexts with a matching
+compiler-emitted point-program/spin/domain/X/C/exact-exchange contract,
+full-range exact J/K and three partition iterations. The native inventory is
+derived from the compiler's stationary AOT catalog and complete source coverage,
+not a second functional-name whitelist. A renamed equivalent MethodIR keeps the
+same admission; changed coefficients or point domains do not reuse another graph's
+binding. Admission shares one native
+rule with descriptor sizing, remains per prepared item, and does not add a
+method-global force bit. DF, ECP, wider angular momentum, other precision,
+range-separated/nonlocal/dispersion and unavailable compiled profiles do not
+inherit this admission. The complete gradient is negated once at publication.
+Python routes only fleets whose every prepared item advertises forces; remaining
+compositions keep their existing qualified consumer. The default SCF and
+initial-guess trajectories are unchanged, including their existing setup
+transfers; the native force itself does not export a final dense D/W frame.
+
+CUDA resource planning uses the point-program-aware allocation inventory v2, so
+tau-dependent methods charge the actual XC work/feature panels rather than a
+GGA-sized estimate. Legacy inventory v1 remains usable for non-tau layouts;
+tau-dependent planning with an older library fails closed before allocation.
+
+The controller device allowance
+includes the stationary/grid numeric arenas and the grid provider allowance,
+excluding the SCF/Fock owner already charged elsewhere. Reported work is this
+consumer's work, not a substitute for complete SCF-plus-force timing or
+simultaneously-live host/device/context receipts. Actual TensorIR arenas use the
+native numeric allocation ledger. Each retained controller separately reserves
+its grid provider allowance against the same request, so cached controllers
+cannot each spend the entire remaining budget. The reservation is admission
+capacity, not a measured CUDA allocation; release follows the controller after
+its stationary/grid users have drained, including outside an observation scope.
+Below-minimum shape preflight performs no allocation and does not invent an
+allocator-rejection event.
+
+`generativeqc_resource_stationary_cuda_v1` exposes the same additional-controller
+shape authority used by construction, without querying a CUDA device or creating
+an owner. Its nine fields are grid numeric bytes, grid-provider allowance,
+stationary minimum/cached numeric bytes, combined minimum/cached admission,
+effective tile points, geometry lanes, and geometry threads. An unbuilt profile
+returns unavailable; invalid or short requests leave the output untouched.
+Capacity availability is not method/property admission and does not replace
+the legacy Python force planner or its separate not-yet-cut-over domains.
+
+Independent fixture checks can
+be reproduced from a verbose Slurm test log with
+`tools/check_native_stationary_cuda_oracles.py --input <log>`; PySCF is required
+only by that offline validation tool, never by the native consumer. The tool
+requires its complete fixture inventory and independently checks energy, final
+spin D/W and the full moving-grid gradient. Missing, duplicate, malformed or
+nonfinite receipts fail rather than skip. The native test exports reference
+matrices only after checking that the complete consumer itself exports no dense
+frame; those test-only observations do not enter production force assembly.
 
 ## CUDA KS preparation
 

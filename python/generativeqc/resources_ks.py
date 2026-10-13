@@ -33,10 +33,21 @@ from .basis import BasisSet
 from .basis_capabilities import require_basis
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
-from .ks import resolve_ks_options
+from .ks import _native_semilocal_code, resolve_ks_options
 from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
+_CUDA_STATIONARY_INVENTORY_KEYS = (
+    "grid_numeric",
+    "provider_allowance",
+    "stationary_minimum",
+    "stationary_cached",
+    "minimum",
+    "cached",
+    "tile_points",
+    "geometry_lanes",
+    "geometry_threads",
+)
 _CPU_HOST_INVENTORY_KEYS = (
     "metadata",
     "grid",
@@ -309,9 +320,19 @@ def _cuda_item_inventory(
     *,
     diis_history: typing.Any,
     requires_first_ao_derivatives: typing.Any,
+    functional_code: int,
+    requires_tau: bool,
     tile: typing.Any,
 ) -> typing.Any:
-    query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
+    query = getattr(library, "generativeqc_resource_ks_cuda_v2", None)
+    selector = functional_code
+    if query is None:
+        if requires_tau:
+            raise NotImplementedError(
+                "tau-dependent CUDA KS planning requires point-program allocation inventory v2"
+            )
+        query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
+        selector = int(requires_first_ao_derivatives)
     if query is None:
         raise NotImplementedError(
             "native library has no KS CUDA allocation inventory v1"
@@ -325,7 +346,7 @@ def _cuda_item_inventory(
         item["grid_points"],
         diis_history,
         item["spins"],
-        int(requires_first_ao_derivatives),
+        selector,
         tile,
     )
     if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
@@ -396,6 +417,148 @@ def _cuda_item_inventory(
     }
 
 
+def _cuda_stationary_descriptor(
+    model: typing.Any,
+    *,
+    precision: str,
+    max_iterations: int,
+    diis_history: int,
+    energy_tolerance: float,
+    density_tolerance: float,
+    screening_tolerance: float,
+) -> typing.Any:
+    """Serialize the resolved model; native admission owns scientific predicates."""
+    from . import _generated_methods, _native
+    from .ks import native_dft_carrier_for_ir, native_ks_options
+
+    descriptor = _native.MethodDescriptor(
+        struct_size=ctypes.sizeof(_native.MethodDescriptor),
+        abi_version=_native.ABI_VERSION,
+        method=_generated_methods.METHOD_NAME_TO_ID[
+            native_dft_carrier_for_ir(model.method_ir)
+        ],
+        max_iterations=max_iterations,
+        diis_history=diis_history,
+        energy_tolerance=energy_tolerance,
+        density_tolerance=density_tolerance,
+        screening_tolerance=screening_tolerance,
+        density_fitting_mode=_native.DENSITY_FITTING_NONE,
+        precision_mode=_native.PRECISION_FP64
+        if precision == "fp64"
+        else _native.PRECISION_AUTO,
+    )
+    descriptor.ks_options = ctypes.pointer(native_ks_options(model))
+    return descriptor
+
+
+def _native_cuda_stationary_inventory(
+    library: typing.Any, item: typing.Any, descriptor: typing.Any
+) -> dict[str, int] | None:
+    """Discover a complete per-item consumer, without CUDA or final-state work.
+
+    Missing/unsupported bindings retain the incumbent fleet route. An invalid
+    descriptor or capacity is not a fallback: surface the native failure.
+    """
+    from . import _native
+
+    query = getattr(library, "generativeqc_resource_ks_stationary_cuda_v1", None)
+    if query is None:
+        return None
+    orbital = item["orbital"]
+    dimensions = (
+        item["atoms"],
+        orbital["nbf"],
+        orbital["primitives"],
+        item["grid_points"],
+        orbital["maximum_angular"],
+        orbital.get("ecp_terms", 0),
+        orbital.get("ecp_core_electrons", 0),
+    )
+    shape = (ctypes.c_uint64 * len(dimensions))(
+        *(checked_bytes(value, "CUDA KS stationary shape") for value in dimensions)
+    )
+    output = (ctypes.c_uint64 * len(_CUDA_STATIONARY_INVENTORY_KEYS))()
+    query.argtypes = [
+        ctypes.POINTER(_native.MethodDescriptor),
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    status = query(ctypes.byref(descriptor), shape, len(shape), output, len(output))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    inventory = dict(zip(_CUDA_STATIONARY_INVENTORY_KEYS, output, strict=True))
+    if (
+        inventory["minimum"]
+        != inventory["grid_numeric"]
+        + inventory["provider_allowance"]
+        + inventory["stationary_minimum"]
+        or inventory["cached"]
+        != inventory["grid_numeric"]
+        + inventory["provider_allowance"]
+        + inventory["stationary_cached"]
+        or not 0 < inventory["minimum"] <= inventory["cached"]
+    ):
+        raise ValueError("native CUDA KS stationary inventory is inconsistent")
+    return {
+        key: checked_bytes(value, f"CUDA KS stationary {key}")
+        for key, value in inventory.items()
+    }
+
+
+def configure_native_cuda_stationary_batch(
+    library: typing.Any, batch: typing.Any, plan: typing.Any
+) -> None:
+    """Authenticate every planned receipt before applying per-item cache bounds.
+
+    Uniform cached/minimum fleet candidates reserve all items together. A greedy
+    first controller must not consume another item's mandatory minimum, and the
+    native prepared owner retains the selected bound across geometry rebuilds.
+    """
+    from . import _native
+
+    request = next((item for item in plan.requests if item.name == "ks"), None)
+    if request is None or request.identity.backend != "cuda":
+        return
+    selected = dict(plan.selections)[request.name]
+    candidate = next(item for item in request.candidates if item.name == selected)
+    decisions = dict(candidate.decisions)
+    mode = decisions.get("cuda_stationary_cache")
+    if mode is None:
+        return
+    query = getattr(library, "generativeqc_ks_batch_stationary_cuda_capacity_v1", None)
+    limit = getattr(library, "generativeqc_ks_batch_stationary_cuda_limit_v1", None)
+    if query is None or limit is None:
+        raise NotImplementedError(
+            "native CUDA KS stationary prepared admission is unavailable"
+        )
+    query.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    limit.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint64]
+    limit.restype = ctypes.c_int
+    inventories = json.loads(decisions["item_device_inventory"])
+    for index, inventory in enumerate(inventories):
+        output = (ctypes.c_uint64 * len(_CUDA_STATIONARY_INVENTORY_KEYS))()
+        _native.check(library, query(batch, index, output, len(output)))
+        expected = tuple(
+            inventory["stationary"][key] for key in _CUDA_STATIONARY_INVENTORY_KEYS
+        )
+        if tuple(output) != expected:
+            raise ValueError(
+                "prepared CUDA KS stationary capacity differs from the plan"
+            )
+    for index, inventory in enumerate(inventories):
+        _native.check(library, limit(batch, index, inventory["stationary"][mode]))
+
+
 def ks_resource_request(
     systems: typing.Any,
     *,
@@ -443,7 +606,8 @@ def ks_resource_request(
             "automatic Libxc KS resource planning currently supports CPU only"
         )
     automatic_cpu = automatic_name is not None
-    if "tau" in model.functional.ingredients and not automatic_cpu:
+    requires_tau = "tau" in model.functional.ingredients
+    if requires_tau and not automatic_cpu and backend == "cpu":
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
         )
@@ -455,10 +619,6 @@ def ks_resource_request(
     if backend == "cuda" and model.has_nonlocal_correlation:
         raise NotImplementedError(
             "self-consistent nonlocal correlation currently requires CPU"
-        )
-    if backend == "cuda" and model.has_nondefault_composition:
-        raise NotImplementedError(
-            "CUDA KS planning does not claim scaled/global-hybrid execution"
         )
     incremental_controls = _incremental_direct_jk_controls()
     incremental_requested = any(incremental_controls.values())
@@ -692,6 +852,7 @@ def ks_resource_request(
         )
     )
     device = []
+    native_stationary = False
     try:
         if backend == "cuda" and library is None:
             from . import _native
@@ -715,6 +876,24 @@ def ks_resource_request(
                     "native library does not implement KS allocation inventory v1"
                 )
         if backend == "cuda":
+            descriptor = _cuda_stationary_descriptor(
+                model,
+                precision=precision,
+                max_iterations=max_iterations,
+                diis_history=diis_history,
+                energy_tolerance=energy_tolerance,
+                density_tolerance=density_tolerance,
+                screening_tolerance=screening_tolerance,
+            )
+            stationary = [
+                _native_cuda_stationary_inventory(library, item, descriptor)
+                for item in items
+            ]
+            native_stationary = all(item is not None for item in stationary)
+            if model.has_nondefault_composition and not native_stationary:
+                raise NotImplementedError(
+                    "CUDA KS planning does not claim this scaled/global-hybrid execution"
+                )
             identity = replace(
                 identity,
                 schedule=json.dumps(
@@ -727,10 +906,14 @@ def ks_resource_request(
                     item,
                     diis_history=diis_history,
                     requires_first_ao_derivatives=requires_first_ao_derivatives,
+                    functional_code=_native_semilocal_code(model.method_ir),
+                    requires_tau=requires_tau,
                     tile=model.tile_points,
                 )
                 for item in items
             ]
+            for inventory, consumer in zip(device, stationary, strict=True):
+                inventory["stationary"] = consumer
             if model.xc_schedule == "host_unfused":
                 for item in device:
                     item["xc"] = 0
@@ -778,16 +961,17 @@ def ks_resource_request(
                     last_phase,
                 )
             )
-            estimates.append(
-                ResourceEstimate(
-                    "serialized generated KS force device staging cap",
-                    512 << 20,
-                    f"device:{device_id}",
-                    first_phase,
-                    last_phase,
-                    kind="persistent",
+            if not native_stationary:
+                estimates.append(
+                    ResourceEstimate(
+                        "serialized generated KS force device staging cap",
+                        512 << 20,
+                        f"device:{device_id}",
+                        first_phase,
+                        last_phase,
+                        kind="persistent",
+                    )
                 )
-            )
     except (NotImplementedError, RuntimeError, OSError) as error:
         return ResourceRequest(
             name, identity, (), exclusions, unsupported_reason=str(error)
@@ -823,7 +1007,28 @@ def ks_resource_request(
             ),
         ),
     )
-    return ResourceRequest(name, identity, (candidate,), exclusions)
+    if not native_stationary:
+        return ResourceRequest(name, identity, (candidate,), exclusions)
+    candidates = []
+    for mode, cost in (("cached", 0), ("minimum", 1)):
+        consumer = ResourceEstimate(
+            "all native KS stationary CUDA consumers",
+            checked_bytes(sum(item[mode] for item in stationary)),
+            f"device:{device_id}",
+            first_phase,
+            last_phase,
+            kind="persistent",
+        )
+        candidates.append(
+            replace(
+                candidate,
+                name=f"cuda-ks-resident-stationary-{mode}",
+                estimates=(*candidate.estimates, consumer),
+                relative_cost=cost,
+                decisions=(*candidate.decisions, ("cuda_stationary_cache", mode)),
+            )
+        )
+    return ResourceRequest(name, identity, tuple(candidates), exclusions)
 
 
 def estimate_ks_resources(

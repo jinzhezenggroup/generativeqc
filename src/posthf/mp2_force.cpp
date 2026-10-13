@@ -44,11 +44,16 @@ std::vector<double> hcore_mo(const hf::PhysicalReference& reference) {
 
 EnergyAdjoint energy_adjoint(const hf::PhysicalReference& reference,
                              const posthf::MOBlockProvider& provider, double denominator_threshold,
-                             bool cuda, int device_id) {
+                             bool cuda, int device_id, std::span<const double> cached_ovov = {}) {
   const auto no = reference.nocc, n = reference.nbf, nv = n - no;
   const auto occupied = range(0, no);
   const auto virtuals = range(no, n);
-  const auto raw = provider.get({occupied, virtuals, occupied, virtuals}, cuda, device_id);
+  const auto owned = cached_ovov.empty()
+                         ? provider.get({occupied, virtuals, occupied, virtuals}, cuda, device_id)
+                         : std::vector<double>{};
+  const auto raw = cached_ovov.empty() ? std::span<const double>(owned) : cached_ovov;
+  if (raw.size() != posthf::checked_mul(square(no), square(nv)))
+    throw std::invalid_argument("borrowed MP2 OVOV block has the wrong shape");
   std::vector<double> ordered(posthf::checked_mul(square(no), square(nv)));
   for (std::size_t i = 0; i < no; ++i)
     for (std::size_t a = 0; a < nv; ++a)
@@ -92,7 +97,8 @@ response::LinearResponseProblem response_problem(const hf::PhysicalReference& re
 ConventionalForceResult conventional_force_impl(
     const hf::PhysicalReference& reference, const integrals::ElectronInteractionSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
-    const response::GmresOptions& response_options, bool cuda, int device_id) {
+    const response::GmresOptions& response_options, bool cuda, int device_id,
+    std::span<const double> ovov, std::span<const posthf::BorrowedMOBlock> blocks) {
 #if !GENERATIVEQC_HAS_CUDA
   if (cuda) throw std::runtime_error("CUDA conventional force is unavailable in this build");
 #endif
@@ -163,6 +169,7 @@ ConventionalForceResult conventional_force_impl(
     }
   }
   runtime::df_progress::Scope::number("mp2_force_source_axis_tile", provider->tile_shape()[0]);
+  if (!blocks.empty()) provider->bind_borrowed_blocks(blocks);
   const auto provider_bytes = provider->provider_bytes();
   const auto endpoint_budget = detail::remaining_force_budget(budget_bytes, streamed_workspace);
   const auto base_resources = conventional_gradient_plan(
@@ -175,7 +182,7 @@ ConventionalForceResult conventional_force_impl(
       reference.nbf, reference.nocc, provider_bytes, plan, maximum_shell, coordinate_count,
       posthf::checked_mul(coordinate_count, sizeof(double)), endpoint_budget, backend_stage_bytes);
   const auto h = hcore_mo(reference);
-  auto adjoint = energy_adjoint(reference, *provider, denominator_threshold, cuda, device_id);
+  auto adjoint = energy_adjoint(reference, *provider, denominator_threshold, cuda, device_id, ovov);
   auto orbital = canonical_orbital_rhs_streamed(reference, h, *provider, adjoint,
                                                 same_space_threshold, cuda, device_id);
   std::vector<double> diagonal(dimension);
@@ -213,22 +220,82 @@ ConventionalForceResult conventional_force_impl(
 }
 }  // namespace
 
-ConventionalForceResult conventional_force_cpu(const hf::PhysicalReference& reference,
-                                               const integrals::ElectronInteractionSource& source,
-                                               std::size_t budget_bytes,
-                                               double denominator_threshold,
-                                               double same_space_threshold,
-                                               const response::GmresOptions& response_options) {
+ConventionalForceResult conventional_force_cpu(
+    const hf::PhysicalReference& reference, const integrals::ElectronInteractionSource& source,
+    std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
+    const response::GmresOptions& response_options, std::span<const double> ovov,
+    std::span<const posthf::BorrowedMOBlock> blocks) {
   return conventional_force_impl(reference, source, budget_bytes, denominator_threshold,
-                                 same_space_threshold, response_options, false, 0);
+                                 same_space_threshold, response_options, false, 0, ovov, blocks);
 }
 
 ConventionalForceResult conventional_force_cuda(
     const hf::PhysicalReference& reference, const integrals::ElectronInteractionSource& source,
     std::size_t budget_bytes, double denominator_threshold, double same_space_threshold,
-    const response::GmresOptions& response_options, int device_id) {
+    const response::GmresOptions& response_options, int device_id, std::span<const double> ovov,
+    std::span<const posthf::BorrowedMOBlock> blocks) {
   return conventional_force_impl(reference, source, budget_bytes, denominator_threshold,
-                                 same_space_threshold, response_options, true, device_id);
+                                 same_space_threshold, response_options, true, device_id, ovov,
+                                 blocks);
+}
+
+ConventionalForceResult reference_force(const hf::PhysicalReference& reference,
+                                        const integrals::ElectronInteractionSource& source,
+                                        std::size_t budget_bytes, bool cuda, int device_id) {
+  const auto orbitals = reference.nbf, occupied = reference.nocc;
+  if (!occupied || occupied >= orbitals || source.nbf() != orbitals ||
+      reference.orbital_energies.size() != orbitals)
+    throw std::invalid_argument("invalid stationary RHF force reference");
+  std::size_t maximum_shell = 1;
+  for (const auto& shell : source.orbital().shells) {
+    const auto count = source.orbital().basis_representation == GENERATIVEQC_BASIS_SPHERICAL
+                           ? 2 * shell.angular_momentum + 1
+                           : molecule::cartesian_count(shell.angular_momentum);
+    maximum_shell = std::max(maximum_shell, static_cast<std::size_t>(count));
+  }
+  const auto coordinates = posthf::checked_mul(source.orbital().atoms.size(), 3);
+  response::GmresPlan conservative_response;
+  conservative_response.dimension = posthf::checked_mul(occupied, orbitals - occupied);
+  // numeric_capacity_bytes is the completed SCF/export phase peak, not the
+  // detached reference's live payload. The source or outer phase already
+  // reserves any retained executable; charging that peak again can retire an
+  // otherwise admitted device source before the primary MP2 consumers run.
+  std::size_t reference_bytes = 0;
+  for (const auto* values :
+       {&reference.overlap, &reference.hcore, &reference.fock, &reference.coefficients,
+        &reference.orbital_energies, &reference.density, &reference.weighted_density})
+    reference_bytes = posthf::checked_add(reference_bytes,
+                                          posthf::checked_mul(values->capacity(), sizeof(double)));
+  const auto retained = posthf::checked_add(reference_bytes, source.retained_numeric_bytes());
+  const auto resources = conventional_gradient_plan(
+      orbitals, occupied, retained, conservative_response, maximum_shell, coordinates,
+      posthf::checked_mul(coordinates, sizeof(double)), budget_bytes);
+  const auto stage_bytes = budget_bytes - resources.peak_bytes;
+  if (cuda && !stage_bytes)
+    throw std::length_error("stationary RHF force has no CUDA derivative staging budget");
+  LagrangianWeights weights;
+  weights.orbitals = orbitals;
+  weights.occupied = occupied;
+  weights.one_electron.resize(square(orbitals));
+  weights.overlap.resize(square(orbitals));
+  auto& factors = weights.two_electron_factors;
+  factors.orbitals = orbitals;
+  factors.occupied = occupied;
+  factors.fock.resize(square(orbitals));
+  factors.correlation_iajb.resize(
+      posthf::checked_mul(square(occupied), square(orbitals - occupied)));
+  for (std::size_t orbital = 0; orbital < occupied; ++orbital) {
+    weights.one_electron[orbital * orbitals + orbital] = 2.0;
+    weights.overlap[orbital * orbitals + orbital] = -2.0 * reference.orbital_energies[orbital];
+    factors.fock[orbital * orbitals + orbital] = 1.0;
+  }
+  ConventionalForceResult result;
+  result.forces = cuda ? conventional_derivative_cuda(source.orbital(), reference, weights,
+                                                      device_id, stage_bytes)
+                       : conventional_derivative_cpu(source.orbital(), reference, weights);
+  for (double& value : result.forces) value = -value;
+  result.planned_endpoint_peak_bytes = cuda ? budget_bytes : resources.peak_bytes;
+  return result;
 }
 
 ConventionalForceResult density_fitted_force_cpu(

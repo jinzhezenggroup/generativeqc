@@ -13,11 +13,12 @@ from dataclasses import dataclass
 from fractions import Fraction
 from math import prod
 
-import numpy as np
-
 from generativeqc_compiler.common.layout import DenseLayout
 from generativeqc_compiler.common.resources import byte_product, checked_bytes
 from generativeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
+
+if typing.TYPE_CHECKING:
+    import numpy as np
 
 BLOCK_NAMES = ("t1a", "t1b", "t2aa", "t2ab", "t2bb")
 
@@ -43,6 +44,8 @@ def _pair_indices(slot: int, n: int) -> tuple[int, int]:
 
 
 def _fp64(value: typing.Any, shape: tuple[int, ...]) -> np.ndarray:
+    import numpy as np
+
     # Subclasses can override finiteness/equality (notably masked arrays).
     if type(value) is not np.ndarray or value.dtype != np.dtype("float64"):
         raise ValueError("amplitudes must be base NumPy arrays of native real-FP64")
@@ -184,6 +187,8 @@ class UCCSDBlock:
 
     def pack(self, full: np.ndarray) -> np.ndarray:
         """Copy exact admitted amplitudes, rejecting rather than projecting."""
+        import numpy as np
+
         full = _fp64(full, self.spec.shape)
         if not self.same_spin:
             return full.ravel(order="C").copy()
@@ -207,6 +212,8 @@ class UCCSDBlock:
 
     def unpack(self, packed: np.ndarray) -> np.ndarray:
         """Expand raw representative values with exact signs and zero diagonals."""
+        import numpy as np
+
         packed = _fp64(packed, (self.packed_layout.storage_elements,))
         if not self.same_spin:
             return packed.reshape(self.spec.shape, order="C").copy()
@@ -224,6 +231,8 @@ class UCCSDBlock:
         orbit members, rather than selecting a representative or projecting
         with an implicit factor. Repeated-index cotangents act on no excitation.
         """
+        import numpy as np
+
         full = _fp64(full, self.spec.shape)
         count = self.packed_layout.storage_elements
         if not self.same_spin:
@@ -318,6 +327,8 @@ class UCCSDLayout:
 
     def pack(self, full: typing.Mapping[str, np.ndarray]) -> np.ndarray:
         """Validate all five named full blocks and return a fresh packed vector."""
+        import numpy as np
+
         if set(full) != set(BLOCK_NAMES):
             raise ValueError(
                 "exactly the five named UCCSD amplitude blocks are required"
@@ -335,6 +346,8 @@ class UCCSDLayout:
 
     def pack_dual(self, full: typing.Mapping[str, np.ndarray]) -> np.ndarray:
         """Return U* times all five arbitrary full-block cotangents."""
+        import numpy as np
+
         if set(full) != set(BLOCK_NAMES):
             raise ValueError(
                 "exactly the five named UCCSD cotangent blocks are required"

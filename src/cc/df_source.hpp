@@ -51,12 +51,13 @@ struct DFSourceResult {
  * metric/source owner; downstream callers must charge retained_source_bytes
  * while that state remains live. Ordinary energy calls release it by default.
  */
-DFSourceResult build_df_source_cuda(
-    const core::System& orbital, const core::System& auxiliary,
-    const hf::PhysicalReference& reference, std::size_t maximum_bytes,
-    double metric_relative_threshold, int device, std::size_t caller_bytes = 0,
-    bool retain_response_state = false,
-    const scf::cuda_execution::CudaDfSourcePolicy* policy = nullptr);
+DFSourceResult build_df_source_cuda(const core::System& orbital, const core::System& auxiliary,
+                                    const hf::PhysicalReference& reference,
+                                    std::size_t maximum_bytes, double metric_relative_threshold,
+                                    int device, std::size_t caller_bytes = 0,
+                                    bool retain_response_state = false,
+                                    const scf::cuda_execution::CudaDfSourcePolicy* policy = nullptr,
+                                    bool factors_only = false);
 
 /** Borrowed physical factors and fixed-orbital Lagrangian cotangents.
  * All factors are Q-major. Boo/Bvv must be symmetric spatial-orbital pairs.
@@ -81,6 +82,27 @@ struct DFFactorResponseResult {
   std::size_t numeric_capacity_bytes{}, owned_device_bytes{}, h2d_bytes{}, d2h_bytes{};
   std::size_t contraction_terms{}, generated_kernels{};
 };
+
+/** Correlation-only DF-MP2 on the original conventional RHF spectrum.
+ * The factor VJP uses the original source token; epsilon outputs include both
+ * repeated occupied/virtual positions. Molecular consumers use full foo/fvv
+ * cotangents instead, never adding both sources. They come from the noncanonical
+ * amplitude equation and remain well-defined at same-space degeneracies.
+ * All scientific contractions run on CUDA.
+ * Energy-only requests omit the reverse program and detached cotangent storage. */
+struct DFMP2Result {
+  double opposite_spin{}, same_spin{}, minimum_absolute_denominator{};
+  const char* equation_hash{};
+  DFFactorResponseResult factors;
+  std::vector<double> eps_o, eps_v, foo, fvv;
+  std::size_t numeric_capacity_bytes{};
+};
+DFMP2Result evaluate_df_mp2_cuda(std::size_t nocc, std::size_t nvir, std::size_t naux,
+                                 std::span<const double> bov, std::span<const double> eps_o,
+                                 std::span<const double> eps_v, std::uint64_t source_identity,
+                                 bool response, std::size_t maximum_bytes, int device,
+                                 std::size_t caller_bytes = 0,
+                                 double denominator_threshold = 1e-10);
 
 /** Compose generated retained Gram and virtual factor derivatives on CUDA.
  * One stream owns every input/arena and drains before any host publication or

@@ -1,0 +1,1079 @@
+{
+  "arrays": {
+    "coefficients": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "e20b901c937f678e6d55cfaa9211ff33c65171070ec3b9a3fbb9779580c1832a",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "commutator_residual": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "b33e2e09abcc3c546a72986efcb38714929491854d8a282d9c3fe23f0acfc838",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "density": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "a868017846d53f2a6c12fdb3d25118b55dc931841f93e7c4464fd2708bcdec16",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "ecp_normalized": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "90b6bb4f9a887c0467c16641ef2da7c9ee14577c6cd9b1c516afdb6cb2967704",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "ecp_raw": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "62d202e3a5c4d07da7f3548b397cd61bef4284ee4f4aed206d9107b3ac77696c",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "energy": {
+      "bytes": 8,
+      "data": "NCr7CFHb5b8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "aa4e30c3999d83867292c1782eba85925bf5532982ff523cf6a9e266e0cb4fef",
+      "shape": []
+    },
+    "fock": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "c1635374a5466f73598b69a182f021b27a5e7a58548f2ce1e84409abb10d88ae",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "forces": {
+      "bytes": 48,
+      "data": "NkCS5hZgb78IKwzvuep0v6C48qdBzqO/QECS5hZgbz8QKwzvuep0P6i48qdBzqM/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "7f6b8c3ada1a7af018ba9d11650d3397b69ac045b6dee0a2bae3bce747b5f71e",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "gradient": {
+      "bytes": 48,
+      "data": "NkCS5hZgbz8IKwzvuep0P6C48qdBzqM/QECS5hZgb78QKwzvuep0v6i48qdBzqO/",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "373167791f4007024e0828cccf86c02c3145c179a54c3ebdacae8f4dc2dca8df",
+      "shape": [
+        2,
+        3
+      ]
+    },
+    "hcore": {
+      "bytes": 2048,
+      "data": "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",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "14d8bbc6216f3611212698ea2744bec1b009d03860fa0bcf11365f93d35efb78",
+      "shape": [
+        16,
+        16
+      ]
+    },
+    "normalization": {
+      "bytes": 128,
+      "data": "////////7z8AAAAAAADwP////////+8/////////7z/////////vPwAAAAAAAPA/AAAAAAAA8D8AAAAAAADwPwAAAAAAAPA/AAAAAAAA8D8AAAAAAADwPwAAAAAAAPA/AAAAAAAA8D8AAAAAAADwPwAAAAAAAPA/AAAAAAAA8D8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "e0a2c207c08e0e1597ce2ee9246579172718732202119b515199a0c0fb95c737",
+      "shape": [
+        16
+      ]
+    },
+    "nuclear_energy": {
+      "bytes": 8,
+      "data": "2CnaIRzX1D8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "ad972c07640361446ced0d128aa7b7c007e2a90e0026a9584d613b68a676db77",
+      "shape": []
+    },
+    "occupations": {
+      "bytes": 128,
+      "data": "AAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "39c7bb5f73698c600ac54e703aa08139f68714887f09b9c19fe05cc2484810d9",
+      "shape": [
+        16
+      ]
+    },
+    "orbital_energies": {
+      "bytes": 128,
+      "data": "SGJhEnMN0r+AQBoinfmIP18Dmusuq6M/dgaa6y6roz9g0i8ezUq4P+rUiDx8M8U/PdWIPHwzxT+gib0kw4LVP6J4V3Xraec/XZbv8Y+H/D9ilu/xj4f8PwhSjRELrvw/EVKNEQuu/D+dTQrUjrX8P6JNCtSOtfw/7M4L/W2t/j8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "a382d74de2479c487bdebf1c2c9c94111ad682cee4b494402be2beab75a010ab",
+      "shape": [
+        16
+      ]
+    },
+    "orbital_gradient": {
+      "bytes": 120,
+      "data": "AADAMqYnRz4AAAAAAACMvAAAAAAAAGg8AAAA2hk8Mb4AAAAAAAChPAAAAAAAAKA8AAAAnspnNz4AAAAg+A4fPgAAAAAAAEw8AAAAAAAAdLwAAAAAAAAYPAAAAAAAABA8AAAAAAAAULwAAAAAAABYPAAAAEAlFQg+",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "93183df559521916b38751c6bdc7d27a8941489b0708c945644acc3850ec7a19",
+      "shape": [
+        15
+      ]
+    },
+    "overlap": {
+      "bytes": 2048,
+      "data": "/v//////7z+KHv7ee8/rPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASQNs5XaK2D+KHv7ee8/rPwAAAAAAAPA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsLuVZvcPSPwAAAAAAAAAAAAAAAAAAAAD////////vPwAAAAAAAAAAAAAAAAAAAADJgBfk2/TlPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQPEAqOe70+Kc/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////////7z8AAAAAAAAAAAAAAAAAAAAAyYAX5Nv05T8AAAAAAAAAAAAAAAAAAJC8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVzhM6Jv2rz8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP///////+8/AAAAAAAAAAAAAAAAAAAAAMmAF+Tb9OU/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABZxcFs6EPePwAAAAAAAAAAAAAAAAAAAADJgBfk2/TlPwAAAAAAAAAAAAAAAAAAAAABAAAAAADwPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIC8AAAAAAAAAAAAAAAAAACAPN8tFsrH0JY/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAyYAX5Nv05T8AAAAAAAAAAAAAAAAAAAAAAQAAAAAA8D8AAAAAAAAAAAAAAAAAAIC8AAAAAAAAAAAAAAAAAACAvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1edyDbVrnj8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMmAF+Tb9OU/AAAAAAAAAAAAAAAAAAAAAAEAAAAAAPA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgDwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACGM+87/M3MPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJC8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAIC8AAAAAAAAAAAAAAAAAADwPwAAAAAAAAAAAAAAAAAApLwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBpLJrJuDI/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAA8D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEFWqGGKvhz8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAvAAAAAAAAAAAAAAAAAAApLwAAAAAAAAAAAAAAAAAAPA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAijBh0gMiyPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgDwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOpfM+hJDMw/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIC8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8D8AAAAAAAAAAOlWXgY9QI08NNIkrsAsrD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAPA/AAAAAAAAAAAADhxy8qFrvwAAAAAAAAAAAAAAAAAAAAAAAAAAAACQPAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOlWXgY9QI08AAAAAAAAAAAAAAAAAADwP4A6tZU65Ei/SQNs5XaK2D8sLuVZvcPSP0AqOe70+Kc/VzhM6Jv2rz9ZxcFs6EPeP98tFsrH0JY/1edyDbVrnj+GM+87/M3MP0BpLJrJuDI/EFWqGGKvhz8ijBh0gMiyP+pfM+hJDMw/NNIkrsAsrD8ADhxy8qFrv4A6tZU65Ei/AQAAAAAA8D8=",
+      "dtype": "float64",
+      "encoding": "base64-le-f64",
+      "order": "C",
+      "sha256_le_f64": "c95a9d8c918c83b160c5e0ea0cc606f955b7baa51b0e1fffe17ae5906af073fe",
+      "shape": [
+        16,
+        16
+      ]
+    }
+  },
+  "inputs": {
+    "acquisition": {
+      "branch": "oracle/ecp-f-hf-reference-20261012",
+      "device": "CPU",
+      "fresh_processes_per_profile": 2,
+      "native_threads": 1,
+      "profiles": 4,
+      "replay_atol": 1e-13,
+      "repository": "njzjz-bot/vibeqc"
+    },
+    "array_encoding": "base64 little-endian C-order FP64",
+    "atoms": [
+      [
+        "Na",
+        [
+          0.13,
+          -0.21,
+          0.17
+        ]
+      ],
+      [
+        "H",
+        [
+          0.43,
+          0.19,
+          3.2
+        ]
+      ]
+    ],
+    "basis_data_sources": [
+      {
+        "git_blob": "299e6de553243acc2a8909dce2cfc863840c64c6",
+        "path": "pyscf/gto/basis/lanl2dz.dat",
+        "ref": "v2.14.0",
+        "repository": "pyscf/pyscf",
+        "sha256": "8271af43b895a6b2d2b47f2c958fe86c3c990f76e982a54ac03cc3c6dd196b64"
+      },
+      {
+        "git_blob": "3872f2b96504636679a6f3ad79bb15697ec6dbae",
+        "path": "pyscf/gto/basis/sto-3g.dat",
+        "ref": "v2.14.0",
+        "repository": "pyscf/pyscf",
+        "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+      }
+    ],
+    "basis_libraries": {
+      "H": "sto-3g",
+      "Na": "lanl2dz"
+    },
+    "ecp_libraries": {
+      "Na": "lanl2dz"
+    },
+    "extra_f_shell": [
+      3,
+      [
+        0.55,
+        0.81
+      ],
+      [
+        0.17,
+        0.23
+      ]
+    ],
+    "packages": {
+      "h5py": "3.16.0",
+      "numpy": "2.3.5",
+      "pyscf": "2.14.0",
+      "scipy": "1.17.0",
+      "setuptools": "83.0.0",
+      "threadpoolctl": "3.6.0"
+    },
+    "precision": "float64",
+    "preserved_gates": {
+      "energy_atol": 2e-08,
+      "energy_rtol": 0,
+      "force_atol": 2e-06,
+      "force_rtol": 0,
+      "net_force_atol": 2e-07
+    },
+    "python": "3.12.12",
+    "representations": [
+      "cartesian",
+      "spherical"
+    ],
+    "resolved_basis": {
+      "H": [
+        [
+          0,
+          [
+            3.42525091,
+            0.15432897
+          ],
+          [
+            0.62391373,
+            0.53532814
+          ],
+          [
+            0.1688554,
+            0.44463454
+          ]
+        ]
+      ],
+      "Na": [
+        [
+          0,
+          [
+            0.4972,
+            -0.2753574
+          ],
+          [
+            0.056,
+            1.0989969
+          ]
+        ],
+        [
+          0,
+          [
+            0.0221,
+            1.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.6697,
+            -0.0683845
+          ],
+          [
+            0.0636,
+            1.014055
+          ]
+        ],
+        [
+          1,
+          [
+            0.0204,
+            1.0
+          ]
+        ],
+        [
+          3,
+          [
+            0.55,
+            0.81
+          ],
+          [
+            0.17,
+            0.23
+          ]
+        ]
+      ]
+    },
+    "resolved_ecp": {
+      "Na": [
+        10,
+        [
+          [
+            -1,
+            [
+              [],
+              [
+                [
+                  175.550259,
+                  -10.0
+                ]
+              ],
+              [
+                [
+                  35.0516791,
+                  -47.4902024
+                ],
+                [
+                  7.906027,
+                  -17.2283007
+                ],
+                [
+                  2.3365719,
+                  -6.0637782
+                ],
+                [
+                  0.7799867,
+                  -0.7299393
+                ]
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          [
+            0,
+            [
+              [
+                [
+                  243.3605846,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  41.5764759,
+                  36.2847626
+                ]
+              ],
+              [
+                [
+                  13.2649167,
+                  72.930488
+                ],
+                [
+                  3.6797165,
+                  23.8401151
+                ],
+                [
+                  0.9764209,
+                  6.0123861
+                ]
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          [
+            1,
+            [
+              [
+                [
+                  1257.2650682,
+                  5.0
+                ]
+              ],
+              [
+                [
+                  189.624881,
+                  117.4495683
+                ]
+              ],
+              [
+                [
+                  54.5247759,
+                  423.3986704
+                ],
+                [
+                  13.7449955,
+                  109.3247297
+                ],
+                [
+                  3.6813579,
+                  31.3701656
+                ],
+                [
+                  0.9461106,
+                  7.1241813
+                ]
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ]
+        ]
+      ]
+    },
+    "scf": {
+      "call": "(scf.UHF(mol) if spin else scf.RHF(mol)).run(conv_tol=1e-12)",
+      "conv_tol": 1e-12,
+      "initial_guess": "minao",
+      "one_electron_dispatch": "UHF factory selects HF1e; initial guess is not used; zero SCF cycles",
+      "other_settings": "pinned PySCF defaults; no override, polish, or fallback"
+    },
+    "schema": "generativeqc.ecp-f-hf.inputs.v1",
+    "source_commit": "44d8c91d80c5c341cd9ce98e86b52b512ce1d444",
+    "source_repository": "jinzhezenggroup/generativeqc",
+    "sources": [
+      {
+        "git_blob": "1f6d0fb391d2f4d8d94496d89cdd23fc4ba6529f",
+        "path": "tests/python/test_ecp.py",
+        "sha256": "25d8588e549f7866de7d534ae93c33fa72d552fe95f6635fa7d820dc333ec85b"
+      },
+      {
+        "git_blob": "fe5091e83c924787d3ea11efbc6af16d8904ee3e",
+        "path": "tests/python/test_ecp_f.py",
+        "sha256": "f9279f71db35a8a0c13d70966bf2da89dd2cbbb0ef38ec2836f24507b3996c1f"
+      },
+      {
+        "git_blob": "2732b0c821e1031a9bd43b0e6aa108b54265dd5c",
+        "path": "tools/generate_cpu_hf_high_l_reference.py",
+        "sha256": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700"
+      },
+      {
+        "git_blob": "600336f1528831bc9b2e155e4c3fa181a4d577ee",
+        "path": "tools/generate_ecp_raw_matrix_reference.py",
+        "sha256": "374d0b18107c8e66dba3dd7292b1641772483f962e8681e5a9d71a1a44499ac6"
+      }
+    ],
+    "states": [
+      {
+        "charge": 0,
+        "method": "RHF",
+        "nelec": [
+          1,
+          1
+        ],
+        "spin": 0
+      },
+      {
+        "charge": 1,
+        "method": "UHF",
+        "nelec": [
+          1,
+          0
+        ],
+        "spin": 1
+      }
+    ],
+    "unit": "Bohr",
+    "upstream_scf_sources": [
+      {
+        "path": "pyscf/scf/__init__.py",
+        "ref": "v2.14.0",
+        "repository": "pyscf/pyscf",
+        "sha256": "42754aaf7518664076082bab3e4854a954cda79afe10c8cf7f48e7aa23c16e42"
+      },
+      {
+        "path": "pyscf/scf/hf.py",
+        "ref": "v2.14.0",
+        "repository": "pyscf/pyscf",
+        "sha256": "34ea1a9057da3a2d5aa37fe51d4e7305580bcb8e0118a5f17ba95ba5bb36c22f"
+      },
+      {
+        "path": "pyscf/scf/uhf.py",
+        "ref": "v2.14.0",
+        "repository": "pyscf/pyscf",
+        "sha256": "b3ee3e679ab64d51ad610f04d02f4ac332c3f9238aeede7ba6bd80ad962a8fee"
+      },
+      {
+        "path": "pyscf/grad/uhf.py",
+        "ref": "v2.14.0",
+        "repository": "pyscf/pyscf",
+        "sha256": "cdcbe1afce1ab5447fcc2976b58b0ab8b8a0a6d039b1d902416ebabe2e6487c1"
+      }
+    ]
+  },
+  "molecule": {
+    "ao_labels": [
+      "0 Na 3s    ",
+      "0 Na 4s    ",
+      "0 Na 3px   ",
+      "0 Na 3py   ",
+      "0 Na 3pz   ",
+      "0 Na 4px   ",
+      "0 Na 4py   ",
+      "0 Na 4pz   ",
+      "0 Na 4f-3  ",
+      "0 Na 4f-2  ",
+      "0 Na 4f-1  ",
+      "0 Na 4f+0  ",
+      "0 Na 4f+1  ",
+      "0 Na 4f+2  ",
+      "0 Na 4f+3  ",
+      "1 H 1s    "
+    ],
+    "ao_labels_structured": [
+      [
+        0,
+        "Na",
+        "3s",
+        ""
+      ],
+      [
+        0,
+        "Na",
+        "4s",
+        ""
+      ],
+      [
+        0,
+        "Na",
+        "3p",
+        "x"
+      ],
+      [
+        0,
+        "Na",
+        "3p",
+        "y"
+      ],
+      [
+        0,
+        "Na",
+        "3p",
+        "z"
+      ],
+      [
+        0,
+        "Na",
+        "4p",
+        "x"
+      ],
+      [
+        0,
+        "Na",
+        "4p",
+        "y"
+      ],
+      [
+        0,
+        "Na",
+        "4p",
+        "z"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "-3"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "-2"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "-1"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "+0"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "+1"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "+2"
+      ],
+      [
+        0,
+        "Na",
+        "4f",
+        "+3"
+      ],
+      [
+        1,
+        "H",
+        "1s",
+        ""
+      ]
+    ],
+    "ao_locations": [
+      0,
+      1,
+      2,
+      5,
+      8,
+      15,
+      16
+    ],
+    "atom_ao_slices": [
+      [
+        0,
+        5,
+        0,
+        15
+      ],
+      [
+        5,
+        6,
+        15,
+        16
+      ]
+    ],
+    "atoms_bohr": [
+      [
+        "Na",
+        [
+          0.13,
+          -0.21,
+          0.17
+        ]
+      ],
+      [
+        "H",
+        [
+          0.43,
+          0.19,
+          3.2
+        ]
+      ]
+    ],
+    "basis": {
+      "H": [
+        [
+          0,
+          [
+            3.42525091,
+            0.15432897
+          ],
+          [
+            0.62391373,
+            0.53532814
+          ],
+          [
+            0.1688554,
+            0.44463454
+          ]
+        ]
+      ],
+      "Na": [
+        [
+          0,
+          [
+            0.4972,
+            -0.2753574
+          ],
+          [
+            0.056,
+            1.0989969
+          ]
+        ],
+        [
+          0,
+          [
+            0.0221,
+            1.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.6697,
+            -0.0683845
+          ],
+          [
+            0.0636,
+            1.014055
+          ]
+        ],
+        [
+          1,
+          [
+            0.0204,
+            1.0
+          ]
+        ],
+        [
+          3,
+          [
+            0.55,
+            0.81
+          ],
+          [
+            0.17,
+            0.23
+          ]
+        ]
+      ]
+    },
+    "cart": false,
+    "charge": 0,
+    "core_electrons": [
+      10,
+      0
+    ],
+    "ecp": {
+      "Na": [
+        10,
+        [
+          [
+            -1,
+            [
+              [],
+              [
+                [
+                  175.550259,
+                  -10.0
+                ]
+              ],
+              [
+                [
+                  35.0516791,
+                  -47.4902024
+                ],
+                [
+                  7.906027,
+                  -17.2283007
+                ],
+                [
+                  2.3365719,
+                  -6.0637782
+                ],
+                [
+                  0.7799867,
+                  -0.7299393
+                ]
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          [
+            0,
+            [
+              [
+                [
+                  243.3605846,
+                  3.0
+                ]
+              ],
+              [
+                [
+                  41.5764759,
+                  36.2847626
+                ]
+              ],
+              [
+                [
+                  13.2649167,
+                  72.930488
+                ],
+                [
+                  3.6797165,
+                  23.8401151
+                ],
+                [
+                  0.9764209,
+                  6.0123861
+                ]
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ],
+          [
+            1,
+            [
+              [
+                [
+                  1257.2650682,
+                  5.0
+                ]
+              ],
+              [
+                [
+                  189.624881,
+                  117.4495683
+                ]
+              ],
+              [
+                [
+                  54.5247759,
+                  423.3986704
+                ],
+                [
+                  13.7449955,
+                  109.3247297
+                ],
+                [
+                  3.6813579,
+                  31.3701656
+                ],
+                [
+                  0.9461106,
+                  7.1241813
+                ]
+              ],
+              [],
+              [],
+              [],
+              []
+            ]
+          ]
+        ]
+      ]
+    },
+    "effective_nuclear_charges": [
+      1,
+      1
+    ],
+    "nao": 16,
+    "nelec": [
+      1,
+      1
+    ],
+    "spin": 0,
+    "unit": "Bohr"
+  },
+  "process_id": 2474,
+  "profile": "rhf-spherical",
+  "provenance": {
+    "configuration": {
+      "policy": "explicit-empty-regular-file",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cuda_visible_devices": "",
+    "device": "CPU",
+    "execution": {
+      "checkout_sha": "2c0458410387d211e3b1e5e19bb3694775390e17",
+      "github_repository": "njzjz-bot/vibeqc",
+      "github_run_attempt": "1",
+      "github_run_id": "38303387532",
+      "github_sha": "2c0458410387d211e3b1e5e19bb3694775390e17"
+    },
+    "generator_sha256": "8b1a289607876c50062fa70a2714bed62881c23355160ab985547bb66d654988",
+    "inputs_sha256": "20f95e88f94c8598e62a20456290b2ceeaf2d2bdb4715341305c58596ab61676",
+    "installed_integral_inputs": {
+      "basis_files": [
+        {
+          "bytes": 109544,
+          "path": "pyscf/gto/basis/lanl2dz.dat",
+          "sha256": "8271af43b895a6b2d2b47f2c958fe86c3c990f76e982a54ac03cc3c6dd196b64"
+        },
+        {
+          "bytes": 49513,
+          "path": "pyscf/gto/basis/sto-3g.dat",
+          "sha256": "0514de5da5df92e477ce69ef906c81589a310260557bcda84531b144eed00cc3"
+        }
+      ],
+      "integral_libraries": [
+        {
+          "bytes": 2402833,
+          "path": "pyscf/lib/deps/lib/libcint.so",
+          "sha256": "950bb0a297507369dce95b9013ef2c5b64b0fa36a0018c303c98e95efce7db7e"
+        },
+        {
+          "bytes": 1409729,
+          "path": "pyscf/lib/libcgto.so",
+          "sha256": "337d956486a156f1aa7ca636ac5a91c6277058ffedb6db2efe714fee65f726e0"
+        }
+      ]
+    },
+    "installed_scf_sources": {
+      "pyscf/grad/uhf.py": {
+        "bytes": 4041,
+        "sha256": "cdcbe1afce1ab5447fcc2976b58b0ab8b8a0a6d039b1d902416ebabe2e6487c1"
+      },
+      "pyscf/scf/__init__.py": {
+        "bytes": 7177,
+        "sha256": "42754aaf7518664076082bab3e4854a954cda79afe10c8cf7f48e7aa23c16e42"
+      },
+      "pyscf/scf/hf.py": {
+        "bytes": 94652,
+        "sha256": "34ea1a9057da3a2d5aa37fe51d4e7305580bcb8e0118a5f17ba95ba5bb36c22f"
+      },
+      "pyscf/scf/uhf.py": {
+        "bytes": 49881,
+        "sha256": "b3ee3e679ab64d51ad610f04d02f4ac332c3f9238aeede7ba6bd80ad962a8fee"
+      }
+    },
+    "machine": "x86_64",
+    "packages": {
+      "h5py": {
+        "installed_source_native_bytes": 17002725,
+        "installed_source_native_files": 89,
+        "installed_source_native_sha256": "ae8661606706915d759b7ca9c98c62b5cb49c5694540a7a2521b1e057c5c3c92",
+        "version": "3.16.0",
+        "wheel_record_sha256": "8174662e95b98828bdba183450be57baefb69b24c06e68639ed049c233e96c21"
+      },
+      "numpy": {
+        "installed_source_native_bytes": 53844146,
+        "installed_source_native_files": 431,
+        "installed_source_native_sha256": "c2282e1c9a05825819078287341058d942ffe98daaceed79a5431c7b6e05171c",
+        "version": "2.3.5",
+        "wheel_record_sha256": "48e12b082951654ee5ab9c495e3bc22a8bee994e05f900a36516bc82f6a27252"
+      },
+      "pyscf": {
+        "installed_source_native_bytes": 135849985,
+        "installed_source_native_files": 717,
+        "installed_source_native_sha256": "801f6d902222f1ba7ae34eca875ac3dd43e91aa485702ba166836a2dfcbe87a8",
+        "version": "2.14.0",
+        "wheel_record_sha256": "4233e4225034532142c1eb9a47b8b806a9f12db9b6d4eef3c644d7c492f25296"
+      },
+      "scipy": {
+        "installed_source_native_bytes": 103245183,
+        "installed_source_native_files": 1087,
+        "installed_source_native_sha256": "9c4925b9a7e18be9fcf3bcfebc2b21ddfc0df7aaff75a443be12d541c0d7c21c",
+        "version": "1.17.0",
+        "wheel_record_sha256": "d67cb70e9ff3bdb86c788d39649247c6bcba22ab6d74f9a1389b816f81c81e59"
+      },
+      "setuptools": {
+        "installed_source_native_bytes": 3071265,
+        "installed_source_native_files": 319,
+        "installed_source_native_sha256": "3914e66cdc85364fd51688fb9364f7cb790ca9edb67cbaaad303df3e61743f1c",
+        "version": "83.0.0",
+        "wheel_record_sha256": "2fe8f339e0ea1a1762bd8b21edcc2609e36aebaf13d993f6ce9e236a0fd2ebd1"
+      },
+      "threadpoolctl": {
+        "installed_source_native_bytes": 50722,
+        "installed_source_native_files": 1,
+        "installed_source_native_sha256": "889df0cc67247507dbe2c94c3177412cd250d1df7d365bd4dc2f9b805d3f2521",
+        "version": "3.6.0",
+        "wheel_record_sha256": "21fd60a7b59ad0785db0d87b7f45a58b9c6961097749168c577efa5b1619e95e"
+      }
+    },
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "source_sha256": {
+      "tests/python/test_ecp.py": "25d8588e549f7866de7d534ae93c33fa72d552fe95f6635fa7d820dc333ec85b",
+      "tests/python/test_ecp_f.py": "f9279f71db35a8a0c13d70966bf2da89dd2cbbb0ef38ec2836f24507b3996c1f",
+      "tools/generate_cpu_hf_high_l_reference.py": "baf613386e7c00c3524ac9cddf3f9396c202de5b7c3017fd263a52ea1b1f1700",
+      "tools/generate_ecp_raw_matrix_reference.py": "374d0b18107c8e66dba3dd7292b1641772483f962e8681e5a9d71a1a44499ac6"
+    },
+    "threadpools": [
+      {
+        "architecture": "Barcelona",
+        "internal_api": "openblas",
+        "library": "libopenblas-r0-f650aae0.3.3.so",
+        "num_threads": 1,
+        "sha256": "79ec02b53f573cd7116a89f04c397473018e7fda05720b354d43505c19d47958",
+        "user_api": "blas",
+        "version": null
+      },
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas-6cdc3b4a.so",
+        "num_threads": 1,
+        "sha256": "8fb864c29cac4b25f6e2c139491ea96f2724dde42d51394f84e9c4a622e34790",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": "Haswell",
+        "internal_api": "openblas",
+        "library": "libscipy_openblas64_-fdde5778.so",
+        "num_threads": 1,
+        "sha256": "ee2039cf13a45e1e89f04d0cea9585657d93ffaa425594e1935161013fdf4e12",
+        "user_api": "blas",
+        "version": "0.3.30"
+      },
+      {
+        "architecture": null,
+        "internal_api": "openmp",
+        "library": "libgomp-a34b3233.so.1.0.0",
+        "num_threads": 1,
+        "sha256": "3a7eaece7231911be2fbb1b3e7cb4cb5c2e0f84e0c2bb73739472b5a1feec8c1",
+        "user_api": "openmp",
+        "version": null
+      }
+    ]
+  },
+  "replica": "first",
+  "scf": {
+    "actual_class": "pyscf.scf.hf.RHF",
+    "converged": true,
+    "cycles": 8,
+    "initial_guess_used": true,
+    "method": "RHF",
+    "resolved": {
+      "conv_check": true,
+      "conv_tol": 1e-12,
+      "conv_tol_cpscf": 1e-08,
+      "conv_tol_grad": null,
+      "damp": 0,
+      "diis": true,
+      "diis_class": "pyscf.scf.diis.CDIIS",
+      "diis_damp": 0,
+      "diis_file": null,
+      "diis_space": 8,
+      "diis_space_rollback": 0,
+      "diis_start_cycle": 1,
+      "direct_scf": true,
+      "direct_scf_tol": 1e-13,
+      "init_guess": "minao",
+      "level_shift": 0,
+      "max_cycle": 50,
+      "max_memory": 4000
+    }
+  },
+  "schema": "generativeqc.ecp-f-hf.receipt.v1",
+  "timings": {
+    "gradient_seconds": 0.13124504400000347,
+    "scf_seconds": 0.04096466099999674
+  }
+}

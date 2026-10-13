@@ -72,11 +72,13 @@ compiles or downloads dependencies. Native AOT preparation/execution remains
 unchanged. CPU-only builds do not include CUDA headers or acquire a driver
 through this interface.
 
-Some Python force compositions still execute outside the native transaction.
-In particular, the existing CPU Direct-KS force composition can invoke JIT
-consumers; native lifecycle metrics do not establish an AOT-only complete public
-force endpoint. That path needs its own complete prepared/AOT cutover rather
-than pretending that a successfully wrapped SCF has completed its force work.
+Native-admitted KS forces use the source-complete prepared C++ owner; admission
+comes from the per-prepared-item capability, not from lifecycle metrics. See
+[KS final-state and force ownership](ks_diagnostics.md) for the current boundary.
+Other qualified Python stationary-force compositions still execute outside the
+native transaction and can invoke JIT consumers. Those paths need their own
+complete prepared/AOT cutover: wrapping SCF alone does not establish an AOT-only
+complete public force endpoint.
 
 ## Resource and diagnostic contract
 
@@ -90,6 +92,27 @@ the sum of mutually exclusive phase high waters. Unobservable vendor storage,
 host allocator overhead and capture-internal allocations remain disclosed.
 Precision controls and method-specific refinement stay with their existing
 precision and scientific owners.
+
+The native stationary CUDA controller additionally reserves its retained
+grid-provider allowance in that ledger's admission capacity. Numeric v1/v2
+receipts remain unchanged: these allowances have no numeric allocation identity
+or requested-byte event. `generativeqc_resource_ledger_read_v3` reports six fields
+in one locked snapshot: request limit, numeric live/peak, provider-reserved
+live/peak, and combined simultaneously-live admission peak. Do not add this
+reservation again to a planner-withheld allowance or call it measured provider
+storage. Controller destruction releases it only after borrowed work drains;
+closing an observation handle does not forgive a retained owner's charge.
+
+For context-admitted native CUDA KS forces, descriptor-only capacity discovery
+and authenticated prepared-item discovery share the native scientific rule and
+the controller's capacity polynomial. Python reserves one complete consumer per
+retained item, including grid-provider admission. Fleet alternatives select
+cached or minimum storage for all items together, and native per-item limits
+survive coordinate rebuilds. Native reservations stay inside the ledger limit;
+they are not planner-withheld `runtime_allowance` estimates. The Python receipt
+keeps numeric observations unchanged and adds the v3 `admission` record.
+Unsupported or mixed fleets retain the incumbent force route and its staging
+allowance, rather than inferring support from a raw profile or a method name.
 
 Private observation ABIs `generativeqc_calculation_execution_lifecycle_v1` and
 `generativeqc_batch_execution_lifecycle_v1` return nine host-control fields:
@@ -109,12 +132,18 @@ legitimate scientific or backend-specific owners.
 | Family | Endpoint adapter | Scientific/resource owners intentionally retained |
 | --- | --- | --- |
 | HF CPU/CUDA | `src/methods/hf_method.cpp` | `PreparedFockPlan`, CPU Fock/overlap owners, native CUDA RHF/DF buckets and original solve generations |
-| XC/KS CPU/CUDA | `src/methods/dft_method.cpp` | Native semilocal/grid/XC, `CudaKsPlan`, source/grid leases, physical final-state validation and stationary force artifact lease |
+| XC/KS CPU/CUDA | `src/methods/dft_method_preparation.cpp` (descriptor/grid/spin admission), `src/methods/dft_method.cpp` (prepared owners), `src/methods/dft_method_{final_state,derivative}_adapter.cpp` (token-checked forwarding) | Native semilocal/grid/XC, `CudaKsPlan`, source/grid leases, physical final-state validation and stationary force artifact lease |
 | MP2/UMP2 | `src/methods/mp2_method.cpp`, `src/methods/ump2_method.cpp` | Reference/correlation source admission, phase-local providers, precision policy and last-good reference seed; unsupported targets still reject |
 | CC | `src/methods/rccsd_method.cpp`, `src/methods/rccsdt_method.cpp`, `src/methods/df_rccsdt_method.cpp` | CC equations, physical residuals, shared response Krylov, source admission, provider streams and bounded fallbacks |
 | GFN | `src/methods/xtb_method.cpp` | Context-owned `Gfn2RuntimeBridge`, native CPU/CUDA SCC owners and provider handle preparation/destruction |
 | Tensor capture | `src/runtime/cuda_graph_region.cuh` | Original graph executable, stream/arena/library binding and capture eligibility; graph submission is not an endpoint completion fence |
 | Explicit generated D3 | `python/generativeqc_compiler/geometry/d3_cuda.py` | Existing artifact lease, topology/switch-state guards and native tensor owner; rebuild after failure remains explicit |
+
+The KS adapters cross-cast to private `KsSingleOwnerPort` and
+`KsBatchOwnerPort` interfaces. These interfaces only forward requests to the
+original prepared calculation/batch: they do **not** allocate resources,
+retain final-state tokens, or extend borrowed CUDA pointer lifetimes. Descriptor
+admission completes before construction of the mutable scientific owner.
 
 Seeded post-HF batch calls and native ragged KS scheduling remain inside the
 fleet transaction; they do not create fake per-item scalar lifecycle records.

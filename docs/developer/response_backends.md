@@ -15,29 +15,65 @@ and atom core counts are absent. Legacy libraries without this proof remain
 unsupported for CUDA CPKS. Method, exact packed basis/quadrature, canonical spin
 frames, physical residual and revocable native token are bound as on CPU.
 
-The Coulomb adapter requests only J from the existing unrestricted `FockPlan`;
-no unused K contraction is performed. XC extends the existing `CudaXcPlan` with
+The RKS adapter requests the exact full-range J/K terms authenticated by the
+native model; a semilocal graph requests J only, without an unused K contraction.
+Admission uses generated point-response and component-scaling capabilities,
+not functional names. Tau, range-separated exchange, nonlocal correlation,
+ECP and density-fitted response remain unsupported by this RKS endpoint.
+The legacy unrestricted adapter retains its separate admission contract.
+XC extends the existing `CudaXcPlan` with
 a directional feature panel, reusing its AO evaluator, density contractions,
 point policy and potential assembler. The CPU and GPU point differentials use
 the same `xc_point_response.hpp` formulas. Preparation copies the native state's
-actual reference density, packed basis, points and weights. It does not regenerate
-the quadrature or rerun SCF. Actions upload a signed AO density direction and
+actual packed basis and immutable quadrature sources, and borrows the current
+SCF owner's resident D/grid under its revocable token. It does not regenerate
+the quadrature, re-export D/F/C/W, or rerun SCF. Compatibility actions upload a signed AO density direction and
 download the completed AO response; AO values and point features stay on device.
 Invalid directions/domains reject publication and the next action resets the arena.
 
-`device_budget_bytes` (default 128 MiB) bounds retained response XC and Coulomb
-allocations together: XC is admitted first, and Coulomb receives the remaining
-budget. `response.diagnostics` separates device J/XC from host transforms and
-Krylov, reports both owners' retained bytes, and exposes native XC setup/action
-transfer and synchronization counters. For each successful XC action with `s`
-spin channels and `n` AOs, H2D is `8*s*n*n` bytes and D2H is `8*s*n*n + 28`
-bytes (matrix plus three scalars and a status), with two explicit fences. Initial
-snapshot export and the second native source export during XC preparation are
-reported separately. Coulomb statistics report host payload, not measured PCIe
+`NativeRKSResponse.solve` and `solve_resident` execute single-RHS GMRES in the
+shared native `solve_gmres_resident` controller. They reuse the existing resident
+RHF orbital/vector engine, with the authenticated Fock K coefficient and a
+method-owned XC density action. C/orbital energies, AO transforms, response
+density/Fock scratch and all dimension-sized Krylov vectors stay on device.
+The native controller owns Arnoldi/Givens/true-residual acceptance; Python only
+validates and transports inputs/results. No host action, NumPy orbital transform,
+Python Krylov loop, SCF rerun or fallback occurs during this solve.
+
+The initial orbitals/energies and RHS/optional guess are uploaded during setup.
+Iteration returns only scalar reductions and numerical-status/XC scalar records;
+the final solution is downloaded once. The XC direction is consumed directly
+from the orbital engine's device density, not its host-upload compatibility panel.
+Snapshot/provider identity is checked even for zero RHS and workspace refusals,
+and state freshness is rechecked before result publication. The caller retains
+the batch/basis/snapshot lifetime; concurrent destruction is not supported.
+
+`device_budget_bytes` (default 128 MiB) bounds retained response XC, J/K and the
+native orbital/Krylov arena together. No reservation grows to make a solve fit.
+`GMRESOptions.max_workspace_bytes` bounds the native host scalar/result payload;
+transport-owned input/output copies and provider setup are accounted separately
+from this solver payload. Impossible device capacity raises explicitly; host
+workspace refusal reports `workspace_limit` without uploads/operator actions.
+`response.diagnostics` identifies the default scalar solver and last execution,
+retains `last_resident_solve` with the combined device peak and native physical
+transfers, and exposes native XC setup/action
+transfer and synchronization counters. For each host-upload XC compatibility
+action with `s` spin channels and `n` AOs, H2D is `8*s*n*n` bytes and D2H is
+`8*s*n*n + 28` bytes (matrix plus three scalars and a status), with two explicit
+fences. Native resident XC actions transfer only the scalar/status record, not
+the direction or potential matrices. Initial
+snapshot export is reported separately; XC preparation borrows rather than
+performing a second final-state export. Coulomb compatibility statistics report host payload, not measured PCIe
 traffic. Borrowed SCF/eigensolver storage, preparation temporaries, host arrays
 and solver workspace, CUDA context and library-private memory are outside the
-retained response budget. This is not a fully resident CPKS solve or a complete
-endpoint memory/performance guarantee.
+retained response device budget. The generic `solve(response, ...)` compatibility
+adapter and blocked/recycled `solve_many` still own host orbital/Krylov vectors;
+their existence does not change the native scalar endpoint's transfer contract.
+This increment does not qualify resident CPKS density/W reconstruction, nuclear
+RHS preparation, molecular HVP/Hessian, or complete endpoint performance.
+Native results do not export an Arnoldi basis/history or infer separately timed
+action/orthogonalization components; their zero component times are unmeasured,
+not a speed claim. Time the complete call separately.
 
 With `GENERATIVEQC_RESPONSE_CUDA_TEST=1` under an explicit Slurm GPU allocation,
 `tests/python/test_response_native_cuda.py` reuses the independent CPU-tier
@@ -47,8 +83,16 @@ SCF reruns during actions. They also cover empty-spin tangent directions,
 resource rejection, preparation/export counters, legacy-proof/method/ECP gates
 and lifetime revocation. `generativeqc_xc_response_cuda_tests` runs all 30 restricted
 and 48 unrestricted independent high-precision point directions on device with
-the unchanged CPU-tier numerical gates. See
+the unchanged CPU-tier numerical gates. `tests/python/test_resident_cpks_cuda.py`
+qualifies complete native solves against independent libcint/Libxc Jacobians,
+renamed graphs, zero/initial-guess RHS, resource refusals/replay and revoked states;
+it also verifies that a converged nonlocal meta-GGA SCF does not imply response
+support. `tests/python/test_scaled_xc_point_response.py` independently checks
+fixed X/C weights, including missing components, against Libxc potential
+differences for both spin conventions. See
 [the CUDA CPKS decision](../../.agents/notes/implemented/numerics/2026-09-20-native-cuda-cpks.md).
+The [native resident scalar decision](../../.agents/notes/implemented/architecture/2026-10-12-native-resident-cpks.md)
+records the shared-engine ownership and retained compatibility boundaries.
 
 ## Backend boundary
 

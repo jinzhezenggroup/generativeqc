@@ -170,6 +170,8 @@ def test_quadrature_setup_coexists_with_prepared_coulomb() -> None:
         _item(32),
         diis_history=8,
         requires_first_ao_derivatives=True,
+        functional_code=1,
+        requires_tau=False,
         tile=16,
     )
     assert result["quadrature_setup"] == 320 << 20
@@ -187,6 +189,8 @@ def test_unavailable_quadrature_inventory_fails_closed(missing: bool) -> None:
             _item(32),
             diis_history=8,
             requires_first_ao_derivatives=True,
+            functional_code=1,
+            requires_tau=False,
             tile=16,
         )
 

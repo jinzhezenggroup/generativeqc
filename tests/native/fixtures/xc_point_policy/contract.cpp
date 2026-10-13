@@ -156,7 +156,7 @@ struct Output {
 };
 Output execute(unsigned functional, unsigned spins, const std::vector<double>& input,
                bool response = false, bool batched = false, double exchange = 1,
-               const std::vector<double>& delta = {}) {
+               const std::vector<double>& delta = {}, double correlation = 1) {
   const std::size_t terms = functional == 0 ? 1 : 4;
   const std::size_t count = input.size() / (terms * spins);
   std::vector<double> weights(count, 1), coefficients(input.size() + 2, 12345),
@@ -167,10 +167,11 @@ Output execute(unsigned functional, unsigned spins, const std::vector<double>& i
   if (batched) {
     auto batch = resolve_point_batch_launcher(functional, launch);
     batch(nullptr, input.data(), weights.data(), count, spins, coefficients.data() + 1,
-          totals.data() + 1, &error, functional, exchange, 1, 3);
+          totals.data() + 1, &error, functional, exchange, correlation, 3);
   } else {
     launch(nullptr, input.data(), weights.data(), count, spins, coefficients.data() + 1,
-           totals.data() + 1, &error, functional, exchange, 1, response ? delta.data() : nullptr);
+           totals.data() + 1, &error, functional, exchange, correlation,
+           response ? delta.data() : nullptr);
   }
   require(input == original, "point launch modified its immutable features");
   require(coefficients.front() == 12345 && coefficients.back() == 12345 &&
@@ -357,6 +358,60 @@ void replay_and_response() {
       }
   }
 }
+void weighted_response() {
+  for (unsigned spins : {1U, 2U})
+    for (const char* equal : {"0", "1"})
+      for (const char* family : {"0", "1"}) {
+        policy("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", equal);
+        policy("GENERATIVEQC_CUDA_XC_PBE_POINT_SPECIALIZATION", family);
+        const std::vector<double> features =
+            spins == 1 ? std::vector<double>{1, .15, -.07, .12}
+                       : std::vector<double>{.4, .15, -.07, .12, .6, -.04, .05, .09};
+        const std::vector<double> delta =
+            spins == 1 ? std::vector<double>{.05, .03, .02, -.01}
+                       : std::vector<double>{.08, .03, .02, -.01, -.03, -.02, .04, .01};
+        for (const auto& scales :
+             {std::array<double, 2>{.75, 1}, {.37, .91}, {0, 1}, {1, 0}, {0, 0}}) {
+          const auto response =
+              execute(1, spins, features, true, false, scales[0], delta, scales[1]);
+          require(!response.error, "valid MethodIR response weights were rejected");
+          for (double step : {1e-4, 3e-5}) {
+            auto plus = features, minus = features;
+            for (std::size_t i = 0; i < delta.size(); ++i) {
+              plus[i] += step * delta[i];
+              minus[i] -= step * delta[i];
+            }
+            const auto high = execute(1, spins, plus, false, false, scales[0], {}, scales[1]);
+            const auto low = execute(1, spins, minus, false, false, scales[0], {}, scales[1]);
+            require(!high.error && !low.error, "weighted physical control was rejected");
+            for (std::size_t i = 0; i < delta.size(); ++i)
+              near(response.coefficients[i],
+                   (high.coefficients[i] - low.coefficients[i]) / (2 * step), 1e-6, 2e-9);
+          }
+        }
+        // Independent Dirac exchange derivative at zero gradient, with an
+        // empty UKS alpha channel. The unused correlation jet must not poison X.
+        const std::vector<double> density = spins == 1
+                                                ? std::vector<double>{1, 0, 0, 0}
+                                                : std::vector<double>{0, 0, 0, 0, 1, 0, 0, 0};
+        const std::vector<double> direction = spins == 1
+                                                  ? std::vector<double>{.1, 0, 0, 0}
+                                                  : std::vector<double>{0, 0, 0, 0, .1, 0, 0, 0};
+        const auto exchange = execute(1, spins, density, true, false, 1, direction, 0);
+        require(!exchange.error, "unused singular correlation jet rejected exchange response");
+        const double spin_rho = spins == 1 ? .5 : 1;
+        const double spin_delta = spins == 1 ? .05 : .1;
+        const double cx = .75 * std::cbrt(6 / std::acos(-1.0));
+        const double expected = -cx * (4.0 / 9.0) * std::pow(spin_rho, -2.0 / 3.0) * spin_delta;
+        near(exchange.coefficients[spins == 1 ? 0 : 4], expected, 5e-10, 1e-14);
+        if (spins == 2) near(exchange.coefficients[0], 0, 0, 1e-322);
+        for (const auto& scales : {std::array<double, 2>{-1, 1},
+                                   {1, std::numeric_limits<double>::infinity()},
+                                   {std::numeric_limits<double>::quiet_NaN(), 1}})
+          require(execute(1, spins, features, true, false, scales[0], delta, scales[1]).error != 0,
+                  "invalid MethodIR response weights were admitted");
+      }
+}
 void consumer_identity() {
   for (unsigned spins : {1U, 2U})
     for (bool response : {false, true}) {
@@ -442,11 +497,13 @@ int main(int argc, char** argv) {
     fixtures(argv[1], false);
     fixtures(argv[2], true);
     replay_and_response();
+    weighted_response();
     consumer_identity();
     invalid_domains_and_policy();
     std::cout
         << "scoped independent E/V, policy equivalence, response, ragged capacity and rejection "
            "contracts passed\n";
+    std::cout << "weighted MethodIR response consistency and independent Dirac exchange checks passed\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

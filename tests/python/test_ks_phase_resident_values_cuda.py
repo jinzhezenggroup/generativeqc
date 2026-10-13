@@ -18,8 +18,9 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("case", ["water", "methane", "water-spd"])
 @pytest.mark.parametrize("chunk_width", ["1", "2"])
+@pytest.mark.parametrize("precision", ["fp64", "auto"])
 def test_global_hybrid_phase_source(
-    tmp_path: Path, native_cxx: NativeCxx, case: str, chunk_width: str
+    tmp_path: Path, native_cxx: NativeCxx, case: str, chunk_width: str, precision: str
 ) -> None:
     """Independent reference data is never supplied to the production KS solve."""
     numpy = pytest.importorskip("numpy")
@@ -109,7 +110,8 @@ def test_global_hybrid_phase_source(
             ),
         )
     execution = subprocess.run(
-        [str(executable), str(input_path)],
+        [str(executable), str(input_path)]
+        + (["mixed-refinement"] if precision == "auto" else []),
         capture_output=True,
         text=True,
         timeout=600,
@@ -143,6 +145,7 @@ def test_global_hybrid_phase_source(
     if (
         os.environ.get("GENERATIVEQC_KS_PHASE_VALUES_ENDPOINT_TEST") == "1"
         and chunk_width == "1"
+        and precision == "fp64"
     ):
         with_forces = os.environ.get("GENERATIVEQC_KS_PHASE_VALUES_FORCE_TEST") == "1"
         endpoints = []

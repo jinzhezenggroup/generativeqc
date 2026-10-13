@@ -1,0 +1,142 @@
+diff --git a/cmake/GenerativeQCTests.cmake b/cmake/GenerativeQCTests.cmake
+index 60221f859..c6a618999 100644
+--- a/cmake/GenerativeQCTests.cmake
++++ b/cmake/GenerativeQCTests.cmake
+@@ -68,6 +68,8 @@ macro(generativeqc_add_native_tests)
+                        NO_GENERATIVEQC NO_SRC_INCLUDE)
+   target_include_directories(generativeqc_geometry_optimizer_tests PRIVATE
+                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
++  generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
++                       tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
+   if(GENERATIVEQC_ENABLE_CUDA)
+     generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
+                        tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)
+diff --git a/src/dft/cuda_ks.cpp b/src/dft/cuda_ks.cpp
+index 2f9b7c044..a80b96a9e 100644
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -19,6 +19,7 @@
+ #include "dft/cuda_ks_precision.hpp"
+ #include "dft/cuda_xc.hpp"
+ #include "dft/energy_change.hpp"
++#include "dft/mixed_precision_warmup.hpp"
+ #include "dft/xc.hpp"
+ #include "generated_split_hybrid_registry.cuh"
+ #include "generativeqc/generativeqc.hpp"
+@@ -295,6 +296,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+   std::uint64_t pending_fitted_projection_scratch_generation{};
+   std::uint64_t final_fitted_projection_scratch_generation{};
+   runtime::ExecutionPrecisionSchedule precision_schedule{};
++  MixedPrecisionWarmup mixed_warmup{};
+   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
+   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
+       incremental_energy_refinement{};
+@@ -987,6 +989,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     precision_schedule =
+         resolve_cuda_ks_precision_schedule(options.precision_mode, xc_layout.fast_paths,
+                                            fitted_coulomb, nonlocal_correlation != nullptr);
++    if (precision_schedule.any_lower_precision())
++      mixed_warmup =
++          resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),
++                                         std::getenv("GENERATIVEQC_KS_MIXED_MAX_ITERATIONS"));
+     const bool range_incremental_eligible =
+         !has_range_correction ||
+         (range_correction->backend == scf::FockBackend::Cuda &&
+@@ -2269,7 +2275,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
+         physical.electronic_energy, physical.electronic_energy_correction, previous_energy,
+         previous_energy_correction);
+     output.density_rms = physical.density_rms;
+-    diagnostic.history.push_back({output.iterations, diagnostic.components, output.energy_change,
++    const bool first_strict_energy = mixed_precision_executed && refinement_iterations == 1 &&
++                                     std::isinf(output.energy_change) && output.energy_change > 0.0;
++    const double history_energy_change = first_strict_energy ? -1.0 : output.energy_change;
++    diagnostic.history.push_back({output.iterations, diagnostic.components, history_energy_change,
+                                   physical.density_change, physical.residual, diagnostic.electrons,
+                                   stabilize_occupations});
+     // The kernel validates electronic components; their host-side sum with
+@@ -2328,7 +2337,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+         incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();
+     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
+     const bool enter_strict_refinement =
+-        mixed_stage && (converged || output.iterations >= options.max_iterations);
++        mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
++                                      options.max_iterations, physical.maximum_residual);
+     if (enter_strict_refinement) {
+       // AUTO may use FP32 only as an iterative accelerator. Reset nonlinear
+       // history and give refinement its own full budget for the FP64 target.
+@@ -2420,8 +2430,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
+       throw;
+     }
+     pending_incremental_delta = false;
+-    previous_energy = physical.electronic_energy;
+-    previous_energy_correction = physical.electronic_energy_correction;
++    // An approximate energy cannot be the baseline of a strict stopping test.
++    // The first FP64 observation starts a new energy epoch beside the fresh DIIS.
++    previous_energy = enter_strict_refinement ? std::numeric_limits<double>::infinity()
++                                              : physical.electronic_energy;
++    previous_energy_correction =
++        enter_strict_refinement ? 0.0 : physical.electronic_energy_correction;
+     try {
+       if (output.converged && complete_precision_inventory_domain()) {
+         auto& work = output.precision_work;
+diff --git a/src/dft/mixed_precision_warmup.hpp b/src/dft/mixed_precision_warmup.hpp
+new file mode 100644
+index 000000000..6d4d3988e
+--- /dev/null
++++ b/src/dft/mixed_precision_warmup.hpp
+@@ -0,0 +1,55 @@
++#pragma once
++
++#include <algorithm>
++#include <charconv>
++#include <cmath>
++#include <cstring>
++#include <stdexcept>
++
++namespace generativeqc::dft {
++
++/** An approximate SCF handoff, never a physical convergence certificate.
++ * Zero controls preserve the incumbent approximate-stage termination criteria.
++ * Positive controls bound approximate work or switch on the current physical
++ * pre-DIIS maximum residual. The consuming owner must clear nonlinear history
++ * and certify the final state using the original strict FP64 tolerances. */
++struct MixedPrecisionWarmup {
++  double switch_residual{};
++  unsigned max_iterations{};
++
++  bool enter_refinement(bool mixed_stage, bool converged, unsigned iterations,
++                        unsigned target_limit, double residual_maximum) const noexcept {
++    if (!mixed_stage || !std::isfinite(residual_maximum) || residual_maximum < 0.0) return false;
++    const unsigned limit = max_iterations ? std::min(max_iterations, target_limit) : target_limit;
++    return converged || iterations >= limit ||
++           (switch_residual > 0.0 && iterations >= 2 && residual_maximum <= switch_residual);
++  }
++};
++
++/** Parse immutable diagnostic controls before creating the prepared owner.
++ * Malformed/nonfinite controls fail explicitly instead of changing arithmetic
++ * silently. Strict-FP64 consumers need not resolve these optional controls. */
++inline MixedPrecisionWarmup resolve_mixed_precision_warmup(const char* residual,
++                                                           const char* iterations) {
++  MixedPrecisionWarmup policy;
++  if (residual) {
++    const char* end = residual + std::strlen(residual);
++    const auto parsed = std::from_chars(residual, end, policy.switch_residual);
++    if (parsed.ec != std::errc{} || parsed.ptr != end || !std::isfinite(policy.switch_residual) ||
++        policy.switch_residual < 0.0)
++      throw std::invalid_argument(
++          "GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL requires a finite "
++          "nonnegative residual (0 preserves convergence-only switching)");
++  }
++  if (iterations) {
++    const char* end = iterations + std::strlen(iterations);
++    const auto parsed = std::from_chars(iterations, end, policy.max_iterations);
++    if (parsed.ec != std::errc{} || parsed.ptr != end)
++      throw std::invalid_argument(
++          "GENERATIVEQC_KS_MIXED_MAX_ITERATIONS requires an unsigned "
++          "iteration limit (0 preserves the original budget)");
++  }
++  return policy;
++}
++
++}  // namespace generativeqc::dft

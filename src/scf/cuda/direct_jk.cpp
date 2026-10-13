@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -972,7 +973,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                                                        static_cast<int>(largest), workspace_bytes));
               const auto key_bytes = direct_jk_product(order.size(), sizeof(double));
               const auto order_bytes = direct_jk_product(order.size(), sizeof(std::int32_t));
-              const auto row_bytes = direct_jk_product(order.size(), 5 * sizeof(std::uint64_t));
+              const auto row_bytes = direct_jk_product(order.size(), 7 * sizeof(std::uint64_t));
               const auto offset_bytes = direct_jk_product(segments.size(), sizeof(int));
               const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
               const auto matrix = direct_jk_product(dimension, dimension);
@@ -1012,11 +1013,11 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   static_cast<int>(order.size()), static_cast<int>(systems.size() * 7),
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
-              // Orders three through nine share five bounded prefix
-              // planes: a (first, second) angular block has exactly one order.
-              // Equal angular buckets own only their sorted triangles.
+              // Every s/p/d/f angular bucket needs its own bounded prefix plane.
+              // Strict reuse covers orders 3--9; mixed reuse also admits 0--2
+              // and 10--12. Equal buckets retain only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
-                for (unsigned angular_order = 3; angular_order <= 9; ++angular_order)
+                for (unsigned angular_order = 0; angular_order <= 12; ++angular_order)
                   for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
                        second <= angular_order / 2; ++second) {
                     const unsigned first = angular_order - second;
@@ -1493,12 +1494,10 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                                        : plan->generated_coulomb.get();
     // The current generated mixed-Fock capability also narrows the
     // density-by-integral product (#1434). DFT AUTO Direct-J is qualified for a
-    // narrower recurrence-only contract, so mixed_j deliberately retains the
-    // independent kernel as an unsupported-contract fallback rather than
-    // silently widening its FP32 arithmetic. Retire this fallback when the
-    // generated streaming owner can express FP32 ERI recurrence + FP64 density
-    // product/Fock accumulation and passes the existing mixed-work/numerical
-    // gates; keep the J-only !mixed_j guard until that contract exists.
+    // narrower recurrence-only contract. Reuse angular-bucketed canonical
+    // sources with MixedPrecisionFloat and the compiler's FP64 scatter instead
+    // of expanding to ordered AO quartets. Optional-storage failure retains
+    // the bounded independent fallback; generated mixed products remain barred.
     const bool generated_coulomb_available =
         !mixed_j && (plan->generated_exchange
                          ? direct_jk_generated_full_range_value_available(*plan)
@@ -1564,6 +1563,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
           direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0));
     if (dispatch.canonical_coulomb || dispatch.canonical_exchange) {
+      const bool canonical_strict_j = dispatch.canonical_coulomb && !mixed_j;
       const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
       const auto matrix = direct_jk_product(dimension, dimension);
       const auto spin_count = unrestricted ? 2U : 1U;
@@ -1581,6 +1581,32 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         const auto& offsets = plan->canonical_pair_offsets[item];
         for (unsigned first = 0; first < 7U; ++first)
           for (unsigned second = 0; second <= first; ++second) {
+            if (dispatch.canonical_coulomb && mixed_j) {
+              if (plan->materialized_pair_order && !correction && !fixed) {
+                const auto& shells = plan->materialized_pair_offsets[item];
+                const auto pairs = plan->materialized_pair_offsets.back()[7];
+                launch_materialized_canonical_mixed_j_kernel(
+                    plan->stream, plan->materialized_batch, first + second,
+                    {plan->materialized_pair_order,
+                     plan->materialized_row_prefix + second * pairs + shells[first]},
+                    shells[first], shells[first + 1] - shells[first], shells[second],
+                    shells[second + 1] - shells[second], unrestricted, plan->screening_tolerance,
+                    plan->materialized_bounds, plan->canonical_density, plan->canonical_active,
+                    plan->canonical_coulomb, census ? census : plan->canonical_work_count,
+                    mixed_coulomb_work_count);
+              } else
+                launch_canonical_mixed_j_kernel(
+                    plan->stream, plan->canonical_batch, plan->canonical_cartesian,
+                    static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
+                    direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
+                    offsets[first + 1U] - offsets[first], offsets[second],
+                    offsets[second + 1U] - offsets[second], first == second, unrestricted,
+                    plan->screening_tolerance, plan->canonical_bounds, plan->canonical_density,
+                    plan->canonical_coulomb, census ? census : plan->canonical_work_count,
+                    mixed_coulomb_work_count, correction);
+              direct_jk_check(cudaGetLastError());
+            }
+            if (!canonical_strict_j && !dispatch.canonical_exchange) continue;
             const auto bucket = first * (first + 1U) / 2U + second;
             const auto cached_offset = !resident || plan->resident_bucket_offsets.empty()
                                            ? value_offset
@@ -1590,16 +1616,15 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
                   plan->canonical_pairs, direct_jk_pair_rows(plan, second, offsets[first]),
                   offsets[first], offsets[first + 1U] - offsets[first], offsets[second],
-                  offsets[second + 1U] - offsets[second], first == second,
-                  dispatch.canonical_coulomb, dispatch.canonical_exchange, unrestricted,
-                  plan->resident_values + cached_offset, plan->canonical_density,
-                  plan->canonical_coulomb, plan->canonical_exchange,
+                  offsets[second + 1U] - offsets[second], first == second, canonical_strict_j,
+                  dispatch.canonical_exchange, unrestricted, plan->resident_values + cached_offset,
+                  plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
             else if (first + second >= 3 && first + second <= 9 && plan->materialized_pair_order &&
                      !correction && !fixed &&
-                     (!dispatch.canonical_coulomb || !dispatch.canonical_exchange ||
+                     (!canonical_strict_j || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {
               // The compiler owns complete-domain lanes/slots for orders 3--9.
               // Low orders use smaller CTAs; higher orders retain wider owners.
@@ -1617,8 +1642,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                                               : DirectCoulombRange::Full,
                   dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
                   plan->screening_tolerance, plan->materialized_bounds, plan->canonical_density,
-                  plan->canonical_active,
-                  dispatch.canonical_coulomb ? plan->canonical_coulomb : nullptr,
+                  plan->canonical_active, canonical_strict_j ? plan->canonical_coulomb : nullptr,
                   dispatch.canonical_exchange ? plan->canonical_exchange : nullptr,
                   census ? census : plan->canonical_work_count);
             } else
@@ -1627,9 +1651,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
                   direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
                   offsets[first + 1U] - offsets[first], offsets[second],
-                  offsets[second + 1U] - offsets[second], first == second,
-                  dispatch.canonical_coulomb, dispatch.canonical_exchange, unrestricted,
-                  direct_exchange_range(spec.exchange),
+                  offsets[second + 1U] - offsets[second], first == second, canonical_strict_j,
+                  dispatch.canonical_exchange, unrestricted, direct_exchange_range(spec.exchange),
                   dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange,
@@ -2423,6 +2446,52 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
         *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
         exchange_coefficient, derivatives, separate_sources, allow_spatial_default));
     direct_jk_finite_result(derivatives);
+  });
+}
+
+generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default) {
+  if (plan == nullptr || plan->generated_exchange == nullptr ||
+      !plan->generated_exchange->force_capability) {
+    detail = "prepared Direct owner has no retained shell derivative lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  // Reject capture before entering the failure drain: synchronizing a captured
+  // stream would invalidate the caller's graph even though no work was submitted.
+  auto capture_error = cudaSetDevice(plan->device_id);
+  cudaStreamCaptureStatus capture{};
+  if (capture_error == cudaSuccess) capture_error = cudaStreamIsCapturing(plan->stream, &capture);
+  if (capture_error != cudaSuccess) {
+    detail = cudaGetErrorString(capture_error);
+    return source_cuda_status(capture_error);
+  }
+  if (capture != cudaStreamCaptureStatusNone) {
+    detail = "resident shell derivatives require an ordinary noncapturing stream";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(consumer && plan->diagnostic.batch_size == 1,
+                      "resident shell derivative requires one prepared item and a consumer");
+    direct_jk_require(plan->diagnostic.derivative_order >= 1,
+                      "direct shell first derivatives were not retained");
+    const auto extent = plan->diagnostic.nbf;
+    direct_jk_require(density != nullptr && matrix_elements == extent * extent,
+                      "resident shell derivative density shape is invalid");
+    const bool unrestricted = spin == FockSpin::Unrestricted;
+    direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
+                      "resident shell derivative spin storage is invalid");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    try {
+      direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
+          *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
+          exchange_coefficient, consumer, allow_spatial_default));
+    } catch (const generativeqc::Error& error) {
+      // Preserve the callback's typed status through the existing provider
+      // guard and its failure drain; driver failures are not bad seed input.
+      throw DirectJkFailure{error.status(), error.what()};
+    }
   });
 }
 

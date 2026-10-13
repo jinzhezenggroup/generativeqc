@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "api/handles.hpp"
+#include "methods/batch_capabilities.hpp"
 #include "methods/scf_common_options.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fleet.hpp"
@@ -292,7 +293,11 @@ class HfPreparedCalculation final : public PreparedCalculation {
   scf::initial_guess::OverlapOrthogonalizer overlap_cache_;
 };
 
-class HfPreparedBatch final : public PreparedBatch {
+class HfPreparedBatch final : public PreparedBatch,
+                              public BatchWarmStarts,
+                              public BatchDirectQueueProfiles,
+                              public BatchEigensolverProfiles,
+                              public BatchDfMetricDiagnostics {
  public:
   HfPreparedBatch(Capabilities capabilities, const runtime::ExecutionContext& execution,
                   std::vector<core::System> systems, scf::ScfOptions options,

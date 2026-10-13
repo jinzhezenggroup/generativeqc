@@ -35,30 +35,25 @@ def test_r2scan_selector_rejects_changed_components_or_parameters(
     def unexpected_codegen(*args: object, **kwargs: object) -> NoReturn:
         raise AssertionError("mismatched model reached point code generation")
 
-    monkeypatch.setattr(geometry_cuda, "energy_expression", unexpected_codegen)
+    monkeypatch.setattr(geometry_cuda, "emit_r2scan_program", unexpected_codegen)
     with pytest.raises(ValueError, match="canonical semilocal"):
         geometry_cuda._emit_stationary_point(R2SCAN_CODE, semilocal=spec)
 
 
+@pytest.fixture(scope="module")
+def canonical_r2scan_point() -> str:
+    """Generate the actual SCF-domain point artifact used by both spin ABIs."""
+    return geometry_cuda._emit_stationary_point(
+        R2SCAN_CODE, semilocal=functional("R2SCAN", spin="polarized")
+    )
+
+
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
 def test_r2scan_alias_and_spin_use_the_canonical_point_model(
-    spin: str, monkeypatch: pytest.MonkeyPatch
+    spin: str, canonical_r2scan_point: str
 ) -> None:
-    canonical = functional("R2SCAN", spin="polarized")
     supplied = replace(
         functional("R2SCAN", spin=spin), identifier="custom-r2scan-alias"
     )
-
-    class CapturedPoint(Exception):
-        pass
-
-    def capture(spec: FunctionalSpec, *, production: bool) -> NoReturn:
-        assert dict(spec.components) == dict(canonical.components)
-        assert spec.spin == "polarized"
-        assert spec.range_omega == canonical.range_omega
-        assert production
-        raise CapturedPoint
-
-    monkeypatch.setattr(geometry_cuda, "energy_expression", capture)
-    with pytest.raises(CapturedPoint):
-        geometry_cuda._emit_stationary_point(R2SCAN_CODE, semilocal=supplied)
+    emitted = geometry_cuda._emit_stationary_point(R2SCAN_CODE, semilocal=supplied)
+    assert emitted == canonical_r2scan_point

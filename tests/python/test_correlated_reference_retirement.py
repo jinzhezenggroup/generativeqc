@@ -392,10 +392,12 @@ def test_actual_cc_provider_and_solver_callbacks_preserve_retry_state(
         "    posthf::ProviderWork provider_work;",
         "    const double problem_seconds =",
     )
+    # Extract the CC solve callback inside the shared CC/DF-MP2 dispatcher.
+    # Its rollback contract remains independent of the sibling MP2 evaluator.
     solver = _between(
-        method[method.index('    allocation_stage = "CC resident solve";') :],
-        "    run_with_cuda_reference_budget(",
-        "    const double solver_seconds =",
+        method[method.index("    const auto solver_started =") :],
+        "      run_with_cuda_reference_budget(",
+        "\n    }\n    const double solver_seconds =",
     )
     code = (
         PLAN_STANDINS
@@ -412,7 +414,7 @@ void provider_probe(int failure, bool resident) {
   auto reference = std::make_shared<hf::PhysicalReference>();
   cc::SolverOptions solver_options, correlation_options;
   solver_options.max_bytes = 100;
-  const bool cuda = true, retain_df_response = true;
+  const bool cuda = true, retain_df_response = true, df_mp2_mode = false;
   const core::System* correlation_auxiliary = nullptr;
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr;
   ProbeExecution execution;
@@ -650,8 +652,10 @@ struct ProbeState {
 cc::Problem build_problem(const core::System&, const integrals::ElectronInteractionSource* source,
     const hf::PhysicalReference&, const cc::SolverOptions& options, bool, int,
     posthf::ProviderWork& work, generativeqc_tensor::Metrics& metrics, const core::System*,
-    cc::DFSourceResult* retained, const scf::cuda_execution::CudaDfSourcePolicy*) {
+    cc::DFSourceResult* retained, const scf::cuda_execution::CudaDfSourcePolicy*,
+    bool df_mp2_mode) {
   PhaseOwner partial_problem;
+  assert(!df_mp2_mode);
   assert(source && source->nbf() == 2 && retained && !retained->response_state);
   build_budgets.push_back(options.max_bytes);
   ++work.source_scans; work.source_values += 3; ++metrics.input_ms;
@@ -681,9 +685,31 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
         "      std::unique_ptr<posthf::RawSource> raw_source;",
         "      Result result;",
     )
+    # Model the ordinary endpoint with no companion outputs. Keep the real
+    # admission callback and energy peak accounting in the executable probe.
+    mp2_energy += "const std::size_t component_capacity = 0, component_peak = 0;\n"
+    mp2_energy += _between(
+        mp2, "      const auto run_phase =", "      if (components & kHfComponent)"
+    )
+    mp2_energy += _between(
+        mp2, "      const auto corr = run_phase(", "      result.energy ="
+    )
+    # This probe exercises ordinary source retirement, without an optional MO
+    # cache. Keep the real callback and its bounded fallback; complete cache
+    # reuse is covered by the native/public MP2 endpoint tests.
     mp2_force = _between(
         mp2,
         "        response::GmresOptions response_options;",
+        "        struct ForceCache {",
+    )
+    mp2_force += _between(
+        mp2,
+        "        force_diagnostic = run_phase(",
+        "          if (cache.bytes) {",
+    )
+    mp2_force += _between(
+        mp2,
+        '          runtime::df_progress::Scope::number("mp2_force_mo_cache_bytes", 0);',
         "        result.forces =",
     )
     mp2_force_entry = _statement(mp2, "const bool force_started_with_reference_plan =")
@@ -691,7 +717,10 @@ def test_actual_mp2_and_cc_force_triples_callbacks_restore_budgets(
     mp2_diagnostic = "".join(
         _statement(mp2, field)
         for field in (
-            "diagnostic.numeric_capacity_bytes = std::max(reference_capacity, energy_capacity)",
+            (
+                "diagnostic.numeric_capacity_bytes = "
+                "std::max(reference_capacity, completed_phase_capacity)"
+            ),
             "diagnostic.reference_execution_plan_reused =",
             "diagnostic.reference_execution_plan_owned_device_bytes =",
         )
@@ -1008,6 +1037,279 @@ template<class... Args> ConventionalForceResult conventional_force_cpu(const Arg
 }
 template<class... Args> ConventionalForceResult density_fitted_force_cpu(const Args&...) {
   throw std::logic_error("conventional callback dispatched fitted force");
+}
+}
+"""
+
+
+def test_actual_mp2_optional_force_cache_retires_before_bounded_replay(
+    tmp_path: Path,
+) -> None:
+    """Execute actual cache admission and retry code with faulted boundaries."""
+    method = (ROOT / "src/methods/mp2_method.cpp").read_text(encoding="utf-8")
+    cache_and_force = _between(
+        method, "        struct ForceCache {", "        result.forces ="
+    )
+    code = (
+        MP2_CACHE_STANDINS
+        + r"""
+void probe(int stage, int failure, std::size_t budget = 1000, bool readable = true,
+           bool legacy = false) {
+  assert(live_blocks() == 0 && live_force_calls == 0);
+  fail_stage = stage; fail_kind = failure;
+  pending_cuda_error = cudaSuccess; clear_calls = 0;
+  producer_calls = cached_calls = raw_calls = 0;
+  expected_budget = budget;
+  Source source{readable};
+  Source* raw_source = &source;
+  const Source* conventional_source = &source;
+  Reference ref{2,1};
+  const bool cuda = true, density_fitted_ = false;
+  const double threshold_ = 1e-10;
+  struct { int device_id = 0; } context_;
+  struct { double density_fitting_relative_threshold = 1e-10; } options_;
+  struct {
+    std::size_t retained_numeric_bytes() const { return 13; }
+  } cuda_reference_plan_;
+  const std::size_t component_capacity = 7, warm_capacity = 11;
+  std::size_t completed_phase_capacity = 80;
+  response::GmresOptions response_options;
+  std::optional<mp2::ConventionalForceResult> force_diagnostic;
+  const auto prepare_source = [&] { conventional_source = &source; };
+  const auto run_phase = [&](auto&& operation) { return operation(budget); };
+  bool rejected = false;
+  try {
+"""
+    )
+    code += cache_and_force
+    code += r"""
+    assert(force_diagnostic && force_diagnostic->forces == std::vector<double>{5});
+    const bool admitted = readable && budget >= 248;
+    const bool constructed = admitted && (stage == 0 || stage == 7);
+    const bool cached_success = constructed && stage != 7;
+    assert(cached_calls == (constructed ? 1 : 0));
+    assert(raw_calls == (cached_success ? 0 : 1));
+    assert(force_diagnostic->planned_endpoint_peak_bytes ==
+           (cached_success ? 348 : 300));
+    assert(force_diagnostic->measured_endpoint_peak_bytes ==
+           (cached_success ? 0 : 45));
+    assert(completed_phase_capacity == (constructed ? 279 : 80));
+    assert((failure != 3 && failure != 4) || !admitted);
+  } catch (const std::invalid_argument&) {
+    assert(failure == 3);
+    rejected = true;
+  } catch (const MethodError& error) {
+    assert(failure == 4 && !legacy && error.status == GENERATIVEQC_STATUS_CUDA_ERROR);
+    rejected = true;
+  } catch (const StaleCudaError& error) {
+    assert(legacy && (failure == 2 || failure == 4));
+    assert(error.status == (failure == 2 ? cudaErrorMemoryAllocation : cudaErrorIllegalAddress));
+    rejected = true;
+  }
+  assert(rejected == ((failure == 3 || failure == 4 || (legacy && failure == 2)) &&
+                      readable && budget >= 248));
+  assert(live_blocks() == 0 && live_force_calls == 0);
+  if (rejected) {
+    assert(!force_diagnostic && raw_calls == (legacy ? 1 : 0));
+    assert(cached_calls == (stage == 7 ? 1 : 0));
+  }
+}
+int main() {
+  unsetenv("GENERATIVEQC_MP2_FORCE_MO_CACHE");
+  unsetenv("GENERATIVEQC_MP2_FORCE_SOURCE_TILING");
+#ifdef TEST_OLD_MP2_CACHE_RECOVERY
+  // Remove only the new drain calls: the original fallback then reaches the
+  // next CUDA boundary with stale OOM (or an unrelated error), as diagnosed.
+  for (int stage : {1,7})
+    for (int failure : {2,4}) probe(stage,failure,1000,true,true);
+  std::cout << "old recovery reaches replay with stale CUDA status\n";
+#else
+  probe(0,0);
+  // Each producer refusal must destroy every earlier block and its own
+  // partially returned allocation before the ordinary force call begins.
+  for (int stage = 1; stage <= 6; ++stage)
+    for (int failure : {1,2,3,4}) probe(stage,failure);
+  for (int failure : {1,2,3,4}) probe(7,failure);
+  // Non-device sources and quarter-budget/preflight rejection do no work.
+  probe(0,0,1000,false);
+  probe(0,0,191);
+  probe(0,0,247);
+  std::cout << "actual optional MP2 cache rollback gates passed\n";
+#endif
+}
+"""
+    assert "actual optional MP2 cache rollback gates passed" in _compile_run(
+        tmp_path, code
+    )
+    negative_path = tmp_path / "old-recovery"
+    negative_path.mkdir()
+    old_recovery = code.replace("clear_force_cache_allocation_error();", "")
+    assert "old recovery reaches replay with stale CUDA status" in _compile_run(
+        negative_path, "#define TEST_OLD_MP2_CACHE_RECOVERY 1\n" + old_recovery
+    )
+
+
+MP2_CACHE_STANDINS = r"""
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstdlib>
+#include <iostream>
+#include <limits>
+#include <new>
+#include <numeric>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string_view>
+#include <vector>
+void* block_allocations[6]{};
+int live_force_calls = 0, producer_calls = 0, cached_calls = 0, raw_calls = 0;
+int fail_stage = 0, fail_kind = 0;
+std::size_t expected_budget = 0;
+enum cudaError_t { cudaSuccess = 0, cudaErrorMemoryAllocation = 2, cudaErrorIllegalAddress = 700 };
+cudaError_t pending_cuda_error = cudaSuccess;
+int clear_calls = 0;
+cudaError_t cudaGetLastError() {
+  ++clear_calls;
+  const auto error = pending_cuda_error;
+  pending_cuda_error = cudaSuccess;
+  return error;
+}
+const char* cudaGetErrorString(cudaError_t) { return "injected CUDA error"; }
+struct StaleCudaError { cudaError_t status; };
+constexpr int GENERATIVEQC_STATUS_CUDA_ERROR = 7;
+struct MethodError : std::runtime_error {
+  int status;
+  MethodError(int code, const char* message) : std::runtime_error(message), status(code) {}
+};
+int live_blocks() {
+  return std::count_if(std::begin(block_allocations), std::end(block_allocations),
+                       [](void* value) { return value != nullptr; });
+}
+void* operator new(std::size_t bytes) {
+  if (auto* value = std::malloc(bytes ? bytes : 1)) return value;
+  throw std::bad_alloc();
+}
+void operator delete(void* value) noexcept {
+  for (auto& block : block_allocations)
+    if (block == value && value) {
+      assert(live_force_calls == 0);
+      block = nullptr;
+    }
+  std::free(value);
+}
+void operator delete(void* value, std::size_t) noexcept { ::operator delete(value); }
+void inject() {
+  if (fail_kind == 1) throw std::length_error("capacity refusal");
+  if (fail_kind == 2 || fail_kind == 4) {
+    pending_cuda_error = fail_kind == 2 ? cudaErrorMemoryAllocation : cudaErrorIllegalAddress;
+    throw std::bad_alloc();
+  }
+  if (fail_kind == 3) throw std::invalid_argument("invalid numerical state");
+}
+struct ForceCall {
+  ForceCall() { ++live_force_calls; }
+  ~ForceCall() { --live_force_calls; }
+};
+namespace integrals { enum class ElectronInteractionOperator { eri }; }
+struct Source {
+  bool readable;
+  bool supports_device_read(integrals::ElectronInteractionOperator, int) const {
+    return readable;
+  }
+};
+struct Reference { std::size_t nbf, nocc; };
+namespace response { struct GmresOptions { std::size_t max_workspace_bytes = 0; }; }
+namespace runtime::df_progress {
+struct Scope {
+  template<class Value> static void number(const char*, Value) {}
+};
+}
+namespace posthf {
+std::size_t checked_add(std::size_t a, std::size_t b) {
+  if (b > std::numeric_limits<std::size_t>::max() - a)
+    throw std::length_error("addition overflow");
+  return a+b;
+}
+std::size_t checked_mul(std::size_t a, std::size_t b) {
+  if (a && b > std::numeric_limits<std::size_t>::max() / a)
+    throw std::length_error("multiplication overflow");
+  return a*b;
+}
+using MOSlots = std::array<std::vector<std::size_t>,4>;
+struct BorrowedMOBlock {
+  std::array<bool,4> virtual_axes;
+  std::span<const double> values;
+};
+enum class AOTileDomain { Basis };
+struct NativeBlockProvider {
+  std::size_t budget;
+  NativeBlockProvider(const Source&, const Reference& ref, std::size_t available,
+                      unsigned axis, AOTileDomain)
+      : budget(available) {
+    assert(ref.nbf == 2 && ref.nocc == 1 && axis >= 1 && axis <= 2);
+  }
+  struct Plan { std::size_t host_bytes = 200, device_bytes = 0; };
+  Plan plan(const std::array<std::size_t,4>& shape, bool cuda) const {
+    assert(cuda && (shape == std::array<std::size_t,4>{1,1,1,1}));
+    return {};
+  }
+  std::vector<double> get(const MOSlots& slots, bool cuda, int device) {
+    ++producer_calls;
+    assert(cuda && device == 0 && producer_calls <= 6);
+    assert(live_blocks() == producer_calls-1);
+    assert(budget == expected_budget - 8*(producer_calls-1));
+    const std::array<std::array<std::size_t,4>,6> expected{{
+      {0,1,0,1},{0,0,1,1},{0,1,0,0},{0,1,1,1},{0,0,0,0},{1,1,1,1}
+    }};
+    for (unsigned axis = 0; axis < 4; ++axis)
+      assert(slots[axis] == std::vector<std::size_t>{expected[producer_calls-1][axis]});
+    std::vector<double> output(1,producer_calls);
+    assert(output.capacity() == 1);
+    block_allocations[producer_calls-1] = output.data();
+    if (fail_stage == producer_calls) inject();
+    return output;
+  }
+};
+}
+namespace mp2 {
+struct ConventionalForceResult {
+  std::vector<double> forces{5};
+  std::size_t planned_endpoint_peak_bytes = 300, measured_endpoint_peak_bytes = 45;
+};
+ConventionalForceResult conventional_force_cuda(
+    const Reference&, const Source&, std::size_t budget, double, double,
+    const response::GmresOptions& options, int,
+    std::span<const double> ovov = {},
+    std::span<const posthf::BorrowedMOBlock> blocks = {}) {
+  ForceCall owner;
+  assert(options.max_workspace_bytes == budget);
+  if (blocks.empty()) {
+    ++raw_calls;
+    assert(live_blocks() == 0 && budget == expected_budget && ovov.empty());
+    if (pending_cuda_error != cudaSuccess) throw StaleCudaError{cudaGetLastError()};
+  } else {
+    ++cached_calls;
+    assert(blocks.size() == 6 && live_blocks() == 6);
+    assert(budget == expected_budget-48 && ovov.data() == block_allocations[0]);
+    const std::array<std::array<bool,4>,6> expected{{
+      {0,1,0,1},{0,0,1,1},{0,1,0,0},{0,1,1,1},{0,0,0,0},{1,1,1,1}
+    }};
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+      assert(blocks[i].virtual_axes == expected[i]);
+      assert(blocks[i].values.size() == 1 && blocks[i].values[0] == i+1);
+      assert(blocks[i].values.data() == block_allocations[i]);
+    }
+    if (fail_stage == 7) inject();
+  }
+  return {};
+}
+template<class... Args> ConventionalForceResult conventional_force_cpu(const Args&...) {
+  throw std::logic_error("unexpected CPU force");
+}
+template<class... Args> ConventionalForceResult density_fitted_force_cpu(const Args&...) {
+  throw std::logic_error("unexpected fitted force");
 }
 }
 """

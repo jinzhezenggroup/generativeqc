@@ -1,3 +1,4 @@
+#include "methods/batch_capabilities.hpp"
 #include "methods/method.hpp"
 
 namespace generativeqc::methods {
@@ -15,12 +16,12 @@ PreparedCalculation::PreparedCalculation(generativeqc_backend backend, int devic
   lifecycle_.bind(owner_binding(this, backend, device));
 }
 
-Result PreparedCalculation::execute(bool compute_forces) {
+Result PreparedCalculation::execute(bool compute_forces, unsigned components) {
   if (lifecycle_.failed()) reset_execution();
   lifecycle_.begin();
   try {
     invalidate_result();
-    auto result = execute_impl(compute_forces);
+    auto result = execute_components_impl(compute_forces, components);
     if (result.convergence.converged) {
       lifecycle_.mark_success();
     } else {
@@ -99,7 +100,7 @@ void PreparedBatch::reset_execution() {
   if (lifecycle_.running() || lifecycle_.closed())
     throw std::logic_error("cannot reset a running or closed prepared batch");
   invalidate_result();
-  clear_warm_starts();
+  if (auto* seeds = dynamic_cast<BatchWarmStarts*>(this)) seeds->clear_warm_starts();
   if (lifecycle_.failed())
     lifecycle_.recover();
   else {
