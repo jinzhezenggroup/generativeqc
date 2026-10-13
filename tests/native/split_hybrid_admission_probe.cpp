@@ -71,16 +71,15 @@ int main() {
           spec.exchange.coefficient = -method.exact / (spin == 1 ? 2.0 : 1.0);
           spec.coulomb.approximation = j;
           spec.exchange.approximation = k;
-          const bool admitted = j == k &&
-                                (j == generativeqc::scf::FockApproximation::Exact || qualified_df);
+          const bool admitted =
+              j == k && (j == generativeqc::scf::FockApproximation::Exact || qualified_df);
           if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0) !=
               admitted) {
             std::cerr << "J/K provider identity disagrees with Libxc hybrid composition\n";
             return 1;
           }
           spec.exchange.coefficient *= 2.0;
-          if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0))
-            return 1;
+          if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0)) return 1;
         }
       }
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "canonical")) return 1;
