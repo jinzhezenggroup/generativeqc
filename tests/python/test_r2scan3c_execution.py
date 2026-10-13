@@ -578,8 +578,7 @@ def test_df_canonical_r2scan3c_cpu_force_composes_and_replays() -> None:
     moved = xyz.copy()
     moved[1] += [0.02, -0.01, 0.03]
     moved_atoms = [
-        (symbol, tuple(row))
-        for (symbol, _), row in zip(H2, moved, strict=True)
+        (symbol, tuple(row)) for (symbol, _), row in zip(H2, moved, strict=True)
     ]
     with composite.prepare_batch([H2], warm_start=True) as batch:
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
@@ -587,9 +586,9 @@ def test_df_canonical_r2scan3c_cpu_force_composes_and_replays() -> None:
         changed = batch.execute(
             coordinates=[moved], strict=True, properties=("energy", "forces")
         ).items[0]
-        moved_warm = batch.execute(
-            strict=True, properties=("energy", "forces")
-        ).items[0]
+        moved_warm = batch.execute(strict=True, properties=("energy", "forces")).items[
+            0
+        ]
     fresh = composite.singlepoint(moved_atoms, properties=("energy", "forces"))
 
     for row, atoms in ((cold, H2), (changed, moved_atoms)):
@@ -663,6 +662,7 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
     from generativeqc.basis import load_basis
     from generativeqc_compiler.dft import NativeAO
     from test_dft_df_public import pyscf_energy_gradient
+
     from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp as reference_gcp
 
     auxiliary = load_basis(
@@ -685,9 +685,7 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
     assert "forces" in calc.capabilities.supported_properties
 
     def reference(batch: typing.Any, atoms: typing.Any) -> tuple[float, np.ndarray]:
-        with NativeAO(
-            atoms, basis=basis_spec, representation="spherical"
-        ) as basis:
+        with NativeAO(atoms, basis=basis_spec, representation="spherical") as basis:
             state = StationaryKsState.from_native(batch, basis)
             try:
                 coulomb, exchange, threshold = state._source.fock_provider_proof()
@@ -716,8 +714,7 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
     moved = np.asarray([xyz for _, xyz in WATER], dtype=np.float64)
     moved[1] += [0.025, -0.01, 0.035]
     moved_atoms = [
-        (symbol, tuple(row))
-        for (symbol, _), row in zip(WATER, moved, strict=True)
+        (symbol, tuple(row)) for (symbol, _), row in zip(WATER, moved, strict=True)
     ]
     errors: dict[str, list[dict[str, float]]] = {"fixed": [], "moved": []}
 
@@ -728,17 +725,15 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
             row = (
                 first
                 if repeat == 0
-                else batch.execute(
-                    strict=True, properties=("energy", "forces")
-                ).items[0]
+                else batch.execute(strict=True, properties=("energy", "forces")).items[
+                    0
+                ]
             )
             assert row.converged and row.dispersion is not None
             errors["fixed"].append(
                 {
                     "energy": abs(row.energy - first_reference[0]),
-                    "force": float(
-                        np.max(np.abs(row.forces - first_reference[1]))
-                    ),
+                    "force": float(np.max(np.abs(row.forces - first_reference[1]))),
                 }
             )
         first_moved = batch.execute(
@@ -749,17 +744,15 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
             row = (
                 first_moved
                 if repeat == 0
-                else batch.execute(
-                    strict=True, properties=("energy", "forces")
-                ).items[0]
+                else batch.execute(strict=True, properties=("energy", "forces")).items[
+                    0
+                ]
             )
             assert row.converged and row.dispersion is not None
             errors["moved"].append(
                 {
                     "energy": abs(row.energy - moved_reference[0]),
-                    "force": float(
-                        np.max(np.abs(row.forces - moved_reference[1]))
-                    ),
+                    "force": float(np.max(np.abs(row.forces - moved_reference[1]))),
                 }
             )
         correction_diagnostic = batch.dispersion_diagnostic
@@ -784,7 +777,9 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
         )
     finite_difference = (displaced_energies[0] - displaced_energies[1]) / (2 * step)
     projected = float(-np.sum(first.forces * direction))
-    max_energy_error = max(entry["energy"] for rows in errors.values() for entry in rows)
+    max_energy_error = max(
+        entry["energy"] for rows in errors.values() for entry in rows
+    )
     max_force_error = max(entry["force"] for rows in errors.values() for entry in rows)
     translation_error = max(
         float(np.max(np.abs(row.sum(axis=0))))
