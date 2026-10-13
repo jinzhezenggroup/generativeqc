@@ -61,10 +61,15 @@ def _resolve_libxc_hybrid(item: dict[str, Any]) -> None:
         or Fraction(record["range_omega"]) != 0
         or Fraction(record["short_range_exchange"]) != 0
         or Fraction(record["long_range_exchange"]) != 0
-        or tuple((name, Fraction(weight)) for name, weight in record["components"])
-        != tuple((name, Fraction(weight)) for name, weight in item["components"])
+        or Fraction(item["range_omega"]) != 0
+        or item["coefficient_policy"] != "exact"
     ):
-        raise ValueError("native hybrid components do not match pinned Libxc metadata")
+        raise ValueError("native hybrid components disagree with pinned Libxc metadata")
+    if item["components"] != "libxc":
+        raise ValueError("native Libxc hybrid components must be source-derived")
+    item["components"] = [
+        [name, str(Fraction(weight))] for name, weight in record["components"]
+    ]
     exact = Fraction(record["exact_exchange"])
     if not 0 < exact <= 1 or item["cuda_global_hybrid_exact_exchange"] is not None:
         raise ValueError("native Libxc hybrid must derive its exact-exchange fraction")

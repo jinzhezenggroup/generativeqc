@@ -282,17 +282,21 @@ def test_b3lyp_fractions_are_source_derived_from_pinned_libxc(tmp_path: Path) ->
     b3lyp = next(item for item in manifest["families"] if item["symbol"] == "B3lyp")
     assert b3lyp["cuda_global_hybrid_exact_exchange"] is None
     assert b3lyp["libxc_hybrid_method"] == "B3LYP"
+    assert b3lyp["components"] == "libxc"
     assert b3lyp["cpu_stationary_force_profiles"][0]["exact_exchange"] == "libxc"
 
     resolved = next(
         item for item in generator.load_manifest() if item["symbol"] == "B3lyp"
     )
+    assert resolved["components"] == [
+        [name, str(Fraction(weight))] for name, weight in record["components"]
+    ]
     assert Fraction(resolved["cuda_global_hybrid_exact_exchange"]) == Fraction(1, 5)
     assert Fraction(
         resolved["cpu_stationary_force_profiles"][0]["exact_exchange"]
     ) == Fraction(1, 5)
-    b3lyp["components"][1][1] = "71/100"
+    b3lyp["components"] = [["GGA_X_B88", "71/100"]]
     invalid = tmp_path / "wrong-libxc-components.json"
     invalid.write_text(json.dumps(manifest), encoding="utf-8")
-    with pytest.raises(ValueError, match="do not match pinned Libxc metadata"):
+    with pytest.raises(ValueError, match="must be source-derived"):
         generator.load_manifest(invalid)

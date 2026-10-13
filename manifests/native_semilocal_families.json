@@ -155,24 +155,7 @@
       "scf_domain": "b3lyp-vwn-rpa-tail-v1/density-vacuum-1e-18",
       "domain_version": 2,
       "cuda_ks": true,
-      "components": [
-        [
-          "LDA_X",
-          "2/25"
-        ],
-        [
-          "GGA_X_B88",
-          "18/25"
-        ],
-        [
-          "LDA_C_VWN_RPA",
-          "19/100"
-        ],
-        [
-          "GGA_C_LYP",
-          "81/100"
-        ]
-      ],
+      "components": "libxc",
       "range_omega": "0",
       "coefficient_policy": "exact",
       "exchange_policy": "any",

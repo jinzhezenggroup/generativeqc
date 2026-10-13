@@ -76,7 +76,7 @@ def test_m06_2x_cuda_df_complete_cold_warm_and_moved_endpoints(atom_count: int) 
     auxiliary, reference_auxiliary = load_retained_comparison_basis(
         AUXILIARY, case, role="auxiliary", compute_forces=True
     )
-    grid = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
+    grid = GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32)
     atoms = tuple(case.atoms)
     moved = tuple(
         (

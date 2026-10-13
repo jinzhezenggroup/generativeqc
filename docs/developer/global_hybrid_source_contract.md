@@ -1,16 +1,17 @@
 # Source-derived global-hybrid composition and J/K admission
 
-The CUDA KS composition contract is now shared by the descriptor admission,
-native method preparation, and the final-state validator in
-`src/dft/global_hybrid_composition.hpp`. A functional's Libxc point program
+The CUDA KS scientific composition is shared by the descriptor admission,
+native method preparation, and final-state validator in
+`src/dft/global_hybrid_composition.hpp`. The matching Direct/DF Fock identity
+checks live in `src/dft/global_hybrid_fock.hpp`. A functional's Libxc point program
 does not define a separate Coulomb/exchange implementation:
 
 - **Scientific identity**: The pinned Libxc hybrid registration supplies
   B3LYP's exact-exchange fraction (1/5) and its four semilocal components.
-  `tools/generate_native_semilocal_families.py` verifies all four component
-  identities and coefficients against the SHA-checked generated Libxc C-owner
-  metadata, derives the native C++/Python hybrid fraction, and fails closed on
-  drift. M06-2X and MN15 derive their split semilocal registrations and
+  `tools/generate_native_semilocal_families.py` materializes the entire
+  semilocal component graph and exact-exchange fraction from the SHA-checked
+  generated Libxc C-owner metadata, without duplicate numeric entries in the
+  native manifest; missing or incompatible source records fail closed. M06-2X and MN15 derive their split semilocal registrations and
   fractions (27/50, 11/25) through
   `tools/generate_xc_split_hybrid_registry.py`. The native PBE envelope also
   represents PBE0's MethodIR-selected 1/4 exact exchange; this is an explicit
