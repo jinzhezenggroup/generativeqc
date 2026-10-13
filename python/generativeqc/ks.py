@@ -436,12 +436,22 @@ def split_hybrid_df_force_admitted(
     native boundary checks exact K fraction, FP64, metric and spin contracts;
     the caller separately checks precision, Hamiltonian and resource budgets.
     """
-    record = _split_hybrid_record(method_ir)
-    return record is None or (
-        record["cuda_df_energy_force"]
-        and backend == "cuda"
-        and xc_schedule == "device_fused"
-    )
+    # Identify the split semilocal point program even if a caller modifies K.
+    # A malformed exact-exchange fraction must not be misclassified as an
+    # ordinary non-split hybrid and accidentally receive force capability.
+    components = dict(_native_execution_plan(method_ir).semilocal.functional.components)
+    for record in SPLIT_HYBRIDS.values():
+        expected = {
+            name: Fraction(coefficient) for name, coefficient in record["components"]
+        }
+        if components == expected:
+            return (
+                record["cuda_df_energy_force"]
+                and backend == "cuda"
+                and xc_schedule == "device_fused"
+                and _split_hybrid_record(method_ir) is record
+            )
+    return True
 
 
 def mixed_density_fitted_force_eligible(method_ir: MethodIR, *, backend: str) -> bool:

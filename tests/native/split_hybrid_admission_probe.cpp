@@ -50,6 +50,9 @@ int main() {
         }
         return true;
       };
+      const auto code = dft::generated::split_hybrid_functional_code(method.exchange,
+                                                                     method.correlation);
+      const bool qualified_df = dft::generated::split_hybrid_cuda_df_energy_force(code);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "canonical")) return 1;
       std::swap(components[0], components[1]);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "reordered components")) return 1;
@@ -91,7 +94,29 @@ int main() {
       if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "mixed precision")) return 1;
       descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
-      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "density fitting")) return 1;
+      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS
+                              : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                 "CUDA density fitting"))
+        return 1;
+      descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_AUTO;
+      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS
+                              : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                 "automatic CUDA density fitting"))
+        return 1;
+      descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CPU fitted provider on CUDA")) return 1;
+      descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+      options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
+      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "fitted host XC")) return 1;
+      options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
+      descriptor.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "fitted mixed precision")) return 1;
+      descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
+      if (qualified_df) {
+        exchange.fock_coefficient *= 2.0;
+        if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "fitted wrong K normalization")) return 1;
+        exchange = original_exchange;
+      }
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
       options.struct_size = 0;
       if (!check(GENERATIVEQC_STATUS_ABI_MISMATCH, "short ABI")) return 1;
