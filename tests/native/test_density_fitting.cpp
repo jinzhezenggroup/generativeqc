@@ -2284,6 +2284,7 @@ int main() {
                 actual, oracle_derivative, 5e-10,
                 "batched generated DF response differs from independent CPU oracle");
           }
+        }
 
         // A pure Coulomb response has no exchange Gram. Check the bounded
         // streamed source and the retained source against independent CPU
@@ -2301,7 +2302,6 @@ int main() {
               cuda_detail.c_str());
           require_matrix_close(actual, j_only_expected, 5e-10,
                                "J-only streamed/resident DF response differs from CPU oracle");
-        }
         }
       }
     } else {
@@ -2361,8 +2361,7 @@ int main() {
       constexpr std::size_t n = 768, a = 3712;
       const auto packed = generativeqc::scf::plan_packed_density_fitting_tiles(
           1, n, a, 0, 0, 0, 0, false);
-      const auto dense_required = generativeqc::scf::workspace_bytes(
-          n * n, 128, 1, n, a, a * a * sizeof(double), 0, true, false, true);
+      const auto dense_required = n * n * a * sizeof(double);
       require(packed.peak_workspace_bytes < dense_required,
               "single-owner packed J-only shape has no density benefit");
       const auto budget =
