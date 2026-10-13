@@ -414,9 +414,9 @@ static cudaError_t contract_retained_coulomb_response(
 static cudaError_t contract_streamed_coulomb_response(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
     const double* densities, std::size_t tile, double* workspace, cudaStream_t stream,
-    cublasHandle_t blas,
-    const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
-    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>& consume) {
+    cublasHandle_t blas, const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
+    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>&
+        consume) {
   const auto matrix = n * n, aa = a * a;
   auto* bar_metric = workspace + aa;
   auto* fitted_panel = workspace + 4 * aa + 3 * matrix;
@@ -453,8 +453,8 @@ static cudaError_t contract_streamed_coulomb_response(
   for (std::size_t t = 0; t < terms.size(); ++t) {
     const auto coefficient = terms[t].coulomb_coefficient;
     if (coefficient == 0) continue;
-    coulomb_metric_kernel<<<blocks(aa), threads, 0, stream>>>(
-        a, -coefficient, potentials + t * a, bar_metric);
+    coulomb_metric_kernel<<<blocks(aa), threads, 0, stream>>>(a, -coefficient, potentials + t * a,
+                                                              bar_metric);
   }
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
@@ -1449,12 +1449,12 @@ cudaError_t contract_cuda_df_response_weights(
   // Pure Coulomb has no exchange metric Gram. Its exact full-rank adjoint
   // needs one fitted-panel read per auxiliary block, not the nested P/Q
   // traversal in the general response. Preserve scalar/dot diagnostics.
-  if (metric.full_rank && !borrowed && !packed_pairs && !single_fitted_tensor &&
-      read_fitted && blas_products && !serial_metric_dot &&
+  if (metric.full_rank && !borrowed && !packed_pairs && !single_fitted_tensor && read_fitted &&
+      blas_products && !serial_metric_dot &&
       std::all_of(terms.begin(), terms.end(),
                   [](const auto& term) { return term.exchange_coefficient == 0; }))
-    return contract_streamed_coulomb_response(n, a, terms, densities, tile, workspace, stream,
-                                               blas, read_fitted, consume);
+    return contract_streamed_coulomb_response(n, a, terms, densities, tile, workspace, stream, blas,
+                                              read_fitted, consume);
   // A validated resident fitted reader takes precedence even for a full-width
   // panel. Capacity is not permission to discard immutable forward values and
   // regenerate raw integrals. Borrowed/raw and rank-truncated routes stay below.
@@ -1481,8 +1481,7 @@ cudaError_t contract_cuda_df_response_weights(
   auto* charges = weights + tile * matrix;
   auto* potentials = charges + terms.size() * a;
   const bool has_exchange = std::any_of(
-      terms.begin(), terms.end(),
-      [](const auto& term) { return term.exchange_coefficient != 0; });
+      terms.begin(), terms.end(), [](const auto& term) { return term.exchange_coefficient != 0; });
   runtime::cuda_trace::TraceRegion metric_inverse("metric_inverse", stream);
   inverse_kernel<<<blocks(aa), threads, 0, stream>>>(a, metric.inverse_square_root, inverse);
   metric_inverse.finish();
@@ -1534,7 +1533,8 @@ cudaError_t contract_cuda_df_response_weights(
         for (std::size_t p = 0; p < count; ++p) read_values(begin + p, raw + p * matrix);
       } else {
         runtime::cuda_trace::trace_counter("raw_value_cache_hits", count);
-        runtime::cuda_trace::trace_counter("raw_value_reuse_bytes", count * matrix * sizeof(double));
+        runtime::cuda_trace::trace_counter("raw_value_reuse_bytes",
+                                           count * matrix * sizeof(double));
       }
     }
     runtime::cuda_trace::TraceRegion coulomb_weights("coulomb_response_weights", stream);

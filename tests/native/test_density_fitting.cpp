@@ -2081,24 +2081,22 @@ int main() {
           std::vector<double> actual;
           std::string detail;
           generativeqc::scf::DfGradientResources work;
-          require(generativeqc::scf::execute_cuda_density_fitting_generated_force_response(
-                      response_plan, 0, orbital, auxiliary, integrals.three_center,
-                      integrals.metric, j_only_terms, 0, budget, 3, actual, detail, &work) ==
-                      GENERATIVEQC_STATUS_SUCCESS,
-                  detail.c_str());
+          require(
+              generativeqc::scf::execute_cuda_density_fitting_generated_force_response(
+                  response_plan, 0, orbital, auxiliary, integrals.three_center, integrals.metric,
+                  j_only_terms, 0, budget, 3, actual, detail, &work) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
           require_matrix_close(actual, j_only_oracle.derivative, 8e-10,
                                "J-only bounded GPU response differs from CPU oracle");
           if (response_plan == source_plan.get()) {
             const auto width = work.auxiliary_weight_tile;
-            require(width < integrals.naux,
-                    "streamed J-only test did not exercise bounded panels");
+            require(width < integrals.naux, "streamed J-only test did not exercise bounded panels");
             const auto panels = (integrals.naux + width - 1) / width;
             const auto pair_tiles =
                 (integrals.nbf * integrals.nbf + integrals.naux - 1) / integrals.naux;
             require(work.value_slices == panels * pair_tiles &&
-                        work.recomputed_value_bytes ==
-                            panels * integrals.naux * integrals.nbf * integrals.nbf *
-                                sizeof(double),
+                        work.recomputed_value_bytes == panels * integrals.naux * integrals.nbf *
+                                                           integrals.nbf * sizeof(double),
                     "streamed J-only response regenerated a quadratic number of raw panels");
           } else {
             require(work.recomputed_value_bytes == 0,
@@ -2330,8 +2328,9 @@ int main() {
         // A pure Coulomb response has no exchange Gram. Check the bounded
         // streamed source and the retained source against independent CPU
         // derivative tensors, with a short final auxiliary panel.
-        const auto j_only_expected = generativeqc::scf::build_density_fitting_rhf_gradient(
-            raw, total, 1e-12, {1.0, 0.0}).derivative;
+        const auto j_only_expected =
+            generativeqc::scf::build_density_fitting_rhf_gradient(raw, total, 1e-12, {1.0, 0.0})
+                .derivative;
         const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
             {total, 1.0, 0.0}};
         for (auto* plan : {physical_resident.get(), batch_source_plan.get()}) {
@@ -2400,8 +2399,8 @@ int main() {
     // arbitrary-density/unknown-method caller must remain streamed.
     {
       constexpr std::size_t n = 768, a = 3712;
-      const auto packed = generativeqc::scf::plan_packed_density_fitting_tiles(
-          1, n, a, 0, 0, 0, 0, false);
+      const auto packed =
+          generativeqc::scf::plan_packed_density_fitting_tiles(1, n, a, 0, 0, 0, 0, false);
       const auto dense_required = n * n * a * sizeof(double);
       require(packed.peak_workspace_bytes < dense_required,
               "single-owner packed J-only shape has no density benefit");
@@ -2419,8 +2418,7 @@ int main() {
       require(j_only.stores_full_three_center &&
                   j_only.value_storage.pairs ==
                       generativeqc::scf::DfPairStorage::SymmetricLowerSingle &&
-                  j_only.value_storage.rank_capacity == 0 &&
-                  j_only.peak_workspace_bytes <= budget,
+                  j_only.value_storage.rank_capacity == 0 && j_only.peak_workspace_bytes <= budget,
               "method-authorized J-only DF should retain a rank-zero packed value");
     }
 

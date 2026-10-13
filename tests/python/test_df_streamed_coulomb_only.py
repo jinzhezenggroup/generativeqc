@@ -11,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -57,9 +56,9 @@ def test_full_rank_j_only_panel_adjoint(tile: int) -> None:
         for p in range(a):
             delta = np.zeros_like(raw)
             delta[i, p] = eps
-            numeric = (
-                energy(raw + delta, metric) - energy(raw - delta, metric)
-            ) / (2 * eps)
+            numeric = (energy(raw + delta, metric) - energy(raw - delta, metric)) / (
+                2 * eps
+            )
             assert numeric == pytest.approx(bar_raw[i, p], abs=2e-8)
     for p in range(a):
         for q in range(p + 1):
@@ -67,9 +66,9 @@ def test_full_rank_j_only_panel_adjoint(tile: int) -> None:
             delta[p, q] = eps
             if p != q:
                 delta[q, p] = eps
-            numeric = (
-                energy(raw, metric + delta) - energy(raw, metric - delta)
-            ) / (2 * eps)
+            numeric = (energy(raw, metric + delta) - energy(raw, metric - delta)) / (
+                2 * eps
+            )
             expected = bar_metric[p, q] * (2 if p != q else 1)
             assert numeric == pytest.approx(expected, abs=2e-8)
 
@@ -95,9 +94,8 @@ def test_streamed_j_only_does_not_revisit_auxiliary_panel_pairs() -> None:
     assert "coulomb_metric_kernel" in specialized
     assert "exchange_weights_kernel" not in specialized
     dispatch = source.index("return contract_streamed_coulomb_response(")
-    assert dispatch < source.index(
-        "return contract_full_rank_panels(", dispatch
-    )
+    assert dispatch < source.index("return contract_full_rank_panels(", dispatch)
+
 
 def test_rank_deficient_j_only_avoids_exchange_source_rereads() -> None:
     """Keep spectral VJP but skip the exchange-only P/Q source traversal."""
