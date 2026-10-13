@@ -40,6 +40,7 @@ def plan_composite_stationary_cuda_resources(
     max_device_bytes: int,
     max_host_bytes: int,
     tile_points: int | None = None,
+    phased_becke: bool = False,
     becke_primitive: bool = False,
     native_derivative_bytes: int = 0,
 ) -> CompositeStationaryCudaResources:
@@ -55,6 +56,8 @@ def plan_composite_stationary_cuda_resources(
     Additional lazy integral owners use the caller's native dry capacity query.
     Their device reserve is also charged conservatively to the host envelope;
     a smaller AO tile cannot hide this independently retained owner.
+    Optional phased Becke storage must be charged for both accumulators before
+    their bounded runtime owners are constructed, or they cannot admit it.
     """
     for name, value in (
         ("grid_points", grid_points),
@@ -100,6 +103,7 @@ def plan_composite_stationary_cuda_resources(
             )
             // 2,
             cooperative_becke=True,
+            phased_becke=phased_becke,
             becke_primitive=becke_primitive,
         )
         device = (
