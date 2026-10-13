@@ -134,4 +134,6 @@ def test_m06_2x_cuda_df_complete_cold_warm_and_moved_endpoints(atom_count: int) 
         for _ in range(5):
             warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             assert warm.warm_start_used
-            _assert_endpoint(warm, _reference_endpoint(reference_moved, cupy, moved_seed))
+            _assert_endpoint(
+                warm, _reference_endpoint(reference_moved, cupy, moved_seed)
+            )

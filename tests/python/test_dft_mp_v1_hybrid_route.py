@@ -410,7 +410,9 @@ def test_automatic_semilocal_promotion_remains_cpu_fp64_only(
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
-def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(spin: str) -> None:
+def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(
+    spin: str,
+) -> None:
     method = resolve_method("M06-2X", spin=spin)
     renamed = replace(method, identifier="opaque-qualified-split")
     assert split_hybrid_df_force_admitted(

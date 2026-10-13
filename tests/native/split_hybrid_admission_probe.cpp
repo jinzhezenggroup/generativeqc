@@ -50,8 +50,8 @@ int main() {
         }
         return true;
       };
-      const auto code = dft::generated::split_hybrid_functional_code(method.exchange,
-                                                                     method.correlation);
+      const auto code =
+          dft::generated::split_hybrid_functional_code(method.exchange, method.correlation);
       const bool qualified_df = dft::generated::split_hybrid_cuda_df_energy_force(code);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "canonical")) return 1;
       std::swap(components[0], components[1]);
@@ -94,13 +94,11 @@ int main() {
       if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "mixed precision")) return 1;
       descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
-      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS
-                              : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                  "CUDA density fitting"))
         return 1;
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_AUTO;
-      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS
-                              : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                  "automatic CUDA density fitting"))
         return 1;
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;

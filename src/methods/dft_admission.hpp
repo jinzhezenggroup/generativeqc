@@ -50,13 +50,11 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   // Only a manifest-qualified complete fitted J/K and force consumer may be
   // substituted for Direct; other registered hybrids remain Direct-only.
   const bool direct_jk = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE;
-  const bool fitted_jk =
-      (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
-       descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO) &&
-      dft::generated::split_hybrid_cuda_df_energy_force(code);
+  const bool fitted_jk = (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
+                          descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO) &&
+                         dft::generated::split_hybrid_cuda_df_energy_force(code);
   if (backend != GENERATIVEQC_BACKEND_CUDA ||
-      descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
-      (!direct_jk && !fitted_jk) ||
+      descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 || (!direct_jk && !fitted_jk) ||
       input->xc_execution_schedule != GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED)
     return reject(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                   "split-global-hybrid KS requires CUDA, qualified Direct/DF J/K, "
