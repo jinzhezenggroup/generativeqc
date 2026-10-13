@@ -91,6 +91,11 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     from generativeqc import Calculator, GridSpec, KsOptions
 
     monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
+    # Each route owns its complete optional policy; a molecular-cohort opt-in
+    # in the parent environment must not turn the off/range cases incremental.
+    monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "0")
+    monkeypatch.setenv("GENERATIVEQC_VV10_INCREMENTAL_SEED", "0")
+    monkeypatch.setenv("GENERATIVEQC_VV10_CONTINUE_INNER_DIIS", "0")
     monkeypatch.setenv(
         "GENERATIVEQC_VV10_NATIVE_SEED", str(int(native_seed == "semilocal"))
     )
@@ -143,13 +148,20 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
 @pytest.mark.parametrize(
-    "frozen_range,incremental", [(False, False), (True, False), (False, True)]
+    "frozen_range,incremental,continued_diis",
+    [
+        (False, False, False),
+        (True, False, False),
+        (False, True, False),
+        (False, True, True),
+    ],
 )
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
     monkeypatch: pytest.MonkeyPatch,
     max_iterations: int,
     frozen_range: bool,
     incremental: bool,
+    continued_diis: bool,
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -163,6 +175,9 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED", str(int(frozen_range)))
     monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", str(int(incremental)))
     monkeypatch.setenv("GENERATIVEQC_VV10_INCREMENTAL_SEED", str(int(incremental)))
+    monkeypatch.setenv(
+        "GENERATIVEQC_VV10_CONTINUE_INNER_DIIS", str(int(continued_diis))
+    )
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1)),

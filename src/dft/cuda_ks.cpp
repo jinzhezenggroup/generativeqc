@@ -345,7 +345,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // VV10 potential. Every accepted endpoint still uses the unmodified full
   // target operator, consecutive physical energy checks and original budget.
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
-  bool nonlocal_freeze_range{};
+  bool nonlocal_freeze_range{}, nonlocal_continue_inner_diis{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1424,6 +1424,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!incremental_direct_jk || incremental_seed_requested) && !use_warm &&
         options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    const auto* continued_diis = std::getenv("GENERATIVEQC_VV10_CONTINUE_INNER_DIIS");
+    nonlocal_continue_inner_diis =
+        nonlocal_outer_active && continued_diis && std::string_view(continued_diis) == "1";
     nonlocal_freeze_range = nonlocal_outer_active && has_range_correction && freeze_range_requested;
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
@@ -2578,8 +2581,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_exact_epoch_iterations = 0;
         // Leave a bounded ordinary full-target tail if the nested solve stalls.
         if (output.iterations + 20 >= options.max_iterations) nonlocal_outer_active = false;
-        check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
-        check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+        // Optional continuation uses old inner history only as a proposal
+        // accelerator across nearby frozen potentials. Those entries are not
+        // full-target work or acceptance evidence. The initial semilocal switch
+        // and every bounded exit still start an uncontaminated target history.
+        if (!nonlocal_continue_inner_diis || pending_nonlocal_seed || !nonlocal_outer_active) {
+          check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
+          check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+        }
       }
     } else if (nonlocal_outer_active && !converged) {
       output.converged = false;
@@ -2590,6 +2599,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // Close with consecutive fresh physical Focks and the original strict
         // energy/density/residual gates, never an inner or stale-potential gate.
         nonlocal_outer_active = false;
+        if (nonlocal_continue_inner_diis) {
+          check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
+          check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+        }
       } else {
         nonlocal_frozen_stage = true;
         nonlocal_inner_iterations = 0;
