@@ -201,3 +201,73 @@ def test_generated_commands_use_explicit_dependency_boundary_when_supported() ->
     assert 'CMAKE_VERSION VERSION_GREATER_EQUAL "3.27"' in helper
     assert "DEPENDS_EXPLICIT_ONLY" in helper
     assert "${_generativeqc_explicit_dependency_boundary}" in helper
+
+
+def test_host_object_component_codegen_compile_and_link(tmp_path: typing.Any) -> None:
+    """A host OBJECT target waits for generated headers and is linked into the SDK."""
+    import shutil
+
+    import pytest
+
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if not launcher:
+        pytest.skip("C++ compiler cache required for local build qualification")
+
+    (tmp_path / "seed.hpp").write_text("#pragma once\n#define GENERATED_VALUE 7\n")
+    (tmp_path / "host.cpp").write_text(
+        '#include "fixture_generated.hpp"\n'
+        "#ifndef HOST_PARENT_DEFINE\n#error missing parent compilation definitions\n#endif\n"
+        'extern "C" int host_value() { return HOST_PARENT_DEFINE + GENERATED_VALUE; }\n'
+    )
+    (tmp_path / "core.cpp").write_text(
+        'extern "C" int host_value();\n'
+        'extern "C" int api_value() { return host_value(); }\n'
+    )
+    (tmp_path / "caller.cpp").write_text(
+        'extern "C" int api_value();\n'
+        "int main() { return api_value() == 55 ? 0 : 1; }\n"
+    )
+    fixture = """cmake_minimum_required(VERSION 3.24)
+project(HostObjectBoundary LANGUAGES CXX)
+find_package(Threads REQUIRED)
+include("{helper}")
+add_library(fixture_core SHARED core.cpp)
+target_include_directories(fixture_core PRIVATE "${{CMAKE_CURRENT_BINARY_DIR}}")
+target_compile_definitions(fixture_core PRIVATE HOST_PARENT_DEFINE=48)
+add_custom_command(
+  OUTPUT "${{CMAKE_CURRENT_BINARY_DIR}}/fixture_generated.hpp"
+  COMMAND "${{CMAKE_COMMAND}}" -E copy_if_different
+          "${{CMAKE_CURRENT_SOURCE_DIR}}/seed.hpp"
+          "${{CMAKE_CURRENT_BINARY_DIR}}/fixture_generated.hpp"
+  DEPENDS "${{CMAKE_CURRENT_SOURCE_DIR}}/seed.hpp"
+  VERBATIM)
+add_custom_target(fixture_codegen DEPENDS
+  "${{CMAKE_CURRENT_BINARY_DIR}}/fixture_generated.hpp")
+generativeqc_add_host_object_component(fixture_core fixture_host
+  SOURCES host.cpp CODEGEN fixture_codegen)
+add_executable(fixture_cli caller.cpp)
+target_link_libraries(fixture_cli PRIVATE fixture_core)
+""".format(helper=(ROOT / "cmake/GenerativeQCSources.cmake").as_posix())
+    (tmp_path / "CMakeLists.txt").write_text(fixture)
+    build = tmp_path / "build"
+    subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(build),
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={launcher}",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["cmake", "--build", str(build), "--target", "fixture_host", "--parallel"],
+        check=True,
+    )
+    assert (build / "fixture_generated.hpp").exists()
+    subprocess.run(
+        ["cmake", "--build", str(build), "--target", "fixture_cli", "--parallel"],
+        check=True,
+    )
+    subprocess.run([str(build / "fixture_cli")], check=True)
