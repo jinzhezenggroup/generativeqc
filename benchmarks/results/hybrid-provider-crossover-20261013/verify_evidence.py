@@ -6,7 +6,6 @@ endpoints remain incomplete; repeated timings cannot replace scientific gates.
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import json
 import math
@@ -15,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
+from benchmarks.hybrid_crossover_receipts import ReceiptBundle
 from tools.benchmark_hybrid_provider_crossover import summarize
 
 HERE = Path(__file__).resolve().parent / "evidence"
@@ -22,21 +22,7 @@ CASES = ("water-96", "water-48", "formaldehyde")
 ARMS = ("direct", "df-jk-occupied")
 
 
-def raw(relative: str) -> bytes:
-    """Read exact original receipt bytes, including deterministic gzip members."""
-    path = HERE / relative
-    data = path.read_bytes()
-    return gzip.decompress(data) if path.suffix == ".gz" else data
-
-
-def read(relative: str) -> dict:
-    return json.loads(raw(relative))
-
-
-def verify() -> dict:
-    manifest = read("manifest.json")
-    if manifest.get("schema") != "generativeqc.hybrid-provider-rtx5090-evidence.v1":
-        raise ValueError("unexpected evidence schema")
+def required_paths() -> set[str]:
     required = {
         "native/campaign.json.gz",
         "build/binaries.sha256.gz",
@@ -67,29 +53,16 @@ def verify() -> dict:
             required.add(f"profiles/{case}-{arm}-profile.json.gz")
             if case != "water-96" or arm == "direct":
                 required.add(f"traces/{case}-{arm}-trace.jsonl.gz")
+    return required
+
+
+def verify() -> dict:
+    bundle = ReceiptBundle(HERE, required_paths())
+    manifest = bundle.manifest
+    read, raw = bundle.read, bundle.raw
+    if manifest.get("schema") != "generativeqc.hybrid-provider-rtx5090-evidence.v1":
+        raise ValueError("unexpected evidence schema")
     rows = manifest["files"]
-    members = {row["path"]: row for row in rows}
-    actual = {
-        p.relative_to(HERE).as_posix()
-        for p in HERE.rglob("*")
-        if p.is_file() and p.name != "manifest.json"
-    }
-    if len(rows) != len(members) or required != set(members) or actual != set(members):
-        raise ValueError("missing, duplicate or unauthenticated evidence member")
-    for relative, row in members.items():
-        path = (HERE / relative).resolve()
-        if not path.is_relative_to(HERE.resolve()) or not path.is_file():
-            raise ValueError(f"unsafe or absent evidence: {relative}")
-        stored = path.read_bytes()
-        content = raw(relative)
-        if (len(stored), hashlib.sha256(stored).hexdigest()) != (
-            row["bytes"],
-            row["sha256"],
-        ) or (len(content), hashlib.sha256(content).hexdigest()) != (
-            row["content_bytes"],
-            row["content_sha256"],
-        ):
-            raise ValueError(f"evidence integrity failed: {relative}")
     outcomes = {}
     for case in CASES:
         profiles = [read(f"profiles/{case}-{arm}-profile.json.gz") for arm in ARMS]

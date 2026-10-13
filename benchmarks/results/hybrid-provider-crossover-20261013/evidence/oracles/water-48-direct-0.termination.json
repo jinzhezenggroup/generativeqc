@@ -1,9 +1,0 @@
-{
-  "status": "INTERRUPTED_AFTER_REQUIRED_REFERENCE_FAILURE",
-  "reason": "Original-geometry PySCF did not converge under the frozen oracle contract. Later phases cannot make this population pass; stop them after retaining the failure.",
-  "pid": 2510238,
-  "argv": "/data/jzzeng/qc-dft-mp-acceptance-20261013/.artifacts/issue-closeout-20261013/oracle-env/bin/python /data/jzzeng/qc-dft-mp-acceptance-20261013/tools/benchmark_hybrid_provider_crossover.py run-reference --native /data/jzzeng/qc-closeout-20261013/.artifacts/closeout-campaign-7968/native/water-48-direct-0.json --output /data/jzzeng/qc-closeout-20261013/.artifacts/closeout-campaign-7968/oracles/water-48-direct-0.json ",
-  "signal": "SIGTERM",
-  "utc": "2026-10-13T03:08:34Z",
-  "oracle_record_sha256": "086ffd63d8b2ea9012853c50b1f2133be41676a899c8c154fec67205a26952cc"
-}

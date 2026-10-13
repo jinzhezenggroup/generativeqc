@@ -131,8 +131,24 @@ through the task repository's `.git/info/exclude` before the clean-source check.
 `/data/jzzeng/qc-closeout-20261013/.artifacts/closeout-campaign-7968`.
 Grid exports and full build output remain in ignored task storage; small raw
 JSON, diagnostic traces and build/installation identity records are retained
-as deterministic gzip members with exact original byte counts and SHA-256.
+in `evidence/receipts.txt.xz`, with every original decoded byte preserved.
+The manifest records the compressed and decoded container identities and each
+logical member's offset, byte count and SHA-256. Names retain their historical
+`.gz` suffixes, but reading a member returns its original uncompressed bytes.
+The verifier authenticates the complete inventory without extracting files,
+rejects gaps/overlaps and trailing compressed streams, and bounds decompression.
 The manifest also authenticates the retained scheduler-query failure.
+
+The old H200 bundle uses the same lossless storage. Packing repeated metadata
+across members keeps the pending evidence union below the unchanged repository
+budget without dropping losing receipts or relying on another PR's deletions.
+For example, inspect an original receipt directly from the repository root:
+
+```bash
+python benchmarks/hybrid_crossover_receipts.py \
+  benchmarks/results/hybrid-provider-crossover-20261013/evidence \
+  oracles/water-48-direct-0.json.gz
+```
 
 ```bash
 PYTHONPATH=python:. python benchmarks/results/hybrid-provider-crossover-20261013/verify_evidence.py

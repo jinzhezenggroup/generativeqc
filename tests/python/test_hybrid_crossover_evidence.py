@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import importlib.util
 import json
-import shutil
+import lzma
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from benchmarks.hybrid_crossover_receipts import ReceiptBundle
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -27,6 +28,35 @@ def verifier() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def repack(root: Path, original: ReceiptBundle, members: dict[str, bytes]) -> None:
+    """Reauthenticate all storage bindings so scientific checks must reject damage."""
+    parts, rows, offset = [], [], 0
+    for name, data in members.items():
+        rows.append(
+            {
+                "path": name,
+                "offset": offset,
+                "bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+        parts.append(data)
+        offset += len(data)
+    payload = b"".join(parts)
+    encoded = lzma.compress(payload)
+    storage = {
+        **original.manifest["storage"],
+        "bytes": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "content_bytes": len(payload),
+        "content_sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    manifest = {**original.manifest, "storage": storage, "files": rows}
+    root.mkdir(parents=True)
+    (root / storage["path"]).write_bytes(encoded)
+    (root / "manifest.json").write_text(json.dumps(manifest))
 
 
 def test_authentic_negative_outcomes_remain_incomplete() -> None:
@@ -50,14 +80,12 @@ def test_removed_provenance_cannot_be_reauthenticated(
     tmp_path: Path, name: str
 ) -> None:
     module = verifier()
-    shutil.copytree(CAMPAIGN / "evidence", tmp_path / "evidence")
+    original = ReceiptBundle(module.HERE, module.required_paths())
+    members = dict(original.members)
+    members.pop(name)
     module.HERE = tmp_path / "evidence"
-    manifest_path = module.HERE / "manifest.json"
-    manifest = json.loads(manifest_path.read_bytes())
-    manifest["files"] = [row for row in manifest["files"] if row["path"] != name]
-    manifest_path.write_text(json.dumps(manifest))
-    (module.HERE / name).unlink()
-    with pytest.raises(ValueError, match="missing, duplicate or unauthenticated"):
+    repack(module.HERE, original, members)
+    with pytest.raises(ValueError, match="missing or unexpected receipt member"):
         module.verify()
 
 
@@ -66,11 +94,10 @@ def test_failed_profile_identity_cannot_hide_in_incomplete_pair(
     tmp_path: Path, identity: str
 ) -> None:
     module = verifier()
-    shutil.copytree(CAMPAIGN / "evidence", tmp_path / "evidence")
-    module.HERE = tmp_path / "evidence"
+    original = ReceiptBundle(module.HERE, module.required_paths())
+    members = dict(original.members)
     name = "profiles/water-96-direct-profile.json.gz"
-    path = module.HERE / name
-    profile = json.loads(gzip.decompress(path.read_bytes()))
+    profile = json.loads(members[name])
     assert profile["status"] == "FAILED"
     if identity == "revision":
         profile["source"]["revision"] = "0" * 40
@@ -78,18 +105,8 @@ def test_failed_profile_identity_cannot_hide_in_incomplete_pair(
         profile["source"]["dirty"] = True
     else:
         profile["library"]["sha256"] = "0" * 64
-    content = json.dumps(profile).encode()
-    encoded = gzip.compress(content, mtime=0)
-    path.write_bytes(encoded)
-    manifest_path = module.HERE / "manifest.json"
-    manifest = json.loads(manifest_path.read_bytes())
-    entry = next(row for row in manifest["files"] if row["path"] == name)
-    entry.update(
-        bytes=len(encoded),
-        sha256=hashlib.sha256(encoded).hexdigest(),
-        content_bytes=len(content),
-        content_sha256=hashlib.sha256(content).hexdigest(),
-    )
-    manifest_path.write_text(json.dumps(manifest))
+    members[name] = json.dumps(profile).encode()
+    module.HERE = tmp_path / "evidence"
+    repack(module.HERE, original, members)
     with pytest.raises(ValueError, match="diagnostic profile source/library"):
         module.verify()
