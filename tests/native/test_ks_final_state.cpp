@@ -312,9 +312,19 @@ void cuda_global_hybrid_identity() {
           hybrid = exact;
           hybrid.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
           hybrid.sync();
-          const bool admitted = j == k && (!b3lyp || j == FockApproximation::Exact);
+          const bool admitted = j == k;
           require(hybrid.validate() == admitted, "CUDA hybrid accepted an unqualified J/K pair");
           if (admitted) {
+            if (b3lyp && j == FockApproximation::DensityFitted) {
+              VerifiedKsFinalState verified;
+              require(hybrid.validate(true, &verified),
+                      "CUDA B3LYP DF rejected force-ready weighted final state");
+              require(verified.identity == hybrid.id &&
+                          verified.weighted_density.size() == hybrid.id.model.spins &&
+                          verified.identity.determinant.model.spec.exchange.approximation ==
+                              FockApproximation::DensityFitted,
+                      "CUDA B3LYP DF final state changed its J/K provenance or W");
+            }
             spec.exchange.coefficient -= 0.01;
             hybrid.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
             hybrid.sync();

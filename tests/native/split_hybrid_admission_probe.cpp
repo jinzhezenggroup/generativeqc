@@ -52,8 +52,36 @@ int main() {
       };
       const auto code = generativeqc::dft::generated::split_hybrid_functional_code(
           method.exchange, method.correlation);
-      const bool qualified_df =
-          generativeqc::dft::generated::split_hybrid_cuda_df_energy_force(code);
+      const auto composition = generativeqc::dft::global_hybrid_composition(code);
+      const bool qualified_df = generativeqc::dft::cuda_global_hybrid_df_admitted(code);
+      if (!composition.present || !composition.fixed_semilocal ||
+          composition.exact_exchange != method.exact ||
+          composition.semilocal_exchange_scale != 1.0 ||
+          composition.semilocal_correlation_scale != 1.0)
+        return 1;
+      for (const auto j : {generativeqc::scf::FockApproximation::Exact,
+                           generativeqc::scf::FockApproximation::DensityFitted}) {
+        for (const auto k : {generativeqc::scf::FockApproximation::Exact,
+                             generativeqc::scf::FockApproximation::DensityFitted}) {
+          generativeqc::scf::FockBuildSpec spec;
+          spec.spin = spin == 1 ? generativeqc::scf::FockSpin::Restricted
+                                : generativeqc::scf::FockSpin::Unrestricted;
+          spec.derivative_order = 0;
+          spec.exchange.coefficient = -method.exact / (spin == 1 ? 2.0 : 1.0);
+          spec.coulomb.approximation = j;
+          spec.exchange.approximation = k;
+          const bool admitted = j == k &&
+                                (j == generativeqc::scf::FockApproximation::Exact || qualified_df);
+          if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0) !=
+              admitted) {
+            std::cerr << "J/K provider identity disagrees with Libxc hybrid composition\\n";
+            return 1;
+          }
+          spec.exchange.coefficient *= 2.0;
+          if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0))
+            return 1;
+        }
+      }
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "canonical")) return 1;
       std::swap(components[0], components[1]);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "reordered components")) return 1;
