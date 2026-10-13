@@ -37,7 +37,20 @@ def verify() -> dict:
     manifest = read("manifest.json")
     if manifest.get("schema") != "generativeqc.hybrid-provider-rtx5090-evidence.v1":
         raise ValueError("unexpected evidence schema")
-    required = set()
+    required = {
+        "native/campaign.json.gz",
+        "build/binaries.sha256.gz",
+        "build/build-identity.json.gz",
+        "build/cache-after.txt.gz",
+        "build/cache-before.txt.gz",
+        "build/cache-version.txt.gz",
+        "platform/allocation.txt",
+        "platform/binaries.sha256",
+        "platform/device.json",
+        "platform/node2-compatibility.json",
+        "platform/slurm.txt",
+        "platform/source.txt",
+    }
     for case in CASES:
         required.add(f"native/{case}-df-j-exact-k.json.gz")
         if case == "water-48":
@@ -52,6 +65,8 @@ def verify() -> dict:
                     required.add(f"oracles/{case}-{arm}-{repeat}.json.gz")
         for arm in ARMS:
             required.add(f"profiles/{case}-{arm}-profile.json.gz")
+            if case != "water-96" or arm == "direct":
+                required.add(f"traces/{case}-{arm}-trace.jsonl.gz")
     rows = manifest["files"]
     members = {row["path"]: row for row in rows}
     actual = {
@@ -59,11 +74,7 @@ def verify() -> dict:
         for p in HERE.rglob("*")
         if p.is_file() and p.name != "manifest.json"
     }
-    if (
-        len(rows) != len(members)
-        or not required.issubset(members)
-        or actual != set(members)
-    ):
+    if len(rows) != len(members) or required != set(members) or actual != set(members):
         raise ValueError("missing, duplicate or unauthenticated evidence member")
     for relative, row in members.items():
         path = (HERE / relative).resolve()
@@ -82,6 +93,19 @@ def verify() -> dict:
     outcomes = {}
     for case in CASES:
         profiles = [read(f"profiles/{case}-{arm}-profile.json.gz") for arm in ARMS]
+        for profile in profiles:
+            # An authentic failed endpoint must still belong to this campaign;
+            # an INCOMPLETE pair cannot hide a foreign diagnostic receipt.
+            if (
+                profile.get("source")
+                != {
+                    "revision": manifest["source_revision"],
+                    "dirty": False,
+                }
+                or profile.get("library", {}).get("sha256")
+                != manifest["library_sha256"]
+            ):
+                raise ValueError("diagnostic profile source/library identity mismatch")
         for repeat in (0, 1):
             native = [read(f"native/{case}-{arm}-{repeat}.json.gz") for arm in ARMS]
             native.append(read(f"native/{case}-df-j-exact-k.json.gz"))
