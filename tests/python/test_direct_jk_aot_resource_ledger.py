@@ -241,7 +241,9 @@ class TestLedgerValidation:
         assert payload["flags"]["code_generation"] == list(
             validator.QUALIFIED_CODE_GENERATION
         )
-        assert len(payload["kernels"]) == 86
+        # The hosted shard-6 receipt retains all 86 existing resource rows and
+        # adds four promoted value classes, each with four RHF/UHF entrypoints.
+        assert len(payload["kernels"]) == 102
 
     @pytest.mark.parametrize(
         "field,value",

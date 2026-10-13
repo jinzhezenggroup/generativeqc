@@ -529,6 +529,424 @@
           "consumers": ["fock", "force"],
           "capabilities": ["streaming_fock"],
           "recurrence": "rys2"
+        },
+        {
+          "shell_class": "fsss",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys2",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 32,
+            "component_tile": 10,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fsps",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys3",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 32,
+            "component_tile": 30,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fspp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys3",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 96,
+            "component_tile": 90,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fsds",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys3",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 64,
+            "component_tile": 60,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fsdp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 192,
+            "component_tile": 180,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fsfs",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 128,
+            "component_tile": 100,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fpss",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys3",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 32,
+            "component_tile": 30,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fppp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 288,
+            "component_tile": 270,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fpds",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 192,
+            "component_tile": 180,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fpdp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 544,
+            "component_tile": 540,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fpfs",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 320,
+            "component_tile": 300,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fpfp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys5",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 928,
+            "component_tile": 900,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fdss",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys3",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 64,
+            "component_tile": 60,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fdps",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 192,
+            "component_tile": 180,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fdpp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 544,
+            "component_tile": 540,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fdds",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 384,
+            "component_tile": 360,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fdfs",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys5",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 608,
+            "component_tile": 600,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ffss",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 128,
+            "component_tile": 100,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ffps",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys4",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 320,
+            "component_tile": 300,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ffpp",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys5",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 928,
+            "component_tile": 900,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "ffds",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys5",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 608,
+            "component_tile": 600,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
+        },
+        {
+          "shell_class": "fffs",
+          "consumers": [
+            "fock"
+          ],
+          "capabilities": [],
+          "recurrence": "rys5",
+          "schedule": {
+            "kind": "component_lanes",
+            "block_threads": 1024,
+            "component_tile": 1000,
+            "tasks_per_warp": 1,
+            "shared_coulomb": true,
+            "pair_orientation": "canonical",
+            "pair_storage": "recomputed",
+            "unroll_pair_terms": false,
+            "minimum_blocks_per_sm": 1
+          }
         }
       ],
       "acceptance": {

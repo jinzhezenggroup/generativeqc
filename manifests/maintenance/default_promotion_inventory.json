@@ -157,6 +157,7 @@
         "docs/developer/df_hf_preconvergence.md",
         ".agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md",
         ".agents/notes/implemented/performance/2026-10-09-df-rhf-work-admission.md",
+        ".agents/notes/implemented/performance/2026-10-13-resident-df-guess-budget.md",
         "tests/python/test_df_hf_guess_policy.py",
         "tests/python/test_df_hf_preconvergence.py"
       ]

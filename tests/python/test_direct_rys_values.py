@@ -4,6 +4,7 @@ import ctypes
 import shutil
 import subprocess
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -23,9 +24,27 @@ from generativeqc_compiler.integral.lowering.fock_component import (
     emit_rys_value_support_cuda,
 )
 from generativeqc_compiler.integral.production_emission import emit_production_shard
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
 TARGET = cuda_target_info("sm_120")
-CLASSES = ("ppps", "dpss", "ddss", "pppp", "ddpp", "dddp")
+CLASSES = (
+    "ppps",
+    "dpss",
+    "ddss",
+    "pppp",
+    "ddpp",
+    "dddp",
+    "fsss",
+    "fsps",
+    "fsdp",
+    "fpds",
+    "fpdp",
+    "fdds",
+    "fdfs",
+    "ffss",
+    "ffpp",
+    "fffs",
+)
 
 
 def value_plan(name: str) -> FusedShellPlan:
@@ -37,6 +56,37 @@ def value_plan(name: str) -> FusedShellPlan:
         recurrence=f"rys{sum(spec.angular) // 2 + 1}",
         target=TARGET,
     )
+
+
+def test_production_f_values_preserve_decoder_and_force_boundaries() -> None:
+    """Promote only complete unraised f tiles, leaving the fpps force owner."""
+    profile = resolve_production_profile(
+        Path(__file__).resolve().parents[2]
+        / "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_120",
+    )
+    selected = {
+        item.spec.name: item
+        for item in profile.selections
+        if max(item.spec.angular) == 3 and KernelConsumer.FOCK in item.consumers
+    }
+    admissible = {
+        spec.name
+        for spec in FUSED_SHELL_SPEC_BY_NAME.values()
+        if max(spec.angular) == 3
+        and spec.angular[3] <= 1
+        and sum(spec.angular) <= 9
+        and spec.component_count <= TARGET.maximum_threads_per_block
+        and spec.name != "fpps"
+    }
+    assert set(selected) == admissible
+    for item in selected.values():
+        assert item.consumers == (KernelConsumer.FOCK,)
+        assert item.recurrence == f"rys{sum(item.spec.angular) // 2 + 1}"
+        assert item.spec.component_count <= item.schedule.block_threads <= 1024
+        assert item.schedule.component_tile == item.spec.component_count
+    fpps = next(item for item in profile.selections if item.spec.name == "fpps")
+    assert fpps.consumers == (KernelConsumer.FORCE,)
 
 
 @pytest.mark.parametrize("name", CLASSES)
@@ -60,6 +110,10 @@ def test_value_only_rys_has_its_own_roots_and_state_bounds(name: str) -> None:
     assert f"generated_{name}_shell_class_fock_rhf_kernel" in source
     assert f"generated_{name}_shell_class_fock_uhf_kernel" in source
     assert source == emit_shell_class_fused_cuda(plan.spec, plan)
+    if plan.schedule.block_threads == TARGET.maximum_threads_per_block:
+        with pytest.raises(ValueError, match="block size"):
+            replace(plan.schedule, block_threads=plan.schedule.block_threads + 32)
+        return
     wider = replace(plan.schedule, block_threads=plan.schedule.block_threads + 32)
     explicit = emit_shell_class_fused_cuda(plan.spec, plan, fock_schedule=wider)
     class_name = name[0].upper() + name[1:]
@@ -78,8 +132,23 @@ def test_value_rys_rejects_unimplemented_schedule_and_decoder() -> None:
             schedule=replace(plan.schedule, block_threads=32),
             target=TARGET,
         )
-    with pytest.raises(ValueError, match="fourth center"):
-        value_plan("dddd")
+    for name in ("dddd", "fsdd"):
+        with pytest.raises(ValueError, match="fourth center"):
+            value_plan(name)
+    with pytest.raises(ValueError, match="no schedule legal"):
+        value_plan("fddp")
+
+
+@pytest.mark.parametrize("name", tuple(name for name in CLASSES if "f" in name))
+def test_value_f_shells_retain_the_force_decoder_boundary(name: str) -> None:
+    """Unraised cubic HRR must not authorize an f-center force derivative."""
+    from generativeqc_compiler.integral.lowering.selection import (
+        supports_component_lane_rys,
+    )
+
+    plan = value_plan(name)
+    assert supports_component_lane_rys(plan.spec, plan.schedule, value_only=True)
+    assert not supports_component_lane_rys(plan.spec, plan.schedule)
 
 
 @pytest.mark.parametrize("name", CLASSES)

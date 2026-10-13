@@ -24,6 +24,19 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _write_materialized_headers(tmp_path: Path) -> None:
+    (tmp_path / "cuda_runtime.h").write_text(
+        "#pragma once\n#include <cmath>\n#define __device__\n#define __host__\n"
+        "#define __forceinline__ inline\n#define __global__\n#define __shared__\n"
+        "#define __launch_bounds__(...)\n"
+        "template<class T> T atomicAdd(T* p,T value) { T old=*p; *p+=value; return old; }\n"
+        "inline double __dadd_rn(double a,double b) { volatile double s=a+b; return s; }\n"
+        "inline void __syncthreads() {}\ninline void __syncwarp() {}\n"
+        "inline bool __syncthreads_or(bool value) { return value; }\n"
+    )
+    (tmp_path / "scatter.hpp").write_text(emit_direct_fock_accumulation_header())
+
+
 def test_materialized_exchange_bridge_matches_dense_contraction(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
@@ -38,15 +51,7 @@ def test_materialized_exchange_bridge_matches_dense_contraction(
     kernel = cpp_function_definition(
         native, "bounded_direct_dddd_streaming_kernel", include_template=True
     )
-    (tmp_path / "cuda_runtime.h").write_text(
-        "#pragma once\n#define __device__\n#define __host__\n"
-        "#define __forceinline__ inline\n#define __global__\n#define __shared__\n"
-        "#define __launch_bounds__(...)\n"
-        "template<class T> T atomicAdd(T* p,T value) { T old=*p; *p+=value; return old; }\n"
-        "inline void __syncthreads() {}\ninline void __syncwarp() {}\n"
-        "inline bool __syncthreads_or(bool value) { return value; }\n"
-    )
-    (tmp_path / "scatter.hpp").write_text(emit_direct_fock_accumulation_header())
+    _write_materialized_headers(tmp_path)
     source, binary = tmp_path / "bridge.cpp", tmp_path / "bridge"
     source.write_text(PREFIX + helper + STUBS + kernel + DRIVER)
     native_cxx.build_executable(
@@ -62,7 +67,35 @@ def test_materialized_exchange_bridge_matches_dense_contraction(
     assert "2640 independent bridge comparisons passed" in result.stdout
 
 
+def test_bounded_materialized_compensation(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute the emitted consumer, scatter and production compensated sink.
+
+    A dyadic dense J/K oracle covers cancellation, both spins, every symmetry
+    coincidence and a nonzero system offset. The recurrence is a fixed ERI
+    stub; this host probe does not qualify CUDA barriers or integral accuracy.
+    """
+    _write_materialized_headers(tmp_path)
+    helper = cpp_function_definition(
+        emit_direct_pair_materialized_support(),
+        "contract_materialized_direct_pair_fock",
+        include_template=True,
+    )
+    source = tmp_path / "bounded_materialized_compensation.cpp"
+    binary = tmp_path / "bounded_materialized_compensation"
+    source.write_text(PREFIX + helper + COMPENSATION_DRIVER)
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=["-std=c++20", "-O2", f"-I{tmp_path}", f"-I{ROOT / 'src'}"],
+        compile_timeout=60,
+    )
+    subprocess.run([binary], check=True, timeout=15)
+
+
 PREFIX = r"""
+#include "runtime/compensated_atomic.cuh"
 #include "scatter.hpp"
 #include "scf/generated_shell_task.hpp"
 #include <array>
@@ -92,6 +125,7 @@ struct DeviceBatch {
   const int *shell_atoms, *shell_pair_primitive_offsets, *shell_primitive_offsets;
   const PrimitivePairData* shell_primitive_pairs;
   const double *primitive_coefficients, *direct_ao_coefficients;
+  double* reference_fock_correction{};
 };
 struct GeneratedShellPairStream {
   int batch_size = 2;
@@ -143,6 +177,116 @@ template<unsigned Order, class Scalar = double> double consume_cartesian_coulomb
     double, double, int, int, int, int, const int (&)[3], const int (&)[3],
     const CoulombState&) {
   return 0.75;
+}
+"""
+
+COMPENSATION_DRIVER = r"""
+}  // namespace generativeqc::scf::cuda_execution
+using namespace generativeqc::scf::cuda_execution;
+
+template<bool Unrestricted> void qualify_compensation() {
+  constexpr std::size_t n=4, matrix=n*n, physical=matrix, spin_offset=2*matrix;
+  constexpr std::size_t begin=Unrestricted ? spin_offset : physical;
+  constexpr std::size_t end=begin+(Unrestricted ? 2U : 1U)*matrix;
+  constexpr std::size_t storage=5*matrix;
+  const int system[]{1}, shell[]{0}, angular[]{2}, offsets[]{0,1};
+  const double coefficients[]{1.0}, ao_coefficients[]{1,1,1,1,1,1,1,1};
+  const PrimitivePairData primitive[]{{}};
+  DeviceBatch batch{1,2,4,system,shell,shell,angular,shell,offsets,offsets,
+                    primitive,coefficients,ao_coefficients};
+  const std::uint8_t active[]{1,1};
+  const double bound[]{1.0};
+  std::array<double,storage> density{};
+  for(std::size_t index=0;index<storage;++index)
+    density[index]=double(int(index%7)-3)/16.0;
+  auto eri_index=[](std::size_t a,std::size_t b,std::size_t c,std::size_t d) {
+    return ((a*n+b)*n+c)*n+d;
+  };
+  bool observed_lost_contribution=false;
+  for(std::size_t i=0;i<n;++i) for(std::size_t j=0;j<=i;++j)
+  for(std::size_t k=0;k<n;++k) for(std::size_t l=0;l<=k;++l) {
+    if(i*(i+1)/2+j < k*(k+1)/2+l) continue;
+    quartet={i,j,k,l};
+    const std::set<std::array<std::size_t,4>> orbit{
+      {i,j,k,l},{j,i,k,l},{i,j,l,k},{j,i,l,k},
+      {k,l,i,j},{l,k,i,j},{k,l,j,i},{l,k,j,i}};
+    std::array<double,n*n*n*n> eri{};
+    for(const auto& abcd:orbit)
+      eri[eri_index(abcd[0],abcd[1],abcd[2],abcd[3])]=0.75;
+    std::array<std::array<double,storage>,4> expected{};
+    // Independent dense definitions: J_ab=sum_cd P_cd (ab|cd),
+    // K_ab=sum_cd P_cd (ac|bd), followed by the RHF/UHF spin factors.
+    for(std::size_t a=0;a<n;++a) for(std::size_t b=0;b<n;++b)
+    for(std::size_t c=0;c<n;++c) for(std::size_t d=0;d<n;++d) {
+      const double total=Unrestricted
+          ? density[spin_offset+c+n*d]+density[spin_offset+matrix+c+n*d]
+          : density[physical+c+n*d];
+      for(unsigned spin=0;spin<(Unrestricted ? 2U : 1U);++spin) {
+        const auto offset=begin+spin*matrix, target=offset+a+n*b;
+        const double j_value=total*eri[eri_index(a,b,c,d)];
+        const double k_value=density[offset+c+n*d]*eri[eri_index(a,c,b,d)];
+        expected[0][target]+=j_value-(Unrestricted ? 1.0 : 0.5)*k_value;
+        expected[1][target]+=j_value;
+        expected[2][target]+=k_value;
+        expected[3][target]-=(Unrestricted ? 1.0 : 0.5)*k_value;
+      }
+    }
+    for(unsigned mode=0;mode<4;++mode)
+    for(bool compensated:{false,true})
+    for(bool cancellation:{false,true}) {
+      constexpr double large=0x1p60;
+      std::array<double,storage> fock, correction;
+      fock.fill(17.0);
+      correction.fill(23.0);
+      for(std::size_t entry=begin;entry<end;++entry) {
+        fock[entry]=cancellation ? large : 0.0;
+        correction[entry]=compensated ? 0.0 : 23.0;
+      }
+      batch.reference_fock_correction=compensated ? correction.data() : nullptr;
+      MaterializedDirectPairRecurrence<8> shared{};
+      contract_materialized_direct_pair_fock<Unrestricted,8>(batch,{0,0,0},0.0,
+          bound,density.data(),active,fock.data(),nullptr,shared,nullptr,
+          mode==1,mode==2 || mode==3,nullptr,mode==3);
+      for(std::size_t entry=0;entry<storage;++entry) {
+        if(entry<begin || entry>=end) {
+          assert(fock[entry]==17.0 && correction[entry]==23.0);
+          continue;
+        }
+        if(cancellation) fock[entry]-=large;
+        if(compensated) fock[entry]+=correction[entry];
+        else assert(correction[entry]==23.0);
+        const double wanted=expected[mode][entry];
+        if(cancellation && !compensated) {
+          assert(fock[entry]==0.0);
+          observed_lost_contribution |= wanted!=0.0;
+        } else assert(fock[entry]==wanted);
+      }
+    }
+    // An HF correction plane must not leak into independent positive J/K
+    // destinations, including simultaneous publication into both matrices.
+    for(unsigned sink=1;sink<=3;++sink) {
+      std::array<double,storage> coulomb{}, exchange{}, correction, unused_fock;
+      correction.fill(23.0);
+      unused_fock.fill(17.0);
+      batch.reference_fock_correction=correction.data();
+      MaterializedDirectPairRecurrence<8> shared{};
+      contract_materialized_direct_pair_fock<Unrestricted,8>(batch,{0,0,0},0.0,
+          bound,density.data(),active,unused_fock.data(),nullptr,shared,nullptr,
+          false,false,nullptr,false,generativeqc::integrals::CoulombRange::Full,0.0,
+          sink&1U ? coulomb.data() : nullptr,sink&2U ? exchange.data() : nullptr);
+      for(std::size_t entry=0;entry<storage;++entry) {
+        assert(correction[entry]==23.0 && unused_fock[entry]==17.0);
+        assert(coulomb[entry]==(sink&1U ? expected[1][entry] : 0.0));
+        assert(exchange[entry]==(sink&2U ? expected[2][entry] : 0.0));
+      }
+    }
+  }
+  assert(observed_lost_contribution);
+}
+
+int main() {
+  qualify_compensation<false>();
+  qualify_compensation<true>();
 }
 """
 

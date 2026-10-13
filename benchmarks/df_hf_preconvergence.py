@@ -46,7 +46,7 @@ def read_molecule(path: Path) -> Mole:
     return gto.M(atom=atoms, basis=basis, unit="Bohr", verbose=0, max_memory=32000)
 
 
-def prepare_case(case: str, destination: Path) -> None:
+def prepare_case(case: str, destination: Path, *, qm7: Path | None = None) -> None:
     """Export qualification geometry/raw basis metadata; never compute a guess or energy."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     if case in {"moved", "budget8"}:
@@ -65,8 +65,23 @@ def prepare_case(case: str, destination: Path) -> None:
             lines[0] = " ".join(dimensions)
         destination.write_text("\n".join(lines) + "\n")
         return
-    if case not in {"propane322", "butane414", "methane34", "ethane58", "ethane144"}:
+    if case not in {
+        "propane322",
+        "butane414",
+        "methane34",
+        "ethane58",
+        "ethane144",
+        "qm7-c7h16-tz",
+    }:
         raise ValueError("unknown qualification case")
+    if case == "qm7-c7h16-tz":
+        if qm7 is None:
+            raise ValueError("qm7-c7h16-tz requires the pinned QM7 dataset")
+        if (
+            hashlib.sha256(qm7.read_bytes()).hexdigest()
+            != "fd6c26c1086887310518e6a6da778253bc5d3ceb8166007a679a740fff9ee6ea"
+        ):
+            raise ValueError("QM7 dataset checksum mismatch")
     from pyscf import df, gto
 
     atoms = [
@@ -83,7 +98,21 @@ def prepare_case(case: str, destination: Path) -> None:
         ("H", (1.29, 1.52, -0.88)),
     ]
     orbital_basis, auxiliary_basis, unit = "aug-cc-pvtz", "aug-cc-pvtz-ri", "Angstrom"
-    if case == "butane414":
+    if case == "qm7-c7h16-tz":
+        from scipy.io import loadmat
+
+        data = loadmat(qm7)
+        selected = data["Z"][5604] > 0
+        # Preserve the original Bohr float32 decimals promoted to float64;
+        # neither a geometry optimizer nor a reference SCF supplies this input.
+        atoms = [
+            (int(number), position.astype(float))
+            for number, position in zip(
+                data["Z"][5604][selected], data["R"][5604][selected], strict=True
+            )
+        ]
+        orbital_basis, auxiliary_basis, unit = "cc-pvtz", "cc-pvtz-ri", "Bohr"
+    elif case == "butane414":
         atoms = [
             ("C", (-1.89, 0.44, 0)),
             ("C", (-0.63, -0.44, 0)),
@@ -527,10 +556,12 @@ def main() -> None:
             "methane34",
             "ethane58",
             "ethane144",
+            "qm7-c7h16-tz",
         ),
         required=True,
     )
     geometry.add_argument("--output", type=raw_output_path, required=True)
+    geometry.add_argument("--qm7", type=Path)
     prepare = commands.add_parser("prepare-jk")
     prepare.add_argument("--input", type=Path, required=True)
     prepare.add_argument("--output", type=raw_output_path, required=True)
@@ -547,7 +578,7 @@ def main() -> None:
     summary.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.command == "prepare-case":
-        prepare_case(args.case, args.output)
+        prepare_case(args.case, args.output, qm7=args.qm7)
     elif args.command == "prepare-jk":
         prepare_jk(args.input, args.output, args.basis)
     elif args.command == "oracle":
