@@ -61,6 +61,8 @@ def reservation_probe(
         "      checked(create_cuda_density_fitting_jk_plan_from_source("
     )
     call_end = prepared.index("      cuda_df.reset", call_start)
+    packing_start = prepared.index("      const bool coulomb_only_packing =")
+    planning_start = prepared.index("      const auto plan_values =", packing_start)
     unit = r"""
 #include <cassert>
 #include <iostream>
@@ -101,10 +103,12 @@ struct Capture::Impl {
     )
     unit += r"""
 DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reservation,
-    DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget) {
+    DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget,
+    bool automatic = false, ResolvedFockBuild strategy = {}) {
   const auto reserved_rank = reservation.restricted_rank;
   FockPreparationDiagnostic diagnostic;
   diagnostic.variant.df_pair_storage_request =
+      automatic ? DfPairStorageRequest::Automatic :
       storage == DfPairStorage::Dense ? DfPairStorageRequest::Dense :
       storage == DfPairStorage::SymmetricLower ? DfPairStorageRequest::SymmetricLower :
       DfPairStorageRequest::SymmetricLowerSingle;
@@ -113,6 +117,9 @@ DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reserva
   DfResolvedBudget resolved;
   resolved.requested_bytes = resolved.total_bytes = resolved.value_bytes = plan_budget;
 """
+    # Execute the production eligibility predicate captured by the planner.
+    # A constant stand-in would lose the J-only physical/spin boundary.
+    unit += prepared[packing_start:planning_start]
     unit += definition(prepared, "      const auto plan_values =") + ";\n"
     unit += "return plan_values(n,a,0); }\n"
     unit += r"""
@@ -251,6 +258,33 @@ int main(int argc, char** argv) {
       catch (const std::invalid_argument&) { rejected=true; }
       assert(rejected);
     }
+  } else if (mode == "coulomb_planning") {
+    const auto dense = DfPairStorage::Dense;
+    auto j_only = strategy;
+    j_only.spec.exchange.present = false;
+    constexpr std::size_t budget = 13685173124ULL;
+    const auto pure = plan_values_for({},dense,768,3712,budget,true,j_only);
+    assert(pure.value_storage.pairs == DfPairStorage::SymmetricLowerSingle);
+    assert(pure.stores_full_three_center && pure.value_storage.rank_capacity == 0);
+    assert(pure.automatic_rhf_rank == 0 && pure.peak_workspace_bytes <= budget);
+    allocate(pure);
+    assert(allocated_retained && allocated_storage.rank_capacity == 0);
+    for (int kind = 0; kind < 4; ++kind) {
+      auto excluded = j_only;
+      if (kind == 0) excluded.spec.spin = FockSpin::Unrestricted;
+      if (kind == 1) excluded.spec.coulomb.present = false;
+      if (kind == 2) excluded.spec.coulomb.approximation = FockApproximation::Exact;
+      if (kind == 3) excluded.spec.exchange.present = true;
+      const auto plan = plan_values_for({},dense,768,3712,budget,true,excluded);
+      assert(plan.value_storage.pairs == dense && !plan.stores_full_three_center);
+    }
+    const auto explicit_dense = plan_values_for({},dense,768,3712,budget,false,j_only);
+    assert(explicit_dense.value_storage.pairs == dense);
+    const auto roomy = plan_values_for({},dense,96,96,1U<<30,true,j_only);
+    assert(roomy.value_storage.pairs == dense && roomy.stores_full_three_center);
+    const auto bounded = plan_values_for({},dense,768,3712,4ULL<<30,true,j_only);
+    assert(bounded.value_storage.pairs == dense && !bounded.stores_full_three_center);
+    assert(bounded.peak_workspace_bytes <= (4ULL<<30));
   } else if (mode == "planning") {
     const auto packed=DfPairStorage::SymmetricLowerSingle;
     const auto generic=plan_values_for({},packed,24,24,1U<<30);
@@ -312,7 +346,9 @@ int main(int argc, char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("mode", ["authorization", "forwarding", "planning"])
+@pytest.mark.parametrize(
+    "mode", ["authorization", "forwarding", "planning", "coulomb_planning"]
+)
 def test_method_owned_projection_reservation(
     reservation_probe: Path, mode: str
 ) -> None:

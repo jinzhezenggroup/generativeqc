@@ -1318,9 +1318,11 @@ DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std:
 DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget& budget,
                                                          std::size_t nbf, std::size_t naux,
                                                          std::size_t restricted_rank,
-                                                         std::size_t source_device_bytes) {
+                                                         std::size_t source_device_bytes,
+                                                         bool allow_zero_rank_coulomb) {
   if (!budget.feasible || !budget.live_resource || budget.requested_bytes ||
-      !budget.response_bytes || !restricted_rank || restricted_rank > nbf)
+      !budget.response_bytes || (!restricted_rank && !allow_zero_rank_coulomb) ||
+      restricted_rank > nbf)
     return budget;
   const long double basis_count = nbf, auxiliary_count = naux, occupied_rank = restricted_rank;
   // The generated singleton response stages four metric matrices, density/AO
@@ -1375,9 +1377,9 @@ DensityFittingTilePlan plan_requested_density_fitting_tiles(
       break;
   }
 
-  // A method-owned restricted reservation qualifies the same capacity crossover
-  // without creating an RHF SCF owner or inferring occupations from dimensions.
-  // Batch/UHF/general-density callers retain their existing dense policy.
+  // A method-authorized restricted owner also qualifies the capacity crossover
+  // without inventing RHF SCF factors. This includes physical J-only methods
+  // with rank zero; batch/UHF/arbitrary-density callers stay on the dense plan.
   if (!generated_source || batch != 1 || (!automatic_rhf_rank && !allow_method_owned_packing))
     return dense();
 
