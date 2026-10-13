@@ -80,6 +80,37 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "old,new",
+    [
+        ("choose(requested_maps)", "choose(True)"),
+        ("choose(False)", "choose(True)"),
+        ("except ValueError as error:", "except Exception as error:"),
+        ("tile_points=tile_points,", "tile_points=1,"),
+    ],
+)
+def test_optional_ao_schedule_contract_executes_capacity_and_failure_policy(
+    old: str,
+    new: str,
+) -> None:
+    """Keep no-map, dense fallback, explicit tiles and runtime errors truthful."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    tree = ast.parse(source)
+    owner = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_plan_stationary_optional_ao_schedule"
+    )
+    original = ast.get_source_segment(source, owner)
+    assert original is not None and old in original
+    qualify_capacity._optional_ao_schedule_contract(ast.parse(original))
+    with pytest.raises(RuntimeError, match="optional AO schedule contract changed"):
+        qualify_capacity._optional_ao_schedule_contract(
+            ast.parse(original.replace(old, new, 1))
+        )
+
+
+@pytest.mark.parametrize(
     "owner,old,new",
     [
         (
@@ -338,7 +369,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
         ),
         "prepared_aot_selection_sha256": (
-            "c1e7e5aaade1a61ba659390fea9998f928e2f20c9905682216f9ad18c34787d4"
+            "260e61e6628c716ac940f730e52575512136fc76825570d62f3e4a6b1c9b197f"
         ),
     }
 
@@ -477,7 +508,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
         ),
         "ordinary_tile_resources_sha256": (
-            "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
+            "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
         ),
         "initializer_sha256": (
             "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
@@ -516,7 +547,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "9e6dca7c564aa9e52e054787d6e3f1e9108694d85a8099825bc4c06add7163ce"
+            "f6836f992fcbfe6dfd5fe5dcc040e927de286c9c419edb6271038ec31740ef9a"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -645,8 +676,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
         "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
-        "tile_points=tile_points, active_ao_capacity=n, "
-        "budget_bytes=max_device_bytes)"
+        "tile_points=tile_points, active_ao_capacity=n if reserve_active_ao else None, "
+        "features_only=features_only, budget_bytes=max_device_bytes)"
     )
     assert result["admission_limits"]["source_resources_definition"].startswith(
         "plan_stationary_cuda_resources(atoms=na"
@@ -876,12 +907,17 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         + 4_851_008
         + 39_755_392
         + grid_binding_host_bytes
+        - 84_953_088  # Unused indexed host and aligned device staging.
     )
     assert water32["resource_requirements"][
         "stationary_center_geometry_bytes"
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_187_488 + 4_851_008 + grid_binding_host_bytes + 8 * (48 * 4096 + 7 * 768)
+        192_187_488
+        + 4_851_008
+        + grid_binding_host_bytes
+        + 8 * (48 * 4096 + 7 * 768)
+        - 8 * (12 * 768**2 + 2 * 768)
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -3197,7 +3233,10 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
     # discount the conservative paired-provider reserve or its v1 fallback.
     # Keep that reserve and add the separate grid binding once.
     assert memory["additional_host_numeric_bound"] == (
-        197_047_712 + (32 << 10) + 8 * (48 * 4096 + 7 * 768)
+        197_047_712
+        + (32 << 10)
+        + 8 * (48 * 4096 + 7 * 768)
+        - 8 * (12 * 768**2 + 2 * 768)
     )
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
@@ -3474,8 +3513,8 @@ def test_native_primitive_domain_capability_and_work_proofs_fail_closed(
             "tile layout contract changed",
         ),
         (
-            "        active_ao_capacity=n,\n",
-            "        active_ao_capacity=n // 2,\n",
+            "        active_ao_capacity=n if reserve_active_ao else None,\n",
+            "        active_ao_capacity=n // 2 if reserve_active_ao else None,\n",
             "grid-plan input definition changed",
         ),
         (
