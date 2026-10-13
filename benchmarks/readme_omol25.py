@@ -441,6 +441,13 @@ def native_endpoint_record(
             if has_xc and item.status == 0 and item.converged
             else None
         ),
+        # Delta J/K is still real integral work. Keep its executed full/delta
+        # and final-audit census beside provisional/full-target VV10 history.
+        **(
+            {"native_incremental_jk_work": item.incremental_direct_jk}
+            if getattr(item, "incremental_direct_jk", None) is not None
+            else {}
+        ),
         "native_force_components": (
             normalize_force_work(force_work) if force_work is not None else None
         ),
