@@ -24,6 +24,7 @@ def test_canonical_force_survives_shell_stack_refusal(method: str) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     result = subprocess.run(
         [sys.executable, str(Path(__file__).resolve()), method],
+        check=False,
         timeout=240,
     )
     if result.returncode == 77:
