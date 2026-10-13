@@ -171,6 +171,7 @@ def emit_weighted_eri_function(
     result_type: str = "Gradient",
     ordering: AlgebraOrdering = AlgebraOrdering.TOPOLOGICAL,
     fusion: AlgebraFusion = AlgebraFusion.SEPARATE,
+    scalar_type: str = "double",
 ) -> str:
     """Emit one selected weighted result with shared scalar CSE.
 
@@ -179,9 +180,14 @@ def emit_weighted_eri_function(
     same helper therefore serves HF adapters and arbitrary external weights.
     Packed weights follow component_indices order, bounding a sparse through-f
     helper's input to its selected subset rather than a full shell weight array.
+    ``scalar_type='float'`` narrows every external leaf before arithmetic and
+    emits typed literals/temporaries. The caller still owns the output/local
+    reduction type, scientific admission and any strict retry policy.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("weighted scalar emission supports cpu or cuda")
+    if scalar_type not in ("double", "float"):
+        raise ValueError("weighted scalar type must be double or float")
     if not name.isascii() or not name.isidentifier():
         raise ValueError("CUDA helper name must be an ASCII identifier")
     if not result_type.isascii() or not result_type.isidentifier():
@@ -225,7 +231,14 @@ def emit_weighted_eri_function(
     for packed, index in enumerate(kernel.component_indices):
         offset = packed if packed_weights else index
         variables[f"component_weight_{index}"] = f"component_weights[{offset}]"
-    emitter = CudaEmitter(graph, variables, plan)
+    # Cast leaves, not only temporaries: otherwise expressions with FP64
+    # geometry/weights would still execute double products before assignment.
+    # Geometry preparation and the Boys ladder deliberately stay FP64.
+    if scalar_type == "float":
+        variables = {
+            name: f"static_cast<float>({value})" for name, value in variables.items()
+        }
+    emitter = CudaEmitter(graph, variables, plan, scalar_type=scalar_type)
     emitter.emit(roots)
     output_kind = "derivatives" if include_value else "gradient-only"
     lines = [
@@ -336,6 +349,8 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
     specialized_result = (
         "/** Independent-center force result; recovered center is reconstructed by the caller. */\n"
         "struct IndependentGradient { double center[3][3]; };\n"
+        "/** FP32 primitive/local reduction; atom scatter remains FP64. */\n"
+        "struct IndependentGradientF32 { float center[3][3]; };\n"
     )
     psss_force = emit_weighted_eri_function(
         psss,
@@ -382,6 +397,26 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
         )
         for kernel, name in order3
     )
+    mixed_force = "".join(
+        emit_weighted_eri_function(
+            kernel,
+            name + "_fp32",
+            inline_single_use=inline_single_use,
+            include_value=False,
+            gradient_centers=(0, 1, 2),
+            result_type="IndependentGradientF32",
+            ordering=AlgebraOrdering.PRESSURE_AWARE,
+            scalar_type="float",
+        )
+        for kernel, name in (
+            (ssss, "ssss_force"),
+            (psss, "psss_force"),
+            (psps, "psps_force"),
+            (ppss, "ppss_force"),
+            (dsss, "dsss_force"),
+            *order3,
+        )
+    )
     return (
         full[: -len(marker)]
         + specialized_result
@@ -391,6 +426,7 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
         + ssss_force
         + order2_force
         + order3_force
+        + mixed_force
         + marker
     )
 
@@ -419,12 +455,30 @@ def emit_order5_weighted_header() -> str:
 
 
 def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...]) -> str:
-    """Emit complete force contractions from bounded component partitions."""
+    """Emit strict/mixed contractions from the same bounded AD partitions."""
+    return (
+        '#pragma once\n#include "weighted_eri.cuh"\n'
+        "namespace generativeqc::scf::generated_weighted_eri {\n"
+        + _emit_weighted_force_class_bodies(classes, "double")
+        + _emit_weighted_force_class_bodies(classes, "float")
+        + "}  // namespace generativeqc::scf::generated_weighted_eri\n"
+    )
+
+
+def _emit_weighted_force_class_bodies(
+    classes: tuple[tuple[int, int, int, int], ...], scalar_type: str
+) -> str:
+    """Keep primitive and partition reductions in the selected compute type."""
+    result_type = (
+        "IndependentGradient" if scalar_type == "double" else "IndependentGradientF32"
+    )
     functions = []
     for angular in classes:
         integral = build_weighted_eri_ir(angular)
         count = prod(integral.signature.component_shape)
         name = "".join("spdf"[value] for value in angular) + "_force"
+        if scalar_type == "float":
+            name += "_fp32"
         parts = []
         # Keep the existing 64-component lowering bound. Every partition
         # retains global weight indexing; their sum covers the full class.
@@ -440,8 +494,9 @@ def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...])
                     part_name,
                     include_value=False,
                     gradient_centers=(0, 1, 2),
-                    result_type="IndependentGradient",
+                    result_type=result_type,
                     ordering=AlgebraOrdering.PRESSURE_AWARE,
+                    scalar_type=scalar_type,
                 )
             )
         if len(parts) > 1:
@@ -453,19 +508,14 @@ def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...])
                 f"part{index}.center[center][axis]" for index in range(len(parts))
             )
             functions.append(f"""/** Complete contraction of all bounded component partitions. */
-__device__ __forceinline__ IndependentGradient {name}(
+__device__ __forceinline__ {result_type} {name}(
     const Geometry& geometry, const double* component_weights) {{
 {calls}
-  IndependentGradient result{{}};
+  {result_type} result{{}};
   for (unsigned center = 0; center < 3; ++center)
     for (unsigned axis = 0; axis < 3; ++axis)
       result.center[center][axis] = {terms};
   return result;
 }}
 """)
-    return (
-        '#pragma once\n#include "weighted_eri.cuh"\n'
-        "namespace generativeqc::scf::generated_weighted_eri {\n"
-        + "\n".join(functions)
-        + "}  // namespace generativeqc::scf::generated_weighted_eri\n"
-    )
+    return "\n".join(functions)

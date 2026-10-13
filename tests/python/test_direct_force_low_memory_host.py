@@ -20,7 +20,7 @@ def test_canonical_force_fallback_preserves_channels_and_failures(
     """Run actual wrappers; fake transfers carry labeled channels, not integrals.
 
     The separate real-GPU Libcint tests own numerical qualification. This probe
-    covers resource refusal, ABI shape, coefficient forwarding, validation,
+    covers resource refusal, ABI shape, coefficient/precision forwarding, validation,
     finite-result rejection, and transactional output on provider failures.
     """
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
@@ -42,7 +42,15 @@ def test_canonical_force_fallback_preserves_channels_and_failures(
     cpp, binary = tmp_path / "fallback.cpp", tmp_path / "fallback"
     cpp.write_text(PREFIX + "\n".join(helpers) + MAIN)
     native_cxx.build_executable(
-        [cpp], binary, compile_args=["-std=c++17", "-O0", "-D_GLIBCXX_ASSERTIONS"]
+        [cpp],
+        binary,
+        compile_args=[
+            "-std=c++17",
+            "-O0",
+            "-D_GLIBCXX_ASSERTIONS",
+            "-I",
+            str(ROOT / "src"),
+        ],
     )
     subprocess.run([binary], check=True, timeout=10)
 
@@ -57,6 +65,8 @@ PREFIX = r"""
 #include <string>
 #include <utility>
 #include <vector>
+#include "scf/direct_force_precision.hpp"
+using generativeqc::scf::DirectForcePrecisionRequest;
 enum generativeqc_status {
   GENERATIVEQC_STATUS_SUCCESS, GENERATIVEQC_STATUS_INVALID_ARGUMENT,
   GENERATIVEQC_STATUS_NOT_IMPLEMENTED, GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
@@ -80,7 +90,8 @@ struct CudaDirectJkPlan {
 struct Download { void* destination; const void* source; std::size_t bytes; };
 std::vector<Download> pending;
 int fail_download = -1, copies{}, mode{};
-bool canonical_used{}, shell_used{}, expected_unrestricted{};
+bool canonical_used{}, shell_used{}, expected_unrestricted{}, expected_spatial{};
+DirectForcePrecisionRequest* expected_precision{};
 double expected_j{}, expected_k{};
 const double* expected_density{};
 const double* expected_beta{};
@@ -118,8 +129,12 @@ void direct_rsh_derivatives(CudaDirectJkPlan* p, std::size_t item, double j,
 }
 namespace cuda_execution {
 cudaError_t execute_generated_full_range_energy_derivatives(
-    Exchange&, bool, const double*, const double*, double, double,
-    std::vector<double>& out, bool separate, bool) {
+    Exchange&, bool unrestricted, const double* density, const double* beta,
+    double j, double k, std::vector<double>& out, bool separate, bool spatial,
+    bool bilinear, DirectForcePrecisionRequest* precision) {
+  assert(unrestricted == expected_unrestricted && density == expected_density);
+  assert(beta == expected_beta && j == expected_j && k == expected_k);
+  assert(spatial == expected_spatial && !bilinear && precision == expected_precision);
   shell_used = true; out.assign(separate ? 6 : 3, 42); return cudaSuccess;
 }
 }
@@ -134,16 +149,21 @@ int main() {
   Exchange unavailable, available{true};
   std::vector<double> output;
   std::string detail;
+  DirectForcePrecisionRequest mixed;
+  mixed.mixed_weighted = mixed.collect_work = true;
+  mixed.work = {17, 19, 23};
   auto invoke = [&](CudaDirectJkPlan* selected, bool unrestricted, double j,
                     double k, bool separate, const double* d, const double* b,
-                    std::size_t count = 4) {
+                    std::size_t count = 4, DirectForcePrecisionRequest* precision = nullptr,
+                    bool spatial = true) {
     output = {123}; detail = "old detail"; pending.clear(); copies = 0;
     canonical_used = shell_used = false;
     expected_j = j; expected_k = k; expected_unrestricted = unrestricted;
     expected_density = d; expected_beta = b;
+    expected_precision = precision; expected_spatial = spatial;
     return execute_cuda_direct_shell_full_range_derivatives_device(
         selected, unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted,
-        j, k, d, b, count, output, detail, separate, true);
+        j, k, d, b, count, output, detail, separate, spatial, precision);
   };
   for (auto* owner : {static_cast<Exchange*>(nullptr), &unavailable}) {
     plan.generated_exchange = owner;
@@ -151,17 +171,23 @@ int main() {
       for (bool separate : {false, true})
         for (double j : {0.0, 1.0, -0.7})
           for (double k : {0.0, -0.125, 0.25}) {
-            assert(invoke(&plan, unrestricted, j, k, separate, density,
-                          unrestricted ? beta : nullptr) == GENERATIVEQC_STATUS_SUCCESS);
-            assert(detail.empty() && pending.empty() && !shell_used);
-            assert(canonical_used == (j != 0 || k != 0));
-            assert(output.size() == (separate ? 6U : 3U));
-            for (std::size_t i = 0; i < 3; ++i) {
-              assert(output[i] == j * double(i + 1) + (separate ? 0 : k * double(i + 11)));
-              if (separate) assert(output[3 + i] == k * double(i + 11));
+            for (auto* precision : {static_cast<DirectForcePrecisionRequest*>(nullptr), &mixed}) {
+              assert(invoke(&plan, unrestricted, j, k, separate, density,
+                            unrestricted ? beta : nullptr, 4, precision) ==
+                     GENERATIVEQC_STATUS_SUCCESS);
+              assert(detail.empty() && pending.empty() && !shell_used);
+              assert(canonical_used == (j != 0 || k != 0));
+              assert(output.size() == (separate ? 6U : 3U));
+              for (std::size_t i = 0; i < 3; ++i) {
+                assert(output[i] == j * double(i + 1) + (separate ? 0 : k * double(i + 11)));
+                if (separate) assert(output[3 + i] == k * double(i + 11));
+              }
             }
           }
   }
+  // The canonical FP64 provider must not report mixed work or change the request.
+  assert(mixed.mixed_weighted && mixed.collect_work);
+  assert((mixed.work == std::array<std::uint64_t, 3>{17, 19, 23}));
   auto unchanged = [&](generativeqc_status actual, generativeqc_status expected) {
     assert(actual == expected && !detail.empty() && output == std::vector<double>{123});
     assert(pending.empty());
@@ -211,7 +237,15 @@ int main() {
   unchanged(invoke(&plan, false, 1, 1, false, density, nullptr),
             GENERATIVEQC_STATUS_NUMERICAL_FAILURE);
   mode = 0; plan.generated_exchange = &available;
-  assert(invoke(&plan, false, 1, 0, true, density, nullptr) == GENERATIVEQC_STATUS_SUCCESS);
-  assert(shell_used && !canonical_used && output == std::vector<double>(6, 42));
+  for (auto* precision : {static_cast<DirectForcePrecisionRequest*>(nullptr), &mixed})
+    for (bool unrestricted : {false, true})
+      for (bool separate : {false, true})
+        for (bool spatial : {false, true}) {
+          assert(invoke(&plan, unrestricted, 1, -0.125, separate, density,
+                        unrestricted ? beta : nullptr, 4, precision, spatial) ==
+                 GENERATIVEQC_STATUS_SUCCESS);
+          assert(detail.empty() && pending.empty() && shell_used && !canonical_used);
+          assert(output == std::vector<double>(separate ? 6 : 3, 42));
+        }
 }
 """

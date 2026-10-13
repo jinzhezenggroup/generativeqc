@@ -47,8 +47,10 @@ class StationaryOwner final : public PlainBatch, public KsBatchOwnerPort {
   static constexpr std::size_t item = 1, allowance = 927;
   generativeqc_status native_cuda_stationary_gradient(
       std::size_t index, const Token& token, std::size_t bytes, std::vector<double>& output,
-      dft::CudaStationaryResources& resources, std::string& detail) override {
+      dft::CudaStationaryResources& resources, std::string& detail,
+      scf::DirectForcePrecisionRequest* precision) override {
     require(index == item && token == expected && bytes == allowance);
+    if (precision) precision->work = {7, 11, 0};
     observed |= 1;
     detail = "gradient owner";
     if (result == GENERATIVEQC_STATUS_SUCCESS) {
@@ -157,6 +159,14 @@ int main() {
   dft::CudaStationaryResources resources;
   resources.device_upper_bytes = 123;
   std::string detail;
+  owner.result = GENERATIVEQC_STATUS_SUCCESS;
+  scf::DirectForcePrecisionRequest precision{true, true};
+  require(dft_cuda_native_stationary_gradient(batch, owner.item, owner.expected,
+      owner.allowance, output, resources, detail, &precision) == GENERATIVEQC_STATUS_SUCCESS);
+  require(precision.mixed_weighted && precision.collect_work &&
+          precision.work == std::array<std::uint64_t, 3>{7, 11, 0});
+  output = {99};
+  resources.device_upper_bytes = 123;
   require(dft_cuda_native_stationary_gradient(foreign, 1, owner.expected, 927,
       output, resources, detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
   require(output == std::vector<double>{99} && resources.device_upper_bytes == 0 && !detail.empty());

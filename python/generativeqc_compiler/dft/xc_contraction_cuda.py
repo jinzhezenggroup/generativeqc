@@ -268,17 +268,17 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
 _TILED_TEMPLATE = r"""
 // Padding avoids bank conflicts when the AO lane reads a transposed panel.
 // Partial tiles still participate in both barriers and load exact zero padding.
-template <bool Mixed, bool ActiveRowsOnly = false>
+template <bool Mixed, bool ActiveRowsOnly = false, class Arithmetic = double>
 __device__ void tiled_density_product_body(const double* density, const double* ao, I n, I count,
     I work_jets, double* work, int* error, const size_t* ao_ids, I full_n, I spin_jet) {
-  __shared__ double d[@TILE@][@PAD@], a[@TILE@][@PAD@];
+  __shared__ Arithmetic d[@TILE@][@PAD@], a[@TILE@][@PAD@];
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = I(blockIdx.x)*@TILE@+x, point = I(blockIdx.y)*@TILE@+y;
   const I spin = spin_jet/work_jets, jet = spin_jet%work_jets;
   const I panel = count*n;
   const double* source = ao+jet*panel;
   const double* matrix = density+spin*full_n*full_n;
-  double value = 0.0;
+  Arithmetic value = 0.0;
   for (I begin = 0; begin < n; begin += @TILE@) {
     const I row = I(blockIdx.x)*@TILE@+y, col = begin+x;
     // Gather directly into the existing shared tile: no full/local D copy and
@@ -319,10 +319,10 @@ __device__ void tiled_density_product_body(const double* density, const double* 
     work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
 }
 
-template <bool Mixed>
+template <bool Mixed, class Arithmetic = double>
 __global__ void tiled_density_product(const double* density, const double* ao, I n, I count,
     I work_jets, double* work, int* error, const size_t* ao_ids, I full_n) {
-  tiled_density_product_body<Mixed>(density, ao, n, count, work_jets, work, error, ao_ids,
+  tiled_density_product_body<Mixed, false, Arithmetic>(density, ao, n, count, work_jets, work, error, ao_ids,
                                      full_n, blockIdx.z);
 }
 
@@ -335,7 +335,7 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-template <bool ActivePairsOnly = false>
+template <bool ActivePairsOnly = false, class Arithmetic = double>
 __device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
     double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin) {
@@ -354,11 +354,11 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
     tile_mu = pair-low*(low+1)/2;
   }
   __syncthreads();
-  __shared__ double am[@TILE@][@PAD@], an[@TILE@][@PAD@], wm[@TILE@][@PAD@], wn[@TILE@][@PAD@];
+  __shared__ Arithmetic am[@TILE@][@PAD@], an[@TILE@][@PAD@], wm[@TILE@][@PAD@], wn[@TILE@][@PAD@];
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = tile_mu*@TILE@+x, nu = tile_nu*@TILE@+y;
   const I nu_load = tile_nu*@TILE@+x, panel = count*n;
-  double value = 0.0;
+  Arithmetic value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
     const double* a = ao+jet*panel;
     const double* w = work+(spin*work_jets+jet)*panel;
@@ -378,25 +378,26 @@ __device__ void tiled_potential_body(const double* ao, const double* work, I n, 
     const I row = ao_ids ? ao_ids[mu] : mu, col = ao_ids ? ao_ids[nu] : nu;
     const I index = (spin*full_n+row)*full_n+col;
     const double prior = accumulate ? potential[index] : 0.0;
-    value = finite(prior+value, error, 3);
-    potential[index] = value;
-    potential[(spin*full_n+col)*full_n+row] = value;
+    const double combined = finite(prior+static_cast<double>(value), error, 3);
+    potential[index] = combined;
+    potential[(spin*full_n+col)*full_n+row] = combined;
   }
   if (point_totals && blockIdx.x == 0 && spin == 0 && threadIdx.y == 0 && threadIdx.x < 3) {
     const I channel = threadIdx.x;
-    double sum = 0.0;
-    for (I p = 0; p < count; ++p) sum += point_totals[channel*count+p];
-    totals[channel] = finite((accumulate ? totals[channel] : 0.0)+sum,error,3);
+    Arithmetic sum = 0.0;
+    for (I p = 0; p < count; ++p) sum += static_cast<Arithmetic>(point_totals[channel*count+p]);
+    totals[channel] = finite((accumulate ? totals[channel] : 0.0)+static_cast<double>(sum),error,3);
   }
 }
 
 // The compiler owns schedule admission; native only supplies borrowed buffers.
 // Tiny shapes and dimensions outside the two-dimensional launch domain retain
 // the bounded grid-stride scalar schedule. Both cover the same scientific work.
+template <class Arithmetic = double>
 __global__ void tiled_potential(const double* ao, const double* work, I n, I count,
     I work_jets, const double* point_totals, double* potential, double* totals,
     bool accumulate, int* error, const size_t* ao_ids, I full_n) {
-  tiled_potential_body(ao, work, n, count, work_jets, point_totals, potential, totals,
+  tiled_potential_body<false, Arithmetic>(ao, work, n, count, work_jets, point_totals, potential, totals,
                         accumulate, error, ao_ids, full_n, blockIdx.z);
 }
 
@@ -410,7 +411,7 @@ inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
   const I tile_pairs = tiles*(tiles+1)/2;
   return tile_pairs <= 65535;
 }
-template <bool Mixed, bool Tiled>
+template <bool Mixed, bool Tiled, class Arithmetic = double>
 void launch_density_product(cudaStream_t stream, const double* density,
     const double* ao, I n, I count, I spins, I work_jets,
     double* work, int* error, const size_t* ao_ids, I full_n) {
@@ -418,13 +419,14 @@ void launch_density_product(cudaStream_t stream, const double* density,
   if constexpr (Tiled) {
     const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@,
                     spins*work_jets), block(@TILE@,@TILE@);
-    tiled_density_product<Mixed><<<grid, block, 0, stream>>>(
+    tiled_density_product<Mixed, Arithmetic><<<grid, block, 0, stream>>>(
         density, ao, n, count, work_jets, work, error, ao_ids, full_n);
   } else {
     density_product<Mixed><<<generativeqc_tensor::blocks(spins*work_jets*count*n,128),128,0,stream>>>(
         density,ao,n,count,spins,work_jets,work,error,ao_ids,full_n);
   }
 }
+template <class Arithmetic = double>
 inline void generated_potential(cudaStream_t stream, const double* ao,
     const double* coefficients, const double* weights, I n, I count, I spins,
     I terms, I work_jets, double* work, const double* point_totals,
@@ -444,7 +446,7 @@ inline void generated_potential(cudaStream_t stream, const double* ao,
         ao,coefficients,weights,n,count,spins,terms,work_jets,work,error);
     generativeqc_tensor::cuda_check(cudaGetLastError());
     const I tiles = (n+@TILE_MINUS_ONE@)/@TILE@, tile_pairs = tiles*(tiles+1)/2;
-    tiled_potential<<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
+    tiled_potential<Arithmetic><<<dim3(tile_pairs,1,spins),dim3(@TILE@,@TILE@),0,stream>>>(
         ao,work,n,count,work_jets,point_totals,potential,totals,accumulate,error,ao_ids,full_n);
   } else {
     if (!accumulate) {
@@ -477,7 +479,12 @@ inline void scheduled_potential(cudaStream_t stream, const double* ao,
     I terms, I work_jets, double* work, const double* point_totals,
     double* potential, double* totals, bool accumulate, int* error,
     const size_t* ao_ids = nullptr, I full_n = 0,
-    const tensor::PreparedSymmetricProduct* binding = nullptr) {
+    const tensor::PreparedSymmetricProduct* binding = nullptr, bool fp32 = false) {
+  if (fp32) {
+    generated_potential<float>(stream,ao,coefficients,weights,n,count,spins,terms,
+        work_jets,work,point_totals,potential,totals,accumulate,error,ao_ids,full_n);
+    return;
+  }
   PotentialCall state{stream,ao,coefficients,weights,n,count,spins,terms,work_jets,
       work,point_totals,potential,totals,accumulate,error,ao_ids,full_n};
   const auto generated=[](void* opaque) {

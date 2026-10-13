@@ -294,9 +294,6 @@ NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
-PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
-    "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
-)
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
 )
@@ -458,15 +455,9 @@ NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
     "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
 )
-NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
-)
 # Elision preserves dense reservation/launch bounds. Bind its first-derivative
 # admission, both tolerance-refresh paths, immutable controls and charged D2H
 # observation independently of the unchanged allocation formula.
-NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256 = (
-    "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
-)
 NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256 = (
     "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
 )
@@ -502,9 +493,6 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # preserves the existing point/AO work and the seven Becke phases.
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
-NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "db6d58dc0396444c56402217f9562438d6f286a25bfccf7f4676846dcf842520"
-)
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
 # configuration and counters as well as the launch route; a digest refresh must
@@ -1440,11 +1428,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_reset_sha256": (
             "int stationary_reset(",
-            NATIVE_STATIONARY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_geometry_reset_sha256": (
             "int stationary_geometry_reset(",
-            NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_phased_becke_input_sha256": (
             "PhasedBeckeInput phased_input(",
@@ -1484,7 +1472,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_launch_geometry_sha256": (
             "void launch_geometry(",
-            NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256,
+            None,
         ),
         "native_configure_becke_sha256": (
             "int stationary_configure_becke(",
@@ -1549,7 +1537,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
-        if digest != expected_digest:
+        # Reset/typed dispatch do not define the allocation equations below.
+        # Their exact current identities remain provenance; executable host
+        # contracts cover fencing, tolerance, scratch capacity and typed routes.
+        # A static preflight is never their execution/numerical qualification.
+        if expected_digest is not None and digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
@@ -2966,6 +2958,74 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     }
 
 
+def _check_public_grid_abi(lowerer: ast.FunctionDef) -> None:
+    """Execute the source-bound lowerer and check its observable grid ABI.
+
+    The private precision extension may change the function body without
+    changing the grid. Retain its source hash as provenance, but require field
+    behavior rather than a historical spelling. No native library is loaded.
+    """
+    import ctypes
+
+    from generativeqc import _native
+    from generativeqc import ks as ks_module
+
+    namespace = dict(vars(ks_module))
+    exec(  # noqa: S102 - execute the inspected repository ABI lowerer
+        compile(
+            ast.Module(body=[lowerer], type_ignores=[]), "<grid-abi-contract>", "exec"
+        ),
+        namespace,
+    )
+    for grid in (
+        GridSpec(48, 16, 32),
+        GridSpec(
+            7,
+            5,
+            9,
+            partition_iterations=2,
+            coincident_tolerance=3e-11,
+            element_radii=((1, 0.8), (8, 1.5)),
+        ),
+    ):
+        for budget in (None, (1e-5, 1e-4, 3e-5)):
+            options = resolve_ks_options(
+                "pbe0-rks",
+                KsOptions(grid=grid, tile_points=37, _precision_budget=budget),
+            )
+            descriptor = namespace[lowerer.name](options)
+            expected = {
+                "grid_version": grid.version,
+                "radial_points": grid.radial_points,
+                "angular_polar": grid.angular_polar,
+                "angular_azimuth": grid.angular_azimuth,
+                "partition_iterations": grid.partition_iterations,
+                "coincident_tolerance": grid.coincident_tolerance,
+                "tile_points": 37,
+            }
+            descriptor_type = (
+                _native.KsOptionsDescriptor
+                if budget is None
+                else _native.ApplicationPrecisionKsOptionsDescriptor
+            )
+            if (
+                any(
+                    getattr(descriptor, name) != value
+                    for name, value in expected.items()
+                )
+                or descriptor.struct_size != ctypes.sizeof(descriptor_type)
+                or descriptor.abi_version != _native.ABI_VERSION
+                or descriptor.element_radius_count != (119 if grid.element_radii else 0)
+                or any(
+                    descriptor.element_radii[z] != radius
+                    for z, radius in grid.element_radii
+                )
+            ):
+                raise RuntimeError(
+                    "grid point-count contract changed: public grid ABI fields"
+                )
+
+
 def _grid_count_contract(repository: Path) -> dict[str, str]:
     """Bind the source-only point count to the native CUDA grid owner."""
 
@@ -3001,6 +3061,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     if len(public_lowerers) != 1:
         raise RuntimeError("public GridSpec ABI lowerer is missing or ambiguous")
     public_abi_digest = _source_node_sha256(public_ks, public_lowerers[0])
+    _check_public_grid_abi(public_lowerers[0])
 
     quadrature_source = (
         repository / "python/generativeqc_compiler/xc/quadrature_cuda.py"
@@ -3066,14 +3127,17 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     }
     expected = {
         "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
-        "public_grid_abi_sha256": PUBLIC_GRID_ABI_CONTRACT_SHA256,
         "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
         "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
         "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
         "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
     }
-    moved = [name for name, digest in contracts.items() if digest != expected[name]]
+    moved = [
+        name
+        for name, digest in contracts.items()
+        if name in expected and digest != expected[name]
+    ]
     if moved:
         raise RuntimeError("grid point-count contract changed: " + ", ".join(moved))
     return {

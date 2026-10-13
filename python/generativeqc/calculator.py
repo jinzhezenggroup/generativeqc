@@ -848,6 +848,21 @@ class Calculator:
                 raise NotImplementedError(
                     "native library does not support the current semantic KS execution-plan ABI"
                 )
+            if self._ks_options._precision_budget is not None:
+                query = getattr(
+                    self._library, "generativeqc_application_precision_version_v1", None
+                )
+                if query is None:
+                    raise NotImplementedError(
+                        "native library lacks application precision transport"
+                    )
+                query.argtypes, query.restype = [], ctypes.c_uint32
+                if query() != 1:
+                    raise NotImplementedError(
+                        "unsupported native application precision transport"
+                    )
+                if self._precision_mode != _native.PRECISION_AUTO:
+                    raise ValueError("application precision transport requires AUTO")
 
         available = ctypes.c_int32()
         _native.check(
@@ -1131,7 +1146,10 @@ class Calculator:
                     self._initial_guess = None
 
         if self._initial_guess is not None:
-            from .initial_guess import require_initial_guess_library
+            from .initial_guess import (
+                _initial_guess_precision,
+                require_initial_guess_library,
+            )
 
             minao = self._initial_guess.kind in ("minao", "huckel")
             backend_ok = self._device_name == "cpu" or (
@@ -1147,7 +1165,8 @@ class Calculator:
             )
             if (
                 not backend_ok
-                or self._precision_mode != _native.PRECISION_FP64
+                or (_initial_guess_precision(self) if minao else self._precision_mode)
+                != _native.PRECISION_FP64
                 or (
                     self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                     and self._initial_guess.kind != "huckel"
@@ -1401,12 +1420,20 @@ class Calculator:
     ) -> dict | None:
         """Expose aggregate provenance plus execution-owned detailed work."""
 
-        from ._precision_work import merge_precision_work, query_precision_work
+        from ._precision_work import (
+            merge_precision_work,
+            query_gradient_precision,
+            query_precision_work,
+        )
 
-        return merge_precision_work(
+        report = merge_precision_work(
             self._precision_provenance(calculation, index),
             query_precision_work(self._library, calculation, index=index),
         )
+        gradient = query_gradient_precision(self._library, calculation, index=index)
+        if gradient is not None:
+            report = {**(report or {}), "gradient": gradient}
+        return report
 
     def _incremental_direct_jk_diagnostic(
         self, calculation: ctypes.c_void_p, index: int | None = None

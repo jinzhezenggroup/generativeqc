@@ -19,6 +19,7 @@ if typing.TYPE_CHECKING:
 
     from .accuracy import AccuracyAssessment
     from .ks_diagnostics import KsDiagnostic, KsTransportDiagnostic
+    from .precision_policy import PrecisionValidation
 
 
 @dataclass(frozen=True)
@@ -164,7 +165,9 @@ class Result:
     Hartree/Bohr, with force equal to minus the nuclear energy gradient.
     Single-point failures raise instead of returning this record. Published
     arrays outlive the native calculation; frozen fields do not recursively
-    freeze contained arrays or mappings. See :ref:`python-results-values`
+    freeze contained arrays or mappings. ``precision_validation`` holds the
+    optional strict-endpoint or application-budget report from ``PrecisionCalculator``; ordinary
+    calculations leave it unset. See :ref:`python-results-values`
     and :ref:`python-results-ownership`."""
 
     energy: float
@@ -186,6 +189,7 @@ class Result:
     ks_transport_diagnostic: KsTransportDiagnostic | None = None
     dispersion: object | None = None
     initial_guess: dict | None = None
+    precision_validation: PrecisionValidation | None = None
 
 
 @dataclass(frozen=True)

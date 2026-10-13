@@ -474,6 +474,8 @@ def emit_geometry_cuda(
     }
     emitter = ScalarCEmitter(program.graph, variables)
     emitter.emit(program.roots)
+    narrowed = ScalarCEmitter(program.graph, variables, scalar_type="float")
+    narrowed.emit(program.roots)
     derivative_order = 0 if family == "lda" else 1
     domain = jet_indices(derivative_order)
     lookup = jet_indices(derivative_order + 1)
@@ -489,13 +491,18 @@ def emit_geometry_cuda(
         [
             emit_grid_adjoint(),
             '#include "dft/xc_point.hpp"',
+            '#include "dft/xc_point_mixed.hpp"',
             emit_grid_partials(iterations, device=True),
+            emit_grid_partials(
+                iterations, device=True, scalar_type="float", suffix="_fp32"
+            ),
             f"constexpr unsigned stationary_functional = {code};",
             f"constexpr unsigned stationary_jets = {len(domain)};",
             f"constexpr unsigned stationary_ao_jets = {len(lookup)};",
             f"constexpr unsigned stationary_coefficients = {coefficient_count};",
             _emit_stationary_point(code, semilocal=semilocal),
             _emit_restricted_point_capability(code, semilocal),
+            _emit_mixed_point(code, semilocal),
             f"__device__ __constant__ unsigned stationary_shift[{len(domain)}][3] = {{{','.join(shifts)}}};",
             "__device__ void ao_pullback(const double* c, const double* w, double* out) {",
             *emitter.lines,
@@ -504,6 +511,52 @@ def emit_geometry_cuda(
                 for j, r in enumerate(program.roots)
             ),
             "}",
+            "__device__ void ao_pullback(const float* c, const float* w, float* out) {",
+            *narrowed.lines,
+            *(
+                f"out[{index}] = {narrowed.reference(root)};"
+                for index, root in enumerate(program.roots)
+            ),
+            "}",
             "",
+        ]
+    )
+
+
+def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:
+    """Reuse the point owner's typed algebra, never cast a completed FP64 value."""
+    curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
+    capable = curated is not None and curated["stationary_kernel"] in ("lda", "pbe")
+    lines = [
+        f"constexpr bool stationary_fp32_point_capable = {str(capable).lower()};",
+        "__device__ inline StationaryPointValue stationary_evaluate_point_fp32(",
+        "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
+    ]
+    if not capable:
+        return "\n".join(
+            [*lines, "  return stationary_evaluate_point(rho, gradient, tau);", "}"]
+        )
+    exchange = correlation = 1.0
+    if semilocal is not None:
+        components = dict(semilocal.components)
+        exchange_name, correlation_name = (name for name, _ in curated["components"])
+        exchange = float(components.get(exchange_name, 0))
+        correlation = float(components.get(correlation_name, 0))
+    pbe = str(curated["stationary_kernel"] == "pbe").lower()
+    return "\n".join(
+        [
+            *lines,
+            "  const auto raw = generativeqc::dft::point::evaluate_pbe_full_mixed(",
+            f"      {pbe}, rho, gradient, {exchange.hex()}, {correlation.hex()}).value;",
+            "  StationaryPointValue result;",
+            "  result.energy = raw.energy;",
+            "  result.valid = raw.valid;",
+            "  for (unsigned spin = 0; spin < 2; ++spin) {",
+            "    result.rho[spin] = raw.rho[spin];",
+            "    for (unsigned axis = 0; axis < 3; ++axis)",
+            "      result.gradient[spin][axis] = raw.gradient[spin][axis];",
+            "  }",
+            "  return result;",
+            "}",
         ]
     )

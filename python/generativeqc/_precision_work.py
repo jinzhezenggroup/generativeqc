@@ -92,6 +92,50 @@ def merge_precision_work(
     }
 
 
+def query_gradient_precision(
+    library: object, handle: object, index: int | None = None
+) -> dict[str, Any] | None:
+    """Decode actual completed mixed-gradient work, never infer it from SCF.
+
+    Weighted integral counts need intrusive instrumentation; ordinary calls
+    report dispatch policy rather than inventing counts or zero retries.
+    Whole-gradient retries replace all sources at the identical strict token.
+    """
+    name = (
+        "generativeqc_calculation_gradient_precision_v1"
+        if index is None
+        else "generativeqc_batch_gradient_precision_v1"
+    )
+    getter = getattr(library, name, None)
+    if getter is None:
+        return None
+    values = (ctypes.c_uint64 * 5)()
+    arguments = (handle,) if index is None else (handle, index)
+    status = getter(*arguments, values, len(values))
+    if status in (_native.STATUS_PRECISION_UNAVAILABLE, _native.STATUS_NOT_IMPLEMENTED):
+        return None
+    _native.check(library, status)
+    return {
+        "schema_version": 1,
+        "complete": bool(values[0]),
+        "weighted_fp32_orders": [0, 1, 2, 3, 4, 5] if values[1] else [],
+        "weighted_task_retries": None,
+        "weighted_task_counters_collected": False,
+        "attempted_fp32_geometry_points": int(values[2]),
+        "attempted_fp32_grid_points": int(values[3]),
+        "fp64_gradient_retries": int(values[4]),
+        "returned_mode": "fp64" if values[4] else "mixed",
+        "fp64_components": [
+            "final_scf",
+            "one_electron_and_pulay",
+            "boys",
+            "weighted_orders_above_5",
+            "global_reductions",
+            "numerical_fallbacks",
+        ],
+    }
+
+
 def query_precision_work(
     library: object, handle: object, index: int | None = None
 ) -> dict[str, Any] | None:
