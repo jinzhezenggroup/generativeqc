@@ -6,11 +6,15 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
 from generativeqc_compiler.dft.xc_density_lowering import emit_density_binding
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,15 +28,13 @@ def _guard() -> str:
 
 def test_local_ao_guard_depends_on_layout_capability_not_method_or_schedule(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
     guard = _guard()
     assert "cuda_xc_execution_capabilities(xc_layout).local_ao_selection" in guard
     assert "precision_schedule" not in guard
     assert "SemilocalFamily" not in guard
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     unit = tmp_path / "guard.cpp"
     executable = tmp_path / "guard"
     unit.write_text(
@@ -68,23 +70,9 @@ int main(int argc, char** argv) {
 }
 """
     )
-    built = subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+    native_cxx.build_executable(
+        [unit], executable, compile_args=("-std=c++20", "-Wall", "-Wextra", "-Werror")
     )
-    assert built.returncode == 0, built.stderr
 
     cases = {
         ("unset", "blocked", "host"): "dense",
@@ -268,12 +256,13 @@ int main() {
     assert(resource.retained_host_numeric_bytes ==
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
     for (bool strict_refinement : {false, true}) {
-      bool pending_mixed_coulomb{}, pending_mixed_density{};
+      bool pending_mixed_coulomb{}, pending_mixed_density{}, pending_mixed_point{};
 """
         + block
         + r"""
       assert(pending_mixed_coulomb == (automatic && !strict_refinement));
       assert(pending_mixed_density == (mixed_density && !strict_refinement));
+      assert(!pending_mixed_point);
     }
   }
   }
@@ -306,10 +295,9 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
     unit = tmp_path / "density_guard.cpp"
     executable = tmp_path / "density_guard"
     emitted = _emit_tiled(XcMatrixSchedule(16))
+    admission_start = emitted.index("inline bool tiled_xc_admitted(")
     shape_admission = emitted[
-        emitted.index("inline bool tiled_xc_admitted(") : emitted.index(
-            "template <bool Mixed, bool Tiled>"
-        )
+        admission_start : emitted.index("\ntemplate <", admission_start)
     ]
     unit.write_text(
         r"""

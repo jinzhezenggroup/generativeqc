@@ -24,6 +24,7 @@ from generativeqc import Calculator, GridSpec, KsOptions
 from generativeqc_compiler.integral.precision import weighted_force_precision_schedule
 
 from benchmarks._cases import benchmark_cases
+from benchmarks._retention import raw_output_path
 from benchmarks.compare_gpu4pyscf_batch import native_build_metadata
 from benchmarks.pbe0_precision import errors, protocol, reference
 
@@ -264,7 +265,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", required=True, choices=benchmark_cases())
     parser.add_argument("--probe", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument(
@@ -349,8 +350,9 @@ def main() -> None:
     calculator.clear_cache()
 
     def save() -> None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+        output = raw_output_path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
 
     try:
         report["qualification"] = sample(
