@@ -1752,10 +1752,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
           if (!whitened->packed_pairs) {
             // Public C[ij,Q] is column-major [Q,ij]. Emit [ij,P] directly
             // into the bounded auxiliary-major panel used by the response.
-            checked(generativeqc_tensor::submit_column_gemm({
-                  handle, true, false, mi, static_cast<int>(count), ai,
-                  &one, whitened->data, ai, device_metric->inverse_square_root + begin * a, ai, &zero,
-                  values, mi}));
+            checked(generativeqc_tensor::submit_column_gemm(
+                {handle, true, false, mi, static_cast<int>(count), ai, &one, whitened->data, ai,
+                 device_metric->inverse_square_root + begin * a, ai, &zero, values, mi}));
             runtime::cuda_trace::trace_counter("response_fitted_panel_gemms", 1);
           } else {
             // Project the whole packed panel with GEMM into the tail of its
@@ -1769,10 +1768,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
             const auto pairs = whitened->pair_count;
             auto* packed_panel = values + count * (n * n - pairs);
             auto* packed_values = workspace + 4 * a * a;
-            checked(generativeqc_tensor::submit_column_gemm({
-                  handle, true, false, static_cast<int>(pairs), static_cast<int>(count), ai,
-                  &one, whitened->data, ai, device_metric->inverse_square_root + begin * a, ai, &zero,
-                  packed_panel, static_cast<int>(pairs)}));
+            checked(generativeqc_tensor::submit_column_gemm(
+                {handle, true, false, static_cast<int>(pairs), static_cast<int>(count), ai, &one,
+                 whitened->data, ai, device_metric->inverse_square_root + begin * a, ai, &zero,
+                 packed_panel, static_cast<int>(pairs)}));
             for (std::size_t p = 0; p < count; ++p) {
               check(cudaMemcpyAsync(packed_values, packed_panel + p * pairs, pairs * sizeof(double),
                                     cudaMemcpyDeviceToDevice, arena.stream));
@@ -1828,17 +1827,16 @@ generativeqc_status execute_cuda_df_hf_gradient(
             // Raw [pair,P] is column-major [P,pair]. Divide Q^T*A before
             // the public-axis rotation, then write [pair,output_P] directly
             // into the auxiliary-major fitted panel with leading n*n.
-            checked(generativeqc_tensor::submit_column_gemm({
-                  handle, true, false, ai, static_cast<int>(pairs), ai,
-                  &one, device_metric->eigenvectors, ai, raw, ai, &zero,
-                  projected, ai}));
+            checked(generativeqc_tensor::submit_column_gemm(
+                {handle, true, false, ai, static_cast<int>(pairs), ai, &one,
+                 device_metric->eigenvectors, ai, raw, ai, &zero, projected, ai}));
             cuda_df::launch_scale_metric_projection(arena.stream, a, pairs,
                                                     device_metric->eigenvalues, false, projected);
             check(cudaGetLastError());
-            checked(generativeqc_tensor::submit_column_gemm({
-                  handle, true, true, static_cast<int>(pairs), static_cast<int>(count), ai,
-                  &one, projected, ai, device_metric->eigenvectors + begin, ai, &zero,
-                  values + pair, mi}));
+            checked(generativeqc_tensor::submit_column_gemm(
+                {handle, true, true, static_cast<int>(pairs), static_cast<int>(count), ai, &one,
+                 projected, ai, device_metric->eigenvectors + begin, ai, &zero, values + pair,
+                 mi}));
             runtime::cuda_trace::trace_counter("response_fitted_panel_gemms", 2);
           }
           // Every fitted-panel request regenerates one full logical raw
@@ -2028,9 +2026,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // AO-element or nuclear-coordinate derivative tensor. The shared BLAS
         // provider sums these bounded copies on the same owning stream.
         const double alpha = 1.0, beta = 0.0;
-        const auto status = generativeqc_tensor::submit_column_gemv({
-            reinterpret_cast<cublasHandle_t>(blas_handle), false, static_cast<int>(result.size()), static_cast<int>(gradient_copies), &alpha, derivative_output,
-            static_cast<int>(result.size()), ones, 1, &beta, output, 1});
+        const auto status = generativeqc_tensor::submit_column_gemv(
+            {reinterpret_cast<cublasHandle_t>(blas_handle), false, static_cast<int>(result.size()),
+             static_cast<int>(gradient_copies), &alpha, derivative_output,
+             static_cast<int>(result.size()), ones, 1, &beta, output, 1});
         if (status != CUBLAS_STATUS_SUCCESS) throw CudaDfResponseBlasFailure{status};
       }
     } else {
