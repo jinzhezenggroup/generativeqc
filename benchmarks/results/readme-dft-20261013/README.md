@@ -28,6 +28,12 @@ failed or incomplete phases have no successful timing. No timeout was increased.
 | [#2418](https://github.com/jinzhezenggroup/generativeqc/issues/2418) | [#2436](https://github.com/jinzhezenggroup/generativeqc/pull/2436) packages exact M06-2X stationary AOT plans. Source `61b9387f3` gives 3-atom direct cold 4.378 s versus historical 229.691 s. A separate empty artifact-cache run passes all 12 calls with runtime compiler discovery and invocation forbidden. Later source-matched populations remain separately identified. |
 | [#2421](https://github.com/jinzhezenggroup/generativeqc/issues/2421) | [#2437](https://github.com/jinzhezenggroup/generativeqc/pull/2437) adds automatic HF/DF value-response planning and exact-state final occupied projection reuse. All 12 calls pass at 96 atoms. Warm: 59.318 → 3.201 s; new cold 32.994 s, moved 28.670 s. |
 
+Direct WB97M-V now passes all 12 calls at 48 atoms within 1800 s with
+[#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454): cold 576.151 s,
+warm 67.707 s, moved 406.924 s, moved-warm 67.946 s. Its maximum energy/force
+errors are 4.548e-12 Eh / 6.528e-11 Eh/Bohr. Small 3/12-atom populations also
+pass. The 96-atom endpoint remains unresolved, so #2426 stays open.
+
 These are before/after complete endpoint observations, not isolated attribution
 of every source change. The newer integration uses the current native public
 initialization policy, including Huckel; historical initialization and work
@@ -35,7 +41,7 @@ counts are preserved. M06-2X API-cold timing includes package loading. Its
 separate compiler-forbidden control establishes AOT use, not a reconstruction
 of the historical compiler-cache state.
 
-The current reductions contain 30 fully qualified direct points (360 calls)
+The current reductions contain 31 fully qualified direct points (372 calls)
 and 30 fully qualified DF points (360 calls). Maximum accepted errors are
 3.275e-11 / 2.201e-10 for direct and 2.261e-10 / 1.573e-10 for DF, in Eh and
 Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
@@ -59,12 +65,23 @@ Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
   allowance by the minimum needed to retain fitted values. Observed free
   memory, absolute headroom, explicit caller caps and solver workspace bounds
   remain enforced. Cold and moved both report non-streamed fitted values.
-- #2417 and #2426: WB97M-V large reference/native populations remain incomplete.
+- #2417 and #2426: WB97M-V reference timing populations remain incomplete at
+  48/96 atoms; native now completes the independently checked 48-atom population.
+  A separately reconverged moved-geometry oracle supplies accuracy only and
+  never adds a reference timing sample. The preceding correct native candidate
+  `99e7c54b2` still timed out during its last moved-warm call; the earlier
+  `de4d7f564` trial was explicitly stopped after its admission failure was
+  diagnosed, rather than relabelled as a timeout. Both remain retained.
   Diagnostic reference/48 has approximately 820 billion active ordered pairs
   and about 23 s per VV10 feature call. Native/96's first measured SCF stage
   takes 116.0 s in nonlocal pairs versus 4.24 s in semilocal density/features
-  and 2.45 s in nonlocal AO potential assembly. Diagnostic times are excluded
-  from the figures. They establish quadratic pair work, not a qualified fix.
+  and 2.45 s in nonlocal AO potential assembly on the older source. A 180-second
+  trace of `7001858f1` measures an 82.6 s bilateral pair call; this short trace
+  is not a formal 1800-second outcome. An independent 96-atom cold oracle has
+  separately converged in 4617.1 s (45 iterations), with complete finite E/F
+  and retained residuals. Its diagnostic duration is excluded from reference
+  timing populations and speedups. Neither result establishes native/96
+  completion. The original reference and native time limits stay visible.
 - The superseded M06-2X/DF 96-atom timeout and an earlier slower 48-atom
   population remain in the summaries. A same-source 48-atom replay already
   reduced cold/warm to 102.832/12.012 s before the local-AO change; this variation
@@ -128,6 +145,11 @@ final feature-grid populations use `227c55c06`; M06-2X local-AO populations use
 DF setup lifetime trials use `fedf81b83`; final DF geometry-rebuild qualification
 uses `3660e04d2`, retained on the
 [DF qualification source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-df-qualified-source-20261013).
+Pure-J spatial populations use `aaec57399`; bilateral VV10 populations use
+`7001858f1` with library SHA256
+`08b866dc5404feebf024011fe95a9e04b16ba55256078874d4fcda080e21fdd0`.
+Both are ancestors of the frozen
+[VV10 qualification source](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-qualified-source-20261014).
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
 compressed summaries. Later source changes do not relabel these measurements.
@@ -170,7 +192,12 @@ PYTHONPATH=.:python python -m tools.render_readme_dft \
   --output .artifacts/readme-figure
 ```
 
-Both engines can run independently (`reference` or `native`). Missing reference
+Both engines can run independently (`reference` or `native`). The separately
+reviewed [accuracy-oracle driver](https://github.com/jinzhezenggroup/generativeqc/pull/2449)
+can validate a missing geometry using an independent atomic-guess solve, exact
+protocol/basis identity and strict convergence residuals. The original
+48-atom one-off driver's exact bytes and SHA remain in the receipts, separately
+from the maintained driver used for 96 atoms. Missing reference
 geometries remain unchecked. A later oracle never rewrites original null gates.
 Complete independently checked 12-call populations replace historical points.
 A newer incomplete population can add complete checked phases where no complete

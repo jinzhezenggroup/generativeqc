@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -608,8 +608,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 187647,
-      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276",
+      "bytes": 187846,
+      "sha256": "7f86d25d7623e1bb95489e4f0d0e96f0d8a715ba518367f904228337354308f3",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -624,8 +624,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 397852,
-      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d",
+      "bytes": 421896,
+      "sha256": "63b0fcd625ad449308ae02dad661a3b17100550507d19f1e287253c990f4a018",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
