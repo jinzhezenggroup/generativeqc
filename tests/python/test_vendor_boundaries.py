@@ -76,6 +76,7 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     # resident, streamed and source-backed GEMM products.
     assert "src/scf/cuda/df_exchange.cpp" not in inventory
     assert "src/scf/cuda/df_response_weights.cu" not in inventory
+    assert "src/scf/cuda/df_gradient_bridge.cu" not in inventory
     assert "src/scf/cuda/df_occupied_exchange.cpp" not in inventory
     assert "src/scf/cuda/df_plan_lifetime.cpp" not in inventory
     assert "src/scf/cuda/df_plan_setup.cpp" not in inventory

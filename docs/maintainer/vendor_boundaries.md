@@ -62,7 +62,13 @@ existing native-status exception boundary remains so the response bridge can
 drain on error and preserve allocation versus execution failure. GEAM
 availability is checked *inside* the shared provider layer using the existing
 dependent capability rule; CuMetal retains the established generated gather
-fallback. This is a mechanical retained-provider migration; canonical
+fallback. The same column-major borrowed views now cover four raw/fitted DF response
+projection GEMMs and the final one-vector shard-reduction GEMV in
+`df_gradient_bridge.cu`. It retains original borrowed handle, callback
+ordering, response error propagation and gradient output layout; the gradient
+consumer's former direct-vendor entry is retired.
+
+This is a mechanical retained-provider migration; canonical
 precision/provider co-selection and method-level diagnostic algebra switches
 are still separate #1889/#1890 work.
 
