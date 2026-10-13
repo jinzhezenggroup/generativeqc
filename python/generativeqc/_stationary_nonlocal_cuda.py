@@ -88,7 +88,8 @@ def resident_nonlocal_geometry(
         ao_maps.reset_work()
 
     began = perf_counter()
-    diagnostic = nonlocal_owner.diagnostic()
+    diagnostic = nonlocal_owner.diagnostic(include_work=True)
+    initial_pair_work = diagnostic
     if diagnostic.executed:
         nonlocal_owner.reset()
     elif diagnostic.collected_points:
@@ -227,6 +228,7 @@ def resident_nonlocal_geometry(
         "vv10_pair_enqueue": pair_seconds,
         geometry_timing: geometry_and_drain_seconds,
     }
+    final_pair_work = nonlocal_owner.diagnostic(include_work=True)
     work = {
         "nonlocal_execution": "resident-full-grid-device-seeds",
         "nonlocal_feature_source": (
@@ -239,6 +241,12 @@ def resident_nonlocal_geometry(
         "nonlocal_feature_collection_point_visits": 0 if snapshot_seeded else count,
         "nonlocal_feature_d2h_bytes": 0,
         "nonlocal_seed_h2d_bytes": 0,
+        "nonlocal_pair_cache_probes": final_pair_work.pair_cache_probes
+        - initial_pair_work.pair_cache_probes,
+        "nonlocal_pair_cache_hits": final_pair_work.pair_cache_hits
+        - initial_pair_work.pair_cache_hits,
+        "nonlocal_pair_sweeps": final_pair_work.pair_evaluations
+        - initial_pair_work.pair_evaluations,
         "grid_owner_source": "implicit-atom-major-index",
         "grid_owner_h2d_bytes": 0,
         "grid_point_source": "exact-native-resident-grid",
