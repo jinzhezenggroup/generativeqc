@@ -1,13 +1,17 @@
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <exception>
 #include <iterator>
 #include <limits>
 #include <stdexcept>
 
+#include "api/error.hpp"
+#include "dft/cuda_stationary_capacity.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
+#include "methods/dft_method.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
 #include "runtime/residency_observer.hpp"
@@ -80,6 +84,8 @@ int generativeqc_resource_ledger_bind_v1(void* handle) {
   ledger->rejected = 0;
   ledger->requested_bytes = 0;
   ledger->requested_bytes_overflow = false;
+  ledger->provider_reservation_peak = ledger->provider_reserved;
+  ledger->admission_peak = ledger->live + ledger->provider_reserved;
   active_device_resource_ledger = std::move(ledger);
   return 0;
 }
@@ -111,6 +117,75 @@ int generativeqc_resource_ledger_read_v2(void* handle, std::uint64_t* values, st
   values[3] = ledger->rejected;
   values[4] = ledger->requested_bytes;
   return 0;
+}
+
+/** Keep numeric v1/v2 observations unchanged. The separate v3 admission receipt
+ * reports limit, numeric live/peak, retained-provider reserved/peak and their
+ * simultaneously live admission peak. Reservations are not measured allocations. */
+int generativeqc_resource_ledger_read_v3(void* handle, std::uint64_t* values, std::size_t count) {
+  if (!handle || !values || count != 6) return 1;
+  const auto& ledger =
+      *static_cast<std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>*>(handle);
+  std::lock_guard<std::mutex> lock(generativeqc::runtime::device_resource_mutex);
+  const std::array<std::uint64_t, 6> snapshot{ledger->limit,
+                                              ledger->live,
+                                              ledger->peak,
+                                              ledger->provider_reserved,
+                                              ledger->provider_reservation_peak,
+                                              ledger->admission_peak};
+  std::copy(snapshot.begin(), snapshot.end(), values);
+  return 0;
+}
+
+/** Additional per-controller capacity, never a method/property admission bit.
+ * Shape-only and CUDA-context-free, including unbuilt-profile rejection. Output
+ * is grid numeric/provider allowance, stationary minimum/cached arenas, combined
+ * minimum/cached admission, tile points, geometry lanes and geometry threads.
+ * Callers retain the legacy plan for unsupported contexts until public cutover. */
+int generativeqc_resource_stationary_cuda_v1(const char* profile, std::size_t atoms,
+                                             std::size_t aos, std::size_t primitives,
+                                             std::size_t points, std::size_t tile_points,
+                                             std::uint64_t* values, std::size_t count) {
+  if (!profile || !values || count != 9) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* binding = generativeqc::dft::cuda_stationary_binding(profile);
+  if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    const auto capacity = generativeqc::dft::cuda_stationary_capacity(
+        *binding, atoms, aos, primitives, points, tile_points);
+    const auto snapshot = generativeqc::dft::cuda_stationary_capacity_values(capacity);
+    std::copy(snapshot.begin(), snapshot.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const std::exception&) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+}
+
+/** Private shape-only planner authority. Unlike the raw-profile query this
+ * parses the production descriptor and shares prepared scientific admission.
+ * Unsupported/invalid/unbuilt contexts never mutate the nine-field output. */
+generativeqc_status generativeqc_resource_ks_stationary_cuda_v1(
+    const generativeqc_method_descriptor* descriptor, const std::uint64_t* shape,
+    std::size_t shape_count, std::uint64_t* values, std::size_t count) {
+  if (!descriptor || !shape || shape_count != 7 || !values || count != 9)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(descriptor) ||
+      (descriptor->initial_guess &&
+       !generativeqc::api::valid_descriptor(descriptor->initial_guess)))
+    return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    generativeqc::dft::CudaStationaryCapacity capacity;
+    std::string detail;
+    const auto status = generativeqc::methods::detail::dft_cuda_stationary_capacity(
+        *descriptor, std::span<const std::uint64_t>(shape, shape_count), capacity, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto snapshot = generativeqc::dft::cuda_stationary_capacity_values(capacity);
+    std::copy(snapshot.begin(), snapshot.end(), values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
 }
 
 /** Snapshot retained owners and reserve journal slots before a replay begins.
@@ -238,28 +313,35 @@ int generativeqc_ks_resource_inventory_version_v1() {
   return sizeof(void*) == 8 && sizeof(generativeqc::dft::ScfIteration) <= 128 ? 1 : 0;
 }
 
-/** Pure shape bridge to allocator-owned KS/XC and common #202 direct-J
- * layouts. The XC slot combines the borrowed-grid arena and its retained
- * MolecularGrid owner. It never constructs a grid, density or CUDA context. */
-int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
+/** Point-program-aware inventory, including tau-dependent work/feature panels.
+ * This shape-only query shares the allocator's actual layout and creates no
+ * CUDA context. XC includes the borrowed-grid arena and retained MolecularGrid;
+ * J/K uses the existing allocator-owned first-order provider storage.
+ * The legacy v1 boolean selector remains a compatible adapter. */
+int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::size_t shells,
                                      std::size_t primitives, std::size_t points,
-                                     std::size_t diis_history, std::size_t spins, std::size_t pbe,
-                                     std::size_t tile_points, std::uint64_t* output,
-                                     std::size_t count) {
-  if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) || pbe > 1) return 1;
+                                     std::size_t diis_history, std::size_t spins,
+                                     std::size_t functional, std::size_t tile_points,
+                                     std::uint64_t* output, std::size_t count) {
+  if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) ||
+      functional > std::numeric_limits<std::uint32_t>::max())
+    return 1;
 #if GENERATIVEQC_HAS_CUDA
   try {
     const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
     const auto xc = generativeqc::dft::cuda_xc_layout_shape(
-        atoms, primitives, nao, points, pbe != 0, spins == 2, tile_points, false,
-        generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+        atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
+        tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
     // The shared grid retains xyz, partition weights and atomic measures.
     // A nonborrowed XC arena owns only the first four arrays and cannot stand
     // in for this five-array lifetime, even when XC reads only points/weights.
     const auto xc_and_grid = generativeqc::runtime::size_add(
         xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points));
+    // Prepared exact KS owners retain first-order J/K source leases even when
+    // the current replay requests energy only. Charge that simultaneous live
+    // storage instead of relying on a serialized force-staging allowance.
     const auto direct =
-        generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives);
+        generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives, 1);
     output[0] = state;
     output[1] = xc_and_grid;
     output[2] = direct;
@@ -270,6 +352,16 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
 #else
   return 2;
 #endif
+}
+
+int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
+                                     std::size_t primitives, std::size_t points,
+                                     std::size_t diis_history, std::size_t spins, std::size_t pbe,
+                                     std::size_t tile_points, std::uint64_t* output,
+                                     std::size_t count) {
+  if (pbe > 1) return 1;
+  return generativeqc_resource_ks_cuda_v2(nao, atoms, shells, primitives, points, diis_history,
+                                          spins, pbe, tile_points, output, count);
 }
 
 /** Shape-only opaque matrix-provider reservation, separate from explicit arenas.

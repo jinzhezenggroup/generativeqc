@@ -510,6 +510,11 @@ jobs:
           python3 -m pytest -q \
             tests/python/test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources \
             --basetemp build/ao-radial-compile
+          # Runtime provenance fingerprints nvcc and its sibling ptxas.
+          # The shared adapter retains compiler caching for this real toolchain.
+          GENERATIVEQC_NVCC="$CUDACXX" python3 -m pytest -q \
+            tests/python/test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device \
+            --basetemp build/grid-wheel-compile
       # This consumer never publishes an incomplete or branch-scoped cache.
       # The trusted full CUDA CLI producer saves after both compile variants.
       - name: Check Fock and proposal preflight without a GPU
@@ -1599,11 +1604,12 @@ jobs:
           sudo install -m 0755 "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
           ccache --version
-      - name: Test deterministic native CLI packager
+      - name: Test deterministic native CLI packager and static-force contracts
         if: steps.cli_scope.outputs.tier != 'skip'
         run: |
           python3 -m unittest discover -s tests/python -p test_native_cli_package.py
           python3 -m unittest discover -s tests/python -p test_native_cli_ci_scope.py
+          python3 -m unittest discover -s tests/python -p test_native_cli_stationary_distribution.py
       - name: Restore shared Linux CUDA ccache
         if: steps.cli_scope.outputs.tier != 'skip'
         id: cli_ccache
@@ -1615,6 +1621,11 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
+      - name: Check for an already-failed required CI sibling
+        if: steps.cli_scope.outputs.tier != 'skip' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/ci_required_failure_guard.py
       # The required cuda-compile job already checks fast CUDA on PRs/merge
       # groups. Only master seeds both compiler-flag identities here, on the
       # same runner that saves/publishes the shared cache snapshot.
@@ -1695,6 +1706,13 @@ jobs:
           )
           print(f"Verified all {len(expected)} automatic CUDA XC registrations")
           PY
+      - name: Verify compiler-selected CUDA graph programs are linked into the CLI
+        if: steps.cli_scope.outputs.tier != 'skip'
+        shell: bash
+        run: |
+          python3 tools/check_native_cli_stationary.py \
+            --build-tree build/cuda-release-cli-sm120 \
+            --cli build/cuda-release-cli-sm120/generativeqc
       - name: Smoke-test release-mode native command
         id: cli_smoke
         if: steps.cli_scope.outputs.tier != 'skip'
@@ -1714,6 +1732,20 @@ jobs:
           fi
           ldd "$cli"
           ccache --show-stats
+      # GitHub-hosted ubuntu-24.04 builders do not have a GPU. On an attached
+      # compatible Blackwell device, run the actual CLI E+F matrix; otherwise
+      # report the missing device instead of mislabeling link checks as GPU QA.
+      - name: Exercise ten CLI CUDA E+F endpoints on an attached sm_120 GPU
+        if: steps.cli_scope.outputs.tier != 'skip'
+        shell: bash
+        run: |
+          if command -v nvidia-smi >/dev/null 2>&1 && \
+             nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | grep -Eq '^12[.]'; then
+            python3 tests/native/test_cli_cuda_stationary.py \
+              build/cuda-release-cli-sm120/generativeqc
+          else
+            echo "::notice::No sm_120 GPU on hosted CI: ten-method CLI E+F device test NOT RUN; run tests/native/test_cli_cuda_stationary.py under a real sm_120 Slurm allocation."
+          fi
       - name: Summarize compiler cache
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true
@@ -1764,7 +1796,7 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 1
-      - name: Install and package native command, AOT plug-ins and notices
+      - name: Install and package native command and notices
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         env:

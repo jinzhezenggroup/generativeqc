@@ -66,8 +66,12 @@ namespace generativeqc::dft::point {
 GENERATIVEQC_XC_RESPONSE_HD inline Value unrestricted_response(bool pbe, const double rho[2],
                                                                const double gradient[2][3],
                                                                const double delta_rho[2],
-                                                               const double delta_gradient[2][3]) {
+                                                               const double delta_gradient[2][3],
+                                                               double exchange_scale = 1.0,
+                                                               double correlation_scale = 1.0) {
   Value out;
+  out.valid = detail::finite(exchange_scale) && exchange_scale >= 0.0 &&
+              detail::finite(correlation_scale) && correlation_scale >= 0.0;
   bool zero_direction = true;
   for (unsigned s = 0; s < 2; ++s) {
     if (!detail::finite(rho[s]) || rho[s] < 0.0 || !detail::finite(delta_rho[s]) ||
@@ -111,7 +115,9 @@ GENERATIVEQC_XC_RESPONSE_HD inline Value unrestricted_response(bool pbe, const d
                                  normalized_sum(delta_gradient[0][k], delta_gradient[1][k]));
     g[k].d[5 + k] = 1.0;
   }
-  const auto correlation = detail::correlation_per_scale(pbe, a, b, g, scale, ratio);
+  const auto correlation = correlation_scale == 0.0
+                               ? ResponseJet{}
+                               : detail::correlation_per_scale(pbe, a, b, g, scale, ratio);
   for (unsigned s = 0; s < 2; ++s) {
     detail::Jet spin_rho(rho[s]), spin_gradient[3];
     spin_rho.d[0] = delta_rho[s];
@@ -119,11 +125,14 @@ GENERATIVEQC_XC_RESPONSE_HD inline Value unrestricted_response(bool pbe, const d
       spin_gradient[k] = detail::Jet(gradient[s][k]);
       spin_gradient[k].d[0] = delta_gradient[s][k];
     }
-    const auto exchange = detail::exchange_value(pbe, spin_rho, spin_gradient);
-    out.rho[s] = correlation.tangent.d[s] + exchange.rho.d[0];
+    const auto exchange = exchange_scale == 0.0
+                              ? detail::ExchangeValue<detail::Jet>{}
+                              : detail::exchange_value(pbe, spin_rho, spin_gradient);
+    out.rho[s] = correlation_scale * correlation.tangent.d[s] + exchange_scale * exchange.rho.d[0];
     out.valid = out.valid && detail::finite(out.rho[s]);
     for (unsigned k = 0; k < 3; ++k) {
-      out.gradient[s][k] = ratio * correlation.tangent.d[2 + 3 * s + k] + exchange.gradient[k].d[0];
+      out.gradient[s][k] = correlation_scale * (ratio * correlation.tangent.d[2 + 3 * s + k]) +
+                           exchange_scale * exchange.gradient[k].d[0];
       out.valid = out.valid && detail::finite(out.gradient[s][k]);
     }
   }
@@ -133,11 +142,12 @@ GENERATIVEQC_XC_RESPONSE_HD inline Value unrestricted_response(bool pbe, const d
 /** Restricted total-density directional derivative of physical XC potential.
  * Only equal-spin RKS is qualified. Vacuum is allowed only with zero direction;
  * an undefined or nonrepresentable coefficient rejects the entire action. */
-GENERATIVEQC_XC_RESPONSE_HD inline Value restricted_response(bool pbe, double rho,
-                                                             const double gradient[3],
-                                                             double delta_rho,
-                                                             const double delta_gradient[3]) {
+GENERATIVEQC_XC_RESPONSE_HD inline Value restricted_response(
+    bool pbe, double rho, const double gradient[3], double delta_rho,
+    const double delta_gradient[3], double exchange_scale = 1.0, double correlation_scale = 1.0) {
   Value out;
+  out.valid = detail::finite(exchange_scale) && exchange_scale >= 0.0 &&
+              detail::finite(correlation_scale) && correlation_scale >= 0.0;
   if (!detail::finite(rho) || rho < 0.0 || !detail::finite(delta_rho)) out.valid = false;
   // RKS gradients are totals; SCF's vacuum admission sees the rounded equal-spin
   // gradient. A doubled cutoff would incorrectly accept halfway rounding ties.
@@ -172,20 +182,29 @@ GENERATIVEQC_XC_RESPONSE_HD inline Value restricted_response(bool pbe, double rh
                                  delta_gradient[k] / gradient_scale);
     g[k].d[5 + k] = 1.0;
   }
-  const auto correlation = detail::correlation_per_scale(pbe, a, b, g, rho, ratio);
+  // Outer MethodIR weights are constant during the density response. Do not
+  // evaluate a missing component: zero times an unused singular jet is not a
+  // finite physical contribution and must not poison the admitted component.
+  const auto correlation = correlation_scale == 0.0
+                               ? ResponseJet{}
+                               : detail::correlation_per_scale(pbe, a, b, g, rho, ratio);
   detail::Jet spin_rho(rho / 2.0), spin_gradient[3];
   spin_rho.d[0] = delta_rho / 2.0;
   for (unsigned k = 0; k < 3; ++k) {
     spin_gradient[k] = detail::Jet(gradient[k] / 2.0);
     spin_gradient[k].d[0] = delta_gradient[k] / 2.0;
   }
-  const auto exchange = detail::exchange_value(pbe, spin_rho, spin_gradient);
+  const auto exchange = exchange_scale == 0.0
+                            ? detail::ExchangeValue<detail::Jet>{}
+                            : detail::exchange_value(pbe, spin_rho, spin_gradient);
   for (unsigned spin = 0; spin < 2; ++spin) {
-    out.rho[spin] = correlation.tangent.d[spin] + exchange.rho.d[0];
+    out.rho[spin] =
+        correlation_scale * correlation.tangent.d[spin] + exchange_scale * exchange.rho.d[0];
     out.valid = out.valid && detail::finite(out.rho[spin]);
     for (unsigned k = 0; k < 3; ++k) {
       out.gradient[spin][k] =
-          ratio * correlation.tangent.d[2 + 3 * spin + k] + exchange.gradient[k].d[0];
+          correlation_scale * (ratio * correlation.tangent.d[2 + 3 * spin + k]) +
+          exchange_scale * exchange.gradient[k].d[0];
       out.valid = out.valid && detail::finite(out.gradient[spin][k]);
     }
   }

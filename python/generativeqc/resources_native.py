@@ -101,8 +101,9 @@ def check_resource_status(
 class NativeDeviceLedger:
     """Persist charges across warm calls and release them with native buffers.
 
-    Driver, graph, pool and library-internal allocations are outside this
-    numeric-buffer ledger; the common plan reports their allowances/exclusions.
+    Driver, graph, pool and library-internal numeric allocations remain outside
+    the ledger. Native retained-provider reservations share its admission limit
+    and v3 reports them separately from actual allocations and requested bytes.
     Each ledger belongs to one prepared request on one visible CUDA device.
     """
 
@@ -124,10 +125,10 @@ class NativeDeviceLedger:
                 "one native prepared owner must use one visible CUDA device"
             )
         self.device = int(devices.pop().split(":")[1])
-        numeric = tuple(
+        admitted = tuple(
             e for e in candidate.estimates if e.accounting != "runtime_allowance"
         )
-        self.limit = _account(numeric)[0][f"device:{self.device}"]
+        self.limit = _account(admitted)[0][f"device:{self.device}"]
         self.library = library
         self.handle = None
         for name in ("create", "destroy", "bind", "read"):
@@ -157,6 +158,14 @@ class NativeDeviceLedger:
                 ctypes.c_size_t,
             ]
             self._read_v2.restype = ctypes.c_int
+        self._read_v3 = getattr(library, "generativeqc_resource_ledger_read_v3", None)
+        if self._read_v3 is not None:
+            self._read_v3.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            self._read_v3.restype = ctypes.c_int
         self.handle = library.generativeqc_resource_ledger_create_v1(
             self.limit, self.device
         )
@@ -164,7 +173,7 @@ class NativeDeviceLedger:
             raise MemoryError("could not allocate native resource ledger metadata")
 
     def to_dict(self) -> typing.Any:
-        """Read owned capacities and, with v2, successful requested bytes.
+        """Read numeric capacities, v2 requested bytes and additive v3 admission.
 
         Older libraries retain the exact v1 shape: absent requested-byte
         evidence must not be inferred from the peak or outstanding storage.
@@ -192,6 +201,24 @@ class NativeDeviceLedger:
         }
         if self._read_v2 is not None:
             result["requested_bytes"] = values[4]
+        if self._read_v3 is not None:
+            admission = (ctypes.c_uint64 * 6)()
+            if self._read_v3(self.handle, admission, len(admission)):
+                raise RuntimeError("native resource admission ledger is unavailable")
+            result["admission"] = dict(
+                zip(
+                    (
+                        "limit_bytes",
+                        "numeric_live_bytes",
+                        "numeric_peak_bytes",
+                        "provider_reserved_bytes",
+                        "provider_reservation_peak_bytes",
+                        "combined_peak_bytes",
+                    ),
+                    admission,
+                    strict=True,
+                )
+            )
         return result
 
     def close(self) -> None:

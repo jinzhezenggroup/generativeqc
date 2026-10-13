@@ -600,6 +600,10 @@ responses `(2, npoint)`, density gradients `(2, npoint, 3)` and sigma responses
 has no extra factor of two. Units follow the AO spatial derivatives and density
 convention, without conversion. Nuclear response records retain source identities
 and solver diagnostics; RHF-named records are aliases of the stationary owners.
+`NativeRKSResponse.solve_resident` accepts one RHS and an optional initial guess
+in the rotation layout, with `GMRESOptions` controlling native scalar GMRES.
+It returns an immutable solution in `SolveResult`; no Arnoldi history or basis
+is exported. Component timing fields are unmeasured, not performance evidence.
 
 (python-response-errors)=
 ## Response admission and failure
@@ -614,6 +618,11 @@ are control tools, not the production matrix-free operator. Native live-state
 changes invalidate the response owner; do not reuse a response snapshot after
 its batch/reference changes. Wrong XC spin/reference density or grid/model
 identity is rejected before claiming a compatible kernel.
+The native resident RKS endpoint reports host-workspace refusal as an
+unconverged `workspace_limit` result; `raise_on_failure=True` raises
+`ResponseSolveError`. Device-capacity admission raises `MemoryError`, and an
+unavailable resident solver or incomplete response sources fail explicitly
+without a CPU/Python solve retry.
 
 (python-response-ownership)=
 ## Response lifetime and concurrency
@@ -631,9 +640,16 @@ shared operator and do not race source replay or close.
 ## Response backend domains
 
 RHF and CPKS operators delegate method-specific Fock/XC actions to explicitly
-bound providers. `NativeRKSResponse` admits the checked live all-electron,
-unscaled LDA/PBE RKS state and installs the matching CPU/CUDA providers;
-this is not blanket support for arbitrary functionals/spin/ECP response.
+bound providers. `NativeRKSResponse` admits checked live all-electron RKS graphs
+with generated response capability and complete native sources, not method-name
+membership. The CPU point bridge remains unscaled semilocal; CUDA also requires
+generated component-scaling capability for non-unit X/C weights and admits
+authenticated full-range exact exchange. CUDA `solve` defaults to the native
+resident single-RHS endpoint; explicit `solve_resident` requires CUDA. Generic
+`solve(response, ...)` and blocked/recycled `solve_many` retain host vectors.
+Tau, range-separated exchange, nonlocal, DF and ECP response sources remain
+unsupported. This is not blanket support for arbitrary functionals or spin.
+See [native response backend boundaries](../developer/response_backends.md).
 `DenseMatrixResponseOperator` is explicit dense comparison evidence, not a
 matrix-free production implementation. Nuclear algebra helpers do not expand
 the injected operator/solver's physical domain. Low-level response support does

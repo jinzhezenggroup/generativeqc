@@ -24,6 +24,7 @@
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/queue_plan.hpp"
+#include "scf/cuda_direct_jk.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -733,17 +734,26 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
                               : error;
 }
 
-cudaError_t execute_generated_full_range_energy_derivatives(
+static cudaError_t validate_generated_full_range_derivative_inputs(
+    const GeneratedExchangePlan& plan, bool unrestricted, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources, bool bilinear) {
+  if (!plan.shared || !plan.force_capability || plan.bounded_pair_order == nullptr ||
+      plan.shell_pair_block_bounds == nullptr || plan.force == nullptr ||
+      plan.force_cursor == nullptr || !std::isfinite(coulomb_coefficient) ||
+      !std::isfinite(exchange_coefficient))
+    return cudaErrorInvalidValue;
+  if (bilinear && (unrestricted || separate_sources || plan.shared->batch.batch_size != 1 ||
+                   plan.shared->screening != 0.0 || beta == nullptr))
+    return cudaErrorInvalidValue;
+  return cudaSuccess;
+}
+
+/** Both adapters validate before entering this queue and own the failure drain.
+ * Keeping preflight outside preserves zero-work refusal for borrowed inputs. */
+static cudaError_t enqueue_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources, bool allow_spatial_default, bool bilinear) {
-  if (!p.force_capability || p.bounded_pair_order == nullptr ||
-      p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
-      !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
-    return cudaErrorInvalidValue;
-  if (bilinear && (unrestricted || separate_sources || p.shared->batch.batch_size != 1 ||
-                   p.shared->screening != 0.0 || beta == nullptr))
-    return cudaErrorInvalidValue;
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
+    bool allow_spatial_default, bool bilinear) {
   // The two existing projection slots carry D and P, not spin densities.
   // Density screening is disabled: spin bounds do not bound a signed cross term.
   auto error = prepare_generated_exchange_density(p, unrestricted || bilinear, alpha, beta);
@@ -754,26 +764,15 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   if (bilinear)
     b.direct_force_seed = p.direct_spin + product(static_cast<std::size_t>(b.direct_nbf),
                                                   static_cast<std::size_t>(b.direct_nbf));
-  runtime::cuda_trace::TraceOperation trace(
-      "direct_jk_force", shared.stream,
-      {static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.nbf), 0, true, true});
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   // Total-force consumers combine the compiler-owned cotangents before AD;
   // derivative exports retain independent channels on exactly the same domain.
-  std::vector<double> result((separate_sources ? 2U : 1U) * coordinates);
+  const auto output_elements = (separate_sources ? 2U : 1U) * coordinates;
   runtime::cuda_trace::trace_counter("direct_force_output_channels", separate_sources ? 2U : 1U);
-  // Drain any pending D2H before result is destroyed on failure or exception.
-  struct HostResultDrain {
-    cudaStream_t stream;
-    bool active{true};
-    ~HostResultDrain() {
-      if (active) (void)cudaStreamSynchronize(stream);
-    }
-  } drain{shared.stream};
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
-  error = cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream);
+  error = cudaMemsetAsync(p.force, 0, output_elements * sizeof(double), shared.stream);
   if (error != cudaSuccess) return error;
   error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
   if (error != cudaSuccess) return error;
@@ -798,6 +797,37 @@ cudaError_t execute_generated_full_range_energy_derivatives(
       if (error != cudaSuccess) return error;
     }
   }
+  return cudaSuccess;
+}
+
+cudaError_t execute_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
+    bool separate_sources, bool allow_spatial_default, bool bilinear) {
+  // Reject inadmissible metadata before allocating output or installing a CUDA
+  // drain: no asynchronous work exists yet, so refusal must not synchronize.
+  auto error = validate_generated_full_range_derivative_inputs(
+      p, unrestricted, beta, coulomb_coefficient, exchange_coefficient, separate_sources, bilinear);
+  if (error != cudaSuccess) return error;
+  auto& shared = *p.shared;
+  const auto& batch = shared.batch;
+  runtime::cuda_trace::TraceOperation trace("direct_jk_force", shared.stream,
+                                            {static_cast<std::size_t>(batch.batch_size),
+                                             static_cast<std::size_t>(batch.nbf), 0, true, true});
+  std::vector<double> result((separate_sources ? 2U : 1U) * batch.total_atoms * 3U);
+  // Host and resident adapters submit precisely the same derivative traversal.
+  // Keep the host allocation alive through every exceptional/ordinary drain.
+  struct HostResultDrain {
+    cudaStream_t stream;
+    bool active{true};
+    ~HostResultDrain() {
+      if (active) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
+  error = enqueue_generated_full_range_energy_derivatives(
+      p, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, separate_sources,
+      allow_spatial_default, bilinear);
+  if (error != cudaSuccess) return error;
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);
   if (error != cudaSuccess) return error;
@@ -808,6 +838,57 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   // derivative convention used by the stationary integral-source reducer.
   for (double& value : result) value = -value;
   derivatives = std::move(result);
+  return cudaSuccess;
+}
+
+cudaError_t consume_generated_full_range_energy_derivatives(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double coulomb_coefficient, double exchange_coefficient,
+    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default) {
+  if (!plan.shared || !consumer) return cudaErrorInvalidValue;
+  const auto input_status = validate_generated_full_range_derivative_inputs(
+      plan, unrestricted, beta, coulomb_coefficient, exchange_coefficient, true, false);
+  if (input_status != cudaSuccess) return input_status;
+  auto& shared = *plan.shared;
+  int device{};
+  const auto device_status = cudaGetDevice(&device);
+  if (device_status != cudaSuccess) return device_status;
+  cudaStreamCaptureStatus capture{};
+  const auto capture_status = cudaStreamIsCapturing(shared.stream, &capture);
+  if (capture_status != cudaSuccess) return capture_status;
+  if (capture != cudaStreamCaptureStatusNone) {
+#if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL)
+    // CuMetal omits the capture-specific error enum. The public adapter has
+    // already refused capture as INVALID_ARGUMENT before submission or drain.
+    return cudaErrorInvalidValue;
+#else
+    return cudaErrorStreamCaptureUnsupported;
+#endif
+  }
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_jk_force_resident", shared.stream,
+      {static_cast<std::size_t>(shared.batch.batch_size),
+       static_cast<std::size_t>(shared.batch.nbf), 0, true, true});
+  struct SubmissionDrain {
+    cudaStream_t stream;
+    bool submitted{true};
+    ~SubmissionDrain() {
+      if (submitted) (void)cudaStreamSynchronize(stream);
+    }
+  } drain{shared.stream};
+  const auto error = enqueue_generated_full_range_energy_derivatives(
+      plan, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, true,
+      allow_spatial_default, false);
+  if (error != cudaSuccess) return error;
+  // Generated Direct kernels publish forces; the stationary source inventory
+  // publishes energy derivatives. The consumer retains this explicit sign.
+  consumer({CudaDerivativeSourceKind::FullRangeJk, CudaDerivativeConvention::Force, device,
+            reinterpret_cast<void*>(shared.stream), plan.force,
+            static_cast<std::size_t>(shared.batch.total_atoms) * 3U, 2});
+  drain.submitted = false;
+  runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
+  runtime::cuda_trace::trace_counter("device_to_host_bytes", 0);
+  runtime::cuda_trace::trace_counter("stream_synchronizations", 0);
   return cudaSuccess;
 }
 
