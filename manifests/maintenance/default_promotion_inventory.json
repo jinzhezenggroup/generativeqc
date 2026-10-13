@@ -727,7 +727,8 @@
         "dft-policy:spatial-spd-force-auto"
       ],
       "owner_issues": [
-        1598
+        1598,
+        2416
       ],
       "sources": [
         "python/generativeqc/resources_hf.py",
@@ -738,10 +739,11 @@
         "src/scf/cuda/direct_coulomb.cpp",
         "src/scf/cuda/direct_force_class_domains.cu"
       ],
-      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range global hybrids with at least 384 AOs, based on method/operator/precision capability rather than a PBE0 label or hard-coded exact-exchange fraction. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal/D4 exclusions and optional resources remain guarded. The 256-to-22\u201354 recurrence evaluation reduction and complete 384/768-AO warm/moved speedups were demonstrated on PBE0 only. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
-      "revisit_condition": "Qualify new global hybrid variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety.",
+      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range sources with at least 384 AOs, including pure J and global hybrids. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal exclusions and optional resources remain guarded. Independent D4/gCP geometry terms are allowed for pure J; hybrids with D4 remain excluded. PBE0 established the recurrence-reuse and 384/768-AO warm/moved benefit. The pure-J extension records complete 3/12/48/96-atom 3c and 48/96-atom PBE/r2SCAN populations on frozen integrated source aaec57399ef29f96981da368c3a8c6a91af74ae8, with the low-free-memory shell-lease refusals and earlier timeouts retained separately. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
+      "revisit_condition": "Qualify further source/model variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety; track the independent low-memory shell-lease fallback and publication of source-matched raw benchmark artifacts under #2416.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
+        "note:.agents/notes/implemented/performance/2026-10-13-pure-j-spatial-default.md",
         "docs:docs/user/ks_options.md",
         "benchmarks:benchmarks/results/pbe0-spd-spatial-reuse-20261011/validation.json.gz",
         "tests:tests/python/test_pbe0_spatial_force_policy.py",
@@ -915,8 +917,13 @@
     {
       "id": "initial.huckel-auto",
       "classification": "already-default",
-      "controls": ["initial-guess:huckel-auto"],
-      "owner_issues": [192, 2052],
+      "controls": [
+        "initial-guess:huckel-auto"
+      ],
+      "owner_issues": [
+        192,
+        2052
+      ],
       "sources": [
         "python/generativeqc/calculator.py",
         "python/generativeqc/initial_guess.py",
@@ -924,7 +931,9 @@
       ],
       "rationale": "Native Modified Huckel is the user-authorized FP64 all-electron restricted H-Ar CPU/CUDA HF/KS default, including DF. Positive additive target-domain capability bits prevent old libraries from advertising unimplemented CUDA RHF/DF integrations. Exact atomic preparation does not change the target approximation. Budget limits, strict independent numerical gates, warm precedence and one ordinary Hcore retry remain mandatory. Measured benefits are workload-specific, not a universal speedup claim.",
       "revisit_condition": "Revisit on root/state or complete-endpoint regressions. Unsupported spin, ECP, elements, precision and resource-planner domains remain unchanged; preserve explicit None rollback and independent DF numerical validation.",
-      "evidence": ["note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"]
+      "evidence": [
+        "note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"
+      ]
     },
     {
       "id": "initial.basis-projection",
