@@ -67,7 +67,8 @@ budget, executed precision work, and FP64 final-SCF checks. This is empirical
 qualification plus strict final refinement, **not a measured per-call
 observable error, mathematical bound, electronic-root or stability test**.
 It never reports `observed_met` without an actual reference endpoint.
-The candidate plan can stay resident between calls; `clear_cache()` releases it.
+KS single-point plans are released after each call; repeated calls start fresh
+SCF solves.
 Approximate work and retained proposal history are bounded; failed mixed work
 retries in FP64, and all final physical convergence checks use FP64 operators.
 
@@ -202,7 +203,9 @@ qualified error/conditioning evidence; this facade does neither.
 The facade supports all-electron HF and KS single points within the underlying
 calculator's admitted property domain. CPU is supported; CUDA calls and FP64
 audits remain on the selected CUDA device. Unsupported AUTO constructor domains
-fall back to the same model's FP64 calculator. `audit_auto` uses the existing native
+or requested properties fall back to the same model's FP64 calculator. An
+energy-only request can still use AUTO when its force consumer is unavailable.
+`audit_auto` uses the existing native
 SCF AUTO policy with its FP64 refinement. It is distinct from Fast's
 budget-selected XC warmup. FP64, Balanced and Strict keep SCF in FP64.
 
@@ -267,7 +270,7 @@ For Fast against already-optimized FP64, run `python -m benchmarks.pbe0_fast` in
 same finite Slurm allocation, with `--reference`, `--output` and `--repeats 5`.
 This reports the current ordinary FP64 default and budget-selected Fast, including
 facade construction, strict refinement, analytic forces and any fallback work.
-Use `--initial-guess automatic` to measure the default native MINAO seed policy,
+Use `--initial-guess automatic` to measure the default native Modified Huckel seed policy,
 or `--initial-guess minao` for the explicit policy; the default benchmark uses
 Hcore. Both timed modes always receive the same seed policy, and the independent
 oracle's Hcore protocol remains separately recorded. It checks the same
@@ -308,3 +311,4 @@ arrays retain the ordinary `Result` ownership contract and outlive those
 workspaces. `clear_cache()` remains available and serializes with active calls.
 Frozen `Result` fields do not make force arrays or native evidence dictionaries
 recursively immutable.
+

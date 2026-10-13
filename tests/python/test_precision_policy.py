@@ -1,5 +1,6 @@
 """Application budgets must gate actual observables and bound fallback work."""
 
+import ctypes
 import json
 import typing
 from dataclasses import FrozenInstanceError, replace
@@ -8,6 +9,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from generativeqc import (
+    Calculator,
+    GridSpec,
+    KsOptions,
     MethodCapabilities,
     ObservableTarget,
     PrecisionBudgetError,
@@ -42,7 +46,12 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     that are hard to produce reproducibly with a converged molecular solve.
     """
     state = SimpleNamespace(
-        outputs=[], instances=[], calls=[], live=None, block_auto=False
+        outputs=[],
+        instances=[],
+        calls=[],
+        live=None,
+        block_auto=False,
+        auto_properties=None,
     )
 
     class Backend:
@@ -70,6 +79,10 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
                 frozenset(("energy", "forces")),
                 frozenset(("hessian",)),
             )
+            if options["precision"] == "auto" and state.auto_properties is not None:
+                self.capabilities = replace(
+                    self.capabilities, supported_properties=state.auto_properties
+                )
             state.instances.append(self)
 
         def basis_metadata(self, *args: typing.Any, **kwargs: typing.Any) -> dict:
@@ -539,3 +552,137 @@ def test_mismatched_model_is_rejected_before_reference_execution(
     with pytest.raises(ValueError, match="scientific model"):
         calculator.singlepoint(ATOMS)
     assert len(backend.calls) == 1
+
+
+@pytest.mark.parametrize("profile", ("fast", "audit_auto"))
+def test_property_fallback_preserves_later_energy_only_auto(
+    backend: SimpleNamespace, profile: str
+) -> None:
+    backend.auto_properties = frozenset({"energy"})
+    backend.outputs = [result(executed_backend="cuda")] * 4
+    calculator = PrecisionCalculator(
+        method="pbe0-rks",
+        device="cuda",
+        policy=PrecisionPolicy(profile, target=ENERGY),
+    )
+    assert calculator.capabilities.supported_properties == {"energy", "forces"}
+    forces = calculator.singlepoint(ATOMS, properties=("energy", "forces"))
+    report = forces.precision_validation
+    assert report.status == "observed_met" and report.solve_count == 2
+    assert all(stage.requested_precision == "fp64" for stage in report.solves)
+    assert "auto_properties_unavailable_for_model" in report.fallback_reasons
+    energy = calculator.singlepoint(ATOMS, properties=("energy",))
+    assert energy.precision_validation.solves[0].requested_precision == "auto"
+    assert (
+        "auto_properties_unavailable_for_model"
+        not in energy.precision_validation.fallback_reasons
+    )
+    assert backend.live is None
+
+
+@pytest.fixture
+def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use actual scientific resolution and capability gates without a GPU."""
+    import generativeqc.calculator as calculator_module
+    from generativeqc import _native
+
+    def available(method: int, pointer: object) -> int:
+        ctypes.cast(pointer, ctypes.POINTER(ctypes.c_int32))[0] = 1
+        return _native.STATUS_SUCCESS
+
+    library = SimpleNamespace(
+        generativeqc_ks_options_version=lambda: 1,
+        generativeqc_application_precision_version_v1=lambda: 1,
+        generativeqc_method_available=available,
+    )
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    monkeypatch.setattr(
+        calculator_module,
+        "method_capabilities",
+        lambda name: MethodCapabilities(
+            name, "density_functional", True, True, frozenset({"energy"})
+        ),
+    )
+
+
+@pytest.mark.parametrize("method", ("m06-2x-rks", "mn15-rks"))
+@pytest.mark.parametrize("profile", ("fast", "audit_auto"))
+def test_split_hybrid_fp64_force_capability_survives_auto_selection(
+    cuda_constructor: None, method: str, profile: str
+) -> None:
+    calculator = PrecisionCalculator(
+        method=method,
+        device="cuda",
+        initial_guess=None,
+        ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
+        policy=profile,
+    )
+    assert calculator._candidate_precision == "auto"
+    assert calculator._candidate.capabilities.supported_properties == {"energy"}
+    assert calculator.capabilities.supported_properties == {"energy", "forces"}
+
+
+@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks", "m06-2x-rks"))
+@pytest.mark.parametrize("profile", ("fast", "audit_auto"))
+def test_density_fitted_force_context_keeps_fp64_fallback(
+    cuda_constructor: None, method: str, profile: str
+) -> None:
+    calculator = PrecisionCalculator(
+        method=method,
+        device="cuda",
+        density_fitting="cuda",
+        initial_guess=None,
+        ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
+        policy=profile,
+    )
+    assert calculator._candidate_precision == "fp64"
+    assert calculator.capabilities.supported_properties == {"energy", "forces"}
+
+
+def test_fast_keeps_resolved_custom_ks_composition(cuda_constructor: None) -> None:
+    """Adding arithmetic controls cannot erase a resolved exact-exchange term."""
+    from generativeqc_compiler.method import resolve_method
+
+    pbe = resolve_method("PBE")
+    custom = replace(
+        pbe,
+        identifier="PBE-plus-exchange",
+        primitives=(*pbe.primitives, resolve_method("PBE0").primitives[1]),
+    )
+    original = Calculator(
+        method="pbe-rks",
+        device="cuda",
+        initial_guess=None,
+        ks_options=KsOptions(grid=GridSpec(16, 8, 16), composition=custom),
+    )
+    resolved = original.ks_options
+    calculator = PrecisionCalculator(
+        method="pbe-rks",
+        device="cuda",
+        initial_guess=None,
+        ks_options=resolved,
+        policy="fast",
+    )
+    assert calculator._candidate_precision == "auto"
+    assert calculator._candidate.ks_options.method_ir.identity == custom.identity
+    assert calculator._reference().ks_options.method_ir.identity == custom.identity
+    assert calculator._candidate.ks_options.coefficients == (1.0, 1.0, -0.125)
+    assert resolved._precision_budget is None
+
+
+def test_fast_property_fallback_audits_the_implicit_force_budget(
+    backend: SimpleNamespace,
+) -> None:
+    backend.auto_properties = frozenset({"energy"})
+    backend.outputs = [result(executed_backend="cuda")] * 2
+    output = PrecisionCalculator(
+        method="pbe0-rks", device="cuda", policy="fast"
+    ).singlepoint(ATOMS)
+    report = output.precision_validation
+    assert report.status == "observed_met" and report.solve_count == 2
+    assert all(stage.requested_precision == "fp64" for stage in report.solves)
+    assert {(error.observable, error.norm) for error in report.errors} == {
+        ("energy", "absolute"),
+        ("forces", "max_abs"),
+        ("forces", "rms"),
+    }
