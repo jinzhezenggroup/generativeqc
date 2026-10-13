@@ -51,6 +51,9 @@ struct CudaStationaryBinding {
   int (*metrics)(void*, std::uint64_t*, std::size_t){};
   void (*destroy)(void*){};
   CudaStationaryModel model{};
+  /** Optional typed geometry consumer. Selection remains launch-local and
+   * never changes the identity of the strict final SCF state. */
+  decltype(geometry) geometry_fp32{};
 };
 
 /** Return only statically linked profiles, or nullptr for an unavailable one. */

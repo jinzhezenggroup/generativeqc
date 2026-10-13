@@ -1,4 +1,7 @@
+#include <algorithm>
+
 #include "api/error.hpp"
+#include "api/handles.hpp"
 #include "generativeqc/generativeqc.h"
 #include "methods/generated_method_manifest.hpp"
 #include "methods/method.hpp"
@@ -6,6 +9,33 @@
 extern "C" {
 
 uint32_t generativeqc_ks_options_version(void) { return 1; }
+
+/** Private Python bridge: distinguish support for the optional size-tagged
+ * precision extension from the unchanged scientific KS descriptor version. */
+GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v1(void) { return 1; }
+
+/** Optional Python provenance transport, independent of the stable SCF ABI.
+ * A missing/computation-only result must not inherit a previous force record. */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision_v1(
+    const generativeqc_calculation* calculation, uint64_t* output, size_t count) {
+  if (!calculation || !output || count != 5) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  if (!calculation->precision_work || !calculation->precision_work->gradient[0])
+    return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  std::copy_n(calculation->precision_work->gradient.begin(), count, output);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+GENERATIVEQC_API generativeqc_status generativeqc_batch_gradient_precision_v1(
+    const generativeqc_batch* batch, uint32_t index, uint64_t* output, size_t count) {
+  if (!batch || index >= batch->precision_work.size() || !output || count != 5)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  if (!batch->precision_work[index] || !batch->precision_work[index]->gradient[0])
+    return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  std::copy_n(batch->precision_work[index]->gradient.begin(), count, output);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 
 uint32_t generativeqc_get_abi_version(void) { return GENERATIVEQC_ABI_VERSION; }
 

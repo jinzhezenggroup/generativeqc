@@ -107,31 +107,46 @@ __global__ void ao_kernel_fp32(const double* basis, I natom, I nprimitive, I nao
 
 @AO_RADIAL_KERNELS@
 
+template <class Arithmetic = double>
 __global__ void feature_kernel(const double* ao, const double* work, I npoint, I nao,
-                               double* output, int* error, unsigned mask) {
+                               double* output, int* error, unsigned mask, bool repair_only = false) {
   for (I point = I(blockIdx.x) * blockDim.x + threadIdx.x; point < npoint;
        point += I(blockDim.x) * gridDim.x) {
-    double gradients[2][3]{};
+    if (repair_only) {
+      bool repair = false;
+      for (unsigned spin = 0; spin < 2; ++spin) {
+        const double rho = output[5 * spin * npoint + point];
+        // A narrowed rho may underflow before its Cartesian derivative. Do
+        // not pass an artificial vacuum with a nonzero gradient to XC, nor
+        // clip it: recompute the same bilinears in their wider range instead.
+        repair = repair || rho < 0;
+        if (rho == 0)
+          for (unsigned axis = 1; axis < 4; ++axis)
+            repair = repair || output[(5 * spin + axis) * npoint + point] != 0;
+      }
+      if (!repair) continue;
+    }
+    Arithmetic gradients[2][3]{};
     const I stride = npoint * nao;
     for (int spin = 0; spin < 2; ++spin) {
       const double* w = work + 4 * spin * stride;
-      double accum[5]{};
+      Arithmetic accum[5]{};
       for (I mu = 0; mu < nao; ++mu) {
         const I i = point * nao + mu;
-        double derivative[3]{}, panel[4]{};
+        Arithmetic derivative[3]{}, panel[4]{};
         if (mask & 7) panel[0] = w[i];
         if (mask & 8)
           for (int k = 1; k < 4; ++k) panel[k] = w[k * stride + i];
         if (mask & 14)
           for (int k = 0; k < 3; ++k) derivative[k] = ao[(k + 1) * stride + i];
-        generativeqc_grid_policy::add_features(ao[i], derivative, panel, accum, mask);
+        generativeqc_grid_policy::add_features(Arithmetic(ao[i]), derivative, panel, accum, mask);
       }
       for (int k = 0; k < 5; ++k)
         output[(5 * spin + k) * npoint + point] = finite(accum[k], error, 1);
       for (int k = 0; k < 3; ++k) gradients[spin][k] = accum[k + 1];
     }
     if (mask & 4) {
-      double sigma[3];
+      Arithmetic sigma[3];
       generativeqc_grid_policy::sigma(gradients, sigma);
       for (int k = 0; k < 3; ++k) output[(10 + k) * npoint + point] = finite(sigma[k], error, 1);
     }
@@ -141,6 +156,7 @@ __global__ void feature_kernel(const double* ao, const double* work, I npoint, I
 // One full warp owns a point, including point and AO tails. Only lane zero
 // publishes; sigma uses the two completely reduced spin gradients. The
 // bilinears stay in the shared feature policy, while AO summation is a tree.
+template <class Arithmetic = double>
 __global__ void cooperative_feature_kernel(const double* ao, const double* work,
                                            I npoint, I nao, double* output,
                                            int* error, unsigned mask) {
@@ -148,13 +164,13 @@ __global__ void cooperative_feature_kernel(const double* ao, const double* work,
   const I stride = npoint * nao;
   for (I point = (I(blockIdx.x) * blockDim.x + threadIdx.x) / 32; point < npoint;
        point += I(blockDim.x) * gridDim.x / 32) {
-    double gradients[2][3]{};
+    Arithmetic gradients[2][3]{};
     for (int spin = 0; spin < 2; ++spin) {
       const double* spin_work = work + 4 * spin * stride;
-      double accum[5]{};
+      Arithmetic accum[5]{};
       for (I ao_index = lane; ao_index < nao; ao_index += 32) {
         const I index = point * nao + ao_index;
-        double derivative[3]{}, panel[4]{};
+        Arithmetic derivative[3]{}, panel[4]{};
         if (mask & 7) panel[0] = spin_work[index];
         if (mask & 8)
           for (int axis = 1; axis < 4; ++axis)
@@ -162,7 +178,7 @@ __global__ void cooperative_feature_kernel(const double* ao, const double* work,
         if (mask & 14)
           for (int axis = 0; axis < 3; ++axis)
             derivative[axis] = ao[(axis + 1) * stride + index];
-        generativeqc_grid_policy::add_features(ao[index], derivative, panel, accum, mask);
+        generativeqc_grid_policy::add_features(Arithmetic(ao[index]), derivative, panel, accum, mask);
       }
       for (int feature = 0; feature < 5; ++feature) {
         for (int offset = 16; offset > 0; offset >>= 1)
@@ -173,7 +189,7 @@ __global__ void cooperative_feature_kernel(const double* ao, const double* work,
       for (int axis = 0; axis < 3; ++axis) gradients[spin][axis] = accum[axis + 1];
     }
     if (lane == 0 && (mask & 4)) {
-      double sigma[3];
+      Arithmetic sigma[3];
       generativeqc_grid_policy::sigma(gradients, sigma);
       for (int component = 0; component < 3; ++component)
         output[(10 + component) * npoint + point] = finite(sigma[component], error, 1);
@@ -183,15 +199,19 @@ __global__ void cooperative_feature_kernel(const double* ao, const double* work,
 
 // Match the native SCF density-feature schedule without allocating scratch.
 // Keep the ordered scalar path for small active spaces and empty maps.
+template <class Arithmetic = double>
 inline void scheduled_grid_features(cudaStream_t stream, const double* ao,
     const double* work, I npoint, I nao, double* output, int* error, unsigned mask) {
   if (nao >= 32) {
-    cooperative_feature_kernel<<<blocks(npoint * 32, 128), 128, 0, stream>>>(
+    cooperative_feature_kernel<Arithmetic><<<blocks(npoint * 32, 128), 128, 0, stream>>>(
         ao, work, npoint, nao, output, error, mask);
   } else {
-    feature_kernel<<<blocks(npoint, 128), 128, 0, stream>>>(
+    feature_kernel<Arithmetic><<<blocks(npoint, 128), 128, 0, stream>>>(
         ao, work, npoint, nao, output, error, mask);
   }
+  if constexpr (std::is_same_v<Arithmetic, float>)
+    feature_kernel<double><<<blocks(npoint, 128), 128, 0, stream>>>(
+        ao, work, npoint, nao, output, error, mask, true);
 }
 
 // Reduce one occupied tile on the owner's stream. Partial sums remain per
@@ -315,6 +335,7 @@ __global__ void xc_local_potential_kernel(bool pbe, bool restricted, const doubl
 _NATIVE_XC_CONTRACTION_KERNELS = r"""// Generated by generativeqc_compiler.dft.ao_cuda; do not edit.
 #include "dft/cuda_xc.hpp"
 #include "dft/xc_point_response.hpp"
+#include "dft/xc_point_mixed.hpp"
 #include "generated_b3lyp_device.cuh"
 #include "generated_split_hybrid_registry.cuh"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
@@ -683,6 +704,49 @@ struct CuratedPointEvaluator {
 
 @POINT_TRAVERSAL@
 
+struct MixedPbePointEvaluator {
+  __device__ static DevicePointValue physical_point(
+      I, const double rho[2], const double gradient[2][3], const double[2],
+      double exchange_scale, double correlation_scale) {
+    return from_point(point::evaluate_pbe_full_mixed(
+        true, rho, gradient, exchange_scale, correlation_scale).value);
+  }
+};
+
+template <bool batched>
+__global__ void evaluate_mixed_pbe_points(
+    const double* features, const double* weights, I count, I spins,
+    double* coefficients, double* totals, int* error, I functional,
+    double exchange_scale, double correlation_scale, I tile_points) {
+  evaluate_point_tiles<4, false, batched, MixedPbePointEvaluator>(
+      features, weights, count, spins, coefficients, totals, error, functional,
+      exchange_scale, correlation_scale, nullptr, tile_points);
+}
+
+void launch_mixed_pbe_points(
+    cudaStream_t stream, const double* features, const double* weights,
+    std::size_t count, std::size_t spins, double* coefficients, double* totals,
+    int* error, std::uint32_t functional, double exchange_scale,
+    double correlation_scale, const double* delta) {
+  if (spins != 1 || functional != static_cast<I>(SemilocalFamily::Pbe) || delta)
+    throw std::invalid_argument("mixed PBE points require physical restricted PBE");
+  evaluate_mixed_pbe_points<false><<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+      features, weights, count, spins, coefficients, totals, error, functional,
+      exchange_scale, correlation_scale, 0);
+}
+
+void launch_mixed_pbe_point_batches(
+    cudaStream_t stream, const double* features, const double* weights,
+    std::size_t count, std::size_t spins, double* coefficients, double* totals,
+    int* error, std::uint32_t functional, double exchange_scale,
+    double correlation_scale, std::size_t tile_points) {
+  if (spins != 1 || functional != static_cast<I>(SemilocalFamily::Pbe) || !tile_points)
+    throw std::invalid_argument("mixed PBE batches require physical restricted PBE");
+  evaluate_mixed_pbe_points<true><<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
+      features, weights, count, spins, coefficients, totals, error, functional,
+      exchange_scale, correlation_scale, tile_points);
+}
+
 template <I feature_terms, bool response, bool batched = false>
 __global__ void evaluate_points(const double* input_features, const double* input_weights,
                                 I domain_count, I spins, double* output_coefficients,
@@ -949,7 +1013,9 @@ def emit_native_xc_point_dispatch() -> str:
     )
     consumers = physical + responses
     lines = [
-        "CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response) {"
+        "CudaXcPointLauncher mixed_pbe_point_launcher() { return &launch_mixed_pbe_points; }",
+        "CudaXcPointBatchLauncher mixed_pbe_point_batch_launcher() { return &launch_mixed_pbe_point_batches; }",
+        "CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response) {",
     ]
     for functional, response, _, _ in consumers:
         consumer = "true" if response else "false"
@@ -1283,7 +1349,14 @@ def emit_grid_policy() -> typing.Any:
         lines.extend(("  }", "  return NAN;", "}"))
     domain = ",".join("{" + ",".join(map(str, d)) + "}" for d in jet_indices(3))
     lines.append(f"__constant__ int derivatives[20][3] = {{{domain}}};")
-    lines.extend((emit_feature_policy(device=True).rstrip("\n"), "}", ""))
+    lines.extend(
+        (
+            emit_feature_policy(device=True).rstrip("\n"),
+            emit_feature_policy(device=True, scalar_type="float").rstrip("\n"),
+            "}",
+            "",
+        )
+    )
     return "\n".join(lines)
 
 
@@ -1311,6 +1384,7 @@ def emit_grid_source(
         policy
         + emit_grid_scientific_kernels(ao_radial_reuse=ao_radial_reuse)
         + emit_grid_contraction()
+        + emit_grid_contraction(dtype="float32", suffix="_fp32")
         + emit_native_ao_grid_binding()
         + '#include "cuda_grid.cu"\n'
     )
@@ -1334,6 +1408,7 @@ def emit_grid_source(
             asset_path("src/runtime/residency_observer.hpp"),
             asset_path("src/dft/grid_task_view.cuh"),
             asset_path("src/dft/xc_point.hpp"),
+            asset_path("src/dft/xc_point_mixed.hpp"),
             asset_path("src/dft/semilocal_family.hpp"),
             asset_path("src/dft/xc_capabilities.hpp"),
             asset_path("src/tensor/cuda_error.hpp"),

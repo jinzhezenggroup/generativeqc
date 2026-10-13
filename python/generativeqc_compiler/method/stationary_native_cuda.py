@@ -163,11 +163,12 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
       stationary_geometry_max_threads, stationary_ao_jets, stationary_jets,
       stationary_jets > 1 ? 11U : 1U,
       native_numeric_bytes, native_create, native_topology, native_reset_geometry, native_nuclear,
-      native_consume_integrals, native_geometry, native_finish_gradient,
+      native_consume_integrals, native_geometry<false>, native_finish_gradient,
       native_source_span, native_metrics, native_destroy,
       {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
-       {exchange}}}
+       {exchange}}},
+      stationary_fp32_point_capable ? native_geometry<true> : nullptr
   }};
   return binding;
 }}

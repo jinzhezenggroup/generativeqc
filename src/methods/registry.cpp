@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 
+#include "dft/application_precision.hpp"
 #include "methods/df_rccsdt_method.hpp"
 #include "methods/dft_admission.hpp"
 #include "methods/dft_method.hpp"
@@ -190,15 +191,22 @@ void validate_option_family(const MethodDefinition& definition,
         descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU;
     const bool minao = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO;
     const bool huckel = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    const bool strict_application_seed =
+        family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
+        backend == GENERATIVEQC_BACKEND_CUDA &&
+        descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+        dft::application_precision_requested(descriptor.ks_options);
+    const auto seed_precision =
+        strict_application_seed ? GENERATIVEQC_PRECISION_FP64 : descriptor.precision_mode;
     const bool admitted =
         automatic ? backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
                         (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
                          family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
         : huckel  ? scf::initial_guess::automatic_huckel_model_eligible(
-                        descriptor.method, family, backend, descriptor.precision_mode,
+                        descriptor.method, family, backend, seed_precision,
                         descriptor.density_fitting_mode, true, false)
         : minao   ? scf::initial_guess::automatic_minao_model_eligible(
-                        descriptor.method, family, backend, descriptor.precision_mode,
+                        descriptor.method, family, backend, seed_precision,
                         descriptor.density_fitting_mode, true, false)
                   : (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK ||
                      family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) &&

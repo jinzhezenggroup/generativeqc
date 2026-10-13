@@ -249,6 +249,7 @@ def test_native_operations_preserve_inner_typed_status(
     source = tmp_path / "typed_creation.cpp"
     source.write_text(
         """
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
 #include <limits>
@@ -258,7 +259,8 @@ struct DeviceAllocationError : std::runtime_error { using std::runtime_error::ru
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 struct Context { void check_device() {} };
 struct Owner { bool failed{}; Context context; uint64_t synchronizations{}; };
-int live_owners{}, inner_status{};
+int live_owners{}, inner_status{}, destroyed_owners{};
+bool fail_creation=true;
 struct NativeOwner {
   Owner* scientific{};
   bool integral_pending{}, nuclear_ready{};
@@ -268,6 +270,10 @@ struct NativeOwner {
   ~NativeOwner() { --live_owners; }
 };
 constexpr size_t stationary_spin_blocks = 1;
+constexpr size_t stationary_becke_max_atoms=128, stationary_becke_pair_tile_rows=4,
+                 stationary_becke_retained_max_atoms=32, stationary_becke_control_bytes=16,
+                 stationary_becke_threads=32;
+namespace generativeqc_grid_adjoint { struct PointPair { double values[8]; }; }
 constexpr uint64_t native_required_integral_mask = 1, native_nuclear_kind = 0;
 namespace generativeqc::dft { struct GridTaskView { size_t npoint{}; }; }
 void native_drain_integrals(NativeOwner&) {}
@@ -276,11 +282,13 @@ int cudaStreamSynchronize(void*) { return 0; }
 void error_text(char* output, size_t capacity, const char* text) {
   if (output && capacity) std::snprintf(output, capacity, "%s", text);
 }
-template <class... Arguments> int stationary_create(Arguments&&...) { return inner_status; }
+template <class... Arguments> int stationary_create(Arguments&&...) { return fail_creation?inner_status:0; }
+template <class... Arguments> int stationary_configure_becke(Arguments&&...) { return inner_status; }
+void stationary_destroy(void*) { ++destroyed_owners; }
 template <class... Arguments> int stationary_geometry_reset(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_nuclear_all(Arguments&&...) { return inner_status; }
 template <class... Arguments>
-int stationary_geometry_molecular_resident_weights_enqueue_v2(Arguments&&...) { return inner_status; }
+int stationary_geometry_molecular_resident_weights_enqueue_impl(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_finish_reduced(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_finish_span(Arguments&&...) { return inner_status; }
 """
@@ -296,6 +304,11 @@ int main() {
     const int actual = native_create(0, 12, 0, 2, 2, 2, 64, 1, 1, 1,
                                      1 << 20, 64, 16, &output, error, sizeof(error));
     if (actual != expected || output || live_owners) return expected;
+    fail_creation=false;
+    const int configured = native_create(0, 12, 0, 2, 2, 2, 64, 1, 1, 1,
+                                         1 << 20, 64, 16, &output, error, sizeof(error));
+    fail_creation=true;
+    if (configured != expected || output || live_owners || destroyed_owners != expected) return 9;
     Owner scientific;
     NativeOwner owner;
     owner.scientific = &scientific;
@@ -304,11 +317,14 @@ int main() {
     scientific.failed = false;
     if (native_nuclear(&owner, nullptr, 2, error, sizeof(error)) != expected ||
         !scientific.failed || owner.nuclear_ready) return 6;
-    scientific.failed = false;
     generativeqc::dft::GridTaskView view{1};
-    if (native_geometry(&owner, &view, nullptr, 0, 1, nullptr, nullptr, 0, 0,
-                        error, sizeof(error)) != expected ||
-        !scientific.failed || owner.grid_points) return 7;
+    for (bool mixed : {false, true}) {
+      scientific.failed = false;
+      const auto geometry = mixed ? native_geometry<true> : native_geometry<false>;
+      if (geometry(&owner, &view, nullptr, 0, 1, nullptr, nullptr, 0, 0,
+                    error, sizeof(error)) != expected ||
+          !scientific.failed || owner.grid_points) return 7;
+    }
     owner.grid_points = 1;
     owner.integral_mask = native_required_integral_mask;
     owner.nuclear_ready = true;

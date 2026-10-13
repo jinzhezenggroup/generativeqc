@@ -15,20 +15,29 @@ from generativeqc_compiler.dft.ao_cuda import emit_grid_scientific_kernels
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
 
 
-@pytest.fixture(scope="module")
-def feature_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
+@pytest.fixture(scope="module", params=("double", "float"))
+def feature_probe(
+    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+) -> Path:
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("host C++ compiler unavailable")
     source = emit_grid_scientific_kernels()
-    begin = source.index("__global__ void feature_kernel(")
-    schedule_begin = source.index("inline void scheduled_grid_features(", begin)
+    begin = source.rfind(
+        "template <", 0, source.index("__global__ void feature_kernel(")
+    )
+    schedule_begin = source.rfind(
+        "template <", 0, source.index("inline void scheduled_grid_features(", begin)
+    )
     end = source.index("// Reduce one occupied tile", schedule_begin)
     kernels = source[begin:schedule_begin]
-    schedule = re.sub(
-        r"(\w+)<<<(.*?)>>>\(", r"launch(\1, \2, ", source[schedule_begin:end]
+    kernels = kernels.replace(
+        "if (!repair) continue;", "if (!repair) continue; ++repair_points;"
     )
-    policy = emit_feature_policy().replace(
+    schedule = re.sub(
+        r"(\w+<\w+>)<<<(.*?)>>>\(", r"launch(\1, \2, ", source[schedule_begin:end]
+    )
+    policy = (emit_feature_policy() + emit_feature_policy(scalar_type="float")).replace(
         "unsigned mask) {", "unsigned mask) { ++bilinear_calls;"
     )
     prefix = r"""
@@ -50,6 +59,7 @@ Dimension blockDim, gridDim;
 std::barrier warp_barrier(32);
 double shuffle_values[32];
 std::atomic<I> bilinear_calls{};
+I repair_points{};
 I launched_work{};
 double __shfl_down_sync(unsigned mask, double value, int offset) {
   if (mask != 0xffffffffu) std::abort();
@@ -65,7 +75,7 @@ double finite(double value, int* error, int node) {
   return value;
 }
 I blocks(I work, I threads) {
-  launched_work = work;
+  launched_work += work;
   return std::min(I(1), (work + threads - 1) / threads);
 }
 """
@@ -76,7 +86,7 @@ void launch(Kernel kernel, I grid, I threads, int shared, int stream, Args... ar
   gridDim.x = grid;
   blockDim.x = threads;
   for (I block = 0; block < grid; ++block) {
-    if (kernel == cooperative_feature_kernel) {
+    if constexpr (std::is_same_v<Kernel, decltype(&cooperative_feature_kernel<TestArithmetic>)>) {
       // Warps have no cross-warp state: emulate one at a time, retaining
       // the actual block/thread indices and grid-stride loops.
       for (I warp = 0; warp < threads / 32; ++warp) {
@@ -90,7 +100,10 @@ void launch(Kernel kernel, I grid, I threads, int shared, int stream, Args... ar
       }
     } else {
       blockIdx.x = block;
-      for (threadIdx.x = 0; threadIdx.x < threads; ++threadIdx.x) kernel(args...);
+      for (threadIdx.x = 0; threadIdx.x < threads; ++threadIdx.x) {
+        if constexpr (std::is_invocable_v<Kernel, Args...>) kernel(args...);
+        else kernel(args...,false);
+      }
     }
   }
 }
@@ -104,6 +117,11 @@ int probe(I nao, I npoint, unsigned mask, int mode) {
     ao[index+1] = mode == 1 ? 0.0 : 0.4*std::sin(0.17*index);
   for (I index = 0; index < 8*stride; ++index)
     work[index+1] = mode == 1 ? 0.0 : 0.3*std::cos(0.13*index);
+  if (mode == 4) {
+    std::fill(ao.begin()+1,ao.begin()+1+stride,1e-23);
+    std::fill(ao.begin()+1+stride,ao.end()-1,1e-20);
+    std::fill(work.begin()+1,work.end()-1,1e-23);
+  }
   // Unrequested jet slots deliberately contain NaNs. Masked work must never
   // enter the arithmetic, including value jets in a tau-only request.
   if (!(mask & 14)) std::fill(ao.begin()+1+stride,ao.end()-1,poison);
@@ -118,12 +136,18 @@ int probe(I nao, I npoint, unsigned mask, int mode) {
   std::fill(output.begin()+1,output.end()-1,0.0);
   int error = mode == 3 ? 9 : 0;
   bilinear_calls = 0;
-  scheduled_grid_features(7,ao.data()+1,work.data()+1,npoint,nao,output.data()+1,&error,mask);
-  if (launched_work != npoint*(nao >= 32 ? 32 : 1)) return 1;
-  if (bilinear_calls != 2*nao*npoint) return 2;
+  launched_work = repair_points = 0;
+  scheduled_grid_features<TestArithmetic>(7,ao.data()+1,work.data()+1,npoint,nao,output.data()+1,&error,mask);
+  if (launched_work != npoint*((nao >= 32 ? 32 : 1)+(sizeof(TestArithmetic)==4))) return 1;
+  if (bilinear_calls != 2*nao*(npoint+repair_points)) return 2;
   if (output.front() != 12345.25 || output.back() != 12345.25) return 3;
   if (mode == 2 && stride) return error == 2 ? 0 : 4;
   if (error != (mode == 3 ? 9 : 0)) return 5;
+  if (mode == 4 && nao) {
+    if (repair_points != (sizeof(TestArithmetic)==4?npoint:0)) return 7;
+    for (I point=0;point<npoint;++point)
+      if (std::abs(output[1+point]/(nao*1e-46)-1.0)>1e-12) return 8;
+  }
   for (I point = 0; point < npoint; ++point) {
     long double expected[13]{};
     for (I spin = 0; spin < 2; ++spin)
@@ -146,7 +170,8 @@ int probe(I nao, I npoint, unsigned mask, int mode) {
       }
     for (I feature = 0; feature < 13; ++feature) {
       const auto difference = std::abs((long double)output[1+feature*npoint+point]-expected[feature]);
-      if (difference > 1e-11L*(1+std::abs(expected[feature]))) return 6;
+      const long double tolerance = sizeof(TestArithmetic)==4 ? 2e-5L : 1e-11L;
+      if (difference > tolerance*(1+std::abs(expected[feature]))) return 6;
     }
   }
   return 0;
@@ -156,7 +181,7 @@ int main(int argc, char** argv) {
   const I nao = std::atoi(argv[1]);
   for (unsigned mask = 1; mask < 16; ++mask)
     if (const int status = probe(nao,3,mask,0)) return 10+status;
-  for (int mode = 0; mode < 4; ++mode)
+  for (int mode = 0; mode < 5; ++mode)
     if (const int status = probe(nao,9,15,mode)) return 20+status;
   return probe(nao,0,15,0);
 }
@@ -165,6 +190,7 @@ int main(int argc, char** argv) {
     path, executable = directory / "probe.cpp", directory / "probe"
     path.write_text(
         prefix
+        + f"using TestArithmetic = {request.param};\n"
         + "namespace generativeqc_grid_policy {\n"
         + policy
         + "}\n"

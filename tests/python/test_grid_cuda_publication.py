@@ -95,15 +95,19 @@ struct Descriptor { std::size_t jets, points, active, width; };
 Descriptor grid_panel_descriptor(std::size_t j,std::size_t p,std::size_t a,std::size_t w) {
   return {j,p,a,w};
 }
+Descriptor grid_panel_descriptor_fp32(std::size_t jets,std::size_t points,std::size_t active,std::size_t width) {
+  return {jets,points,active,width};
+}
 }
 struct Projection {
+  template<class Arithmetic>
   void execute(generativeqc::dft::generated::Descriptor r, cudaStream_t,
-               const double* left, const double* right, double* output, int*) {
+               const Arithmetic* left, const Arithmetic* right, Arithmetic* output, int*) {
     ++gemm_calls;
     gemm_products += r.jets;
     for (std::size_t row = 0; row < r.jets*r.points; ++row)
       for (std::size_t column = 0; column < r.width; ++column) {
-        double value = 0;
+        Arithmetic value = 0;
         for (std::size_t item = 0; item < r.active; ++item)
           value += left[row*r.active+item]*right[item*r.width+column];
         output[row*r.width+column] = value;
@@ -137,6 +141,8 @@ struct GridPlan {
   bool profile_stages = false;
   Projection projection_value;
   Projection* projection = &projection_value;
+  Projection* projection_fp32 = nullptr;
+  struct FloatPanels { float values[256]{}; float* get() { return values; } } fp32_panels;
   bool view_ready=true,features_ready=true,density_jets_ready=true;
   bool local=true,density_ready=true,use_orbitals=false,orbital_ready=false,last_identity_map=false;
   bool identical_spin_density=false,orbital_enabled=true;
@@ -153,7 +159,7 @@ struct GridPlan {
   const std::size_t* current_ao_ids{};
 };
 void scheduled_ao(int, const double*, std::size_t, std::size_t, std::size_t, const double* points,
-               std::size_t,std::size_t,double*,int* error,const std::size_t*) {
+               std::size_t,std::size_t,double*,int* error,const std::size_t*,bool=false) {
   observed_points = points;
   if (fault == 1) *error = 7;
 }
@@ -167,7 +173,14 @@ void gather_density(const double* density, const std::size_t* ids, I nao, I acti
       for (I column = 0; column < active; ++column)
         output[(spin*active+row)*active+column] = density[(spin*nao+ids[row])*nao+ids[column]];
 }
-template<class... A> void scheduled_grid_features(A&&...) {}
+template<class Arithmetic=double, class... Arguments> void scheduled_grid_features(Arguments&&...) {}
+template<class Output, class Input>
+void convert_grid_panel(const Input* input,Output* output,std::size_t count,int* error) {
+  for (std::size_t index=0;index<count;++index) {
+    output[index]=static_cast<Output>(input[index]);
+    if (!std::isfinite(output[index])) *error=1;
+  }
+}
 """
 
 SPIN_MAIN = r"""

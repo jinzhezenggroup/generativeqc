@@ -70,6 +70,12 @@
     "generativeqc.PairedCalibrationSample": "generativeqc/force_aware_numerics.py:PairedCalibrationSample",
     "generativeqc.PairedDifferenceEstimator": "generativeqc/force_aware_numerics.py:PairedDifferenceEstimator",
     "generativeqc.PppsQueueProfile": "generativeqc/_batch_diagnostics.py:PppsQueueProfile",
+    "generativeqc.PrecisionBudgetError": "generativeqc/precision_policy.py:PrecisionBudgetError",
+    "generativeqc.PrecisionCalculator": "generativeqc/precision_policy.py:PrecisionCalculator",
+    "generativeqc.PrecisionError": "generativeqc/precision_policy.py:PrecisionError",
+    "generativeqc.PrecisionPolicy": "generativeqc/precision_policy.py:PrecisionPolicy",
+    "generativeqc.PrecisionSolve": "generativeqc/precision_policy.py:PrecisionSolve",
+    "generativeqc.PrecisionValidation": "generativeqc/precision_policy.py:PrecisionValidation",
     "generativeqc.PreparedBatch": "generativeqc/batch.py:PreparedBatch",
     "generativeqc.Primitive": "generativeqc/_api_types.py:Primitive",
     "generativeqc.ProgressiveBudget": "generativeqc/progressive_controller.py:ProgressiveBudget",
@@ -5753,6 +5759,149 @@
         "errors": "docs/reference/python_contracts.md#python-projection-errors",
         "ownership": "docs/reference/python_contracts.md#python-projection-ownership",
         "values": "docs/reference/python_contracts.md#python-projection-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionBudgetError": {
+      "kind": "class",
+      "profile": "exception",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionBudgetError.__init__": {
+      "kind": "function",
+      "profile": "exception",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionCalculator": {
+      "kind": "class",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/application_precision.md#python-precision-backends",
+        "errors": "docs/user/application_precision.md#python-precision-errors",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionCalculator.__init__": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/application_precision.md#python-precision-backends",
+        "errors": "docs/user/application_precision.md#python-precision-errors",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionCalculator.capabilities": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionCalculator.clear_cache": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/application_precision.md#python-precision-errors",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionCalculator.policy": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionCalculator.singlepoint": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/application_precision.md#python-precision-backends",
+        "errors": "docs/user/application_precision.md#python-precision-errors",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionError": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionError.met": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionPolicy": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionPolicy.__post_init__": {
+      "kind": "function",
+      "profile": "validation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/user/application_precision.md#python-precision-errors",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionPolicy.to_dict": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionSolve": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionValidation": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionValidation.solve_count": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
+      }
+    },
+    "generativeqc/precision_policy.py:PrecisionValidation.to_dict": {
+      "kind": "function",
+      "profile": "accessor",
+      "facets": {
+        "behavior": "docstring"
       }
     },
     "generativeqc/progressive.py:ProgressiveResult": {
