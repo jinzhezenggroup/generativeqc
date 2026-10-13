@@ -308,10 +308,11 @@ class DensityFittingBudgetError : public std::invalid_argument {
     std::size_t automatic_rhf_rank = 0, bool retain_raw = true);
 
 /** Resolve dense/packed value storage from the requested policy and executable
- * resource plan. Automatic promotion is bounded to singleton RHF or an explicit
- * method-owned restricted occupation reservation, not arbitrary-density callers:
- * retain dense whenever it is fully resident, otherwise use a single fitted
- * packed owner only when that owner fits the same value allowance.
+ * resource plan. Automatic promotion is bounded to singleton RHF, a
+ * method-owned restricted occupation reservation, or a restricted physical
+ * Coulomb-only Fock owner. The latter uses rank zero, with no occupied-factor
+ * lease. Arbitrary-density callers retain dense storage: only replace a
+ * streamed plan with one packed fitted owner that fits the same allowance.
  */
 [[nodiscard]] DensityFittingTilePlan plan_requested_density_fitting_tiles(
     DfPairStorageRequest request, std::size_t batch_size, std::size_t nbf, std::size_t naux,
