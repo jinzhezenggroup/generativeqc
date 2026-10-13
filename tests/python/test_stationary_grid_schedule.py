@@ -67,7 +67,9 @@ def test_dense_large_basis_does_not_reserve_unused_indexed_density_storage() -> 
     )
     with pytest.raises(ValueError, match="host.*budget"):
         _ordinary(
-            96, aos=1088, reserve_active_ao=False,
+            96,
+            aos=1088,
+            reserve_active_ao=False,
             max_host_bytes=dense.host_bound - 1,
         )
 
