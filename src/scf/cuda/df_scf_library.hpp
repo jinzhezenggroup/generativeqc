@@ -14,6 +14,23 @@ namespace generativeqc::scf::cuda_df {
  * retained provider; it never allocates, changes the stream/math policy,
  * reselects a backend, or prepares a handle during CUDA Graph capture.
  */
+/** Borrowed DF BLAS handle preparation and disposal. The DF plan owns the
+ * stream and lifetime; this provider implementation owns NVIDIA setup/modes.
+ * There is no allocation, provider search or handle state mutation at replay.
+ * A partially created handle is retained for failure cleanup by release().
+ */
+generativeqc_status prepare_df_blas(CudaDensityFittingJkPlan& plan, std::string& detail);
+void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept;
+
+/** Explicit Gram operation. Lower-triangle publication is a semantic request,
+ * not a vendor selector: if SYRK is unavailable the incumbent full GEMM is
+ * preserved. The caller mirrors the lower triangle only when actually used.
+ */
+generativeqc_status scf_occupied_gram(CudaDensityFittingJkPlan& plan, std::size_t columns,
+                                    std::size_t reduction, double weight, const double* factor,
+                                    double* output, bool lower_triangle, bool& wrote_lower,
+                                    const char* failure_context, std::string& detail);
+
 generativeqc_status scf_matrix_product_view(
     CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,
     std::size_t columns, std::size_t reduction, const double* left, std::size_t left_ld,

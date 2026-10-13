@@ -119,7 +119,7 @@
       "contract": "src/scf/cuda/df_scf_library.hpp",
       "reason": "Reusable DF SCF matrix/eigensolver adapter retains semantic strides, alpha/beta and solve requests. DeviceSolver retains numeric workspace and the shared prepared handle owner; raw cuSOLVER setup/submission ownership is retired.",
       "references": {
-        "cublasDgemm": 1,
+        "cublasDgemm": 2,
         "cublasDgemmStridedBatched": 1
       }
     },

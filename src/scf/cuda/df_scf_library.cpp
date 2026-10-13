@@ -60,6 +60,59 @@ generativeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+generativeqc_status prepare_df_blas(CudaDensityFittingJkPlan& plan, std::string& detail) {
+  if (plan.blas || !plan.stream) {
+    detail = "invalid prepared CUDA DF provider lifetime";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto status = cublasCreate(&plan.blas);
+  if (status == CUBLAS_STATUS_SUCCESS) status = cublasSetStream(plan.blas, plan.stream);
+  if (status == CUBLAS_STATUS_SUCCESS)
+    status = cublasSetPointerMode(plan.blas, CUBLAS_POINTER_MODE_HOST);
+  return status == CUBLAS_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
+             : blas_failure(status, "initialize CUDA DF cuBLAS", detail);
+}
+
+void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept {
+  if (plan.blas) (void)cublasDestroy(plan.blas);
+  plan.blas = nullptr;
+}
+
+generativeqc_status scf_occupied_gram(
+    CudaDensityFittingJkPlan& plan, std::size_t columns, std::size_t reduction, double weight,
+    const double* factor, double* output, bool lower_triangle, bool& wrote_lower,
+    const char* failure_context, std::string& detail) {
+  wrote_lower = false;
+  constexpr auto limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+  if (!plan.blas || !factor || !output || !columns || !reduction ||
+      columns > limit || reduction > limit) {
+    detail = "invalid prepared CUDA DF occupied Gram view";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto n = static_cast<int>(columns), k = static_cast<int>(reduction);
+  const double zero = 0;
+  // Keep the incumbent lower-triangle SYRK contract on toolchains that
+  // provide it. A full GEMM remains the exact original unsupported fallback.
+  const auto submit = [&]<class Handle>(Handle handle) {
+    if constexpr (requires {
+                    cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k,
+                                &weight, factor, k, &zero, output, n);
+                  }) {
+      if (lower_triangle) {
+        wrote_lower = true;
+        return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k,
+                           &weight, factor, k, &zero, output, n);
+      }
+    }
+    return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n, n, k, &weight, factor, k,
+                       factor, k, &zero, output, n);
+  };
+  const auto status = submit(plan.blas);
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(status, failure_context, detail);
+}
+
 generativeqc_status scf_matrix_product_view(
     CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,
     std::size_t columns, std::size_t reduction, const double* left, std::size_t left_ld,
