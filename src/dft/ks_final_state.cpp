@@ -4,7 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#include "dft/global_hybrid_composition.hpp"
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/semilocal_family.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "scf/mean_field.hpp"

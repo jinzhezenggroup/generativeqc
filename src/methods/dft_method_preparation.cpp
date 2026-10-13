@@ -12,7 +12,7 @@
 #include <string_view>
 
 #include "core/types.hpp"
-#include "dft/global_hybrid_composition.hpp"
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"

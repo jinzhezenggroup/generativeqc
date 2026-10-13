@@ -5,6 +5,7 @@
 #include <limits>
 #include <string>
 
+#include "dft/global_hybrid_fock.hpp"
 #include "methods/dft_admission.hpp"
 
 int main() {
@@ -74,7 +75,7 @@ int main() {
                                 (j == generativeqc::scf::FockApproximation::Exact || qualified_df);
           if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0) !=
               admitted) {
-            std::cerr << "J/K provider identity disagrees with Libxc hybrid composition\\n";
+            std::cerr << "J/K provider identity disagrees with Libxc hybrid composition\n";
             return 1;
           }
           spec.exchange.coefficient *= 2.0;

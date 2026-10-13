@@ -3,7 +3,6 @@
 #include <cstdint>
 
 #include "dft/semilocal_family.hpp"
-#include "scf/fock_build.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
 #include "generated_split_hybrid_registry.cuh"
@@ -12,8 +11,8 @@
 namespace generativeqc::dft {
 
 /** The XC/EXX composition is independent of the installed J/K implementation.
- * Curated exact coefficients and split-global-hybrid coefficients are generated
- * from the pinned Libxc records. PBE's native scales also describe PBE0.
+ * B3LYP and split-hybrid fractions originate in pinned Libxc method metadata.
+ * The curated PBE/PBE0 fraction is a separate, explicit MethodIR contract.
  */
 struct GlobalHybridComposition {
   double exact_exchange{};
@@ -51,41 +50,6 @@ constexpr bool cuda_global_hybrid_df_admitted(std::uint32_t functional) noexcept
 #else
   return false;
 #endif
-}
-
-/** Common exact full-range-exchange composition check, before DF selection. */
-constexpr bool global_hybrid_coefficients_match(const scf::FockBuildSpec& spec,
-                                                std::uint32_t functional, std::uint32_t spins,
-                                                double semilocal_exchange_scale,
-                                                double semilocal_correlation_scale) noexcept {
-  const auto composition = global_hybrid_composition(functional);
-  if (!composition.present || spins < 1U || spins > 2U ||
-      spec.spin != (spins == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted) ||
-      spec.derivative_order != 0 || !spec.coulomb.present || spec.coulomb.coefficient != 1.0 ||
-      spec.coulomb.op != scf::FockOperator::FullRange || spec.coulomb.omega != 0.0 ||
-      !spec.exchange.present || spec.exchange.op != scf::FockOperator::FullRange ||
-      spec.exchange.omega != 0.0 ||
-      semilocal_exchange_scale != composition.semilocal_exchange_scale ||
-      semilocal_correlation_scale != composition.semilocal_correlation_scale)
-    return false;
-  return spec.exchange.coefficient == -composition.exact_exchange / (spins == 1 ? 2.0 : 1.0);
-}
-
-/** One J/K identity gate for curated GGA and generated meta-GGA hybrids.
- * Reject mixed Direct/DF, COSX, and split DF lacking explicit provider coverage.
- * The calling method owner independently checks range/nonlocal corrections.
- */
-constexpr bool cuda_global_hybrid_jk_match(const scf::FockBuildSpec& spec, std::uint32_t functional,
-                                           std::uint32_t spins, double semilocal_exchange_scale,
-                                           double semilocal_correlation_scale) noexcept {
-  if (!global_hybrid_coefficients_match(spec, functional, spins, semilocal_exchange_scale,
-                                        semilocal_correlation_scale))
-    return false;
-  const auto j = spec.coulomb.approximation;
-  const auto k = spec.exchange.approximation;
-  return (j == scf::FockApproximation::Exact && k == scf::FockApproximation::Exact) ||
-         (j == scf::FockApproximation::DensityFitted &&
-          k == scf::FockApproximation::DensityFitted && cuda_global_hybrid_df_admitted(functional));
 }
 
 }  // namespace generativeqc::dft
