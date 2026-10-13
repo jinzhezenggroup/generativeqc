@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -56,7 +58,7 @@ def experiment() -> tuple[dict, list[dict]]:
                     "status": 0,
                     "system_status": 0,
                     "converged": 1,
-                    "iterations": 12,
+                    "iterations": 11,
                     "flags": 0,
                     "energy": -1.0,
                     "forces": [0.0] * 6,
@@ -355,3 +357,40 @@ def test_lifecycle_metadata_types_fail_closed(tmp_path: Path, mutation: str) -> 
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with pytest.raises(ValueError):
         MODULE.report_lifecycle(path, oracle)
+
+
+def test_consistently_missing_tail_is_incomplete(tmp_path: Path) -> None:
+    oracle, rows = experiment()
+    on = next(row for row in rows if row["enabled"])
+    on["receipts"].pop()
+    on["attempted_receipts"] -= 1
+    result = write_report(tmp_path, rows, oracle)
+    assert result["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize("drift", ["none", "energy", "force", "nonfinite"])
+def test_pinned_reference_gate_survives_optimized_python(drift: str) -> None:
+    record = {"energy": -1.0, "forces": [0.0, 0.0, 0.0]}
+    if drift == "energy":
+        record["energy"] += 1e-6
+    if drift == "force":
+        record["forces"][0] = 1e-6
+    if drift == "nonfinite":
+        record["energy"] = None
+    script = (
+        "import importlib.util,json; "
+        f"s=importlib.util.spec_from_file_location('probe',{str(ROOT / 'benchmarks/gfn2_mixer_endpoint.py')!r}); "
+        "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+        f"m.check_pinned_reference(json.loads({json.dumps(record)!r}),"
+        "{'energy':-1.0,'forces':[[0.0,0.0,0.0]]})"
+    )
+    result = subprocess.run(
+        [sys.executable, "-O", "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == (0 if drift == "none" else 1)
+    if drift != "none":
+        assert "original pinned energy/force gate" in result.stderr

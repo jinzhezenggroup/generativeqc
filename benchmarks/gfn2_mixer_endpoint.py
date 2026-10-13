@@ -74,16 +74,7 @@ def prepare(directory: Path, waters: list[int]) -> None:
             # Retain the original frozen small-fixture comparison as a separate
             # gate, so a regenerated reference cannot hide a changed fixture.
             if geometry == 0 and "energy" in original:
-                assert abs(record["energy"] - original["energy"]) < GATE
-                assert (
-                    np.max(
-                        np.abs(
-                            np.asarray(record["forces"])
-                            - np.asarray(original["forces"]).reshape(-1)
-                        )
-                    )
-                    < GATE
-                )
+                check_pinned_reference(record, original)
             records.append(record)
             (directory / "oracle.json").write_text(
                 json.dumps(
@@ -122,6 +113,21 @@ def integer(value: object, name: str, low: int = 0, high: int = (1 << 64) - 1) -
 
 def finite(value: object) -> bool:
     return type(value) in (int, float) and math.isfinite(value)
+
+
+def check_pinned_reference(record: dict, original: dict) -> None:
+    expected_forces = [value for atom in original["forces"] for value in atom]
+    valid = (
+        finite(record["energy"])
+        and abs(record["energy"] - original["energy"]) < GATE
+        and len(record["forces"]) == len(expected_forces)
+        and all(
+            finite(value) and abs(value - expected) < GATE
+            for value, expected in zip(record["forces"], expected_forces, strict=True)
+        )
+    )
+    if not valid:
+        raise ValueError("fresh reference fails the original pinned energy/force gate")
 
 
 def validate_input(row: dict, expected: dict, nonfinite_position: bool = False) -> None:
@@ -268,8 +274,11 @@ def validate_receipts(row: dict, expected: dict) -> dict:
         # All intervals in this denominator belong to this one invocation/CTA.
         # It excludes unmeasured normalization, commit and launch overhead.
         shares.append({stage: cycles[i] / total for i, stage in enumerate(STAGES)})
-    if attempted > row["iterations"]:
-        raise ValueError("receipt count exceeds SCC iterations")
+    if attempted != row["iterations"]:
+        return {
+            "status": "INCOMPLETE",
+            "reason": "receipt count differs from completed SCC iterations",
+        }
     return {
         "status": "PASS",
         "per_invocation_measured_stage_shares": shares,
