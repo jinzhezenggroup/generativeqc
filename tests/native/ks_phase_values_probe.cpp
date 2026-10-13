@@ -34,8 +34,9 @@ void cuda_check(cudaError_t status) { require(status == cudaSuccess, cudaGetErro
 struct Fixture {
   core::System system;
   std::vector<double> density, coulomb, exchange;
+  std::array<std::vector<double>, 2> range_exchange;
 
-  explicit Fixture(const char* path, bool read_oracle = true) {
+  explicit Fixture(const char* path, bool read_oracle = true, bool read_range = false) {
     std::ifstream input(path);
     std::size_t atoms{}, shells{}, nao{};
     input >> atoms >> shells >> nao;
@@ -54,6 +55,11 @@ struct Fixture {
       for (auto* matrix : {&density, &coulomb, &exchange}) {
         matrix->resize(nao * nao);
         for (auto& value : *matrix) input >> value;
+      }
+    if (read_range)
+      for (auto& matrix : range_exchange) {
+        matrix.resize(nao * nao);
+        for (auto& value : matrix) input >> value;
       }
     std::string detail;
     require(bool(input) &&
@@ -221,6 +227,84 @@ void raw_oracle_uks(const Fixture& fixture) {
   };
   for (const double screening : {0.0, 1e-12})
     for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) check_source(screening, buckets);
+}
+
+/** Independent SR/LR matrices protect radial identity, both spins and partial
+ * caches. Invalid operator requests must fail before any retained value is used. */
+void raw_range_oracle(const Fixture& fixture) {
+  runtime::OwnedCudaStream stream;
+  stream.create(0);
+  const auto elements = fixture.density.size();
+  runtime::OwnedCudaBuffer<double> matrices;
+  runtime::OwnedCudaBuffer<int> error;
+  matrices.allocate(0, 4 * elements, stream.get());
+  error.allocate(0, 1, stream.get());
+  auto beta_density = fixture.density;
+  for (auto& value : beta_density) value *= -0.5;
+  auto* alpha = matrices.get();
+  auto* beta = alpha + elements;
+  auto* ka = beta + elements;
+  auto* kb = ka + elements;
+  cuda_check(cudaMemcpyAsync(alpha, fixture.density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  cuda_check(cudaMemcpyAsync(beta, beta_density.data(), elements * sizeof(double),
+                             cudaMemcpyHostToDevice, stream.get()));
+  unsigned checks = 0;
+  for (unsigned range = 0; range < 2; ++range)
+    for (const unsigned spins : {1U, 2U})
+      for (const double screening : {0.0, 1e-12})
+        for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
+          const auto op = range == 0 ? scf::FockOperator::ShortRange : scf::FockOperator::LongRange;
+          scf::cuda_execution::DirectJkSourceLease source(stream.get(), op, 0.3);
+          require(
+              source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                             4 * elements * sizeof(double), 8ULL << 30, "1", "range-source-oracle",
+                             false, false, screening, 8ULL << 30, false,
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f, buckets,
+                             spins) == GENERATIVEQC_STATUS_SUCCESS &&
+                  source.active(),
+              source.reason());
+          auto spec = scf::make_global_hybrid_fock_spec(
+              spins == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted, 0.25);
+          spec.coulomb.present = false;
+          spec.exchange.op = op;
+          spec.exchange.omega = 0.3;
+          std::string detail;
+          const auto execute = [&](scf::FockBuildSpec request, double threshold) {
+            return source.enqueue(request, alpha, nullptr, ka, error.get(), threshold, detail,
+                                  spins == 2 ? beta : nullptr, spins == 2 ? kb : nullptr);
+          };
+          for (unsigned mismatch = 0; mismatch < 3; ++mismatch) {
+            auto wrong = spec;
+            if (mismatch == 0) wrong.exchange.op = scf::FockOperator::FullRange;
+            if (mismatch == 1) wrong.exchange.omega = 0.4;
+            if (mismatch == 2) wrong.coulomb.present = true;
+            require(execute(wrong, screening) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "range source accepted a different radial consumer");
+          }
+          require(execute(spec, screening) == GENERATIVEQC_STATUS_SUCCESS &&
+                      source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                  "range resident finite/census audit: " + detail);
+          std::vector<double> actual(elements);
+          for (unsigned spin = 0; spin < spins; ++spin) {
+            cuda_check(cudaMemcpy(actual.data(), spin == 0 ? ka : kb, elements * sizeof(double),
+                                  cudaMemcpyDeviceToHost));
+            const double scale = spin == 0 ? 1.0 : -0.5;
+            for (std::size_t index = 0; index < elements; ++index)
+              require(std::abs(actual[index] - scale * fixture.range_exchange[range][index]) < 2e-9,
+                      "independent PySCF range-K parity");
+          }
+          require(execute(spec, 1e12) == GENERATIVEQC_STATUS_SUCCESS &&
+                      source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                  "range replay changed the immutable screening predicate");
+          cuda_check(
+              cudaMemcpy(actual.data(), ka, elements * sizeof(double), cudaMemcpyDeviceToHost));
+          require(
+              std::all_of(actual.begin(), actual.end(), [](double value) { return value == 0.0; }),
+              "screened range replay retained nonzero values");
+          ++checks;
+        }
+  std::cout << "range oracle checks " << checks << "\n";
 }
 
 void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_base) {
@@ -638,14 +722,20 @@ void endpoint(const Fixture& fixture, bool b3lyp, bool compute_forces) {
 int main(int argc, char** argv) {
   try {
     require(
-        argc == 2 || (argc == 3 &&
-                      (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "endpoint" ||
-                       std::string(argv[2]) == "endpoint-forces" ||
-                       std::string(argv[2]) == "mixed-refinement")),
+        argc == 2 ||
+            (argc == 3 &&
+             (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
+              std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
+              std::string(argv[2]) == "mixed-refinement")),
         "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces|mixed-refinement]");
-    const Fixture fixture(argv[1], argc == 2 || std::string(argv[2]) == "mixed-refinement");
+    const bool range_oracle = argc == 3 && std::string(argv[2]) == "range-oracle";
+    const Fixture fixture(argv[1],
+                          argc == 2 || std::string(argv[2]) == "mixed-refinement" || range_oracle,
+                          range_oracle);
     std::cout << std::setprecision(17);
-    if (argc == 3 && std::string(argv[2]) == "capacity") {
+    if (range_oracle) {
+      raw_range_oracle(fixture);
+    } else if (argc == 3 && std::string(argv[2]) == "capacity") {
       capacity(fixture);
     } else if (argc == 3 && std::string(argv[2]) == "mixed-refinement") {
       mixed_refinement(fixture, false, argv[1]);

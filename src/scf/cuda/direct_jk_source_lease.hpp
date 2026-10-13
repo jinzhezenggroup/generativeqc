@@ -8,7 +8,7 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-/** Method-neutral lease of immutable full-range FP64 ERIs.
+/** Method-neutral lease of immutable operator-bound FP64 ERIs.
  * The common Direct provider remains the scientific owner. Consumers assemble
  * their own HF/KS equations and retire captured borrowers before this lease.
  * The caller-owned stream outlives destruction. An immutable-geometry owner may
@@ -18,7 +18,12 @@ namespace generativeqc::scf::cuda_execution {
  */
 class DirectJkSourceLease {
  public:
-  explicit DirectJkSourceLease(cudaStream_t stream) : stream_(stream) {}
+  /** Radial identity is immutable. Range leases accept matching pure K only;
+   * the default preserves the existing full-range J/K consumer contract. */
+  explicit DirectJkSourceLease(cudaStream_t stream,
+                               FockOperator source_operator = FockOperator::FullRange,
+                               double omega = 0.0)
+      : stream_(stream), source_operator_(source_operator), source_omega_(omega) {}
   ~DirectJkSourceLease();
   DirectJkSourceLease(const DirectJkSourceLease&) = delete;
   DirectJkSourceLease& operator=(const DirectJkSourceLease&) = delete;
@@ -85,6 +90,8 @@ class DirectJkSourceLease {
  private:
   void release_values() noexcept;
   cudaStream_t stream_{};
+  FockOperator source_operator_{FockOperator::FullRange};
+  double source_omega_{};
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> direct_{
       nullptr, destroy_cuda_direct_jk_plan};
   double* scratch_{};

@@ -72,6 +72,17 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Retain exact values of one immutable radial operator, with bounded partial
+ * residency. SR/LR values can serve only matching pure-exchange requests; full
+ * J/K and a different omega keep their ordinary exact provider. A successful
+ * lease never changes operator identity, even when preparation is repeated.
+ */
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(CudaDirectJkPlan* plan,
+                                                                 std::size_t maximum_bytes,
+                                                                 std::uint32_t bucket_mask,
+                                                                 FockOperator source_operator,
+                                                                 double omega, std::string& detail);
+
 /** Select whole immutable angular buckets, numbered first*(first+1)/2+second.
  * The mask is shared across batch items. Unselected buckets retain the native
  * canonical evaluator, not a second whole-source action. Selection affects
