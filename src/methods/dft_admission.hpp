@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 
+#include "dft/global_hybrid_composition.hpp"
 #include "generativeqc/generativeqc.h"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -52,7 +53,7 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   const bool direct_jk = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE;
   const bool fitted_jk = (descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA ||
                           descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO) &&
-                         dft::generated::split_hybrid_cuda_df_energy_force(code);
+                         dft::cuda_global_hybrid_df_admitted(code);
   if (backend != GENERATIVEQC_BACKEND_CUDA ||
       descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 || (!direct_jk && !fitted_jk) ||
       input->xc_execution_schedule != GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED)
@@ -67,13 +68,12 @@ inline generativeqc_status validate_split_hybrid_descriptor(
   if (input->exchange_term_count != 1)
     return reject(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                   "split-global-hybrid KS requires one nonzero full-range exact-exchange term");
-  const auto composition = dft::generated::split_hybrid_composition(code);
-  if (!composition.matched || !composition.exact_exchange_denominator)
+  const auto composition = dft::global_hybrid_composition(code);
+  if (!composition.present || !composition.fixed_semilocal)
     return reject(GENERATIVEQC_STATUS_INTERNAL_ERROR,
                   "split-hybrid registry composition is missing");
   const auto& exchange = input->exchange_terms[0];
-  const double exact = static_cast<double>(composition.exact_exchange_numerator) /
-                       static_cast<double>(composition.exact_exchange_denominator);
+  const double exact = composition.exact_exchange;
   const double divisor = input->spin_channels == 1 ? 2.0 : 1.0;
   if (exchange.operator_kind != GENERATIVEQC_KS_EXCHANGE_FULL_RANGE || exchange.omega != 0.0 ||
       exchange.coefficient != exact || exchange.fock_coefficient != -exact / divisor)
