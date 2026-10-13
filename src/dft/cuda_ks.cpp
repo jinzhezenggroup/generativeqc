@@ -1395,7 +1395,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool use_warm = !input && reuse_warm && warm_ready;
     const auto* seed_selection = std::getenv("GENERATIVEQC_VV10_NATIVE_SEED");
     const auto* outer_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
-    const bool outer_requested = outer_selection && std::string_view(outer_selection) == "1";
+    // Initialization only proposes densities; full target evaluations still
+    // certify convergence. An explicit off setting keeps the ordinary solve,
+    // and an explicitly selected device chunk retains its own solver policy.
+    const bool outer_requested = outer_selection ? std::string_view(outer_selection) == "1"
+                                                : configured_chunk_width() == 1;
     nonlocal_seed_trace = seed_selection && std::string_view(seed_selection) == "1";
     const bool nonlocal_initialization =
         (nonlocal_seed_trace || outer_requested) && device_nonlocal && spins == 1 &&
@@ -2506,6 +2510,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
                            physical.density_change < options.density_tolerance &&
                            physical.residual < std::min(1e-9, options.density_tolerance) &&
                            physical.maximum_residual < std::min(1e-9, options.density_tolerance);
+    // Once the initialized target already passes every physical stationarity
+    // gate, confirm its energy with another complete F[D] at that same D.
+    // Applying a sub-tolerance proposal can otherwise inject summation noise
+    // and repeat expensive changing-density sweeps without improving the
+    // accepted physical state. The original energy gate still has to pass;
+    // this is neither an acceptance shortcut nor a provisional-state replay.
+    const bool confirm_nonlocal_stationary_density =
+        nonlocal_seed_iterations && !pending_nonlocal_seed && !pending_nonlocal_frozen &&
+        physical.density_change < options.density_tolerance &&
+        physical.residual < std::min(1e-9, options.density_tolerance) &&
+        physical.maximum_residual < std::min(1e-9, options.density_tolerance);
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     const bool strict_final_closure =
@@ -2616,6 +2631,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
         warm_energy = physical.electronic_energy;
         warm_energy_correction = physical.electronic_energy_correction;
         occupied_fitted_factor_ready = false;
+      } else if (is_active && confirm_nonlocal_stationary_density) {
+        // tmp2 belongs to the unaccepted proposal, not the held density. Do
+        // not expose that orbital frame as an occupied-factor identity.
+        occupied_fitted_factor_ready = false;
+        invalidate_warm_orbitals();
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));

@@ -78,7 +78,7 @@ def test_nonlocal_work_rejects_malformed_availability() -> None:
         _nonlocal_work(library, 12, 3)
 
 
-@pytest.mark.parametrize("native_seed", ["off", "semilocal", "frozen"])
+@pytest.mark.parametrize("native_seed", ["off", "semilocal", "frozen", "auto"])
 def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch: pytest.MonkeyPatch,
     native_seed: str,
@@ -97,6 +97,8 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch.setenv(
         "GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", str(int(native_seed == "frozen"))
     )
+    if native_seed == "auto":
+        monkeypatch.delenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", raising=False)
     calculator = Calculator(
         method="wb97m-v",
         basis="sto-3g",
@@ -129,7 +131,7 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         after = owner.execute(moved, properties=("energy",)).items[0]
         assert after.converged
         assert after.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
-        if native_seed == "frozen":
+        if native_seed in {"frozen", "auto"}:
             # Transported target densities start with a fresh physical anchor;
             # discarding VV10 first needlessly moves them away from that target.
             scopes = after.ks_diagnostic.nonlocal_history_scopes
@@ -138,8 +140,9 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
+@pytest.mark.parametrize("explicit_selection", [False, True])
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
-    monkeypatch: pytest.MonkeyPatch, max_iterations: int
+    monkeypatch: pytest.MonkeyPatch, max_iterations: int, explicit_selection: bool
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -150,6 +153,8 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
     monkeypatch.setenv("GENERATIVEQC_VV10_NATIVE_SEED", "0")
     monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
+    if not explicit_selection:
+        monkeypatch.delenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", raising=False)
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1)),
