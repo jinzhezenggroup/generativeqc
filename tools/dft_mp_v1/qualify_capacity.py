@@ -254,12 +254,6 @@ BASIS_SNAPSHOT_CONTRACT_SHA256 = (
 BASIS_SHELL_EXPANSION_CONTRACT_SHA256 = (
     "300a64c1815273cf31ed5b463eac2e32f24bf4a1db5938975ffbad5cfb27f60c"
 )
-CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256 = (
-    "af7bd2da7d571fb6d92dee7f984bf8de95f32b263c8b75fe69555772d60a44b6"
-)
-NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256 = (
-    "120936d57b90062a8a888892ce4d514ca8a62a0b2ced671afe3fce660b0414d5"
-)
 # Reviewed strict Cartesian x/y/z pairing preserves the native basis layout.
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
     "b3a4132dfc6b5863813894177dc83db175a448b9f207874b0847ab4caefe6460"
@@ -1832,6 +1826,375 @@ def _grid_spec(payload: dict[str, Any]) -> GridSpec:
     return GridSpec(**values)
 
 
+def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
+    """Exercise the census's Gaussian lowering without a native library.
+
+    Source digests remain report provenance, not admission gates. Run the current
+    methods against the real immutable basis records and ctypes ABI, replacing
+    only the native creation boundary and observing capability admission. This
+    permits unrelated auxiliary consumers and behavior-preserving refactors while
+    rejecting changes to the orbital/ordinary-DF shell and primitive census.
+    """
+    import ctypes
+    from dataclasses import replace
+
+    from generativeqc import calculator as calculator_module
+
+    source = (repository / "python/generativeqc/calculator.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    owners = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
+    ]
+    if len(owners) != 1:
+        raise RuntimeError("Calculator basis owner is missing or ambiguous")
+    # Compile the current class, not an imported/stale method. Its constructor is
+    # never run; all native calls terminate at the descriptor capture below.
+    namespace = dict(vars(calculator_module))
+    exec(  # noqa: S102 - current repository class, native boundary replaced
+        compile(ast.Module(body=owners, type_ignores=[]), str(repository), "exec"),
+        namespace,
+    )
+    calculator_type = namespace["Calculator"]
+    native = calculator_module._native
+    atoms = (Atom(6, (0.25, -0.5, 0.75)), Atom(1, (1.5, 0.25, -0.125)))
+    context = ctypes.c_void_p(101)
+    returned_system = 202
+    preflight_seen = False
+    reject_preflight = False
+    native_seen = False
+    expected_route = "ordinary"
+    native_status = native.STATUS_SUCCESS
+    expected_basis: Any = None
+    expected_options: dict[str, Any] = {}
+    expected_shells: tuple[Any, ...] = ()
+    expected_representation = native.BASIS_SPHERICAL
+
+    class AdmissionRejected(Exception):
+        pass
+
+    def observe_admission(basis: Any, observed_atoms: Any, **options: Any) -> None:
+        nonlocal preflight_seen
+        preflight_seen = True
+        options.setdefault("consumer", None)
+        if (
+            basis != expected_basis
+            or tuple(observed_atoms) != atoms
+            or options != expected_options
+        ):
+            raise RuntimeError("basis capability inputs changed")
+        if reject_preflight:
+            raise AdmissionRejected
+        calculator_module.require_basis(basis, observed_atoms, **options)
+
+    def capture_system(
+        observed_context: Any,
+        descriptor_pointer: Any,
+        system_pointer: Any,
+        *,
+        route: str = "ordinary",
+    ) -> int:
+        nonlocal native_seen
+        native_seen = True
+        descriptor = ctypes.cast(
+            descriptor_pointer, ctypes.POINTER(native.SystemDescriptor)
+        ).contents
+        primitives = tuple(p for shell in expected_shells for p in shell.primitives)
+        header = (
+            descriptor.struct_size,
+            descriptor.abi_version,
+            descriptor.atom_count,
+            descriptor.shell_count,
+            descriptor.primitive_count,
+            descriptor.charge,
+            descriptor.multiplicity,
+            descriptor.basis_representation,
+        )
+        if (
+            route != expected_route
+            or getattr(observed_context, "value", None) != context.value
+            or header
+            != (
+                ctypes.sizeof(native.SystemDescriptor),
+                native.ABI_VERSION,
+                len(atoms),
+                len(expected_shells),
+                len(primitives),
+                -1,
+                2,
+                expected_representation,
+            )
+        ):
+            raise RuntimeError("native basis descriptor dimensions changed")
+        actual_atoms = tuple(
+            (atom.atomic_number, (atom.x, atom.y, atom.z))
+            for atom in descriptor.atoms[: descriptor.atom_count]
+        )
+        actual_shells = tuple(
+            (
+                shell.atom_index,
+                shell.angular_momentum,
+                shell.primitive_offset,
+                shell.primitive_count,
+            )
+            for shell in descriptor.shells[: descriptor.shell_count]
+        )
+        actual_primitives = tuple(
+            (p.exponent, p.coefficient)
+            for p in descriptor.primitives[: descriptor.primitive_count]
+        )
+        expected_shell_records = tuple(
+            (
+                shell.atom_index,
+                shell.angular_momentum,
+                sum(len(previous.primitives) for previous in expected_shells[:i]),
+                len(shell.primitives),
+            )
+            for i, shell in enumerate(expected_shells)
+        )
+        if (
+            actual_atoms != tuple((atom.atomic_number, atom.position) for atom in atoms)
+            or actual_shells != expected_shell_records
+            or actual_primitives
+            != tuple((p.exponent, p.coefficient) for p in primitives)
+        ):
+            raise RuntimeError("native basis descriptor values changed")
+        ctypes.cast(system_pointer, ctypes.POINTER(ctypes.c_void_p))[0] = (
+            returned_system
+        )
+        return native_status
+
+    def capture_ecp(
+        observed_context: Any,
+        descriptor: Any,
+        cores: Any,
+        terms: Any,
+        count: int,
+        system: Any,
+    ) -> int:
+        if (
+            tuple(cores) != (2, 0)
+            or count != 1
+            or tuple(
+                getattr(terms[0], field)
+                for field in (
+                    "atom_index",
+                    "channel",
+                    "power",
+                    "exponent",
+                    "coefficient",
+                )
+            )
+            != (0, -1, 2, 0.8, -2.0)
+        ):
+            raise RuntimeError("native ECP descriptor changed")
+        return capture_system(observed_context, descriptor, system, route="ecp")
+
+    namespace["require_basis"] = observe_admission
+    label = "_shells_for_atoms"
+    try:
+        for representation in ("spherical", "cartesian"):
+            orbital = snapshot_basis("def2-svp", representation)
+            auxiliary = snapshot_basis("sto-3g", representation)
+            expected_representation = (
+                native.BASIS_SPHERICAL
+                if representation == "spherical"
+                else native.BASIS_CARTESIAN
+            )
+            for device in ("cpu", "cuda"):
+                for form in (orbital, "def2-svp", orbital.shells_for(atoms)):
+                    calculator = object.__new__(calculator_type)
+                    calculator._basis = form
+                    calculator._representation_name = representation
+                    calculator._basis_representation = expected_representation
+                    calculator._device_name = device
+                    calculator._density_fitting_mode = (
+                        native.DENSITY_FITTING_CPU_REFERENCE
+                    )
+                    calculator._method = native.METHOD_PBE_RKS
+                    calculator._library = SimpleNamespace(
+                        generativeqc_system_create=capture_system,
+                        generativeqc_system_create_ecp=capture_ecp,
+                        generativeqc_correlation_auxiliary_system_create_v1=lambda *args: (
+                            capture_system(*args, route="correlation")
+                        ),
+                        generativeqc_status_message=lambda status: (
+                            b"capacity probe rejected"
+                        ),
+                        generativeqc_context_get_last_detail=lambda context: None,
+                    )
+                    for explicit_basis in (None, auxiliary):
+                        expected_basis = snapshot_basis(
+                            form if explicit_basis is None else explicit_basis,
+                            representation,
+                        )
+                        expected_shells = (
+                            expected_basis.shells_for(atoms)
+                            if isinstance(expected_basis, BasisSet)
+                            else tuple(expected_basis)
+                        )
+                        for operator, derivative_order in ((None, 0), ("kinetic", 1)):
+                            expected_options = {
+                                "backend": device if explicit_basis is None else "cpu",
+                                "operator": operator
+                                or ("eri" if explicit_basis is None else "df_metric"),
+                                "derivative_order": derivative_order,
+                                "role": "orbital"
+                                if explicit_basis is None
+                                else "auxiliary",
+                                "representation": representation,
+                                "consumer": None,
+                            }
+                            label = "_shells_for_atoms"
+                            preflight_seen = False
+                            shells = calculator._shells_for_atoms(
+                                atoms,
+                                explicit_basis,
+                                operator=operator,
+                                derivative_order=derivative_order,
+                            )
+                            if not preflight_seen or tuple(shells) != expected_shells:
+                                raise RuntimeError("basis shell expansion changed")
+                        expected_options.update(
+                            operator="eri" if explicit_basis is None else "df_metric",
+                            derivative_order=0,
+                        )
+                        label = "_create_native_system"
+                        preflight_seen = native_seen = False
+                        system = calculator._create_native_system(
+                            context, atoms, -1, 2, explicit_basis
+                        )
+                        if (
+                            not preflight_seen
+                            or not native_seen
+                            or system.value != returned_system
+                        ):
+                            raise RuntimeError("native basis forwarding changed")
+                        # A failed capability preflight must reach neither the
+                        # native allocator nor a successful shell/result return.
+                        reject_preflight = True
+                        for label, arguments in (
+                            ("_shells_for_atoms", (atoms, explicit_basis)),
+                            (
+                                "_create_native_system",
+                                (context, atoms, -1, 2, explicit_basis),
+                            ),
+                        ):
+                            native_seen = False
+                            try:
+                                getattr(calculator, label)(*arguments)
+                            except AdmissionRejected:
+                                if native_seen:
+                                    raise RuntimeError(
+                                        "native allocation preceded basis admission"
+                                    ) from None
+                            else:
+                                raise RuntimeError(
+                                    "basis admission failure was swallowed"
+                                )
+                        reject_preflight = False
+        # Keep scoped correlation auxiliary creation separate from the ordinary
+        # orbital ABI, including a library that lacks the optional entry point.
+        calculator._basis = orbital
+        calculator._device_name = "cuda"
+        calculator._density_fitting_mode = native.DENSITY_FITTING_CORRELATION_CUDA
+        calculator._method = native.METHOD_MP2
+        for explicit_basis in (None, auxiliary):
+            expected_basis = orbital if explicit_basis is None else auxiliary
+            expected_shells = expected_basis.shells_for(atoms)
+            expected_options.update(
+                backend="cuda",
+                role="orbital" if explicit_basis is None else "auxiliary",
+                operator="eri" if explicit_basis is None else "df_metric",
+                consumer=None if explicit_basis is None else "correlation_df",
+            )
+            expected_route = "ordinary" if explicit_basis is None else "correlation"
+            calculator._create_native_system(context, atoms, -1, 2, explicit_basis)
+        del calculator._library.generativeqc_correlation_auxiliary_system_create_v1
+        native_seen = False
+        try:
+            calculator._create_native_system(context, atoms, -1, 2, auxiliary)
+        except NotImplementedError:
+            if native_seen:
+                raise RuntimeError(
+                    "missing auxiliary ABI reached native creation"
+                ) from None
+        else:
+            raise RuntimeError("missing auxiliary ABI did not fail closed")
+
+        ecp_element = replace(
+            orbital.by_element[6],
+            ecp_core_electrons=2,
+            ecp_data=json.dumps(
+                [
+                    {
+                        "ecp_type": "scalar_ecp",
+                        "angular_momentum": [0],
+                        "r_exponents": [2],
+                        "gaussian_exponents": ["0.8"],
+                        "coefficients": [["-2"]],
+                    }
+                ]
+            ),
+        )
+        calculator._basis = expected_basis = replace(
+            orbital, elements=(ecp_element, orbital.by_element[1])
+        )
+        calculator._density_fitting_mode = native.DENSITY_FITTING_NONE
+        expected_shells = expected_basis.shells_for(atoms)
+        expected_options.update(role="orbital", operator="eri", consumer=None)
+        expected_route = "ecp"
+        calculator._create_native_system(context, atoms, -1, 2)
+        calculator._density_fitting_mode = native.DENSITY_FITTING_CUDA
+        native_seen = False
+        try:
+            calculator._create_native_system(context, atoms, -1, 2)
+        except NotImplementedError:
+            if native_seen:
+                raise RuntimeError(
+                    "ECP density fitting reached native creation"
+                ) from None
+        else:
+            raise RuntimeError("ECP density fitting did not fail closed")
+
+        calculator._basis = expected_basis = orbital
+        expected_shells = orbital.shells_for(atoms)
+        expected_route = "ordinary"
+        for charge, multiplicity in ((2**31, 2), (-1, 0)):
+            native_seen = False
+            try:
+                calculator._create_native_system(context, atoms, charge, multiplicity)
+            except ValueError:
+                if native_seen:
+                    raise RuntimeError(
+                        "invalid electron state reached native creation"
+                    ) from None
+            else:
+                raise RuntimeError("invalid electron state did not fail closed")
+        native_status = native.STATUS_INVALID_ARGUMENT
+        try:
+            calculator._create_native_system(context, atoms, -1, 2)
+        except RuntimeError as error:
+            if "capacity probe rejected" not in str(error):
+                raise
+        else:
+            raise RuntimeError("native basis creation failure was swallowed")
+    except Exception as error:
+        raise RuntimeError(
+            f"{label} basis lowering contract changed: {error}"
+        ) from error
+    functions = {
+        node.name: node for node in owners[0].body if isinstance(node, ast.FunctionDef)
+    }
+    return tuple(
+        _source_node_sha256(source, functions[name])
+        for name in ("_shells_for_atoms", "_create_native_system")
+    )
+
+
 def _basis_layout_contract(repository: Path) -> dict[str, str]:
     source = (repository / "python/generativeqc_compiler/dft/ao.py").read_text(
         encoding="utf-8"
@@ -1919,17 +2282,8 @@ def _basis_layout_contract(repository: Path) -> dict[str, str]:
         BASIS_SHELL_EXPANSION_CONTRACT_SHA256,
         class_name="BasisSet",
     )
-    shell_forwarding_digest = function_digest(
-        "python/generativeqc/calculator.py",
-        "_shells_for_atoms",
-        CALCULATOR_SHELL_FORWARDING_CONTRACT_SHA256,
-        class_name="Calculator",
-    )
-    native_system_digest = function_digest(
-        "python/generativeqc/calculator.py",
-        "_create_native_system",
-        NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256,
-        class_name="Calculator",
+    shell_forwarding_digest, native_system_digest = _calculator_basis_contract(
+        repository
     )
     return {
         "packed_capacity_definition": packed[0],
@@ -2590,10 +2944,16 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_digest = _cpp_block_sha256(
         route_source, "dft::MolecularGrid ks_molecular_grid("
     )
+    # Preserve the original frozen ABI digest: the exact ks_grid_options
+    # source span (including its trailing blank line) is now in preparation.
+    # Changing to _cpp_block_sha256 would silently alter the audit oracle.
+    preparation_source = (
+        repository / "src/methods/dft_method_preparation.cpp"
+    ).read_text(encoding="utf-8")
     native_abi_digest = _source_span_sha256(
-        route_source,
+        preparation_source,
         begin="dft::GridSpec ks_grid_options(",
-        end="Result adapt_result(",
+        end="void validate_ks_spin_state(",
         label="native GridSpec ABI lowerer",
     )
     header_source = (repository / "src/dft/grid.hpp").read_text(encoding="utf-8")
@@ -3219,6 +3579,7 @@ def _build_report(
         "src/dft/cuda_quadrature.cu",
         "src/dft/stationary_gradient_cuda.cuh",
         "src/methods/dft_method.cpp",
+        "src/methods/dft_method_preparation.cpp",
         "cmake/GenerativeQCCuda.cmake",
     )
     blocked = sum(row["admission"]["outcome"] == "blocked" for row in rows)

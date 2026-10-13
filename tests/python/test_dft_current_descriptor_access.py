@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _source() -> str:
-    return (ROOT / "src/methods/dft_method.cpp").read_text(encoding="utf-8")
+    return (ROOT / "src/methods/dft_method_preparation.cpp").read_text(encoding="utf-8")
 
 
 def test_current_dft_readers_do_not_probe_legacy_prefixes() -> None:
@@ -32,11 +32,12 @@ def test_current_dft_descriptor_readers_compile_and_keep_defaults(
     text = _source()
     grid = text[
         text.index("dft::GridSpec ks_grid_options(") : text.index(
-            "Result adapt_result("
+            "void validate_ks_spin_state("
         )
     ]
-    auxiliary = text[
-        text.index("std::optional<core::System> ks_auxiliary_template(") : text.index(
+    owner = (ROOT / "src/methods/dft_method.cpp").read_text(encoding="utf-8")
+    auxiliary = owner[
+        owner.index("std::optional<core::System> ks_auxiliary_template(") : owner.index(
             "void validate_ks_auxiliary_geometry("
         )
     ]

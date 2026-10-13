@@ -1,0 +1,15 @@
+id: cuda-no-assert-api-status
+language: Cpp
+severity: error
+message: "Do not execute CUDA API operations only inside assert: NDEBUG removes the call in release builds."
+rule:
+  any:
+    - pattern:
+        context: "void f() { assert($API($$$ARGS) == cudaSuccess); }"
+        selector: expression_statement
+    - pattern:
+        context: "void f() { assert(cudaSuccess == $API($$$ARGS)); }"
+        selector: expression_statement
+constraints:
+  API:
+    regex: '^(?:cudaMalloc|cudaMallocAsync|cudaMemcpy|cudaMemcpyAsync|cudaMemset|cudaMemsetAsync|cudaEventRecord|cudaGraphLaunch|cudaGetLastError|cudaPeekAtLastError)$'

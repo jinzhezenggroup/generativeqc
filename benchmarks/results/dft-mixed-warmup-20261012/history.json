@@ -1,0 +1,9 @@
+{
+  "captures.json.xz": {
+    "commit": "b0cf631e9d72982314365703718a4c1f785d1997",
+    "path": "benchmarks/results/dft-mixed-warmup-20261012/captures.json.xz",
+    "sha256": "d057537d121da67bce31eb1003f3b173bc910452f06377247a56bcc4524e35af",
+    "bytes": 104648,
+    "reason": "Historical water raw observations are retained byte-exact in existing Git history and ignored local artifacts. Latest master leaves insufficient aggregate evidence capacity; do not raise caps or remove unrelated campaigns. Current repair raw endpoints and all historical derived outcomes remain checked out."
+  }
+}

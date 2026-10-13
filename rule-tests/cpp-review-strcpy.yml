@@ -1,0 +1,13 @@
+id: cpp-review-strcpy
+valid:
+  - |
+    void copy(char* dst, const char* src, unsigned n) { memcpy(dst, src, n); }
+invalid:
+  - |
+    void copy(char* dst, const char* src) { strcpy(dst, src); }
+  - |
+    void copy(char* dst, const char* src) { std::strcpy(dst, src); }
+  - |
+    void append(char* dst, const char* src) { strcat(dst, src); }
+  - |
+    void append(char* dst, const char* src) { std::strcat(dst, src); }

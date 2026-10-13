@@ -6,6 +6,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import lzma
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -25,9 +26,11 @@ def decoded(entry: dict[str, Any]) -> bytes:
 
 
 def members(directory: Path = HERE) -> Iterator[tuple[str, bytes]]:
-    """Yield hash-checked original records from the deterministic gzip capsules."""
-    for path in sorted(directory.glob("*.json.gz")):
-        payload = json.loads(gzip.decompress(path.read_bytes()))
+    """Yield hash-checked original records from the gzip or XZ capsules."""
+    paths = [*directory.glob("*.json.gz"), *directory.glob("*.json.xz")]
+    for path in sorted(paths):
+        decompress = gzip.decompress if path.suffix == ".gz" else lzma.decompress
+        payload = json.loads(decompress(path.read_bytes()))
         if payload.get("schema") != "generativeqc.cpu-eri-evidence-capsule.v1":
             raise ValueError(f"Unknown capsule schema: {path}")
         for entry in payload["files"]:
@@ -60,6 +63,16 @@ def main() -> None:
             or hashlib.sha256(data).hexdigest() != entry["sha256"]
         ):
             raise ValueError(f"Changed published member: {entry['path']}")
+        if "decoded_sha256" in entry:
+            decompress = (
+                gzip.decompress if entry["path"].endswith(".gz") else lzma.decompress
+            )
+            raw = decompress(data)
+            if (
+                len(raw) != entry["decoded_bytes"]
+                or hashlib.sha256(raw).hexdigest() != entry["decoded_sha256"]
+            ):
+                raise ValueError(f"Changed decoded member: {entry['path']}")
     records = dict(members())
     for campaign, expected in [
         ("matched-endpoints-bytecode-normalized", 960),

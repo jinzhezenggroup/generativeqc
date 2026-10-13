@@ -75,7 +75,9 @@ enum {
   /** Require the accelerator-native density-fitting path. */
   GENERATIVEQC_DENSITY_FITTING_CUDA = 2,
   /** Select CUDA when requested by the context, otherwise use CPU reference. */
-  GENERATIVEQC_DENSITY_FITTING_AUTO = 3
+  GENERATIVEQC_DENSITY_FITTING_AUTO = 3,
+  /** MP2 only: conventional RHF with accelerator-native correlation DF. */
+  GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA = 4
 };
 
 /**
@@ -915,7 +917,7 @@ typedef struct generativeqc_method_descriptor {
   /** Optional KS snapshot. NULL preserves the method's built-in model.
    * The descriptor and pointees need only outlive the prepare call. */
   const generativeqc_ks_options* ks_options;
-  /** RCCSD controls. Zero selects the documented default except
+  /** Restricted/unrestricted CCSD controls. Zero selects the documented default except
    * ccsd_diis_history=0, which explicitly disables DIIS. */
   uint32_t ccsd_max_iterations;
   uint32_t ccsd_diis_history;
@@ -924,7 +926,7 @@ typedef struct generativeqc_method_descriptor {
   double ccsd_denominator_threshold;
   double ccsd_damping;
   double ccsd_level_shift;
-  /** Frozen occupied orbitals are not implemented for the native RCCSD owner.
+  /** Frozen occupied orbitals are not implemented for the native CCSD owners.
    * Zero means all occupied orbitals are correlated. */
   uint32_t ccsd_frozen_core;
   /** Optional execution-only cold-start policy. Pointee is copied at preparation.
@@ -1161,7 +1163,7 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t measured_response_workspace_peak_bytes;
   /** Successful allocation events in the same GMRES ownership domain. */
   uint64_t response_workspace_allocation_count;
-  /** RCCSD-only fields. Zero for methods that do not publish iterative CC state. */
+  /** Iterative restricted/unrestricted CCSD fields. Zero for other methods. */
   uint64_t ccsd_iterations;
   uint64_t ccsd_diis_restarts;
   double ccsd_correlation_energy;
@@ -1175,13 +1177,13 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t ccsd_amplitude_d2h_bytes;
   uint64_t ccsd_synchronizations;
   char ccsd_replay_equation_hash[65];
-  /** Standard canonical noniterative (T) correction; zero for non-RCCSD(T) methods. */
+  /** Standard canonical noniterative (T) correction; zero for methods without (T). */
   double ccsd_t_triples_energy;
-  /** Number of triangular virtual triples evaluated by the native (T) owner. */
+  /** Triangular virtual triples for RCCSD(T), ordered scalar tiles for UCCSD(T). */
   uint64_t ccsd_t_virtual_triples;
   /** Peak temporary numeric workspace owned by the native (T) evaluator. */
   uint64_t ccsd_t_workspace_bytes;
-  /** Audited standard-(T) inventory identity; empty for non-RCCSD(T) methods. */
+  /** Audited restricted/unrestricted standard-(T) inventory; empty without (T). */
   char ccsd_t_equation_hash[65];
   /** Nonzero only when the successful RHF attempt for this complete correlated
    * endpoint used a compatible caller-retained CUDA executable plan. This is
@@ -1192,7 +1194,7 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t reference_execution_plan_owned_device_bytes;
 } generativeqc_correlation_diagnostic;
 
-/** Additive observational RCCSD/RCCSD(T) phase/work record.
+/** Additive observational native coupled-cluster phase/work record.
  * This descriptor does not alter correlation science or convergence contracts.
  * Nested phases are intentionally not additive: source is contained by provider,
  * while iteration/replay/update/DIIS are contained by solver.
@@ -1900,6 +1902,42 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_supported_prop
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute(
     generativeqc_calculation* calculation, generativeqc_result_descriptor* result);
 
+/** @native-contract generativeqc_calculation_execute_components_v1
+ * @behavior Execute conventional MP2 or RCCSD(T) with optional same-reference companions.
+ * @inputs Initialize every supplied result with its full struct_size and GENERATIVEQC_ABI_VERSION.
+ * MP2 supports HF; RCCSD(T) supports HF and MP2. NULL companion descriptors omit
+ * that work. All supplied descriptors must request the same energy/force mode,
+ * have disjoint output storage, and satisfy calculation_execute's buffer rules.
+ * One converged RHF state and exact interaction owner serve the complete group.
+ * Force companions are analytic, not finite differences or reference-oracle work.
+ * @outputs With companions requested, outputs are published together only after every
+ * requested component succeeds. With neither requested, preserves calculation_execute.
+ * @errors With companions requested, nonconvergence and any failure leave every scientific
+ * output untouched. Unsupported methods return NOT_IMPLEMENTED; invalid/aliased force
+ * storage or inconsistent output modes return INVALID_ARGUMENT.
+ * The existing per-endpoint numeric budget also bounds simultaneously live
+ * companion inputs, outputs and workspace; it is not a process-RSS limit.
+ * @lifetime Borrowed buffers must remain alive for the call. The caller owns successful copies.
+ * @execution Synchronous; serialize execution/query/destruction on the owner/context.
+ * @units Energy is Hartree; forces are minus the gradient in Hartree/Bohr.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute_components_v1(
+    generativeqc_calculation* calculation, generativeqc_result_descriptor* result,
+    generativeqc_result_descriptor* hf, generativeqc_result_descriptor* mp2);
+
+/** @native-contract generativeqc_calculation_get_mp2_component_diagnostic_v1
+ * @behavior Read the completed same-reference MP2 companion diagnostic.
+ * @inputs NULL out probes availability; otherwise initialize its full struct_size and abi_version.
+ * @outputs Copies only the record from a successful current component execution.
+ * @errors NOT_IMPLEMENTED before execution or after a legacy, rejected or failed replay.
+ * Invalid owner/ABI returns INVALID_ARGUMENT/ABI_MISMATCH without writes.
+ * @lifetime Host-only copy; the owner and context must outlive the query.
+ * @execution Synchronous; serialize with execution and destruction.
+ * @units Correlation energies are Hartree; force/response units follow the standard diagnostic.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_mp2_component_diagnostic_v1(
+    const generativeqc_calculation* calculation, generativeqc_correlation_diagnostic* out);
+
 /** Read separate density-update and physical SCF residual measures.
  * Available after a completed supported solve, including NOT_CONVERGED.
  * Returns NOT_IMPLEMENTED before execution, after a backend execution failure, or
@@ -2086,9 +2124,9 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_precision_work
  */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_correlation_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_correlation_diagnostic* diagnostic);
-/** Most recent RCCSD/RCCSD(T) phase/work record; NULL out probes availability. */
+/** Most recent native coupled-cluster phase/work record; NULL out probes availability. */
 /** @native-contract generativeqc_calculation_get_cc_performance_diagnostic
- * @behavior Read the latest RCCSD/RCCSD(T) phase and work evidence.
+ * @behavior Read the latest native coupled-cluster phase and work evidence.
  * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
  * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
  * probes availability.
@@ -2526,7 +2564,7 @@ generativeqc_batch_get_correlation_diagnostic(const generativeqc_batch* batch, u
                                               generativeqc_correlation_diagnostic* diagnostic);
 /** Input-ordered counterpart of generativeqc_calculation_get_cc_performance_diagnostic. */
 /** @native-contract generativeqc_batch_get_cc_performance_diagnostic
- * @behavior Read the latest RCCSD/RCCSD(T) phase and work evidence.
+ * @behavior Read the latest native coupled-cluster phase and work evidence.
  * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
  * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
  * probes availability. index is the zero-based original input index, not a bucket index.

@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "dft/semilocal_family.hpp"
 #include "dft/xc_point.hpp"
 #include "runtime/resource_usage.hpp"
 #include "xc_cpu_generated.hpp"
@@ -1315,6 +1316,40 @@ PbeStationaryXcDerivative stationary_b3lyp_xc_derivative(
     const AoBasis& basis, const MolecularGrid& grid,
     const std::vector<std::vector<double>>& density, std::size_t tile_points) {
   return stationary_gga_xc_derivative(basis, grid, density, tile_points, true, 1.0, 1.0);
+}
+
+namespace {
+using StationaryXcKernel = PbeStationaryXcDerivative (*)(const AoBasis&, const MolecularGrid&,
+                                                         const std::vector<std::vector<double>>&,
+                                                         std::size_t, double, double);
+
+PbeStationaryXcDerivative bound_b3lyp_stationary_xc(const AoBasis& basis, const MolecularGrid& grid,
+                                                    const std::vector<std::vector<double>>& density,
+                                                    std::size_t tile_points, double exchange_scale,
+                                                    double correlation_scale) {
+  if (exchange_scale != 1.0 || correlation_scale != 1.0)
+    throw std::invalid_argument("B3LYP stationary XC requires its canonical composition");
+  return stationary_b3lyp_xc_derivative(basis, grid, density, tile_points);
+}
+
+// Implementation names are registered once, not used for runtime admission.
+constexpr auto kStationaryXcKernels = [] {
+  std::array<StationaryXcKernel, kSemilocalFamilyMetadata.size()> kernels{};
+  kernels[semilocal_family_code(SemilocalFamily::Pbe)] = stationary_pbe_xc_derivative;
+  kernels[semilocal_family_code(SemilocalFamily::B3lyp)] = bound_b3lyp_stationary_xc;
+  return kernels;
+}();
+}  // namespace
+
+PbeStationaryXcDerivative stationary_curated_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    SemilocalFamily family, double exchange_scale, double correlation_scale) {
+  const auto code = semilocal_family_code(family);
+  if (code >= kStationaryXcKernels.size() || !kStationaryXcKernels[code])
+    throw std::invalid_argument("no qualified native stationary XC geometry implementation");
+  return kStationaryXcKernels[code](basis, grid, density, tile_points, exchange_scale,
+                                    correlation_scale);
 }
 
 }  // namespace generativeqc::dft

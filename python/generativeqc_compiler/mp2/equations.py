@@ -10,9 +10,12 @@ from generativeqc_compiler.tensor import (
     add,
     broadcast,
     divide,
+    einsum,
     input_tensor,
     multiply,
     reduce_sum,
+    transpose,
+    transpose_program,
 )
 
 
@@ -52,15 +55,9 @@ def energy_program(
 
     g, x = tensor("g", axes), tensor("x", axes)
     eps = [tensor("e" + name, (axis,)) for name, axis in zip("ijab", axes, strict=True)]
-    d = add(
-        *(broadcast(e, axes, (k,)) for k, e in enumerate(eps)),
-        coefficients=(1, 1, -1, -1),
-    )
-    t = divide(g, d)
-    os = reduce_sum(multiply(t, g), (0, 1, 2, 3))
-    ss = reduce_sum(multiply(t, add(g, x, coefficients=(1, -1))), (0, 1, 2, 3))
+    outputs = _energy_outputs(g, x, eps, axes)
     return Program(
-        {"opposite_spin": os, "same_spin": ss},
+        outputs,
         provenance={
             "issue": "193 A1 (part of A)",
             "reference": "real all-electron canonical closed-shell RHF",
@@ -68,6 +65,92 @@ def energy_program(
             "units": "Hartree",
             "amplitudes": "unantisymmetrized restricted spatial; tile temporary only",
         },
+    )
+
+
+def _energy_outputs(
+    g: typing.Any,
+    x: typing.Any,
+    eps: typing.Any,
+    axes: typing.Any,
+    *,
+    fock_response: bool = False,
+) -> dict:
+    """Shared ordered spatial-MP2 algebra, independent of the integral producer."""
+    d = add(
+        *(broadcast(e, axes, (k,)) for k, e in enumerate(eps)),
+        coefficients=(1, 1, -1, -1),
+    )
+    t = divide(g, d)
+    os = reduce_sum(multiply(t, g), (0, 1, 2, 3))
+    ss = reduce_sum(multiply(t, add(g, x, coefficients=(1, -1))), (0, 1, 2, 3))
+    outputs = {"opposite_spin": os, "same_spin": ss}
+    if fock_response:
+        # Differentiate the noncanonical MP2 amplitude equation L(F)T=G.
+        # Its adjoint is (2G-X)/D at this canonical frame. Full same-space
+        # Fock cotangents preserve rotational stationarity without dividing
+        # by occupied/occupied or virtual/virtual gaps, including degeneracy.
+        left = divide(add(g, x, coefficients=(2, -1)), d)
+        outputs["bar_foo"] = add(
+            einsum("ijab,kjab->ik", left, t),
+            einsum("ijab,ikab->jk", left, t),
+            coefficients=(-1, -1),
+        )
+        outputs["bar_fvv"] = add(
+            einsum("ijab,ijcb->ac", left, t),
+            einsum("ijab,ijac->bc", left, t),
+        )
+    return outputs
+
+
+def df_energy_program(
+    occupied: int, virtuals: int, auxiliaries: int, *, fock_response: bool = False
+) -> Program:
+    """DF correlation on supplied conventional RHF orbitals; never refit Fock.
+
+    Bov is Q-major and already whitened with the molecular source's metric.
+    Only occupied/virtual Gram integrals are formed, not a full NMO^4 tensor.
+    The two occupied and two virtual epsilon inputs borrow the same respective
+    physical spectra; their reverse outputs must be summed by the caller.
+    """
+    if any(
+        type(size) is not int or size < 1 for size in (occupied, virtuals, auxiliaries)
+    ):
+        raise ValueError(
+            "DF-MP2 requires positive integer occupied, virtual and auxiliary dimensions"
+        )
+    axes = (
+        Index("Q", IndexSpace("mp2_auxiliary", "batch", auxiliaries)),
+        Index("i", IndexSpace("mp2_occupied", "occupied", occupied)),
+        Index("a", IndexSpace("mp2_virtual", "virtual", virtuals)),
+    )
+    bov = input_tensor("bov", TensorSpec(axes, role="parameter", differentiable=True))
+    direct = einsum("Qia,Qjb->ijab", bov, bov)
+    exchange = transpose(direct, (0, 1, 3, 2))
+    axes = direct.spec.indices
+    eps = [
+        input_tensor("e" + name, TensorSpec((axis,), role="input", differentiable=True))
+        for name, axis in zip("ijab", axes, strict=True)
+    ]
+    return Program(
+        _energy_outputs(direct, exchange, eps, axes, fock_response=fock_response),
+        provenance={"method": "conventional RHF plus correlation-only DF-MP2"},
+    )
+
+
+def df_energy_response_program(
+    occupied: int, virtuals: int, auxiliaries: int
+) -> Program:
+    """Energy, unit-total full Fock response and exact factor/spectrum VJP.
+
+    The factor/spectrum reverse exposes OS/SS seeds; the molecular consumer
+    sets both to one, matching the full noncanonical Fock response outputs.
+    """
+    primal = df_energy_program(occupied, virtuals, auxiliaries, fock_response=True)
+    reverse = transpose_program(primal, ("opposite_spin", "same_spin"))
+    return Program(
+        {**primal.outputs, **reverse.program.outputs},
+        provenance={"method": "same-Hamiltonian DF-MP2 factor and spectrum response"},
     )
 
 

@@ -68,6 +68,10 @@ macro(generativeqc_add_native_tests)
                        NO_GENERATIVEQC NO_SRC_INCLUDE)
   target_include_directories(generativeqc_geometry_optimizer_tests PRIVATE
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
+                       tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_df_ccsd_precision_policy_tests
+                     tests/native/test_df_ccsd_precision_policy.cpp NO_GENERATIVEQC)
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
                        tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)

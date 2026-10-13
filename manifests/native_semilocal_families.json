@@ -41,7 +41,9 @@
       "stationary_second_order": true,
       "aliases": [
         "LDA_XC_PW"
-      ]
+      ],
+      "cpu_stationary_force_profiles": [],
+      "legacy_cpu_point_response_slot": 0
     },
     {
       "symbol": "Pbe",
@@ -81,7 +83,28 @@
       "molecular_nonlocal_domain": false,
       "incremental_xc": true,
       "stationary_second_order": true,
-      "aliases": []
+      "aliases": [],
+      "cpu_stationary_force_profiles": [
+        {
+          "spins": [
+            1,
+            2
+          ],
+          "exact_exchange": "0",
+          "semilocal_exchange": "1",
+          "semilocal_correlation": "1"
+        },
+        {
+          "spins": [
+            1,
+            2
+          ],
+          "exact_exchange": "1/4",
+          "semilocal_exchange": "3/4",
+          "semilocal_correlation": "1"
+        }
+      ],
+      "legacy_cpu_point_response_slot": 1
     },
     {
       "symbol": "R2scan",
@@ -121,7 +144,9 @@
       "molecular_nonlocal_domain": false,
       "incremental_xc": false,
       "stationary_second_order": false,
-      "aliases": []
+      "aliases": [],
+      "cpu_stationary_force_profiles": [],
+      "legacy_cpu_point_response_slot": null
     },
     {
       "symbol": "B3lyp",
@@ -169,7 +194,18 @@
       "molecular_nonlocal_domain": false,
       "incremental_xc": false,
       "stationary_second_order": false,
-      "aliases": []
+      "aliases": [],
+      "cpu_stationary_force_profiles": [
+        {
+          "spins": [
+            1
+          ],
+          "exact_exchange": "1/5",
+          "semilocal_exchange": "1",
+          "semilocal_correlation": "1"
+        }
+      ],
+      "legacy_cpu_point_response_slot": null
     },
     {
       "symbol": "Wb97mv",
@@ -210,7 +246,9 @@
       "molecular_nonlocal_domain": true,
       "incremental_xc": false,
       "stationary_second_order": false,
-      "aliases": []
+      "aliases": [],
+      "cpu_stationary_force_profiles": [],
+      "legacy_cpu_point_response_slot": null
     }
   ]
 }

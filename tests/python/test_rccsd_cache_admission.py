@@ -14,13 +14,20 @@ PREFIX = r"""
 #include <cstddef>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 #include "cc/solver.hpp"
+namespace cc = generativeqc::cc;
 int allocations=0, executions=0;
 bool retained_response=false;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3, GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
-namespace core { struct System { bool df_supported=true; }; }
+namespace core {
+struct System { bool df_supported=true; int electron_count=2; std::size_t nbf=2; };
+}
+namespace molecule {
+std::size_t ao_count(const core::System& system) { return system.nbf; }
+}
 namespace runtime {
 struct ExecutionContext {
   bool cuda=false;
@@ -76,7 +83,9 @@ std::size_t correlation_budget(const generativeqc_method_descriptor& d) { return
 using SolverOptions = generativeqc::cc::SolverOptions;
 SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 std::size_t admitted_q_batch=0;
-bool admitted_derived_denominators=false;
+bool admitted_derived_denominators=false, admitted_mixed=false;
+double admitted_switch=0;
+bool admitted_df_mp2_mode=false;
 scf::CudaRhfBucketPlan** admitted_reference_plan=nullptr;
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
@@ -85,10 +94,13 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::S
                                       std::unique_ptr<scf::PreparedFockPlan>*, const core::System*,
                                       bool retain_df_response,
                                       const scf::cuda_execution::CudaDfSourcePolicy*,
-                                      scf::CudaRhfBucketPlan** reference_plan) {
+                                      scf::CudaRhfBucketPlan** reference_plan, bool df_mp2_mode) {
   admitted_q_batch=options.df_auxiliary_batch_limit;
   admitted_derived_denominators=options.derived_denominators;
+  admitted_mixed=options.df_mixed_precision;
+  admitted_switch=options.df_mixed_precision_switch_residual;
   admitted_reference_plan=reference_plan;
+  admitted_df_mp2_mode=df_mp2_mode;
   ++executions;
   retained_response=retain_df_response;
   return {p != nullptr,0,{80}};
@@ -103,6 +115,32 @@ int main(int argc,char** argv) {
   core::System system;
   generativeqc_method_descriptor descriptor;
   std::unique_ptr<scf::PreparedFockPlan> cache;
+  if (mode == 11) {
+    struct Shape { int electrons; std::size_t nbf; bool automatic; };
+    const Shape shapes[]{{16,136,false},{18,136,false},{18,137,true}};
+    core::System auxiliary;
+    for (const auto shape : shapes)
+    for (bool cuda : {false,true})
+    for (bool with_auxiliary : {false,true})
+    for (std::optional<bool> requested :
+         {std::optional<bool>{},std::optional<bool>{false},std::optional<bool>{true}})
+    for (double switch_residual : {100.0 * 1e-9,1e-4})
+    for (bool mp2_mode : {false,true}) {
+      if (with_auxiliary && !cuda) continue;
+      execution.cuda=cuda;
+      system.electron_count=shape.electrons;
+      system.nbf=shape.nbf;
+      (void)run_rccsd_native_state(
+          execution,system,descriptor,nullptr,nullptr,nullptr,0,
+          with_auxiliary ? &auxiliary : nullptr,false,true,nullptr,8,true,false,
+          requested,switch_residual,mp2_mode);
+      const bool expected=cuda && with_auxiliary && requested.value_or(shape.automatic);
+      if (admitted_mixed!=expected || admitted_switch!=switch_residual ||
+          admitted_df_mp2_mode!=mp2_mode || allocations)
+        return 16;
+    }
+    return 0;
+  }
   if (mode == 0) descriptor.budget=79;
   if (mode == 1) descriptor.valid=false;
   if (mode == 2) execution.cuda=true;
@@ -125,22 +163,32 @@ int main(int argc,char** argv) {
       return executions || allocations || retained_response ? 12 : 0;
     }
   }
-  if (mode == 7 || mode == 8) {
+  if (mode >= 7 && mode <= 10) {
     execution.cuda=true;
     core::System auxiliary;
     scf::CudaRhfBucketPlan resident;
     auto* reference_plan=&resident;
+    // CC and correlation-only MP2 share admission, with independent response
+    // retention. Exercise MP2 energy-only and response-bearing forwarding.
+    const bool mp2_mode=mode >= 9, retain_response=mode != 9;
+    const bool derived_denominators=mode != 8;
+    const double switch_residual=1e-4;
     (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,
-                                 &auxiliary,true,true,&reference_plan,3,mode==7);
+                                 &auxiliary,retain_response,true,&reference_plan,3,
+                                 derived_denominators,false,false,switch_residual,mp2_mode);
     if(admitted_q_batch!=3 || admitted_reference_plan!=&reference_plan ||
-       reference_plan!=&resident || admitted_derived_denominators!=(mode==7)) return 14;
-    return !retained_response || executions != 1 || allocations || cache ? 13 : 0;
+       reference_plan!=&resident || admitted_derived_denominators!=derived_denominators ||
+       admitted_df_mp2_mode!=mp2_mode || admitted_mixed ||
+       admitted_switch!=switch_residual) return 14;
+    return retained_response!=retain_response || executions != 1 || allocations || cache ? 13 : 0;
   }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
                                         nullptr,nullptr,0,nullptr,false,true,nullptr);
     if (mode < 2) return 2;
-    if(admitted_q_batch!=8 || admitted_reference_plan || !admitted_derived_denominators) return 15;
+    if(admitted_q_batch!=8 || admitted_reference_plan || !admitted_derived_denominators ||
+       admitted_df_mp2_mode || admitted_mixed ||
+       admitted_switch!=cc::SolverOptions{}.df_mixed_precision_switch_residual) return 15;
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;
     if (result.cached != expect_cache) return 3;
@@ -208,7 +256,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         text=True,
         timeout=30,
     )
-    for mode in range(9):
+    for mode in range(12):
         result = subprocess.run(
             [str(executable), str(mode)],
             capture_output=True,

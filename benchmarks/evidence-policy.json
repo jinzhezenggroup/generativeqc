@@ -2,26 +2,6 @@
   "benchmark_results_max_bytes": 67108864,
   "change_review_max_bytes": 2097152,
   "exceptions": {
-    "benchmarks/results/array-api-rhf-slurm-20261011/n1/tests.log": {
-      "owner": "array-api-rhf-slurm-20261011",
-      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
-      "sha256": "cc9cce96918f054928c4188f6e59587aceed18a993c845597c63331aa28a3d51"
-    },
-    "benchmarks/results/array-api-rhf-slurm-20261011/n1/tests.xml": {
-      "owner": "array-api-rhf-slurm-20261011",
-      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
-      "sha256": "f4090e3652e02b2bf35498756d67465f25ba4fa838982c94b17d42a3aeb4efe9"
-    },
-    "benchmarks/results/array-api-rhf-slurm-20261011/n4/tests.log": {
-      "owner": "array-api-rhf-slurm-20261011",
-      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
-      "sha256": "4dae84dcd14ff26b33e02ccdec61e50367fb10fb8f6b71a78e5f3c93fdda7337"
-    },
-    "benchmarks/results/array-api-rhf-slurm-20261011/n4/tests.xml": {
-      "owner": "array-api-rhf-slurm-20261011",
-      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
-      "sha256": "032c863be36c57e1dc00448060e7fec88d31e5ddfcbbfc7241790184d6a07325"
-    },
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
       "owner": "array-api-rhf-slurm-20261011",
       "reason": "Small exact compiler/toolkit/profile qualification receipt for the frozen source-matched Release/sm_120 CUDA library. Retains initial/final configuration provenance, distinguishing the measured force-AOT-off build from an unverified prebuilt library; objects and full build logs remain ignored.",
@@ -37,6 +17,31 @@
       "reason": "Small exact diagnostic receipt of the dormant float32 CUDA planner rejection exposed on scheduled hardware. Retains the failed acceptance and traceback rather than rewriting it as success; final passing cases and source/library identities are separate compact records.",
       "sha256": "22e693a88988e6515f0ef654fbc6fccd9d254191dbeea7372b34fa346c90c3a1"
     },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n1/tests.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
+      "sha256": "cc9cce96918f054928c4188f6e59587aceed18a993c845597c63331aa28a3d51"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n1/tests.xml": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
+      "sha256": "f4090e3652e02b2bf35498756d67465f25ba4fa838982c94b17d42a3aeb4efe9"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n2-driver-discovery.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact failed scheduler/device-discovery receipt explaining why no PRO 6000 numerical/performance acceptance is claimed. Keeps the NVML driver/library mismatch distinct from the successfully qualified n1/n4 CUDA source.",
+      "sha256": "2bb20dfe86d765e1d03215266b640dd7e61fb1207b72e6370c3638eef7ea5322"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n4/tests.log": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
+      "sha256": "4dae84dcd14ff26b33e02ccdec61e50367fb10fb8f6b71a78e5f3c93fdda7337"
+    },
+    "benchmarks/results/array-api-rhf-slurm-20261011/n4/tests.xml": {
+      "owner": "array-api-rhf-slurm-20261011",
+      "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
+      "sha256": "032c863be36c57e1dc00448060e7fec88d31e5ddfcbbfc7241790184d6a07325"
+    },
     "benchmarks/results/array-api-rhf-slurm-20261011/typed-tensor-gate.log": {
       "owner": "array-api-rhf-slurm-20261011",
       "reason": "Small exact scheduled acceptance receipt preserving the actual 24/67 test outcome and finite Slurm context, rather than a manufactured passing flag. Named coverage and frozen source/library identity are independently retained in the campaign JUnit/provenance records.",
@@ -47,10 +52,105 @@
       "reason": "Small exact per-test qualification receipt for frozen Array API CUDA/RHF source: preserves every named primal/AD/molecular/domain-recovery case and failure/skip count, preventing planner/host-only coverage from being relabelled as GPU acceptance. Source, library and Slurm identities are separately hash-bound in provenance.json.",
       "sha256": "6354023f6a2440ae16a15173bbf2e22db0735a5a92f54fbdf3d0f2b7ac0c2db2"
     },
-    "benchmarks/results/array-api-rhf-slurm-20261011/n2-driver-discovery.log": {
-      "owner": "array-api-rhf-slurm-20261011",
-      "reason": "Small exact failed scheduler/device-discovery receipt explaining why no PRO 6000 numerical/performance acceptance is claimed. Keeps the NVML driver/library mismatch distinct from the successfully qualified n1/n4 CUDA source.",
-      "sha256": "2bb20dfe86d765e1d03215266b640dd7e61fb1207b72e6370c3638eef7ea5322"
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/integrated-cbs-smoke.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact integration receipt for tree 933cd35d94e13b3549139d4c27ef0e08eb4aca20: preserves the CPU water-algebra oracle/reuse 2-pass outcome and native/public API checker results. This is host integration evidence, not a fresh integrated-head CUDA qualification.",
+      "sha256": "0fb50aab08e1b27132fe288e598105a23ebcb3faf2b8f187eeea834b2d0602af"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/integrated-host-portability.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact host-portability receipt preserving 4 passed, 1 skipped and 23 deselected. The skipped Clang case must remain visible; this receipt cannot be relabelled as a two-compiler pass or as GPU qualification.",
+      "sha256": "603bf54f23b9c7d2a4f75b2745b7ec9a0f99e43d7494f8a18307dc947405f010"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/integrated-host-smoke.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Lossless 24122-byte compressed build/native-test receipt for the explicit integration tree: retains ccache 4.5.1, compiler warnings, library/native-gradient links and the original gradient-executable completion. It distinguishes an actually rebuilt host library from the earlier pinned GPU binary. This exact frozen receipt is admitted; compiler objects, binaries and future build logs are not.",
+      "sha256": "bbf56956b148da2362cdf76738984301d94d787182777f687c0d8e547404a74a"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/reuse-live-capacity-native.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact 57-byte compressed completion receipt from the native MP2 gradient executable used for the pinned live-reference-capacity qualification. Test scope and source identity are documented separately; retaining this original outcome does not imply new device allocation-refusal coverage.",
+      "sha256": "3dc4c2c31e0f0ba7a15bfdbdb98af387a79c54e90353fdf949a23b0e89820221"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/reuse-qualified-contracts.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact pinned-source contract-suite receipt preserving the original 73 passed and 39 subtests. Retain the authentic aggregate outcome beside source/library and numerical records rather than manufacturing a passing flag or extending its scope to later integration.",
+      "sha256": "cd9f3ed11ce8f726414d8cb5bb12f74a52786218183b7615f3b35010c7af0fa3"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/reuse-qualified-cpu.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact pinned-source CPU acceptance receipt preserving 68 passed, 4 skipped and 31 deselected. The original skips and selection limits remain auditable; the receipt does not qualify the expensive opt-in physical H2 CPU force replay.",
+      "sha256": "2447b38f9a1d52e38db1480684a5a44e6f95087665b9c6a5398b240dc934ff8a"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/reuse-qualified-gpu-focused.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact focused Slurm CUDA acceptance receipt preserving 28 passed and 42 deselected for the pinned c6a489ac implementation. Numerical/source/library records are retained separately; this outcome excludes the disabled-source F-shell timeout and is not integrated-head GPU qualification.",
+      "sha256": "5077119b06badcc9875afe44c4c6f7edb3cd56ca28878a46f1315a14072b2dc9"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/reuse-qualified-gpu-legacy-timeout.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact failed Slurm step 7883.0 receipt preserving the disabled-source F-shell time-limit termination. Keeping the negative outcome prevents the separate focused CUDA pass from being misrepresented as a complete combined-suite pass.",
+      "sha256": "0ad8778525c05ff48232583b8fe662f00066b9dd81e5920ea5b1077c6ff417e2"
+    },
+    "benchmarks/results/ccsdt-cbs-native-reuse-20261012/reuse-tight-budget-gpu.log.gz": {
+      "owner": "ccsdt-cbs-native-reuse-20261012",
+      "reason": "Exact compact tight-budget CUDA receipt preserving GPU/toolkit identity and 1 passed, 44 deselected. The matching retained journal establishes resource-only source fallback with zero optional MO cache; this receipt is not evidence for every cache-construction allocation-refusal scenario.",
+      "sha256": "84b6e7007370c23bc6fa68e77ed0f09251cae86128f3d1918589bb30d01103fd"
+    },
+    "benchmarks/results/df-cbs-integrated-20261013/gpu-build.log.gz": {
+      "owner": "df-cbs-integrated-20261013",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "5773d4cc7db0a16bfe0702ade9c316e94562eebf615cd71d2c5b1958196164e9"
+    },
+    "benchmarks/results/df-cbs-integrated-20261013/gpu-tests.log.gz": {
+      "owner": "df-cbs-integrated-20261013",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "dd75f49c8549a238b8e860e72517a7cf4c47af5b8c47cd4427b907a2495026ca"
+    },
+    "benchmarks/results/df-cbs-integrated-20261013/host-build.log.gz": {
+      "owner": "df-cbs-integrated-20261013",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "890a553ac80162fd689f402a8592d8b1bb11c5298ce42e52c63b992b93b9396e"
+    },
+    "benchmarks/results/df-cbs-integrated-20261013/host-probe-initial-failure.log.gz": {
+      "owner": "df-cbs-integrated-20261013",
+      "reason": "Exact losslessly compressed initial compiled probe failure receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "6226aa3a730d87b41e64285a337529c94c2a802b0e555a22d8dfe50206fc266d"
+    },
+    "benchmarks/results/df-cbs-integrated-20261013/host-tests.log.gz": {
+      "owner": "df-cbs-integrated-20261013",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "b44add72e8ef79e55f81730ab1153289f9d9d933462f0d437130fc6ed12466fe"
+    },
+    "benchmarks/results/df-cbs-integrated-20261013/qm7-tests.log.gz": {
+      "owner": "df-cbs-integrated-20261013",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "90caf8d338048947a74d526a3c748d3777cb8d17b03c9e5895aa15eba05c2411"
+    },
+    "benchmarks/results/df-cbs-qm7-20261012/gpu-build.log.gz": {
+      "owner": "df-cbs-qm7-20261012",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "e8eea5c54fe632233d4eb29d287057ca685f8c45b1e5d4cae2271eb85fb4aab5"
+    },
+    "benchmarks/results/df-cbs-qm7-20261012/gpu-tests.log.gz": {
+      "owner": "df-cbs-qm7-20261012",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "b93a5d16607d323d22a1fa4cfed3f84ea10cda50fa24af462709ae322e9f0aa9"
+    },
+    "benchmarks/results/df-cbs-qm7-20261012/host-build.log.gz": {
+      "owner": "df-cbs-qm7-20261012",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "f3e165763aac065cfb10338fd682770e59eb4e4944aa26e89087b8d8b732a04c"
+    },
+    "benchmarks/results/df-cbs-qm7-20261012/host-tests.log.gz": {
+      "owner": "df-cbs-qm7-20261012",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "d4aa00bd120d7891da10d2478a450e4c186b8ae86972d6377caee3d8ce3534df"
+    },
+    "benchmarks/results/df-cbs-qm7-20261012/qm7-tests.log.gz": {
+      "owner": "df-cbs-qm7-20261012",
+      "reason": "Exact losslessly compressed build/test completion receipt for correlation-only DF-MP2/DF-CBS qualification. Retain the original outcome beside source/library hashes, independent molecular gates and timing boundaries; this exception admits only these frozen bytes, not future logs or broader qualification.",
+      "sha256": "dc43b83c39e799a1f26885eda13553e3b9283d210e8292691923dba679fe5173"
     },
     "benchmarks/results/ecp-consumers-171/raw-evidence.zip": {
       "owner": "ecp-consumers-171",
@@ -248,8 +348,8 @@
       "sha256": "04a091ebadea2fbc318a6953eb6567c5334a951327e9760124e616497e2ec38e"
     }
   },
-  "review_size_bytes": 1048576,
-  "schema": "generativeqc.retention-policy.v1",
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",
-  "legacy_large_review_threshold_bytes": 131072
+  "legacy_large_review_threshold_bytes": 131072,
+  "review_size_bytes": 1048576,
+  "schema": "generativeqc.retention-policy.v1"
 }
