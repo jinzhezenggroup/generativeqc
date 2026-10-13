@@ -2041,6 +2041,28 @@ generativeqc_status item_exception_status() {
   }
 }
 
+bool retryable_seed_failure(generativeqc_status status, const std::exception_ptr& failure) {
+  if (status != GENERATIVEQC_STATUS_NOT_CONVERGED &&
+      status != GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+      status != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+    return false;
+  if (!failure) return true;
+  try {
+    std::rethrow_exception(failure);
+  } catch (const MethodError&) {
+    return true;
+  } catch (const generativeqc::Error&) {
+    return true;
+  } catch (const std::invalid_argument&) {
+    return true;
+  } catch (...) {
+    // The public status mapper also classifies untyped runtime exceptions as
+    // numerical failures. CUDA graph launch errors use that path, so status
+    // alone cannot authorize a second solve after possibly submitted work.
+    return false;
+  }
+}
+
 /** Independent native KS owners, with ordinary-stream round-robin CUDA work.
  * Geometry is rebuilt per item, while model/basis/charge/spin remain immutable.
  * No HF graph or Python calculation loop participates in this schedule. */
@@ -2196,9 +2218,7 @@ class KsPreparedBatch final : public PreparedBatch,
         auto& result = results[i];
         // Retry only seed-related failures. Resource/driver failures preserve
         // their first status and leave the last-good seed for explicit replay.
-        const bool seed_failure = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
-                                  result.status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE ||
-                                  result.status == GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+        const bool seed_failure = retryable_seed_failure(result.status, items_[i].failure);
         const bool preliminary_seeded = preliminary_seeds[i].has_value();
         const bool first_seeded = result.warm_start_used || preliminary_seeded;
         if (!ready[i] || (attempt && (!first_seeded || !seed_failure))) continue;
