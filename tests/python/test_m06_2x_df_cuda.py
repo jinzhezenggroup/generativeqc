@@ -135,7 +135,13 @@ def test_m06_2x_cuda_df_complete_cold_warm_and_moved_endpoints(atom_count: int) 
         moved_seed = reference_moved.make_rdm1().copy()
         batch.set_warm_start_updates(False)
         for _ in range(5):
-            warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            # Omitting coordinates replays the originally prepared geometry.
+            # Keep the moved native and independent geometry owners aligned.
+            warm = batch.execute(
+                coordinates=[[position for _, position in moved]],
+                strict=True,
+                properties=("energy", "forces"),
+            ).items[0]
             assert warm.warm_start_used
             _assert_endpoint(
                 warm, _reference_endpoint(reference_moved, cupy, moved_seed)

@@ -664,13 +664,13 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
     dftd4 = pytest.importorskip("dftd4")
     from dftd4.interface import DampingParam, DispersionModel
     from generativeqc._dft_gradient import StationaryKsState
-    from generativeqc.basis import load_basis
     from generativeqc_compiler.dft import NativeAO
     from test_dft_df_public import pyscf_energy_gradient
 
+    from benchmarks._retained_basis import load_retained_basis
     from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp as reference_gcp
 
-    auxiliary = load_basis(
+    auxiliary = load_retained_basis(
         Path(__file__).resolve().parents[2]
         / "benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json"
     )
