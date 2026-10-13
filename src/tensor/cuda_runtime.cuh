@@ -78,7 +78,12 @@ struct Context {
             std::to_string(metrics.provider_retained_bytes) + " bytes, allowed " +
             std::to_string(provider_bytes));
     }
-    cuda_check(cudaMalloc(reinterpret_cast<void**>(&arena), bytes));
+    bool host_oom = false;
+    const auto allocation_status = generativeqc::runtime::resource_cuda_malloc(
+        reinterpret_cast<void**>(&arena), bytes, &host_oom);
+    // Host bookkeeping failure must not trigger a smaller-device-arena retry.
+    if (host_oom) throw std::bad_alloc();
+    cuda_check(allocation_status);
     error = reinterpret_cast<int*>(arena + error_offset);
     metrics.owned_device_bytes = bytes;
     if (needs_blas) {
@@ -145,7 +150,7 @@ struct Context {
     if (end) cudaEventDestroy(end);
     if (section_begin) cudaEventDestroy(section_begin);
     if (section_end) cudaEventDestroy(section_end);
-    if (arena) cudaFree(arena);
+    if (arena) generativeqc::runtime::resource_cuda_free(arena);
     if (stream) cudaStreamDestroy(stream);
     cudaSetDevice(previous);
   }

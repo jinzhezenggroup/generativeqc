@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -2445,6 +2446,52 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
         *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
         exchange_coefficient, derivatives, separate_sources, allow_spatial_default));
     direct_jk_finite_result(derivatives);
+  });
+}
+
+generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
+    CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
+    const double* density, const double* beta, std::size_t matrix_elements,
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default) {
+  if (plan == nullptr || plan->generated_exchange == nullptr ||
+      !plan->generated_exchange->force_capability) {
+    detail = "prepared Direct owner has no retained shell derivative lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  // Reject capture before entering the failure drain: synchronizing a captured
+  // stream would invalidate the caller's graph even though no work was submitted.
+  auto capture_error = cudaSetDevice(plan->device_id);
+  cudaStreamCaptureStatus capture{};
+  if (capture_error == cudaSuccess) capture_error = cudaStreamIsCapturing(plan->stream, &capture);
+  if (capture_error != cudaSuccess) {
+    detail = cudaGetErrorString(capture_error);
+    return source_cuda_status(capture_error);
+  }
+  if (capture != cudaStreamCaptureStatusNone) {
+    detail = "resident shell derivatives require an ordinary noncapturing stream";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(consumer && plan->diagnostic.batch_size == 1,
+                      "resident shell derivative requires one prepared item and a consumer");
+    direct_jk_require(plan->diagnostic.derivative_order >= 1,
+                      "direct shell first derivatives were not retained");
+    const auto extent = plan->diagnostic.nbf;
+    direct_jk_require(density != nullptr && matrix_elements == extent * extent,
+                      "resident shell derivative density shape is invalid");
+    const bool unrestricted = spin == FockSpin::Unrestricted;
+    direct_jk_require(unrestricted ? beta != nullptr : beta == nullptr,
+                      "resident shell derivative spin storage is invalid");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    try {
+      direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
+          *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
+          exchange_coefficient, consumer, allow_spatial_default));
+    } catch (const generativeqc::Error& error) {
+      // Preserve the callback's typed status through the existing provider
+      // guard and its failure drain; driver failures are not bad seed input.
+      throw DirectJkFailure{error.status(), error.what()};
+    }
   });
 }
 

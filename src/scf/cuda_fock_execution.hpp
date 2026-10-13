@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "scf/cuda_derivative_sources.hpp"
 #include "scf/fock_prepared.hpp"
 
 namespace generativeqc::scf {
@@ -163,6 +164,13 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail,
     bool separate_sources = true, bool allow_spatial_default = false);
+
+/** Consume the prepared immutable full-range J/K composition on device. The
+ * enclosing method owns final-state authentication and source publication. */
+generativeqc_status consume_prepared_cuda_direct_shell_full_range_derivatives_device(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    bool allow_spatial_default = false);
 
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.

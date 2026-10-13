@@ -95,11 +95,12 @@ libarchive), still need to be installed. On a host with a nonstandard CUDA
 library location, configure the dynamic loader's library path. The archive
 contains **one GenerativeQC executable** (`bin/generativeqc`), with no
 GenerativeQC shared libraries or separate stationary AOT plug-ins. Existing
-native AOT shell and CPU derivative code is compiled into the C++ core. The
-independent `stationary_*` CUDA derivative `.so` modules serve the Python
-force-consumer route, which the native CLI does not invoke, so bundling those
-modules would not add native CLI force capabilities. Their Python package and
-shared-SDK distribution semantics are unchanged.
+native AOT shell and CPU derivative code is compiled into the C++ core. The Python-specific `stationary_*` CUDA derivative `.so` modules remain
+separate from the single-executable CLI. Instead, the release preset enables
+`GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA` while leaving
+`GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF`: generated native s/p stationary
+force graphs and their generated registry are statically linked into the core. Shared
+SDK and Python AOT artifact semantics remain unchanged.
 
 The monolithic distribution cannot replace its linked core with a local binary
 profile through loader interposition. Automatic discovery of a cached binary
@@ -384,9 +385,31 @@ beta population, pass the same stationary-state gate. Direct s/p/d and DF
 orbital-through-f/auxiliary-through-g contexts retain their existing basis
 boundaries; see the SDK contract for qualification details.
 
-This is not support for native CUDA DFT forces, B3LYP UKS,
-r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
-requests reject before execution and do not return a partial derivative.
+On builds containing linked native CUDA stationary profiles, complete *Direct*
+CUDA DFT forces also admit graph-matched LDA, PBE, PBE0, r²SCAN and B3LYP
+RKS/UKS in the qualified all-electron s/p, strict-FP64,
+three-partition-iteration domain. Matching uses the generated MethodIR graph,
+exact-exchange and XC coefficients, rather than a functional-name whitelist.
+The monolithic CUDA CLI includes the compiler-qualified graph inventory; CPU-only
+builds do not. CMake discovers that inventory at build time from MethodIR rather
+than maintaining a second ten-name list. Native graph wrappers now share one
+CUDA source-transport kernel and one ordered unit-source gradient-reduction
+kernel, instead of compiling those device routines separately for every graph.
+The compiler validates that a MethodIR source reduction is a complete ordered
+unit-coefficient sum before selecting the shared implementation. XC evaluation,
+Becke derivatives and AO pullback are still graph-specialized pending numerical
+and performance qualification of a common CUDA geometry executor.
+A method listing alone never certifies forces: exact preparation and available
+resource capacity remain authoritative.
+
+CUDA DF DFT forces, ECP, d/f-shell force contexts, ωB97M-V and correction-bearing
+MethodIR forces are **not** enabled by this native CUDA path. CPU B3LYP UKS
+also remains unqualified. Unsupported `--forces` requests fail before execution
+rather than publishing incomplete gradients. Run
+`python3 tests/native/test_cli_cuda_stationary.py /path/to/generativeqc`
+under a real sm_120 GPU allocation for all ten CLI energy/force and reconverged
+finite-difference smoke checks. Hosted GitHub packaging CI checks the compiler-selected graph registry and
+linked symbols, but has no GPU and cannot supply numerical device evidence.
 Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
 RKS/UKS and B3LYP RKS force consumer only when every member has a qualified prepared
 context; unsupported members remain fail-closed. The Python `PreparedBatch` now queries real per-item

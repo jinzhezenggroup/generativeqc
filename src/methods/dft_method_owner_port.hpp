@@ -65,6 +65,21 @@ class KsBatchOwnerPort {
       std::span<const double> lr_correction, std::vector<double>& output, std::size_t maximum_bytes,
       std::array<std::uint64_t, 9>& work, std::string& detail) = 0;
 
+  // Native stationary consumers remain owned by the prepared KS batch. These
+  // ports forward the exact token and per-item bound without retaining storage.
+  virtual generativeqc_status native_cuda_stationary_gradient(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected,
+      std::size_t maximum_device_bytes, std::vector<double>& output,
+      dft::CudaStationaryResources& resources, std::string& detail) = 0;
+
+  virtual generativeqc_status native_cuda_stationary_capacity(std::size_t index,
+                                                              dft::CudaStationaryCapacity& capacity,
+                                                              std::string& detail) const = 0;
+
+  virtual generativeqc_status native_cuda_stationary_limit(std::size_t index,
+                                                           std::size_t maximum_device_bytes,
+                                                           std::string& detail) = 0;
+
   virtual generativeqc_status resident_density(std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                int& device, const double*& alpha,

@@ -593,4 +593,5 @@ int main(int argc, char** argv) {
   else
     return 1;
   assert(plan.blas == &handle && plan.stream == stream && handle.stream == stream);
+  return 0;
 }

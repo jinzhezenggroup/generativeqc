@@ -72,11 +72,13 @@ compiles or downloads dependencies. Native AOT preparation/execution remains
 unchanged. CPU-only builds do not include CUDA headers or acquire a driver
 through this interface.
 
-Some Python force compositions still execute outside the native transaction.
-In particular, the existing CPU Direct-KS force composition can invoke JIT
-consumers; native lifecycle metrics do not establish an AOT-only complete public
-force endpoint. That path needs its own complete prepared/AOT cutover rather
-than pretending that a successfully wrapped SCF has completed its force work.
+Native-admitted KS forces use the source-complete prepared C++ owner; admission
+comes from the per-prepared-item capability, not from lifecycle metrics. See
+[KS final-state and force ownership](ks_diagnostics.md) for the current boundary.
+Other qualified Python stationary-force compositions still execute outside the
+native transaction and can invoke JIT consumers. Those paths need their own
+complete prepared/AOT cutover: wrapping SCF alone does not establish an AOT-only
+complete public force endpoint.
 
 ## Resource and diagnostic contract
 
@@ -90,6 +92,27 @@ the sum of mutually exclusive phase high waters. Unobservable vendor storage,
 host allocator overhead and capture-internal allocations remain disclosed.
 Precision controls and method-specific refinement stay with their existing
 precision and scientific owners.
+
+The native stationary CUDA controller additionally reserves its retained
+grid-provider allowance in that ledger's admission capacity. Numeric v1/v2
+receipts remain unchanged: these allowances have no numeric allocation identity
+or requested-byte event. `generativeqc_resource_ledger_read_v3` reports six fields
+in one locked snapshot: request limit, numeric live/peak, provider-reserved
+live/peak, and combined simultaneously-live admission peak. Do not add this
+reservation again to a planner-withheld allowance or call it measured provider
+storage. Controller destruction releases it only after borrowed work drains;
+closing an observation handle does not forgive a retained owner's charge.
+
+For context-admitted native CUDA KS forces, descriptor-only capacity discovery
+and authenticated prepared-item discovery share the native scientific rule and
+the controller's capacity polynomial. Python reserves one complete consumer per
+retained item, including grid-provider admission. Fleet alternatives select
+cached or minimum storage for all items together, and native per-item limits
+survive coordinate rebuilds. Native reservations stay inside the ledger limit;
+they are not planner-withheld `runtime_allowance` estimates. The Python receipt
+keeps numeric observations unchanged and adds the v3 `admission` record.
+Unsupported or mixed fleets retain the incumbent force route and its staging
+allowance, rather than inferring support from a raw profile or a method name.
 
 Private observation ABIs `generativeqc_calculation_execution_lifecycle_v1` and
 `generativeqc_batch_execution_lifecycle_v1` return nine host-control fields:

@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/native_stationary_shared_kernels.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Stable compiled native CUDA launch ABI shared by method-neutral source transport and ProgramIR-qualified complete reduction; no scientific formulas or admission policy are defined here.",
+  "regions": []
+}

@@ -43,21 +43,32 @@ def test_resident_cphf_tool_is_not_public_derivative_promotion() -> None:
     assert row["exception"]["retirement_condition"]
 
 
-def test_cuda_cpks_and_rhf_frame_do_not_hide_host_krylov() -> None:
+def test_cuda_cpks_native_scalar_keeps_compatibility_boundaries_explicit() -> None:
     rows = _rows()
-    for identifier in ("dft-response-cuda-semilocal-cpks", "hf-response-cuda-frame-z"):
-        row = rows[identifier]
-        assert row["status"] == "production"
-        assert "Krylov" in row["exception"]["missing_capability"]
-        assert row["exception"]["owner"] == row["execution_owner"]
-        assert row["evidence_levels"]["public"]["state"] == "missing"
+    row = rows["dft-response-cuda-semilocal-cpks"]
+    assert row["status"] == "production"
+    assert row["execution_owner"] == "src/api/c_api_ks_snapshot.cpp"
+    assert row["exception"]["owner"] == "python/generativeqc/rks_response.py"
+    assert "multi-RHS/reconstruction" in row["exception"]["missing_capability"]
+    assert "host-vector compatibility" in row["exception"]["missing_capability"]
+    assert "nuclear/HVP" in row["exception"]["retirement_condition"]
+    assert "tests/python/test_resident_cpks_cuda.py" in row["evidence"]
+    assert row["evidence_levels"]["public"]["state"] == "missing"
+
+
+def test_cuda_rhf_frame_does_not_hide_host_krylov() -> None:
+    row = _rows()["hf-response-cuda-frame-z"]
+    assert row["status"] == "production"
+    assert "Krylov" in row["exception"]["missing_capability"]
+    assert row["exception"]["owner"] == row["execution_owner"]
+    assert row["evidence_levels"]["public"]["state"] == "missing"
 
 
 def test_uks_tooling_is_not_relabelled_as_installed_rks_ownership() -> None:
     rows = _rows()
     rks = rows["dft-response-cuda-semilocal-cpks"]
     uks = rows["dft-response-cuda-semilocal-uks-cpks"]
-    assert rks["domain"] == "lda-pbe-rks-fixed-grid"
+    assert rks["domain"] == "graph-qualified-rks-fixed-grid"
     assert uks["domain"] == "lda-pbe-uks-fixed-grid"
     assert rks["provider_owner"] == "python/generativeqc/rks_response.py"
     assert uks["provider_owner"] == "tools/generativeqc_response/native_ks.py"
