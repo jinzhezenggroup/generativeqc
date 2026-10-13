@@ -1398,7 +1398,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool use_warm = !input && reuse_warm && warm_ready;
     const auto* seed_selection = std::getenv("GENERATIVEQC_VV10_NATIVE_SEED");
     const auto* outer_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
-    const bool outer_requested = outer_selection && std::string_view(outer_selection) == "1";
+    // The bounded initializer changes only proposals and still certifies the
+    // full target. Keep an explicit off fallback and respect a caller-selected
+    // device chunk, whose independent solver policy owns that execution route.
+    const bool outer_requested = outer_selection ? std::string_view(outer_selection) == "1"
+                                                : configured_chunk_width() == 1;
     const auto* range_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED");
     const bool freeze_range_requested = range_selection && std::string_view(range_selection) == "1";
     const auto* incremental_seed = std::getenv("GENERATIVEQC_VV10_INCREMENTAL_SEED");

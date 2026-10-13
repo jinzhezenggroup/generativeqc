@@ -78,7 +78,9 @@ def test_nonlocal_work_rejects_malformed_availability() -> None:
         _nonlocal_work(library, 12, 3)
 
 
-@pytest.mark.parametrize("native_seed", ["off", "semilocal", "frozen", "frozen-range"])
+@pytest.mark.parametrize(
+    "native_seed", ["off", "semilocal", "frozen", "frozen-range", "auto"]
+)
 def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch: pytest.MonkeyPatch,
     native_seed: str,
@@ -105,6 +107,8 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         "GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED",
         str(int(native_seed in {"frozen", "frozen-range"})),
     )
+    if native_seed == "auto":
+        monkeypatch.delenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", raising=False)
     monkeypatch.setenv(
         "GENERATIVEQC_VV10_FROZEN_RANGE_SEED", str(int(native_seed == "frozen-range"))
     )
@@ -140,7 +144,7 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         after = owner.execute(moved, properties=("energy",)).items[0]
         assert after.converged
         assert after.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
-        if native_seed in {"frozen", "frozen-range"}:
+        if native_seed in {"frozen", "frozen-range", "auto"}:
             # Transported target densities start with a fresh physical anchor;
             # discarding VV10 first needlessly moves them away from that target.
             scopes = after.ks_diagnostic.nonlocal_history_scopes
