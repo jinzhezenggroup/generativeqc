@@ -50,9 +50,10 @@ int main() {
         }
         return true;
       };
-      const auto code =
-          dft::generated::split_hybrid_functional_code(method.exchange, method.correlation);
-      const bool qualified_df = dft::generated::split_hybrid_cuda_df_energy_force(code);
+      const auto code = generativeqc::dft::generated::split_hybrid_functional_code(
+          method.exchange, method.correlation);
+      const bool qualified_df =
+          generativeqc::dft::generated::split_hybrid_cuda_df_energy_force(code);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "canonical")) return 1;
       std::swap(components[0], components[1]);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "reordered components")) return 1;

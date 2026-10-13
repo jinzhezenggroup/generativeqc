@@ -28,6 +28,7 @@ from generativeqc.ks import (
 from generativeqc_compiler.method import (
     D4Spec,
     DispersionCorrectionPrimitive,
+    ExactExchangePrimitive,
     compile_ks_execution_plan,
     resolve_bulk_ks,
     resolve_method,
@@ -428,11 +429,12 @@ def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(
         renamed,
         primitives=tuple(
             replace(node, coefficient=Fraction(3, 7))
-            if node.kind == "full-range-exchange"
+            if isinstance(node, ExactExchangePrimitive)
             else node
             for node in renamed.primitives
         ),
     )
+    assert wrong_fraction != renamed
     assert not split_hybrid_df_force_admitted(
         wrong_fraction, backend="cuda", xc_schedule="device_fused"
     )

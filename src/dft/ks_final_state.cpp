@@ -26,8 +26,11 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const auto& fock = identity.determinant.model;
 #if GENERATIVEQC_HAS_CUDA
   const bool split_hybrid = generated::split_hybrid_registered(model.functional);
+  const bool qualified_split_df =
+      split_hybrid && generated::split_hybrid_cuda_df_energy_force(model.functional);
 #else
   const bool split_hybrid = false;
+  const bool qualified_split_df = false;
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
@@ -59,13 +62,13 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       !model.nonlocal_correlation &&
       fock.spec.exchange.coefficient == -qualified_exact_exchange / exchange_divisor;
   // Admit matching exact J/K for the three qualified CUDA semilocal
-  // families, plus the independently exercised PBE density-fitted J/K route.
-  // Mixed exact/DF ownership remains fail-closed.
+  // families, plus scalable semilocal and manifest-admitted split-hybrid
+  // density-fitted J/K. Mixed exact/DF ownership remains fail-closed.
   const bool cuda_primary_exchange =
       fock.backend == scf::FockBackend::Cuda && semilocal_family_has_cuda_ks(family) &&
       ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
         fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
-       (scalable_semilocal &&
+       ((scalable_semilocal || qualified_split_df) &&
         fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
         fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
       !model.range_correction && !model.nonlocal_correlation;
@@ -94,8 +97,11 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       !split_hybrid ||
       (fock.backend == scf::FockBackend::Cuda && split_composition.matched &&
        split_composition.exact_exchange_denominator && fock.spec.exchange.present &&
-       fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
-       fock.spec.exchange.approximation == scf::FockApproximation::Exact &&
+       ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
+         fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
+        (qualified_split_df &&
+         fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+         fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
        !model.range_correction && !model.nonlocal_correlation &&
        fock.spec.exchange.coefficient ==
            -static_cast<double>(split_composition.exact_exchange_numerator) /
