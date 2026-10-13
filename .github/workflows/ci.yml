@@ -69,6 +69,9 @@ jobs:
           echo "active=true" >> "${GITHUB_OUTPUT}"
 
   master-cpu-cache:
+    permissions:
+      contents: read
+      actions: read
     name: Seed shared Linux CPU ccache (GCC, coverage, Clang, Python)
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     # One master producer fills all CPU compiler/flag variants before publishing.
@@ -109,6 +112,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.master_cpu_ccache.outcome == 'success' && steps.master_cpu_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
       - name: Compile GCC, instrumented GCC, and Clang
@@ -196,7 +206,28 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ format('{0}-partial-{1}-{2}', steps.master_cpu_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
 
+      - name: Package bounded CPU compiler snapshot
+        id: cpu_snapshot
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cpu_seed.outcome == 'success' && steps.python_seed.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        run: python3 tools/ci_cpu_ccache_snapshot.py package
+      - name: Publish bounded CPU compiler snapshot
+        if: steps.cpu_snapshot.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cpu-ccache-master-ubuntu24-x86_64-v1-${{ github.run_attempt }}
+          path: ${{ steps.cpu_snapshot.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   cpu:
+    permissions:
+      contents: read
+      actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     # Cold GCC coverage can spend 6.5 minutes compiling and 8 minutes in CTest.
@@ -237,6 +268,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.cpu_ccache.outcome == 'success' && steps.cpu_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Install native CLI dependencies
@@ -969,6 +1007,9 @@ jobs:
           retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
 
   python:
+    permissions:
+      contents: read
+      actions: read
     name: python (${{ matrix.shard }})
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
@@ -1027,6 +1068,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.python_ccache.outcome == 'success' && steps.python_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Prepare CPU Python test environment
@@ -1320,6 +1368,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.benchmark_ccache.outcome == 'success' && steps.benchmark_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
