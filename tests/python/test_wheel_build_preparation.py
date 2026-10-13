@@ -25,7 +25,11 @@ def _executable(path: Path, body: str) -> None:
 
 
 def _prepare(
-    tmp_path: Path, *, cuda_repo: bool, package_status: int = 0
+    tmp_path: Path,
+    *,
+    cuda_repo: bool,
+    package_status: int = 0,
+    receipt_status: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     project = tmp_path / "project with spaces"
     ci = project / "python/ci"
@@ -79,6 +83,8 @@ def _prepare(
 
         with Path(os.environ["TEST_PYTHON_CALLS"]).open("a") as stream:
             stream.write(repr(sys.argv[1:]) + "\\n")
+        if "record_wheel_toolchain" in sys.argv:
+            sys.exit(int(os.environ["TEST_RECEIPT_STATUS"]))
         if sys.argv[1:3] == ["-m", "venv"]:
             target = Path(sys.argv[3]) / "bin/python"
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -92,6 +98,8 @@ def _prepare(
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "CCACHE_DIR": str(tmp_path / "ccache"),
+            "GQC_WHEEL_SNAPSHOT_ID": "123-2" if receipt_status is not None else "",
+            "TEST_RECEIPT_STATUS": str(receipt_status or 0),
             "TEST_CUDA_REPO": str(int(cuda_repo)),
             "TEST_PACKAGE_STATUS": str(package_status),
             "TEST_REPOS": str(tmp_path / "repos.json"),
@@ -128,3 +136,25 @@ def test_wheel_required_host_dependency_failure_stops_preparation(
     result = _prepare(tmp_path, cuda_repo=True, package_status=42)
     assert result.returncode == 42, result.stdout + result.stderr
     assert not (tmp_path / "python-calls.txt").exists()
+
+
+@pytest.mark.parametrize("receipt_status", [0, 17])
+def test_optional_snapshot_receipt_never_masks_or_blocks_required_setup(
+    tmp_path: Path, receipt_status: int
+) -> None:
+    result = _prepare(tmp_path, cuda_repo=True, receipt_status=receipt_status)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "python-calls.txt").read_text()
+    assert "record_wheel_toolchain" in calls and "--profile" in calls
+    assert "scipy-openblas32==" in calls and "resolve-openblas-wheel.py" in calls
+    assert ("receipt unavailable" in result.stdout) == (receipt_status != 0)
+
+
+def test_optional_receipt_failure_does_not_hide_required_package_failure(
+    tmp_path: Path,
+) -> None:
+    result = _prepare(tmp_path, cuda_repo=True, package_status=42, receipt_status=17)
+    assert result.returncode == 42, result.stdout + result.stderr
+    calls = (tmp_path / "python-calls.txt").read_text()
+    assert "record_wheel_toolchain" in calls
+    assert "scipy-openblas32==" not in calls
