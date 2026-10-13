@@ -111,3 +111,35 @@ Reproduce public timings with `benchmarks.pbe0_fast --reference <reference.json>
 preserving assigned device visibility. The raw reference and source identities
 must match; private `benchmarks.pbe0_mixed_gradient` ratios are not substitutes
 for this public endpoint.
+
+## Integrated master requalification (2026-10-14)
+
+Production commit `eca02b8ec`, including master `f2d59d9f3`, was rebuilt with
+all ten native stationary CUDA profiles. This exposed and fixed cross-profile
+FP32 helper linkage that the earlier PBE0-only build could not exercise.
+CUDA 12.9.1, Release, compute_120/sm_120, fast-compile OFF, verified ccache;
+library SHA-256 `88571e9e2a80b43b00521cc161e57e0969077a8311497455288821c6a09d6dff`.
+Slurm **8232**, node1 RTX 5090, assigned visibility `6`.
+
+The same fresh-owner complete-endpoint protocol, independent oracle and
+acceptance gates above give these three-repeat medians:
+
+| Seed | System | AOs | Optimized FP64 (s) | Fast (s) | Speedup |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Hcore | Water | 24 | 0.594528 | 0.483676 | 1.2292× |
+| Hcore | Water octamer S4 | 192 | 7.123487 | 6.062871 | 1.1749× |
+| Automatic Modified Huckel | Water | 24 | 0.507962 | 0.401488 | 1.2652× |
+
+All **24** endpoints, including retained first-call pairs, pass. Maximum
+energy/force-component/RMS errors are `2.956e-12 Eh`, `8.232e-7 Eh/bohr` and
+`2.934e-7 Eh/bohr`. Every Fast endpoint reports one solve, positive FP32 grid
+and geometry work, and no complete-gradient retry. Scheduled public/native
+policy tests: **35 passed**. This does not rerun the historical 384-AO campaign
+or sanitizer and does not qualify other functionals or the README prepared
+cold/frozen-seed/moved protocol.
+
+`integrated-master-summary.json.xz` retains every endpoint, its protocol, native
+build metadata, Fock and gradient work, seed diagnostics, oracle errors and raw
+file hashes. Logs and uncompressed results remain in
+`.artifacts/readme-budget-fast-20261013/` and the matching node1 campaign.
+The preceding historical tables retain their original source identities.
