@@ -415,8 +415,14 @@ generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_
     const auto* selected = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
     const std::string schedule = selected ? selected : "";
     const auto* reuse = std::getenv("GENERATIVEQC_VV10_COMPONENT_REUSE");
+    // Large fixed-grid replays avoid a quadratic sweep for a linear exact-key
+    // comparison. Small grids retain the old route unless explicitly selected;
+    // explicit zero/unknown values remain a bounded opt-out.
+    const bool reuse_selected = reuse && *reuse
+                                    ? std::string_view(reuse) == "1"
+                                    : owner->point_count >= 65536;
     const bool cache_admitted =
-        reuse && std::string_view(reuse) == "1" && owner->snapshot_seeded &&
+        reuse_selected && owner->snapshot_seeded &&
         owner->parameters.variant == generativeqc::dft::nlc::Vv10Variant::vv10 &&
         owner->parameters.coefficient <= 0x1p32;
     const int* cache_mismatch = nullptr;
