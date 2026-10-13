@@ -311,4 +311,3 @@ arrays retain the ordinary `Result` ownership contract and outlive those
 workspaces. `clear_cache()` remains available and serializes with active calls.
 Frozen `Result` fields do not make force arrays or native evidence dictionaries
 recursively immutable.
-
