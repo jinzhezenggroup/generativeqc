@@ -315,7 +315,7 @@ jobs:
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
       # Generated AOT objects are much larger than ordinary CPU objects, so
       # give the CUDA cache enough room while staying within the repo quota.
-      CCACHE_MAXSIZE: 3G
+      CCACHE_MAXSIZE: 5G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1528,7 +1528,7 @@ jobs:
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
-      CCACHE_MAXSIZE: 3G
+      CCACHE_MAXSIZE: 5G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1722,6 +1722,18 @@ jobs:
           python3 tools/report_ci_ccache.py
           --label "CUDA native CLI monolithic build"
           --build-dir build/cuda-release-cli-sm120
+      # A cache snapshot can contain entries for long-abandoned source/flag
+      # identities even when the 5 GiB cap was respected. Evict only entries
+      # untouched for a week; hits during either seed/build refresh recency.
+      # Do not clean consumer caches or delete the just-built compiler outputs.
+      - name: Retire unused CUDA objects before publishing the cache
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.fast_cuda_seed.outcome != '' && steps.fast_cuda_seed.outcome != 'skipped' }}
+        timeout-minutes: 2
+        continue-on-error: true
+        run: |
+          ccache --evict-older-than 7d
+          ccache --cleanup
+          ccache --show-stats
       - name: Save complete shared CUDA ccache on master
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_ccache.outputs.cache-hit != 'true'
         continue-on-error: true
