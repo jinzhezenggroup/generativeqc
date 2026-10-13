@@ -190,7 +190,9 @@ def emit_polarized_semilocal(
     if equal_spin_function_name is None:
         return source
     restricted_roots = equal_spin_roots(graph, roots)
-    restricted_emitter = ScalarCEmitter(graph, {name: name for name in spec.features})
+    restricted_emitter = ScalarCEmitter(
+        graph, {name: name for name in spec.features}, coalesce_branches=True
+    )
     restricted_emitter.emit(restricted_roots)
     restricted_refs = [restricted_emitter.reference(root) for root in restricted_roots]
     restricted_identity = canonical_hash(
@@ -320,7 +322,9 @@ def emit_r2scan_program(
         )
         if include_equal_spin:
             restricted_roots = equal_spin_roots(emitter.graph, roots_for_component[tag])
-            restricted_emitter = ScalarCEmitter(emitter.graph, emitter.variables)
+            restricted_emitter = ScalarCEmitter(
+                emitter.graph, emitter.variables, coalesce_branches=True
+            )
             restricted_emitter.emit(restricted_roots)
             restricted_refs = [
                 restricted_emitter.reference(root) for root in restricted_roots

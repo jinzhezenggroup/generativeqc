@@ -95,6 +95,15 @@ diagonal-sigma floors can make it differ even when the original RKS gradients
 are identical. Component-specific density screens, sigma/tau floors, Fermi-hole
 constraints and original-density energy rescaling are unchanged.
 
+The curated semilocal and split-hybrid equal-spin emitters share common
+arithmetic across simultaneously required branches with the same predicate.
+The scalar lowering keeps each inactive arm lazy, including singular boundary
+expressions, and reuses known predicate results only inside that arm. This
+changes the execution schedule without reassociating expressions or changing
+the polarized partials. The general-point selector arm retains its existing
+lowering. Executable branch tests include inactive singularities, nested
+predicates, signed zero and NaN comparisons.
+
 Run the strict host scalar and selector checks with the optional pinned
 reference dependencies installed:
 

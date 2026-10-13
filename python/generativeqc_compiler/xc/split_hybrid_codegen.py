@@ -193,7 +193,9 @@ def _emit_component(
         ]
     )
     restricted_roots = equal_spin_roots(program.graph, roots)
-    restricted_emitter = CudaEmitter(program.graph, variables)
+    # Polarized derivatives share the primal work under identical predicates.
+    # Keep that work in one lazy branch for the proven equal-spin producer.
+    restricted_emitter = CudaEmitter(program.graph, variables, coalesce_branches=True)
     restricted_emitter.emit(restricted_roots)
     restricted_interior = "\n".join(
         [

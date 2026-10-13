@@ -31,7 +31,12 @@ def format_constant(value: Coefficient, *, scalar_type: str = "double") -> str:
 
 
 class ScalarCEmitter:
-    """Emit selectively materialized DAG values with shared CSE state."""
+    """Emit selectively materialized DAG values with shared CSE state.
+
+    ``coalesce_branches`` shares lazy regions across simultaneous outputs.
+    It is an explicit execution schedule; the default preserves incumbent
+    source generation for consumers that have not qualified this schedule.
+    """
 
     def __init__(
         self,
@@ -40,6 +45,7 @@ class ScalarCEmitter:
         materialization_plan: MaterializationPlan | None = None,
         *,
         scalar_type: str = "double",
+        coalesce_branches: bool = False,
     ) -> None:
         if scalar_type not in ("double", "float"):
             raise ValueError("scalar type must be double or float")
@@ -47,6 +53,7 @@ class ScalarCEmitter:
         self.variables = dict(variables)
         self.materialization_plan = materialization_plan
         self.scalar_type = scalar_type
+        self.coalesce_branches = coalesce_branches
         self.names: dict[int, str] = {}
         self.lines: list[str] = []
         self._temporary = 0
@@ -62,7 +69,12 @@ class ScalarCEmitter:
         operands. Child emission never changes the parent or sibling CSE state.
         """
 
-        child = ScalarCEmitter(self.graph, self.variables, scalar_type=self.scalar_type)
+        child = ScalarCEmitter(
+            self.graph,
+            self.variables,
+            scalar_type=self.scalar_type,
+            coalesce_branches=self.coalesce_branches,
+        )
         child.names = self.names.copy()
         child._temporary = self._temporary
         return child
@@ -82,7 +94,10 @@ class ScalarCEmitter:
                 raise ValueError(
                     "materialization plan roots do not match emission roots"
                 )
-            self._emit_piecewise(normalized_roots)
+            if self.coalesce_branches:
+                self._emit_coalesced_piecewise(normalized_roots)
+            else:
+                self._emit_piecewise(normalized_roots)
             return
         if self.materialization_plan is None:
             materialized = {
@@ -193,6 +208,115 @@ class ScalarCEmitter:
 
         for root in roots:
             visit(root.identifier, "  ")
+
+    def _emit_coalesced_piecewise(self, roots: Sequence[Expr]) -> None:
+        """Share simultaneously demanded branches without speculating their arms.
+
+        Differentiation produces several selects with one predicate. Lowering
+        each output separately repeats their common primal expressions inside
+        distinct lexical scopes. A region's frontier stops at every unknown
+        select, so only branches required on *all* paths through that region
+        can be grouped. Predicate facts apply only inside the selected arm;
+        singular arithmetic in an inactive arm remains unevaluated. Arithmetic
+        nodes, operand order and output values are otherwise unchanged.
+        """
+
+        def temporary() -> str:
+            name = f"v{self._temporary}"
+            self._temporary += 1
+            return name
+
+        def region(
+            targets: Sequence[int], indent: str, facts: dict[tuple[int, int], bool]
+        ) -> None:
+            frontier: dict[tuple[int, int], list[int]] = {}
+            visited: set[int] = set()
+            while True:
+                frontier.clear()
+                visited.clear()
+
+                def discover(identifier: int) -> None:
+                    if identifier in self.names or identifier in visited:
+                        return
+                    visited.add(identifier)
+                    node = self.graph.nodes[identifier]
+                    if node.operation == "select_le":
+                        left, right, yes, no = node.arguments
+                        predicate = (left, right)
+                        if predicate in facts:
+                            discover(yes if facts[predicate] else no)
+                        else:
+                            # Predicate expressions can themselves contain
+                            # selects; their frontier must precede this group.
+                            discover(left)
+                            discover(right)
+                            frontier.setdefault(predicate, []).append(identifier)
+                        return
+                    for argument in node.arguments:
+                        discover(argument)
+
+                for identifier in targets:
+                    discover(identifier)
+                if not frontier:
+                    break
+                predicate, group = next(iter(frontier.items()))
+                region(predicate, indent, facts)
+                outputs = {identifier: temporary() for identifier in group}
+                for output in outputs.values():
+                    self.lines.append(f"{indent}{self.scalar_type} {output};")
+                left, right = predicate
+                self.lines.append(
+                    f"{indent}if ({self.names[left]} <= {self.names[right]}) {{"
+                )
+                parent = self.names.copy()
+                for taken, arm in ((True, 2), (False, 3)):
+                    self.names = parent.copy()
+                    values = [self.graph.nodes[item].arguments[arm] for item in group]
+                    region(values, indent + "  ", {**facts, predicate: taken})
+                    for identifier, value in zip(group, values, strict=True):
+                        self.lines.append(
+                            f"{indent}  {outputs[identifier]} = {self.names[value]};"
+                        )
+                    if taken:
+                        self.lines.append(f"{indent}}} else {{")
+                self.lines.append(f"{indent}}}")
+                self.names = parent
+                self.names.update(outputs)
+
+            def finish(identifier: int) -> None:
+                if identifier in self.names:
+                    return
+                node = self.graph.nodes[identifier]
+                if node.operation == "select_le":
+                    left, right, yes, no = node.arguments
+                    selected = yes if facts[(left, right)] else no
+                    finish(selected)
+                    self.names[identifier] = self.names[selected]
+                    return
+                if node.operation == "constant":
+                    if not isinstance(node.payload, (Fraction, float)):
+                        raise TypeError("constant node requires a numeric coefficient")
+                    self.names[identifier] = format_constant(
+                        node.payload, scalar_type=self.scalar_type
+                    )
+                    return
+                if node.operation == "variable":
+                    name = str(node.payload)
+                    self.names[identifier] = self.variables.get(name, name)
+                    return
+                for argument in node.arguments:
+                    finish(argument)
+                code = self._operation_code(identifier)
+                output = temporary()
+                self.names[identifier] = output
+                self.lines.append(
+                    f"{indent}const {self.scalar_type} {output} = {code};"
+                )
+
+            for identifier in targets:
+                finish(identifier)
+
+        region(tuple(root.identifier for root in roots), "  ", {})
 
     def emit_assignment(self, expression: Expr, target: str) -> None:
         """Emit one expression and bind its root to an existing C lvalue.
