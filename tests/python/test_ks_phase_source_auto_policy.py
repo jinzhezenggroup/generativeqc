@@ -3,7 +3,11 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 from conftest import NativeCxx
+from test_preliminary_cuda_control import probe
+
+pytest_plugins = ("test_preliminary_cuda_control",)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -20,24 +24,35 @@ def test_unset_selection_reaches_the_bounded_auto_policy() -> None:
     assert "direct_jk_source_auto_refusal(" in prepare
 
 
-def test_native_cold_seed_provenance_is_not_an_external_density() -> None:
-    """Only native preparation, never a warm projection, broadens seed eligibility."""
-    header = (ROOT / "src/dft/cuda_ks.hpp").read_text()
-    solver = " ".join((ROOT / "src/dft/cuda_ks.cpp").read_text().split())
-    owner = " ".join((ROOT / "src/methods/dft_method.cpp").read_text().split())
-    assert "CudaKsSeedOrigin seed_origin = CudaKsSeedOrigin::External" in header
-    assert (
-        "(!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm"
-        in solver
-    )
-    assert "prepared ? dft::CudaKsSeedOrigin::NativeColdGuess" in owner
-    assert (
-        "!attempt && !reuse && preliminary_seeds[i] ? dft::CudaKsSeedOrigin::NativeColdGuess"
-        in owner
-    )
-    assert solver.index("direct_jk_source_auto_refusal(") < solver.index(
-        "phase_source = std::make_unique<DirectJkSourceLease>"
-    )
+@pytest.mark.parametrize(
+    "route,scenario,origins,cold_eligibility",
+    [
+        ("cold", "success", [True], [True]),
+        ("warm", "success", [False], [False]),
+        ("explicit", "success", [False], [False]),
+        ("both", "success", [False], [False]),
+        ("no-reuse", "success", [True], [True]),
+        ("preparation-skipped", "success", [False], [True]),
+        ("cold", "nonconverged", [True, False], [True, True]),
+        ("warm", "nonconverged", [False, False], [False, True]),
+    ],
+)
+def test_native_cold_seed_provenance_is_not_an_external_density(
+    cuda_control_probe: Path,
+    route: str,
+    scenario: str,
+    origins: list[bool],
+    cold_eligibility: list[bool],
+) -> None:
+    """Exercise owner provenance and the provider’s real cold-source admission."""
+    result = probe(cuda_control_probe, route, scenario)
+    assert result["status"] == "returned"
+    assert result["phase_source_cold"] == cold_eligibility
+    assert [bool(attempt["native_cold"]) for attempt in result["trace"]] == origins
+    for attempt in result["trace"]:
+        if attempt["native_cold"]:
+            assert attempt["seed"] == 2
+            assert not attempt["warm"] and not attempt["reuse"]
 
 
 def test_screened_cold_candidates_preserve_rhf_policy(
