@@ -270,7 +270,7 @@ def test_actual_layout_incompatibilities_fail_closed(
     )
 
 
-@pytest.mark.parametrize("family", ["m062x", "mn15"])
+@pytest.mark.parametrize("family", ["mn15"])
 @pytest.mark.parametrize("selection", ["unset", "0", "1"])
 def test_point_program_without_capability_stays_dense(
     admission_probe: Path, family: str, selection: str
@@ -278,6 +278,25 @@ def test_point_program_without_capability_stays_dense(
     assert _run(admission_probe, selection, family) == (
         "rejected" if selection == "1" else "dense:0:0"
     )
+
+
+@pytest.mark.parametrize("spin", ["rks", "uks"])
+@pytest.mark.parametrize("precision", ["fp64", "auto"])
+@pytest.mark.parametrize("selection", ["unset", "0", "1"])
+def test_m06_local_ao_does_not_admit_mixed_density(
+    admission_probe: Path, spin: str, precision: str, selection: str
+) -> None:
+    """The generated M06 consumer reuses FP64 maps, not mixed XC contractions."""
+    assert _run(admission_probe, selection, "m062x", spin, precision=precision) == (
+        f"{'dense' if selection == '0' else 'local'}:{int(precision == 'auto')}:0"
+    )
+
+
+@pytest.mark.parametrize("mode", ["budget", "ledger"])
+def test_m06_map_capacity_fallback_stays_fp64(
+    admission_probe: Path, mode: str
+) -> None:
+    assert _run(admission_probe, "unset", "m062x", mode=mode) == "dense:0:0"
 
 
 @pytest.mark.parametrize("selection", ["unset", "1"])
