@@ -7,6 +7,13 @@ KS calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
+Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
+under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes
+only the initial density: the molecular fitted operators, auxiliary basis,
+metric threshold and force response stay unchanged. Warm/imported densities
+take precedence, and `initial_guess=None` restores Hcore. See
+[initial guesses](initial_guesses.md) for bounded fallback and compatibility.
+
 CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K

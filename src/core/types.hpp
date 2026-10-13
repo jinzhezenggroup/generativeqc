@@ -2,14 +2,24 @@
 #define GENERATIVEQC_CORE_TYPES_HPP
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "generativeqc/generativeqc.h"
-
 namespace generativeqc::core {
+
+// Native numerical tags do not depend on C handle layouts or public headers.
+// api/native_method_inputs.hpp verifies them against the versioned ABI.
+using Backend = std::int32_t;
+inline constexpr Backend kCpuReferenceBackend = 0;
+inline constexpr Backend kCudaBackend = 1;
+inline constexpr Backend kHybridCudaBackend = 2;
+
+using BasisRepresentation = std::int32_t;
+inline constexpr BasisRepresentation kCartesianBasis = 0;
+inline constexpr BasisRepresentation kSphericalBasis = 1;
 
 struct Atom {
   int atomic_number{};
@@ -43,7 +53,7 @@ struct System {
   int charge{};
   unsigned multiplicity{1};
   int electron_count{};
-  generativeqc_basis_representation basis_representation{GENERATIVEQC_BASIS_CARTESIAN};
+  BasisRepresentation basis_representation{kCartesianBasis};
   std::vector<EcpTerm> ecp_terms;
 };
 
@@ -61,8 +71,8 @@ class ContextWorkspace {
 };
 
 struct ContextState {
-  generativeqc_backend requested_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
-  generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
+  Backend requested_backend{kCpuReferenceBackend};
+  Backend executed_backend{kCpuReferenceBackend};
   int device_id{0};
   std::string device_name;
   int compute_capability_major{};

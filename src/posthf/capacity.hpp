@@ -31,7 +31,7 @@ inline std::size_t source_capacity(const core::System& system) {
       throw std::invalid_argument("post-HF source capacity supports through g");
     const auto l = static_cast<std::size_t>(shell.angular_momentum);
     const auto cart = (l + 1) * (l + 2) / 2;
-    const auto pub = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL ? 2 * l + 1 : cart;
+    const auto pub = system.basis_representation == core::kSphericalBasis ? 2 * l + 1 : cart;
     bytes = checked_add(bytes, 64 + 32 * cart + 16 * pub * cart);
     bytes = checked_add(bytes, checked_mul(32, shell.primitives.size()));
   }
@@ -56,7 +56,7 @@ inline std::size_t rhf_reference_capacity(const core::System& system, unsigned d
     const auto cart = molecule::cartesian_ao_count(system);
     const auto cart2 = checked_mul(cart, cart);
     auto eri_elements = checked_mul(2, checked_mul(cart2, cart2));
-    if (system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL)
+    if (system.basis_representation == core::kSphericalBasis)
       eri_elements = checked_add(eri_elements, checked_mul(matrix_elements, matrix_elements));
     bytes = checked_add(bytes, checked_mul(8, eri_elements));
   }

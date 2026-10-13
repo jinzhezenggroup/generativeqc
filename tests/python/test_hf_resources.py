@@ -140,17 +140,35 @@ def test_prepared_cpu_budget_gates_before_native_context_and_preserves_results(
         constrained.singlepoint(H2)
 
 
-def test_bounded_fleet_samples_every_serial_item_and_restores_thread_scope() -> None:
+@pytest.mark.parametrize("initial_guess", [None, "auto"])
+def test_bounded_fleet_samples_every_serial_item_and_restores_thread_scope(
+    initial_guess: typing.Any,
+) -> None:
     from generativeqc_compiler.common.resources import CpuResourceObservation
 
-    calculator = Calculator(resource_budget=ResourceBudget(host_bytes=10**6))
-    with calculator.prepare_batch([H2] * 4) as batch:
+    systems = [H2] * 4
+    peak = (
+        Calculator(initial_guess=initial_guess)
+        .estimate_resources(systems)
+        .peak_bytes["host"]
+    )
+    calculator = Calculator(
+        initial_guess=initial_guess, resource_budget=ResourceBudget(host_bytes=peak)
+    )
+    with calculator.prepare_batch(systems) as batch:
+        assert batch.resource_plan.peak_bytes["host"] == peak
         result = batch.execute(strict=True)
         observed = batch.resource_diagnostics["observation"]
         assert observed["samples"] == sum(item.iterations for item in result.items)
     with CpuResourceObservation(calculator._library) as observation:
         assert observation.cpu_workers == 0
     assert observation.samples is None
+    constrained = Calculator(
+        initial_guess=initial_guess,
+        resource_budget=ResourceBudget(host_bytes=peak - 1),
+    )
+    with pytest.raises(MemoryError, match="no supported plan fits"):
+        constrained.prepare_batch(systems)
 
 
 def test_failed_solve_retains_available_resource_samples() -> None:

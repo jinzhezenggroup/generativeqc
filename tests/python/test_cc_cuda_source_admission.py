@@ -127,6 +127,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/rhf_source_handoff.hpp"

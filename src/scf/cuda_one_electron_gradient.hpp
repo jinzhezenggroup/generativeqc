@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/cuda_derivative_sources.hpp"
 
 namespace generativeqc::scf {

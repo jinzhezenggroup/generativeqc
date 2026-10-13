@@ -222,8 +222,9 @@ class Calculator:
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
 
-        ``initial_guess="auto"`` selects MINAO for FP64 all-electron H-Ar
-        restricted exact CPU HF/KS and CUDA KS cold starts. Other domains retain
+        ``initial_guess="auto"`` selects native Modified Huckel for FP64
+        all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
+        Older libraries retain their previously supported default. Other domains retain
         Hcore, as does a batch containing an unsupported element. Explicit
         ``None`` disables preparation; existing densities always take precedence.
 
@@ -1088,36 +1089,49 @@ class Calculator:
         native_per_item_guess = False
         if self._automatic_initial_guess:
             from .initial_guess import (
-                _automatic_minao_model_eligible,
                 _uses_native_automatic_cpu,
+                automatic_initial_guess_candidate,
             )
 
-            if _automatic_minao_model_eligible(
+            candidate = automatic_initial_guess_candidate(
                 self,
                 restricted=restricted,
                 has_ecp=False,
-            ):
+            )
+            if candidate is not None:
+                self._initial_guess = candidate
                 # A basis package can contain unused ECP records. Only the qualified
                 # native per-item path may defer those facts to actual target admission.
                 native_per_item_guess = basis_has_ecp and _uses_native_automatic_cpu(
                     self
                 )
                 if not basis_has_ecp or native_per_item_guess:
-                    self._initial_guess = InitialGuessSpec("minao")
+                    self._initial_guess = candidate
+                else:
+                    self._initial_guess = None
 
         if self._initial_guess is not None:
             from .initial_guess import require_initial_guess_library
 
-            minao = self._initial_guess.kind == "minao"
+            minao = self._initial_guess.kind in ("minao", "huckel")
             backend_ok = self._device_name == "cpu" or (
                 minao
                 and self._device_name == "cuda"
-                and self._capabilities.family == "density_functional"
+                and (
+                    self._capabilities.family == "density_functional"
+                    or (
+                        self._initial_guess.kind == "huckel"
+                        and self._method == _native.METHOD_RHF
+                    )
+                )
             )
             if (
                 not backend_ok
                 or self._precision_mode != _native.PRECISION_FP64
-                or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                or (
+                    self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                    and self._initial_guess.kind != "huckel"
+                )
                 or not restricted
                 or (
                     basis_has_ecp
@@ -1127,7 +1141,7 @@ class Calculator:
                 not in ("hartree_fock", "density_functional")
             ):
                 raise NotImplementedError(
-                    "MINAO requires FP64 all-electron restricted exact CPU HF/KS or CUDA KS"
+                    "MINAO requires FP64 all-electron restricted exact CPU HF/KS or CUDA KS; Huckel also supports CUDA RHF and restricted DF HF/KS"
                     if minao
                     else "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
                 )
@@ -1181,7 +1195,7 @@ class Calculator:
 
     @property
     def initial_guess(self) -> InitialGuessSpec | None:
-        """Resolved cold-start candidate; automatic MINAO also checks batch elements."""
+        """Resolved guarded cold-start candidate; native CPU admission is per item."""
         return self._initial_guess
 
     @property
