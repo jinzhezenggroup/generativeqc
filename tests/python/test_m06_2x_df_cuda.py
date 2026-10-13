@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -32,7 +33,7 @@ AUXILIARY = (
 )
 
 
-def _oracle(atoms: tuple, basis: dict, auxiliary: dict, grid: GridSpec):
+def _oracle(atoms: tuple, basis: dict, auxiliary: dict, grid: GridSpec) -> Any:
     engine = reference_engine(atoms, basis, grid, xc="M06-2X")
     engine = engine.density_fit(auxbasis=auxiliary)
     engine.conv_tol = 1e-12
@@ -42,7 +43,9 @@ def _oracle(atoms: tuple, basis: dict, auxiliary: dict, grid: GridSpec):
     return engine
 
 
-def _reference_endpoint(engine, cupy, density=None):
+def _reference_endpoint(
+    engine: Any, cupy: Any, density: Any = None
+) -> tuple[float, np.ndarray]:
     energy = float(engine.kernel(dm0=None if density is None else density.copy()))
     assert engine.converged
     gradient = engine.nuc_grad_method()
@@ -52,7 +55,7 @@ def _reference_endpoint(engine, cupy, density=None):
     return energy, force
 
 
-def _assert_endpoint(native, reference):
+def _assert_endpoint(native: Any, reference: tuple[float, np.ndarray]) -> None:
     energy, force = reference
     assert native.converged
     assert native.physical_residual_rms < 1e-9
