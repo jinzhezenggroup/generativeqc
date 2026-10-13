@@ -462,8 +462,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     return fail_plan(candidate, cuda_failure(cuda_error, "create CUDA DF stream", detail));
   }
   auto provider_status = prepare_df_blas(*candidate, detail);
-  if (provider_status != GENERATIVEQC_STATUS_SUCCESS)
-    return fail_plan(candidate, provider_status);
+  if (provider_status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, provider_status);
   if (!candidate->streamed || integral_source != nullptr) {
     try {
       if (!candidate->streamed) {

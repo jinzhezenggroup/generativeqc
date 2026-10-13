@@ -20,7 +20,7 @@ enum cublasMath_t { CUBLAS_DEFAULT_MATH = 0, CUBLAS_PEDANTIC_MATH = 2 };
 cublasStatus_t cublasCreate(cublasHandle_t*);
 cublasStatus_t cublasDestroy(cublasHandle_t);
 cublasStatus_t cublasDsyrk(cublasHandle_t, cublasFillMode_t, cublasOperation_t, int, int,
-                          const double*, const double*, int, const double*, double*, int);
+                           const double*, const double*, int, const double*, double*, int);
 cublasStatus_t cublasSetStream(cublasHandle_t, cudaStream_t);
 cublasStatus_t cublasSetWorkspace(cublasHandle_t, void*, std::size_t);
 cublasStatus_t cublasSetPointerMode(cublasHandle_t, cublasPointerMode_t);

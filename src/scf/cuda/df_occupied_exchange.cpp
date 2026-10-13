@@ -56,14 +56,19 @@ generativeqc_status build_streamed_projected_exchange(
       // Raw [mu,nu,P] has contiguous P. Each mu projects its contracted nu
       // directly into U[mu,i,P]; lda=a preserves prior raw-auxiliary blocks.
       const auto blas = trace_call("streamed_occupied_raw_projection", plan.stream, [&] {
-        return scf_matrix_product_batched_view(
-          plan, {{raw, q, q * n},
-                 {coefficients, column_major ? n : rank, 0},
-                 {target + p, a, ar},
-                 q, rank, n,
-                 count, false, !column_major,
-                 one, zero},
-          "project streamed raw DF factors", detail);
+        return scf_matrix_product_batched_view(plan,
+                                               {{raw, q, q * n},
+                                                {coefficients, column_major ? n : rank, 0},
+                                                {target + p, a, ar},
+                                                q,
+                                                rank,
+                                                n,
+                                                count,
+                                                false,
+                                                !column_major,
+                                                one,
+                                                zero},
+                                               "project streamed raw DF factors", detail);
       });
       if (blas != GENERATIVEQC_STATUS_SUCCESS) return blas;
       trace_counter("occupied_projection_products", count);
@@ -75,10 +80,8 @@ generativeqc_status build_streamed_projected_exchange(
     // private factors are never published as a final symmetric-C projection.
     const auto blas = trace_call("streamed_occupied_metric_projection", plan.stream, [&] {
       return scf_matrix_product_view(
-          plan, true, false, a, count * rank, a,
-          plan.metric_eigenvectors + system * a * a, a, target, a,
-          transformed, a, one, zero,
-          "whiten streamed occupied DF factors", detail);
+          plan, true, false, a, count * rank, a, plan.metric_eigenvectors + system * a * a, a,
+          target, a, transformed, a, one, zero, "whiten streamed occupied DF factors", detail);
     });
     if (blas != GENERATIVEQC_STATUS_SUCCESS) return blas;
     // The scale pass already touches every transformed element once. Store the
@@ -110,11 +113,9 @@ generativeqc_status build_streamed_projected_exchange(
     // Columns of each (a*rank,rows) panel are output AO rows. Every matrix
     // block is produced exactly once, including partial row/column tails.
     const auto blas = trace_call("streamed_occupied_exchange_gemm", plan.stream, [&] {
-      return scf_matrix_product_view(
-          plan, true, false, nr, nc, ar,
-          projections[left], ar, projections[right], ar,
-          output + r + c * n, n, weight, zero,
-          "contract streamed occupied DF factors", detail);
+      return scf_matrix_product_view(plan, true, false, nr, nc, ar, projections[left], ar,
+                                     projections[right], ar, output + r + c * n, n, weight, zero,
+                                     "contract streamed occupied DF factors", detail);
     });
     if (blas != GENERATIVEQC_STATUS_SUCCESS) {
       status = blas;
@@ -253,14 +254,19 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
       trace_counter("packed_projection_launches", 1);
     } else {
       status = trace_call("ri_k_occupied_projection_gemm", plan.stream, [&] {
-        return scf_matrix_product_batched_view(
-          plan, {{b, a, plan.naux * plan.nbf},
-                 {coefficients, column_major ? n : r, 0},
-                 {u, a, plan.naux * rank},
-                 a, r, n,
-                 n, false, !column_major,
-                 one, zero},
-          "resident occupied DF projection", detail);
+        return scf_matrix_product_batched_view(plan,
+                                               {{b, a, plan.naux * plan.nbf},
+                                                {coefficients, column_major ? n : r, 0},
+                                                {u, a, plan.naux * rank},
+                                                a,
+                                                r,
+                                                n,
+                                                n,
+                                                false,
+                                                !column_major,
+                                                one,
+                                                zero},
+                                               "resident occupied DF projection", detail);
       });
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
@@ -288,9 +294,8 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
       status = trace_call("ri_k_occupied_exchange_gemm", plan.stream, [&] {
         // Triangle ownership is a semantic property. The prepared provider
         // uses SYRK where supported or retains the original full GEMM.
-        return scf_occupied_gram(plan, n, ar, weight, u, output,
-                                 plan.triangular_exchange, triangular,
-                                 "resident occupied DF K product", detail);
+        return scf_occupied_gram(plan, n, ar, weight, u, output, plan.triangular_exchange,
+                                 triangular, "resident occupied DF K product", detail);
       });
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (triangular && !gram_splits) {
@@ -419,12 +424,18 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     // already C^T in that convention and includes sqrt(occupation).
     auto status = trace_call("ri_k_occupied_gemm", plan.stream, [&] {
       return scf_matrix_product_batched_view(
-          plan, {{coefficients, column_major ? plan.nbf : rank, 0},
-                 {plan.exchange_intermediate, plan.nbf, count * plan.nbf},
-                 {output, rank, rank * count},
-                 rank, count, plan.nbf,
-                 qcount, column_major, false,
-                 one, zero},
+          plan,
+          {{coefficients, column_major ? plan.nbf : rank, 0},
+           {plan.exchange_intermediate, plan.nbf, count * plan.nbf},
+           {output, rank, rank * count},
+           rank,
+           count,
+           plan.nbf,
+           qcount,
+           column_major,
+           false,
+           one,
+           zero},
           "occupied DF projection", detail);
     });
     trace_counter("occupied_projection_products", qcount);
@@ -457,13 +468,19 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
         const auto stride = rcount * ccount;
         auto blas = trace_call("ri_k_occupied_gemm", plan.stream, [&] {
           return scf_matrix_product_batched_view(
-          plan, {{plan.exchange_contributions, rank, rank * rcount},
-                 {column, rank, rank * ccount},
-                 {plan.exchange_intermediate, rcount, stride},
-                 rcount, ccount, rank,
-                 qcount, true, false,
-                 weight, zero},
-          "occupied DF K product", detail);
+              plan,
+              {{plan.exchange_contributions, rank, rank * rcount},
+               {column, rank, rank * ccount},
+               {plan.exchange_intermediate, rcount, stride},
+               rcount,
+               ccount,
+               rank,
+               qcount,
+               true,
+               false,
+               weight,
+               zero},
+              "occupied DF K product", detail);
         });
         if (blas != GENERATIVEQC_STATUS_SUCCESS) return blas;
         trace_counter("occupied_exchange_products", qcount);

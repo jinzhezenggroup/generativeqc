@@ -13,8 +13,8 @@
 #include "scf/cuda/df_final_validation.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_plan_setup.hpp"
-#include "scf/cuda/df_scf_state.hpp"
 #include "scf/cuda/df_scf_library.hpp"
+#include "scf/cuda/df_scf_state.hpp"
 
 namespace generativeqc::scf::cuda_df {
 

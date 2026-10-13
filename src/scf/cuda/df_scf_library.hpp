@@ -27,9 +27,9 @@ void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept;
  * preserved. The caller mirrors the lower triangle only when actually used.
  */
 generativeqc_status scf_occupied_gram(CudaDensityFittingJkPlan& plan, std::size_t columns,
-                                    std::size_t reduction, double weight, const double* factor,
-                                    double* output, bool lower_triangle, bool& wrote_lower,
-                                    const char* failure_context, std::string& detail);
+                                      std::size_t reduction, double weight, const double* factor,
+                                      double* output, bool lower_triangle, bool& wrote_lower,
+                                      const char* failure_context, std::string& detail);
 
 generativeqc_status scf_matrix_product_view(
     CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,

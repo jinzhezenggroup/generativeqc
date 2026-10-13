@@ -79,14 +79,14 @@ void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept {
   plan.blas = nullptr;
 }
 
-generativeqc_status scf_occupied_gram(
-    CudaDensityFittingJkPlan& plan, std::size_t columns, std::size_t reduction, double weight,
-    const double* factor, double* output, bool lower_triangle, bool& wrote_lower,
-    const char* failure_context, std::string& detail) {
+generativeqc_status scf_occupied_gram(CudaDensityFittingJkPlan& plan, std::size_t columns,
+                                      std::size_t reduction, double weight, const double* factor,
+                                      double* output, bool lower_triangle, bool& wrote_lower,
+                                      const char* failure_context, std::string& detail) {
   wrote_lower = false;
   constexpr auto limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
-  if (!plan.blas || !factor || !output || !columns || !reduction ||
-      columns > limit || reduction > limit) {
+  if (!plan.blas || !factor || !output || !columns || !reduction || columns > limit ||
+      reduction > limit) {
     detail = "invalid prepared CUDA DF occupied Gram view";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -96,17 +96,17 @@ generativeqc_status scf_occupied_gram(
   // provide it. A full GEMM remains the exact original unsupported fallback.
   const auto submit = [&]<class Handle>(Handle handle) {
     if constexpr (requires {
-                    cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k,
-                                &weight, factor, k, &zero, output, n);
+                    cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k, &weight, factor,
+                                k, &zero, output, n);
                   }) {
       if (lower_triangle) {
         wrote_lower = true;
-        return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k,
-                           &weight, factor, k, &zero, output, n);
+        return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k, &weight, factor, k,
+                           &zero, output, n);
       }
     }
-    return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n, n, k, &weight, factor, k,
-                       factor, k, &zero, output, n);
+    return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n, n, k, &weight, factor, k, factor, k,
+                       &zero, output, n);
   };
   const auto status = submit(plan.blas);
   return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS

@@ -23,7 +23,7 @@ cublasStatus_t create_error = CUBLAS_STATUS_SUCCESS;
 cublasStatus_t stream_error = CUBLAS_STATUS_SUCCESS;
 cublasStatus_t mode_error = CUBLAS_STATUS_SUCCESS;
 int handles_created = 0, handles_destroyed = 0;
-}
+}  // namespace
 cublasStatus_t cublasCreate(cublasHandle_t* handle) {
   if (create_error != CUBLAS_STATUS_SUCCESS) return create_error;
   *handle = new cublasContext{};
@@ -31,7 +31,10 @@ cublasStatus_t cublasCreate(cublasHandle_t* handle) {
   return CUBLAS_STATUS_SUCCESS;
 }
 cublasStatus_t cublasDestroy(cublasHandle_t handle) {
-  if (handle) { ++handles_destroyed; delete handle; }
+  if (handle) {
+    ++handles_destroyed;
+    delete handle;
+  }
   return CUBLAS_STATUS_SUCCESS;
 }
 cublasStatus_t cublasSetStream(cublasHandle_t handle, cudaStream_t stream) {
@@ -45,9 +48,9 @@ cublasStatus_t cublasSetPointerMode(cublasHandle_t handle, cublasPointerMode_t m
   return mode_error;
 }
 cublasStatus_t cublasDsyrk(cublasHandle_t handle, cublasFillMode_t triangle,
-                            cublasOperation_t transpose, int n, int k, const double* alpha,
-                            const double* u, int ldu, const double* beta, double* output,
-                            int ldout) {
+                           cublasOperation_t transpose, int n, int k, const double* alpha,
+                           const double* u, int ldu, const double* beta, double* output,
+                           int ldout) {
   assert(handle && triangle == CUBLAS_FILL_MODE_LOWER && transpose == CUBLAS_OP_T);
   handle->submitted = true;
   if (handle->result != CUBLAS_STATUS_SUCCESS) return handle->result;
@@ -322,27 +325,28 @@ void gram(CudaDensityFittingJkPlan& plan) {
     assert(wrote_lower == lower && detail == "unchanged");
     for (int i = 0; i < n; ++i)
       for (int j = 0; j < n; ++j) {
-        const double expected =
-            1.25 * (coefficients[i * k] * coefficients[j * k] +
-                    coefficients[i * k + 1] * coefficients[j * k + 1]);
-        if (lower && i < j) assert(output[i + j * n] == sentinel);
-        else assert(output[i + j * n] == expected);
+        const double expected = 1.25 * (coefficients[i * k] * coefficients[j * k] +
+                                        coefficients[i * k + 1] * coefficients[j * k + 1]);
+        if (lower && i < j)
+          assert(output[i + j * n] == sentinel);
+        else
+          assert(output[i + j * n] == expected);
       }
   }
   bool wrote_lower = true;
   std::string detail;
   plan.blas->submitted = false;
-  assert(scf_occupied_gram(plan, 0, k, 1, coefficients, output, false, wrote_lower,
-                           "bad gram", detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  assert(scf_occupied_gram(plan, 0, k, 1, coefficients, output, false, wrote_lower, "bad gram",
+                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
   assert(!plan.blas->submitted && !wrote_lower);
   for (const auto error : {CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_EXECUTION_FAILED}) {
     plan.blas->result = error;
-    assert(scf_occupied_gram(plan, n, k, 1, coefficients, output, true, wrote_lower,
-                             "failed gram", detail) ==
-           (error == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
-                                                : GENERATIVEQC_STATUS_CUDA_ERROR));
-    assert(detail == "failed gram failed with cuBLAS status " +
-                         std::to_string(static_cast<int>(error)));
+    assert(scf_occupied_gram(plan, n, k, 1, coefficients, output, true, wrote_lower, "failed gram",
+                             detail) == (error == CUBLAS_STATUS_ALLOC_FAILED
+                                             ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                             : GENERATIVEQC_STATUS_CUDA_ERROR));
+    assert(detail ==
+           "failed gram failed with cuBLAS status " + std::to_string(static_cast<int>(error)));
   }
   plan.blas->result = CUBLAS_STATUS_SUCCESS;
 }
@@ -363,8 +367,8 @@ void owner(CudaDensityFittingJkPlan& plan) {
     create_error = phase == 0 ? CUBLAS_STATUS_ALLOC_FAILED : CUBLAS_STATUS_SUCCESS;
     stream_error = phase == 1 ? CUBLAS_STATUS_EXECUTION_FAILED : CUBLAS_STATUS_SUCCESS;
     mode_error = phase == 2 ? CUBLAS_STATUS_INVALID_VALUE : CUBLAS_STATUS_SUCCESS;
-    const auto expected = phase == 0 ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
-                                     : GENERATIVEQC_STATUS_CUDA_ERROR;
+    const auto expected =
+        phase == 0 ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_CUDA_ERROR;
     assert(prepare_df_blas(plan, detail) == expected);
     assert(detail.find("initialize CUDA DF cuBLAS") != std::string::npos);
     release_df_blas(plan);
