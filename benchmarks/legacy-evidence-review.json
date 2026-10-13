@@ -608,8 +608,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 188062,
-      "sha256": "1db53ae625851527240df00621970162b9a2bf776e1a7ac6ed1b8c603dd83e28",
+      "bytes": 187647,
+      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -624,8 +624,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 308028,
-      "sha256": "fb978f7ddde6e4b1969e7d6c5bf834c1c1e32bec96bebd88b54f43ceb2b00342",
+      "bytes": 397852,
+      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
