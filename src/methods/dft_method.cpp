@@ -1059,27 +1059,30 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  /** Authenticate the complete restricted Direct global-hybrid derivative
-   * capability, not a functional name or isolated K coefficient. */
+  /** Authenticate the restricted exact full-range derivative source. Pure J
+   * uses the same spatial recurrence, including when a separate D4/gCP owner
+   * contributes geometry corrections. Their forces do not change this source. */
   bool qualified_spatial_force_default() const {
     const auto& strategy = fock_.strategy();
     const auto& spec = strategy.spec;
-    const bool direct_global_hybrid =
+    const bool pure_coulomb = !spec.exchange.present;
+    const bool global_hybrid =
+        spec.exchange.present &&
         dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient) &&
-        strategy.backend == scf::FockBackend::Cuda && spec.derivative_order == 0 &&
-        spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
-        spec.coulomb.approximation == scf::FockApproximation::Exact &&
-        spec.coulomb.op == scf::FockOperator::FullRange && spec.exchange.present &&
         spec.exchange.approximation == scf::FockApproximation::Exact &&
-        spec.exchange.op == scf::FockOperator::FullRange &&
+        spec.exchange.op == scf::FockOperator::FullRange && !execution_plan_.d4_correction;
+    const bool direct_full_range =
+        (pure_coulomb || global_hybrid) && strategy.backend == scf::FockBackend::Cuda &&
+        spec.derivative_order == 0 && spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
+        spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        spec.coulomb.op == scf::FockOperator::FullRange &&
         options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
         !execution_plan_.range_exchange && !range_strategy_ &&
-        !execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction &&
-        system_.ecp_terms.empty() &&
+        !execution_plan_.nonlocal_correlation && system_.ecp_terms.empty() &&
         std::none_of(system_.atoms.begin(), system_.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     return dft::spatial_spd_force_default_eligible(
-        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid,
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range,
         options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
   }
 

@@ -63,7 +63,7 @@ class RHFFrameIdentity {
  private:
   template <class Sink>
   static bool visit(const PhysicalReference& ref, Sink&& sink) {
-    if (!sink(1) || !sink(ref.nbf) || !sink(ref.nocc) ||
+    if (!sink(2) || !sink(ref.nbf) || !sink(ref.nocc) || !sink(ref.density_fitted) ||
         !sink(std::bit_cast<std::uint64_t>(ref.energy)))
       return false;
     for (const auto* values : {&ref.coefficients, &ref.fock, &ref.overlap, &ref.density, &ref.hcore,

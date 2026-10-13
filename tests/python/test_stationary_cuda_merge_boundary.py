@@ -410,6 +410,8 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             host_bytes=256,
             tile_points=options["tile_points"],
             order=options["order"],
+            active_ao_capacity=options["active_ao_capacity"],
+            features_only=options["features_only"],
         ),
     )
     tensor_plan = SimpleNamespace(peak_bytes=128, host_bytes=64)
@@ -522,7 +524,15 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     grid_owner = MagicMock()
     grid_owner.__enter__.return_value = grid_owner
     grid_owner.metrics.return_value = {"owned_device_bytes": 0}
-    monkeypatch.setattr(runtime, "CudaGrid", lambda *_a, **_k: grid_owner)
+
+    def make_grid(*_args: object, **options: object) -> MagicMock:
+        # This endpoint requests no AO maps and only borrows force features.
+        # Keep the constructor bound to that admitted dense, read-only contract.
+        assert options["active_ao_capacity"] is None
+        assert options["features_only"] is True
+        return grid_owner
+
+    monkeypatch.setattr(runtime, "CudaGrid", make_grid)
     basis = SimpleNamespace(
         identity="basis",
         natom=2,

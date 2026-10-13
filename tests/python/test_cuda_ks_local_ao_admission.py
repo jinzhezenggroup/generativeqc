@@ -69,6 +69,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "CudaXcProgramTraits cuda_xc_program_traits(",
             "CudaXcLayout cuda_xc_layout_shape(",
             "CudaXcExecutionCapabilities cuda_xc_execution_capabilities(",
+            "CudaXcLayout cuda_xc_local_ao_layout_shape(",
             "CudaXcLayout cuda_xc_local_ao_layout(",
             "CudaXcAoSelectionResources cuda_xc_ao_selection_resources(",
         )
@@ -139,7 +140,8 @@ int main(int argc, char** argv) {
   const bool nonlocal = std::string(argv[6]) == "nonlocal";
   try {
     auto xc_layout = cuda_xc_layout_shape(
-        3, 9, mode == "budget" ? 4096 : 12, mode == "budget" ? 1048576 : 64,
+        3, 9, mode == "budget" ? 4096 : (mode == "large" ? 1664 : 12),
+        mode == "budget" ? 134217728 : (mode == "large" ? 2359296 : 64),
         functional, unrestricted, 16, false, CudaXcAoPrecision::Fp64,
         mode == "scaled" ? 0.37 : 1.0, mode == "scaled" ? 0.81 : 1.0, false);
     if (mode == "response") xc_layout.response = true;
@@ -304,6 +306,11 @@ def test_host_budget_decline_keeps_dense_arithmetic_capability(
     assert (
         _run(admission_probe, selection, mode="budget", precision="auto") == "dense:1:1"
     )
+
+
+def test_large_grid_map_needs_only_one_host_tile(admission_probe: Path) -> None:
+    """The complete device map may exceed 64 MiB while host discovery fits."""
+    assert _run(admission_probe, "unset", "2", mode="large") == "local:0:0"
 
 
 @pytest.mark.parametrize("selection", ["", "yes", "2", "-1", "01"])

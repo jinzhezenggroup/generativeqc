@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 from pathlib import Path
 
 from tools.generate_native_semilocal_families import load_manifest
@@ -21,6 +22,15 @@ def load_profiles() -> tuple[tuple[str, int, str, bool], ...]:
     if data.get("schema") != SCHEMA:
         raise ValueError("invalid stationary CUDA AOT profile schema")
     codes = {row["symbol"]: row["code"] for row in load_manifest()}
+    # Split hybrids use generated Libxc point codes rather than the curated
+    # semilocal enum. Keep that registry authoritative; a package profile must
+    # never invent a second functional code or change the exact MethodIR plan.
+    split = runpy.run_path(
+        str(ROOT / "python/generativeqc_compiler/xc/_generated_split_hybrids.py")
+    )["SPLIT_HYBRIDS"]
+    codes.update(
+        {f"split:{name}": record["functional_code"] for name, record in split.items()}
+    )
     result: list[tuple[str, int, str, bool]] = []
     names: set[str] = set()
     legacy_codes: set[int] = set()

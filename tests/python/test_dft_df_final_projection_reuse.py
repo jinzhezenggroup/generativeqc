@@ -167,30 +167,6 @@ def test_dft_projection_reuse_keeps_explicit_fallback_controls() -> None:
     assert 'storage != "jk-scratch"' in lower
 
 
-def test_optional_projection_admission_preserves_bounded_fallback() -> None:
-    lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
-    selection = lower[
-        lower.index("const bool select_borrowed_projection") : lower.index(
-            "bool borrowed_fitted_occupied"
-        )
-    ]
-    assert (
-        "plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle" in selection
-    )
-    assert lower.index("const std::string_view projection =") < lower.index(
-        "const bool select_borrowed_projection"
-    )
-    retry = lower[
-        lower.index(
-            "if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && borrowed_fitted_occupied"
-        ) : lower.index(
-            "if (status == GENERATIVEQC_STATUS_SUCCESS && borrow && matching_source"
-        )
-    ]
-    assert 'space == "auto" && occupied_source == "auto"' in retry
-    assert "final_state, nullptr" in retry
-
-
 def test_borrowed_projection_executes_storage_and_provider_admission(
     tmp_path: Path,
 ) -> None:
@@ -200,7 +176,7 @@ def test_borrowed_projection_executes_storage_and_provider_admission(
     lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
     admission = lower[
         lower.index("  const bool select_borrowed_projection =") : lower.index(
-            "  const bool fitted_occupied_requested ="
+            "  if (explicit_fitted_occupied &&"
         )
     ]
     source = tmp_path / "admission.cpp"

@@ -553,6 +553,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     if (!p.local) {
       if (ao_ids) throw std::invalid_argument("dense plan does not own AO gather buffers");
       active = p.nao;
+      identity_map = true;
     } else {
       if (active > p.active_capacity)
         throw std::invalid_argument("selected AO map exceeds capacity");
@@ -568,9 +569,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         (features && (((p.feature_mask & 14) && p.jets < 4) || !p.density_ready ||
                       (p.use_orbitals && !p.orbital_ready))))
       throw std::invalid_argument("invalid grid tile/output");
-    if (defer_error_to_consumer && (!p.local || !features || feature_output || jet_output))
-      throw std::invalid_argument(
-          "deferred CUDA grid errors require a device-only local feature lease");
+    if (defer_error_to_consumer && (!features || feature_output || jet_output))
+      throw std::invalid_argument("deferred CUDA grid errors require a device-only feature lease");
     p.last_points = npoint;
     p.last_active = active;
     p.last_identity_map = identity_map;
@@ -994,7 +994,10 @@ int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, ch
     auto& p = *static_cast<GridPlan*>(pointer);
     std::lock_guard<std::mutex> lock(p.context.mutex);
     p.context.check_device();
-    if (!p.local || !p.view_ready) throw std::invalid_argument("local grid view is not ready");
+    if (!p.view_ready) throw std::invalid_argument("grid view is not ready");
+    // Dense consumers borrow only AO/features and contracted density jets.
+    // Their null potential pointers deliberately do not grant scatter/XC
+    // assembly capability; those entry points still require a local owner.
     *output = {1,
                p.generation,
                p.last_points,
@@ -1032,7 +1035,7 @@ int grid_cuda_density_jets_v1(void* pointer, std::uint64_t generation, unsigned 
     auto& p = *static_cast<GridPlan*>(pointer);
     std::lock_guard<std::mutex> lock(p.context.mutex);
     p.context.check_device();
-    if (!p.local || !p.view_ready || !p.features_ready || !p.density_jets_ready || p.use_orbitals ||
+    if (!p.view_ready || !p.features_ready || !p.density_jets_ready || p.use_orbitals ||
         generation != p.generation || (jets != 1 && jets != 4) || !(p.feature_mask & 7) ||
         (jets == 4 && !(p.feature_mask & 8)))
       throw std::invalid_argument("contracted AO jets are unavailable");
@@ -1059,7 +1062,7 @@ int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned 
     auto& p = *static_cast<GridPlan*>(pointer);
     std::lock_guard<std::mutex> lock(p.context.mutex);
     p.context.check_device();
-    if (!p.local || !p.view_ready || !p.features_ready || !p.density_jets_ready || p.use_orbitals ||
+    if (!p.view_ready || !p.features_ready || !p.density_jets_ready || p.use_orbitals ||
         generation != p.generation || (jets != 1 && jets != 4) || !(p.feature_mask & 7) ||
         (jets == 4 && !(p.feature_mask & 8)))
       throw std::invalid_argument("contracted AO jets are unavailable");

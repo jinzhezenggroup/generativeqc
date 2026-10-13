@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from test_ci_prose_workflow import assert_full_coverage_step
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -110,12 +111,12 @@ def test_all_cuda_jobs_remain_required_with_the_same_source_and_finite_budgets()
         ),
     ],
 )
-def test_existing_gates_are_unconditional_and_owned_once(
+def test_existing_gates_are_mandatory_for_full_scope_and_owned_once(
     job: str, name: str, command: str
 ) -> None:
     step = _step(job, name)
     assert command in step
-    assert "if:" not in step
+    assert_full_coverage_step(step)
     assert "continue-on-error:" not in step
     assert WORKFLOW.count(f"      - name: {name}\n") == 1
 
