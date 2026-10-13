@@ -1,0 +1,2585 @@
+{
+  "schema": "generativeqc.readme-dft-evidence.v2",
+  "measured_date": "2026-10-13",
+  "source_base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+  "native_source_snapshots": {
+    "1e43ea9f0977fedbc38cd27db4966d8a7675095fa1be691ac148173756d2113c": {
+      "base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+      "production_changes": []
+    },
+    "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16": {
+      "base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+      "production_changes": [
+        "conditional SCF ERI-cache reclamation at force entry"
+      ],
+      "remeasured_points": [
+        {
+          "method": "pbe",
+          "atoms": 12
+        },
+        {
+          "method": "pbe",
+          "atoms": 96
+        },
+        {
+          "method": "pbe0",
+          "atoms": 12
+        },
+        {
+          "method": "pbe0",
+          "atoms": 96
+        },
+        {
+          "method": "b3lyp",
+          "atoms": 12
+        },
+        {
+          "method": "b3lyp",
+          "atoms": 96
+        },
+        {
+          "method": "r2scan",
+          "atoms": 12
+        },
+        {
+          "method": "r2scan",
+          "atoms": 96
+        }
+      ]
+    }
+  },
+  "original_master_campaign": {
+    "schema": "generativeqc.readme-dft-evidence.v1",
+    "measured_date": "2026-10-13",
+    "source_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+    "source_identity": "1e43ea9f0977fedbc38cd27db4966d8a7675095fa1be691ac148173756d2113c",
+    "source_inventory_files": 1715,
+    "source_inventory_manifest": {
+      "sha256": "1bc1f610743f2f16a9067ab740be53487f8e42b38f33f815e64903fd4f1c9b66",
+      "bytes": 3332
+    },
+    "native_source_changes_from_base": [],
+    "snapshot_note": "Remote plain source snapshot has null Git fields; its recomputed source identity equals the loaded native probe and local build identity. All recorded consumer hashes match this checkout.",
+    "source_file_sha256": {
+      "python/generativeqc/calculator.py": "2c2ef66ef39ee0047d6b8ec27a37b713c62388c2379d1b2fc4bfc8f3d9cbcd0d",
+      "python/generativeqc/ks.py": "b8457c8a9da0333575a27855e07072a579b006ac81908bd5012b8dd65c1cd159",
+      "python/generativeqc/_ks_snapshot.py": "435d38fa7efe63c255c0bd008b8cd0201d92fc1750a362c95175cfd68515b4da",
+      "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+      "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+      "python/generativeqc/_stationary_cuda.py": "776514fbf71269eabe4c90b99627028fc07af249f084db1a4a0ccd951d96fbc6",
+      "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+      "python/generativeqc/batch.py": "1cc00af9c96b7a45ae8fe032091b67debde88afb9d3587b170382f32b7e960b8",
+      "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+      "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+      "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+      "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+      "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+      "python/generativeqc/_stationary_composite_cuda.py": "75dfbd6dc92ec1e548d1c64f453cf8938c8e8598c9af2253db89eb75b7404f14",
+      "benchmarks/readme_omol25.py": "c61b057b78571d8f6a777f967ef558d9ae00796eeed6b95e51161584bb3763c1",
+      "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+      "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+      "benchmarks/readme_dft.py": "daa57a886b0499731544c07a42878c60eb658217af4534befb05a46c195464e2",
+      "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+      "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65",
+      "benchmarks/readme_wb97mv.py": "c3160265baf9fa4b5baa9de155ceac045d629fc187e6c198397bcda5e3c16c63",
+      "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+      "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+      "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+      "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+      "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+      "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+      "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+      "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+      "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+      "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+      "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+      "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+      "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+      "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+      "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+      "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+      "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+      "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+      "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+      "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+      "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+      "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22"
+    },
+    "reporting_consumer_sha256": {
+      "benchmarks/run_readme_dft_benchmarks.sh": "cc24a60cf7404f31c492f1c444368a2581e840775e0e1244aed5ec9a49f4edde",
+      "tools/render_readme_dft.py": "b5c01c7ff8fb738f8cdbbc8283c8f28be2755ea1f917e40cd788fa0598a07c2f",
+      "tools/render_omol25_benchmarks.py": "b6159d3f996228e329dc20efed20369c405a92921d48e3440c3b767626384aba"
+    },
+    "build": {
+      "preset": "cuda-release-sm120",
+      "configuration": "Release",
+      "cuda_architecture": "sm_120",
+      "host_compiler": "GNU 11.4.0",
+      "nvcc": "12.9.86",
+      "compiler_cache": "ccache 4.5.1",
+      "cxx_launcher": "/home/jzzeng/.local/bin/ccache",
+      "cuda_launcher": "/home/jzzeng/.local/bin/ccache",
+      "cache_basedir": "/home/jzzeng/codes/generativeqc-readme-20261013",
+      "full_preset_built": true,
+      "ninja_launcher_evidence": "LAUNCHER = /home/jzzeng/.local/bin/ccache",
+      "retained_local_log_identities": {
+        "configure.log": {
+          "sha256": "f55a3e421fe0aeadcbfd569e5d0d1ce6fce1119ee72cd672cb252140702256dc",
+          "bytes": 278
+        },
+        "build.log": {
+          "sha256": "e6059e479c98b6d66561e6050140a085a865bcb8e09834ba1ca449d371907065",
+          "bytes": 1388376
+        },
+        "build-packaged.log": {
+          "sha256": "80f924bf84992aea3cb7287073c2b4168cb99d5f591c854eca09d812f4b4f2b2",
+          "bytes": 21870
+        },
+        "ccache-before.txt": {
+          "sha256": "f2b3fd1d52771cf0b754dfe4be957246774804a5668870bf42a295b0075dfa90",
+          "bytes": 479
+        },
+        "ccache-after.txt": {
+          "sha256": "752b04c1314db6fa165195d93bf6d958457c49db13d48e509ca4a2a5185b61ce",
+          "bytes": 479
+        },
+        "sccache-before.log": {
+          "sha256": "9f232f36ef173a9f06fbd9328cc2e61fb5c7b3163b552da552a1491d7ca5a98e",
+          "bytes": 1053
+        },
+        "sccache-after.log": {
+          "sha256": "1d3cf5485cf723d53564decde68ad08a6fc1e62851ecdeaeff6a5c671621ce5b",
+          "bytes": 1038
+        },
+        "host-tests.log": {
+          "sha256": "ac9f35a35363d74586166c0340a9b9e9df3f82bd54c54b3ba39595ccd6375f4e",
+          "bytes": 179
+        }
+      },
+      "cache_snapshots": {
+        "ccache-before.txt": "Summary:\n  Hits:             90153 / 281307 (32.05 %)\n    Direct:         74696 / 282572 (26.43 %)\n    Preprocessed:   15457 / 207803 (7.44 %)\n  Misses:          191154\n    Direct:        207876\n    Preprocessed:  192346\n  Errors:             926\n  Uncacheable:       9326\nPrimary storage:\n  Hits:            187210 / 565071 (33.13 %)\n  Misses:          377861\n  Cache size (GB):  10.73 /  12.00 (89.40 %)\n  Cleanups:           618\n\nUse the -v/--verbose option for more details.\n",
+        "ccache-after.txt": "Summary:\n  Hits:             90296 / 281863 (32.04 %)\n    Direct:         74837 / 283128 (26.43 %)\n    Preprocessed:   15459 / 208218 (7.42 %)\n  Misses:          191567\n    Direct:        208291\n    Preprocessed:  192759\n  Errors:             926\n  Uncacheable:       9327\nPrimary storage:\n  Hits:            187717 / 566185 (33.15 %)\n  Misses:          378468\n  Cache size (GB):  10.69 /  12.00 (89.08 %)\n  Cleanups:           620\n\nUse the -v/--verbose option for more details.\n",
+        "sccache-before.log": "sccache 0.16.0\nCompile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+        "sccache-after.log": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/home/jzzeng/.cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n"
+      },
+      "cache_note": "Shared-cache snapshots do not isolate this campaign. Runtime per-invocation cache servers are not aggregated by shared-server statistics. Caches were retained."
+    },
+    "runtime_files": [
+      {
+        "name": "generativeqc_stationary_b3lyp_rks.json",
+        "bytes": 1540,
+        "sha256": "870ed73dfceee6ca5873ca034f0fba981e1e9d3bd78c920465283b235d53b1f0",
+        "contract": {
+          "binary_sha256": "3bbfea5484d958c4a9d22fbb41e42b1fc3aae8a43db90bcdbc036995eefeb608",
+          "contract_identity": "13af478d23a3f54b169cdf0537e2c9d85dcd82ddea63afa2e063219b86b8dafe",
+          "plan_identity": "bfc63f0469b709742da00018a741c397d8d27db5a18a4d41826be9ebf2b34e65",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_b3lyp_rks_spd.json",
+        "bytes": 3304,
+        "sha256": "8ba269188899fa4ef581216bba399fe8642a162fb6b8594a3e66f466bbc77188",
+        "contract": {
+          "binary_sha256": "7bb002e8c46a32017c75aaa5ee0ee2f343b17cff1588234c4d740b2bad274967",
+          "contract_identity": "654a5264acf447a32832ed1f2429e8579da4d53ced758f9452caafcc4e81afc5",
+          "plan_identity": "bfc63f0469b709742da00018a741c397d8d27db5a18a4d41826be9ebf2b34e65",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_b3lyp_uks.json",
+        "bytes": 1537,
+        "sha256": "6e3b6487c2e0f9d82d3c4f7935ee8fe18e5bcf9d2cac258900af381eef3b114b",
+        "contract": {
+          "binary_sha256": "8e672e913741c968a31af0bca41c269dbe98dd08a203ff0ec31a3f413388bcfe",
+          "contract_identity": "3c874f0fb7d83b0d7aa5211de5240c5f07f0309471ba673e05137cb1c36380c8",
+          "plan_identity": "b73b6972963094e648e3633831df67ebf435ed54e14c935b1ae7291aa4a7d00f",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_b3lyp_uks_spd.json",
+        "bytes": 3302,
+        "sha256": "aac2934f9d1ed617d83fa9c535b0a5cf2bd121d81d6f8303e0c077296ff21f3c",
+        "contract": {
+          "binary_sha256": "1982c163f7742ddfc6e0013050a3a9ec0d9de6e2ae3ca1948853185054c9e04e",
+          "contract_identity": "38fc7ddb752d0a1a5e6e1d52ff2cc7c46a42ddf1e07a3968280d059b13fb8d49",
+          "plan_identity": "b73b6972963094e648e3633831df67ebf435ed54e14c935b1ae7291aa4a7d00f",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_lda_rks.json",
+        "bytes": 1448,
+        "sha256": "cdfeb8aa1b6b1abf712541973a8b8ade2913191d6bf604be05be23f695db3df7",
+        "contract": {
+          "binary_sha256": "086211a126e07d4de509a5ef1fb75c9c4e1f58fcb03fb348fc1029f849794854",
+          "contract_identity": "e444fca05f9e8b1e1f7ebb34a3c0a5e03b30f00555ad941874cdf4427e1f2d07",
+          "plan_identity": "41e4280ba7f2ece433f2185d48a05371021ab42e6d16b5788e9615da66f22bf1",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_lda_rks_spd.json",
+        "bytes": 3212,
+        "sha256": "5edf37d10556fb9289d4c9c6843bb46bd1d1fb64322078bfe6ec4dc744caf29a",
+        "contract": {
+          "binary_sha256": "10680e45ba66ddb1c2ed772adf6635b4c14a4b6102685a37ba49380086a9f922",
+          "contract_identity": "1384e95fbf3f7fe232f7e9982aa9a661078cb090e9cddfdca2f641998daab64f",
+          "plan_identity": "41e4280ba7f2ece433f2185d48a05371021ab42e6d16b5788e9615da66f22bf1",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_lda_uks.json",
+        "bytes": 1445,
+        "sha256": "2ea0b3aadd96683f08035a747e38d6bf41c868aae09dba36c8952d7a49dea99a",
+        "contract": {
+          "binary_sha256": "f30c4a39429676dbdecedefc8c9ac02162da86772aeee1d0dfc87698579fbf5d",
+          "contract_identity": "ea6012d57efb74454832355cfba61fc5638b3fac26d3ea4b4ddfec4ad429861e",
+          "plan_identity": "cd4b746809ed474b8ec513c10111b57faa54bbe64862f202d4c32b9f73e86a57",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_lda_uks_spd.json",
+        "bytes": 3210,
+        "sha256": "600bd8c270fc6d4b7d8fa16df4f509fc85cdd0900381d21035ca5a32b50524df",
+        "contract": {
+          "binary_sha256": "6bd165642f46b9031010996aefb8f116c2f23642cc5dd9ac61a2def58002fcfb",
+          "contract_identity": "0b24678c815b3c61fa898e042c39035ca7c5c539ed95a207fdf96bf4f0e72cff",
+          "plan_identity": "cd4b746809ed474b8ec513c10111b57faa54bbe64862f202d4c32b9f73e86a57",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe0_rks.json",
+        "bytes": 1539,
+        "sha256": "b39894c55d0d72545bf1770286d1a8e5542b85c40f78572bbb8363952bfbd25e",
+        "contract": {
+          "binary_sha256": "b5388518eaaff2e0709bfbf8e44dfb622907dca3498084d8d97bc664e4d20c9b",
+          "contract_identity": "b7a5705678e20f34edf74d18f1fe9a49f8e435bd9fc938ac23f34e4d156aecb1",
+          "plan_identity": "7d5a539a108e7972ecc947636d920c455d326f9af60106a29e9d669461aa1b7a",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe0_rks_spd.json",
+        "bytes": 3303,
+        "sha256": "961579406fac8c07750209d8735efd9b7fc77bf8c04bdff483b6e6b483cc8cf3",
+        "contract": {
+          "binary_sha256": "79d8c068d71d2b0c927b99d2c1575303c8c1b48851c99a59c39ab2a651d8018b",
+          "contract_identity": "73c08a3cb35007257f53427e63fd47b2b75aa579c3597d13fd2be9f78b22bfc1",
+          "plan_identity": "7d5a539a108e7972ecc947636d920c455d326f9af60106a29e9d669461aa1b7a",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe0_uks.json",
+        "bytes": 1537,
+        "sha256": "22b6429fda0f6a359938ee9cddee0108c46d585c337d0a5f562036e880c8358d",
+        "contract": {
+          "binary_sha256": "e4498a89bd460ad10e7fcd4ab0a6e22b9c4654b56d9672ad13866ddb9814d5a7",
+          "contract_identity": "5253ad09d57f56ba9af6e4330d747e1eaaeef4cf690d3a32785aa3dcca3c070b",
+          "plan_identity": "4b9a5a226fcd5a7614c171c84f9541e57a1b06a82aadac4a3c62abcfc8691d01",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe0_uks_spd.json",
+        "bytes": 3301,
+        "sha256": "e7d3ecf33f7a196dc97ffc18750199b4a7f40ba4bb2195e79babfe50aa836d64",
+        "contract": {
+          "binary_sha256": "5d89b9fae895037c1cb0485f290c20b90deba4bbd3b42afaec70a2519b51298d",
+          "contract_identity": "b5e4aafc86f24786960ed91f744c789e2e868b69a02934879be3f33da6650133",
+          "plan_identity": "4b9a5a226fcd5a7614c171c84f9541e57a1b06a82aadac4a3c62abcfc8691d01",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe_rks.json",
+        "bytes": 1448,
+        "sha256": "3fa26091ccb28f183c779116eafe48ab2a07915a0cffbe6275b3c93b58c41049",
+        "contract": {
+          "binary_sha256": "66b848f0981338e1e6daf33e2777ad05eb3f3ba8e952834762ab530b3feb0b88",
+          "contract_identity": "0c7addc417870e421fcd038c1cbe4dfc1fab5112e1d68289f5e053d7bad342e0",
+          "plan_identity": "bd6e495efea62c0cc5d4a68221dc7585cab220a6cbed457a18f60abbc3bdc359",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe_rks_spd.json",
+        "bytes": 3212,
+        "sha256": "2f1014ff3f28bb51becf283f81bcc33e100ba403ef704b31c5d3a2921b883f3c",
+        "contract": {
+          "binary_sha256": "6c9a7795b208f37885d43a170f59df9adf4c7e16744711d98a87a80f3ac281ed",
+          "contract_identity": "f4ac0a1d0d796157c24637ddab59355cd8a1222b763b99536ff6d90a2e98142c",
+          "plan_identity": "bd6e495efea62c0cc5d4a68221dc7585cab220a6cbed457a18f60abbc3bdc359",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe_uks.json",
+        "bytes": 1446,
+        "sha256": "59b06ba99ebf87e1890ea06c91de6a82fb876dce1057d6ef47cd077247e0a925",
+        "contract": {
+          "binary_sha256": "c344ba553d2ae79dbd753a8ad3a12a420a02033ed9ccc5dc434e89768700630a",
+          "contract_identity": "cd1dd1b3a4da57f20e4cc60e3c93d61331df48b391d7bde6f32bffd0bb409d7f",
+          "plan_identity": "6c3128e15ad2b725880588e86e885cf8e8ec725bd477f1bea6ac32b36972c253",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_pbe_uks_spd.json",
+        "bytes": 3210,
+        "sha256": "f431804aa3f709b324566b51dda0c709026bf9ad553d7cfaf68ed0d111d80c5f",
+        "contract": {
+          "binary_sha256": "a8e77520aa9f6424b1fdde3aa1cdb8a01116cdcf2b0f1ff6c4b96b15d7dfbbf8",
+          "contract_identity": "07adeb5e51a996998693d65e8c7e4c6defa7490f985c55242960ebae11e71fb4",
+          "plan_identity": "6c3128e15ad2b725880588e86e885cf8e8ec725bd477f1bea6ac32b36972c253",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_r2scan_rks.json",
+        "bytes": 1451,
+        "sha256": "f563bef0eaa609da0beeb15977b6457494dd3316eb0aaab628416e6c08b4db4a",
+        "contract": {
+          "binary_sha256": "ad168b874bcde11809d5841d705ef7954e7eee084e641626ea217d3a8779184a",
+          "contract_identity": "ed668ba884ffea90596ab311286d9daaf41dc43cfab73e99568540f1a1bb9bdd",
+          "plan_identity": "709f8d6ffd0a0b7806e39311a35ff47eb39ee8c5f1688f25ccdf38c1b24ecfc2",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_r2scan_rks_spd.json",
+        "bytes": 3215,
+        "sha256": "6a5f9f75006192b6f5376f0401b178935b013e7c079b6d4f8be0a0ff904551d6",
+        "contract": {
+          "binary_sha256": "7330fe8e72bc93d6e01573b6289d17d5644dbb1da18b49e3c016fc4d0d220266",
+          "contract_identity": "75c9ee505c274fe23523567131b91547169770e5faf42c25153c85c59c881b96",
+          "plan_identity": "709f8d6ffd0a0b7806e39311a35ff47eb39ee8c5f1688f25ccdf38c1b24ecfc2",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_r2scan_uks.json",
+        "bytes": 1449,
+        "sha256": "db489863e6f020c18bf4814a54ac440e5b0e71b22f94b19ae88d3c1388582007",
+        "contract": {
+          "binary_sha256": "68271ceb940b936bb539c88fffa9667b7f5bd85d5c39474ad13015b8a53388d9",
+          "contract_identity": "b758a74af3fc99955523b75c578491c0ef8f04178b82f6136b89433bd1e5eeab",
+          "plan_identity": "d748cdc469b7bfdf7e9d036fdbccef2370cf453f7281a2b298258ae1d9628335",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "generativeqc_stationary_r2scan_uks_spd.json",
+        "bytes": 3213,
+        "sha256": "ea92e8820b6f68f9f207232aab5efabbca7792af1c9eaef47c21b67f9b33aed4",
+        "contract": {
+          "binary_sha256": "70772d006b4fc370a9a081ee364f30d349edf2b01f7b200efbb0df9a541c96bf",
+          "contract_identity": "939488fe11a64b4c398c4bbcfdacf0728e88e03e691f753ec5daa732325de22c",
+          "plan_identity": "d748cdc469b7bfdf7e9d036fdbccef2370cf453f7281a2b298258ae1d9628335",
+          "architectures": [
+            "sm_120"
+          ],
+          "compile_contract": {
+            "fmad": false,
+            "fp64": true,
+            "relaxed_constexpr": true
+          }
+        }
+      },
+      {
+        "name": "libgenerativeqc.so",
+        "bytes": 796599072,
+        "sha256": "9d7e210f5e7770eb43c0ebc7375ae9187a900c1607bde1f7c6c2df9f5ab1eae1"
+      },
+      {
+        "name": "libgenerativeqc_stationary_b3lyp_rks.so",
+        "bytes": 10085872,
+        "sha256": "3bbfea5484d958c4a9d22fbb41e42b1fc3aae8a43db90bcdbc036995eefeb608"
+      },
+      {
+        "name": "libgenerativeqc_stationary_b3lyp_rks_spd.so",
+        "bytes": 33900064,
+        "sha256": "7bb002e8c46a32017c75aaa5ee0ee2f343b17cff1588234c4d740b2bad274967"
+      },
+      {
+        "name": "libgenerativeqc_stationary_b3lyp_uks.so",
+        "bytes": 9905504,
+        "sha256": "8e672e913741c968a31af0bca41c269dbe98dd08a203ff0ec31a3f413388bcfe"
+      },
+      {
+        "name": "libgenerativeqc_stationary_b3lyp_uks_spd.so",
+        "bytes": 33715592,
+        "sha256": "1982c163f7742ddfc6e0013050a3a9ec0d9de6e2ae3ca1948853185054c9e04e"
+      },
+      {
+        "name": "libgenerativeqc_stationary_lda_rks.so",
+        "bytes": 10003944,
+        "sha256": "086211a126e07d4de509a5ef1fb75c9c4e1f58fcb03fb348fc1029f849794854"
+      },
+      {
+        "name": "libgenerativeqc_stationary_lda_rks_spd.so",
+        "bytes": 33814032,
+        "sha256": "10680e45ba66ddb1c2ed772adf6635b4c14a4b6102685a37ba49380086a9f922"
+      },
+      {
+        "name": "libgenerativeqc_stationary_lda_uks.so",
+        "bytes": 9930064,
+        "sha256": "f30c4a39429676dbdecedefc8c9ac02162da86772aeee1d0dfc87698579fbf5d"
+      },
+      {
+        "name": "libgenerativeqc_stationary_lda_uks_spd.so",
+        "bytes": 33740160,
+        "sha256": "6bd165642f46b9031010996aefb8f116c2f23642cc5dd9ac61a2def58002fcfb"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe0_rks.so",
+        "bytes": 10212840,
+        "sha256": "b5388518eaaff2e0709bfbf8e44dfb622907dca3498084d8d97bc664e4d20c9b"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe0_rks_spd.so",
+        "bytes": 34027032,
+        "sha256": "79d8c068d71d2b0c927b99d2c1575303c8c1b48851c99a59c39ab2a651d8018b"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe0_uks.so",
+        "bytes": 10397016,
+        "sha256": "e4498a89bd460ad10e7fcd4ab0a6e22b9c4654b56d9672ad13866ddb9814d5a7"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe0_uks_spd.so",
+        "bytes": 34203016,
+        "sha256": "5d89b9fae895037c1cb0485f290c20b90deba4bbd3b42afaec70a2519b51298d"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe_rks.so",
+        "bytes": 10212840,
+        "sha256": "66b848f0981338e1e6daf33e2777ad05eb3f3ba8e952834762ab530b3feb0b88"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe_rks_spd.so",
+        "bytes": 34022928,
+        "sha256": "6c9a7795b208f37885d43a170f59df9adf4c7e16744711d98a87a80f3ac281ed"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe_uks.so",
+        "bytes": 10388816,
+        "sha256": "c344ba553d2ae79dbd753a8ad3a12a420a02033ed9ccc5dc434e89768700630a"
+      },
+      {
+        "name": "libgenerativeqc_stationary_pbe_uks_spd.so",
+        "bytes": 34198912,
+        "sha256": "a8e77520aa9f6424b1fdde3aa1cdb8a01116cdcf2b0f1ff6c4b96b15d7dfbbf8"
+      },
+      {
+        "name": "libgenerativeqc_stationary_r2scan_rks.so",
+        "bytes": 10679800,
+        "sha256": "ad168b874bcde11809d5841d705ef7954e7eee084e641626ea217d3a8779184a"
+      },
+      {
+        "name": "libgenerativeqc_stationary_r2scan_rks_spd.so",
+        "bytes": 34489896,
+        "sha256": "7330fe8e72bc93d6e01573b6289d17d5644dbb1da18b49e3c016fc4d0d220266"
+      },
+      {
+        "name": "libgenerativeqc_stationary_r2scan_uks.so",
+        "bytes": 10360168,
+        "sha256": "68271ceb940b936bb539c88fffa9667b7f5bd85d5c39474ad13015b8a53388d9"
+      },
+      {
+        "name": "libgenerativeqc_stationary_r2scan_uks_spd.so",
+        "bytes": 34170256,
+        "sha256": "70772d006b4fc370a9a081ee364f30d349edf2b01f7b200efbb0df9a541c96bf"
+      }
+    ],
+    "runtime_cache_version": "sccache 0.16.0",
+    "host_cpu": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-127\nVendor ID:                            AuthenticAMD\nModel name:                           AMD EPYC 9354 32-Core Processor\nCPU family:                           25\nModel:                                17\nThread(s) per core:                   2\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             1\nFrequency boost:                      enabled\nCPU(s) scaling MHz:                   55%\nCPU max MHz:                          3250.0000\nCPU min MHz:                          1500.0000\nBogoMIPS:                             6490.38\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd amd_ppin cppc amd_ibpb_ret arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid overflow_recov succor smca fsrm flush_l1d sev sev_es debug_swap ibpb_exit_to_user\nVirtualization:                       AMD-V\nL1d cache:                            2 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             64 MiB (64 instances)\nL3 cache:                             512 MiB (16 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31,64-95\nNUMA node1 CPU(s):                    32-63,96-127\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Mitigation; Safe RET\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected\nVulnerability Vmscape:                Mitigation; IBPB before exit to userspace\n",
+    "allocations": {
+      "7962": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7962",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "PBE/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
+      "7971": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7971",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "PBE/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE/RKS",
+            "atoms": 48,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE/RKS",
+            "atoms": 96,
+            "engine": "native",
+            "status": "failed",
+            "outcome": {
+              "exit_code": 1,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 48,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 96,
+            "engine": "native",
+            "status": "failed",
+            "outcome": {
+              "exit_code": 1,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 48,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 96,
+            "engine": "native",
+            "status": "failed",
+            "outcome": {
+              "exit_code": 1,
+              "time_limit_seconds": 1800
+            }
+          }
+        ],
+        "observed_slurm_states": [
+          {
+            "JobState": "FAILED",
+            "Reason": "NonZeroExitCode",
+            "ExitCode": "1:0",
+            "RunTime": "00:09:43",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:10:18",
+            "EndTime": "2026-10-13T11:20:01",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          }
+        ]
+      },
+      "7964": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7964",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "PBE0/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
+      "7963": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7963",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
+      "7973": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7973",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 48,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 96,
+            "engine": "native",
+            "status": "failed",
+            "outcome": {
+              "exit_code": 1,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 48,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 96,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ],
+        "observed_slurm_states": [
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:14:06",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T12:11:09",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "FAILED",
+            "Reason": "NonZeroExitCode",
+            "ExitCode": "1:0",
+            "RunTime": "00:40:59",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T11:52:08",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:10:00",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T12:11:09",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          }
+        ]
+      },
+      "7969": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7969",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
+      "7972": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7972",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 48,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 96,
+            "engine": "native",
+            "status": "timeout",
+            "outcome": {
+              "exit_code": 124,
+              "time_limit_seconds": 1800
+            }
+          }
+        ],
+        "observed_slurm_states": [
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:14:06",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T12:11:09",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:10:00",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T12:11:09",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "FAILED",
+            "Reason": "NonZeroExitCode",
+            "ExitCode": "1:0",
+            "RunTime": "00:37:55",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T11:49:04",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          }
+        ]
+      },
+      "7965": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7965",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "timeout",
+            "outcome": {
+              "exit_code": 124,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "timeout",
+            "outcome": {
+              "exit_code": 143,
+              "reason": "slurm_time_limit",
+              "slurm_job_id": "7965",
+              "slurm_state": "TIMEOUT",
+              "slurm_exit_code": "0:15",
+              "allocation_time_limit_seconds": 3600,
+              "point_time_limit_seconds": 1800,
+              "provenance": "Post-run scontrol TIMEOUT and srun exit 143; runner was terminated before writing its per-point outcome."
+            }
+          }
+        ],
+        "observed_slurm_states": [
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:57:12",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T10:28:03",
+            "EndTime": "2026-10-13T11:28:03",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:53:06",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T10:28:03",
+            "EndTime": "2026-10-13T11:28:03",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "TIMEOUT",
+            "Reason": "TimeLimit",
+            "ExitCode": "0:15",
+            "RunTime": "01:00:08",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T10:28:03",
+            "EndTime": "2026-10-13T11:28:11",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          }
+        ]
+      },
+      "7974": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7974",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 3,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 12,
+            "engine": "native",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      }
+    },
+    "slurm_accounting_note": "sacct unavailable: accounting storage disabled. Retain available scontrol observations and per-point runner outcomes; an overall nonzero job may contain accepted individual points.",
+    "acceptance": {
+      "native_points": 21,
+      "reference_points": 26,
+      "native_observations": 252,
+      "maximum_energy_error_eh": 2.319211489520967e-11,
+      "maximum_force_error_eh_per_bohr": 9.158790392760352e-11
+    },
+    "files": {
+      "summary.json.gz": {
+        "sha256": "cd215a799a02b76646fbd956776a9b6b630c15fda3e89b82e2afbcfbebf4b720",
+        "bytes": 661843
+      },
+      "dft-cold-warm.svg": {
+        "sha256": "a3406a53a7f7f345be40c0c7ebf6c485560b70e13140d5680c04e0064180f555",
+        "bytes": 149431
+      },
+      "timings.md": {
+        "sha256": "96de7f5bae05d75458a0debe891cfd2160ca6b883211d15f37ea9b6db6be8a5f",
+        "bytes": 4123
+      },
+      "README.md": {
+        "sha256": "bb22d000d02cdc08ccdc8fa44b9f26f24d5d399c7cabad71144f353b00142e04",
+        "bytes": 9345
+      }
+    },
+    "uncompressed_summary": {
+      "sha256": "202238b87cec1584334431ab70e56f339c8d315e1f4ab3ce343d0b2f7ab315ba",
+      "bytes": 7432812
+    },
+    "raw_retention": {
+      "location": ".artifacts/readme-20261013/remote-raw",
+      "remote": "n1:/data/jzzeng/gqc-readme-20261013/source/.artifacts",
+      "selection": "measured/* except r2scan-3c; r2scan3c/r2scan-3c supplies the separate canonical 3c campaign",
+      "excluded_trials": "smoke, smoke2, aborted-reference-pbe0, unpackaged-native remain retained separately and supply no plotted timing",
+      "file_identities": {
+        "aborted-reference-pbe0/12/reference.json": {
+          "sha256": "b587739b6c91c3e907ff33e38110c17268f9e569c9c9475fd939a9f0be423f42",
+          "bytes": 29029
+        },
+        "aborted-reference-pbe0/12/reference.log": {
+          "sha256": "47fe5ff61800805e1b02e71056b3a304e66b827d8ae858e99ecdfc2ae2861d1a",
+          "bytes": 3413
+        },
+        "aborted-reference-pbe0/3/reference.json": {
+          "sha256": "62c817df444699de561642db3adeceec079169b2e0fb4fdea5533026e791292e",
+          "bytes": 28509
+        },
+        "aborted-reference-pbe0/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "aborted-reference-pbe0/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/12/native.json": {
+          "sha256": "5ee923bf17749c4cada721d245f30eb0b52cbe45b74e592b79e477d69d6589d7",
+          "bytes": 238463
+        },
+        "measured/b3lyp/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/12/reference.json": {
+          "sha256": "43c3ef72fb07a49c3867e6925a9316e294f1c022b7c847a247d9ed424f3beb89",
+          "bytes": 44203
+        },
+        "measured/b3lyp/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/3/native.json": {
+          "sha256": "d79a18554540deab68af1b8ce5608a2cb22a9e460eba952038f04ba5bba0fcfe",
+          "bytes": 216952
+        },
+        "measured/b3lyp/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/3/reference.json": {
+          "sha256": "cc7034835ae6a0798b2361d17116b9e3c90c844dfeb4d4f2d55f50e299e89c4d",
+          "bytes": 28542
+        },
+        "measured/b3lyp/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/48/native.json": {
+          "sha256": "4e5081754c198796c58a39616b4d9d6a4f81a5b9109f472f64f63bca7e69988d",
+          "bytes": 299389
+        },
+        "measured/b3lyp/48/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/48/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/48/reference.json": {
+          "sha256": "cc5e3fdd8eb1dfe0fb92f4e36a7280f9c1a1c60df99662fbb64f1806d955119b",
+          "bytes": 106528
+        },
+        "measured/b3lyp/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/48/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/b3lyp/96/native.json": {
+          "sha256": "88348c7a09baaafbd97879d8f038d0aeeeca9f2b9d142d31142630e418cdeb4a",
+          "bytes": 59374
+        },
+        "measured/b3lyp/96/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "measured/b3lyp/96/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "measured/b3lyp/96/reference.json": {
+          "sha256": "23b6da0f3db346ccd113128b46e4cdf3c0880c2b15374bcbd31d7413186deef2",
+          "bytes": 189917
+        },
+        "measured/b3lyp/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/b3lyp/96/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/inputs/def2-svp.json": {
+          "sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+          "bytes": 3567
+        },
+        "measured/m06-2x/12/native.json": {
+          "sha256": "e4944c7cccd01081cab8a7aa0ab7af9777df1c1242299bc6bb67032bc2c746b5",
+          "bytes": 238542
+        },
+        "measured/m06-2x/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/12/reference.json": {
+          "sha256": "f6dcaee33b5186c74a8d383e0decacf3adcdd5c45bdd2b552b05f99d6bf5d7ee",
+          "bytes": 45620
+        },
+        "measured/m06-2x/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/3/native.json": {
+          "sha256": "18b66143fe0ec91d033e3d3fd94a0ae0dd59662f257be92cfb7cdb59fc27fbb0",
+          "bytes": 217140
+        },
+        "measured/m06-2x/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/3/reference.json": {
+          "sha256": "6515ba3c1d771f07bdae9b67f55c91d6616e18f03f1aa8629af04844771a555f",
+          "bytes": 30016
+        },
+        "measured/m06-2x/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/48/native.json": {
+          "sha256": "0fcddb29eb35bdcd4c71afbd8e58b9bb59fbfac25db6f3390ad102d16ae6f4f4",
+          "bytes": 299291
+        },
+        "measured/m06-2x/48/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/48/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/48/reference.json": {
+          "sha256": "48f1e661e101ad5e243ae1f4e3929dc636e5d221d4a9fad8c9eba3d8af8ba375",
+          "bytes": 108428
+        },
+        "measured/m06-2x/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/48/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/96/native.json": {
+          "sha256": "48848471e3b3e5f015155e2233a734fc502276c2ad7ccb287ee3b0e1c809776e",
+          "bytes": 384883
+        },
+        "measured/m06-2x/96/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/96/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/m06-2x/96/reference.json": {
+          "sha256": "4f31261489c0c3d0a9d7af5ba17979110c5953edc787dab365a0702b0ecc43be",
+          "bytes": 192196
+        },
+        "measured/m06-2x/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/m06-2x/96/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/12/native.json": {
+          "sha256": "dd1dd9539d55b02357818b4896556e38668d9a79e8354140105d373c2cfe4fc6",
+          "bytes": 237966
+        },
+        "measured/pbe/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/12/reference.json": {
+          "sha256": "006d94f996348b989dc3184a3a7f64279d88f157f29478b979b900a14dac1f7b",
+          "bytes": 45241
+        },
+        "measured/pbe/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/3/native.json": {
+          "sha256": "1e4a1596a16262679e6076e13d42d99bfdde261df96f5ae82b5414063921526f",
+          "bytes": 216537
+        },
+        "measured/pbe/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/3/reference.json": {
+          "sha256": "ae9a4168ce8b489f3386405df80fdd439749ad2063af53797d1857bb85a27623",
+          "bytes": 29900
+        },
+        "measured/pbe/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/48/native.json": {
+          "sha256": "765badbe57121e48239ecee979ddf06675d612cb08403e60dbbad047a7536c19",
+          "bytes": 298472
+        },
+        "measured/pbe/48/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/48/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/48/reference.json": {
+          "sha256": "17392fad15d47b3b90cc1b1506088dfec480d0f6e716be1c477779586e15a826",
+          "bytes": 107365
+        },
+        "measured/pbe/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/48/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe/96/native.json": {
+          "sha256": "f763afc9d15db19736aab21130f05b405b33a17ed9ba6fdd18942ac32dca26e4",
+          "bytes": 60540
+        },
+        "measured/pbe/96/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "measured/pbe/96/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "measured/pbe/96/reference.json": {
+          "sha256": "96a97325c32529d21e905610d65a4f3048e74b21a7265f6fb7f28ca251e5d586",
+          "bytes": 189935
+        },
+        "measured/pbe/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe/96/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/12/native.json": {
+          "sha256": "9146fef28070ac6eb586ac68b9c38f5fd65a54c01776e871e4a5b7d164ac8477",
+          "bytes": 237183
+        },
+        "measured/pbe0/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/12/reference.json": {
+          "sha256": "4257cc8619d699434502ee31e5e5aee2c676d65e2b91aecc82377cd052cdad57",
+          "bytes": 44036
+        },
+        "measured/pbe0/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/3/native.json": {
+          "sha256": "0098b8f86967dcf27d5302aab5ac77716de8d1882c8a14583775f8607634e5ae",
+          "bytes": 216925
+        },
+        "measured/pbe0/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/3/reference.json": {
+          "sha256": "b9f4a2fcb99699c5b470afdf0aa196e75e66cf09cadefa96b1bc479bfbeb5574",
+          "bytes": 28545
+        },
+        "measured/pbe0/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/48/native.json": {
+          "sha256": "ab73d1195416a4e4b7b2843cf0f9319737d414204cc67cc44a44f7bd39ec096b",
+          "bytes": 299413
+        },
+        "measured/pbe0/48/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/48/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/48/reference.json": {
+          "sha256": "7a56954716a360f6ef40be816237f3da853df55c7ce3bc0733399df24a4b3ab2",
+          "bytes": 106868
+        },
+        "measured/pbe0/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/48/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/pbe0/96/native.json": {
+          "sha256": "b7a76067579ecbed1e5b30a25e5d8d2769e667298ccd1a09f519863699e81e48",
+          "bytes": 58820
+        },
+        "measured/pbe0/96/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "measured/pbe0/96/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "measured/pbe0/96/reference.json": {
+          "sha256": "0f75ba1eddab882189eb27c41623933bb09cd54df96fb4135d571e077493eb39",
+          "bytes": 190448
+        },
+        "measured/pbe0/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/pbe0/96/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/12/native.json": {
+          "sha256": "b7274c5b1b20099aa4615a39e2809c4f9142dd2f41573bd16391818e70c2072d",
+          "bytes": 238223
+        },
+        "measured/r2scan/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/12/reference.json": {
+          "sha256": "a54d1dd48c2baaa6f5e9da2bc802772fe71ab7dcc05b9bccd3596b9f813f513e",
+          "bytes": 45647
+        },
+        "measured/r2scan/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/3/native.json": {
+          "sha256": "8b8b64e7d02246bbcdcf0eca7b4394b48194c7b034f25aba7effef7bab54890f",
+          "bytes": 216822
+        },
+        "measured/r2scan/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/3/reference.json": {
+          "sha256": "10e636335b8c848f0257379946cd5df3815b4ee2b774fa3c74fcb9f24dd8b25b",
+          "bytes": 30022
+        },
+        "measured/r2scan/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/48/native.json": {
+          "sha256": "adeaae861e8c4ab43aec977a52932e54f36f008ee2976b847c46c4c9e99d7d85",
+          "bytes": 299188
+        },
+        "measured/r2scan/48/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/48/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/48/reference.json": {
+          "sha256": "f46c3b36f543aae5f5e70b7a06fa793227e70f91c3f4e3049584ce1507aee7bb",
+          "bytes": 108037
+        },
+        "measured/r2scan/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/48/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/r2scan/96/native.json": {
+          "sha256": "810ce4a9a416fea0090cda101044d58f0c42476551ab7d86bc73a901f0109539",
+          "bytes": 59413
+        },
+        "measured/r2scan/96/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "measured/r2scan/96/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "measured/r2scan/96/reference.json": {
+          "sha256": "d61dcecb50e52bbcc61337d23c4d21767eec08a6662684d116fc79f5b4cbacb8",
+          "bytes": 191385
+        },
+        "measured/r2scan/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/r2scan/96/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/wb97m-v/12/native.json": {
+          "sha256": "b9371b9e513cba9295e4b354872867474ae458bffb46adbe3fd57f3038b647e2",
+          "bytes": 217745
+        },
+        "measured/wb97m-v/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/wb97m-v/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/wb97m-v/12/reference.json": {
+          "sha256": "488dd190c8721efc4dc3de3429ec3661d3cc09d0109cfb021146fef26e8126d4",
+          "bytes": 45327
+        },
+        "measured/wb97m-v/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/wb97m-v/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/wb97m-v/3/native.json": {
+          "sha256": "9aec3be31fc47785edb6b0d763ecbc7505127fa202d431574bc4f12612808865",
+          "bytes": 196095
+        },
+        "measured/wb97m-v/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/wb97m-v/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/wb97m-v/3/reference.json": {
+          "sha256": "fd938141b271287e55ce178c92e6509cda26df428be0fe1c99961b11a3929fe7",
+          "bytes": 29874
+        },
+        "measured/wb97m-v/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/wb97m-v/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "measured/wb97m-v/48/native.outcome": {
+          "sha256": "e0cc105da990fc21020a8baf8357233d5d1947cb736d38b0fd4d335e5d0b8ad0",
+          "bytes": 49
+        },
+        "measured/wb97m-v/48/reference.json": {
+          "sha256": "e17c28c4ca708685d025bd7b1655b971fd1db5e26044268bdbd1bb4b1fdab0c8",
+          "bytes": 66717
+        },
+        "measured/wb97m-v/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/wb97m-v/48/reference.outcome": {
+          "sha256": "4d04227113dd6b041c4cdf537b9f7a4197e933beb56ac7967db046d88e0a5383",
+          "bytes": 44
+        },
+        "measured/wb97m-v/96/native.outcome": {
+          "sha256": "e0cc105da990fc21020a8baf8357233d5d1947cb736d38b0fd4d335e5d0b8ad0",
+          "bytes": 49
+        },
+        "measured/wb97m-v/96/reference.json": {
+          "sha256": "be4b6dc04f44cc0a008b5c4dd30956108ac5cdd75e8ece291290e793a7ba90ac",
+          "bytes": 40126
+        },
+        "measured/wb97m-v/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "measured/wb97m-v/96/reference.outcome": {
+          "sha256": "f3c8a59be7c01e20d0bcb8f4ec0553a2a121b4629ec638d47d2b82f861e36d36",
+          "bytes": 339
+        },
+        "native-gga-packaged.log": {
+          "sha256": "d19a0e98b48af081680396f31adc6fe0bcfe7d6bb244cc0baf879e1587cd8ab7",
+          "bytes": 385
+        },
+        "native-gga.log": {
+          "sha256": "4393939fb2c0b2942d910ac1907dbaceae1cbd59610ced6ad204e08c495fe926",
+          "bytes": 389
+        },
+        "native-library.sha256": {
+          "sha256": "e8c9b8ba7c68dee1ceb5e697e9ac49cdfc3ba0c891629aa2dffe596438afd1c8",
+          "bytes": 96
+        },
+        "native-meta.log": {
+          "sha256": "f61c91d8a8404e7d8111e4239733b954c36211d5fcbdc06cfdefd4f0a1dd87dd",
+          "bytes": 290
+        },
+        "native-r2scan3c.log": {
+          "sha256": "93dcaa5831de1871d6d294d7a5e41d980151e49c80ba0dd7ca6d58ffa911cb2b",
+          "bytes": 185
+        },
+        "native-wb97mv.log": {
+          "sha256": "4965369bb44592a63af0bc6d9063066253926540b38011ec5a42a95c21262239",
+          "bytes": 113
+        },
+        "r2scan3c/inputs/def2-svp.json": {
+          "sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+          "bytes": 3567
+        },
+        "r2scan3c/r2scan-3c/12/native.json": {
+          "sha256": "293e046a6032f52357c7610bfd34606a2a59d0e103b1c2bb12a0d79ae890d877",
+          "bytes": 241786
+        },
+        "r2scan3c/r2scan-3c/12/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/12/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "r2scan3c/r2scan-3c/12/reference.json": {
+          "sha256": "8ccf40720052a931f8cf15c2b6629dffd510b845d09436ab3c6837b0888f1128",
+          "bytes": 45828
+        },
+        "r2scan3c/r2scan-3c/12/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/12/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "r2scan3c/r2scan-3c/3/native.json": {
+          "sha256": "ba324493dd115062d1afb0941ae82ee427212ca516a5ea2272b766f1ab0e8500",
+          "bytes": 219011
+        },
+        "r2scan3c/r2scan-3c/3/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/3/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "r2scan3c/r2scan-3c/3/reference.json": {
+          "sha256": "12ed78b11c541f2c0d9a59611e67d15afa2d4c5fde3d9dffbe12c947994e28c1",
+          "bytes": 30232
+        },
+        "r2scan3c/r2scan-3c/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "r2scan3c/r2scan-3c/48/native.json": {
+          "sha256": "4f81630ba784d42374587b30c4e61cdf6565950b174321b76ce2b566ac42cfd3",
+          "bytes": 303668
+        },
+        "r2scan3c/r2scan-3c/48/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/48/native.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "r2scan3c/r2scan-3c/48/reference.json": {
+          "sha256": "ae2fe3465bc847d3e787f7aaaf72a8559c89dfe6cea278457cb9b6a8368b6268",
+          "bytes": 108997
+        },
+        "r2scan3c/r2scan-3c/48/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/48/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "r2scan3c/r2scan-3c/96/native.json": {
+          "sha256": "9f3fb4a1c6b7e69f7835c72fb250dd4bdc647c9a0f426543bb9692e98b2d0fe6",
+          "bytes": 47266
+        },
+        "r2scan3c/r2scan-3c/96/native.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/96/native.outcome": {
+          "sha256": "4d04227113dd6b041c4cdf537b9f7a4197e933beb56ac7967db046d88e0a5383",
+          "bytes": 44
+        },
+        "r2scan3c/r2scan-3c/96/reference.json": {
+          "sha256": "a27d03119f2f7387db6d6bdc9abb306b4b137a3a8ac891431a26a25f5a456dfc",
+          "bytes": 192845
+        },
+        "r2scan3c/r2scan-3c/96/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "r2scan3c/r2scan-3c/96/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "reference-composite.log": {
+          "sha256": "4ab5c48479c0cbd74379ba406318283171df6b2588820873b087ff86ae271a40",
+          "bytes": 320
+        },
+        "reference-hybrid.log": {
+          "sha256": "854d7b1fa3513665bf27fcb054e36e8586061ac17c91b84affc94314c6657b29",
+          "bytes": 250
+        },
+        "reference-job.log": {
+          "sha256": "12d18b1844ee8756f9763907a5ab1973dacf738d04cd334d603d422ae7eb0bfd",
+          "bytes": 348
+        },
+        "reference-meta.log": {
+          "sha256": "78126fef2af52038e5613f753be5f5c8ab99a3dd425d7cb7cbbe8f1945123020",
+          "bytes": 262
+        },
+        "reference-r2scan3c.log": {
+          "sha256": "5917d4aaf619c300c1b3123c47553a6620bf6284e5eb3894ecb2c24eaa3c4b0e",
+          "bytes": 143
+        },
+        "sccache-before.log": {
+          "sha256": "9f232f36ef173a9f06fbd9328cc2e61fb5c7b3163b552da552a1491d7ca5a98e",
+          "bytes": 1053
+        },
+        "smoke/b3lyp/3/reference.json": {
+          "sha256": "2e03be182af4be5b69f71c3e3b478a2e54a4b1d4ec4bb755e484610b36c9c627",
+          "bytes": 10350
+        },
+        "smoke/b3lyp/3/reference.log": {
+          "sha256": "b0fd82277b83b6f1040f20ad5fa1450ec84668c1385904a30e0d1a84fdcd0f3d",
+          "bytes": 2228
+        },
+        "smoke/b3lyp/3/reference.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "smoke/inputs/def2-svp.json": {
+          "sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+          "bytes": 3567
+        },
+        "smoke/m06-2x/3/reference.json": {
+          "sha256": "5f2fb0bbcd608e898fc3067769b6ab6586a7c5a14072eae2f6cc0e739cdfb51e",
+          "bytes": 10354
+        },
+        "smoke/m06-2x/3/reference.log": {
+          "sha256": "b0fd82277b83b6f1040f20ad5fa1450ec84668c1385904a30e0d1a84fdcd0f3d",
+          "bytes": 2228
+        },
+        "smoke/m06-2x/3/reference.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "smoke/r2scan-3c/3/reference.json": {
+          "sha256": "aeffce6ef4904b10f73f6c50949ade31ec9b77e69c694dd5a15c5c24a742c787",
+          "bytes": 10602
+        },
+        "smoke/r2scan-3c/3/reference.log": {
+          "sha256": "b0fd82277b83b6f1040f20ad5fa1450ec84668c1385904a30e0d1a84fdcd0f3d",
+          "bytes": 2228
+        },
+        "smoke/r2scan-3c/3/reference.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "smoke-job.log": {
+          "sha256": "010230b1934db12b8906f920af4d2e3ea8679d219090c235ab87cdae2896b429",
+          "bytes": 150
+        },
+        "smoke2/b3lyp/3/reference.json": {
+          "sha256": "0f9c265e50307b6571596bd4f884a397d8960a0bb86f4249e6cb6ff50b0fdd5a",
+          "bytes": 22584
+        },
+        "smoke2/b3lyp/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "smoke2/b3lyp/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "smoke2/inputs/def2-svp.json": {
+          "sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+          "bytes": 3567
+        },
+        "smoke2/m06-2x/3/reference.json": {
+          "sha256": "322cd4c8cef17d5c8c9781eaecd28406613fc885cbf3cc1e4a669b24488faebf",
+          "bytes": 23594
+        },
+        "smoke2/m06-2x/3/reference.log": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        "smoke2/m06-2x/3/reference.outcome": {
+          "sha256": "c862ff6d68632ef1d57e5305426227f7179dd3fa7ae89fd073210b44b72d60a6",
+          "bytes": 42
+        },
+        "smoke2/r2scan-3c/3/reference.json": {
+          "sha256": "8aa13dfd88eb5c5ee5391a0e908868847f4cdeb1b9057ebcbf098f6bde249e08",
+          "bytes": 11383
+        },
+        "smoke2/r2scan-3c/3/reference.log": {
+          "sha256": "470f69a671070edf2d99b246e071a003105f1011aae962282c15892fa6589757",
+          "bytes": 882
+        },
+        "smoke2/r2scan-3c/3/reference.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "smoke2-job.log": {
+          "sha256": "825e85455cbc82fdb47db1b04fe95c3f3532926f31bdcd6c61335faaa344915b",
+          "bytes": 150
+        },
+        "unpackaged-native/pbe/12/native.json": {
+          "sha256": "074f08d11fbc01fb413879ddb2829cdce0988d9dea902dab5049ef1568007035",
+          "bytes": 30215
+        },
+        "unpackaged-native/pbe/12/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe/12/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe/3/native.json": {
+          "sha256": "9faf8b87731a8ab74c54daa239162978be6fa42154b64502df996dddd189d291",
+          "bytes": 24065
+        },
+        "unpackaged-native/pbe/3/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe/3/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe/48/native.json": {
+          "sha256": "dd4f808aa09e279757234e536b8e9c8307895c1c2891afd0f0c2e588fffc8307",
+          "bytes": 43350
+        },
+        "unpackaged-native/pbe/48/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe/48/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe/96/native.json": {
+          "sha256": "3d2b6132eebbcd8aa5ddb67ccabaac64dff4d2820e7891927653dc47f3c7a2d7",
+          "bytes": 60569
+        },
+        "unpackaged-native/pbe/96/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe/96/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe0/12/native.json": {
+          "sha256": "82e234aee5fad62e568544b04fda9aae429b1e42f81b367d1a345dc1657f0990",
+          "bytes": 29041
+        },
+        "unpackaged-native/pbe0/12/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe0/12/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe0/3/native.json": {
+          "sha256": "9a45527d47f3297b4f4051f73a6177cd02479d265ff827f5e954513d0e4da15f",
+          "bytes": 23462
+        },
+        "unpackaged-native/pbe0/3/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe0/3/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe0/48/native.json": {
+          "sha256": "953ccf063852b8fa6c147be6358503089cc78735d5e9bdcbff769fd417b4e1ae",
+          "bytes": 43298
+        },
+        "unpackaged-native/pbe0/48/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        },
+        "unpackaged-native/pbe0/48/native.outcome": {
+          "sha256": "596dedcda6dbd6343cef1d3399d4d30bf4b13efb32d9ac355f396789460b18eb",
+          "bytes": 42
+        },
+        "unpackaged-native/pbe0/96/native.json": {
+          "sha256": "aa2a09ff9bccd2798771ce39a6716ec8dc546994979db1ea361b95f5ca711870",
+          "bytes": 58874
+        },
+        "unpackaged-native/pbe0/96/native.log": {
+          "sha256": "abefad773b00f1d131d75d8bd1fbf555993f276ae2a67533e7eb4d4f520a6d9d",
+          "bytes": 1073
+        }
+      }
+    }
+  },
+  "fixed_campaign": {
+    "source_identity": "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16",
+    "base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+    "native_library_sha256": "622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9",
+    "remeasured_plotted_points": [
+      {
+        "method": "pbe",
+        "atoms": 12
+      },
+      {
+        "method": "pbe",
+        "atoms": 96
+      },
+      {
+        "method": "pbe0",
+        "atoms": 12
+      },
+      {
+        "method": "pbe0",
+        "atoms": 96
+      },
+      {
+        "method": "b3lyp",
+        "atoms": 12
+      },
+      {
+        "method": "b3lyp",
+        "atoms": 96
+      },
+      {
+        "method": "r2scan",
+        "atoms": 12
+      },
+      {
+        "method": "r2scan",
+        "atoms": 96
+      }
+    ],
+    "production_source_files": {
+      "src/methods/dft_method.cpp": {
+        "sha256": "a8a322ab6b4665874350cf03552bc6d8e8a0981717010acfaabef45e5a84bb6e",
+        "bytes": 145045
+      },
+      "src/methods/dft_method.hpp": {
+        "sha256": "d3dc70e2c88d6bf9ea9415270744b101aed1f907d3d2f70e04a9da3479f77e6e",
+        "bytes": 14663
+      },
+      "src/methods/dft_method_derivative_adapter.cpp": {
+        "sha256": "9117afadae85a29f91acc5b679e7c4e8b86eaf1cb9195a201a621d0987c99140",
+        "bytes": 8543
+      },
+      "src/methods/dft_method_owner_port.hpp": {
+        "sha256": "f26d1094c1d326b4ef5e63a7384e8f57be97ec274bd920871b05a2faeac500b1",
+        "bytes": 7197
+      },
+      "src/dft/cuda_ks.cpp": {
+        "sha256": "559d620f20ba39dda75619a396a236821c76308c1ffcaf85abd2980359b3f281",
+        "bytes": 176990
+      },
+      "src/dft/cuda_ks.hpp": {
+        "sha256": "6577d0a55863aa8dfe28e2a90415e196dfdc6d6a5ec6f52b0b187ca82c9ac12e",
+        "bytes": 19039
+      },
+      "src/api/ks_snapshot.hpp": {
+        "sha256": "dcf6d4ebb171a666fd094fbb7ff16c2d50249a8325bb04e5623c32ec0f27e20c",
+        "bytes": 11817
+      },
+      "src/api/c_api_ks_snapshot.cpp": {
+        "sha256": "15c7dc33783ddd25da575a773e767584dc57eb2d64de672e9ce11ddece17f28d",
+        "bytes": 74390
+      },
+      "python/generativeqc/_stationary_composite_cuda.py": {
+        "sha256": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+        "bytes": 28346
+      },
+      "python/generativeqc/_stationary_cuda.py": {
+        "sha256": "096f04a0d82fe1f551bdb14c88e0aa0237055b1784b9301140322a75286dc29b",
+        "bytes": 172377
+      },
+      "python/generativeqc/_ks_snapshot.py": {
+        "sha256": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+        "bytes": 64374
+      }
+    },
+    "build": "Full cuda-release-sm120 preset, Release, CUDA 12.9.1/GCC 11.4, verified ccache 4.5.1; existing caches retained.",
+    "validation": {
+      "native_endpoints": 132,
+      "maximum_energy_error_eh": 1.0459189070388675e-11,
+      "maximum_force_error_eh_per_bohr": 9.159051295171139e-11,
+      "host_tests": 140,
+      "native_state_lifetime_and_oracle_test": "1 passed, 11 deselected",
+      "native_cli_force_finite_difference_cases": 10
+    },
+    "retained_logs": {
+      "host-tests-final.log": {
+        "sha256": "54bd8aecfc40f8422ad89f6c5d79b03167b9d7ad28dc32790372f3455619c0e6",
+        "bytes": 180
+      },
+      "build.log": {
+        "sha256": "52640bad4e42871bc68188b5228b7fd7c22eb9af5c1574497c7b57caa1fb744e",
+        "bytes": 11077
+      },
+      "host-tests.log": {
+        "sha256": "513cfe1118699528354e48b5f221d2b384b5987d52adc89ef690a140f9a0e259",
+        "bytes": 99
+      },
+      "telemetry-tests.log": {
+        "sha256": "2bb2eadc6c2a1b118c98ac0e6c7eb2258ded0a0b372d1a31cbe852c5176f33de",
+        "bytes": 99
+      },
+      "additional-host-tests.log": {
+        "sha256": "5f0d0fca67b6fcedbd88b2f6919460ff5f802c5941aef53dad8195ed7a25bc6e",
+        "bytes": 179
+      },
+      "report-finalization.log": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      "baseline-free.log": {
+        "sha256": "e29a614a212359349bff813ea798ad90c00b4a97829525c9d7515b20209727b0",
+        "bytes": 1284
+      },
+      "baseline-pressure.log": {
+        "sha256": "541f7df20daabe10583f1783a68887ef6401177f5846a2fc8568af749ca187e2",
+        "bytes": 1445
+      }
+    },
+    "slurm_records": {
+      "slurm-progress.txt": "default/pbe0/96/native.json moved/0 running 6\n{'additional_device_bytes': 536870912, 'free_before_bytes': 245760000, 'free_after_bytes': 15387197440, 'reclaimed_device_bytes': 15120367225}\ndefault/r2scan/96/native.json warm/3 running 4\n{'additional_device_bytes': 536870912, 'free_before_bytes': 264634368, 'free_after_bytes': 15406071808, 'reclaimed_device_bytes': 15120367225}\ndefault/b3lyp/96/native.json moved/0 running 6\n{'additional_device_bytes': 536870912, 'free_before_bytes': 245760000, 'free_after_bytes': 15387197440, 'reclaimed_device_bytes': 15120367225}\ndefault/pbe/96/native.json moved/0 running 6\n{'additional_device_bytes': 536870912, 'free_before_bytes': 262537216, 'free_after_bytes': 15403974656, 'reclaimed_device_bytes': 15120367225}\npressure/pbe/96/native.json moved/0 running 6\n{'additional_device_bytes': 536870912, 'free_before_bytes': 65404928, 'free_after_bytes': 15206842368, 'reclaimed_device_bytes': 15120367225}\nJobId=7988 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:03:04 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:14 EligibleTime=2026-10-13T12:37:14 AccrueTime=Unknown StartTime=2026-10-13T12:37:14 EndTime=2026-10-13T12:52:14 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:14 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149058 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7989 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:03:03 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:15 EligibleTime=2026-10-13T12:37:15 AccrueTime=Unknown StartTime=2026-10-13T12:37:15 EndTime=2026-10-13T12:52:15 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:15 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149162 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7990 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:03:01 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:17 EligibleTime=2026-10-13T12:37:17 AccrueTime=Unknown StartTime=2026-10-13T12:37:17 EndTime=2026-10-13T12:57:17 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:17 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149274 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7991 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:03:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:18 EligibleTime=2026-10-13T12:37:18 AccrueTime=Unknown StartTime=2026-10-13T12:37:18 EndTime=2026-10-13T12:57:18 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:18 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149451 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7992 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:02:59 TimeLimit=00:30:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:19 EligibleTime=2026-10-13T12:37:19 AccrueTime=Unknown StartTime=2026-10-13T12:37:19 EndTime=2026-10-13T13:07:19 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:19 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149562 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+      "slurm-final.txt": "JobId=7992 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:06:25 TimeLimit=00:30:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:19 EligibleTime=2026-10-13T12:37:19 AccrueTime=Unknown StartTime=2026-10-13T12:37:19 EndTime=2026-10-13T12:43:44 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:19 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149562 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7995 JobName=env UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:58 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-13T12:39:35 EligibleTime=2026-10-13T12:39:35 AccrueTime=Unknown StartTime=2026-10-13T12:39:35 EndTime=2026-10-13T12:40:33 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:39:35 Scheduler=Main Partition=main AllocNode:Sid=localhost:1153385 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=env WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7996 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:03:53 TimeLimit=00:30:00 TimeMin=N/A SubmitTime=2026-10-13T12:40:19 EligibleTime=2026-10-13T12:40:19 AccrueTime=Unknown StartTime=2026-10-13T12:40:19 EndTime=2026-10-13T12:44:12 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:40:19 Scheduler=Main Partition=main AllocNode:Sid=localhost:1154290 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7997 JobName=env UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:58 TimeLimit=00:10:00 TimeMin=N/A SubmitTime=2026-10-13T12:42:54 EligibleTime=2026-10-13T12:42:54 AccrueTime=Unknown StartTime=2026-10-13T12:42:54 EndTime=2026-10-13T12:43:52 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:42:54 Scheduler=Main Partition=main AllocNode:Sid=localhost:1162179 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=env WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+      "slurm-checkpoint.txt": "JobId=7988 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:04:23 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:14 EligibleTime=2026-10-13T12:37:14 AccrueTime=Unknown StartTime=2026-10-13T12:37:14 EndTime=2026-10-13T12:41:37 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:14 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149058 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7989 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:04:22 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:15 EligibleTime=2026-10-13T12:37:15 AccrueTime=Unknown StartTime=2026-10-13T12:37:15 EndTime=2026-10-13T12:41:37 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:15 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149162 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7990 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:04:22 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:17 EligibleTime=2026-10-13T12:37:17 AccrueTime=Unknown StartTime=2026-10-13T12:37:17 EndTime=2026-10-13T12:41:39 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:17 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149274 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7991 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:04:43 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:18 EligibleTime=2026-10-13T12:37:18 AccrueTime=Unknown StartTime=2026-10-13T12:37:18 EndTime=2026-10-13T12:57:18 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:18 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149451 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7992 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:04:42 TimeLimit=00:30:00 TimeMin=N/A SubmitTime=2026-10-13T12:37:19 EligibleTime=2026-10-13T12:37:19 AccrueTime=Unknown StartTime=2026-10-13T12:37:19 EndTime=2026-10-13T13:07:19 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:37:19 Scheduler=Main Partition=main AllocNode:Sid=localhost:1149562 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \nJobId=7995 JobName=env UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:58 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-13T12:39:35 EligibleTime=2026-10-13T12:39:35 AccrueTime=Unknown StartTime=2026-10-13T12:39:35 EndTime=2026-10-13T12:40:33 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T12:39:35 Scheduler=Main Partition=main AllocNode:Sid=localhost:1153385 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=env WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n"
+    },
+    "raw_retention": ".artifacts/force-memory-20261013/remote-raw",
+    "baseline_pressure": {
+      "sha256": "d3b1894e3effaf5b74e97d0bd96c5721c6bb9da29028559f7e6aeb9cdbfa2158",
+      "bytes": 60013
+    },
+    "raw_file_identities": {
+      "default/r2scan/96/native.json": {
+        "sha256": "ec69e67e7dd24afb65a9e642b661d79f987af5e45abc000a66c642f855364b3c",
+        "bytes": 386983
+      },
+      "default/r2scan/12/native.json": {
+        "sha256": "639adf91f9087ebd10b46e0e60e7dfa2df47597359cf973b87d02f7022f87f95",
+        "bytes": 241225
+      },
+      "default/pbe0/96/native.json": {
+        "sha256": "dc9b41605dca60681a9363df06e48f5cbc6c3801cfecaacefa2eb82bfd315407",
+        "bytes": 387203
+      },
+      "default/pbe0/12/native.json": {
+        "sha256": "f3b905b514b2c4c886787503ceb5872e6f6a87c55d93e3a8bddb286bfc1762c5",
+        "bytes": 240168
+      },
+      "default/pbe/96/native.json": {
+        "sha256": "a48f4d42e1c65f360854ca725095a71684a402a869d09fbf6467414256326d8c",
+        "bytes": 387003
+      },
+      "default/pbe/12/native.json": {
+        "sha256": "f4cd92a4274d3a6c26287daa18264a41ff55aabf5105144b67da0872b0d39e2d",
+        "bytes": 241213
+      },
+      "default/b3lyp/96/native.json": {
+        "sha256": "018693517973fb8c39ecf54650001e29d140cd28e77d5dfe82384e83f440ae0d",
+        "bytes": 387897
+      },
+      "default/b3lyp/12/native.json": {
+        "sha256": "cbdcab81535cb561e90246c2d71c418e4ee871a9b5b370173f21b1a8c33742f9",
+        "bytes": 240860
+      },
+      "pressure/pbe/96/native.json": {
+        "sha256": "a09a7fad22d5e5e4ff592adb083a70ae03d7a39b7ea6740ea3020372d0c946a8",
+        "bytes": 386973
+      },
+      "control/m06-2x/3/native.json": {
+        "sha256": "178e7038646755bbe51a0bb27b0f31461e49077641643d1b4e676efa1a34e222",
+        "bytes": 220114
+      },
+      "control/wb97m-v/3/native.json": {
+        "sha256": "1ff390a34be0e4df884cf5032f7060050becd8f328e952280dc156d2055c7675",
+        "bytes": 199047
+      },
+      "native-test/test_global_hybrid_phase_sourc0/water.input.pbe0.json": {
+        "sha256": "16919b7c7c9a88e24f36e531076d3b7a265f5b276eb042c9aacd2e6fc281b105",
+        "bytes": 616329
+      },
+      "native-test/test_global_hybrid_phase_sourc0/water.input.oracle.json": {
+        "sha256": "7202b34ae1b1e1c2e4ecea4bc37a1b00d798615588cae77867694740ccde7d95",
+        "bytes": 281
+      },
+      "native-test/test_global_hybrid_phase_sourc0/water.input.b3lyp.json": {
+        "sha256": "5ffff6c54f0f7e3fc9f9169e60ef1c5d3e46162e26f8a70c753fe1321b936783",
+        "bytes": 616409
+      },
+      "native-test/test_global_hybrid_phase_sourc0/water.input.probe.log": {
+        "sha256": "a40b701643526f76738da88fb8b79227b120b4f84e945066c70d58008d9bde59",
+        "bytes": 409
+      },
+      "native-test/test_global_hybrid_phase_sourc0/water.input": {
+        "sha256": "1ec893def039f430da5ebca1abe399109f2d640e71e46a36e5429d018634f9df",
+        "bytes": 555352
+      }
+    },
+    "cache_statistics": {
+      "ccache-before.txt": "Summary:\n  Hits:             90349 / 282259 (32.01 %)\n    Direct:         74885 / 283524 (26.41 %)\n    Preprocessed:   15464 / 208566 (7.41 %)\n  Misses:          191910\n    Direct:        208639\n    Preprocessed:  193102\n  Errors:             926\n  Uncacheable:       9370\nPrimary storage:\n  Hits:            187947 / 566977 (33.15 %)\n  Misses:          379030\n  Cache size (GB):  10.71 /  12.00 (89.26 %)\n  Cleanups:           620\n\nUse the -v/--verbose option for more details.\n",
+      "ccache-after.txt": "Summary:\n  Hits:             90349 / 282271 (32.01 %)\n    Direct:         74885 / 283536 (26.41 %)\n    Preprocessed:   15464 / 208578 (7.41 %)\n  Misses:          191922\n    Direct:        208651\n    Preprocessed:  193114\n  Errors:             926\n  Uncacheable:       9370\nPrimary storage:\n  Hits:            187948 / 567001 (33.15 %)\n  Misses:          379053\n  Cache size (GB):  10.71 /  12.00 (89.27 %)\n  Cleanups:           620\n\nUse the -v/--verbose option for more details.\n"
+    }
+  },
+  "acceptance": {
+    "native_points": 25,
+    "native_observations": 300,
+    "maximum_energy_error_eh": 2.319211489520967e-11,
+    "maximum_force_error_eh_per_bohr": 9.158790392760352e-11
+  },
+  "files": {
+    "README.md": {
+      "sha256": "b54fa0fa08d2aceeef3aaf0d4a6864e302e0510db48978543e6e47de2791cf32",
+      "bytes": 10633
+    },
+    "summary.json.gz": {
+      "sha256": "a001e2d5f851c8b4106a3081b405902f3867048637fd88e4087d67f9184e42d5",
+      "bytes": 729766
+    },
+    "timings.md": {
+      "sha256": "8bac7b91c483ba4c31257618fd31a941311ee1e934f008829469faf2336926de",
+      "bytes": 4132
+    },
+    "dft-cold-warm.svg": {
+      "sha256": "1fe5d14c173c6c0c02fb5436bf7f297a72251d9a8771af3e24af3f25099a8869",
+      "bytes": 151076
+    },
+    "force-memory.json.gz": {
+      "sha256": "42e327aacc2f2ddf451c1efd11ea88baea39943c721ee5fb419c7cef018716c5",
+      "bytes": 82109
+    }
+  },
+  "uncompressed_summary": {
+    "sha256": "083de8a400256dbdf1d874f7e62fddc7fffb33af2a09e6307ebc46e8daefddca",
+    "bytes": 8409640
+  },
+  "original_master_campaign_report_retention": ".artifacts/force-memory-20261013/master-report"
+}

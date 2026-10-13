@@ -1130,6 +1130,22 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
 #endif
   }
 
+  generativeqc_status cuda_prepare_force_memory(const dft::CudaKsFinalStateToken& expected,
+                                                std::size_t additional_device_bytes,
+                                                std::array<std::uint64_t, 4>& receipt,
+                                                std::string& detail) {
+    receipt = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_)
+      return cuda_->prepare_force_memory(expected, additional_device_bytes, receipt, detail);
+#else
+    (void)expected;
+    (void)additional_device_bytes;
+#endif
+    detail = "CUDA force-memory handoff requires a CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
   generativeqc_status cuda_integral_gradient_additional_device_bytes(
       const dft::CudaKsFinalStateToken& expected, std::size_t& bytes, std::string& detail) {
     bytes = 0;
@@ -1587,6 +1603,18 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
         detail = "retained native CUDA stationary controller exceeds the new device allowance";
         return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
       }
+      // The controller's shape plan includes grid/provider scratch. Charge only
+      // storage not already retained on a replay, before creating any force owner.
+      const auto capacity =
+          dft::cuda_stationary_capacity(*binding, basis_.natom, basis_.nao, basis_.nprimitive,
+                                        grid_.point_count(), options_.xc_tile_points);
+      const auto envelope = std::min(maximum_device_bytes, capacity.cached_device_bytes);
+      const auto retained =
+          stationary_controller_ ? stationary_controller_->resources().device_upper_bytes : 0;
+      std::array<std::uint64_t, 4> memory_receipt{};
+      auto memory_status = cuda_->prepare_force_memory(
+          expected, envelope > retained ? envelope - retained : 0, memory_receipt, detail);
+      if (memory_status != GENERATIVEQC_STATUS_SUCCESS) return memory_status;
       if (!stationary_controller_) {
         stationary_controller_ = std::make_unique<dft::CudaStationaryController>(
             system_, basis_, grid_, *binding, expected.identity.model.device,
@@ -2579,6 +2607,19 @@ class KsPreparedBatch final : public PreparedBatch,
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->read_derivative_sources(expected, output, detail);
     output = {};
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status cuda_prepare_force_memory(std::size_t index,
+                                                const dft::CudaKsFinalStateToken& expected,
+                                                std::size_t additional_device_bytes,
+                                                std::array<std::uint64_t, 4>& receipt,
+                                                std::string& detail) override {
+    receipt = {};
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->cuda_prepare_force_memory(expected, additional_device_bytes,
+                                                           receipt, detail);
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }

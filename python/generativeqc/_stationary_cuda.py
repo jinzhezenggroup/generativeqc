@@ -2162,6 +2162,14 @@ class PreparedStationaryCudaTopologyMismatch(ValueError):
     """Retained execution is incompatible with the requested scientific topology."""
 
 
+def _prepare_force_memory(
+    source: typing.Any, additional_device_bytes: int
+) -> dict[str, int]:
+    """Ask the authenticated SCF owner for room before force allocations begin."""
+    prepare = getattr(source, "cuda_prepare_force_memory", None)
+    return prepare(additional_device_bytes) if callable(prepare) else {}
+
+
 class PreparedStationaryCudaExecution:
     """Retain method-owned CUDA resources behind the shared prepared-region lease."""
 
@@ -2371,6 +2379,11 @@ class PreparedStationaryCudaExecution:
                 raise PreparedStationaryCudaTopologyMismatch(
                     "stationary CUDA prepared profiling mode changed"
                 )
+            # Replays retain their force arenas. Only remaining transient work
+            # competes with optional SCF values in this phase.
+            self.force_memory = _prepare_force_memory(
+                state._source, max(0, max_device_bytes - self.device_peak_bound)
+            )
             if (
                 basis.identity != self._bound_basis_identity
                 or self._lease.needs_refresh
@@ -2407,6 +2420,7 @@ class PreparedStationaryCudaExecution:
         if retained_host > max_host_bytes:
             raise ValueError("prepared stationary CUDA host budget exceeded")
 
+        self.force_memory = _prepare_force_memory(state._source, max_device_bytes)
         started = perf_counter()
         cache = Path(cache)
         _, _, expansions, _ = _layout(basis)
@@ -3296,6 +3310,11 @@ def _complete_rks_cuda_gradient_diagnostic(
             n, len(state.grid.points), tile_points
         ).admitted_bytes(ao_map_reserve)
     host_bound += ao_map_reserve
+    force_memory = (
+        _prepare_force_memory(state._source, max_device_bytes)
+        if prepared is None
+        else {}
+    )
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -4048,6 +4067,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             else 0
         )
         + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
+        scf_force_memory=force_memory if prepared is None else prepared.force_memory,
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
         tensor_executions=tensor_work["executions"],

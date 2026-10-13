@@ -62,6 +62,16 @@ class EndpointSpec:
         """Only the range-separated OMol25 composition needs nonlocal screening."""
         return self.method == "wb97m-v"
 
+    @property
+    def is_r2scan3c(self) -> bool:
+        """The 3c endpoint includes its fixed basis, D4 and gCP corrections."""
+        return self.method == "r2scan-3c"
+
+    @property
+    def reference_xc(self) -> str:
+        """Select only the electronic functional; 3c corrections run separately."""
+        return "R2SCAN" if self.is_r2scan3c else self.method.upper().replace("-", "_")
+
 
 OMOL25 = EndpointSpec("wb97m-v", "def2-TZVPD", SCHEMA)
 
@@ -87,6 +97,9 @@ def source_hashes() -> dict[str, str]:
         "benchmarks/readme_omol25.py",
         "benchmarks/ks_preliminary_density.py",
         "benchmarks/readme_pbe0.py",
+        "benchmarks/readme_dft.py",
+        "tools/generativeqc_gcp/reference.py",
+        "tools/parameters/r2scan3c_gcp.json",
         "benchmarks/readme_wb97mv.py",
         "benchmarks/compare_df_direct_endpoint.py",
         "src/scf/cuda/direct_jk.cpp",
@@ -160,6 +173,22 @@ def protocol(
                 "density_fitting": False,
                 **(
                     {
+                        "reference_corrections": "CPU dftd4 + independent CPU gCP; included in every endpoint",
+                        "d4_parameters": {
+                            "s6": 1.0,
+                            "s8": 0.0,
+                            "s9": 2.0,
+                            "a1": 0.42,
+                            "a2": 5.65,
+                            "ga": 2.0,
+                            "gc": 1.0,
+                        },
+                    }
+                    if benchmark.is_r2scan3c
+                    else {}
+                ),
+                **(
+                    {
                         "nonlocal_density_policy": MOLECULAR_VV10_DENSITY_POLICY,
                         "nonlocal_density_threshold": float(
                             MOLECULAR_VV10_DENSITY_THRESHOLD
@@ -183,7 +212,7 @@ def protocol(
                 "max_iterations": 100,
                 "energy_gate": 1e-8,
                 "force_gate": 1e-7,
-                "cold_definition": "preparation plus first synchronized energy/force endpoint",
+                "cold_definition": "calculator construction, preparation and first synchronized energy/force endpoint; process startup and provenance collection excluded; existing compilation caches retained",
                 "warm_definition": f"{repeats} fixed engine-local post-cold/post-move density replays",
                 "threads": {
                     name: os.environ.get(name)
@@ -320,6 +349,18 @@ def native_endpoint_record(
         "native_force_components": (
             normalize_force_work(force_work) if force_work is not None else None
         ),
+        **(
+            {
+                "corrections": {
+                    "backend": item.dispersion.backend,
+                    "d4_energy": item.dispersion.d4.energy,
+                    "gcp_energy": item.dispersion.gcp.energy,
+                }
+            }
+            if getattr(item, "dispersion", None) is not None
+            and item.dispersion.gcp is not None
+            else {}
+        ),
     }
 
 
@@ -344,6 +385,7 @@ def reference_energy_forces(
     export: Callable[[Any], Any],
     synchronize: Callable[[], None],
     clock: Callable[[], float] = perf_counter,
+    correction: Callable[[], tuple[float, Any]] | None = None,
 ) -> tuple[float, Any, float]:
     """Time SCF, seed copy, analytic gradient and host force export together."""
     synchronize()
@@ -354,6 +396,10 @@ def reference_energy_forces(
     gradient = engine.nuc_grad_method()
     gradient.grid_response = True
     forces = export(-gradient.kernel())
+    if correction is not None:
+        correction_energy, correction_gradient = correction()
+        energy += correction_energy
+        forces -= correction_gradient
     seconds = reference_endpoint_seconds(
         started=started, synchronize=synchronize, clock=clock
     )
@@ -387,7 +433,32 @@ def force_execution_options(
     return options
 
 
-def main(benchmark: EndpointSpec = OMOL25) -> None:
+def reference_correction(atoms: Any) -> Callable[[], tuple[float, Any]]:
+    """Create an independent 3c oracle; all geometry-dependent work stays timed.
+
+    GPU4PySCF supplies the electronic endpoint. The reference's D4 and gCP
+    corrections execute on CPU and must be labeled as such in comparisons.
+    The native endpoint never calls these reference implementations.
+    """
+    from dftd4.interface import DampingParam, DispersionModel
+
+    from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp
+
+    numbers = np.asarray([atomic_number(symbol) for symbol, _ in atoms], dtype=np.int32)
+    coordinates = np.asarray([xyz for _, xyz in atoms])
+
+    def evaluate() -> tuple[float, Any]:
+        damping = DampingParam(s6=1.0, s8=0.0, s9=2.0, a1=0.42, a2=5.65)
+        d4 = DispersionModel(
+            numbers, coordinates, charge=0.0, ga=2.0, gc=1.0
+        ).get_dispersion(damping, grad=True)
+        gcp = evaluate_r2scan3c_gcp(tuple(numbers), coordinates)
+        return float(d4["energy"]) + gcp.energy, d4["gradient"] + gcp.gradient
+
+    return evaluate
+
+
+def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> None:
     """Journal complete independent endpoints, including experimental cold seeds."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("engine", choices=("reference", "native"))
@@ -419,7 +490,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         help="Explicit additional composite-force host allowance; excludes SCF storage",
     )
     parser.add_argument("--output", type=raw_output_path, required=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
     if args.repeats < 1 or min(args.grid) < 1:
@@ -502,6 +573,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                 "cupy": ("cupy-cuda12x",),
                 "cutensor": ("cutensor-cu12",),
                 "numpy": ("numpy",),
+                "dftd4": ("dftd4",),
             }
         ),
         "scheduler": {
@@ -535,7 +607,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                     geometry,
                     reference_basis,
                     spec,
-                    xc=benchmark.method.upper().replace("-", "_"),
+                    xc=benchmark.reference_xc,
                     full_fock=benchmark.reference_full_fock,
                 )
                 from gpu4pyscf.dft import libxc
@@ -549,6 +621,9 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                 engine.conv_tol_grad = 1e-10
                 engine.direct_scf_tol = 1e-14
                 engine.max_cycle = 100
+                correction = (
+                    reference_correction(geometry) if benchmark.is_r2scan3c else None
+                )
                 cp.cuda.Stream.null.synchronize()
                 prepare_seconds = perf_counter() - started
                 if engine.mol.nao_nr() != scientific["aos"]:
@@ -562,6 +637,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                     *,
                     engine: Any = engine,
                     geometry_index: int = geometry_index,
+                    correction: Any = correction,
                 ) -> dict[str, Any]:
                     """Bind the geometry owner; density copies remain inside the timer."""
                     save(f"{phase}/{repeat}")
@@ -580,6 +656,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                             seed,
                             export=cp.asnumpy,
                             synchronize=cp.cuda.Stream.null.synchronize,
+                            correction=correction,
                         )
                         convergence = gpu_convergence_payload(
                             [engine], [work["tracker"]]
@@ -643,6 +720,8 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
 
                 PreparedCompositeStationaryCudaGradient.execute = active_force
             save("native/calculator")
+            cp.cuda.Stream.null.synchronize()
+            started = perf_counter()
             calc = Calculator(
                 method=benchmark.native_method,
                 basis=basis,
@@ -654,6 +733,9 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                 screening_tolerance=1e-12,
                 max_iterations=100,
             )
+            cp.cuda.Stream.null.synchronize()
+            calculator_seconds = perf_counter() - started
+            record["native_calculator_seconds"] = calculator_seconds
             record["native_build"] = native_build_metadata(calc)
             require_tuned_native_build(record["native_build"])
             record["native_capabilities"] = {
@@ -690,7 +772,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
 
             owner._public_dft_cuda_force = observed_force
             cp.cuda.Stream.null.synchronize()
-            prepare_seconds = perf_counter() - started
+            prepare_seconds = calculator_seconds + perf_counter() - started
             save("cold/preliminary-density")
             cp.cuda.Stream.null.synchronize()
             started = perf_counter()

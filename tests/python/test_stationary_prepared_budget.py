@@ -74,7 +74,7 @@ def test_prepared_artifact_resources_close_when_publication_fails(
     )
     with pytest.raises(error, match=message):
         owner.ensure(
-            state=SimpleNamespace(),
+            state=SimpleNamespace(_source=SimpleNamespace()),
             basis=SimpleNamespace(identity="geometry", natom=1, nao=1),
             contract=SimpleNamespace(),
             plan=SimpleNamespace(spin_blocks=1),
@@ -109,7 +109,11 @@ def test_retained_host_budget_is_rechecked_before_rebind(
     monkeypatch: pytest.MonkeyPatch, failed: bool, changed: bool
 ) -> None:
     monkeypatch.setattr(runtime, "_basis_topology_identity", lambda basis: "topology")
-    source = SimpleNamespace(backend="cuda")
+    memory_requests = []
+    source = SimpleNamespace(
+        backend="cuda",
+        cuda_prepare_force_memory=lambda size: memory_requests.append(size) or {},
+    )
     identity = SimpleNamespace(
         method="pbe-rks", functional_identity="xc", regularization_identity="reg"
     )
@@ -200,6 +204,7 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         owner._lease.mark_failure()
     with pytest.raises(ValueError, match="host budget"):
         owner.ensure(**kwargs)
+    assert memory_requests == []
     # An admission failure must leave an unchanged compatible owner reusable.
     if owner._lease.failed:
         owner._lease.mark_refresh()
@@ -207,3 +212,4 @@ def test_retained_host_budget_is_rechecked_before_rebind(
     kwargs["max_host_bytes"] = 100
     owner.ensure(**kwargs)
     assert owner._bound_basis_identity == "old"
+    assert memory_requests == [0]  # Retained arenas need no second allocation.

@@ -3279,6 +3279,50 @@ generativeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& ex
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
+generativeqc_status CudaKsPlan::prepare_force_memory(const CudaKsFinalStateToken& expected,
+                                                     std::size_t additional_device_bytes,
+                                                     std::array<std::uint64_t, 4>& receipt,
+                                                     std::string& detail) {
+  receipt = {};
+  detail.clear();
+  try {
+    if (expected.version != 1 || expected != impl_->token())
+      throw std::invalid_argument("CUDA KS force-memory token is stale");
+    impl_->current_device();
+    cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
+    check(cudaStreamIsCapturing(impl_->stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::invalid_argument("CUDA KS force-memory handoff cannot capture");
+    std::size_t free_before{}, free_after{}, total{}, retired{};
+    check(cudaMemGetInfo(&free_before, &total));
+    free_after = free_before;
+    if (additional_device_bytes > free_before && impl_->phase_source) {
+      // The final-state token excludes active/pending SCF work. Drain its
+      // producer before invalidating graph borrowers and freeing immutable ERIs;
+      // downstream D/W/XC leases do not borrow this independently owned source.
+      check(cudaStreamSynchronize(impl_->stream));
+      ++impl_->movement.synchronizations;
+      retired = impl_->phase_device_bytes;
+      impl_->retire_phase_source(false);  // Successful SCF already audited it.
+      check(cudaMemGetInfo(&free_after, &total));
+    }
+    receipt = {additional_device_bytes, free_before, free_after, retired};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    detail = "CUDA KS force-memory handoff allocation failed";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const generativeqc::Error& error) {
+    detail = error.what();
+    return error.status();
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
 const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
   return impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;

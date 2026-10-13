@@ -191,18 +191,25 @@ print(first.energies)
 
 ## Benchmarks
 
-Measured results are retained under
-[benchmarks/results](benchmarks/results/README.md), together with exact source,
-hardware, numerical checks and reproduction protocols. A dated candidate
-benchmark is not a claim about the current default implementation.
+Complete **DFT energy + analytic forces** on an RTX 5090, based on master
+`e0ad22036`, measured on 2026-10-13. The report identifies original measurements
+and reruns with the force-memory fix. Cold includes construction, preparation
+and the first calculation; warm reuses a fixed converged density. Compiler
+caches are retained.
 
-Representative complete-endpoint reports include
-[direct and density-fitted HF](benchmarks/results/df-source-screening-20261004/README.md)
-and [ωB97M-V / def2-SVP](benchmarks/results/wb97mv-active-ao-20261003/README.md).
-Negative and incomplete trials remain available in their original archives,
-not as promoted README figures. See
-[performance engineering](docs/maintainer/performance_engineering.md)
-for the qualification and publication criteria.
+![Cold and warm DFT energy-plus-force timings for GenerativeQC and GPU4PySCF](benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
+
+Both engines use matching water clusters, FP64, def2-SVP and explicit moving
+grids. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP; its
+reference includes CPU corrections. Each plotted native point passes energy
+and force checks across cold, warm and changed-geometry calls. Missing points
+are labeled; crosses show warm repeats with differing SCF work.
+
+See the [timing table](benchmarks/results/readme-dft-20261013/timings.md) and
+[measurement protocol, accuracy and limitations](benchmarks/results/readme-dft-20261013/README.md).
+Other dated measurements, including
+[direct and density-fitted HF](benchmarks/results/df-source-screening-20261004/README.md),
+are retained in the [benchmark archive](benchmarks/results/README.md).
 
 ## Documentation
 

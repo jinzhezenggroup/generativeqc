@@ -109,6 +109,7 @@ def collect(directory: Path, atoms: int, *, schema: str = SCHEMA) -> dict[str, A
                     "native_schedule_policy",
                     "native_experiment",
                     "preliminary_density",
+                    "native_calculator_seconds",
                     "target_prepare_seconds",
                     "preliminary_wrapper_seconds",
                 )
