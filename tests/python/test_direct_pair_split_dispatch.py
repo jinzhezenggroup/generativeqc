@@ -123,7 +123,8 @@ DeviceShellClassProfileEntry profile;
 std::uint32_t pair_order, class_state;
 std::uint64_t mask_pointer;
 std::uint8_t active;
-constexpr double tolerance = 1e-13, coulomb = 1.7, exchange = -0.23;
+constexpr double tolerance = 1e-13;
+double coulomb = 1.7, exchange = -0.23;
 constexpr std::uint64_t mask = 919;
 constexpr cudaStream_t stream_id = 17;
 constexpr std::uint64_t prefix_storage[1]{};
@@ -243,7 +244,8 @@ void bounded_direct_shell_quartet_kernel(
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
   assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
   assert(j_coefficient == coulomb && k_coefficient == exchange && omega == 0 && secondary == 0);
-  assert(!coulomb_only && !exchange_only && block_domain == domain);
+  assert(coulomb_only == (Purpose == DirectScreeningPurpose::Force && exchange == 0.0));
+  assert(!exchange_only && block_domain == domain);
   assert(range == (expected_separate ? DirectRangeOperator::FullSources : DirectRangeOperator::Full));
   assert(Radial == -1 || Radial == static_cast<int>(range));
   if constexpr (AngularOrder == -2 || AngularOrder == -3 || AngularOrder == 7 || AngularOrder == 8) assert(cursor == 0);
@@ -319,5 +321,24 @@ int main() {
                   assert(events == std::vector<Event>(expected.begin(), expected.begin() + completed));
                 }
               }
+  // Pure J must reach the existing source-specific force gate on every
+  // generic/low/materialized fallback; combined J/K keeps both sources.
+  for (bool spin : {false, true})
+    for (bool separate : {false, true})
+      for (auto purpose : {DirectScreeningPurpose::Fock, DirectScreeningPurpose::Force})
+        for (unsigned maximum : {0U, 2U, 3U})
+          for (double k : {0.0, -0.23}) {
+            expected_spin = spin; expected_separate = separate; expected_purpose = purpose;
+            expected_topology = &topology;
+            expected_batch = {true,true,&profile,&profile,0,0,maximum};
+            domain.prefix = prefix_storage; exchange = k;
+            events.clear(); last_error = cudaSuccess; cursor = 0; fail_event = -1;
+            assert(launch_bounded_direct_shell_quartet_kernel_scaled(
+                spin,purpose,7,dim3{256},1024,stream_id,expected_batch,tolerance,
+                &shell_bounds,&density_bounds,&pair_order,&block_bounds,&system_bounds,
+                &mask_pointer,mask,&class_state,&schwarz,&density,&active,&output,
+                &cursor,&profile,coulomb,exchange,separate,domain,expected_topology,
+                DirectSpdForceSchedule::Incumbent) == cudaSuccess);
+          }
 }
 """
