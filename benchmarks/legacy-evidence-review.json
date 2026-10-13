@@ -622,6 +622,22 @@
       "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
     },
     {
+      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 142684,
+      "sha256": "616ec7ecfc3a7a52d9e55219d5ecc8875cf849cf02eada1a0c2aeef1e8e5a5f1",
+      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/manifest.json",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 137276,
+      "sha256": "584811328ed89df697aef731432c27a969070a633e498594ac06d7858926f5e9",
+      "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 421896,
