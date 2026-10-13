@@ -357,7 +357,7 @@ def capabilities() -> dict[str, object]:
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
         "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
-        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; no-AD-or-native",
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD-only; no-generated-public-AD-or-native",
         "boolean_native_lowering": True,
         "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views; no-AD-or-where",
         "astype_devices": "device-none-only-cpu-reference",
