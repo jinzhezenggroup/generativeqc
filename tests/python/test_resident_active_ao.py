@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("selection", ("identity", "subset", "empty"))
+@pytest.mark.parametrize("selection", ("identity", "subset", "empty", "dense"))
 def test_resident_selected_features_and_density_jets(
     tmp_path: Path, selection: str
 ) -> None:
@@ -38,6 +38,7 @@ def test_resident_selected_features_and_density_jets(
     with NativeAO(**basis_arguments(meta)) as basis:
         ids = {
             "identity": None,
+            "dense": None,
             "subset": np.arange(0, basis.nao, 2, dtype=np.uintp),
             "empty": np.empty(0, dtype=np.uintp),
         }[selection]
@@ -47,7 +48,7 @@ def test_resident_selected_features_and_density_jets(
             artifact,
             order=2,
             tile_points=7,
-            active_ao_capacity=max(1, active),
+            active_ao_capacity=None if selection == "dense" else max(1, active),
             ingredients=("rho", "gradient", "tau"),
         ) as grid:
             grid.set_density(arrays["density"])
@@ -60,6 +61,10 @@ def test_resident_selected_features_and_density_jets(
                     view = task.view
                     assert view.nactive == active and view.nao == basis.nao
                     work = task.density_jets(4)
+                    if selection == "dense":
+                        assert not view.local_potential and not view.potential
+                        with pytest.raises(RuntimeError):
+                            task.scatter(np.zeros((2, active, active)))
 
                     # Explicit copies are test diagnostics, outside production.
                     def download(

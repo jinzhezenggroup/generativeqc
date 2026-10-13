@@ -1030,8 +1030,6 @@ class CudaGrid:
         """
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("device task views require a local CUDA plan")
             if set(self.ingredients) != {"rho", "gradient", "sigma", "tau"}:
                 raise ValueError("device task ABI v1 requires the full feature layout")
             with self._task(
@@ -1128,13 +1126,13 @@ class CudaGrid:
 
         This device-only path is deliberately deferred: the downstream same-stream
         consumer propagates the grid error before reading AO/features. The point
-        allocation remains caller-owned and must outlive the lease.
+        allocation remains caller-owned and must outlive the lease. Dense
+        owners expose read-only AO/features with no potential/scatter buffers;
+        explicit AO maps still require a capacity-qualified indexed owner.
         """
         _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
             active, selected = self._selected_ao_map(ao_ids)
@@ -1394,8 +1392,6 @@ class CudaGrid:
         _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
             with self._task(
@@ -1427,8 +1423,6 @@ class CudaGrid:
         published, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients) or not published.issubset(
                 self.ingredients
             ):
