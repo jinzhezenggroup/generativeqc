@@ -355,6 +355,21 @@ select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
 
+An explicit `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=1` selects an experimental
+bounded range-ERI lease for strict-FP64 direct restricted VV10 with single-step
+control. It applies to cold and transported-density solves; retained warm
+replays use the incumbent provider. The existing resident bucket mask and byte
+ceiling constrain optional storage after complete host/device admission. A
+capacity refusal retains exact Direct evaluation. Unset, `auto` and `0` leave
+this range experiment off. Fitted, lower-precision, incremental and externally
+budgeted device-ledger paths retain their existing providers.
+
+The lease binds geometry, radial operator and omega. It supplies only matching
+raw range K; primary full J/K and derivative owners remain independent.
+Successful solves rebase warm energy metadata with both incumbent exchange
+terms before optional values are retired. This preserves the physical replay
+gates and records the additional complete Fock and both exchange applications.
+
 ## Prepared ragged execution
 
 `KsPreparedBatch` owns one compatible KS plan per input item. CUDA execution

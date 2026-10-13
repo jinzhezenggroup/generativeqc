@@ -279,8 +279,8 @@ void raw_range_oracle(const Fixture& fixture) {
             // Keep each radial request valid in isolation so rejection tests
             // the immutable lease identity, not ordinary argument validation.
             if (mismatch == 0)
-              wrong.exchange.op = range == 0 ? scf::FockOperator::LongRange
-                                            : scf::FockOperator::ShortRange;
+              wrong.exchange.op =
+                  range == 0 ? scf::FockOperator::LongRange : scf::FockOperator::ShortRange;
             if (mismatch == 1) wrong.exchange.omega = 0.4;
             if (mismatch == 2) wrong.coulomb.present = true;
             if (mismatch == 3) {
