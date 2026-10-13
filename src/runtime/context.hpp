@@ -4,6 +4,7 @@
 #include <string>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 
 namespace generativeqc::runtime {
 

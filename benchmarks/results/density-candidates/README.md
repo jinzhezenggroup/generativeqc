@@ -60,9 +60,19 @@ content hash of its complete reference snapshot, including producer provenance
 and runtime. Executable candidate/workload identities use the actual source,
 grid and prepared contract, and do not include producer runtime. Re-exporting
 references can change the snapshot identity without changing those inputs.
-The 192-AO octamer stores each original NPY array separately under
-`inputs/water8_svp/`, with file and numeric hashes checked by the loader.
-These permanent reference inputs fit the hard 1 MiB file limit. Full molecular grid-by-AO or grid-by-orbital tensors are not retained.
+The 192-AO octamer retains all 18 original NPY member byte streams in
+`inputs/water8_svp.npz`, a standard ZIP-LZMA NumPy archive read by the existing
+`np.load(..., allow_pickle=False)` path. Members have sorted names, a fixed
+1980-01-01 timestamp and regular-file 0644 metadata. Python's standard `lzma`
+support is required, with no third-party decoder or filesystem extraction.
+The archive is 796,419 bytes, replacing 2,589,344 loose NPY bytes; ordinary
+DEFLATE would exceed the hard 1 MiB per-file cap. The manifest binds the stored
+archive SHA-256 before decoding, and the unchanged `water8_svp.json` binds every
+array's dtype, shape and numerical bytes, producer, inputs and grid identities.
+The large-evidence ledger classifies this retained scientific input without a
+policy exception. This lossless storage migration adds no measurement or
+qualification claim. Full molecular grid-by-AO or grid-by-orbital tensors are
+not retained.
 
 ## Retained results
 

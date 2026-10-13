@@ -315,7 +315,7 @@ jobs:
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
       # Generated AOT objects are much larger than ordinary CPU objects, so
       # give the CUDA cache enough room while staying within the repo quota.
-      CCACHE_MAXSIZE: 3G
+      CCACHE_MAXSIZE: 5G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1525,7 +1525,7 @@ jobs:
         (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
-    # Account for both the fast CI compilation and the full release AOT seed.
+    # Master seeds both CUDA flag variants; PRs/merge groups compile only the CLI.
     timeout-minutes: 210
     permissions:
       contents: read
@@ -1533,7 +1533,7 @@ jobs:
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
-      CCACHE_MAXSIZE: 3G
+      CCACHE_MAXSIZE: 5G
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1621,11 +1621,17 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
-      # Populate both compiler-flag identities before publishing one cache image.
-      # The required fast CI job runs on a separate runner and cannot write here.
+      - name: Check for an already-failed required CI sibling
+        if: steps.cli_scope.outputs.tier != 'skip' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/ci_required_failure_guard.py
+      # The required cuda-compile job already checks fast CUDA on PRs/merge
+      # groups. Only master seeds both compiler-flag identities here, on the
+      # same runner that saves/publishes the shared cache snapshot.
       - name: Seed fast CUDA CI objects in the shared cache
         id: fast_cuda_seed
-        if: steps.cli_scope.outputs.tier != 'skip'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           ccache --zero-stats
@@ -1748,6 +1754,18 @@ jobs:
           python3 tools/report_ci_ccache.py
           --label "CUDA native CLI monolithic build"
           --build-dir build/cuda-release-cli-sm120
+      # A cache snapshot can contain entries for long-abandoned source/flag
+      # identities even when the 5 GiB cap was respected. Evict only entries
+      # untouched for a week; hits during either seed/build refresh recency.
+      # Do not clean consumer caches or delete the just-built compiler outputs.
+      - name: Retire unused CUDA objects before publishing the cache
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.fast_cuda_seed.outcome != '' && steps.fast_cuda_seed.outcome != 'skipped' }}
+        timeout-minutes: 2
+        continue-on-error: true
+        run: |
+          ccache --evict-older-than 7d
+          ccache --cleanup
+          ccache --show-stats
       - name: Save complete shared CUDA ccache on master
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_ccache.outputs.cache-hit != 'true'
         continue-on-error: true

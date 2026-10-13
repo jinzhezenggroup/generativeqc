@@ -60,6 +60,59 @@ generativeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+generativeqc_status prepare_df_blas(CudaDensityFittingJkPlan& plan, std::string& detail) {
+  if (plan.blas || !plan.stream) {
+    detail = "invalid prepared CUDA DF provider lifetime";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  auto status = cublasCreate(&plan.blas);
+  if (status == CUBLAS_STATUS_SUCCESS) status = cublasSetStream(plan.blas, plan.stream);
+  if (status == CUBLAS_STATUS_SUCCESS)
+    status = cublasSetPointerMode(plan.blas, CUBLAS_POINTER_MODE_HOST);
+  return status == CUBLAS_STATUS_SUCCESS
+             ? GENERATIVEQC_STATUS_SUCCESS
+             : blas_failure(status, "initialize CUDA DF cuBLAS", detail);
+}
+
+void release_df_blas(CudaDensityFittingJkPlan& plan) noexcept {
+  if (plan.blas) (void)cublasDestroy(plan.blas);
+  plan.blas = nullptr;
+}
+
+generativeqc_status scf_occupied_gram(CudaDensityFittingJkPlan& plan, std::size_t columns,
+                                      std::size_t reduction, double weight, const double* factor,
+                                      double* output, bool lower_triangle, bool& wrote_lower,
+                                      const char* failure_context, std::string& detail) {
+  wrote_lower = false;
+  constexpr auto limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+  if (!plan.blas || !factor || !output || !columns || !reduction || columns > limit ||
+      reduction > limit) {
+    detail = "invalid prepared CUDA DF occupied Gram view";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto n = static_cast<int>(columns), k = static_cast<int>(reduction);
+  const double zero = 0;
+  // Keep the incumbent lower-triangle SYRK contract on toolchains that
+  // provide it. A full GEMM remains the exact original unsupported fallback.
+  const auto submit = [&]<class Handle>(Handle handle) {
+    if constexpr (requires {
+                    cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k, &weight, factor,
+                                k, &zero, output, n);
+                  }) {
+      if (lower_triangle) {
+        wrote_lower = true;
+        return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, n, k, &weight, factor, k,
+                           &zero, output, n);
+      }
+    }
+    return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, n, n, k, &weight, factor, k, factor, k,
+                       &zero, output, n);
+  };
+  const auto status = submit(plan.blas);
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(status, failure_context, detail);
+}
+
 generativeqc_status scf_matrix_product_view(
     CudaDensityFittingJkPlan& plan, bool transpose_left, bool transpose_right, std::size_t rows,
     std::size_t columns, std::size_t reduction, const double* left, std::size_t left_ld,
@@ -85,20 +138,83 @@ generativeqc_status scf_matrix_product_view(
                                          : blas_failure(status, failure_context, detail);
 }
 
+generativeqc_status scf_matrix_product_batched_view(CudaDensityFittingJkPlan& plan,
+                                                    const ScfMatrixBatchView& view,
+                                                    const char* failure_context,
+                                                    std::string& detail) {
+  constexpr auto dimension_limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+  constexpr auto stride_limit = static_cast<std::size_t>(std::numeric_limits<long long>::max());
+  if (!plan.blas || !view.left.data || !view.right.data || !view.output.data || !view.rows ||
+      !view.columns || !view.reduction || !view.batches ||
+      std::max({view.rows, view.columns, view.reduction, view.batches, view.left.leading_dimension,
+                view.right.leading_dimension, view.output.leading_dimension}) > dimension_limit ||
+      std::max({view.left.batch_stride, view.right.batch_stride, view.output.batch_stride}) >
+          stride_limit ||
+      view.left.leading_dimension < (view.transpose_left ? view.reduction : view.rows) ||
+      view.right.leading_dimension < (view.transpose_right ? view.columns : view.reduction) ||
+      view.output.leading_dimension < view.rows) {
+    detail = "invalid prepared CUDA DF batched matrix product view";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  // Bound the full physical byte span before vendor pointer arithmetic. Inputs
+  // may broadcast or share read-only storage; writable batch spans are disjoint.
+  const auto valid_span = [&](const double* data, std::size_t physical_rows,
+                              std::size_t physical_columns, std::size_t ld, std::size_t stride,
+                              bool writable) {
+    constexpr auto limit =
+        static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / sizeof(double);
+    if (physical_rows > limit || (physical_columns - 1) > (limit - physical_rows) / ld)
+      return false;
+    const auto matrix_span = (physical_columns - 1) * ld + physical_rows;
+    if (view.batches > 1 && writable && stride < matrix_span) return false;
+    if (stride && view.batches - 1 > (limit - matrix_span) / stride) return false;
+    const auto bytes = ((view.batches - 1) * stride + matrix_span) * sizeof(double);
+    return reinterpret_cast<std::uintptr_t>(data) <=
+           std::numeric_limits<std::uintptr_t>::max() - bytes;
+  };
+  if (!valid_span(view.left.data, view.transpose_left ? view.reduction : view.rows,
+                  view.transpose_left ? view.rows : view.reduction, view.left.leading_dimension,
+                  view.left.batch_stride, false) ||
+      !valid_span(view.right.data, view.transpose_right ? view.columns : view.reduction,
+                  view.transpose_right ? view.reduction : view.columns,
+                  view.right.leading_dimension, view.right.batch_stride, false) ||
+      !valid_span(view.output.data, view.rows, view.columns, view.output.leading_dimension,
+                  view.output.batch_stride, true)) {
+    detail = "invalid prepared CUDA DF batched matrix product span";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const cublasStatus_t status = cublasDgemmStridedBatched(
+      plan.blas, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+      view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, static_cast<int>(view.rows),
+      static_cast<int>(view.columns), static_cast<int>(view.reduction), &view.alpha, view.left.data,
+      static_cast<int>(view.left.leading_dimension), static_cast<long long>(view.left.batch_stride),
+      view.right.data, static_cast<int>(view.right.leading_dimension),
+      static_cast<long long>(view.right.batch_stride), &view.beta, view.output.data,
+      static_cast<int>(view.output.leading_dimension),
+      static_cast<long long>(view.output.batch_stride), static_cast<int>(view.batches));
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(status, failure_context, detail);
+}
+
 generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
                                      std::size_t batch_size, std::size_t nbf, const double* left,
                                      std::size_t left_stride, const double* right,
                                      std::size_t right_stride, double* output,
                                      std::size_t output_stride, double alpha, double beta,
                                      const char* failure_context, std::string& detail) {
-  const cublasStatus_t status = cublasDgemmStridedBatched(
-      plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(nbf),
-      static_cast<int>(nbf), static_cast<int>(nbf), &alpha, left, static_cast<int>(nbf),
-      static_cast<long long>(left_stride), right, static_cast<int>(nbf),
-      static_cast<long long>(right_stride), &beta, output, static_cast<int>(nbf),
-      static_cast<long long>(output_stride), static_cast<int>(batch_size));
-  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
-                                         : blas_failure(status, failure_context, detail);
+  return scf_matrix_product_batched_view(plan,
+                                         {{left, nbf, left_stride},
+                                          {right, nbf, right_stride},
+                                          {output, nbf, output_stride},
+                                          nbf,
+                                          nbf,
+                                          nbf,
+                                          batch_size,
+                                          transpose_left,
+                                          false,
+                                          alpha,
+                                          beta},
+                                         failure_context, detail);
 }
 
 generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left,

@@ -619,3 +619,10 @@ if [[ "${GITHUB_EVENT_NAME}" == "schedule" || "${GITHUB_EVENT_NAME}" == "workflo
       ;;
   esac
 fi
+
+if [[ "${GENERATIVEQC_CI_SHARD}" == "posthf" && "${GITHUB_EVENT_NAME}" != "schedule" && "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+  # Keep whole-file fixtures local, but start measured expensive files first.
+  # xdist >=3.8 otherwise replaces collection order with descending test count.
+  source "${BASH_SOURCE[0]%/*}/ci_prioritize_posthf_files.sh"
+  extra_args+=(--no-loadscope-reorder)
+fi

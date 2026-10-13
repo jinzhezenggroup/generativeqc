@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/cuda_batch.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/density_fitting.hpp"
