@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -325,15 +326,15 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
   return binding;
 }
 
-// The native owner alone retains mutable KS resources; adapters use private ports.
-class KsPreparedCalculation final : public PreparedCalculation, public KsSingleOwnerPort {
+/** Retained scientific state for one item. Execution policy belongs to
+ * KsPreparedBatch for both public single calculations and ragged batches. */
+class KsPreparedState final : public KsSingleOwnerPort {
  public:
-  KsPreparedCalculation(Capabilities capabilities, core::System system,
-                        NativeKsExecutionPlan execution_plan, scf::ScfOptions options,
-                        dft::GridSpec grid, generativeqc_backend backend, int device,
-                        const std::optional<core::System>& auxiliary)
-      : PreparedCalculation(backend, device),
-        capabilities_(capabilities),
+  KsPreparedState(Capabilities capabilities, core::System system,
+                  NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
+                  generativeqc_backend backend, int device,
+                  const std::optional<core::System>& auxiliary)
+      : capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
         options_(std::move(options)),
@@ -387,8 +388,6 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
     runtime::sample_cpu_capacity(host_numeric_capacity());
   }
 
-  std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
-  const Capabilities& capabilities() const noexcept override { return capabilities_; }
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
     return options_.preliminary_guess;
@@ -453,7 +452,7 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
                 system_, spec.exchange.present, grid_.point_count(), options_.xc_tile_points));
   }
 
-  [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept override {
+  [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept {
     return capabilities_.supported_properties |
            (supports_native_gga_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   }
@@ -544,9 +543,6 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
     }
   }
 
-  void invalidate_result() override { invalidate_final_state(); }
-  void reset_execution_impl() override { clear_warm_start(); }
-
   void invalidate_final_state() noexcept {
     cpu_physical_.reset();
 #if GENERATIVEQC_HAS_CUDA
@@ -557,13 +553,6 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
 #if GENERATIVEQC_HAS_CUDA
   dft::CudaKsPlan* cuda_plan() noexcept { return cuda_.get(); }
 #endif
-
-  std::optional<KsTransportDiagnostic> ks_transport_diagnostic() const override {
-#if GENERATIVEQC_HAS_CUDA
-    if (cuda_) return adapt_transfers(cuda_->transfers());
-#endif
-    return std::nullopt;
-  }
 
   generativeqc_status final_state_token(dft::CudaKsFinalStateToken& token,
                                         std::string& detail) const override {
@@ -1767,23 +1756,6 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
     }
   }
 
-  Result execute_impl(bool compute_forces) override {
-    if (compute_forces && !supports_native_gga_force()) {
-      const char* issue = execution_plan_.automatic_program ? "#1122"
-                          : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
-                              ? "#164"
-                              : "#163";
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        std::string(ks_semilocal_family_name(execution_plan_)) +
-                            " KS nuclear gradients are tracked separately in issue " + issue +
-                            "; this prepared native DFT force context is unqualified (#2151)");
-    }
-    auto result = adapt_result(run(nullptr, true, true), backend_);
-    if (compute_forces) add_prepared_native_forces(result);
-    apply_d4(result);
-    return result;
-  }
-
   void apply_d4(Result& result) {
     if (!d4_) return;
     std::vector<double> coordinates;
@@ -1806,60 +1778,12 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
     result.energy += components[0] + components[1];
   }
 
-  /** Single-system and native batch paths share the same scientific owner. */
-  scf::ScfResult run(const std::vector<double>* initial_density, bool reuse_warm, bool update_warm,
-                     bool allow_preliminary = true) {
+  /** CPU solve used by the common scheduler; CUDA is advanced there per stream. */
+  scf::ScfResult run_cpu(const std::vector<double>* initial_density, bool reuse_warm,
+                         bool update_warm, bool allow_preliminary = true) {
+    if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE)
+      throw std::logic_error("CPU KS solve requires a CPU prepared owner");
     invalidate_final_state();
-#if GENERATIVEQC_HAS_CUDA
-    if (cuda_) {
-      // Native iterations read only scalar diagnostics. The public energy
-      // result does not require a final AO matrix download; warm D stays resident.
-      cuda_->set_warm_start_updates(update_warm);
-      scf::initial_guess::PreliminaryDiagnostic diagnostic;
-      std::optional<std::vector<double>> prepared;
-      const bool policy = allow_preliminary && options_.preliminary_guess.has_value();
-      const bool existing = initial_density != nullptr || (reuse_warm && cuda_->has_warm_start());
-      if (policy) {
-        diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
-        diagnostic.target_attempts = 1;
-        if (existing) {
-          diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
-        } else {
-          prepared = prepare_cold_initial_guess(diagnostic);
-        }
-      }
-      const auto* seed = initial_density ? initial_density : (prepared ? &*prepared : nullptr);
-      scf::ScfResult native;
-      try {
-        native = cuda_->run(
-            seed, reuse_warm && !prepared, false,
-            prepared ? dft::CudaKsSeedOrigin::NativeColdGuess : dft::CudaKsSeedOrigin::External);
-      } catch (const generativeqc::Error& error) {
-        // CUDA helpers may also throw untyped runtime errors for device faults.
-        // Only an explicitly numerical failure may consume the seed retry.
-        if (!prepared || error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
-        diagnostic.work_counters_complete = false;
-      }
-      // Returned physical failures and nonconvergence retain a complete work
-      // census; a typed numerical exception above has no terminal result.
-      if (prepared && (!native.converged || cuda_->failed())) {
-        diagnostic.discarded_target_iterations = native.iterations;
-        diagnostic.discarded_target_fock_builds = native.fock_builds;
-        diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
-        diagnostic.target_attempts = 2;
-        prepared.reset();
-        // Release the discarded result's history before the new solve. begin()
-        // revokes its final state and resets DIIS while preserving last-good warm D.
-        native = {};
-        native = cuda_->run(nullptr, false, false);
-      }
-      if (policy) native.preliminary_guess = diagnostic;
-      if (cuda_->failed())
-        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
-                          "CUDA KS physical evaluation failed");
-      return native;
-    }
-#endif
     if (cpu_epoch_ == std::numeric_limits<std::uint64_t>::max())
       throw std::overflow_error("CPU KS solve epoch exhausted");
     ++cpu_epoch_;
@@ -2168,12 +2092,19 @@ class KsPreparedBatch final : public PreparedBatch,
     // not quietly receive an energy-only result with an unfilled force buffer.
     if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
           return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
-        }))
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "KS batch analytic forces require individually qualified prepared contexts (#2151)");
+        })) {
+      const char* issue = execution_plan_.automatic_program ? "#1122"
+                          : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
+                              ? "#164"
+                              : "#163";
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        std::string(ks_semilocal_family_name(execution_plan_)) +
+                            " KS nuclear gradients are tracked separately in issue " + issue +
+                            "; this prepared native DFT force context is unqualified (#2151)");
+    }
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("KS batch coordinates do not match system count");
+    for (auto& item : items_) item.failure = nullptr;
     std::vector<BatchItemResult> results(size());
     std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
         size(), scf::CoulombExchangeWork::empty());
@@ -2227,6 +2158,7 @@ class KsPreparedBatch final : public PreparedBatch,
 #endif
         ready[i] = true;
       } catch (...) {
+        items_[i].failure = std::current_exception();
         result.status = item_exception_status();
       }
     }
@@ -2287,6 +2219,7 @@ class KsPreparedBatch final : public PreparedBatch,
           preliminary_seeds[i].reset();
         }
         auto& item = items_[i];
+        item.failure = nullptr;
         const bool reuse = !attempt && result.warm_start_used;
         const auto* seed =
             reuse && !item.resident_warm
@@ -2310,8 +2243,8 @@ class KsPreparedBatch final : public PreparedBatch,
           const auto discarded_iterations = result.calculation.convergence.iterations;
           const auto discarded_fock_builds = result.calculation.fock_builds;
           const bool discarded_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
-          auto native = item.plan->run(seed, reuse && item.resident_warm,
-                                       warm_enabled_ && warm_updates_, !attempt);
+          auto native = item.plan->run_cpu(seed, reuse && item.resident_warm,
+                                           warm_enabled_ && warm_updates_, !attempt);
           if (attempt && item.plan->initial_guess_policy()) {
             auto& diagnostic = native.preliminary_guess;
             diagnostic.requested_kind =
@@ -2327,6 +2260,7 @@ class KsPreparedBatch final : public PreparedBatch,
           target_coulomb_exchange_work[i].complete = false;
           if (result.calculation.ks_diagnostic)
             result.calculation.ks_diagnostic->coulomb_exchange_work.complete = false;
+          items_[i].failure = std::current_exception();
           result.status = item_exception_status();
         }
       }
@@ -2338,6 +2272,7 @@ class KsPreparedBatch final : public PreparedBatch,
           try {
             items_[i].plan->cuda_plan()->enqueue_iteration();
           } catch (...) {
+            items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
             running[i] = false;
           }
@@ -2354,6 +2289,7 @@ class KsPreparedBatch final : public PreparedBatch,
             finish(i, cuda->result(false));
             results[i].target_fock_work->finish_attempt(cuda->completed_fock_builds());
           } catch (...) {
+            items_[i].failure = std::current_exception();
             results[i].status = item_exception_status();
             running[i] = false;
           }
@@ -2364,6 +2300,23 @@ class KsPreparedBatch final : public PreparedBatch,
     runtime::sample_cpu_capacity(host_numeric_capacity());
     return results;
   }
+
+  /** Run one item with the exact batch schedule, preserving scalar error semantics.
+   * Nonconvergence returns diagnostics; other failures remain exceptions. */
+  Result execute_single(bool compute_forces) {
+    if (size() != 1) throw std::logic_error("single calculation requires exactly one KS item");
+    auto results = execute({}, compute_forces);
+    auto& result = results.front();
+    if (result.status != GENERATIVEQC_STATUS_SUCCESS &&
+        result.status != GENERATIVEQC_STATUS_NOT_CONVERGED) {
+      if (items_.front().failure) std::rethrow_exception(items_.front().failure);
+      throw MethodError(result.status, "prepared KS calculation failed");
+    }
+    return std::move(result.calculation);
+  }
+
+  /** Borrow the sole scientific port; the facade never replaces this geometry. */
+  KsSingleOwnerPort& single_owner() const { return *items_.at(0).plan; }
 
   void clear_warm_starts() override {
     for (auto& item : items_) {
@@ -2682,7 +2635,10 @@ class KsPreparedBatch final : public PreparedBatch,
     // prevent the next force replay from reconstructing this item's plan.
     generativeqc_property_flags prepared_properties{};
     std::optional<std::size_t> stationary_device_allowance;
-    std::unique_ptr<KsPreparedCalculation> plan;
+    // A single-calculation adapter rethrows the original terminal failure so
+    // C ABI status mapping and context detail survive the ragged scheduler.
+    std::exception_ptr failure;
+    std::unique_ptr<KsPreparedState> plan;
     // Density is materialized only for explicit output, import, or rebuilding
     // an owner. Empty density with resident_warm=true is a valid lazy snapshot.
     mutable std::optional<scf::HfWarmState> warm;
@@ -2691,12 +2647,12 @@ class KsPreparedBatch final : public PreparedBatch,
     dft::CudaKsTransfers retired_transfers;
 #endif
   };
-  std::unique_ptr<KsPreparedCalculation> make_plan(
+  std::unique_ptr<KsPreparedState> make_plan(
       const core::System& system,
       std::optional<std::size_t> stationary_device_allowance = {}) const {
-    auto plan = std::make_unique<KsPreparedCalculation>(
-        capabilities_, system, execution_plan_, options_, grid_spec_, backend_, device_,
-        ks_auxiliary_for_system(system, auxiliary_));
+    auto plan = std::make_unique<KsPreparedState>(capabilities_, system, execution_plan_, options_,
+                                                  grid_spec_, backend_, device_,
+                                                  ks_auxiliary_for_system(system, auxiliary_));
     if (stationary_device_allowance) {
       std::string detail;
       const auto status = plan->native_cuda_stationary_limit(*stationary_device_allowance, detail);
@@ -2763,35 +2719,12 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
   }
 }
 
-std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
-    const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
-#if !GENERATIVEQC_HAS_CUDA
-  if (context.requested_backend == GENERATIVEQC_BACKEND_CUDA)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "DFT CUDA backend is not built");
-#endif
-  NativeKsExecutionPlan execution_plan;
-  auto options = dft_options(descriptor, context.requested_backend, execution_plan);
-  validate_ks_spin_state(execution_plan, system);
-  if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
-      (!system.ecp_terms.empty() ||
-       std::any_of(system.atoms.begin(), system.atoms.end(),
-                   [](const auto& atom) { return atom.ecp_core != 0; })))
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "DFT ECP density fitting is not qualified");
-  validate_ks_auxiliary_geometry(system, ks_auxiliary_template(descriptor));
-  auto grid = ks_grid_options(descriptor, options, execution_plan);
-  return std::make_unique<KsPreparedCalculation>(
-      capabilities, system, execution_plan, std::move(options), std::move(grid),
-      context.requested_backend, context.device_id,
-      ks_auxiliary_for_system(system, ks_auxiliary_template(descriptor)));
-}
-
-std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
-                                                 core::ContextState& context,
-                                                 std::vector<core::System> systems,
-                                                 const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags) {
+namespace {
+std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabilities,
+                                                  core::ContextState& context,
+                                                  std::vector<core::System> systems,
+                                                  const generativeqc_method_descriptor& descriptor,
+                                                  generativeqc_batch_flags flags) {
   if ((flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "KS batches support warm starts but not HF-specific profiling flags");
@@ -2817,6 +2750,83 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
       capabilities, std::move(systems), execution_plan, std::move(options), std::move(grid),
       context.requested_backend, context.device_id,
       (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0, ks_auxiliary_template(descriptor));
+}
+
+/** Single-system ABI/SDK view of the same native scheduler used by Python.
+ * Keep repeated-call warm starts, token identity and diagnostics in the batch;
+ * this adapter owns no scientific buffers and performs no SCF/force work. */
+class KsPreparedCalculation final : public PreparedCalculation, public KsSingleOwnerPort {
+ public:
+  KsPreparedCalculation(Capabilities capabilities, std::size_t atoms, generativeqc_backend backend,
+                        int device, std::unique_ptr<KsPreparedBatch> owner)
+      : PreparedCalculation(backend, device),
+        capabilities_(capabilities),
+        atoms_(atoms),
+        owner_(std::move(owner)) {}
+
+  std::size_t atom_count() const noexcept override { return atoms_; }
+  const Capabilities& capabilities() const noexcept override { return capabilities_; }
+  generativeqc_property_flags supported_properties() const noexcept override {
+    return *owner_->supported_properties(0);
+  }
+  runtime::ExecutionResourceSnapshot execution_resources() const noexcept override {
+    return owner_->execution_resources(0);
+  }
+  void invalidate_result() override { owner_->invalidate_result(); }
+  std::optional<KsTransportDiagnostic> ks_transport_diagnostic() const override {
+    return owner_->ks_transport_diagnostic(0);
+  }
+  generativeqc_status final_state_token(dft::CudaKsFinalStateToken& token,
+                                        std::string& detail) const override {
+    return owner_->single_owner().final_state_token(token, detail);
+  }
+  generativeqc_status read_final_state(const dft::CudaKsFinalStateToken& expected,
+                                       bool compute_weighted_density,
+                                       dft::VerifiedKsFinalState& state,
+                                       std::string& detail) override {
+    return owner_->single_owner().read_final_state(expected, compute_weighted_density, state,
+                                                   detail);
+  }
+  generativeqc_status prepared_integral_gradient(
+      const dft::CudaKsFinalStateToken& expected,
+      const std::vector<scf::reference::Matrix>& density,
+      const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) override {
+    return owner_->single_owner().prepared_integral_gradient(expected, density, weighted_density,
+                                                             output, maximum_bytes, work, detail);
+  }
+
+ protected:
+  Result execute_impl(bool compute_forces) override {
+    return owner_->execute_single(compute_forces);
+  }
+  void reset_execution_impl() override { owner_->reset_execution(); }
+
+ private:
+  Capabilities capabilities_;
+  std::size_t atoms_;
+  std::unique_ptr<KsPreparedBatch> owner_;
+};
+}  // namespace
+
+std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
+    const Capabilities& capabilities, core::ContextState& context, const core::System& system,
+    const generativeqc_method_descriptor& descriptor) {
+  // Retained native calculations historically reuse their last good density.
+  // Python singlepoint remains cold by constructing a fresh owner per call.
+  auto owner = prepare_ks_batch(capabilities, context, {system}, descriptor,
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
+  return std::make_unique<KsPreparedCalculation>(capabilities, system.atoms.size(),
+                                                 context.requested_backend, context.device_id,
+                                                 std::move(owner));
+}
+
+std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
+                                                 core::ContextState& context,
+                                                 std::vector<core::System> systems,
+                                                 const generativeqc_method_descriptor& descriptor,
+                                                 generativeqc_batch_flags flags) {
+  return prepare_ks_batch(capabilities, context, std::move(systems), descriptor, flags);
 }
 
 }  // namespace generativeqc::methods::detail

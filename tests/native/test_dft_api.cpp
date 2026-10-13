@@ -587,6 +587,40 @@ void warm_execution_allocation_failure() {
           "warm SCF allocation failure lost its last-good density/energy pair");
 }
 
+void single_execution_allocation_failure() {
+  // The scalar facade must preserve a scheduler item's exact exception/status,
+  // revoke old diagnostics, and recover without publishing a partial result.
+  Fixture fixture;
+  const auto method = lda_method();
+  generativeqc_calculation* calculation = nullptr;
+  require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                           &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+          "single allocation failure preparation failed");
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)> owner(
+      calculation, &generativeqc_calculation_destroy);
+  generativeqc_result_descriptor result{};
+  result.struct_size = sizeof(result);
+  result.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single allocation failure source did not converge");
+  const auto energy = result.energy;
+  result.energy = 123.0;
+  fail_allocation_bytes = 4 * sizeof(double);
+  const auto status = generativeqc_calculation_execute(calculation, &result);
+  const bool injected = fail_allocation_bytes == 0;
+  fail_allocation_bytes = 0;
+  require(injected && status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && result.energy == 123.0,
+          "single prepared scheduler hid an allocation failure or published partial energy");
+  require(generativeqc_calculation_get_precision_provenance(calculation, nullptr) ==
+              GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE,
+          "single failed scheduler retained stale precision diagnostics");
+  require(generativeqc_context_get_last_detail(fixture.context) != nullptr,
+          "single failed scheduler lost its exception detail");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - energy) < 2e-10,
+          "single prepared scheduler did not recover after allocation failure");
+}
+
 void mixed_df_rsh_cpu_endpoints() {
   // This CPU-only gate must run even when no CUDA compiler/device is present.
   // The paired CUDA qualification below cannot catch a broken CPU reference
@@ -703,6 +737,7 @@ int main() {
     warm_preparation_failure(false);
     warm_preparation_failure(true);
     warm_execution_allocation_failure();
+    single_execution_allocation_failure();
     generativeqc_method_capabilities_descriptor capabilities{
         sizeof(generativeqc_method_capabilities_descriptor),
         GENERATIVEQC_ABI_VERSION,
