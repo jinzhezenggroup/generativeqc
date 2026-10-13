@@ -7,7 +7,6 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
-import cupy as cp
 import numpy as np
 from generativeqc import GridSpec
 
@@ -24,6 +23,7 @@ from benchmarks.readme_omol25 import (
     source_hashes,
 )
 from benchmarks.readme_wb97mv import (
+    configure_reference_full_fock,
     configure_reference_mixed_rsh_df,
     reference_engine,
     reference_vv10_domain,
@@ -40,6 +40,8 @@ def main() -> None:
     """
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU execution requires a finite Slurm allocation")
+    import cupy as cp
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--template", type=Path, required=True)
     parser.add_argument("--basis", type=Path, required=True)
@@ -103,14 +105,13 @@ def main() -> None:
         a.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
 
     save()
-    engine = reference_engine(
-        p["geometries_bohr"][a.geometry], reference_basis, spec, full_fock=True
-    )
+    engine = reference_engine(p["geometries_bohr"][a.geometry], reference_basis, spec)
     if reference_aux is not None:
         engine = engine.density_fit(auxbasis=reference_aux)
-        from benchmarks.readme_wb97mv import configure_reference_full_fock
-
-        configure_reference_full_fock(engine)
+    # DF construction copies instance attributes; wrapping the direct owner
+    # first would retain its bound get_veff even after density_fit().
+    configure_reference_full_fock(engine)
+    if reference_aux is not None:
         configure_reference_mixed_rsh_df(engine)
     engine.conv_tol = p["energy_tolerance"]
     engine.conv_tol_grad = p["reference_gradient_tolerance"]

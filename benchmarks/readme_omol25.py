@@ -34,7 +34,10 @@ from benchmarks.compare_gpu4pyscf_batch import (
     native_build_metadata,
     require_tuned_native_build,
 )
-from benchmarks.readme_accuracy_oracle import merge_geometry_oracles
+from benchmarks.readme_accuracy_oracle import (
+    merge_geometry_oracles,
+    read_geometry_oracle,
+)
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_wb97mv import (
     configure_reference_full_fock,
@@ -738,16 +741,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     if args.accuracy_reference:
         if args.engine != "native":
             parser.error("accuracy-only references apply to native validation")
+        record["accuracy_reference_files"] = []
         for path in args.accuracy_reference:
-            if path.resolve().parent != args.output.resolve().parent:
-                parser.error(
-                    "accuracy references must be retained beside the native output"
-                )
-            accuracy_receipts.append(json.loads(path.read_text()))
-        record["accuracy_reference_files"] = [
-            {"file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-            for path in args.accuracy_reference
-        ]
+            receipt, binding = read_geometry_oracle(path, directory=args.output.parent)
+            accuracy_receipts.append(receipt)
+            record["accuracy_reference_files"].append(binding)
 
     owner = None
     restore_force = None

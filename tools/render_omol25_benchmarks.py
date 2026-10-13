@@ -16,7 +16,10 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
-from benchmarks.readme_accuracy_oracle import merge_geometry_oracles
+from benchmarks.readme_accuracy_oracle import (
+    merge_geometry_oracles,
+    read_geometry_oracle,
+)
 from benchmarks.readme_omol25 import (
     SCHEMA,
     SIZES,
@@ -231,11 +234,14 @@ def collect(
                 if engine != "native" or Path(name).name != name:
                     raise ValueError("invalid accuracy reference file binding")
                 accuracy_path = path.parent / name
-                if digest(accuracy_path) != binding["sha256"]:
+                receipt, observed = read_geometry_oracle(
+                    accuracy_path, directory=path.parent
+                )
+                if observed["sha256"] != binding["sha256"]:
                     raise ValueError(
                         "native run used a different accuracy-only reference"
                     )
-                accuracy_receipts.append(json.loads(accuracy_path.read_text()))
+                accuracy_receipts.append(receipt)
             if accuracy_receipts:
                 entry["accuracy_reference_files"] = raw["accuracy_reference_files"]
                 point["independent_accuracy_receipts"] = accuracy_receipts

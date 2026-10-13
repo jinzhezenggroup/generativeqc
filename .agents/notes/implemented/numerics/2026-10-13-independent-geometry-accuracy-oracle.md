@@ -48,6 +48,26 @@ The original one-off driver and receipt must remain with publication evidence;
 the maintained driver added here supports future reproducible independent runs.
 This change does not establish a 96-atom reference result or improve runtime.
 
+## Source-review corrections
+
+Bind the full-density Fock wrapper only after optional `density_fit()`. The
+GPU4PySCF DF constructor copies instance attributes, so a wrapper attached to
+the original direct engine otherwise retains that direct owner. Rewrapping the
+copied closure does not fix the owner and can mix direct SCF with fitted forces.
+A host regression exercises both direct and fitted driver execution, including
+the new-owner copy behavior; it fails on the original fitted driver.
+
+The runner and renderer parse and hash one receipt byte snapshot. Both enforce
+same-directory resolution, including symlinks; the original renderer accepted
+an escaping symlink in the negative control. Malformed source/driver digests
+and nonintegral iteration counts are rejected. These checks preserve declared
+provenance and byte integrity, not independent authentication of an acquisition.
+
+The separate historical one-off driver and 48-atom receipt are not included in
+this source PR. This host-only repair does not establish how that earlier solve
+was configured, requalify its result, or qualify a corrected-driver GPU run.
+Preserve the original acquisition bytes for any later evidence review.
+
 ## Revisit when
 
 A complete reference population becomes available under the original limit.
