@@ -2284,6 +2284,24 @@ int main() {
                 actual, oracle_derivative, 5e-10,
                 "batched generated DF response differs from independent CPU oracle");
           }
+
+        // A pure Coulomb response has no exchange Gram. Check the bounded
+        // streamed source and the retained source against independent CPU
+        // derivative tensors, with a short final auxiliary panel.
+        const auto j_only_expected = generativeqc::scf::build_density_fitting_rhf_gradient(
+            raw, total, 1e-12, {1.0, 0.0}).derivative;
+        const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
+            {total, 1.0, 0.0}};
+        for (auto* plan : {physical_resident.get(), batch_source_plan.get()}) {
+          std::vector<double> actual;
+          require(
+              generativeqc::scf::execute_cuda_density_fitting_generated_force_response(
+                  plan, item, physical_orbital, source_auxiliary, raw.three_center, raw.metric,
+                  j_only_terms, 0, 65536, 3, actual, cuda_detail) == GENERATIVEQC_STATUS_SUCCESS,
+              cuda_detail.c_str());
+          require_matrix_close(actual, j_only_expected, 5e-10,
+                               "J-only streamed/resident DF response differs from CPU oracle");
+        }
         }
       }
     } else {
@@ -2335,6 +2353,37 @@ int main() {
                 bounded_plan.peak_workspace_bytes <= 1024ULL * 1024 * 1024 &&
                 bounded_plan.ao_pair_tile > 0 && bounded_plan.auxiliary_tile > 0,
             "large DF plan exceeded its memory budget");
+    // #2411: a restricted J-only method has no occupied rank, yet a
+    // physical symmetric source can retain one packed fitted tensor under
+    // a budget that cannot retain the dense N^2*Naux value. The default
+    // arbitrary-density/unknown-method caller must remain streamed.
+    {
+      constexpr std::size_t n = 768, a = 3712;
+      const auto packed = generativeqc::scf::plan_packed_density_fitting_tiles(
+          1, n, a, 0, 0, 0, 0, false);
+      const auto dense_required = generativeqc::scf::workspace_bytes(
+          n * n, 128, 1, n, a, a * a * sizeof(double), 0, true, false, true);
+      require(packed.peak_workspace_bytes < dense_required,
+              "single-owner packed J-only shape has no density benefit");
+      const auto budget =
+          packed.peak_workspace_bytes + (dense_required - packed.peak_workspace_bytes) / 2;
+      const auto without_method = generativeqc::scf::plan_requested_density_fitting_tiles(
+          generativeqc::scf::DfPairStorageRequest::Automatic, 1, n, a, n, 0, budget, 0, true, 0,
+          false);
+      const auto j_only = generativeqc::scf::plan_requested_density_fitting_tiles(
+          generativeqc::scf::DfPairStorageRequest::Automatic, 1, n, a, n, 0, budget, 0, true, 0,
+          true);
+      require(!without_method.stores_full_three_center &&
+                  without_method.value_storage.pairs == generativeqc::scf::DfPairStorage::Dense,
+              "unqualified automatic DF storage must preserve streamed fallback");
+      require(j_only.stores_full_three_center &&
+                  j_only.value_storage.pairs ==
+                      generativeqc::scf::DfPairStorage::SymmetricLowerSingle &&
+                  j_only.value_storage.rank_capacity == 0 &&
+                  j_only.peak_workspace_bytes <= budget,
+              "method-authorized J-only DF should retain a rank-zero packed value");
+    }
+
     bool rejected_tiny_budget = false;
     try {
       (void)generativeqc::scf::plan_density_fitting_tiles(1, 8, 8, 2, 512);
