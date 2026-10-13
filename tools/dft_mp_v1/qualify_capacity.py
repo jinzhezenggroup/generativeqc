@@ -392,8 +392,11 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Resident AO selection is tested through the production-loop execution probe.
 # This legacy capacity audit still binds endpoint/call wiring; its remaining
 # whole-owner fingerprints are separate migration debt under #2296.
+# The reviewed force-memory handoff precedes allocations and forwards receipts;
+# it changes neither capacity equations nor admission limits. Refresh only this
+# existing offline source binding, with executable cold/replay/refusal controls.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "7c9031f7cd65a676e7d47737557f280bc81f42dd9cc4f8875b0168345a350a5b"
+    "9e6dca7c564aa9e52e054787d6e3f1e9108694d85a8099825bc4c06add7163ce"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -556,8 +559,11 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 # The JIT side defers integral source reuse. Prepared admission charges both
 # native CSR and exact-bitmask caches; packaged selection remains unchanged.
 # Closed/running checks precede admission without changing AOT selection.
+# Force-memory admission requests the full cold envelope and only the unretained
+# remainder on replay. Keep this existing compatibility binding until #2296;
+# no new whole-function fingerprint or production-source gate is introduced.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "5c0a8537b0236b67efd678e09338347ddae68f1e89a0150aae0f41a3ca357047"
+    "c1e7e5aaade1a61ba659390fea9998f928e2f20c9905682216f9ad18c34787d4"
 )
 # The restricted-point request joins schedule identity without changing AO reserves.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
