@@ -44,6 +44,12 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const double qualified_exact_exchange =
       family_metadata ? family_metadata->cuda_global_hybrid_exact_exchange : -1.0;
   const bool canonical_global_hybrid = qualified_exact_exchange > 0.0 && !scalable_semilocal;
+  // B3LYP's XC coefficients are fixed. Preserve its resolved J/K model:
+  // either both Direct or both DF, never a mixed Hamiltonian.
+  const bool matched_cuda_hybrid_jk =
+      fock.spec.coulomb.approximation == fock.spec.exchange.approximation &&
+      (fock.spec.coulomb.approximation == scf::FockApproximation::Exact ||
+       fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted);
   const double expected_semilocal_exchange =
       scalable_semilocal && qualified_exact_exchange > 0.0 ? 1.0 - qualified_exact_exchange : 1.0;
   const double exchange_divisor = model.spins == 1 ? 2.0 : 1.0;
@@ -145,9 +151,7 @@ bool valid_model(const KsFinalStateIdentity& identity) {
        (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
         !fock.spec.exchange.present ||
         fock.spec.exchange.coefficient != -qualified_exact_exchange / exchange_divisor ||
-        (fock.backend == scf::FockBackend::Cuda &&
-         (fock.spec.coulomb.approximation != scf::FockApproximation::Exact ||
-          fock.spec.exchange.approximation != scf::FockApproximation::Exact)))))
+        (fock.backend == scf::FockBackend::Cuda && !matched_cuda_hybrid_jk))))
     return false;
   try {
     if (molecular_nonlocal) {
