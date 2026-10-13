@@ -1,0 +1,51 @@
+name: Restore trusted CPU compiler snapshot
+description: Bounded optional successful-master fallback after a true actions/cache miss
+inputs:
+  github-token:
+    description: Read-only Actions token for this repository
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Discover trusted CPU snapshot
+      id: discover
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: timeout --kill-after=2s 25s python3 tools/ci_cpu_ccache_snapshot.py discover
+    - name: Download trusted CPU snapshot
+      id: download
+      if: steps.discover.outcome == 'success' && steps.discover.outputs.artifact_id != ''
+      continue-on-error: true
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      with:
+        artifact-ids: ${{ steps.discover.outputs.artifact_id }}
+        run-id: ${{ steps.discover.outputs.run_id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ inputs.github-token }}
+        path: ${{ steps.discover.outputs.stage }}/download
+        merge-multiple: true
+        digest-mismatch: error
+    - name: Verify CPU snapshot
+      id: verify
+      if: steps.download.outcome == 'success'
+      continue-on-error: true
+      shell: bash
+      env:
+        CPU_CACHE_STAGE: ${{ steps.discover.outputs.stage }}
+      run: timeout --kill-after=2s 45s python3 tools/ci_cpu_ccache_snapshot.py verify
+    - name: Activate CPU snapshot
+      if: steps.verify.outcome == 'success'
+      continue-on-error: true
+      shell: bash
+      env:
+        CPU_CACHE_STAGE: ${{ steps.discover.outputs.stage }}
+      run: python3 tools/ci_cpu_ccache_snapshot.py activate
+    - name: Discard owned snapshot staging
+      if: always() && steps.discover.outputs.stage != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        CPU_CACHE_STAGE: ${{ steps.discover.outputs.stage }}
+      run: python3 tools/ci_cpu_ccache_snapshot.py cleanup

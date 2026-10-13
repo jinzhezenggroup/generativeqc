@@ -865,10 +865,10 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   }
   // Source force replay borrows these original device factors. Transfer them
   // only after the final stream drain below, so setup still owns error cleanup.
-  // Publish a conservative allocation accounting record.  Setup buffers are
-  // still live at this point, so the peak includes both permanent contraction
-  // storage and metric-factorization workspace; host-side solver workspace is
-  // intentionally excluded from the device-byte figures.
+  // Publish a conservative allocation accounting record. Setup scratch and
+  // lazy SCF state have disjoint lifetimes: no SCF call can enter until this
+  // routine has drained and destroyed SetupBuffers. Retained metric factors
+  // belong to the common live set. Host solver scratch is counted separately.
   // Device SCF state is allocated lazily on the first solve. Reserve a
   // conservative upper bound here so diagnostics remain valid before and
   // after that allocation (RHF/UHF share this plan type).
@@ -900,8 +900,9 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   // This record covers the value/SCF plan and its setup. Generated force
   // staging is owned by the separately budgeted bridge and reported through
   // DfGradientResources and the whole-HF allocation ledger.
-  const long double peak_estimate =
-      static_cast<long double>(persistent_device_bytes) + setup_device_bytes;
+  const long double peak_estimate = static_cast<long double>(persistent_device_bytes) -
+                                    persistent_scf_bytes +
+                                    std::max(setup_device_bytes, persistent_scf_bytes);
   const std::size_t peak_device_bytes =
       peak_estimate >= static_cast<long double>(std::numeric_limits<std::size_t>::max())
           ? std::numeric_limits<std::size_t>::max()

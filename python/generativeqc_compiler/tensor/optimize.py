@@ -671,6 +671,8 @@ def prepare_for_backend(
         disabled_passes=disabled_passes,
         stop_after=stop_after,
     )
+    if any(node.op == "where" for node in prepared.live_nodes):
+        raise ValueError(f"{backend} TensorIR lowering does not support where")
     if not allow_cpu_boolean and any(
         node.spec.dtype == "bool"
         or node.op

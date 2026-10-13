@@ -111,6 +111,8 @@ def _evaluate(
         ).reshape(node.spec.shape)
     if op == "cast":
         return operands[0].astype(node.spec.dtype, copy=True)
+    if op == "where":
+        return np.where(*operands)
     if op in ("equal", "not_equal", "greater", "greater_equal", "less", "less_equal"):
         return getattr(np, op)(operands[0], operands[1])
     if op == "add":
