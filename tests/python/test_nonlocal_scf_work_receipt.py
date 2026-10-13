@@ -129,3 +129,57 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         after = owner.execute(moved, properties=("energy",)).items[0]
         assert after.converged
         assert after.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
+
+
+@pytest.mark.parametrize("max_iterations", [4, 100])
+def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
+    monkeypatch: pytest.MonkeyPatch, max_iterations: int
+) -> None:
+    """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("requires an explicitly Slurm-allocated GPU")
+    assert os.environ.get("SLURM_JOB_ID")
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
+    monkeypatch.setenv("GENERATIVEQC_VV10_NATIVE_SEED", "0")
+    monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
+    atoms = [
+        ("O", (0.02, -0.03, 0.04)),
+        ("H", (0.1, 1.43, 1.1)),
+        ("H", (-0.15, -1.45, 1.12)),
+    ]
+    calculator = Calculator(
+        method="wb97m-v",
+        basis="def2-svp",
+        device="cuda",
+        basis_representation="spherical",
+        max_iterations=max_iterations,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        ks_options=KsOptions(grid=GridSpec(8, 6, 12)),
+    )
+    with calculator.prepare_batch([atoms], warm_start=True) as owner:
+        result = owner.execute(properties=("energy",)).items[0]
+        diagnostic = result.ks_diagnostic
+        scopes = diagnostic.nonlocal_history_scopes
+        work = diagnostic.nonlocal_work
+        assert result.iterations <= max_iterations
+        assert work["target_focks"] + work["provisional_focks"] == result.iterations
+        assert scopes.count("full-target") == work["target_focks"]
+        if max_iterations == 4:
+            assert result.status == _native.STATUS_NOT_CONVERGED
+            assert not result.converged
+            # An unfinished provisional solve cannot become a last-good warm seed.
+            retry = owner.execute(properties=("energy",)).items[0]
+            assert not retry.warm_start_used and not retry.converged
+        else:
+            assert result.converged
+            assert "provisional-frozen-vv10" in scopes
+            assert scopes[-2:] == ("full-target", "full-target")
+            assert diagnostic.physical_residual_max < 1e-10
+            assert diagnostic.density_change_max < 1e-10
+            monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "0")
+            with calculator.prepare_batch([atoms]) as reference:
+                full = reference.execute(properties=("energy",)).items[0]
+            assert full.converged and abs(full.energy - result.energy) < 1e-10
