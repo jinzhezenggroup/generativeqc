@@ -103,6 +103,33 @@ generativeqc_status scf_matrix_product_batched_view(CudaDensityFittingJkPlan& pl
     detail = "invalid prepared CUDA DF batched matrix product view";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  // Bound the full physical byte span before vendor pointer arithmetic. Inputs
+  // may broadcast or share read-only storage; writable batch spans are disjoint.
+  const auto valid_span = [&](const double* data, std::size_t physical_rows,
+                              std::size_t physical_columns, std::size_t ld, std::size_t stride,
+                              bool writable) {
+    constexpr auto limit =
+        static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / sizeof(double);
+    if (physical_rows > limit || (physical_columns - 1) > (limit - physical_rows) / ld)
+      return false;
+    const auto matrix_span = (physical_columns - 1) * ld + physical_rows;
+    if (view.batches > 1 && writable && stride < matrix_span) return false;
+    if (stride && view.batches - 1 > (limit - matrix_span) / stride) return false;
+    const auto bytes = ((view.batches - 1) * stride + matrix_span) * sizeof(double);
+    return reinterpret_cast<std::uintptr_t>(data) <=
+           std::numeric_limits<std::uintptr_t>::max() - bytes;
+  };
+  if (!valid_span(view.left.data, view.transpose_left ? view.reduction : view.rows,
+                  view.transpose_left ? view.rows : view.reduction, view.left.leading_dimension,
+                  view.left.batch_stride, false) ||
+      !valid_span(view.right.data, view.transpose_right ? view.columns : view.reduction,
+                  view.transpose_right ? view.reduction : view.columns,
+                  view.right.leading_dimension, view.right.batch_stride, false) ||
+      !valid_span(view.output.data, view.rows, view.columns, view.output.leading_dimension,
+                  view.output.batch_stride, true)) {
+    detail = "invalid prepared CUDA DF batched matrix product span";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   const cublasStatus_t status = cublasDgemmStridedBatched(
       plan.blas, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
       view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, static_cast<int>(view.rows),

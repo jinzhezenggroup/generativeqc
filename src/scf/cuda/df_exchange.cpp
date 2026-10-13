@@ -347,8 +347,8 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
-  const int nbf = static_cast<int>(plan.nbf);
-  const long long matrix_stride = static_cast<long long>(plan.matrix_elements);
+  const auto nbf = plan.nbf;
+  const auto matrix_stride = plan.matrix_elements;
   for (std::size_t system = system_begin; system < system_end; ++system) {
     const double* system_density = density + system * plan.matrix_elements;
     double* transposed_density = plan.exchange_density_column_major + system * plan.matrix_elements;
@@ -373,7 +373,7 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
       // which is precisely the public row-major K. No symmetry of D or B
       // is assumed. Only one full scratch tensor is written, leaving the
       // response owner's immutable raw tensor untouched across dense seeds.
-      const auto a = static_cast<int>(plan.naux), an = a * nbf;
+      const auto a = plan.naux, an = a * nbf;
       const auto* b = plan.three_center + system * plan.tensor_elements_per_system;
       auto* x = plan.auxiliary_tile_values;
       auto status = trace_call("ri_k_density_projection_gemm", plan.stream, [&] {
@@ -433,7 +433,7 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
         return cuda_failure(cuda_error, "gather DF exchange tile", detail);
       }
 
-      const int tile_count = static_cast<int>(auxiliary_count);
+      const auto tile_count = auxiliary_count;
       // The gathered AO-pair tile is B^T in column-major layout. D^T
       // contributes the left factor; reduction below maps the result
       // back to the row-major public exchange matrix, yielding B D B^T.

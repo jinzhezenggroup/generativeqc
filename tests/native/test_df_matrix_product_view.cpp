@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
@@ -207,6 +208,7 @@ void batched(CudaDensityFittingJkPlan& plan) {
             expected[1 + batch * stride_c + i + j * ldc] = -1.25 * sum + 0.5 * seed;
           }
       }
+      const auto original_a = a, original_b = b;
       std::string detail = "unchanged";
       const ScfMatrixBatchView view{
           {a.data() + 1, static_cast<std::size_t>(lda), static_cast<std::size_t>(stride_a)},
@@ -223,7 +225,7 @@ void batched(CudaDensityFittingJkPlan& plan) {
       assert(scf_matrix_product_batched_view(plan, view, "batch", detail) ==
              GENERATIVEQC_STATUS_SUCCESS);
       for (std::size_t i = 0; i < c.size(); ++i) assert(std::abs(c[i] - expected[i]) < 1e-12);
-      assert(detail == "unchanged");
+      assert(a == original_a && b == original_b && detail == "unchanged");
     }
   }
   double data[64]{};
@@ -266,6 +268,102 @@ void batched(CudaDensityFittingJkPlan& plan) {
   plan.blas->result = CUBLAS_STATUS_SUCCESS;
 }
 
+void batched_admission(CudaDensityFittingJkPlan& plan, const std::string& mode) {
+  double input[64]{}, output[64]{};
+  const ScfMatrixBatchView valid{{input, 4, 0}, {input, 4, 0}, {output, 4, 16}, 2, 3, 4, 2,
+                                 false,         false};
+  const auto saved = plan.blas;
+  // Fail injected vendor calls before any invalid address can be dereferenced.
+  saved->result = CUBLAS_STATUS_EXECUTION_FAILED;
+  const auto rejected = [&](const ScfMatrixBatchView& view) {
+    saved->submitted = false;
+    std::string detail;
+    assert(scf_matrix_product_batched_view(plan, view, "admission", detail) ==
+           GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    assert(!saved->submitted && !detail.empty());
+  };
+  if (mode == "batched_overlap") {
+    for (std::size_t stride : {0U, 1U, 9U}) {
+      auto view = valid;
+      view.output.batch_stride = stride;
+      rejected(view);
+    }
+  } else if (mode == "batched_overflow") {
+    for (int slot = 0; slot != 3; ++slot) {
+      auto view = valid;
+      view.batches = 3;
+      const auto huge = static_cast<std::size_t>(std::numeric_limits<long long>::max());
+      if (slot == 0) view.left.batch_stride = huge;
+      if (slot == 1) view.right.batch_stride = huge;
+      if (slot == 2) view.output.batch_stride = huge;
+      rejected(view);
+    }
+    // Each vendor dimension fits int, but the physical matrix's byte span does not.
+    const auto huge = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    for (int slot = 0; slot != 3; ++slot) {
+      auto view = valid;
+      view.batches = 1;
+      if (slot == 0) {
+        view.reduction = huge;
+        view.left.leading_dimension = huge;
+        view.right.leading_dimension = huge;
+      } else if (slot == 1) {
+        view.columns = huge;
+        view.right.leading_dimension = huge;
+      } else {
+        view.columns = huge;
+        view.output.leading_dimension = huge;
+      }
+      rejected(view);
+    }
+    const auto end = std::numeric_limits<std::uintptr_t>::max() - sizeof(double) + 1;
+    for (int slot = 0; slot != 3; ++slot) {
+      auto view = valid;
+      if (slot == 0) view.left.data = reinterpret_cast<const double*>(end);
+      if (slot == 1) view.right.data = reinterpret_cast<const double*>(end);
+      if (slot == 2) view.output.data = reinterpret_cast<double*>(end);
+      rejected(view);
+    }
+  } else {
+    for (int slot = 0; slot != 4; ++slot) {
+      auto view = valid;
+      plan.blas = slot == 0 ? nullptr : saved;
+      if (slot == 1) view.left.data = nullptr;
+      if (slot == 2) view.right.data = nullptr;
+      if (slot == 3) view.output.data = nullptr;
+      rejected(view);
+    }
+    plan.blas = saved;
+    for (int slot = 0; slot != 7; ++slot) {
+      for (std::size_t value :
+           {std::size_t{0}, static_cast<std::size_t>(std::numeric_limits<int>::max()) + 1}) {
+        auto view = valid;
+        if (slot == 0) view.rows = value;
+        if (slot == 1) view.columns = value;
+        if (slot == 2) view.reduction = value;
+        if (slot == 3) view.batches = value;
+        if (slot == 4) view.left.leading_dimension = value;
+        if (slot == 5) view.right.leading_dimension = value;
+        if (slot == 6) view.output.leading_dimension = value;
+        rejected(view);
+      }
+    }
+  }
+  saved->result = CUBLAS_STATUS_SUCCESS;
+  // A single output may have zero stride. Both inputs may share read-only storage.
+  auto single = valid;
+  single.batches = 1;
+  single.output.batch_stride = 0;
+  std::string detail;
+  assert(scf_matrix_product_batched_view(plan, single, "single", detail) ==
+         GENERATIVEQC_STATUS_SUCCESS);
+  // The last column's unused padding is not part of a writable matrix's span.
+  auto adjacent = valid;
+  adjacent.output.batch_stride = 10;
+  assert(scf_matrix_product_batched_view(plan, adjacent, "adjacent", detail) ==
+         GENERATIVEQC_STATUS_SUCCESS);
+}
+
 void failures(CudaDensityFittingJkPlan& plan) {
   double input[4]{}, output[4] = {1, 2, 3, 4};
   for (const auto failure : {CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_NOT_INITIALIZED,
@@ -298,6 +396,8 @@ int main(int argc, char** argv) {
     failures(plan);
   else if (mode == "batched")
     batched(plan);
+  else if (mode == "batched_overlap" || mode == "batched_overflow" || mode == "batched_invalid")
+    batched_admission(plan, mode);
   else
     return 1;
   assert(plan.blas == &handle && plan.stream == stream && handle.stream == stream);

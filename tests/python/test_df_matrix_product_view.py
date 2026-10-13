@@ -59,6 +59,17 @@ def product_probe(
     )
 
 
-@pytest.mark.parametrize("mode", ("products", "invalid", "failures", "batched"))
+@pytest.mark.parametrize(
+    "mode",
+    (
+        "products",
+        "invalid",
+        "failures",
+        "batched",
+        "batched_overlap",
+        "batched_overflow",
+        "batched_invalid",
+    ),
+)
 def test_df_matrix_product_contract(product_probe: Path, mode: str) -> None:
     subprocess.run([str(product_probe), mode], check=True, timeout=15)
