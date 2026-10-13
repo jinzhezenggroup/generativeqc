@@ -79,6 +79,8 @@ static_assert(!direct_jk_source_auto_refusal(64,128,8,3,true,true,screened,0.0))
 static_assert(direct_jk_source_auto_refusal(64,128,8,3,true,false,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(64,128,8,4,true,true,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,3,true,true));
+static_assert(direct_jk_source_auto_refusal(63,128,8,3,true,true));
+static_assert(direct_jk_source_auto_refusal(64,127,8,3,true,true));
 static_assert(direct_jk_source_value_ceiling(automatic,screened,2)==(16ULL<<30));
 static_assert(direct_jk_source_value_ceiling(automatic,screened,3)==(8ULL<<30));
 static_assert(direct_jk_source_value_ceiling(automatic,generic,2)==(8ULL<<30));

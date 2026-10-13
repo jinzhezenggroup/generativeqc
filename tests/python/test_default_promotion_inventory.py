@@ -114,11 +114,6 @@ def test_independent_pair_default_refuses_domain_or_capacity_drift(
         ),
         (
             "src/scf/cuda/direct_jk_source_policy.hpp",
-            "direct_nbf < 128",
-            "direct_nbf < 64",
-        ),
-        (
-            "src/scf/cuda/direct_jk_source_policy.hpp",
             "maximum_iterations < 8",
             "maximum_iterations < 4",
         ),
