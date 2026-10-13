@@ -355,6 +355,7 @@ def test_native_grid_file_target_generates_its_exact_header_closure(
 ) -> None:
     """Exercise the real production declarations without enabling a CUDA compiler."""
     from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+
     from tools.generate_libxc_semilocal_cuda_registry import emit_header, emit_registry
 
     subprocess.run(["ccache", "--version"], check=True, capture_output=True, timeout=10)
