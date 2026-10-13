@@ -872,7 +872,7 @@ class PreparedBatch:
             calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE
             and not ecp_force
             and calculator._automatic_libxc_name is None
-            and calculator._dispersion_method_ir is None
+            and calculator._density_fitted_composite_force_eligible()
             and calculator._ks_options is not None
             and (
                 (
