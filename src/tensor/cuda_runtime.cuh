@@ -13,6 +13,8 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include "../runtime/allocation_measurement.hpp"
 #include "../runtime/cuda_resources.cuh"
@@ -327,11 +329,17 @@ inline cublasStatus_t submit_column_gemv(const ColumnGemvView& view) {
 // Some CUDA-compatible runtimes intentionally omit GEAM. Keep the original
 // dependent capability test within the provider, so the scientific owner can
 // retain its generated transpose fallback without spelling a vendor API.
+// The shared tensor header is also parsed by C++17 runtime compilation.
+// Use dependent overload substitution rather than a C++20 requires expression.
 template <class Handle>
-inline constexpr bool column_geam_available =
-    requires(Handle handle, int m, int n, const double* a, double* output) {
-      cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, a, a, n, a, a, n, output, m);
-    };
+auto column_geam_capability(Handle handle, int m, int n, const double* a, double* output)
+    -> decltype(cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, a, a, n, a, a, n, output, m),
+                std::true_type{});
+auto column_geam_capability(...) -> std::false_type;
+
+template <class Handle>
+inline constexpr bool column_geam_available = decltype(column_geam_capability(
+    std::declval<Handle>(), 0, 0, std::declval<const double*>(), std::declval<double*>()))::value;
 
 template <class Handle>
 struct ColumnGeamView {
