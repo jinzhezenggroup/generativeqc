@@ -334,14 +334,6 @@
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
     },
     {
-      "path": "benchmarks/results/df-one-step-warm-20260926/work.json",
-      "family": "df-one-step-warm-20260926",
-      "bytes": 202052,
-      "sha256": "729c2687009cdd6e197dce27ea02507cc5cb4b2367b3cf56d2a59902d1f228f3",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All grouped semantic work counters for eight DF workloads; profiler launch arrays remain ignored."
-    },
-    {
       "bytes": 485607,
       "classification": "required-compact-accepted-evidence",
       "family": "ecp-consumers-171",
@@ -524,22 +516,6 @@
       "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
       "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
       "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
-    },
-    {
-      "bytes": 148102,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json",
-      "role": "scientific-record",
-      "sha256": "025d97701a9c47aacf436214beb3ead641e4938f2a0ca7464823d47e32f9f7b5"
-    },
-    {
-      "bytes": 148094,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-thread.json",
-      "role": "scientific-record",
-      "sha256": "5caca21fb3c48a5e185821603750cf6041331c0f9e67f35255f61f25dc9f3780"
     },
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
