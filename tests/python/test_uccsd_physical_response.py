@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any
 from unittest.mock import patch
@@ -166,8 +167,8 @@ def test_relaxed_weights_close_independent_complete_molecular_gradient(
                         value.setflags(write=True)
 
 
-@pytest.fixture
-def small_physical() -> Any:
+@contextmanager
+def _small_physical() -> Any:
     snapshot, source = _noninteracting(3, 1, 1)
     with (
         ConventionalProvider(snapshot, source) as provider,
@@ -176,6 +177,20 @@ def small_physical() -> Any:
         state = parent.solve()
         with PreparedUCCSDLambda(parent, state) as lambdas:
             yield lambdas, lambdas.solve(), provider, source
+
+
+@pytest.fixture
+def small_physical() -> Any:
+    """Keep mutation, injected failures and explicit close checks isolated."""
+    with _small_physical() as prepared:
+        yield prepared
+
+
+@pytest.fixture(scope="module")
+def admission_physical() -> Any:
+    """Reuse the parent only for limits rejected before producer admission."""
+    with _small_physical() as prepared:
+        yield prepared
 
 
 @pytest.mark.parametrize(
@@ -187,9 +202,9 @@ def small_physical() -> Any:
     ],
 )
 def test_physical_admission_precedes_producer_reads(
-    small_physical: tuple, options: Any
+    admission_physical: tuple, options: Any
 ) -> None:
-    lambdas, result, provider, source = small_physical
+    lambdas, result, provider, source = admission_physical
     reads = source.reads
     with pytest.raises(MemoryError):
         PreparedUCCSDPhysicalResponse(
