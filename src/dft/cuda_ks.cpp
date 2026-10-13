@@ -1135,10 +1135,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
           nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false, true);
       const auto* cache_choice = std::getenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE");
       const auto parameters = nonlocal_correlation->parameters();
-      nonlocal_cache_enabled =
-          cache_choice && std::string_view(cache_choice) == "1" && xc_layout.npoint >= 3 &&
-          parameters.variant == nlc::Vv10Variant::vv10 && parameters.coefficient <= 0x1p32;
+      // Complete endpoint controls qualify the exact component cache once
+      // quadratic pair work dominates its linear ingredient comparison.
+      const bool cache_requested =
+          cache_choice ? std::string_view(cache_choice) == "1" : xc_layout.npoint >= 65536;
+      nonlocal_cache_enabled = cache_requested && xc_layout.npoint >= 3 &&
+                               parameters.variant == nlc::Vv10Variant::vv10 &&
+                               parameters.coefficient <= 0x1p32;
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
+      if (nonlocal_cache_enabled &&
+          nonlocal_arena_bytes > nonlocal_correlation->resources().device_workspace_bytes) {
+        nonlocal_cache_enabled = false;
+        nonlocal_arena_bytes = partition_nonlocal(nullptr);
+      }
       if (nonlocal_arena_bytes > nonlocal_correlation->resources().device_workspace_bytes)
         throw std::invalid_argument(
             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
@@ -1185,7 +1194,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
       partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
                 incremental_diis_gram, arena);
       if (nonlocal_arena_bytes) {
-        check(runtime::resource_cuda_malloc(&nonlocal_arena, nonlocal_arena_bytes));
+        bool host_oom = false;
+        auto status =
+            runtime::resource_cuda_malloc(&nonlocal_arena, nonlocal_arena_bytes, &host_oom);
+        if (nonlocal_cache_enabled && status == cudaErrorMemoryAllocation && !host_oom) {
+          // The optional scalar/key/counter lease must not make an otherwise
+          // admissible complete solve fail. Preserve non-allocation errors.
+          const auto pending = cudaGetLastError();
+          if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+          const auto prior_bytes = nonlocal_arena_bytes;
+          nonlocal_cache_enabled = false;
+          nonlocal_arena_bytes = partition_nonlocal(nullptr);
+          resource.state_device_bytes -= prior_bytes - nonlocal_arena_bytes;
+          status = runtime::resource_cuda_malloc(&nonlocal_arena, nonlocal_arena_bytes);
+        }
+        check(status);
         partition_nonlocal(nonlocal_arena);
       }
       // Admit mandatory solver/VV10 storage before optional maps. A device
