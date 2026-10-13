@@ -89,8 +89,10 @@ def test_feature_only_force_keeps_indexed_maps_under_existing_caps() -> None:
 
 
 @pytest.mark.parametrize("tile_points", (None, 256))
+@pytest.mark.parametrize("features_only", (False, True))
 def test_optional_force_maps_fall_back_within_the_same_complete_caps(
     tile_points: int | None,
+    features_only: bool,
 ) -> None:
     """An auto map request must not reject an otherwise admitted wide force."""
 
@@ -106,15 +108,27 @@ def test_optional_force_maps_fall_back_within_the_same_complete_caps(
                     aos=aos,
                     tile_points=points,
                     reserve_active_ao=indexed,
+                    features_only=features_only,
                     max_host_bytes=host_bytes,
                 ),
                 None,
             ),
         )
 
-    wide, _, reason = choose(96, 1088)
+    host_budget = (
+        _ordinary(
+            96,
+            aos=1088,
+            tile_points=tile_points or 1,
+            reserve_active_ao=False,
+            features_only=True,
+        ).host_bound
+        if features_only
+        else 256 << 20
+    )
+    wide, _, reason = choose(96, 1088, host_budget)
     assert wide.grid_plan.active_ao_capacity is None
-    assert wide.host_bound <= 256 << 20
+    assert wide.host_bound <= host_budget
     assert reason and "budget" in reason
     if tile_points is not None:
         assert wide.grid_plan.tile_points == tile_points
