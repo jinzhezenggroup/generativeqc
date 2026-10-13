@@ -264,7 +264,12 @@ def _nonlocal_history_scopes(
     if status == _native.STATUS_NOT_IMPLEMENTED:
         return None
     _native.check(library, status)
-    names = ("full-target", "provisional-semilocal-rsh", "provisional-frozen-vv10")
+    names = (
+        "full-target",
+        "provisional-semilocal-rsh",
+        "provisional-frozen-vv10",
+        "provisional-frozen-vv10-and-range-exchange",
+    )
     if any(value >= len(names) for value in values):
         raise ValueError("invalid native nonlocal operator scope")
     return tuple(names[value] for value in values)

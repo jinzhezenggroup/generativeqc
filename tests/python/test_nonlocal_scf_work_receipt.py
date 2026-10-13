@@ -32,7 +32,7 @@ def test_nonlocal_history_preserves_interleaved_operator_scopes() -> None:
 
 def test_nonlocal_history_rejects_unknown_scope() -> None:
     def query(handle: int, index: int, values: Any, count: int) -> int:
-        values[0] = 3
+        values[0] = 4
         return _native.STATUS_SUCCESS
 
     library = SimpleNamespace(
@@ -78,7 +78,7 @@ def test_nonlocal_work_rejects_malformed_availability() -> None:
         _nonlocal_work(library, 12, 3)
 
 
-@pytest.mark.parametrize("native_seed", ["off", "semilocal", "frozen"])
+@pytest.mark.parametrize("native_seed", ["off", "semilocal", "frozen", "frozen-range"])
 def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch: pytest.MonkeyPatch,
     native_seed: str,
@@ -95,7 +95,11 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         "GENERATIVEQC_VV10_NATIVE_SEED", str(int(native_seed == "semilocal"))
     )
     monkeypatch.setenv(
-        "GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", str(int(native_seed == "frozen"))
+        "GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED",
+        str(int(native_seed in {"frozen", "frozen-range"})),
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_VV10_FROZEN_RANGE_SEED", str(int(native_seed == "frozen-range"))
     )
     calculator = Calculator(
         method="wb97m-v",
@@ -129,7 +133,7 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         after = owner.execute(moved, properties=("energy",)).items[0]
         assert after.converged
         assert after.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
-        if native_seed == "frozen":
+        if native_seed in {"frozen", "frozen-range"}:
             # Transported target densities start with a fresh physical anchor;
             # discarding VV10 first needlessly moves them away from that target.
             scopes = after.ks_diagnostic.nonlocal_history_scopes
@@ -138,8 +142,9 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
+@pytest.mark.parametrize("frozen_range", [False, True])
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
-    monkeypatch: pytest.MonkeyPatch, max_iterations: int
+    monkeypatch: pytest.MonkeyPatch, max_iterations: int, frozen_range: bool
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -150,6 +155,7 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
     monkeypatch.setenv("GENERATIVEQC_VV10_NATIVE_SEED", "0")
     monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
+    monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED", str(int(frozen_range)))
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1)),
@@ -181,7 +187,12 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
             assert not retry.warm_start_used and not retry.converged
         else:
             assert result.converged
-            assert "provisional-frozen-vv10" in scopes
+            expected_inner = (
+                "provisional-frozen-vv10-and-range-exchange"
+                if frozen_range
+                else "provisional-frozen-vv10"
+            )
+            assert expected_inner in scopes
             assert scopes[-2:] == ("full-target", "full-target")
             assert diagnostic.physical_residual_max < 1e-10
             assert diagnostic.density_change_max < 1e-10

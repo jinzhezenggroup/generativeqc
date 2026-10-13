@@ -345,6 +345,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // VV10 potential. Every accepted endpoint still uses the unmodified full
   // target operator, consecutive physical energy checks and original budget.
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
+  bool nonlocal_freeze_range{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1403,6 +1404,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !precision_schedule.any_lower_precision() && !incremental_direct_jk && !use_warm &&
         options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    const auto* range_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED");
+    nonlocal_freeze_range = nonlocal_outer_active && has_range_correction && range_selection &&
+                            std::string_view(range_selection) == "1";
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
@@ -2239,7 +2243,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const double* jk_density = prepare_incremental_jk_density();
       generativeqc_status jk_status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       bool fused_rsh_values = false;
-      if (has_range_correction && !pending_mixed_coulomb && !use_occupied_fitted) {
+      // Optional nested-solver experiment: the last complete target anchor
+      // owns both VV10 and range K during an explicitly provisional inner
+      // problem. Primary full-range J/K remains density-current throughout.
+      const bool frozen_range = nonlocal_freeze_range && nonlocal_frozen_stage;
+      if (has_range_correction && !frozen_range && !pending_mixed_coulomb && !use_occupied_fitted) {
         jk_status = scf::enqueue_prepared_cuda_rsh_values(
             provider, *range_correction, jk_density, spins == 2 ? jk_density + matrix : nullptr,
             matrix, j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr,
@@ -2277,7 +2285,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         else
           ++movement.fitted_dense_exchange_builds;
       }
-      if (has_range_correction && !fused_rsh_values)
+      if (has_range_correction && !frozen_range && !fused_rsh_values)
         enqueue_range_correction(jk_density, spins == 2 ? jk_density + matrix : nullptr, detail);
       finalize_incremental_jk_components();
       mixed_precision_executed =
@@ -2452,7 +2460,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                   physical.density_change, physical.residual, diagnostic.electrons,
                                   stabilize_occupations});
     diagnostic.history.back().nonlocal_operator_scope =
-        pending_nonlocal_seed ? 1U : (pending_nonlocal_frozen ? 2U : 0U);
+        pending_nonlocal_seed ? 1U
+                              : (pending_nonlocal_frozen ? (nonlocal_freeze_range ? 3U : 2U) : 0U);
     // The kernel validates electronic components; their host-side sum with
     // the nuclear term must also be finite before any convergence/cache gate.
     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
