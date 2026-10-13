@@ -70,6 +70,11 @@ generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
 /** Query the conservative additional lazy derivative-owner device capacity.
  * The live snapshot is checked before publication; no derivative owner is
  * created. DF response resources remain in their separate prepared envelope. */
+// Private force-boundary cache handoff; receipt is requested/free-before/free-after/reclaimed.
+generativeqc_status generativeqc_ks_snapshot_cuda_prepare_force_memory_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint64_t additional_device_bytes, std::uint64_t* receipt, std::size_t count);
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint64_t* bytes);
 

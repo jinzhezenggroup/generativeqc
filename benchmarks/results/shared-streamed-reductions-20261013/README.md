@@ -8,9 +8,13 @@ and complete RCCSD(T)/force qualification remain open.
 compiled artifacts, PTXAS gates, independent NumPy canonical (T) energies,
 runtime control pages, invalid-map recovery and all timing samples. Its source
 is the recorded dirty `fca37ebf` checkout reconstructed by `source.patch.gz`.
-The subsequent integrated upstream changes do not alter the tensor JIT source
-inventory or its emitted CUDA dependency closure. Final delivery still requires
-the usual source/blob/CI/review and merge checks.
+The initial upstream integration preserved that snapshot inventory. Later
+upstream integrations add retained SCF tensor lowerers and borrowed column-major
+CUDA views, changing the compiler/header inventory and JIT artifact identity.
+Those views are not called by the shared streamed kernels; existing generated
+arithmetic and execution remain unchanged. These historical device records do
+not qualify a whole build at the later merged head. Final delivery still requires
+source/blob/CI/review and merge checks.
 
 | Synthetic shape | Default full lifecycle | Unfused full lifecycle | Shared full lifecycle |
 | --- | ---: | ---: | ---: |

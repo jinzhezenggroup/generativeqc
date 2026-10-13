@@ -191,18 +191,36 @@ print(first.energies)
 
 ## Benchmarks
 
-Measured results are retained under
-[benchmarks/results](benchmarks/results/README.md), together with exact source,
-hardware, numerical checks and reproduction protocols. A dated candidate
-benchmark is not a claim about the current default implementation.
+Complete **HF and DFT energy + analytic forces** on an RTX 5090, based on master
+`e0ad22036`, measured on 2026-10-13. The report identifies original measurements
+and reruns with the force-memory fix. Cold includes construction, preparation
+and the first calculation; warm reuses a fixed converged density. Compiler
+caches are retained.
 
-Representative complete-endpoint reports include
-[direct and density-fitted HF](benchmarks/results/df-source-screening-20261004/README.md)
-and [ωB97M-V / def2-SVP](benchmarks/results/wb97mv-active-ao-20261003/README.md).
-Negative and incomplete trials remain available in their original archives,
-not as promoted README figures. See
-[performance engineering](docs/maintainer/performance_engineering.md)
-for the qualification and publication criteria.
+**Direct J/K**
+
+![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
+
+**Density fitting (DF)** — both engines use the same cc-pVDZ-JKFIT auxiliary basis.
+
+![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-dft-20261013/df-cold-warm.svg)
+
+Both engines use matching water clusters, FP64, def2-SVP and explicit moving
+grids for DFT. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP.
+Native corrections use CUDA D4 and native CPU gCP; the independent reference
+uses CPU D4 and gCP. The engines run independently. Completed cold calls and
+complete warm repeat sets remain visible even when a later phase or the other
+engine times out. Filled native markers pass independent energy/force checks;
+open markers indicate completed calls whose accuracy is still unchecked.
+Lines connect medians, bars show min/max, and crosses retain differing SCF work.
+Iteration counts do not imply equal work between engines; incomplete phases
+and timeout outcomes remain explicit.
+
+See the [direct](benchmarks/results/readme-dft-20261013/timings.md) and
+[DF timing tables](benchmarks/results/readme-dft-20261013/df-timings.md), and
+[measurement protocol, accuracy and limitations](benchmarks/results/readme-dft-20261013/README.md).
+DF coverage and unsupported combinations are listed in that report.
+Other dated measurements are retained in the [benchmark archive](benchmarks/results/README.md).
 
 ## Documentation
 

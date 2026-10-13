@@ -72,6 +72,14 @@ class StationaryOwner final : public PlainBatch, public KsBatchOwnerPort {
     detail = "limit owner";
     return result;
   }
+  generativeqc_status cuda_prepare_force_memory(std::size_t index, const Token& token,
+      std::size_t bytes, std::array<std::uint64_t, 4>& receipt, std::string& detail) override {
+    require(index == item && token == expected && bytes == allowance);
+    observed |= 8;
+    detail = "force memory owner";
+    if (result == GENERATIVEQC_STATUS_SUCCESS) receipt = {bytes, 100, 200, 100};
+    return result;
+  }
   // Any unrelated owner call is a test failure; the production adapters select
   // only the requested port and do not export a detached snapshot first.
   generativeqc_status final_state_token(std::size_t, Token&, std::string&) const override {
@@ -137,6 +145,12 @@ int main() {
     require(capacity.minimum_device_bytes == (status == GENERATIVEQC_STATUS_SUCCESS ? 927 : 321));
     require(dft_cuda_stationary_limit(batch, owner.item, owner.allowance, detail) == status);
     require(detail == "limit owner" && owner.observed == 7);
+    std::array<std::uint64_t, 4> receipt{9, 9, 9, 9};
+    require(dft_cuda_prepare_force_memory(batch, owner.item, owner.expected,
+        owner.allowance, receipt, detail) == status);
+    require(detail == "force memory owner" && owner.observed == 15);
+    require(receipt == (status == GENERATIVEQC_STATUS_SUCCESS
+        ? std::array<std::uint64_t, 4>{927, 100, 200, 100} : std::array<std::uint64_t, 4>{}));
   }
   PlainBatch foreign;
   std::vector<double> output{99};
@@ -153,6 +167,10 @@ int main() {
   require(capacity.minimum_device_bytes == 321 && !detail.empty());
   require(dft_cuda_stationary_limit(foreign, 1, 927, detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
   require(!detail.empty());
+  std::array<std::uint64_t, 4> receipt{9, 9, 9, 9};
+  require(dft_cuda_prepare_force_memory(foreign, 1, owner.expected, 927, receipt, detail) ==
+      GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+  require(receipt == std::array<std::uint64_t, 4>{} && !detail.empty());
 }
 """
     )

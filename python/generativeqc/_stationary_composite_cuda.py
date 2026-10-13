@@ -370,9 +370,12 @@ class PreparedCompositeStationaryCudaGradient:
             active_ao_producer,
             active_ao_max_active_fraction,
         )
+        from ._stationary_cuda import _prepare_force_memory
+
         reused = identity == self._identity
         if not reused:
             self.close()
+            force_memory = _prepare_force_memory(source, device_bound)
             self._stack = ExitStack()
             try:
                 primitive = emit_first_derivative_cuda((("nuclear", ()),))
@@ -452,6 +455,10 @@ class PreparedCompositeStationaryCudaGradient:
         # Both retained owners have independent streams and cumulative counters.
         # Snapshot before nuclear/grid work; never merge their device durations
         # into a clean host-wall endpoint or omit the nonlocal owner's traffic.
+        if reused:
+            force_memory = _prepare_force_memory(
+                source, native_budget + native_derivative_bytes
+            )
         source_metrics_before = self.sources.metrics()
         nonlocal_metrics_before = self.nonlocal_sources.metrics()
         component_start = perf_counter()
@@ -620,6 +627,7 @@ class PreparedCompositeStationaryCudaGradient:
                 "unavailable: native execution route is not exported; screened shell "
                 "scheduler and public-AO capability fallback are both supported"
             ),
+            "scf_force_memory": force_memory,
             "additional_device_peak_bound": device_bound,
             "additional_host_numeric_bound": host_bound,
             "active_ao_cache_allowance_bytes": ao_cache_allowance,

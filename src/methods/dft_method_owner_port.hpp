@@ -41,6 +41,12 @@ class KsBatchOwnerPort {
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::string& detail) = 0;
 
+  virtual generativeqc_status cuda_prepare_force_memory(std::size_t index,
+                                                        const dft::CudaKsFinalStateToken& expected,
+                                                        std::size_t additional_device_bytes,
+                                                        std::array<std::uint64_t, 4>& receipt,
+                                                        std::string& detail) = 0;
+
   virtual generativeqc_status cuda_integral_gradient_additional_device_bytes(
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::size_t& bytes,
       std::string& detail) = 0;

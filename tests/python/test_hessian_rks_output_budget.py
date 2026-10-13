@@ -105,6 +105,26 @@ def test_one_byte_short_output_budget_refuses_before_block_work(
         )
 
 
+def test_d_shell_weight_budget_refuses_one_byte_short_before_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Retain shell-quartet-dominated storage admission independently of JIT."""
+    operator = _stub_operator(monkeypatch)
+    operator._source = SimpleNamespace(nbf=13, shell_sizes=(1, 6, 6), atoms=(None,))
+    operator.xc_kernel = SimpleNamespace(basis=SimpleNamespace(natom=1))
+    budget = 128 * 6**4
+    assert rks_molecular._checked_integral_budget(operator, budget) == budget
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("CPKS started before the d-shell integral-budget gate")
+
+    monkeypatch.setattr(rks_molecular, "directional_rks_response", forbidden)
+    with pytest.raises(MemoryError, match="integral_budget_bytes"):
+        rks_molecular.rks_hvp(
+            operator, np.zeros((1, 3)), integral_budget_bytes=budget - 1
+        )
+
+
 def test_weighted_provider_admission_has_no_legacy_size_cap(
     monkeypatch: pytest.MonkeyPatch, tmp_path: typing.Any
 ) -> None:
