@@ -345,7 +345,6 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     }
     borrowed_fitted_occupied = true;
   }
-  const bool fitted_occupied_requested = explicit_fitted_occupied || borrowed_fitted_occupied;
   if (explicit_fitted_occupied &&
       (space != "occupied" || plan->streamed || !plan->integral_source ||
        plan->value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
@@ -356,11 +355,15 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   bool borrow =
       storage == "jk-scratch" || (space == "occupied" && full_scratch && storage != "panel");
   bool automatic_occupied = false;
+  bool automatic_fitted_occupied = false;
+  const bool fitted_resident = !host_weights && !plan->streamed && plan->integral_source &&
+                               plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle;
   if (packed_resident && storage != "panel" && space == "occupied") borrow = true;
   // An explicit occupied request already chose compatible borrowed storage;
   // automatic work selection must not replace that comparison override.
-  if (space != "occupied" && storage != "panel" && (full_scratch || packed_resident) &&
-      schedule == 0 && plan->batch_size == 1 && terms.size() == 1) {
+  if (space != "occupied" && storage != "panel" &&
+      (full_scratch || packed_resident || fitted_resident) && schedule == 0 &&
+      plan->batch_size == 1 && terms.size() == 1) {
     // Share SCF's work/capacity policy. The token is only a selection hint:
     // exact owner, model, density and device generations are validated below.
     // Diagnostic schedules and attribution probes retain their panel path.
@@ -383,6 +386,17 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       automatic_occupied =
           space == "auto" && final_state && final_state->identity.occupied.size() == 1 &&
           qualified_resident_rhf_exchange(*plan, final_state->identity.occupied[0]);
+      // A single fitted B has no retained raw A, so it cannot borrow the raw
+      // response buffers above. Its final U=B*C is nevertheless a valid fitted
+      // response input when the exact final-state lease and metric are current.
+      // Canonical density/factor validation below remains authoritative.
+      automatic_fitted_occupied =
+          space == "auto" && storage == "auto" && occupied_source == "auto" &&
+          projection != "off" && fitted_resident && system == 0 && final_state &&
+          final_state->identity.occupied.size() == 1 && plan->final_projection_token &&
+          *plan->final_projection_token == *final_state && plan->metric_full_rank[0] &&
+          plan->metric_response_valid[0] &&
+          qualified_value_rhf_exchange(*plan, final_state->identity.occupied[0]);
       // Dense response can also reuse existing full J/K storage: projecting
       // each Q once avoids repeating work across response panels. Its storage
       // policy needs no occupied reservation or factor token. Keep this path
@@ -394,6 +408,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         borrow = true;
     }
   }
+  bool fitted_occupied_requested =
+      explicit_fitted_occupied || borrowed_fitted_occupied || automatic_fitted_occupied;
   if (borrowed_fitted_occupied) borrow = false;
   CudaDfResponseBuffers buffers;
   CudaDfPackedRawTensorView packed_raw;
@@ -545,8 +561,9 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     }
     CudaDfOccupiedResponseView streamed_factors;
     if (!borrow && plan->integral_source &&
-        (plan->streamed || (plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
-                            (space == "occupied" || borrowed_fitted_occupied))) &&
+        (plan->streamed ||
+         (plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+          (space == "occupied" || borrowed_fitted_occupied || automatic_fitted_occupied))) &&
         metric.full_rank && space != "dense") {
       // A method owner may lend the exact density-generating Cocc together with
       // the final K producer's U=B*Cocc. It was token/scratch-validated immediately
@@ -585,7 +602,12 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
           streamed_factors.final_fitted_occupied_projection = final_fitted_projection;
         }
       }
-      // The explicit fitted experiment projects forward B before applying
+      // A stale or corrected canonical density cannot borrow the final U.
+      // Automatic selection retains the exact bounded fitted-panel fallback;
+      // an explicit fitted request still reports failed qualification below.
+      if (automatic_fitted_occupied && !streamed_factors.owner_identity)
+        fitted_occupied_requested = false;
+      // The fitted route projects forward B before applying
       // the second metric root. Preserve the validated view only on that path;
       // legacy source-occupied response continues to read physical raw A.
       if (streamed_factors.owner_identity && !fitted_occupied_requested) whitened = {};
