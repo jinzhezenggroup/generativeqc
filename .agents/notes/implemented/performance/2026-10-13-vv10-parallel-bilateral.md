@@ -110,7 +110,25 @@ are retained separately from successful device qualification.
 The preceding correct noncooperative source `99e7c54b2` improved 48-atom cold
 from 781.601 to 630.716 s and warm to about 72.9 s, but still timed out during
 its final moved-warm call. It is not a completed point. The cooperative
-candidate's full 48/96-atom populations are still pending, so #2426 remains open.
+candidate completes the full 48-atom population in Slurm job 8218 under the
+original 1800-second limit: cold 576.151 s, warm median 67.707 s, moved 406.924 s,
+moved-warm median 67.946 s. All 12 calls pass the independent gates, with maximum
+energy error 4.548e-12 Eh and force error 6.528e-11 Eh/Bohr. A separately
+reconverged moved-geometry reference supplies accuracy only; the reference
+timing population remains incomplete. Ordinary-driver 3/12-atom controls also
+complete all 12 calls. Their cold/warm/moved/moved-warm times are respectively
+6.620/0.607/4.867/0.604 s and 43.101/4.804/32.271/4.830 s.
+
+A 180-second diagnostic trace at 96 atoms records one 82.6 s bilateral feature
+call. It is not a formal 1800-second timeout or completed population. Native/96
+still needs repair and complete qualification, so #2426 remains open.
+
+An ignored three-float expansion experiment at 320,000 synthetic rows passed
+its small long-double check and baseline-array comparison, but was 3.19 times
+slower for features and 3.99 times slower for geometry. Its domain had no
+production overflow/underflow admission. This experiment is rejected; it does
+not establish a new precision policy or qualify molecular execution. Source,
+cache receipts and Slurm results remain in `.artifacts/qualification/vv10-triple-float/`.
 
 ## Invariants and revisit conditions
 
