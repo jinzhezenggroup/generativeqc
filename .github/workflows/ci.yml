@@ -311,7 +311,10 @@ jobs:
     permissions:
       contents: read
       actions: read
-    timeout-minutes: 25
+    # A valid source-changing queue rebuild exceeded 23m before the former
+    # 25m job ceiling killed it. Bound the build separately and leave 5m for
+    # setup, the mandatory probes, compiler diagnostics and runner cleanup.
+    timeout-minutes: 35
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
@@ -487,6 +490,7 @@ jobs:
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
       - name: Compile production CUDA and runtime CTest
+        timeout-minutes: 30
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
         # method adapter as part of this existing integration gate.
@@ -535,7 +539,28 @@ jobs:
         run: ccache --show-stats
       - name: Summarize compiler cache
         if: always()
-        run: python3 tools/report_ci_ccache.py --label "CUDA 12.9 compile sm120"
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          mkdir -p build
+          python3 tools/report_ci_ccache.py --label "CUDA 12.9 compile sm120" \
+            --verbose --build-dir build/cuda-release-sm120 \
+            | tee build/cuda-fast-compile-cache.txt
+      - name: Preserve failed fast CUDA build diagnostics
+        if: ${{ failure() || cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cuda-fast-compile-diagnostics
+          # Only per-target timings and the report's allowlisted compiler/build
+          # identities: never upload the complete CMake cache or environment.
+          path: |
+            build/cuda-release-sm120/.ninja_log
+            build/cuda-fast-compile-cache.txt
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
       - name: Preserve opted-in AO radial resource reports
         if: ${{ always() && github.event_name != 'push' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

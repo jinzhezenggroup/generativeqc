@@ -27,13 +27,16 @@ def _step(job: str, name: str) -> str:
     return section.split("      - name: ", 1)[0]
 
 
-def test_all_cuda_jobs_remain_required_with_the_same_source_and_budget() -> None:
+def test_all_cuda_jobs_remain_required_with_the_same_source_and_finite_budgets() -> (
+    None
+):
     for name in ("cuda-compile", "cuda-resources", "cuda-direct-aot"):
         job = _job(name)
         header = job.split("    steps:\n", 1)[0]
         assert "needs: merge_queue_liveness" in header
         assert "if: needs.merge_queue_liveness.outputs.active != 'false'" in header
-        assert "timeout-minutes: 25" in header
+        expected_minutes = 35 if name == "cuda-compile" else 25
+        assert f"timeout-minutes: {expected_minutes}" in header
         assert "continue-on-error:" not in header
         checkout = job.split("      - uses: actions/checkout@", 1)[1]
         checkout = checkout.split("      - name: ", 1)[0]
