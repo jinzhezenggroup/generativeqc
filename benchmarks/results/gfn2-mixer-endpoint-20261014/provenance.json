@@ -1,0 +1,209 @@
+{
+  "schema": 1,
+  "qualification_scope": "restricted single-system small/48/192 intrinsic AO complete energy and host-force diagnostics",
+  "source": {
+    "baseline_head": "2946eed598c6ea54c0b493c60f695c0efad7fc50",
+    "library_input_tree": "6315087045b87a207b763822f47a789cb5b92f11",
+    "frozen_candidate_tree": "0acc762c69b3dba9acd0d6e249464981c1307963",
+    "candidate_component_relation": "production/native/compiler/fixture inputs unchanged; subsequent deltas are readout/report/tests/docs only",
+    "all_blob_and_mode_verification": {
+      "source_tree": "0acc762c69b3dba9acd0d6e249464981c1307963",
+      "verified_blobs": 10761,
+      "status": "PASS"
+    },
+    "readout_source_sha256": {
+      "tests/native/test_gfn2_cuda_bootstrap.cpp": "fa9fd09bab3d81d31f2ef7aa53094ddb0fa12efd92d336b4c5a626ead92c5fb5",
+      "tests/native/gfn2_mixer_endpoint_probe.hpp": "6dcc49ef385b8b1e704c64db21e6d64cbe06403262ea8549860c30f1149ce52e",
+      "benchmarks/gfn2_mixer_endpoint.py": "8c1bb557b70e408acf0ab2e28ba1f472c485fdaf254cf7cbba13484ca44216b7",
+      "tests/python/test_gfn2_mixer_endpoint.py": "d0108bcfb0079dd45752545d6dc3e6e5351e611dbf32d298a41fbf69d7a5c9c8"
+    }
+  },
+  "artifacts": {
+    "library_sha256": "6fcef302226d8c72da0d5b02b53ad633fd0833475395948a62cf526f8ab25e31",
+    "executable_sha256": "28aec2c69864d275b26031b7535164b4849f94ef030c5ce3cf19d65dbbc0f671",
+    "oracle_text_sha256": "29983d8b9149015df76d8791da6adec6607b39c15f1fe4e4cb56539d12d68780",
+    "oracle_json_sha256": "3d8da94defcf7487ff5991a7d2fa1f9d8c767f7586c3b1c7e09b20547d821570",
+    "private_full_bundle_sha256": "014bf5a221771a4df34d6b5ffe9e9255dd42e5ecbcb164da5dfa7286e85e991e",
+    "published": {
+      "raw-endpoints.jsonl.xz": {
+        "sha256": "ec7793d86f2d85c9b75ff14f55c6e4d2c2880069e0e3f409641678786c22d7e4",
+        "decoded_sha256": "d003785e915eb08f607eb67982c55700ee7fce80e9efc7b071d8c8c62a73c901",
+        "stored_bytes": 32492,
+        "decoded_bytes": 1008120
+      },
+      "raw-lifecycle.jsonl.xz": {
+        "sha256": "1d0a805eaf8e93b7cf56a9254692ee7d4500195b5787866693ba95353aabf662",
+        "decoded_sha256": "f25c1b4d104fd5c1bdc795b299f918202cee5c5d8c42a9bd5f04ec3e17b2c6c0",
+        "stored_bytes": 1376,
+        "decoded_bytes": 18916
+      },
+      "oracle.json.xz": {
+        "sha256": "fd0b30547d4ca7c2515b11870dce508c6e749e6f96913d9bc766f96de59a1073",
+        "decoded_sha256": "3d8da94defcf7487ff5991a7d2fa1f9d8c767f7586c3b1c7e09b20547d821570",
+        "stored_bytes": 8088,
+        "decoded_bytes": 51359
+      },
+      "report.json.xz": {
+        "sha256": "d28519791afed5ace569e9ddb86c69921ad1cae6d7ca3dbe2f30363a29c29108",
+        "decoded_sha256": "3ff7a35907b5693a5d819f25474e22a44cc30224adb5665a02d1d37de71bb6d3",
+        "stored_bytes": 43408,
+        "decoded_bytes": 404603
+      }
+    }
+  },
+  "build": {
+    "type": "Release",
+    "cuda_architecture": "90",
+    "fast_compile": false,
+    "density_diagnostics": false,
+    "cache": "sccache 0.16.0",
+    "compiler": "GNU C++ 11.4.0",
+    "toolkit": "CUDA 12.9.86",
+    "nvcc_sha256": "df9974db233a0b7a6c6d59c0e5d74e011566104098bcb3553495ff1b95bdeaf6",
+    "codegen_python": "3.12.15",
+    "oracle_python": "3.10.12",
+    "oracle_library": "tblite 0.6.0",
+    "oracle_library_sha256": "68ad7a58a4cbe2efa62b6b199beaea296887477fce396e433bedaf08c0b85575",
+    "commands": {
+      "actual-cuda-command-final.txt": "/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/bin/sccache /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_BUILDING_LIBRARY=1 -DGENERATIVEQC_HAS_CUDA=1 -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/include -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated -isystem /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_90,code=[compute_90,sm_90]\" -Xcompiler=-fPIC -MD -MT CMakeFiles/generativeqc_direct_angular_force.dir/src/scf/cuda/direct_angular_force.cu.o -MF CMakeFiles/generativeqc_direct_angular_force.dir/src/scf/cuda/direct_angular_force.cu.o.d -x cu -c /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/scf/cuda/direct_angular_force.cu -o CMakeFiles/generativeqc_direct_angular_force.dir/src/scf/cuda/direct_angular_force.cu.o\n",
+      "actual-gfn2-generator-command.txt": "cd /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build && /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/bin/python /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/tools/run_codegen.py --depfile /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_aes2_native.cuh.d --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_aes2_native.cuh --source-root /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/tools/generate_gfn2_aes2_native.py --cuda-output /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_aes2_native.cuh && /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/lib/python3.12/site-packages/cmake/data/bin/cmake -E cmake_transform_depfile Ninja gccdepfile /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_aes2_native.cuh.d /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/CMakeFiles/d/f5f787d5c9a4f54290a42667f4f97492afeb03b6d531332fe104f7a95257920a.d\n",
+      "actual-gfn2-runtime-command.txt": "/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/bin/sccache /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_XTB_HAS_CUDA=1 -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/xtb/native -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/xtb/native/src -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/include -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_90,code=[compute_90,sm_90]\" -Xcompiler=-fPIC -MD -MT CMakeFiles/generativeqc_gfn2_cuda.dir/src/xtb/native/src/runtime/gfn2_cuda_execution.cu.o -MF CMakeFiles/generativeqc_gfn2_cuda.dir/src/xtb/native/src/runtime/gfn2_cuda_execution.cu.o.d -x cu -rdc=true -c /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/xtb/native/src/runtime/gfn2_cuda_execution.cu -o CMakeFiles/generativeqc_gfn2_cuda.dir/src/xtb/native/src/runtime/gfn2_cuda_execution.cu.o\n",
+      "actual-gfn2-mixer-command.txt": "/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/bin/sccache /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_XTB_HAS_CUDA=1 -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/xtb/native -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/xtb/native/src -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/include -I/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_90,code=[compute_90,sm_90]\" -Xcompiler=-fPIC -MD -MT CMakeFiles/generativeqc_gfn2_cuda.dir/src/xtb/native/src/backends/cuda/gfn2_scc_mixer.cu.o -MF CMakeFiles/generativeqc_gfn2_cuda.dir/src/xtb/native/src/backends/cuda/gfn2_scc_mixer.cu.o.d -x cu -rdc=true -c /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/src/xtb/native/src/backends/cuda/gfn2_scc_mixer.cu -o CMakeFiles/generativeqc_gfn2_cuda.dir/src/xtb/native/src/backends/cuda/gfn2_scc_mixer.cu.o\n",
+      "actual-gfn2-history-generator-command.txt": "cd /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build && /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/bin/python /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/tools/run_codegen.py --depfile /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_helpers.inc.d --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_helpers.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_window.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_gram.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_correction.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_identity.json --source-root /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/tools/generate_ordered_history_native.py --output-directory /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated --backend cpu && /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/lib/python3.12/site-packages/cmake/data/bin/cmake -E cmake_transform_depfile Ninja gccdepfile /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_broyden_cpu_helpers.inc.d /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/CMakeFiles/d/274b8f2b07affb9faed6bc7b1bb5fd1ece7a06f3ea396d224c9fd71d4587da18.d\ncd /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build && /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/bin/python /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/tools/run_codegen.py --depfile /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_helpers.inc.d --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_helpers.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_window.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_gram.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_correction.inc --target /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_identity.json --source-root /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/tools/generate_ordered_history_native.py --output-directory /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated --backend cuda && /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/venv312/lib/python3.12/site-packages/cmake/data/bin/cmake -E cmake_transform_depfile Ninja gccdepfile /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/generated/generated_gfn2_history_cuda_helpers.inc.d /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/source-lf/build/CMakeFiles/d/38146639cfd5a0415227eed3412f32d5dca49e7673fa8a3dc3aa6d27df53fd84.d\n"
+    },
+    "cache_stats": {
+      "cache312-before.txt": "Compile requests                      9\nCompile requests executed             9\nCache hits                            0\nCache misses                          9\nCache misses (C/C++)                  9\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          9\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.006 s\nAverage compiler                  0.351 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/compiler-cache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                           90 KiB\nMax cache size                       10 GiB\n",
+      "cache-after.txt": "Compile requests                      1\nCompile requests executed             1\nCache hits                            0\nCache misses                          1\nCache misses (C/C++)                  1\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          1\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.001 s\nAverage compiler                  1.360 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/compiler-cache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                          466 MiB\nMax cache size                       10 GiB\n",
+      "probe-final-cache-before.txt": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/compiler-cache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n",
+      "probe-final-cache-after.txt": "Compile requests                      1\nCompile requests executed             1\nCache hits                            0\nCache misses                          1\nCache misses (C/C++)                  1\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          1\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.001 s\nAverage compiler                  1.454 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/compiler-cache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                          466 MiB\nMax cache size                       10 GiB\n"
+    },
+    "cache_stats_limit": "server counters reset/discontinuity observed; snapshots are not attributable whole-build hit/miss counts",
+    "canonical_build_exit": 0,
+    "final_probe_outer_exit_observed": 0,
+    "final_probe_outer_exit_source": "owner observed FINAL_PROBE_EXIT=0 in executed remote wrapper; final recipe, binary and input hashes retained",
+    "cache_fallback_warning": "sccache: warning: The server looks like it shut down unexpectedly, compiling locally instead"
+  },
+  "resource": {
+    "account_alias": "qz",
+    "workspace": "分布式训练空间",
+    "project": "原子级化学反应基座模型2.0",
+    "job_name": "i1882-mixer-gpu-1014",
+    "node": "qb-prod-gpu1351",
+    "quota": [
+      1,
+      20,
+      200
+    ],
+    "requested_priority": 4,
+    "observed_priority": 20,
+    "observed_priority_level": "NORMAL",
+    "priority_difference_reason": "UNCONFIRMED",
+    "points_per_instance_hour": 1,
+    "max_runtime_hours": 0.25,
+    "budget_ceiling_points": 1,
+    "actual_billed_points": "UNAVAILABLE",
+    "auto_retry": false,
+    "pid": 20,
+    "start_utc": "2026-10-13T20:10:54Z",
+    "finish_utc": "2026-10-13T20:11:22Z",
+    "cpu_name": "i1882-mixer-prep-1014",
+    "cpu_start_shanghai": "2026-10-14 02:48:16",
+    "cpu_stop_deadline_shanghai": "2026-10-14 05:48:16",
+    "remote_root": "/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014"
+  },
+  "execution": {
+    "cuda_api_device": {
+      "selected_device": 0,
+      "visible_devices": 1,
+      "driver_version": 12080,
+      "runtime_version": 12090,
+      "name": "NVIDIA H200",
+      "compute_major": 9,
+      "compute_minor": 0,
+      "total_global_memory": 150121545728,
+      "uuid_hex": "c54ea3ad7bece430ffa2fe0c64f8c80f"
+    },
+    "nvidia_inventory": "NVIDIA H200, GPU-c54ea3ad-7bec-e430-ffa2-fe0c64f8c80f, 570.124.06, 143771 MiB",
+    "ldd": "\tlinux-vdso.so.1 (0x00007ffd97798000)\n\tlibgenerativeqc.so.0 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/native/libgenerativeqc.so.0 (0x00007f760a46f000)\n\tlibcudart.so.12 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/lib64/libcudart.so.12 (0x00007f760a000000)\n\tlibstdc++.so.6 => /usr/lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f7609dd4000)\n\tlibgcc_s.so.1 => /usr/lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f760a44a000)\n\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x00007f7609bab000)\n\tlibcublas.so.12 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/lib64/libcublas.so.12 (0x00007f7603400000)\n\tlibcusolver.so.11 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/lib64/libcusolver.so.11 (0x00007f75f1200000)\n\tlibopenblas.so.0 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/native/libopenblas.so.0 (0x00007f75eedb0000)\n\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007f760a361000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f7627316000)\n\tlibdl.so.2 => /usr/lib/x86_64-linux-gnu/libdl.so.2 (0x00007f760a35a000)\n\tlibpthread.so.0 => /usr/lib/x86_64-linux-gnu/libpthread.so.0 (0x00007f760a355000)\n\tlibrt.so.1 => /usr/lib/x86_64-linux-gnu/librt.so.1 (0x00007f760a350000)\n\tlibcublasLt.so.12 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/lib64/libcublasLt.so.12 (0x00007f75bca00000)\n\tlibnvJitLink.so.12 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/lib64/libnvJitLink.so.12 (0x00007f75b6d7a000)\n\tlibcusparse.so.12 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1882-stage-20261008/cuda-12.9/lib64/libcusparse.so.12 (0x00007f7599c00000)\n\tlibgfortran.so.5 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/native/libgfortran.so.5 (0x00007f7599925000)\n\tlibquadmath.so.0 => /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/native/libquadmath.so.0 (0x00007f760a306000)\n",
+    "input_sha_readback": "28aec2c69864d275b26031b7535164b4849f94ef030c5ce3cf19d65dbbc0f671  native/bootstrap-final\n6fcef302226d8c72da0d5b02b53ad633fd0833475395948a62cf526f8ab25e31  native/libgenerativeqc.so.0\n29983d8b9149015df76d8791da6adec6607b39c15f1fe4e4cb56539d12d68780  oracle/oracle.txt\n3d8da94defcf7487ff5991a7d2fa1f9d8c767f7586c3b1c7e09b20547d821570  oracle/oracle.json\n",
+    "expected_input_gate": "native/bootstrap-final: OK\nnative/libgenerativeqc.so.0: OK\noracle/oracle.json: OK\noracle/oracle.txt: OK\nnative/libopenblas.so.0: OK\nnative/libgfortran.so.5: OK\nnative/libquadmath.so.0: OK\n",
+    "canonical_exits": {
+      "preflight-sha": 0,
+      "preflight-ldd": 0,
+      "bootstrap": 0,
+      "probe": 0,
+      "report": 0
+    },
+    "command": "bash /inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014/gpu.sh",
+    "cwd": "/inspire/ssd/project/chemicalreaction/czxs25220150/issue1882-endpoint-20261014",
+    "bootstrap_command": "timeout 120 native/bootstrap-final oracle/oracle.txt",
+    "probe_command": "timeout 300 native/bootstrap-final oracle/oracle.txt --mixer-endpoint-probe gpu/mixer.jsonl 5",
+    "reducer_command": "venv312/bin/python source-lf/benchmarks/gfn2_mixer_endpoint.py report gpu/mixer.jsonl oracle/oracle.json gpu/report.json --repetitions 5 --failures gpu/mixer.jsonl.failures.jsonl",
+    "whole_graph_submitted_count": "UNAVAILABLE",
+    "allocator_peak_bytes": "UNAVAILABLE",
+    "raw_main_rows": 216,
+    "raw_lifecycle_rows": 6,
+    "raw_journal_bytes": 1027036,
+    "journal_limit_bytes": 67108864
+  },
+  "acceptance": {
+    "host_baseline": {
+      "passed": 28,
+      "skipped": 1
+    },
+    "host_final": {
+      "passed": 68,
+      "skipped": 1
+    },
+    "report_validation": "PASS",
+    "instrumentation_parity": true,
+    "lifecycle": "PASS",
+    "oracle_energy_force_gate": 5e-07,
+    "max_energy_error": 1.963371687452309e-09,
+    "max_force_error": 3.960852935913639e-08,
+    "mixer_scc_fraction": "UNAVAILABLE",
+    "provider_promotion": false,
+    "retained_768_ao": "historical independent FAIL, not rerun or resolved by this qualification",
+    "parents": [
+      "#1882 OPEN",
+      "#560 OPEN"
+    ]
+  },
+  "retained_preparation_failures": [
+    {
+      "kind": "Windows archive CRLF conversion",
+      "baseline_result": "27 PASS / 1 SKIP / 1 FAIL",
+      "resolution": "core.autocrlf=false archive and all-blob/mode verification; no production/manifest change"
+    },
+    {
+      "kind": "Python 3.10 typing.Self import during MP2 generation",
+      "build_exit": 1,
+      "resolution": "task-owned Python 3.12.15; no source change or cache clearing"
+    }
+  ],
+  "post_run_consumer_repair": {
+    "tree": "02cd40b079094a75988c9802fb2a1220553b96e4",
+    "reporter_sha256": "526f5243c983057cad851d9435bae4ccb7588edb78a11b46fc1b2125a376bc53",
+    "host_tests": {
+      "passed": 73,
+      "skipped": 1
+    },
+    "behavior_tests": 45,
+    "reducer_exit": 0,
+    "real_report_semantically_unchanged": true,
+    "native_scientific_inputs_unchanged": true,
+    "gpu_rerun": false
+  },
+  "retained_preparation_artifacts": {
+    "separate_negative_bundle_sha256": "093e7ef84a455f96532ca0d2e1a03a3c2fdb274f54ae123a62e7518898b3d293",
+    "paths": [
+      "remote/evidence/baseline-tests.txt",
+      "remote/source-baseline/build.exit",
+      "remote/evidence-lf/build.txt"
+    ],
+    "local_bad_export_archives": [
+      ".artifacts/1882-baseline-2946.tar",
+      ".artifacts/1882-candidate-source.tar"
+    ]
+  }
+}
