@@ -402,6 +402,66 @@ static cudaError_t contract_retained_coulomb_response(
   return cudaSuccess;
 }
 
+/** Full-rank, J-only bounded response. A streamed fitted-panel reader
+ * supplies A M^{-1} in auxiliary-major order. Unlike the generic J/K
+ * response, pure Coulomb needs only p=(A M^{-1}):D, W_P=c_J D p_P and
+ * bar_M=-c_J p p^T/2. Read each fitted panel exactly once; do not run the
+ * quadratic P/Q reread schedule intended for exchange's metric response.
+ * The physical source may still regenerate one raw tensor per output panel,
+ * but never once for every ordered pair of panels. All storage is borrowed
+ * from the existing response workspace, including the metric and W panels.
+ */
+static cudaError_t contract_streamed_coulomb_response(
+    std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
+    const double* densities, std::size_t tile, double* workspace, cudaStream_t stream,
+    cublasHandle_t blas,
+    const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
+    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>& consume) {
+  const auto matrix = n * n, aa = a * a;
+  auto* bar_metric = workspace + aa;
+  auto* fitted_panel = workspace + 4 * aa + 3 * matrix;
+  auto* weights = fitted_panel + tile * matrix;
+  auto* potentials = weights + tile * matrix;
+  auto error = cudaMemsetAsync(bar_metric, 0, aa * sizeof(double), stream);
+  if (error != cudaSuccess) return error;
+  for (std::size_t begin = 0; begin < a; begin += tile) {
+    const auto count = std::min(tile, a - begin);
+    read_fitted(begin, count, fitted_panel);
+    const auto status = generated::df_rhf_charge_contract(
+        blas, static_cast<int>(matrix), static_cast<int>(a), static_cast<int>(begin),
+        static_cast<int>(count), static_cast<int>(terms.size()), densities, fitted_panel,
+        potentials);
+    if (status != CUBLAS_STATUS_SUCCESS) throw CudaDfResponseBlasFailure{status};
+    runtime::cuda_trace::trace_counter("response_charge_blas_dots", terms.size() * count);
+    runtime::cuda_trace::trace_counter("response_charge_dot_elements",
+                                       terms.size() * count * matrix);
+    error = cudaMemsetAsync(weights, 0, count * matrix * sizeof(double), stream);
+    if (error != cudaSuccess) return error;
+    for (std::size_t t = 0; t < terms.size(); ++t) {
+      const auto coefficient = terms[t].coulomb_coefficient;
+      if (coefficient == 0) continue;
+      coulomb_weights_kernel<<<blocks(count * matrix), threads, 0, stream>>>(
+          matrix, a, begin, count, coefficient, densities + t * matrix, potentials + t * a,
+          weights);
+    }
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    consume(0, {begin, matrix, 1, a}, count * matrix, weights);
+    runtime::cuda_trace::trace_counter("response_auxiliary_blocks", 1);
+    runtime::cuda_trace::trace_counter("response_streamed_coulomb_fitted_panels", 1);
+  }
+  for (std::size_t t = 0; t < terms.size(); ++t) {
+    const auto coefficient = terms[t].coulomb_coefficient;
+    if (coefficient == 0) continue;
+    coulomb_metric_kernel<<<blocks(aa), threads, 0, stream>>>(
+        a, -coefficient, potentials + t * a, bar_metric);
+  }
+  error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+  consume(1, {}, aa, bar_metric);
+  return cudaSuccess;
+}
+
 static cudaError_t contract_full_rank_panels(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
     const double* densities, std::size_t tile, double* workspace, cudaStream_t stream,
@@ -1386,6 +1446,15 @@ cudaError_t contract_cuda_df_response_weights(
     return contract_occupied_response(n, a, terms, densities, metric, tile, workspace, stream, blas,
                                       *borrowed, raw_host, consume, packed_pairs,
                                       auxiliary_shell_offsets, packed_block_rows);
+  // Pure Coulomb has no exchange metric Gram. Its exact full-rank adjoint
+  // needs one fitted-panel read per auxiliary block, not the nested P/Q
+  // traversal in the general response. Preserve scalar/dot diagnostics.
+  if (metric.full_rank && !borrowed && !packed_pairs && !single_fitted_tensor &&
+      read_fitted && blas_products && !serial_metric_dot &&
+      std::all_of(terms.begin(), terms.end(),
+                  [](const auto& term) { return term.exchange_coefficient == 0; }))
+    return contract_streamed_coulomb_response(n, a, terms, densities, tile, workspace, stream,
+                                               blas, read_fitted, consume);
   // A validated resident fitted reader takes precedence even for a full-width
   // panel. Capacity is not permission to discard immutable forward values and
   // regenerate raw integrals. Borrowed/raw and rank-truncated routes stay below.
