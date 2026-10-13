@@ -592,8 +592,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 187647,
-      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276",
+      "bytes": 187846,
+      "sha256": "7f86d25d7623e1bb95489e4f0d0e96f0d8a715ba518367f904228337354308f3",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -606,10 +606,26 @@
       "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
     },
     {
+      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 149660,
+      "sha256": "39cf82b1c29195f4a4cf256a3f9cd9cd0045384b294e4d6b605811e666527259",
+      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/manifest.json",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 138119,
+      "sha256": "8825bac89728792b9db5c94b2f77814d8da1c882a9f27f0f8d9de2760106c3b0",
+      "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 397852,
-      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d",
+      "bytes": 425168,
+      "sha256": "2b8eeac9ca19d68596389838a4e5ea0f6c5ce5cef3c305bde68731cd89ff8771",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
