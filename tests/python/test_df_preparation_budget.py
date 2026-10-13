@@ -492,9 +492,30 @@ int main() {
   if (resolve_method_owned_df_resident_budget(
           wide_explicit,1088,3712,0,100ULL<<20,true) != wide_explicit) return 29;
   const auto tight_wide = resolve_df_budget(
-      {1088,3712,96,1,0,true},{28ULL<<30,32ULL<<30,true},0);
+      {1088,3712,96,1,0,true},{24ULL<<30,32ULL<<30,true},0);
   if (resolve_method_owned_df_resident_budget(
           tight_wide,1088,3712,0,100ULL<<20,true) != tight_wide) return 30;
+  // Persistent force arenas/modules reduce observed free memory on a moved
+  // geometry. Reclaim only the minimum packed allowance from the optional
+  // fractional margin, while retaining the absolute live headroom.
+  const auto rebuilt_budget = resolve_df_budget(
+      {1088,3712,96,1,0,true},{29ULL<<30,32ULL<<30,true},0);
+  const auto rebuilt = resolve_method_owned_df_resident_budget(
+      rebuilt_budget,1088,3712,0,100ULL<<20,true);
+  if (rebuilt.total_bytes <= rebuilt_budget.total_bytes ||
+      rebuilt.total_bytes != rebuilt.value_bytes + rebuilt.response_bytes ||
+      rebuilt.reserved_headroom_bytes != rebuilt_budget.reserved_headroom_bytes ||
+      rebuilt.total_bytes > rebuilt.observed_free_bytes-rebuilt.reserved_headroom_bytes)
+    return 31;
+  const auto rebuilt_values = plan_packed_density_fitting_tiles(
+      1,1088,3712,0,rebuilt.value_bytes,100ULL<<20,0,false);
+  if (!rebuilt_values.stores_full_three_center ||
+      rebuilt_values.peak_workspace_bytes > rebuilt.value_bytes) return 32;
+  try {
+    (void)plan_packed_density_fitting_tiles(
+        1,1088,3712,0,rebuilt.value_bytes-1,100ULL<<20,0,false);
+    return 33;
+  } catch (const DensityFittingBudgetError&) {}
   return 0;
 }
 """)

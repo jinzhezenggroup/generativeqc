@@ -38,7 +38,7 @@ def tetramer_reference() -> typing.Any:
     return case, energy, forces
 
 
-@pytest.mark.parametrize("budget", [24 << 20, 32 << 20, 64 << 20])
+@pytest.mark.parametrize("budget", [16 << 20, 32 << 20, 64 << 20])
 def test_property_replay_replans_value_storage_with_complete_forces(
     tetramer_reference: typing.Any,
     budget: typing.Any,
@@ -58,7 +58,7 @@ def test_property_replay_replans_value_storage_with_complete_forces(
         density_tolerance=1e-10,
     )
     # The current policy divides the public allowance by workload, not 50/50.
-    # Check the actual value/response caps and their conserved total. At 24 MiB
+    # Check the actual value/response caps and their conserved total. At 16 MiB
     # the force replay must regenerate B while the energy replay retains it;
     # larger allowances exercise the resident value path with the same oracle.
     with calc.prepare_batch([case.atoms]) as batch:
@@ -86,7 +86,7 @@ def test_property_replay_replans_value_storage_with_complete_forces(
             assert len(diagnostics) == 1
             assert diagnostics[0].peak_device_bytes <= value_budget
             assert diagnostics[0].streamed == (
-                budget == 24 << 20 and "forces" in properties
+                budget == 16 << 20 and "forces" in properties
             )
             if "forces" in properties:
                 np.testing.assert_allclose(item.forces, forces, atol=1e-8, rtol=0)
@@ -144,7 +144,12 @@ def test_resident_response_budget_replans_without_reference_factors(
             (response,) = [
                 r for r in read_trace(trace) if r["operation"] == "force_response"
             ]
-            assert not response["source_backed"]
+            # Fitted occupied response generates derivative panels from the
+            # physical source while retaining B and borrowing final U. Its
+            # trace's source_backed/streamed flags describe those panels, not
+            # whether the value tensor was regenerated during SCF.
+            (value_storage,) = batch.last_density_fitting_metric_diagnostics()
+            assert not value_storage.streamed
             assert response["counters"]["response_scratch_bytes"] <= budget
             assert aggregate_host(read_host_trace(host))["reference_eigensolves"] == []
             panels.append(response["counters"]["response_auxiliary_blocks"])

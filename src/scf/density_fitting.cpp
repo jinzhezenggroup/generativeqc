@@ -1364,6 +1364,46 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
     result.response_bytes = response;
     return result;
   }
+  // A geometry rebuild observes persistent CUDA modules and force arenas that
+  // were absent from the first preparation. The generic fractional margin can
+  // then drop an otherwise feasible packed B and multiply every subsequent J
+  // build's work. For this method-authenticated pure-J owner only, borrow just
+  // the minimum resident allowance from that extra margin. The absolute live
+  // headroom, explicit limits and complete response floor remain hard bounds.
+  if (!restricted_rank && allow_zero_rank_coulomb &&
+      budget.observed_free_bytes > budget.reserved_headroom_bytes) {
+    const auto available = budget.observed_free_bytes - budget.reserved_headroom_bytes;
+    if (available > response_floor && available > budget.total_bytes) {
+      const auto fits = [&](std::size_t value) {
+        try {
+          (void)plan_packed_density_fitting_tiles(1, nbf, naux, 0, value,
+                                                  source_device_bytes, 0, false);
+          return true;
+        } catch (const DensityFittingBudgetError&) {
+          return false;
+        }
+      };
+      auto upper = available - response_floor;
+      if (fits(upper)) {
+        // Reuse the actual planner rather than duplicating its allocation
+        // formula. Rank zero has monotone resident admission; byte bisection
+        // spends no GPU work and preserves the smallest sufficient allowance.
+        std::size_t lower = 1;
+        while (lower < upper) {
+          const auto middle = lower + (upper - lower) / 2;
+          if (fits(middle))
+            upper = middle;
+          else
+            lower = middle + 1;
+        }
+        auto result = budget;
+        result.value_bytes = upper;
+        result.response_bytes = response_floor;
+        result.total_bytes = upper + response_floor;
+        return result;
+      }
+    }
+  }
   return budget;
 }
 
