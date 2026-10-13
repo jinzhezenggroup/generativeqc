@@ -1,5 +1,6 @@
 """Compiled CPU/CUDA coordinate tiles, bounded lifecycle and independent gates."""
 
+import json
 import os
 import shutil
 import typing
@@ -268,6 +269,40 @@ def test_native_svec_preserves_offdiagonal_inner_product_factors(
     with PreparedSecondDerivative(artifact, record_capacity=1) as plan:
         np.testing.assert_allclose(
             plan.contract((primitive,)).values[0], expected, atol=5e-11, rtol=2e-11
+        )
+
+
+def test_native_dddd_hvp_against_frozen_libcint(
+    compiler: typing.Any,
+) -> None:
+    """Retain all-d and mixed-component coverage with a bounded native subset."""
+    reference_path = (
+        Path(__file__).parents[1] / "reference_data/second_derivatives/dddd_hvp.json"
+    )
+    reference = json.loads(reference_path.read_text())
+    ir = build_eri_second_ir(tuple(reference["angular"]))
+    # Include Cartesian extremes and a mixed xy/xz/yy/yz quartet. Only these
+    # three components and four coordinate outputs enter generated native code.
+    indices = tuple(reference["component_indices"])
+    outputs = tuple(reference["output_indices"])
+    artifact = compile_second_derivative(
+        ir, *compiler, component_indices=indices, output_indices=outputs
+    )
+    expected = np.asarray(reference["expected_hvp"])
+    primitive = SecondPrimitive(
+        tuple(reference["exponents"]),
+        tuple(map(tuple, reference["centers"])),
+        tuple(reference["weights"]),
+        tuple(map(tuple, reference["direction"])),
+    )
+    with PreparedSecondDerivative(artifact, record_capacity=1) as plan:
+        actual = plan.contract((primitive,)).values[0]
+        assert np.isfinite(actual).all()
+        assert np.max(np.abs(expected)) > 1e-5
+        np.testing.assert_allclose(actual, expected, atol=5e-11, rtol=2e-11)
+        translation = replace(primitive, direction=np.tile((0.31, -0.27, 0.19), (4, 1)))
+        np.testing.assert_allclose(
+            plan.contract((translation,)).values, 0.0, atol=5e-11, rtol=0
         )
 
 
