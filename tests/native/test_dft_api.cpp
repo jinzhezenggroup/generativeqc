@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -14,6 +15,7 @@
 #include <utility>
 
 #include "generativeqc/generativeqc.h"
+#include "generativeqc/generativeqc.hpp"
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/mman.h>
@@ -34,12 +36,16 @@ namespace {
 // executable-only interposition exercises real constructor unwinding without
 // adding fault controls to the production API or exhausting machine memory.
 thread_local std::size_t fail_allocation_bytes = 0;
+thread_local std::exception_ptr fail_allocation_error;
+thread_local unsigned fail_allocation_skip = 0;
 
 }  // namespace
 
 void* operator new(std::size_t bytes) {
-  if (bytes && bytes == fail_allocation_bytes) {
+  if (bytes && bytes == fail_allocation_bytes &&
+      (fail_allocation_skip == 0 || --fail_allocation_skip == 0)) {
     fail_allocation_bytes = 0;
+    if (fail_allocation_error) std::rethrow_exception(fail_allocation_error);
     throw std::bad_alloc();
   }
   if (void* pointer = std::malloc(bytes ? bytes : 1)) return pointer;
@@ -587,6 +593,113 @@ void warm_execution_allocation_failure() {
           "warm SCF allocation failure lost its last-good density/energy pair");
 }
 
+void single_execution_allocation_failure() {
+  // The scalar facade must preserve a scheduler item's exact exception/status,
+  // revoke old diagnostics, and recover without publishing a partial result.
+  Fixture fixture;
+  const auto method = lda_method();
+  generativeqc_calculation* calculation = nullptr;
+  require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                           &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+          "single allocation failure preparation failed");
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)> owner(
+      calculation, &generativeqc_calculation_destroy);
+  generativeqc_result_descriptor result{};
+  result.struct_size = sizeof(result);
+  result.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single allocation failure source did not converge");
+  const auto energy = result.energy;
+  result.energy = 123.0;
+  fail_allocation_bytes = 4 * sizeof(double);
+  const auto status = generativeqc_calculation_execute(calculation, &result);
+  const bool injected = fail_allocation_bytes == 0;
+  fail_allocation_bytes = 0;
+  require(injected && status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && result.energy == 123.0,
+          "single prepared scheduler hid an allocation failure or published partial energy");
+  require(generativeqc_calculation_get_precision_provenance(calculation, nullptr) ==
+              GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE,
+          "single failed scheduler retained stale precision diagnostics");
+  require(generativeqc_context_get_last_detail(fixture.context) != nullptr,
+          "single failed scheduler lost its exception detail");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - energy) < 2e-10,
+          "single prepared scheduler did not recover after allocation failure");
+}
+
+void single_execution_retry_errors() {
+  // Inject at a real warm SCF allocation, after scheduler preparation. Untyped
+  // failures include CUDA graph launch errors and must not be mistaken for a
+  // numerical seed rejection, consumed by a cold retry, or replaced by success.
+  Fixture fixture;
+  const auto method = lda_method();
+  generativeqc_calculation* calculation = nullptr;
+  require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                           &calculation) == GENERATIVEQC_STATUS_SUCCESS,
+          "single retry-error preparation failed");
+  std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)> owner(
+      calculation, &generativeqc_calculation_destroy);
+  generativeqc_result_descriptor result{};
+  result.struct_size = sizeof(result);
+  result.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single retry-error source did not converge");
+  const auto energy = result.energy;
+  unsigned failure_site = 1;
+  const auto injected = [&](std::exception_ptr error) {
+    result.energy = 123.0;
+    fail_allocation_error = std::move(error);
+    fail_allocation_skip = failure_site;
+    fail_allocation_bytes = 4 * sizeof(double);
+    const auto status = generativeqc_calculation_execute(calculation, &result);
+    const bool consumed = fail_allocation_bytes == 0;
+    fail_allocation_bytes = 0;
+    fail_allocation_error = nullptr;
+    fail_allocation_skip = 0;
+    require(consumed, "single retry-error injection did not reach the SCF solve");
+    return status;
+  };
+  // Locate an allocation inside the retryable solve rather than depending on
+  // the number of scheduler setup allocations preceding it. A typed numerical
+  // failure in setup is terminal; the first successful injected call proves
+  // that this site exercised the real seeded solve and its cold fallback.
+  for (;; ++failure_site) {
+    const auto status = injected(std::make_exception_ptr(
+        generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "locate numerical retry site")));
+    if (status == GENERATIVEQC_STATUS_SUCCESS) break;
+    require(status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+            "numerical retry-site discovery lost its exact status");
+    require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+            "numerical retry-site discovery did not recover");
+  }
+  const char* detail = "injected untyped launch failure";
+  require(injected(std::make_exception_ptr(std::runtime_error(detail))) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              result.energy == 123.0,
+          "single scheduler retried an untyped failure or published partial energy");
+  const auto* actual_detail = generativeqc_context_get_last_detail(fixture.context);
+  require(actual_detail && std::strcmp(actual_detail, detail) == 0,
+          "single scheduler replaced the original untyped failure detail");
+  require(generativeqc_calculation_get_precision_provenance(calculation, nullptr) ==
+              GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE,
+          "single untyped failure retained stale precision diagnostics");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              std::abs(result.energy - energy) < 2e-10,
+          "single scheduler did not recover after an untyped failure");
+  require(injected(std::make_exception_ptr(generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR,
+                                                               "injected typed device failure"))) ==
+                  GENERATIVEQC_STATUS_CUDA_ERROR &&
+              result.energy == 123.0,
+          "single scheduler retried a typed device failure");
+  require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS,
+          "single scheduler did not recover after a typed device failure");
+  require(injected(std::make_exception_ptr(generativeqc::Error(
+              GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "injected numerical seed failure"))) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - energy) < 2e-10,
+          "single scheduler lost the explicitly numerical cold retry");
+}
+
 void mixed_df_rsh_cpu_endpoints() {
   // This CPU-only gate must run even when no CUDA compiler/device is present.
   // The paired CUDA qualification below cannot catch a broken CPU reference
@@ -703,6 +816,8 @@ int main() {
     warm_preparation_failure(false);
     warm_preparation_failure(true);
     warm_execution_allocation_failure();
+    single_execution_allocation_failure();
+    single_execution_retry_errors();
     generativeqc_method_capabilities_descriptor capabilities{
         sizeof(generativeqc_method_capabilities_descriptor),
         GENERATIVEQC_ABI_VERSION,

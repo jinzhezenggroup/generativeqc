@@ -697,11 +697,24 @@ def test_stationary_integral_layout_rejects_understated_channels(
 
 
 def _generic_cuda_integral_gradient(methods: str) -> str:
-    # Bound the single-system owner before the later batch overload. Match its
-    # braces so unrelated CPU force methods between here and execute stay out.
+    # The scientific owner has no input index. Its forwarding batch overload
+    # may move independently, so select the complete definition by its ABI.
     begin = methods.index("generativeqc_status cuda_integral_gradient(")
-    end = methods.index("Result execute_impl(bool compute_forces)", begin)
-    return cpp_function_definition(methods[begin:end], "cuda_integral_gradient")
+    candidates = methods[begin:].split("generativeqc_status cuda_integral_gradient(")
+    definitions = [
+        cpp_function_definition(
+            "generativeqc_status cuda_integral_gradient(" + candidate,
+            "cuda_integral_gradient",
+        )
+        for candidate in candidates[1:]
+    ]
+    implementations = [
+        body
+        for body in definitions
+        if "std::size_t index," not in body[: body.index("{")]
+    ]
+    assert len(implementations) == 1
+    return implementations[0]
 
 
 def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> None:

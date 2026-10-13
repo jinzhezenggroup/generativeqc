@@ -2,7 +2,7 @@
 
 All contraction loops and arithmetic below are shared compiler ownership.
 Method envelopes bind physical names and failure destinations only. Retained
-spelling is deliberate: complete generated function/kernel body hashes are gates.
+arithmetic order and publication are executable contracts, not source fingerprints.
 """
 
 from __future__ import annotations
@@ -73,10 +73,12 @@ inline constexpr const char* cuda_density_schedule =
 
 template <int OccupationWeight>
 __global__ void occupied_density_kernel(
-    std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
+    std::size_t batch_size, std::size_t spin_count, std::size_t nbf,
     const std::int32_t* occupied, const double* coefficients,
-    const std::uint8_t* active, double* density) {
-  static_assert(OccupationWeight == 1 || OccupationWeight == 2);
+    const std::uint8_t* active, double* density, double occupation_weight = 0.0) {
+  // Zero selects the retained runtime-scalar schedule used by DF-SCF. The
+  // static schedules keep ordinary HF/KS's existing full-domain contract.
+  static_assert(OccupationWeight == 0 || OccupationWeight == 1 || OccupationWeight == 2);
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t matrix_size = n * n;
   const std::size_t state_count =
@@ -92,13 +94,24 @@ __global__ void occupied_density_kernel(
   const std::size_t local = element % matrix_size;
   const std::size_t row = local % n;
   const std::size_t column = local / n;
-  if (row > column) return;
+  bool symmetric = true;
+  if constexpr (OccupationWeight == 0) {
+    // General weights retain both product orientations. A clipped launch must
+    // not mirror into elements outside the caller's original launch domain.
+    const auto launched = static_cast<std::uint64_t>(gridDim.x) * blockDim.x;
+    symmetric = (occupation_weight == 1.0 || occupation_weight == 2.0) &&
+                launched >= state_count * matrix_size;
+  }
+  if (symmetric && row > column) return;
 
   const std::size_t offset = state * matrix_size;
   double value = 0.0;
   for (std::int32_t orbital = 0; orbital < occupied[state]; ++orbital) {
     const std::size_t orbital_index = static_cast<std::size_t>(orbital) * n;
-    if constexpr (OccupationWeight == 2) {
+    if constexpr (OccupationWeight == 0) {
+      value += occupation_weight * coefficients[offset + row + orbital_index] *
+               coefficients[offset + column + orbital_index];
+    } else if constexpr (OccupationWeight == 2) {
       value += 2.0 * coefficients[offset + row + orbital_index] *
                coefficients[offset + column + orbital_index];
     } else {
@@ -107,7 +120,7 @@ __global__ void occupied_density_kernel(
     }
   }
   density[element] = value;
-  if (row != column)
+  if (symmetric && row != column)
     density[offset + column + row * n] = value;
 }
 
@@ -220,6 +233,13 @@ def emit_occupied(plain: WeightedGram, weighted: WeightedGram, *, backend: str) 
     if algorithm == "occupied-cpu":
         return _OCCUPIED_CPU
     if algorithm == "occupied-cuda":
+        # The same kernel also serves DF's size_t/scalar-weight ABI. Admit that
+        # physical schedule separately without inventing another density graph.
+        require_candidate(
+            plain,
+            retained_candidate(plain, "occupied-scalar-cuda"),
+            "occupied-scalar-cuda",
+        )
         return _OCCUPIED_CUDA.replace(
             "@DENSITY_HASH@", template_hash(plain.adapter.program)
         ).replace("@WEIGHTED_HASH@", template_hash(weighted.adapter.program))

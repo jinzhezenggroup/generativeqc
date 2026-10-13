@@ -304,12 +304,17 @@ jobs:
     needs: merge_queue_liveness
     outputs:
       publish_cache_snapshot: ${{ steps.trusted_cuda_ccache.outputs.publish }}
+      fast_cache_artifact_id: ${{ steps.master_fast_ccache_upload.outputs.artifact-id }}
+      fast_cache_run_attempt: ${{ steps.master_fast_ccache_upload.outcome == 'success' && github.run_attempt || '' }}
     if: needs.merge_queue_liveness.outputs.active != 'false'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       actions: read
-    timeout-minutes: 25
+    # A valid source-changing queue rebuild exceeded 23m before the former
+    # 25m job ceiling killed it. Bound the build separately and leave 5m for
+    # setup, the mandatory probes, compiler diagnostics and runner cleanup.
+    timeout-minutes: 35
     env:
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
@@ -485,12 +490,18 @@ jobs:
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
       - name: Compile production CUDA and runtime CTest
+        timeout-minutes: 30
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
         # method adapter as part of this existing integration gate.
         run: >-
           cmake --build --preset cuda-release-sm120
           --target generativeqc_cuda_runtime_tests --parallel 3
+        # File-backed secondary storage records misses, not the restored cache.
+        # Only trusted master pushes hand this delta to the ordered CLI job.
+        env:
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
+          CCACHE_NORESHARE: "true"
       - name: Compile opted-in AO radial kernels with release resources
         # Default native emission intentionally omits this experimental schedule.
         # Exercise its exact six kernel resource records without running a GPU.
@@ -515,8 +526,8 @@ jobs:
           GENERATIVEQC_NVCC="$CUDACXX" python3 -m pytest -q \
             tests/python/test_packaging.py::test_wheel_grid_compiler_links_without_checkout_or_device \
             --basetemp build/grid-wheel-compile
-      # This consumer never publishes an incomplete or branch-scoped cache.
-      # The trusted full CUDA CLI producer saves after both compile variants.
+      # PR/queue consumers never publish compiler snapshots. The master-only
+      # miss handoff is not a full cache; CLI still owns final publication.
       - name: Check Fock and proposal preflight without a GPU
         env:
           CUDA_VISIBLE_DEVICES: ""
@@ -528,7 +539,28 @@ jobs:
         run: ccache --show-stats
       - name: Summarize compiler cache
         if: always()
-        run: python3 tools/report_ci_ccache.py --label "CUDA 12.9 compile sm120"
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          mkdir -p build
+          python3 tools/report_ci_ccache.py --label "CUDA 12.9 compile sm120" \
+            --verbose --build-dir build/cuda-release-sm120 \
+            | tee build/cuda-fast-compile-cache.txt
+      - name: Preserve failed fast CUDA build diagnostics
+        if: ${{ failure() || cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cuda-fast-compile-diagnostics
+          # Only per-target timings and the report's allowlisted compiler/build
+          # identities: never upload the complete CMake cache or environment.
+          path: |
+            build/cuda-release-sm120/.ninja_log
+            build/cuda-fast-compile-cache.txt
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
       - name: Preserve opted-in AO radial resource reports
         if: ${{ always() && github.event_name != 'push' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -540,6 +572,32 @@ jobs:
             build/ao-radial-compile/**/resources.json
           if-no-files-found: error
           retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
+      - name: Bound the master fast CUDA cache handoff
+        id: master_fast_ccache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        continue-on-error: true
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          delta="$RUNNER_TEMP/cuda-ccache-handoff"
+          if [[ -d "$delta" ]]; then
+            # This is secondary storage, never the restored local cache.
+            ccache --trim-dir "$delta" --trim-max-size 2GiB
+            du -sh "$delta"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Hand fast CUDA cache misses to the master CLI
+        id: master_fast_ccache_upload
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.master_fast_ccache.outputs.available == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cuda-ccache-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cuda-ccache-handoff
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   master-cache-cleanup:
     name: Trim trusted CUDA cache snapshots
@@ -1513,15 +1571,13 @@ jobs:
 
   native-cli-artifact:
     name: Native C++ CUDA CLI package (sm_120)
-    # Build and package affected PR/merge-group native changes before merge.
-    # Linker/package changes use release NVCC; other source changes use fast
-    # NVCC but still link and package a genuine executable.
+    # Master/tag/manual builds retain ordered CUDA qualification. Master also
+    # consumes its trusted-cache publication decision. PR/queue builds below
+    # share these package steps without waiting for the independent CUDA check.
     needs: cuda-compile
     if: >-
       needs.cuda-compile.result == 'success' &&
-      (github.event_name == 'pull_request' ||
-       github.event_name == 'merge_group' ||
-       (github.event_name == 'push' &&
+      ((github.event_name == 'push' &&
         (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
@@ -1531,10 +1587,13 @@ jobs:
       contents: read
       actions: read
     env:
+      FAST_CUDA_CACHE_ARTIFACT_ID: ${{ needs.cuda-compile.outputs.fast_cache_artifact_id }}
+      FAST_CUDA_CACHE_RUN_ATTEMPT: ${{ needs.cuda-compile.outputs.fast_cache_run_attempt }}
       CUDACXX: /usr/local/cuda-12.9/bin/nvcc
       LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
       CCACHE_MAXSIZE: 5G
-    steps:
+      PUBLISH_CUDA_CACHE_SNAPSHOT: ${{ needs.cuda-compile.outputs.publish_cache_snapshot }}
+    steps: &native_cli_package_steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -1621,6 +1680,17 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
+      - name: Restore this run's master fast CUDA cache delta
+        id: master_fast_ccache_download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip' && env.FAST_CUDA_CACHE_ARTIFACT_ID != '' && env.FAST_CUDA_CACHE_RUN_ATTEMPT == github.run_attempt
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          # The immutable ID comes only from this run's required CUDA job.
+          # No cross-run lookup or artifact-name fallback is permitted here.
+          artifact-ids: ${{ env.FAST_CUDA_CACHE_ARTIFACT_ID }}
+          path: ${{ runner.temp }}/cuda-ccache-handoff
       - name: Check for an already-failed required CI sibling
         if: steps.cli_scope.outputs.tier != 'skip' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
         env:
@@ -1632,6 +1702,10 @@ jobs:
       - name: Seed fast CUDA CI objects in the shared cache
         id: fast_cuda_seed
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip'
+        env:
+          # Strict ccache lookup admits only compatible compiler/source inputs.
+          # Remote hits populate the local cache used by release and publication.
+          CCACHE_REMOTE_STORAGE: ${{ steps.master_fast_ccache_download.outcome == 'success' && format('file://{0}/cuda-ccache-handoff read-only', runner.temp) || '' }}
         shell: bash
         run: |
           ccache --zero-stats
@@ -1786,7 +1860,7 @@ jobs:
       # An artifact mirrors the single master cache for ephemeral merge-group
       # refs. It does not represent an independently built compiler cache.
       - name: Publish trusted master CUDA ccache snapshot
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.cuda-compile.outputs.publish_cache_snapshot == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && env.PUBLISH_CUDA_CACHE_SNAPSHOT == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -1859,6 +1933,26 @@ jobs:
           retention-days: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 7 || 30 }}
           overwrite: true
 
+  native-cli-qualification:
+    name: Qualify native C++ CUDA CLI package (sm_120)
+    # Both required checks may begin after liveness. The full queued-range tier
+    # selector and every build/link/package check are shared with the producer.
+    needs: merge_queue_liveness
+    if: >-
+      needs.merge_queue_liveness.outputs.active != 'false' &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 210
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CUDACXX: /usr/local/cuda-12.9/bin/nvcc
+      LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
+      CCACHE_MAXSIZE: 5G
+      PUBLISH_CUDA_CACHE_SNAPSHOT: 'false'
+    steps: *native_cli_package_steps
+
   native-cli-release:
     name: Publish versioned native CLI to GitHub Releases
     needs: native-cli-artifact
@@ -1916,7 +2010,7 @@ jobs:
   pass:
     name: Pass CI checks
     timeout-minutes: 5
-    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, cuda-direct-aot, python, native-cli-artifact]
+    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, cuda-direct-aot, python, native-cli-artifact, native-cli-qualification]
     runs-on: ubuntu-slim
     if: ${{ !cancelled() && github.event_name != 'push' }}
     steps:
@@ -1927,7 +2021,7 @@ jobs:
         if: needs.merge_queue_liveness.outputs.active != 'false'
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
-          # Scheduled correctness runs intentionally do not publish CLI artifacts.
-          # Selected PR/queue/manual builds must never pass with a skipped job.
-          allowed-skips: ${{ github.event_name == 'schedule' && 'native-cli-artifact' || '' }}
+          # Only the unused event branch may skip. Scheduled correctness runs
+          # intentionally skip both; a selected PR/queue/manual build must pass.
+          allowed-skips: ${{ github.event_name == 'schedule' && 'native-cli-artifact,native-cli-qualification' || (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'native-cli-artifact' || 'native-cli-qualification' }}
           jobs: ${{ toJSON(needs) }}

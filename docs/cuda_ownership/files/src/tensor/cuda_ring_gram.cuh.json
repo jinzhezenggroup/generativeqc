@@ -1,6 +1,6 @@
 {
   "path": "src/tensor/cuda_ring_gram.cuh",
-  "reason": "Shared bounded physical-ring cache refresh using a compiler-generated ordered vector dot. Callers supply vectors and valid slot windows; the adapter owns neither residual formation, DIIS normalization/solve, dependent-history policy nor Fock extrapolation.",
+  "reason": "Shared bounded physical-ring cache refresh and chronological element view for compiler-generated ordered dot and coefficient contractions. Callers own live windows, residual formation, normalization, solve, retirement and publication.",
   "regions": [],
   "role": "runtime",
   "subsystem": "runtime"

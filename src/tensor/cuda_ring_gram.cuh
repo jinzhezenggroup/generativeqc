@@ -10,6 +10,22 @@
 
 namespace generativeqc::tensor {
 
+/** Read one flattened element through a live chronological ring window.
+ * The solver owns first/count after retirement; no stale slot is materialized.
+ * Coefficients use chronological indices, while history retains physical slots.
+ */
+struct RingHistoryElement {
+  const double* history;
+  std::size_t vector_size;
+  std::size_t element;
+  std::uint32_t first;
+  std::uint32_t capacity;
+
+  __device__ double operator[](std::size_t item) const {
+    return history[((first + item) % capacity) * vector_size + element];
+  }
+};
+
 /** Refresh a new row/column in a physical-slot Gram cache with one CUDA warp.
  * The caller first inserts the new vector at slot and supplies the live ring
  * window. Other live vectors must be immutable until their slots are replaced.
