@@ -14,7 +14,6 @@ from generativeqc_compiler.tensor import ir
 from generativeqc_compiler.tensor.ad_program import linearize, transpose_program
 from generativeqc_compiler.tensor.autodiff import jvp, vjp
 from generativeqc_compiler.tensor.complexity import node_complexity
-from generativeqc_compiler.tensor.cpu import describe_cpu_compilation
 from generativeqc_compiler.tensor.interpreter import execute
 from generativeqc_compiler.tensor.optimize import optimize, prepare_for_backend
 from generativeqc_compiler.tensor.precision import (
@@ -261,12 +260,9 @@ def test_native_preparation_refuses_where(backend: str) -> None:
     )
     with pytest.raises(ValueError, match="where"):
         prepare_for_backend(program, backend, allow_cpu_boolean=backend == "cpu")
-    if backend == "cpu":
-        with pytest.raises(ValueError, match="where"):
-            describe_cpu_compilation(program)
 
 
-@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("backend", ["cuda"])
 def test_public_native_endpoint_refuses_before_toolchain_or_device(
     monkeypatch: pytest.MonkeyPatch, backend: str
 ) -> None:

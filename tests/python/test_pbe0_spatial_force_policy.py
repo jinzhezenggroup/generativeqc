@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_method_authenticates_global_hybrid_spatial_force_default(
+def test_method_authenticates_full_range_spatial_force_default(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     """Check every composition, approximation, size, spin and precision guard."""
@@ -113,18 +113,30 @@ struct Method {
 """
 
 DRIVER = r"""
-template<class Mutation> void reject(Mutation mutate) {
+template<class Mutation> void reject_hybrid(Mutation mutate) {
   Method method;
   mutate(method);
   assert(!method.qualified_spatial_force_default());
 }
+template<class Mutation> void reject(Mutation mutate) {
+  for (unsigned source : {0U, 1U, 2U}) {
+    Method method;
+    method.fock_.strategy_value.spec.exchange.present = source == 0;
+    method.execution_plan_.d4_correction = source == 2;
+    mutate(method);
+    assert(!method.qualified_spatial_force_default());
+  }
+}
 int main() {
   Method method;
   assert(method.qualified_spatial_force_default());
-  for (std::size_t aos : {0U, 383U, 384U, 768U, 1536U}) {
-    method.fock_.diagnostic_value.nbf = aos;
-    assert(method.qualified_spatial_force_default() == (aos >= 384));
-  }
+  for (bool exchange_present : {false, true})
+    for (std::size_t aos : {0U, 383U, 384U, 385U, 768U, 1536U}) {
+      method.fock_.strategy_value.spec.exchange.present = exchange_present;
+      method.fock_.diagnostic_value.nbf = aos;
+      assert(method.qualified_spatial_force_default() == (aos >= 384));
+    }
+  reject([](auto& value) { value.execution_plan_.spin_channels = 0; });
   reject([](auto& value) { value.execution_plan_.spin_channels = 2; });
   // Eligible B3LYP has 20% exact K and no PBE label; the method catalog
   // has already authenticated its full semilocal/exact exchange composition.
@@ -137,25 +149,38 @@ int main() {
   reject([](auto& value) { value.fock_.strategy_value.spec.derivative_order = 1; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.present = false; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.coefficient = 0.5; });
-  reject([](auto& value) { value.fock_.strategy_value.spec.exchange.present = false; });
-  for (double coefficient : {0.0, 0.25, -0.500001, std::numeric_limits<double>::infinity()})
-    reject([coefficient](auto& value) { value.fock_.strategy_value.spec.exchange.coefficient = coefficient; });
+  // Pure J remains valid when an independent D4/gCP owner adds its force.
+  Method pure_j;
+  pure_j.fock_.strategy_value.spec.exchange.present = false;
+  assert(pure_j.qualified_spatial_force_default());
+  pure_j.execution_plan_.d4_correction = true;
+  assert(pure_j.qualified_spatial_force_default());
+  pure_j.execution_plan_.nonlocal_correlation = true;
+  assert(!pure_j.qualified_spatial_force_default());
+  for (double coefficient : {0.0, -0.0, 0.25, -0.500001, std::numeric_limits<double>::infinity(),
+                             std::numeric_limits<double>::quiet_NaN()})
+    reject_hybrid([coefficient](auto& value) { value.fock_.strategy_value.spec.exchange.coefficient = coefficient; });
+  for (double coefficient : {-0.5, -1e-300}) {
+    Method live_exchange;
+    live_exchange.fock_.strategy_value.spec.exchange.coefficient = coefficient;
+    assert(live_exchange.qualified_spatial_force_default());
+  }
   // Semilocal XC composition is orthogonal to the exact Direct J/K recurrence.
   Method scaled;
   scaled.options_.semilocal_exchange_scale = 1.0;
   scaled.options_.semilocal_correlation_scale = 0.5;
   assert(scaled.qualified_spatial_force_default());
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.approximation = scf::FockApproximation::DensityFitted; });
-  reject([](auto& value) { value.fock_.strategy_value.spec.exchange.approximation = scf::FockApproximation::DensityFitted; });
+  reject_hybrid([](auto& value) { value.fock_.strategy_value.spec.exchange.approximation = scf::FockApproximation::DensityFitted; });
   reject([](auto& value) { value.fock_.strategy_value.spec.coulomb.op = scf::FockOperator::LongRange; });
-  reject([](auto& value) { value.fock_.strategy_value.spec.exchange.op = scf::FockOperator::LongRange; });
+  reject_hybrid([](auto& value) { value.fock_.strategy_value.spec.exchange.op = scf::FockOperator::LongRange; });
   reject([](auto& value) { value.options_.density_fitting_mode = 1; });
   reject([](auto& value) { value.options_.precision_mode = 1; });
   reject([](auto& value) { value.options_.precision_mode.reset(); });
   reject([](auto& value) { value.execution_plan_.range_exchange = true; });
   reject([](auto& value) { value.range_strategy_ = true; });
   reject([](auto& value) { value.execution_plan_.nonlocal_correlation = true; });
-  reject([](auto& value) { value.execution_plan_.d4_correction = true; });
+  reject_hybrid([](auto& value) { value.execution_plan_.d4_correction = true; });
   reject([](auto& value) { value.system_.ecp_terms.push_back(1); });
   reject([](auto& value) { value.system_.atoms[0].ecp_core = 2; });
 }

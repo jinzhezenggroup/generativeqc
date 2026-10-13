@@ -125,11 +125,11 @@ print(first.energies)
 ## Benchmarks
 
 **Complete HF and DFT energy + analytic forces** on an RTX 5090
-(2026-10-13), compared with GPU4PySCF under matched FP64, basis, and grid
+(2026-10-13–14), compared with GPU4PySCF under matched FP64, basis, and grid
 settings. Cold includes construction, preparation, and the first calculation
 (compiler caches retained); warm reuses a fixed converged density. Measurements retain
 their individually qualified source/build identities. The report includes complete
-direct and DF r²SCAN-3c populations through 96 atoms.
+direct and DF r²SCAN-3c populations through 96 atoms and direct ωB97M-V at 48 atoms.
 
 **Direct J/K**
 
