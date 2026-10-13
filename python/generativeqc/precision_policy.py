@@ -343,6 +343,7 @@ class PrecisionCalculator:
                     ceiling, ceiling if requested is None else requested
                 )
         self._candidate = Calculator(**self._options, precision="fp64")
+        self._fp64_properties = self._candidate.capabilities.supported_properties
         if self._candidate.capabilities.family not in (
             "hartree_fock",
             "density_functional",
@@ -365,13 +366,19 @@ class PrecisionCalculator:
 
             if device == "cuda" and self._candidate._ks_options is not None:
                 candidate_options = dict(self._options)
+                ks_options = candidate_options.get("ks_options") or KsOptions()
                 candidate_options["ks_options"] = replace(
-                    candidate_options.get("ks_options") or KsOptions(),
+                    ks_options,
                     _precision_budget=(
                         policy.budget.energy_abs,
                         policy.budget.force_max_abs,
                         policy.budget.force_rms or 0.0,
                     ),
+                )
+                # replace() resets init=False fields. Resolved options retain
+                # their scientific composition there, including exact exchange.
+                object.__setattr__(
+                    candidate_options["ks_options"], "_method_ir", ks_options._method_ir
                 )
                 try:
                     self._candidate = Calculator(**candidate_options, precision="auto")
@@ -403,6 +410,10 @@ class PrecisionCalculator:
         """Expose only this facade's admitted single-point property boundary."""
         return replace(
             self._candidate.capabilities,
+            supported_properties=(
+                self._candidate.capabilities.supported_properties
+                | self._fp64_properties
+            ),
             supports_batch=False,
             supported_second_order=frozenset(),
         )
@@ -486,13 +497,24 @@ class PrecisionCalculator:
                 )
             from .ecp import resolve_ecp
 
-            if any(resolve_ecp(self._candidate._basis, native_atoms)[0]):
+            candidate_calculator = self._candidate
+            candidate_precision = self._candidate_precision
+            route_reasons = list(self._route_reasons)
+            if requested - candidate_calculator.capabilities.supported_properties:
+                # AUTO can support energies while its force consumer is absent.
+                # Choose FP64 for this request without disabling later AUTO calls.
+                self._candidate.clear_cache()
+                candidate_calculator = Calculator(**self._options, precision="fp64")
+                candidate_precision = "fp64"
+                route_reasons.append("auto_properties_unavailable_for_model")
+            if any(resolve_ecp(candidate_calculator._basis, native_atoms)[0]):
                 raise NotImplementedError(
                     "application precision ECP model identity is not implemented"
                 )
-            model = _model_identity(self._candidate, native_atoms, charge, multiplicity)
+            model = _model_identity(
+                candidate_calculator, native_atoms, charge, multiplicity
+            )
             solves = []
-            route_reasons = list(self._route_reasons)
 
             def solve(calculator: Calculator, role: str, precision: str) -> Result:
                 if calculator is not self._candidate and (
@@ -566,7 +588,8 @@ class PrecisionCalculator:
                 )
                 return result
 
-            candidate = solve(self._candidate, "candidate", self._candidate_precision)
+            candidate = solve(candidate_calculator, "candidate", candidate_precision)
+            fast_native = self._fast_native and candidate_calculator is self._candidate
             gradient = (candidate.precision or {}).get("gradient") or {}
             gradient_admission = "no-application-qualified-fp32-gradient-route"
             if gradient.get("complete") is True and gradient.get("schema_version") == 1:
@@ -575,7 +598,7 @@ class PrecisionCalculator:
             if self.policy.profile == "fast" and target is None:
                 work = candidate.precision or {}
                 if (
-                    self._fast_native
+                    fast_native
                     and "forces" in requested
                     and work.get("operator_work_counters_valid") is True
                     and work.get("complete") is True
@@ -612,7 +635,7 @@ class PrecisionCalculator:
                     )
                     return replace(candidate, precision_validation=validation)
                 if (
-                    self._fast_native
+                    fast_native
                     and work.get("operator_work_counters_valid") is True
                     and work.get("complete") is True
                     and work.get("operator_inventory_complete") is True
