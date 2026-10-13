@@ -577,16 +577,16 @@
       "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 421612,
-      "sha256": "da4c558a4d30c800fb9b752ba9ff46474e0c0098e9e1b476fcab05d050ea5792",
+      "bytes": 426364,
+      "sha256": "a6ac6421c6becd7f97e840504f9ab8caf58498d082554ae6feaecff6af42f6f4",
       "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/manifest.json",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 228746,
-      "sha256": "7be5edb3f8c928a046b8f6415fead044c5160bb566117a657da5e41631c14610",
+      "bytes": 229003,
+      "sha256": "f323605024324fadd31db335c2575fc89c743cd158c0f1cabc46d0307dafdcd6",
       "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
     },
     {

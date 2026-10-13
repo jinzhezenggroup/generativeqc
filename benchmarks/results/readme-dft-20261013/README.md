@@ -216,6 +216,12 @@ short-iteration trace counts six actual Fock evaluations across a failed-seed
 retry, including four VV10 sweeps averaging 81.964 s; the configured
 three-iteration limit is per attempt. Its 470.728 s execution is diagnostic
 only and never a benchmark sample.
+The independently assembled [initialization PR #2480](https://github.com/jinzhezenggroup/generativeqc/pull/2480)
+is qualified at `e0def8fff`: 15 host checks pass; n4 job 875 passes 13 mixed
+receipt/budget/replay checks and six independent molecular energy/force and
+reconverged energy-difference checks. Jobs 876/877 each pass 13 cases under
+memcheck/synccheck, with zero errors. Its library hash, 1724-input native source
+audit, scheduler receipts and exact logs are retained in the follow-up receipts.
 The PR branches can differ from these assembled snapshots; only the recorded
 snapshot identities identify a measured population.
 Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.

@@ -52,7 +52,7 @@
       "bytes": 6421,
       "path": "validation.json.gz",
       "role": "evidence",
-      "sha256": "c875a09e9cba966ea7c38e4a925c872b87ba4402f71a731a1f9ff6b28d02a092"
+      "sha256": "4e05bb2287956d15f6956335eb212faa2865aee95689cea8b9f4ffe3f08ee402"
     }
   ],
   "reproduction": {

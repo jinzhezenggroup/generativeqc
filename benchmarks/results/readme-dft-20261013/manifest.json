@@ -132,8 +132,8 @@
   },
   "files": {
     "README.md": {
-      "bytes": 20796,
-      "sha256": "2c188e8ddff4518fba9dc0e4461a86832c72685a6195e34ae6c379410aaea10e"
+      "bytes": 21300,
+      "sha256": "5845ea5bc93c24f9843d1deaa79362a931eed01beb4440141b884a3da241efe6"
     },
     "df-cold-warm.svg": {
       "bytes": 185892,
@@ -156,8 +156,8 @@
       "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d"
     },
     "followup-receipts.json.xz": {
-      "bytes": 421612,
-      "sha256": "da4c558a4d30c800fb9b752ba9ff46474e0c0098e9e1b476fcab05d050ea5792"
+      "bytes": 426364,
+      "sha256": "a6ac6421c6becd7f97e840504f9ab8caf58498d082554ae6feaecff6af42f6f4"
     },
     "force-memory.json.xz": {
       "bytes": 37176,
@@ -3172,5 +3172,11 @@
       }
     },
     "note": "Historical acceptance fields retain their original campaigns. Current totals are acceptance and df_acceptance; incomplete phase timings are not complete-population qualification."
+  },
+  "implementation_qualification": {
+    "pull_request": 2480,
+    "source": "e0def8fff7218f644d8e18636253e837a15f2eac",
+    "role": "independent code qualification only; not benchmark timing source",
+    "receipt_key": "vv10_bounded_initialization_pr"
   }
 }
