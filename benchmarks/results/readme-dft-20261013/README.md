@@ -23,7 +23,7 @@ failed or incomplete phases have no successful timing. No timeout was increased.
 | [#2412](https://github.com/jinzhezenggroup/generativeqc/issues/2412) | Integrated B3LYP DF force repair passes all 12 calls at 3, 12, 48 and 96 atoms; independent final-state/lifetime tests also pass. |
 | [#2413](https://github.com/jinzhezenggroup/generativeqc/issues/2413) | WB97M-V DF passes all 12 calls at 3 and 12 atoms with the matching independent full-range-DF/exact-long-range-K oracle. The old default-reference mismatch remains in historical probes. Large WB endpoints remain unresolved. |
 | [#2414](https://github.com/jinzhezenggroup/generativeqc/issues/2414) | [#2438](https://github.com/jinzhezenggroup/generativeqc/pull/2438) qualifies M06-2X FP64 local AO execution. Direct and DF pass all 12 independent calls at 3/12/48/96 atoms. DF/96 cold: 628.378 → 150.082 s; warm: 116.061 → 36.357 s. The older timeout remains retained. |
-| [#2415](https://github.com/jinzhezenggroup/generativeqc/issues/2415) | Canonical r²SCAN-3c DF now passes complete independent populations at 3, 12 and 48 atoms, including D4/gCP and moved geometry. The 96-atom population is pending. |
+| [#2415](https://github.com/jinzhezenggroup/generativeqc/issues/2415) | [#2443](https://github.com/jinzhezenggroup/generativeqc/pull/2443) removes the DF resident/streamed crossover on geometry rebuilds. Canonical r²SCAN-3c DF passes all 12 calls at 3/12/48/96 atoms, including D4/gCP. DF/96 cold/warm/moved/moved-warm: 226.247 / 23.080 / 145.915 / 23.085 s; the prior cold and moved timeouts remain retained. |
 | [#2418](https://github.com/jinzhezenggroup/generativeqc/issues/2418) | [#2436](https://github.com/jinzhezenggroup/generativeqc/pull/2436) packages exact M06-2X stationary AOT plans. Source `61b9387f3` gives 3-atom direct cold 4.378 s versus historical 229.691 s. A separate empty artifact-cache run passes all 12 calls with runtime compiler discovery and invocation forbidden. Later source-matched populations remain separately identified. |
 | [#2421](https://github.com/jinzhezenggroup/generativeqc/issues/2421) | [#2437](https://github.com/jinzhezenggroup/generativeqc/pull/2437) adds automatic HF/DF value-response planning and exact-state final occupied projection reuse. All 12 calls pass at 96 atoms. Warm: 59.318 → 3.201 s; new cold 32.994 s, moved 28.670 s. |
 
@@ -35,7 +35,7 @@ separate compiler-forbidden control establishes AOT use, not a reconstruction
 of the historical compiler-cache state.
 
 The current reductions contain 29 fully qualified direct points (348 calls)
-and 29 fully qualified DF points (348 calls). Maximum accepted errors are
+and 30 fully qualified DF points (360 calls). Maximum accepted errors are
 2.274e-11 / 9.159e-11 for direct and 2.261e-10 / 1.573e-10 for DF, in Eh and
 Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
 
@@ -50,10 +50,14 @@ Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
   contribute about 77.8 s per call. Initial capacity failures and the final
   incomplete population remain retained. The incomplete moved-warm series has
   no successful median.
-- #2415: DF/96 gets past the repaired force-grid admission, but its latest
-  source `227c55c06` run times out during cold SCF with no completed record.
-  The packed-versus-streamed value planning cliff remains under investigation;
-  the data contains no claimed successful 96-atom DF r²SCAN-3c endpoint.
+- #2415 is now qualified at 96 atoms on source `3660e04d2`. Source `227c55c06`
+  timed out in cold SCF; the intermediate `fedf81b83` completed cold and five
+  warm calls but timed out after geometry movement. Both failures remain in
+  the summaries. The final automatic singleton pure-J policy uses disjoint
+  setup/SCF workspace lifetimes and may increase the generic fractional
+  allowance by the minimum needed to retain fitted values. Observed free
+  memory, absolute headroom, explicit caller caps and solver workspace bounds
+  remain enforced. Cold and moved both report non-streamed fitted values.
 - #2417 and #2426: WB97M-V large reference/native populations remain incomplete.
   Diagnostic reference/48 has approximately 820 billion active ordered pairs
   and about 23 s per VV10 feature call. Native/96's first measured SCF stage
@@ -120,6 +124,9 @@ is bound to `61b9387f3`; the first dense-grid controls use `877775209`;
 final feature-grid populations use `227c55c06`; M06-2X local-AO populations use
 `9e3c5e6e6`. The frozen sources are available on the
 [qualification source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-qualified-source-20261013).
+DF setup lifetime trials use `fedf81b83`; final DF geometry-rebuild qualification
+uses `3660e04d2`, retained on the
+[DF qualification source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-df-qualified-source-20261013).
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
 compressed summaries. Later source changes do not relabel these measurements.
@@ -136,8 +143,8 @@ as historical observations. [source-campaigns.json.xz](source-campaigns.json.xz)
 [force-memory.json.xz](force-memory.json.xz) and the
 [reference replay audit](reference-replay-audit.json) retain earlier evidence.
 [followup-receipts.json.xz](followup-receipts.json.xz) retains authentic test
-receipts, the compiler-forbidden control, source audits and the rejected
-reciprocal probe. Failed fixtures and missing-library setup attempts remain
+receipts, the compiler-forbidden control, source audits, the DF geometry-rebuild
+diagnosis and the rejected reciprocal probe. Failed fixtures and missing-library setup attempts remain
 labelled as failures, rather than being rewritten as final acceptance. Native
 arrays, build products and full trial logs stay in ignored local storage.
 
