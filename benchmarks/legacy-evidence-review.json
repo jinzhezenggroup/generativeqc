@@ -594,7 +594,7 @@
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
       "bytes": 189592,
-      "sha256": "1ece915aa921a6e0c32ad96842bb63f82b43aa16ba4a12dbace66823c93f5764",
+      "sha256": "747a113c6bbd784b288525f3e4b2492af51b73a0bc2e71d1e4886febb8399754",
       "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
     },
     {
