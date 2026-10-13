@@ -42,6 +42,19 @@ because that ID still selects the separately qualified native D4 correction
 owner. System validation, SCF option translation, backend selection and retained
 execution state remain private to the adapter.
 
+Native DFT single calculations (including the C++ SDK and CLI) are one-item
+views of the same C++ prepared batch scheduler used by Python singlepoint and
+batch calls. Preparation, initial-guess/retry policy, backend iteration,
+stationary-force assembly and D4 completion have one native orchestration
+owner. The single-calculation view forwards final-state tokens and derivative
+source reads to that owner's retained item. Repeated native single-calculation
+calls retain warm-start behavior; Python singlepoint creates a fresh cold owner.
+Scalar failures preserve their original exceptions/status and invalidate exports;
+ragged batches continue reporting individual item failures. Energy-only requests
+skip force work. This shared entry does not expand qualified force domains:
+Python compatibility consumers remain for properties the native owner does not
+admit, and native CLI/SDK calls continue rejecting those requests.
+
 Batch features beyond execution, lifecycle and resource high waters are opt-in
 interfaces in `src/methods/batch_capabilities.hpp`: warm checkpointing,
 direct-J/K queues, CUDA eigensolver and inactive-lane profiles, DF metric
