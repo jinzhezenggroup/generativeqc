@@ -620,28 +620,15 @@ def _discover_response_options(root: Path) -> dict[str, str]:
 
 
 def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
-    """Keep the density-only default's qualified domain and finite work cap explicit."""
+    """Discover the rollback selector; compiled policy tests qualify admission."""
     relative = Path("src/methods/df_hf_guess.cpp")
     source = _read(root / relative)
     required = (
         'std::getenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS")',
         'value != "direct" && value != "auto"',
-        "reference_quartet_direct(functions, maximum_angular->angular_momentum)",
-        "guess.work_amortization_ratio < 1.0",
-        "cartesian * cartesian",
-        "guess.preparation_peak_bytes > guess.value_budget_bytes",
-        "scf::plan_requested_density_fitting_tiles(",
-        "!plan.stores_full_three_center",
-        "system.charge != 0",
-        "preliminary_iterations = 32",
-        "options.max_iterations = preliminary_iterations",
-        "options.energy_tolerance = 1e-4",
-        "options.density_tolerance = 1e-4",
-        "options.export_physical_reference = false",
-        "512ULL << 20",
     )
     if any(fragment not in source for fragment in required):
-        raise ValueError("DF-RHF preconvergence default or admission domain drifted")
+        raise ValueError("DF-RHF preconvergence rollback selector drifted")
     return {"initial-guess:df-rhf-preconvergence-auto": relative.as_posix()}
 
 

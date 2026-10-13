@@ -36,6 +36,8 @@ struct DFHFGuess {
  * Skip cache-eligible exact references and unamortized dense DF work, not AO intervals.
  * Live correlation metadata and optional response caches are charged before admission.
  * The shared native tile planner must retain the full fitted tensor; streaming is skipped.
+ * Preview from 512 MiB, growing only on refusal up to the smaller of 4 GiB and
+ * the remaining caller budget. Already-resident small guesses keep their allowance.
  * Unsupported topology, a tight budget or a refused guess retains cold Direct RHF.
  * GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS=direct explicitly disables this policy;
  * auto (or an unset variable) enables it. Invalid selectors are errors. */

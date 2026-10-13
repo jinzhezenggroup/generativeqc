@@ -81,7 +81,8 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
       posthf::checked_add(retained_bytes, posthf::source_capacity(correlation_auxiliary));
   guess.outcome = DFHFGuessOutcome::BudgetSkipped;
   if (outside >= budget || budget - outside < (256ULL << 20)) return guess;
-  guess.value_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
+  const auto maximum_guess_budget = std::min<std::size_t>(budget - outside, 4ULL << 30);
+  guess.value_budget_bytes = std::min<std::size_t>(maximum_guess_budget, 512ULL << 20);
   std::size_t orbital_primitives{};
   for (const auto& shell : system.shells)
     orbital_primitives = posthf::checked_add(orbital_primitives, shell.primitives.size());
@@ -90,7 +91,6 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
                                    system.shells.size(), orbital_primitives, auxiliary_shells,
                                    auxiliary_shells, false, true})
           .peak_bytes;
-  if (guess.preparation_peak_bytes > guess.value_budget_bytes) return guess;
 
   // Streaming is memory-bounded, not work-bounded: the 414-AO qualification
   // spent more on provisional DF than it saved in exact Focks. Query the same
@@ -108,14 +108,26 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
   const auto fixed_bytes = posthf::checked_add(
       source_bytes, scf::density_fitting_scf_diis_device_bytes(1, functions, diis_history));
   const auto occupied = std::max<std::size_t>(1, system.electron_count / 2);
-  try {
-    const auto plan = scf::plan_requested_density_fitting_tiles(
-        scf::requested_df_pair_storage_request(), 1, functions, guess.auxiliary_functions, occupied,
-        occupied, guess.value_budget_bytes, fixed_bytes, true, occupied);
-    guess.resident_plan_peak_bytes = plan.peak_workspace_bytes;
-    if (!plan.stores_full_three_center) return guess;
-  } catch (const scf::DensityFittingBudgetError&) {
-    return guess;
+  const auto resident_guess_fits = [&]() {
+    if (guess.preparation_peak_bytes > guess.value_budget_bytes) return false;
+    try {
+      const auto plan = scf::plan_requested_density_fitting_tiles(
+          scf::requested_df_pair_storage_request(), 1, functions, guess.auxiliary_functions,
+          occupied, occupied, guess.value_budget_bytes, fixed_bytes, true, occupied);
+      guess.resident_plan_peak_bytes = plan.peak_workspace_bytes;
+      return plan.stores_full_three_center;
+    } catch (const scf::DensityFittingBudgetError&) {
+      return false;
+    }
+  };
+  // Preserve the small-guess allowance when it already retains the factors.
+  // Larger references may spend more of the caller's available phase budget,
+  // but preview only: never generate streamed factors hoping to save Focks.
+  // Doubling terminates at the explicit 4-GiB/caller cap before any GPU work.
+  while (!resident_guess_fits()) {
+    if (guess.value_budget_bytes == maximum_guess_budget) return guess;
+    guess.value_budget_bytes =
+        std::min(maximum_guess_budget, posthf::checked_mul(guess.value_budget_bytes, 2));
   }
 
   const auto started = std::chrono::steady_clock::now();

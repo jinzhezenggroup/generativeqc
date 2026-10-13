@@ -237,6 +237,10 @@ work-only cohorts. No universal benefit claim or fixed AO interval is restored.
 
 ## Revisit when
 
+The fixed 512-MiB cap is superseded by the
+[budgeted resident-guess decision](2026-10-13-resident-df-guess-budget.md).
+Resident-only admission and the scientific reference boundary remain unchanged.
+
 A device-calibrated cost model can account for actual primitive shell-class
 work, fitted metric/preparation cost and resident/streamed schedules. Extend
 compatibility only with independent exact-reference and final-force validation;

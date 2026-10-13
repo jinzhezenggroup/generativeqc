@@ -150,26 +150,17 @@ def test_rhf_phase_value_default_domain_is_audited(
     )
 
 
-@pytest.mark.parametrize(
-    "before,after",
-    [
-        ("guess.work_amortization_ratio < 1.0", "guess.work_amortization_ratio < 0.1"),
-        ("preliminary_iterations = 32", "preliminary_iterations = 50"),
-        ("guess.preparation_peak_bytes > guess.value_budget_bytes", "false"),
-    ],
-)
-def test_df_rhf_guess_default_domain_is_audited(
-    tmp_path: Path, before: str, after: str
-) -> None:
-    """A broader workload or additional provisional work needs a promotion decision."""
+def test_df_rhf_guess_rollback_selector_is_discovered(tmp_path: Path) -> None:
+    """Register the public rollback; executable policy tests protect admission."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "src/methods/df_hf_guess.cpp"
     original = source.read_text()
-    assert before in original
-    source.write_text(original.replace(before, after))
+    source.write_text(
+        original.replace("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS", "REMOVED_SELECTOR")
+    )
     assert any(
-        "DF-RHF preconvergence default or admission domain drifted" in error
+        "DF-RHF preconvergence rollback selector drifted" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 

@@ -28,6 +28,8 @@ def test_native_df_guess_admission_and_refusal(tmp_path: Path) -> None:
 using namespace generativeqc;
 int calls{}, behavior{};
 bool resident = true;
+bool throw_on_shortfall = false;
+std::size_t minimum_resident_budget{}, selected_guess_budget{};
 namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& system) noexcept {
   std::size_t functions{};
@@ -52,11 +54,13 @@ std::size_t density_fitting_source_metadata_bytes(std::size_t, std::size_t, std:
     std::size_t, std::size_t, std::size_t) {return 0;}
 std::size_t density_fitting_scf_diis_device_bytes(std::size_t, std::size_t, unsigned) noexcept {return 0;}
 DensityFittingTilePlan plan_requested_density_fitting_tiles(DfPairStorageRequest, std::size_t,
-    std::size_t, std::size_t, std::size_t, std::size_t, std::size_t,
+    std::size_t, std::size_t, std::size_t, std::size_t, std::size_t budget,
     std::size_t, bool generated, std::size_t rank, bool method_owned_packing) {
   assert(generated && rank > 0 && !method_owned_packing);
   DensityFittingTilePlan plan;
-  plan.stores_full_three_center = resident;
+  if (throw_on_shortfall && budget < minimum_resident_budget)
+    throw DensityFittingBudgetError();
+  plan.stores_full_three_center = resident && budget >= minimum_resident_budget;
   plan.peak_workspace_bytes = 128ULL << 20;
   return plan;
 }
@@ -71,7 +75,8 @@ ScfResult run_rhf_density_fitting_cuda(
   assert(options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA);
   assert(!options.density_fitting_host_retry);
   assert(!options.compute_forces && !options.export_physical_reference);
-  assert(options.reference_memory_budget_bytes == (512ULL << 20));
+  selected_guess_budget = options.reference_memory_budget_bytes;
+  assert(selected_guess_budget >= minimum_resident_budget && selected_guess_budget <= (4ULL << 30));
   assert(options.density_fitting_memory_budget_bytes == options.reference_memory_budget_bytes);
   if (behavior == 2) throw std::bad_alloc();
   ScfResult result;
@@ -110,6 +115,8 @@ int main() {
   assert(calls == 1 && guess.outcome == DFHFGuessOutcome::Used);
   assert(guess.iterations == 13 && guess.auxiliary_functions == 484);
   assert(guess.density.size() == 4 && guess.work_counters_complete);
+  assert(guess.value_budget_bytes == (512ULL << 20));
+  assert(selected_guess_budget == guess.value_budget_bytes);
   assert(descriptor.energy_tolerance == 1e-12 && descriptor.density_tolerance == 1e-11);
   assert(prepare(false).outcome == DFHFGuessOutcome::Disabled);
   setenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS", "direct", 1);
@@ -170,6 +177,30 @@ int main() {
     assert(!guess.work_counters_complete);
   }
   assert(calls == 6);
+  behavior = 0;
+  descriptor.correlation_memory_budget_bytes = 8ULL << 30;
+  minimum_resident_budget = 2ULL << 30;
+  for (bool throws : {false, true}) {
+    throw_on_shortfall = throws;
+    guess = prepare();
+    assert(guess.outcome == DFHFGuessOutcome::Used && !guess.density.empty());
+    assert(guess.value_budget_bytes >= minimum_resident_budget);
+    assert(selected_guess_budget == guess.value_budget_bytes);
+  }
+  const int admitted_calls = calls;
+  descriptor.correlation_memory_budget_bytes = 1ULL << 30;
+  guess = prepare();
+  assert(guess.outcome == DFHFGuessOutcome::BudgetSkipped && calls == admitted_calls);
+  assert(guess.value_budget_bytes <= descriptor.correlation_memory_budget_bytes);
+  descriptor.correlation_memory_budget_bytes = 3ULL << 30;
+  guess = prepare(true, 2ULL << 30);
+  assert(guess.outcome == DFHFGuessOutcome::BudgetSkipped && calls == admitted_calls);
+  assert(guess.value_budget_bytes <= (1ULL << 30));
+  descriptor.correlation_memory_budget_bytes = 64ULL << 30;
+  minimum_resident_budget = 5ULL << 30;
+  guess = prepare();
+  assert(guess.outcome == DFHFGuessOutcome::BudgetSkipped && calls == admitted_calls);
+  assert(guess.value_budget_bytes == (4ULL << 30));
 }
 """
     )
