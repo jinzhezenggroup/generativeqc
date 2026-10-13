@@ -3,6 +3,14 @@
 Status: implemented
 Date: 2026-10-13
 
+## Subsequent residual-contraction work
+
+The [cooperative bounded-Fock decision](2026-10-13-cooperative-bounded-fock-contraction.md)
+supersedes the residual generic consumer's preparation/contraction schedule,
+not the 22-class Rys admission boundary or the historical evidence below.
+It preserves the unsuccessful preparation-only variants and separately
+qualifies the existing Hermite convolution for this bounded HF owner.
+
 ## Problem
 
 The 434-spherical-AO QM7 C7H16/cc-pVTZ reference preparation spent essentially

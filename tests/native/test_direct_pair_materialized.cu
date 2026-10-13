@@ -161,19 +161,19 @@ __global__ void retained_components(
       batch.shell_pair_second[task.second_pair], -1, range, 0.37);
 }
 
-template <bool Unrestricted, unsigned Order, bool WholeShell = false>
+template <bool Unrestricted, unsigned Order, bool WholeShell = false,
+          bool CooperativePreparation = false>
 __global__ void shared_components(
     DeviceBatch batch, const ActiveShellQuartetTile* tasks, const double* schwarz, double threshold,
     const double* density, const std::uint8_t* active, double* fock, unsigned channel,
     MaterializedDirectPairWork* work, double* values,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   __shared__ MaterializedDirectPairRecurrence<Order> shared;
-  // Match complete-domain production ownership through order nine, including
-  // the maximum fddd domain. Higher orders retain independent qualification.
-  constexpr unsigned whole_slots = Order <= 9 ? canonical_materialized_component_slots(Order) : 40;
-  constexpr unsigned lanes =
-      WholeShell && Order <= 9 ? canonical_materialized_component_lanes(Order) : 256;
-  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1, lanes>(
+  // Match the bounded complete-domain owner's lane and slot limits.
+  constexpr unsigned whole_slots = canonical_materialized_component_slots(Order);
+  constexpr unsigned lanes = WholeShell ? canonical_materialized_component_lanes(Order) : 256;
+  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1, lanes,
+                                         double, CooperativePreparation, CooperativePreparation>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
       channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
 }
@@ -250,13 +250,12 @@ void close(double actual, double expected, const char* message) {
 }
 
 template <unsigned A, unsigned B, unsigned C, unsigned D, bool Unrestricted,
-          bool WholeShell = false>
+          bool WholeShell = false, bool CooperativePreparation = false>
 void qualify(
     bool same_pair, bool coincident, double threshold,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   constexpr auto order = A + B + C + D;
-  constexpr unsigned lanes =
-      WholeShell && order <= 9 ? canonical_materialized_component_lanes(order) : 256;
+  constexpr unsigned lanes = WholeShell ? canonical_materialized_component_lanes(order) : 256;
   Fixture fixture({D, C, B, A}, Unrestricted, coincident);
   const auto n = std::size_t(fixture.batch.direct_nbf), matrix = n * n;
   const unsigned first_pair = 8, second_pair = same_pair ? 8 : 1;
@@ -281,9 +280,10 @@ void qualify(
     work.clear();
     materialized.clear();
     fock.clear();
-    shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), lanes>>>(
-        fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data,
-        channel, work.data, materialized.data, range);
+    shared_components<Unrestricted, order, WholeShell, CooperativePreparation>
+        <<<WholeShell ? 1 : tasks.size(), lanes>>>(fixture.batch, dtasks.data, schwarz.data,
+                                                   threshold, density.data, active.data, fock.data,
+                                                   channel, work.data, materialized.data, range);
     check(cudaGetLastError());
     const auto values = materialized.read(), actual_fock = fock.read();
     std::vector<double> expected_fock(actual_fock.size(), 0.0);
@@ -340,15 +340,17 @@ void qualify(
   active.clear();
   work.clear();
   fock.clear();
-  shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), lanes>>>(
-      fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data, 0,
-      work.data, materialized.data);
+  shared_components<Unrestricted, order, WholeShell, CooperativePreparation>
+      <<<WholeShell ? 1 : tasks.size(), lanes>>>(fixture.batch, dtasks.data, schwarz.data,
+                                                 threshold, density.data, active.data, fock.data, 0,
+                                                 work.data, materialized.data);
   check(cudaGetLastError());
   if (work.read()[0].coulomb_preparations)
     throw std::runtime_error("inactive system consumed recurrence");
   std::cout << "order=" << order << " uhf=" << Unrestricted << " same=" << same_pair
-            << " whole_shell=" << WholeShell << " live_packets=" << live_packets
-            << " components=" << admitted_count << " range=" << static_cast<unsigned>(range)
+            << " whole_shell=" << WholeShell << " cooperative=" << CooperativePreparation
+            << " live_packets=" << live_packets << " components=" << admitted_count
+            << " range=" << static_cast<unsigned>(range)
             << " recurrence=" << 16 * (WholeShell ? std::size_t(admitted_count != 0) : live_packets)
             << '\n';
 }
@@ -715,8 +717,45 @@ void qualify_shared_responses() {
   std::cout << "orders 7..11 shared scalar responses and exact primitive work PASS\n";
 }
 
+/** Every remaining f class, plus the lower-order portable fallback domain.
+ * The serial whole-shell checks remain separate; both schedules must agree
+ * with the retained component oracle and independent host J/K orbit. */
+template <unsigned First, unsigned Second, unsigned Third, unsigned Fourth>
+void qualify_cooperative_class() {
+  qualify<First, Second, Third, Fourth, false, true, true>(false, false, 0.0);
+  qualify<First, Second, Third, Fourth, true, true, true>(false, false, 0.8);
+}
+
+void qualify_cooperative_fock() {
+  qualify_cooperative_class<3, 0, 2, 2>();
+  qualify_cooperative_class<3, 1, 1, 0>();
+  qualify_cooperative_class<3, 1, 2, 2>();
+  qualify_cooperative_class<3, 2, 2, 1>();
+  qualify_cooperative_class<3, 2, 2, 2>();
+  qualify_cooperative_class<3, 2, 3, 1>();
+  qualify_cooperative_class<3, 2, 3, 2>();
+  qualify_cooperative_class<3, 3, 2, 1>();
+  qualify_cooperative_class<3, 3, 2, 2>();
+  qualify_cooperative_class<3, 3, 3, 1>();
+  qualify_cooperative_class<3, 3, 3, 2>();
+  qualify_cooperative_class<3, 3, 3, 3>();
+  qualify_cooperative_class<3, 0, 0, 0>();
+  qualify_cooperative_class<3, 0, 1, 0>();
+  qualify_cooperative_class<3, 1, 1, 1>();
+  for (auto range :
+       {generativeqc::integrals::CoulombRange::Short, generativeqc::integrals::CoulombRange::Long})
+    qualify<3, 2, 2, 1, true, true, true>(false, false, 0.8, range);
+  qualify<3, 3, 3, 3, true, true, true>(true, true, 0.8);
+  qualify<3, 2, 2, 1, false, true, true>(false, false, 2.0);
+  std::cout << "cooperative f-shell orders3..12, RHF/UHF J/K and exact work PASS\n";
+}
+
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--cooperative-fock") == 0) {
+      qualify_cooperative_fock();
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--shared-responses") == 0) {
       qualify_shared_responses();
       return 0;
@@ -770,9 +809,9 @@ int main(int argc, char** argv) {
       // Racecheck targets shared publication, retirement, multiple packets,
       // inactive lanes and empty claims without instrumenting the expensive
       // ffff scalar oracle's private recurrence at every component.
-      qualify<2, 2, 1, 1, false, true>(false, false, 0.0);
-      qualify<2, 2, 2, 2, true, true>(true, true, 0.8);
-      qualify<2, 2, 2, 2, false, true>(false, false, 2.0);
+      qualify<2, 2, 1, 1, false, true, true>(false, false, 0.0);
+      qualify<2, 2, 2, 2, true, true, true>(true, true, 0.8);
+      qualify<2, 2, 2, 2, false, true, true>(false, false, 2.0);
       std::cout << "pair-materialized shared lifecycle PASS\n";
       return 0;
     }
@@ -808,6 +847,7 @@ int main(int argc, char** argv) {
     qualify<2, 2, 2, 2, false, true>(false, false, 2.0);
     qualify<3, 3, 3, 3, true, true>(false, false, 0.8);
     std::cout << "pair-materialized whole-shell admission and exact work PASS\n";
+    qualify_cooperative_fock();
 #ifdef GENERATIVEQC_PAIR_MATERIALIZED_DFT_STREAM_TEST
     qualify_dft_stream<false>();
     qualify_dft_stream<true>();

@@ -83,12 +83,56 @@ __device__ inline void prepare_materialized_direct_pair(
   }
 }
 
+/** Descending radial planes depend only on the already-published n+1 plane.
+ * Rows within a plane are independent. Reuse the serial owner's Boys roots
+ * and axis operation so this changes scheduling, not recurrence arithmetic.
+ * Only the first warp prepares the small planes. Other component warps wait
+ * at one final CTA publication instead of paying a CTA barrier per plane.
+ * All lanes enter, including those without an admitted Cartesian component. */
+template <unsigned AngularOrder>
+__device__ inline void fill_materialized_coulomb_cooperative(
+    double exponent, const Vec3<double>& product, const Vec3<double>& center,
+    CoulombAuxiliary<double, AngularOrder>& auxiliary) {
+  if (threadIdx.x < 32) {
+    if (threadIdx.x == 0)
+      fill_coulomb_roots<AngularOrder>(exponent, product, center, auxiliary);
+    __syncwarp();
+    const Vec3<double> difference{product.x - center.x, product.y - center.y, product.z - center.z};
+    for (unsigned plane = 1; plane <= AngularOrder; ++plane) {
+      const unsigned radial = AngularOrder - plane;
+      const unsigned rows = (plane + 1) * (plane + 2) / 2;
+      for (unsigned row = threadIdx.x; row < rows; row += 32) {
+        unsigned first_order = 0, second_order = row;
+        while (second_order > plane - first_order) {
+          second_order -= plane - first_order + 1;
+          ++first_order;
+        }
+        for (unsigned third_order = 0; third_order <= plane - first_order - second_order;
+             ++third_order) {
+          if (first_order)
+            auxiliary.at(radial, first_order, second_order, third_order) =
+                raise_coulomb_axis<0>(auxiliary, difference.x, radial, first_order, second_order, third_order);
+          else if (second_order)
+            auxiliary.at(radial, first_order, second_order, third_order) =
+                raise_coulomb_axis<1>(auxiliary, difference.y, radial, first_order, second_order, third_order);
+          else if (third_order)
+            auxiliary.at(radial, first_order, second_order, third_order) =
+                raise_coulomb_axis<2>(auxiliary, difference.z, radial, first_order, second_order, third_order);
+        }
+      }
+      __syncwarp();
+    }
+  }
+  __syncthreads();
+}
+
 /** Uniform CTA entry: admission precedes every barrier. Inactive/tail lanes
  * still participate in publication/retirement but never read an invalid AO.
  * All selected components consume one Coulomb recurrence per pair product.
  * J and K reuse each contracted ERI through the existing symmetry scatter. */
 template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1,
-          unsigned ComponentLanes = detail::kDirectQuartetTileSize, typename Scalar = double>
+          unsigned ComponentLanes = detail::kDirectQuartetTileSize, typename Scalar = double,
+          bool CooperativePreparation = false, bool ConvolvedContraction = false>
 __device__ inline void contract_materialized_direct_pair_fock(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
@@ -101,6 +145,7 @@ __device__ inline void contract_materialized_direct_pair_fock(
     double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
     std::uint64_t* canonical_work = nullptr, std::uint64_t* mixed_work = nullptr) {
   constexpr bool mixed = std::is_same_v<Scalar, MixedPrecisionFloat>;
+  static_assert(!CooperativePreparation || std::is_same_v<Scalar, double>);
   if (task.first_pair >= batch.total_shell_pairs || task.second_pair >= batch.total_shell_pairs)
     return;
   const auto first_pair = task.first_pair, second_pair = task.second_pair;
@@ -166,14 +211,14 @@ __device__ inline void contract_materialized_direct_pair_fock(
   for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
     // Read immutable cached geometry directly: shared.first is not published
     // until the existing barrier, so other axis owners must not borrow it yet.
-    if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+    if constexpr (CooperativePreparation || (AngularOrder == 3 && ComponentLanes == 32)) {
       if (threadIdx.x < 3U)
         prepare_materialized_direct_pair(batch.shell_primitive_pairs[bra], li, lj, first, second,
                                          shared.bra, threadIdx.x, threadIdx.x + 1U);
     }
     if (threadIdx.x == 0) {
       shared.first = batch.shell_primitive_pairs[bra];
-      if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+      if constexpr (!CooperativePreparation && (AngularOrder != 3 || ComponentLanes != 32))
         prepare_materialized_direct_pair(shared.first, li, lj, first, second, shared.bra);
       const auto a = batch.shell_primitive_offsets[si] + (bra - bra_begin) / nb;
       const auto b = batch.shell_primitive_offsets[sj] + (bra - bra_begin) % nb;
@@ -184,14 +229,14 @@ __device__ inline void contract_materialized_direct_pair_fock(
     __syncthreads();
     for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
       // All three axes retire with the unchanged Coulomb publication barrier.
-      if constexpr (AngularOrder == 3 && ComponentLanes == 32) {
+      if constexpr (CooperativePreparation || (AngularOrder == 3 && ComponentLanes == 32)) {
         if (threadIdx.x < 3U)
           prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket], lk, ll, third, fourth,
                                            shared.ket, threadIdx.x, threadIdx.x + 1U);
       }
       if (threadIdx.x == 0) {
         shared.second = batch.shell_primitive_pairs[ket];
-        if constexpr (AngularOrder != 3 || ComponentLanes != 32)
+        if constexpr (!CooperativePreparation && (AngularOrder != 3 || ComponentLanes != 32))
           prepare_materialized_direct_pair(shared.second, lk, ll, third, fourth, shared.ket);
         const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
         const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
@@ -210,9 +255,11 @@ __device__ inline void contract_materialized_direct_pair_fock(
           fill_coulomb<AngularOrder>(EvaluationReal<Scalar>{p * q / (p + q)}, bra_center,
                                     ket_center, shared.coulomb);
         } else {
-          if (range == generativeqc::integrals::CoulombRange::Full)
-            fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
-                                      shared.second.product_center, shared.coulomb);
+          if (range == generativeqc::integrals::CoulombRange::Full) {
+            if constexpr (!CooperativePreparation)
+              fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
+                                        shared.second.product_center, shared.coulomb);
+          }
           else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
                       shared.second.product_center, range, omega, shared.coulomb))
             shared.coulomb.at(0, 0, 0, 0) = NAN;
@@ -223,6 +270,14 @@ __device__ inline void contract_materialized_direct_pair_fock(
         }
       }
       __syncthreads();
+      if constexpr (CooperativePreparation) {
+        if (range == generativeqc::integrals::CoulombRange::Full) {
+          const auto bra_exponent = shared.first.exponent_sum, ket_exponent = shared.second.exponent_sum;
+          fill_materialized_coulomb_cooperative<AngularOrder>(
+              bra_exponent * ket_exponent / (bra_exponent + ket_exponent),
+              shared.first.product_center, shared.second.product_center, shared.coulomb);
+        }
+      }
       for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
         if (!admitted[slot]) continue;
         const double coefficient = batch.direct_ao_coefficients[ao_begin + i[slot]] *
@@ -231,11 +286,13 @@ __device__ inline void contract_materialized_direct_pair_fock(
             batch.direct_ao_coefficients[ao_begin + l[slot]];
         const double weight = coefficient * shared.coefficients[0] * shared.coefficients[1] *
                              shared.coefficients[2] * shared.coefficients[3];
-        value[slot] += weight * scalar_value(consume_cartesian_coulomb<AngularOrder, Scalar>(
+        // Bounded FP64 owners may reuse the qualified three-axis convolution.
+        // Serial/packet consumers retain their six-loop summation by default.
+        value[slot] += weight * scalar_value(contract_prepared_cartesian_coulomb<AngularOrder, Scalar>(
             shared.first.exponent_sum, shared.second.exponent_sum,
             direct_ao_angular(batch, ao_begin + i[slot]), direct_ao_angular(batch, ao_begin + j[slot]),
             direct_ao_angular(batch, ao_begin + k[slot]), direct_ao_angular(batch, ao_begin + l[slot]),
-            shared.bra, shared.ket, shared.coulomb));
+            shared.bra, shared.ket, shared.coulomb, ConvolvedContraction));
         if (work) atomicAdd(&work->component_contractions, 1ULL);
       }
       // Retire all readers before the next ket replaces the shared recurrence.

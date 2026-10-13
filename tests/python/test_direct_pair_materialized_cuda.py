@@ -106,6 +106,10 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "order5..12, RHF/UHF J/K and exact work PASS" in result.stdout
     assert "whole-shell admission and exact work PASS" in result.stdout
+    assert (
+        "cooperative f-shell orders3..12, RHF/UHF J/K and exact work PASS"
+        in result.stdout
+    )
     if stream_object:
         assert (
             "DFT native dddd stream, RHF/UHF J/K and bounded fallbacks PASS"

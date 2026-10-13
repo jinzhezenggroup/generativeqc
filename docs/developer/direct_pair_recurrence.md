@@ -57,6 +57,50 @@ records the complete six/nine-slot bounds and their resource/endpoint gates.
 The [low-order scheduling decision](../../.agents/notes/implemented/performance/2026-10-11-canonical-small-cta-scheduling.md)
 records the 32-thread ownership bounds and the retained full initialization.
 
+## Bounded HF residual values
+
+The bounded RHF/UHF owner automatically shares primitive-pair preparation for
+uncovered full-range FP64 shell classes of total order 3--12. Generated classes
+keep their existing owners: this does not widen Rys root, fourth-center or
+component-tile capabilities. In particular, the remaining f-containing classes
+use a bounded cooperative recurrence, not an unqualified Rys recipe.
+
+The first warp screens a page of up to 32 shell candidates with the existing
+Schwarz and density-weighted predicate. Only its surviving mask enters the
+recurrence barriers. Page width shrinks with the class domain per worker, so
+small classes preserve the original worker-grid parallelism. Every admitted
+quartet retains component-level screening, canonical pair orientation and
+the compensated reference-Fock scatter.
+
+Three lanes prepare disjoint Hermite axes from immutable pair geometry. The
+first warp builds Coulomb radial planes in descending order, publishing each
+plane with a warp barrier; component warps wait at the final block publication.
+All states in a plane depend only on the preceding, already-published radial
+plane. The serial and cooperative schedules share the same Boys initialization
+and axis-raising arithmetic. Readers retire before shared storage is reused.
+
+For orders five and above, this owner explicitly selects the existing compiler
+Hermite-axis convolution before consuming Coulomb roots. Combining bra/ket
+coefficients by their summed axis orders replaces the six-index contraction
+with three bounded axis convolutions and a three-index contraction. This
+reassociates floating-point sums and therefore requires independent numerical
+gates; it is not claimed to be bitwise identical. Per-component coefficient
+weights and final output compensation remain unchanged.
+
+No global numeric allocation or retained ERI tensor is added. The extra
+per-component convolution workspace is at most 15 FP64 values. Missing pair
+storage, mixed precision, separately selected recurrence experiments, and
+`GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=0` retain the bounded fallback.
+Canonical independent J/K, legacy packet consumers and analytic derivative
+owners do not inherit this cooperative/convolved policy.
+
+The [cooperative residual-value decision](../../.agents/notes/implemented/performance/2026-10-13-cooperative-bounded-fock-contraction.md)
+records complete-endpoint qualification and the rejected preparation-only
+variants. The compiled materialized CUDA test separately checks serial and
+cooperative consumers, every remaining f class, all orders 3--12, RHF/UHF,
+screening tails, inactive work and shared-storage lifetime. Molecular E+F and
+final exact-reference gates remain independent of these kernel tests.
+
 ## Bounded long-range force scheduling
 
 Ordinary long-range exchange force launches use the established 128-thread
@@ -144,7 +188,9 @@ The internal HF/dddd qualification switch
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=1` is frozen when a CUDA Direct
 batch/provider is prepared. It selects strict FP64 full-range value consumers
 that share cached primitive-pair geometry, Hermite preparation and a Coulomb
-simplex across the components of an admitted shell quartet. It is default-off.
+simplex across the components of an admitted shell quartet. The automatic
+bounded HF policy is described above; canonical J/K admission is independent
+of this selector.
 
 The HF angular launcher uses the first queued packet of each admitted order
 5--12 shell quartet to consume the complete component domain. Queue compaction

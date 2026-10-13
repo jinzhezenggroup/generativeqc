@@ -85,16 +85,11 @@ static_assert(CoulombAuxiliary<double, 6>::kStateCount == 210);
 static_assert(CoulombAuxiliary<double, 12>::kStateCount == 1820);
 static_assert(CoulombAuxiliary<double, 13>::kStateCount == 2380);
 
+/** Shared radial initialization for serial and cooperative full-simplex schedules. */
 template <unsigned MaximumAngular, typename Scalar>
-GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
+GENERATIVEQC_ERI_DEVICE inline void fill_coulomb_roots(
     EvaluationReal<Scalar> exponent, const Vec3<Scalar>& product, const Vec3<Scalar>& center,
-    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, CoulombComponentDomain domain = {}) {
-  const bool reachable = domain.valid<MaximumAngular>();
-  const unsigned halo = reachable && domain.first_response ? 1U : 0U;
-  // Roots and the successive z/y/x planes write the entire full-domain
-  // simplex exactly once. Clearing it first only adds per-primitive stores;
-  // neither the complete nor the reachable recurrence reads an unwritten cell.
-  const Vec3<Scalar> pc{product.x - center.x, product.y - center.y, product.z - center.z};
+    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
   Scalar boys[MaximumAngular + 1];
   boys_values<MaximumAngular>(exponent * distance_squared(product, center), boys);
   EvaluationReal<Scalar> factor{1.0};
@@ -102,17 +97,39 @@ GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
     auxiliary.at(n, 0, 0, 0) = factor * boys[n];
     factor = factor * (-2.0 * exponent);
   }
+}
+
+/** One unchanged axis-raising operation; schedules must publish n+1 first. */
+template <unsigned Axis, unsigned MaximumAngular, typename Scalar>
+GENERATIVEQC_ERI_DEVICE inline Scalar raise_coulomb_axis(
+    const CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, const Scalar& coordinate,
+    unsigned radial, unsigned first_order, unsigned second_order, unsigned third_order) {
+  static_assert(Axis < 3);
+  const unsigned order = Axis == 0 ? first_order : Axis == 1 ? second_order : third_order;
+  Scalar value = coordinate * auxiliary.at(radial + 1, first_order - (Axis == 0),
+                                           second_order - (Axis == 1), third_order - (Axis == 2));
+  if (order > 1)
+    value = value + static_cast<double>(order - 1) *
+                        auxiliary.at(radial + 1, first_order - 2 * (Axis == 0),
+                                     second_order - 2 * (Axis == 1), third_order - 2 * (Axis == 2));
+  return value;
+}
+
+template <unsigned MaximumAngular, typename Scalar>
+GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
+    EvaluationReal<Scalar> exponent, const Vec3<Scalar>& product, const Vec3<Scalar>& center,
+    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary, CoulombComponentDomain domain = {}) {
+  const bool reachable = domain.valid<MaximumAngular>();
+  const unsigned halo = reachable && domain.first_response ? 1U : 0U;
+  const Vec3<Scalar> pc{product.x - center.x, product.y - center.y, product.z - center.z};
+  fill_coulomb_roots<MaximumAngular>(exponent, product, center, auxiliary);
 
   // Every reachable read has an earlier write in this unchanged z/y/x
   // recurrence order. Unused simplex cells need neither evaluation nor zeroing.
   const unsigned maximum_v = reachable ? domain.z + halo : MaximumAngular;
   for (unsigned v = 1; v <= maximum_v; ++v) {
     for (unsigned n = 0; n + v <= MaximumAngular; ++n) {
-      Scalar value = pc.z * auxiliary.at(n + 1, 0, 0, v - 1);
-      if (v > 1) {
-        value = value + static_cast<double>(v - 1) * auxiliary.at(n + 1, 0, 0, v - 2);
-      }
-      auxiliary.at(n, 0, 0, v) = value;
+      auxiliary.at(n, 0, 0, v) = raise_coulomb_axis<2>(auxiliary, pc.z, n, 0, 0, v);
     }
   }
   for (unsigned v = 0; v <= maximum_v; ++v) {
@@ -123,11 +140,7 @@ GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
           reachable ? coulomb_domain_bound(domain.x + domain.y + halo - u, MaximumAngular - u - v)
                     : MaximumAngular - u - v;
       for (unsigned n = 0; n <= maximum_n; ++n) {
-        Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
-        if (u > 1) {
-          value = value + static_cast<double>(u - 1) * auxiliary.at(n + 1, 0, u - 2, v);
-        }
-        auxiliary.at(n, 0, u, v) = value;
+        auxiliary.at(n, 0, u, v) = raise_coulomb_axis<1>(auxiliary, pc.y, n, 0, u, v);
       }
     }
   }
@@ -143,11 +156,7 @@ GENERATIVEQC_ERI_DEVICE inline void fill_coulomb(
             reachable ? coulomb_domain_bound(domain.x + halo - t, MaximumAngular - t - u - v)
                       : MaximumAngular - t - u - v;
         for (unsigned n = 0; n <= maximum_n; ++n) {
-          Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
-          if (t > 1) {
-            value = value + static_cast<double>(t - 1) * auxiliary.at(n + 1, t - 2, u, v);
-          }
-          auxiliary.at(n, t, u, v) = value;
+          auxiliary.at(n, t, u, v) = raise_coulomb_axis<0>(auxiliary, pc.x, n, t, u, v);
         }
       }
     }

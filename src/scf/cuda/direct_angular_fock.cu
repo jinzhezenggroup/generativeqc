@@ -32,8 +32,9 @@ __global__ void bounded_materialized_fock_kernel(DeviceBatch batch,
   constexpr unsigned lanes = canonical_materialized_component_lanes(AngularOrder);
   constexpr unsigned slots = canonical_materialized_component_slots(AngularOrder);
   __shared__ MaterializedDirectPairRecurrence<AngularOrder> recurrence;
-  __shared__ ActiveShellQuartetTile task;
-  __shared__ bool keep;
+  constexpr unsigned candidate_lanes = 32;
+  __shared__ ActiveShellQuartetTile tasks[candidate_lanes];
+  __shared__ unsigned admitted_mask;
   const auto& topology = *topology_pointer;
   const std::size_t stride = static_cast<std::size_t>(topology.batch_size) + 1U;
   const auto* density_bounds =
@@ -48,29 +49,50 @@ __global__ void bounded_materialized_fock_kernel(DeviceBatch batch,
         topology.pair_class_offsets[ket_class * stride + system + 1U] - ket_begin;
     const bool same_class = bra_class == ket_class;
     const auto count = same_class ? bra_count * (bra_count + 1U) / 2U : bra_count * ket_count;
-    for (std::size_t ordinal = blockIdx.x; ordinal < count; ordinal += gridDim.x) {
-      if (threadIdx.x == 0) {
-        std::size_t bra{}, ket{};
-        if (same_class)
-          decode_lower_triangle(ordinal, bra, ket);
-        else {
-          bra = ordinal / ket_count;
-          ket = ordinal % ket_count;
+    const auto per_worker = count / gridDim.x;
+    const auto page_width = per_worker == 0                ? std::size_t{1}
+                            : per_worker < candidate_lanes ? per_worker
+                                                           : std::size_t{candidate_lanes};
+    // Screen a warp-sized page before entering any recurrence barrier. Rejected
+    // candidates pay two barriers per page, not two barriers per quartet.
+    // Small classes retain enough pages to occupy the incumbent worker grid.
+    for (std::size_t page = std::size_t(blockIdx.x) * page_width; page < count;
+         page += std::size_t(gridDim.x) * page_width) {
+      if (threadIdx.x < candidate_lanes) {
+        const std::size_t ordinal = page + threadIdx.x;
+        bool keep = false;
+        if (threadIdx.x < page_width && ordinal < count) {
+          std::size_t bra{}, ket{};
+          if (same_class)
+            decode_lower_triangle(ordinal, bra, ket);
+          else {
+            bra = ordinal / ket_count;
+            ket = ordinal % ket_count;
+          }
+          const auto first = topology.pair_order[bra_begin + bra];
+          const auto second = topology.pair_order[ket_begin + ket];
+          const auto task = first >= second ? ActiveShellQuartetTile{first, second, 0U}
+                                            : ActiveShellQuartetTile{second, first, 0U};
+          tasks[threadIdx.x] = task;
+          keep =
+              direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Fock>(
+                  batch, task.first_pair, task.second_pair, screening_tolerance,
+                  topology.shell_pair_bounds, density_bounds, nullptr);
         }
-        const auto first = topology.pair_order[bra_begin + bra];
-        const auto second = topology.pair_order[ket_begin + ket];
-        task = first >= second ? ActiveShellQuartetTile{first, second, 0U}
-                               : ActiveShellQuartetTile{second, first, 0U};
-        keep = direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Fock>(
-            batch, task.first_pair, task.second_pair, screening_tolerance,
-            topology.shell_pair_bounds, density_bounds, nullptr);
-        if (keep && work_count) atomicAdd(work_count, 1ULL);
+        const unsigned mask = __ballot_sync(0xffffffffU, keep);
+        if (threadIdx.x == 0) {
+          admitted_mask = mask;
+          if (work_count) atomicAdd(work_count, static_cast<unsigned long long>(__popc(mask)));
+        }
       }
       __syncthreads();
-      if (keep)
-        contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, slots, lanes>(
-            batch, task, screening_tolerance, schwarz_bounds, density, active, fock, nullptr,
-            recurrence);
+      for (unsigned remaining = admitted_mask; remaining; remaining &= remaining - 1) {
+        const auto task = tasks[__ffs(remaining) - 1];
+        contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, slots, lanes, double,
+                                               true, true>(batch, task, screening_tolerance,
+                                                           schwarz_bounds, density, active, fock,
+                                                           nullptr, recurrence);
+      }
       __syncthreads();
     }
   }

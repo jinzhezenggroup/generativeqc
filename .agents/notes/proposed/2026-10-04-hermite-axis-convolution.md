@@ -3,6 +3,14 @@
 Status: proposed (default-off implementation; host arithmetic qualified)
 Date: 2026-10-04
 
+## Subsequent bounded-HF qualification
+
+The [2026-10-13 bounded residual-Fock decision](../implemented/performance/2026-10-13-cooperative-bounded-fock-contraction.md)
+qualifies this existing convolution for a narrower cooperative full-range
+FP64 HF consumer. It does not promote the general canonical/DFT value or
+derivative experiment described here. The original scope and evidence below
+remain historical; broader promotion still requires its own endpoint gates.
+
 ## Motivation and distinct scope
 
 The accepted full-TZVPD 12-atom profile attributes 89.49% of warm time to

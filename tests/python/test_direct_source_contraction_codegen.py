@@ -1,4 +1,8 @@
-"""Retirement guards for compiler-owned Direct source contraction."""
+"""Retirement guards for compiler-owned Direct source contraction.
+
+Parallel Hermite/Coulomb publication is exercised by the compiled materialized
+CUDA test and its racecheck cases, rather than pinning branch spelling here.
+"""
 
 from pathlib import Path
 
@@ -112,24 +116,3 @@ def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> Non
     preparation = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text(encoding="utf-8")
     assert "direct_jk_product(order.size(), 7 * sizeof(std::uint64_t))" in preparation
     assert "angular_order = 0; angular_order <= 12" in preparation
-
-
-def test_order_three_axis_owners_borrow_only_published_geometry() -> None:
-    """Parallel axes preserve full initialization and the legacy serial consumer."""
-    source = emit_direct_source_contraction_header()
-    assert "unsigned axis_begin = 0U, unsigned axis_end = 3U" in source
-    assert "for (unsigned axis = axis_begin; axis < axis_end; ++axis)" in source
-    assert source.count("if constexpr (AngularOrder == 3 && ComponentLanes == 32)") == 2
-    assert source.count("if constexpr (AngularOrder != 3 || ComponentLanes != 32)") == 2
-    assert "prepare_materialized_direct_pair(batch.shell_primitive_pairs[bra]" in source
-    assert "prepare_materialized_direct_pair(batch.shell_primitive_pairs[ket]" in source
-    assert "shared.bra, threadIdx.x, threadIdx.x + 1U)" in source
-    assert "shared.ket, threadIdx.x, threadIdx.x + 1U)" in source
-    begin = source.index(
-        "__device__ inline void contract_materialized_direct_pair_fock("
-    )
-    end = source.index("}  // namespace generativeqc::scf::cuda_execution", begin)
-    assert (
-        source[begin:end].count("if (work) atomicAdd(&work->bra_preparations, 1ULL)")
-        == 1
-    )
