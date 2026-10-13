@@ -17,6 +17,11 @@ from generativeqc_compiler.tensor.complexity import node_complexity
 from generativeqc_compiler.tensor.cpu import describe_cpu_compilation
 from generativeqc_compiler.tensor.interpreter import execute
 from generativeqc_compiler.tensor.optimize import optimize, prepare_for_backend
+from generativeqc_compiler.tensor.precision import (
+    PrecisionDirective,
+    conservative_precision_variants,
+    lower_precision,
+)
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
 
@@ -321,3 +326,72 @@ def test_direct_public_where_capture_and_two_scalar_branches() -> None:
     result = xp.compile(lambda c: xp.where(c, 1.5, 2.5), backend="reference")(mask)
     np.testing.assert_array_equal(result, [1.5, 2.5])
     assert result.dtype == np.dtype("float64")
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("comparison_condition", [False, True])
+def test_precision_identity_preserves_boolean_condition(
+    dtype: str, comparison_condition: bool
+) -> None:
+    mask = np.array([True, False])
+    values = np.array([-0.0, 1.00000006], dtype=dtype)
+    compiled = xp.compile(
+        lambda c, x: xp.where(x > 0 if comparison_condition else c, x, 2 * x),
+        backend="reference",
+    )
+    program = compiled.lower(mask, values)
+    lowered = lower_precision(program, {})
+    assert lowered.logical_hash == program.logical_hash
+    expected = np.where(
+        values > 0 if comparison_condition else mask, values, 2 * values
+    )
+    result = execute(lowered, {"c": mask, "x": values}).outputs["output"]
+    np.testing.assert_array_equal(result, expected)
+    np.testing.assert_array_equal(np.signbit(result), np.signbit(expected))
+    assert (
+        next(node for node in lowered.live_nodes if node.op == "where")
+        .inputs[0]
+        .spec.dtype
+        == "bool"
+    )
+
+
+def test_precision_casts_only_real_selection_branches() -> None:
+    mask = np.array([True, False])
+    values = np.array([1.00000006, -0.0])
+    program = xp.compile(lambda c, x: xp.where(c, x, 2 * x), backend="reference").lower(
+        mask, values
+    )
+    selected = program.outputs["output"]
+    lowered = lower_precision(
+        program,
+        {
+            program.debug_names[selected]: PrecisionDirective(
+                "float32", "float32", "float32"
+            )
+        },
+    )
+    result = execute(lowered, {"c": mask, "x": values}).outputs["output"]
+    expected = np.where(
+        mask, values.astype(np.float32), (2 * values).astype(np.float32)
+    ).astype(np.float64)
+    np.testing.assert_array_equal(result, expected)
+    np.testing.assert_array_equal(np.signbit(result), np.signbit(expected))
+    predicate = next(node for node in lowered.live_nodes if node.op == "where").inputs[
+        0
+    ]
+    assert predicate.spec.dtype == "bool"
+    variants = conservative_precision_variants(program)
+    assert len(variants) == 2
+    for variant in variants:
+        actual = execute(variant, {"c": mask, "x": values}).outputs["output"]
+        oracle = np.where(
+            mask,
+            values,
+            2 * values if variant is program else 2 * values.astype(np.float32),
+        )
+        np.testing.assert_array_equal(actual, oracle)
+        with pytest.raises(ValueError, match="Boolean|non-differentiable"):
+            linearize(variant, [])
+        with pytest.raises(ValueError, match="where"):
+            prepare_for_backend(variant, "cpu", allow_cpu_boolean=True)

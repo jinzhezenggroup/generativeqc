@@ -17,6 +17,10 @@ broadcasts, serialization, CSE and NumPy interpreter. `where` has three ordered
 live operands and fresh real storage. Frontend promotion applies only to the
 two branches; the condition stays Boolean. Admission is generic, general,
 unannotated arrays only, even when scientific extents happen to agree.
+Precision lowering preserves the typed predicate and casts only the real
+branches. Identity precision requests preserve equation identity; explicit or
+conservative FP32 candidates remain reference candidates without native or AD
+qualification.
 
 Both branches remain live under constant conditions or identical branch values.
 The optimizer does not simplify selection to one branch: doing so would discard

@@ -462,7 +462,9 @@ float promotion; condition and values each broadcast explicitly, including
 scalars and empty axes. Python real branch scalars follow the existing exact
 scalar contract (negative-zero literals are rejected; array signed zeros are
 preserved). Reference outputs are detached and never mutate inputs. The reference
-interpreter counts all live operands, selection results and published copies
+precision transform preserves the Boolean condition and casts only the real
+branches; generated precision variants remain unqualified reference candidates.
+The reference interpreter counts all live operands, selection results and published copies
 against its retained-byte budget; selection costs one unit of logical work per
 result element. All live operands are evaluated and finite-checked, so an invalid
 or nonfinite unselected branch still raises, even under a constant condition.
