@@ -1278,6 +1278,19 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
                 ctypes.POINTER(KsCoulombExchangeWorkDescriptor),
             ]
             work_query.restype = ctypes.c_int
+    for name in (
+        "generativeqc_internal_batch_get_nonlocal_work_v1",
+        "generativeqc_internal_batch_get_nonlocal_history_scopes_v1",
+    ):
+        nonlocal_query = getattr(library, name, None)
+        if nonlocal_query is not None:
+            nonlocal_query.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            nonlocal_query.restype = ctypes.c_int
     for name, prefix in (
         ("generativeqc_calculation_get_ks_transport_diagnostic", [ctypes.c_void_p]),
         (
