@@ -332,29 +332,31 @@ void cuda_global_hybrid_identity() {
                           force_ready.weighted_density.size() == hybrid.id.model.spins,
                       "CUDA DF B3LYP force publication changed its functional, DF owner or W");
 
-              const KsFinalStateEvidence evidence{
-                  hybrid.id, hybrid.candidate.fock_density_generation, true,
-                  hybrid.physical.components, hybrid.physical.reported_energy,
-                  hybrid.physical.physical_residual};
+              const KsFinalStateEvidence evidence{hybrid.id,
+                                                  hybrid.candidate.fock_density_generation,
+                                                  true,
+                                                  hybrid.physical.components,
+                                                  hybrid.physical.reported_energy,
+                                                  hybrid.physical.physical_residual};
               KsFinalStateDiagnostic accepted;
               std::string detail;
-              require(validate_ks_final_state_evidence(
-                          hybrid.id, 2, evidence, hybrid.limits,
-                          force_ready.diagnostic.determinant, accepted, detail),
+              require(validate_ks_final_state_evidence(hybrid.id, 2, evidence, hybrid.limits,
+                                                       force_ready.diagnostic.determinant, accepted,
+                                                       detail),
                       detail.c_str());
               auto stale = evidence;
               --stale.identity.model.scf_domain_version;
-              require(!validate_ks_final_state_evidence(
-                          hybrid.id, 2, stale, hybrid.limits,
-                          force_ready.diagnostic.determinant, accepted, detail) &&
+              require(!validate_ks_final_state_evidence(hybrid.id, 2, stale, hybrid.limits,
+                                                        force_ready.diagnostic.determinant,
+                                                        accepted, detail) &&
                           accepted.determinant.eigenframes.empty(),
                       "CUDA DF B3LYP accepted stale functional evidence");
               stale = evidence;
               stale.identity.determinant.model.spec.exchange.approximation =
                   FockApproximation::Exact;
-              require(!validate_ks_final_state_evidence(
-                          hybrid.id, 2, stale, hybrid.limits,
-                          force_ready.diagnostic.determinant, accepted, detail),
+              require(!validate_ks_final_state_evidence(hybrid.id, 2, stale, hybrid.limits,
+                                                        force_ready.diagnostic.determinant,
+                                                        accepted, detail),
                       "CUDA DF B3LYP accepted a switched final-state Hamiltonian");
               auto wrong_version = hybrid;
               --wrong_version.id.model.scf_domain_version;

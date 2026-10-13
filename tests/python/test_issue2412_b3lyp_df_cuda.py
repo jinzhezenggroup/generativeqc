@@ -75,12 +75,8 @@ def test_b3lyp_df_cold_warm_and_moved_forces(
         assert item.succeeded and item.converged and item.forces is not None
         assert item.executed_backend == "cuda"
         assert item.energy == pytest.approx(reference_energy, abs=1e-8)
-        np.testing.assert_allclose(
-            item.forces, -reference_gradient, atol=1e-7, rtol=0
-        )
-        np.testing.assert_allclose(
-            item.forces.sum(axis=0), 0, atol=2e-9, rtol=0
-        )
+        np.testing.assert_allclose(item.forces, -reference_gradient, atol=1e-7, rtol=0)
+        np.testing.assert_allclose(item.forces.sum(axis=0), 0, atol=2e-9, rtol=0)
 
     receipts: list[Any] = []
     with calc.prepare_batch([WATER], warm_start=True) as batch:
@@ -113,7 +109,9 @@ def test_b3lyp_df_cold_warm_and_moved_forces(
 
     assert len(receipts) == 12
     for work in receipts:
-        assert work["stationary_integral_derivative_route"] == "prepared-native-complete"
+        assert (
+            work["stationary_integral_derivative_route"] == "prepared-native-complete"
+        )
         assert work["stationary_native_integral_sources"] == (
             "one_electron",
             "overlap_pulay",
