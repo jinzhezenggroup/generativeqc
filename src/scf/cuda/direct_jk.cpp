@@ -2425,6 +2425,33 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     bool allow_spatial_default) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
+    // The optional shell owner can be refused when its recurrence-stack
+    // reservation does not fit, even though the canonical Direct owner and
+    // first-derivative scratch remain valid. Reuse that retained GPU provider
+    // at omega=0 (SR equals full range; LR is absent). This is a bounded,
+    // slower fallback, with no new integral definition or CPU evaluation.
+    if (plan && plan->canonical_pairs && plan->diagnostic.derivative_order >= 1) {
+      std::vector<double> channels;
+      const auto status = execute_cuda_direct_rsh_energy_derivatives_device(
+          plan, spin, coulomb_coefficient, exchange_coefficient, 0.0, 0.0, density, beta,
+          matrix_elements, channels, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      const auto coordinates = plan->coordinates_per_item;
+      if (separate_sources) {
+        channels.resize(2 * coordinates);
+      } else {
+        for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+          channels[coordinate] += channels[coordinates + coordinate];
+          if (!std::isfinite(channels[coordinate])) {
+            detail = "nonfinite combined canonical Direct force";
+            return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+          }
+        }
+        channels.resize(coordinates);
+      }
+      derivatives = std::move(channels);
+      return GENERATIVEQC_STATUS_SUCCESS;
+    }
     detail = "prepared Direct owner has no retained shell derivative lease";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
