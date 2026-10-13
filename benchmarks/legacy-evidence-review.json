@@ -262,10 +262,10 @@
       "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 425678,
-      "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009",
+      "bytes": 195548,
+      "sha256": "f46dfb1eb56a74c14c32641924ff49f88b6da87894a44992bbe0d7e8b49b2a35",
       "classification": "required-compact-accepted-evidence",
       "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
     },

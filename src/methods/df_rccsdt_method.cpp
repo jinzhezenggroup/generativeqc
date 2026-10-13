@@ -29,7 +29,8 @@ void validate_descriptor(const generativeqc_method_descriptor& descriptor,
       descriptor.method == GENERATIVEQC_METHOD_MP2 &&
       descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA;
   if (!correlation_mp2 && descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
-      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO)
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO &&
+      descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DF-RCCSD(T) requires density_fitting='cuda' or 'auto'");
   const double threshold = descriptor.density_fitting_relative_threshold == 0.0
@@ -68,8 +69,9 @@ class DfRccsdtPrepared final : public PreparedCalculation {
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
         descriptor_(descriptor) {
-    // The accepted reference stays conventional; the native owner may prepare
-    // a density-only JK-fit guess. This auxiliary remains correlation-only.
+    full_df_reference_ = descriptor.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA;
+    // Preserve the legacy descriptor contract of the CC solver. The explicit
+    // demand carries the RI-JK model through reference, companions and response.
     descriptor_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.density_fitting_memory_budget_bytes = 0;
@@ -114,10 +116,10 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
 #if GENERATIVEQC_HAS_CUDA
     auto native =
-        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2
+        companions || descriptor_.method == GENERATIVEQC_METHOD_MP2 || full_df_reference_
             ? run_df_correlation_group_native(
                   execution_, system_, auxiliary_, descriptor_, compute_forces,
-                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions})
+                  {descriptor_.method == GENERATIVEQC_METHOD_MP2, companions, full_df_reference_})
             : run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces);
     native.primal.triples_seconds = native.triples_seconds;
     last_correlation_ = native.correlation;
@@ -134,6 +136,7 @@ class DfRccsdtPrepared final : public PreparedCalculation {
   runtime::ExecutionContext execution_;
   core::System system_;
   core::System auxiliary_;
+  bool full_df_reference_{};
   generativeqc_method_descriptor descriptor_{};
   std::optional<generativeqc_correlation_diagnostic> last_correlation_;
   std::optional<CcPerformanceDiagnostic> last_performance_;

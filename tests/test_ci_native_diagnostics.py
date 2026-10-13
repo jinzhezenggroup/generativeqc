@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import importlib.util
 import json
 import os
 import resource
@@ -262,10 +263,42 @@ def test_workflow_keeps_diagnostics_in_failure_artifacts() -> None:
     preparation = source.split("      - name: Prepare bounded native diagnostics\n", 1)[
         1
     ].split("      - name:", 1)[0]
-    assert (
-        "        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' "
-        "|| matrix.shard == 'core-c'\n" in preparation
+    spec = importlib.util.spec_from_file_location(
+        "ci_scope_workflow_contracts", ROOT / "tests/python/test_ci_prose_workflow.py"
     )
+    assert spec is not None and spec.loader is not None
+    admission = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(admission)
+    for shard in (
+        "core-a",
+        "core-b",
+        "core-c",
+        "compiler-heavy",
+        "runtime-heavy",
+        "uccsd-forces",
+        "posthf",
+        "ecp-forces",
+    ):
+        for outcome, scope in (
+            ("success", "full"),
+            ("success", "prose"),
+            ("success", ""),
+            ("failure", "prose"),
+        ):
+            expected = shard in {"core-a", "core-b", "core-c"} and not (
+                outcome == "success" and scope == "prose"
+            )
+            assert (
+                admission.selected(
+                    preparation,
+                    {
+                        "matrix.shard": shard,
+                        "steps.prose_scope.outcome": outcome,
+                        "steps.prose_scope.outputs.scope": scope,
+                    },
+                )
+                == expected
+            )
     assert "ccache --version" in preparation
     assert (
         ".venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q"

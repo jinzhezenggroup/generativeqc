@@ -19,6 +19,7 @@ from generativeqc_compiler.dft.ao_cuda import (
     emit_grid_scientific_kernels,
     emit_grid_source,
 )
+from test_ci_prose_workflow import assert_full_coverage_step, selected
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -503,7 +504,8 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     marker = "      - name: Compile opted-in AO radial kernels with release resources\n"
     step = cuda.split(marker, 1)[1].split("      - name: ", 1)[0]
     assert "python3-pytest" in cuda
-    assert "if:" not in step and "continue-on-error:" not in step
+    assert_full_coverage_step(step)
+    assert "continue-on-error:" not in step
     assert 'test -x "$CUDACXX"' in step
     assert 'exec ccache "$CUDACXX" "$@"' in step
     assert "GENERATIVEQC_GRID_CUDA_ARCH: sm_120" in step
@@ -549,7 +551,11 @@ def _assert_cuda_ci_ao_gate(workflow: str) -> None:
     )[1].split("      - name: ", 1)[0]
     # Reports survive failed PR/merge-queue builds. Master push runs maintain
     # the trusted compiler cache and deliberately omit diagnostic artifacts.
-    assert "if: ${{ always() && github.event_name != 'push' }}" in artifact
+    for event in ("pull_request", "merge_group", "push"):
+        assert selected(
+            artifact,
+            {"github.event_name": event, "success()": False, "failure()": True},
+        ) == (event != "push")
     assert "build/ao-radial-compile" in artifact
     assert "name: ao-radial-release-compile" in artifact
     script = textwrap.dedent(step.split("        run: |\n", 1)[1])

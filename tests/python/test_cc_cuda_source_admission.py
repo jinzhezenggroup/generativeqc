@@ -133,7 +133,7 @@ PREFIX = r"""
 #include "scf/rhf_source_handoff.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,source_live=0,plan_live=0,native_calls=0,host_calls=0;
-int source_mode=0,warm_failure=0;
+int source_mode=0,warm_failure=0,df_calls=0,df_live=0;
 bool converged=true,expect_source=true;
 namespace generativeqc::integrals {
 struct ElectronInteractionSource {
@@ -226,6 +226,19 @@ ScfResult run_rhf(const core::System&,const ScfOptions&,const std::vector<double
   ++host_calls; return physical();
 }
 }
+// This exact-source probe must never claim a successful RI-JK solve. A
+// counted refusal also checks that warm retries reconstruct the same model.
+namespace generativeqc::hf {
+struct DFReference {
+  DFReference() { if (df_live++) std::abort(); }
+  ~DFReference() { --df_live; }
+  scf::ScfResult solve(const core::System&, const core::System&, scf::ScfOptions,
+                       int, const std::vector<double>*) {
+    ++df_calls;
+    throw std::runtime_error("injected RI-JK refusal");
+  }
+};
+}
 namespace generativeqc::methods::detail {
 struct MethodError : std::runtime_error { MethodError(int,const char* s):std::runtime_error(s){} };
 struct RccsdNativeState {
@@ -288,6 +301,20 @@ int main() {
         &auxiliary,false,nullptr,cached ? &plan : nullptr);
     if (result.borrowed || result.peak || result.prepared || native_calls!=1 || host_calls) return 10;
     scf::destroy_rhf_cuda_bucket_plan(plan);
+  }
+  // A full-DF refusal cannot fall through to the exact adapters. A seeded
+  // retry releases its previous fitted owner before constructing the next.
+  for (bool seeded : {false,true}) {
+    native_calls=host_calls=df_calls=0;
+    try {
+      (void)methods::detail::execute_rccsd_prepared(
+          execution,system,reference,solver,0,nullptr,seeded ? &seed : nullptr,
+          nullptr,&cache,&auxiliary,false,nullptr,nullptr,false,true);
+      return 12;
+    } catch (const std::runtime_error& error) {
+      if (std::string(error.what())!="injected RI-JK refusal") return 13;
+    }
+    if (native_calls || host_calls || df_live || df_calls!=(seeded ? 2 : 1)) return 14;
   }
   // CPU preparation remains cached and never enters the CUDA adapters.
   execution.cuda=false; cache=std::make_unique<scf::PreparedFockPlan>();

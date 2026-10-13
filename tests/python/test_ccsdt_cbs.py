@@ -18,6 +18,32 @@ if TYPE_CHECKING:
 ATOMS = (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4)))
 
 
+def test_full_df_groups_preserve_the_explicit_reference_model(
+    bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
+) -> None:
+    workflow = CCSDTCBSCalculator(
+        bases,
+        auxiliary_bases=("sto-3g", "def2-svp"),
+        hf_reference="df",
+        device="cuda",
+    )
+    result = workflow.singlepoint(ATOMS)
+    assert result.basis_metadata["hf_reference"] == "df"
+    assert len(fake_native) == len(result.execution_groups) == 2
+    assert all(
+        event["options"]["density_fitting"] == "full_cuda" for event in fake_native
+    )
+    assert all(event["closed"] for event in fake_native)
+
+
+@pytest.mark.parametrize("reference", ("df", "guess", None))
+def test_df_reference_requires_a_valid_model_and_auxiliaries(
+    bases: tuple[CBSBasis, CBSBasis], reference: str | None
+) -> None:
+    with pytest.raises(ValueError):
+        CCSDTCBSCalculator(bases, hf_reference=reference)
+
+
 def test_df_cbs_same_reference_groups_and_force_weights(
     bases: tuple[CBSBasis, CBSBasis], fake_native: list[dict]
 ) -> None:

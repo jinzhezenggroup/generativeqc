@@ -1014,8 +1014,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
               // Every s/p/d/f angular bucket needs its own bounded prefix plane.
-              // Strict reuse covers orders 3--9; mixed reuse also admits 0--2
-              // and 10--12. Equal buckets retain only their sorted triangles.
+              // Compensated fixed-mask and mixed reuse cover orders 0--12.
+              // Equal buckets retain only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
                 for (unsigned angular_order = 0; angular_order <= 12; ++angular_order)
                   for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
@@ -1387,7 +1387,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, bool mixed_j, std::uint64_t* mixed_coulomb_work_count,
     double fixed_threshold, std::uint64_t* census, std::string& detail,
-    double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true) {
+    double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true,
+    bool allow_materialized_fixed = false) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
     const bool fixed = fixed_threshold >= 0;
@@ -1622,14 +1623,16 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
-            else if (first + second >= 3 && first + second <= 9 && plan->materialized_pair_order &&
-                     !correction && !fixed &&
+            else if (plan->materialized_pair_order &&
+                     ((fixed && allow_materialized_fixed) ||
+                      (!fixed && !correction && first + second >= 3 && first + second <= 9)) &&
                      (!canonical_strict_j || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {
-              // The compiler owns complete-domain lanes/slots for orders 3--9.
-              // Low orders use smaller CTAs; higher orders retain wider owners.
-              // Fixed-density screening, compensation and resident-value
-              // layouts retain their established component-wise fallbacks.
+              // The prepared shell rows only prune candidates. Each AO still
+              // applies the canonical geometry-only predicate, preserving a
+              // linear signed-density operator at a fixed threshold. Every
+              // writer shares the caller's compensation planes and final fold.
+              // Admission rejects masks tighter than rows pruned at setup.
               const auto& shells = plan->materialized_pair_offsets[item];
               const auto pairs = plan->materialized_pair_offsets.back()[7];
               launch_materialized_canonical_jk_kernel(
@@ -1641,10 +1644,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   dispatch.canonical_exchange ? direct_exchange_range(spec.exchange)
                                               : DirectCoulombRange::Full,
                   dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
-                  plan->screening_tolerance, plan->materialized_bounds, plan->canonical_density,
-                  plan->canonical_active, canonical_strict_j ? plan->canonical_coulomb : nullptr,
+                  fixed ? fixed_threshold : plan->screening_tolerance, plan->materialized_bounds,
+                  plan->canonical_density, plan->canonical_active,
+                  canonical_strict_j ? plan->canonical_coulomb : nullptr,
                   dispatch.canonical_exchange ? plan->canonical_exchange : nullptr,
-                  census ? census : plan->canonical_work_count);
+                  census ? census : plan->canonical_work_count, correction, exchange_correction);
+              ++plan->diagnostic.materialized_value_launches;
             } else
               launch_canonical_jk_kernel(
                   plan->stream, plan->canonical_batch, plan->canonical_cartesian,
@@ -2284,7 +2289,7 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t elements,
     double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
-    bool allow_resident, const double* beta, double* beta_exchange) {
+    bool allow_resident, const double* beta, double* beta_exchange, bool allow_materialized) {
   if (!std::isfinite(threshold) || threshold < 0 || !correction ||
       (spec.spin != FockSpin::Restricted && spec.spin != FockSpin::Unrestricted) ||
       (spec.exchange.present && direct_exchange_range(spec.exchange) != DirectCoulombRange::Full)) {
@@ -2297,7 +2302,8 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
   }
   return enqueue_cuda_direct_jk_device_impl(
       plan, spec, density, beta, elements, coulomb, exchange, beta_exchange, numerical_error, false,
-      nullptr, threshold, census, detail, correction, correction_elements, allow_resident);
+      nullptr, threshold, census, detail, correction, correction_elements, allow_resident,
+      allow_materialized);
 }
 
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(

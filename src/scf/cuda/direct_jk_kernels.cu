@@ -92,7 +92,8 @@ __global__ void materialized_canonical_jk_kernel(
     std::size_t second_begin, std::size_t second_count, generativeqc::integrals::CoulombRange range,
     double omega, double screening, const double* bounds, const double* density,
     const std::uint8_t* active, double* coulomb, double* exchange, std::uint64_t* work_census,
-    std::uint64_t* mixed_work = nullptr) {
+    std::uint64_t* mixed_work = nullptr, double* coulomb_correction = nullptr,
+    double* exchange_correction = nullptr) {
   using Scalar = std::conditional_t<MixedJ, MixedPrecisionFloat, double>;
   using Recurrence = MaterializedDirectPairRecurrence<AngularOrder, Scalar>;
   static_assert(std::is_trivially_copyable_v<Recurrence> && alignof(Recurrence) <= 16);
@@ -102,7 +103,7 @@ __global__ void materialized_canonical_jk_kernel(
   auto& shared = *reinterpret_cast<Recurrence*>(storage);
   // With s/p/d/f shells, these are the exact maximum packet counts for each
   // admitted total order. No component may be left for a second CTA owner.
-  static_assert(MixedJ ? AngularOrder <= 12 : (AngularOrder >= 3 && AngularOrder <= 9));
+  static_assert(AngularOrder <= 12);
   static_assert(kMaximumAngularMomentum == 3);
   // Order-nine fddd has 2160 components, exceeding ffdp's 1800. These
   // complete-domain bounds must not depend on the most common shell class.
@@ -121,7 +122,8 @@ __global__ void materialized_canonical_jk_kernel(
     contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots,
                                            component_lanes>(
         batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
-        false, nullptr, false, range, omega, coulomb, exchange, work_census, mixed_work);
+        false, nullptr, false, range, omega, coulomb, exchange, work_census, mixed_work,
+        coulomb_correction, exchange_correction);
   }
 }
 
@@ -866,7 +868,8 @@ void launch_materialized_canonical_jk_kernel(
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, DirectCoulombRange range, double omega,
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
-    double* coulomb, double* exchange, std::uint64_t* work_count) {
+    double* coulomb, double* exchange, std::uint64_t* work_count, double* coulomb_correction,
+    double* exchange_correction) {
   if (!first_count || !second_count) return;
   // Dense shell-pair products bound screened work without a device-to-host
   // count read. Clamp each factor before multiplication to avoid overflow;
@@ -882,14 +885,17 @@ void launch_materialized_canonical_jk_kernel(
       materialized_canonical_jk_kernel<true, order><<<blocks, threads, 0, stream>>>(           \
           batch, rows, first_begin, first_count, second_begin, second_count,                   \
           integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count);                                                                         \
+          work_count, nullptr, coulomb_correction, exchange_correction);                       \
     else                                                                                       \
       materialized_canonical_jk_kernel<false, order><<<blocks, threads, 0, stream>>>(          \
           batch, rows, first_begin, first_count, second_begin, second_count,                   \
           integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
-          work_count);                                                                         \
+          work_count, nullptr, coulomb_correction, exchange_correction);                       \
     break
   switch (angular_order) {
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(0);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(1);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(2);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(3);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(4);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(5);
@@ -897,6 +903,9 @@ void launch_materialized_canonical_jk_kernel(
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(7);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(8);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(9);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(10);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(11);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(12);
   }
 #undef GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER
 }

@@ -156,15 +156,20 @@ std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan, u
  * correction must have exactly cuda_direct_jk_compensation_elements(plan, spins)
  * doubles, disjoint from all inputs, outputs and diagnostic slots. It is reset
  * per action and folded before canonical-to-public projection. A compatible mask
- * may reuse admitted resident values unless allow_resident is false (the
- * independent exact-audit contract); no allocation or success-path fence.
+ * may reuse admitted resident values unless allow_resident is false;
+ * no allocation or success-path fence.
+ * Prepared whole-shell recurrence preserves the same AO Schwarz mask and
+ * compensation planes. Disable allow_materialized for an independent
+ * per-component replay, also disabling allow_resident for an independent audit.
+ * Missing prepared storage retains that bounded replay.
  * Unavailable canonical storage returns NOT_IMPLEMENTED without enqueueing.
  */
 generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
     double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
-    bool allow_resident = true, const double* beta = nullptr, double* beta_exchange = nullptr);
+    bool allow_resident = true, const double* beta = nullptr, double* beta_exchange = nullptr,
+    bool allow_materialized = true);
 
 /** Eligibility for the default reuse-preserving shell bilinear derivative.
  * Canonical residency alone does not admit this schedule. No device work is
