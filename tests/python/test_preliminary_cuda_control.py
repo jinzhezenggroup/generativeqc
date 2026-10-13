@@ -402,9 +402,10 @@ def cuda_control_probe(
             "class PreparedBatch {",
             "\n/** Exception carrying",
         ),
-        "CUDA_WARM_ADMISSION": between(
-            cuda, "    const bool use_warm =", "\n    retire_phase_source(false)"
-        ),
+        # This fixture tests seed precedence, not the independent initializer.
+        # Compile the real warm predicate without pulling unrelated optional
+        # solver setup into the scheduler double.
+        "CUDA_WARM_ADMISSION": between(cuda, "    const bool use_warm =", ";") + ";",
         "CUDA_PHASE_SOURCE_ADMISSION": between(
             cuda,
             "      phase_source_cold =",
