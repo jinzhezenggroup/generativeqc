@@ -16,6 +16,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+from benchmarks.readme_accuracy_oracle import merge_geometry_oracles
 from benchmarks.readme_omol25 import (
     SCHEMA,
     SIZES,
@@ -72,6 +73,7 @@ def independent_phase_status(
     *,
     atoms: int,
     schema: str,
+    accuracy_receipts: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     """Validate complete phase populations independently of later timeouts.
 
@@ -89,6 +91,12 @@ def independent_phase_status(
     if scientific.get("atoms") != atoms:
         raise ValueError("endpoint atom count differs from the requested point")
     baselines = reference_baselines(reference, scientific, allow_missing=True)
+    baselines = merge_geometry_oracles(
+        baselines,
+        accuracy_receipts or [],
+        scientific,
+        basis_sha256=raw.get("basis_file_sha256"),
+    )
     repeats = scientific["repeats"]
     required = {
         (phase, geometry, repeat)
@@ -217,11 +225,26 @@ def collect(
                 digest(reference_path) if reference is not None else None
             ):
                 raise ValueError("native run used a different independent reference")
+            accuracy_receipts = []
+            for binding in raw.get("accuracy_reference_files", []):
+                name = binding["file"]
+                if engine != "native" or Path(name).name != name:
+                    raise ValueError("invalid accuracy reference file binding")
+                accuracy_path = path.parent / name
+                if digest(accuracy_path) != binding["sha256"]:
+                    raise ValueError(
+                        "native run used a different accuracy-only reference"
+                    )
+                accuracy_receipts.append(json.loads(accuracy_path.read_text()))
+            if accuracy_receipts:
+                entry["accuracy_reference_files"] = raw["accuracy_reference_files"]
+                point["independent_accuracy_receipts"] = accuracy_receipts
             entry["phase_status"] = independent_phase_status(
                 raw,
                 reference if engine == "native" else raw,
                 atoms=atoms,
                 schema=schema,
+                accuracy_receipts=accuracy_receipts,
             )
         if completed:
             if independent_engines:
