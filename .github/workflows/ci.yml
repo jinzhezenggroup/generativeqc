@@ -1520,7 +1520,7 @@ jobs:
         (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
        github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
-    # Account for both the fast CI compilation and the full release AOT seed.
+    # Master seeds both CUDA flag variants; PRs/merge groups compile only the CLI.
     timeout-minutes: 210
     permissions:
       contents: read
@@ -1615,11 +1615,12 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
-      # Populate both compiler-flag identities before publishing one cache image.
-      # The required fast CI job runs on a separate runner and cannot write here.
+      # The required cuda-compile job already checks fast CUDA on PRs/merge
+      # groups. Only master seeds both compiler-flag identities here, on the
+      # same runner that saves/publishes the shared cache snapshot.
       - name: Seed fast CUDA CI objects in the shared cache
         id: fast_cuda_seed
-        if: steps.cli_scope.outputs.tier != 'skip'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         run: |
           ccache --zero-stats
