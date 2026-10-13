@@ -368,7 +368,6 @@ def test_exact_pair_component_reuse_and_invalidation(
         assert owner.diagnostic(include_work=True).pair_evaluations == 5
 
 
-
 def test_large_grid_automatic_reuse_has_explicit_opt_out(
     cuda_runtime: tuple[Any, ct.CDLL], monkeypatch: pytest.MonkeyPatch
 ) -> None:
