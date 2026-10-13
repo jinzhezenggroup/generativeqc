@@ -140,9 +140,8 @@ generativeqc_status DirectJkSourceLease::prepare(
       checked_add(
           checked_add(checked_mul(5, direct_bound), checked_mul(6, source_capacity(system))),
           checked_add(scratch_bytes, sizeof(int) + 2 * sizeof(std::uint64_t))));
-  const auto numeric_allowance = direct_jk_source_allowance(nbf, maximum_iterations, required,
-                                                            overhead, budget, value_ceiling,
-                                                            auto_policy);
+  const auto numeric_allowance = direct_jk_source_allowance(
+      nbf, maximum_iterations, required, overhead, budget, value_ceiling, auto_policy);
   auto allowance = numeric_allowance;
   if (!allowance) {
     reason_ = "reuse or numeric capacity refusal";

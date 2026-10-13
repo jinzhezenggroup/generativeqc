@@ -108,15 +108,16 @@ void raw_oracle(const Fixture& fixture) {
   for (const double preparation_mask : {0.0, 1e-12})
     for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
       scf::cuda_execution::DirectJkSourceLease source(stream);
-      require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
-                             3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle",
-                             false, false, preparation_mask, 8ULL << 30, preparation_mask == 0.0,
-                             molecule::ao_count(fixture.system) < 64
-                                 ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
-                                 : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
-                             buckets) == GENERATIVEQC_STATUS_SUCCESS &&
-                  source.active(),
-              source.reason());
+      require(
+          source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                         3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle", false,
+                         false, preparation_mask, 8ULL << 30, preparation_mask == 0.0,
+                         molecule::ao_count(fixture.system) < 64
+                             ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
+                             : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                         buckets) == GENERATIVEQC_STATUS_SUCCESS &&
+              source.active(),
+          source.reason());
       require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
                   (source.exchange() != nullptr) == (preparation_mask == 0.0),
               "borrowed outputs unexpectedly allocated duplicate J/K slots");
@@ -192,8 +193,8 @@ void raw_oracle_uks(const Fixture& fixture) {
                            false, false, screening, 8ULL << 30, false,
                            molecule::ao_count(fixture.system) < 64
                                ? scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold
-                               : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f, buckets,
-                           2) == GENERATIVEQC_STATUS_SUCCESS &&
+                               : scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                           buckets, 2) == GENERATIVEQC_STATUS_SUCCESS &&
                 source.active(),
             source.reason());
     for (const bool has_exchange : {true, false}) {
@@ -340,13 +341,12 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
   unsigned maximum_angular = 0;
   for (const auto& shell : fixture.system.shells)
     maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-  const bool auto_domain =
-      !scf::cuda_execution::direct_jk_source_auto_refusal(
-          molecule::ao_count(fixture.system), molecule::cartesian_ao_count(fixture.system),
-          options.max_iterations, maximum_angular, true,
-          scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec),
-          scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
-          options.screening_tolerance);
+  const bool auto_domain = !scf::cuda_execution::direct_jk_source_auto_refusal(
+      molecule::ao_count(fixture.system), molecule::cartesian_ao_count(fixture.system),
+      options.max_iterations, maximum_angular, true,
+      scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec),
+      scf::cuda_execution::DirectJkSourceAutoPolicy::screened_hybrid_cold,
+      options.screening_tolerance);
   require(automatic.converged && std::abs(automatic.energy - baseline.energy) < 2e-9 &&
               (plan.transfers().phase_resident_values_built > built) == auto_domain,
           "automatic cold Hybrid source domain");

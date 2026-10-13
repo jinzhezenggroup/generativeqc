@@ -90,11 +90,10 @@ constexpr std::size_t direct_jk_source_value_ceiling(DirectJkSourceSelection sel
 }
 
 /** Admit quartic values only after the complete consumer and source overhead. */
-constexpr std::size_t direct_jk_source_allowance(std::size_t nbf, unsigned maximum_iterations,
-                                                 std::size_t required, std::size_t overhead,
-                                                 std::size_t budget, std::size_t ceiling,
-                                                 DirectJkSourceAutoPolicy policy =
-                                                     DirectJkSourceAutoPolicy::generic_f) noexcept {
+constexpr std::size_t direct_jk_source_allowance(
+    std::size_t nbf, unsigned maximum_iterations, std::size_t required, std::size_t overhead,
+    std::size_t budget, std::size_t ceiling,
+    DirectJkSourceAutoPolicy policy = DirectJkSourceAutoPolicy::generic_f) noexcept {
   const auto minimum_aos = policy == DirectJkSourceAutoPolicy::screened_hybrid_cold ? 24U : 64U;
   if (nbf < minimum_aos || maximum_iterations < 4 || required > budget ||
       overhead > budget - required)
