@@ -2146,12 +2146,28 @@ class KsPreparedBatch final : public PreparedBatch,
 
   std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
                                             bool compute_forces) override {
-    // A native force request is admitted only when *every* prepared item has
-    // a source-complete native owner. Mixed or missing contexts must
-    // not quietly receive an energy-only result with an unfilled force buffer.
-    if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
-          return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
-        })) {
+    return execute_items(coordinates, compute_forces, {});
+  }
+
+  std::vector<BatchItemResult> execute_selected_forces_impl(
+      const Coordinates& coordinates, std::span<const std::uint8_t> forces) override {
+    return execute_items(coordinates, false, forces);
+  }
+
+  /** Selection changes only derivative consumers. All items share the existing
+   * SCF scheduler, warm policy, state generations and error isolation. */
+  std::vector<BatchItemResult> execute_items(const Coordinates& coordinates, bool compute_forces,
+                                             std::span<const std::uint8_t> selected_forces) {
+    const auto wants_forces = [&](std::size_t index) {
+      return selected_forces.empty() ? compute_forces : selected_forces[index] != 0;
+    };
+    // Every requested force still needs its exact prepared capability. An
+    // energy-only neighbor does not grant or revoke another item's admission.
+    bool force_unavailable = false;
+    for (std::size_t i = 0; i < size(); ++i)
+      force_unavailable |=
+          wants_forces(i) && !(items_[i].prepared_properties & GENERATIVEQC_PROPERTY_FORCES);
+    if (force_unavailable) {
       const char* issue = execution_plan_.automatic_program ? "#1122"
                           : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
                               ? "#164"
@@ -2230,7 +2246,7 @@ class KsPreparedBatch final : public PreparedBatch,
       if (preliminary_requested[i] && !native.preliminary_guess.requested_kind)
         native.preliminary_guess = preliminary_diagnostics[i];
       result.calculation = adapt_result(std::move(native), backend_);
-      if (compute_forces && result.calculation.convergence.converged)
+      if (wants_forces(i) && result.calculation.convergence.converged)
         items_[i].plan->add_prepared_native_forces(result.calculation);
       items_[i].plan->apply_d4(result.calculation);
       const auto& calculation = result.calculation;

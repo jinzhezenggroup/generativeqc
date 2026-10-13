@@ -1,3 +1,4 @@
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -174,6 +175,26 @@ void optional_batch_capabilities() {
   require(dynamic_cast<BatchCcPerformanceDiagnostics*>(erased) == nullptr,
           "CC performance capability is mandatory");
   require(plain.execute({}, false).size() == 1, "plain batch execution failed");
+  for (const auto selection : {std::vector<std::uint8_t>{}, std::vector<std::uint8_t>{2}}) {
+    bool invalid = false;
+    try {
+      plain.execute_selected_forces({}, selection);
+    } catch (const std::invalid_argument&) {
+      invalid = true;
+    }
+    require(invalid && plain.execution_lifecycle().failed(),
+            "malformed force selection did not fail the shared lifecycle");
+    require(plain.execute({}, false).size() == 1, "force selection failure prevented recovery");
+  }
+  bool unsupported = false;
+  try {
+    plain.execute_selected_forces({}, std::array<std::uint8_t, 1>{1});
+  } catch (const MethodError& error) {
+    unsupported = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(unsupported && plain.execution_lifecycle().failed(),
+          "optional per-item execution was silently emulated by an unsupported owner");
+  require(plain.execute({}, false).size() == 1, "optional execution rejection prevented recovery");
   plain.reset_execution();
   require(!plain.execution_lifecycle().warmed(), "plain reset retained replay eligibility");
 
