@@ -169,7 +169,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                             checked_add(recycle_bytes,
                                         physical_replay ? physical_replay->output_bytes : 0)),
                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
-                packed_diis, ccsd_mixed_precision, ccsd_mixed_switch_residual, demand.mp2);
+                packed_diis, ccsd_mixed_precision, ccsd_mixed_switch_residual, demand.mp2,
+                demand.df_reference);
   if (retained_host_bytes >= state.budget)
     throw std::length_error("DF correlation retained caller state exhausts complete budget");
   if (demand.mp2 && !state.df_mp2_mode) {
@@ -230,6 +231,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
                 &state.df_mp2.eps_o, &state.df_mp2.eps_v, &state.df_mp2.foo, &state.df_mp2.fvv});
   base = checked_add(base, mp2_response_bytes);
   if (trace.enabled()) {
+    Trace::label("reference_integral_model", state.df_reference ? "ri-jk" : "four-center");
     Trace::number("df_source_identity", p.df_source_identity);
     Trace::number("df_source_builds", replay_state ? 0 : 1);
   }
@@ -527,8 +529,11 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   factors = {};
   result.source_response_seconds = elapsed(phase);
   phase = Clock::now();
-  if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
+  if (trace.enabled())
+    Trace::label("phase", state.df_reference ? "df_orbital_and_nuclear_response"
+                                             : "exact_orbital_and_nuclear_response");
   auto orbital_options = frame_options;
+  orbital_options.df_reference = state.df_reference;
   hf::RHFFrameDFPreconditionerPreparation preconditioner;
   if (orbital_options.df_preconditioning) {
     // Preparation precedes source release so it consumes the very same frame
@@ -861,10 +866,10 @@ DFCCSDTResult run_df_ccsdt_native(
   const bool had_retained_cache = recycling && recycling->storage_bytes();
   DFCCSDTReferenceExperiment local_reference;
   auto* const diagnostic = reference_experiment ? reference_experiment : &local_reference;
-  auto guess =
-      prepare_df_hf_guess(system, auxiliary, descriptor, recycling ? recycling->storage_bytes() : 0,
-                          execution.cuda_requested() ? execution.device_id() : -1,
-                          !diagnostic->disable_preconvergence && !diagnostic->initial_density);
+  auto guess = prepare_df_hf_guess(
+      system, auxiliary, descriptor, recycling ? recycling->storage_bytes() : 0,
+      execution.cuda_requested() ? execution.device_id() : -1,
+      !demand.df_reference && !diagnostic->disable_preconvergence && !diagnostic->initial_density);
   const auto* const borrowed_seed = diagnostic->initial_density;
   if (!guess.density.empty()) diagnostic->initial_density = &guess.density;
   struct RestoreSeed {

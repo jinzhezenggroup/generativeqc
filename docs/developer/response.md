@@ -1,5 +1,31 @@
 # Shared orbital response and bounded Krylov solves
 
+## Native correlated RI-JK reference response
+
+The full-DF molecular owner supplies an immutable `hf::DFReference` to the
+same matrix-free RHF frame maps used by conventional correlation. It retains
+SCF's original RI-JK plan and metric cutoff through the same-basis companions.
+Its signed-density actions use dense linear J/K, never a positive occupied
+factor approximation. The independent final frame-map replay evaluates the
+same physical RI operator; switching it to four-center ERIs would be a model
+error, not a stronger residual check. External reconverged PySCF energies
+qualify the complete gradient independently of the CUDA J/K implementation.
+
+The nuclear cross term uses symmetric polarization of the existing generated
+DF energy derivative, including three-center and fixed-rank metric response.
+It differentiates the actual retained metric branch and rejects unresolved
+rank crossings. One-electron/Pulay and correlation source pullbacks remain
+separate. Exact-source recycled operator images are not reused for RI-JK.
+`PhysicalReference::density_fitted` and immutable frame identity prevent
+accidentally accepting a DF reference with an exact response (or vice versa).
+The generated response-map hash describes the frame equations, not the
+auxiliary basis or Hamiltonian; public model identity retains the DF selector.
+
+The explicit full-DF API and fitting-basis contract are documented in
+[the CBS guide](../user/ccsdt_cbs.md). Its source/response leases are charged
+through all correlation phases; no memory refusal authorizes CPU or exact-HF
+fallback. The SCF and correlation AO-factor builds are still separate owners.
+
 The installed runtime now owns the shared closed-shell response stack:
 `generativeqc.response_problem` owns problem/layout compatibility,
 `generativeqc.response_operator` owns RHF/CPKS matrix-free equations,
@@ -100,6 +126,19 @@ canonical storage retains the existing bounded value route. Resident-source
 refusal still recomputes the same compensated canonical action, and independent
 audits never borrow the resident source. The ordinary device J/K API, mixed
 precision paths and ordinary energy/force SCF dispatch remain unchanged.
+
+Compensated fixed-mask actions reuse the compiler-owned whole-shell Hermite and
+Coulomb recurrence through f shells when prepared shell rows are available.
+This avoids repeating primitive preparation for each Cartesian AO quartet;
+it does not retain a quartic global tensor or change the Schwarz predicate.
+Separate positive J and K destinations retain independent correction planes.
+Resident buckets still take precedence; missing prepared storage retains
+component-wise replay. A threshold tighter than the prepared rows is rejected
+before any action writer, as in the original fixed-mask API.
+`RHFFrameResponseOptions::materialized_jk=false` provides an internal ablation;
+the independent final scalar residual always disables both materialization and
+residency. Successful-attempt phase times and submitted materialized launch
+counts are available in the optional DF progress journal without extra fences.
 
 Restricted CUDA physical-reference exports also admit one canonical Fock
 correction plane. Bounded quartet references use the existing generic exact

@@ -186,12 +186,16 @@ def test_complete_hf_limit(
     np.testing.assert_allclose(symmetric[2][0], output[0], atol=3e-10, rtol=3e-10)
 
 
-@pytest.mark.parametrize("name", ["water", "lih"])
+@pytest.mark.parametrize("name", ["water", "lih", "h2_f"])
 @pytest.mark.parametrize("blas", [False, True])
 def test_nonzero_z_response_matches_complete_energy_directions(
     probe: typing.Any, name: str, blas: bool
 ) -> None:
-    metadata, _ = load_fixture(name)
+    metadata, _ = load_fixture("h2" if name == "h2_f" else name)
+    if name == "h2_f":
+        metadata["inputs"]["shells"].append(
+            {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
+        )
     arrays, mf = reference(metadata)
     o = mf.mol.nelectron // 2
     sources, w = seeds(arrays, o, 0.03)
@@ -323,17 +327,55 @@ def test_fixed_mask_response_is_qualified_against_exact_operator(
     assert actual[3][14] <= actual[3][13]
 
 
-@pytest.mark.parametrize("threshold", [0.0, 0.03])
-def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
+@pytest.mark.parametrize("threshold", [0.0, 0.03, 0.2])
+@pytest.mark.parametrize("name", ["water", "h2_spdf"])
+@pytest.mark.parametrize("materialized", [False, True])
+@pytest.mark.parametrize("prepared_threshold", [0.0, 0.1])
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+def test_fixed_mask_signed_jk_matches_dense_oracle(
+    threshold: float,
+    name: str,
+    materialized: bool,
+    prepared_threshold: float,
+    representation: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The same symmetric ERI mask must act linearly on arbitrary signed D."""
     from tools.generate_validation_references import pyscf_molecule
 
-    metadata, _ = load_fixture("water")
+    monkeypatch.setenv("GENERATIVEQC_TEST_RHF_MATERIALIZED_JK", str(int(materialized)))
+    monkeypatch.setenv(
+        "GENERATIVEQC_TEST_RHF_PREPARED_SCREENING", str(prepared_threshold)
+    )
+    metadata, _ = load_fixture("h2" if name == "h2_spdf" else name)
+    metadata["inputs"]["basis_representation"] = representation
+    if name == "h2_spdf":
+        for angular in (1, 2, 3):
+            metadata["inputs"]["shells"].append(
+                {
+                    "atom_index": 1,
+                    "angular_momentum": angular,
+                    "primitives": [[0.8, 1.0]],
+                }
+            )
     mol, scale, _ = pyscf_molecule(metadata["inputs"])
-    eri = mol.intor("int2e") * np.einsum("i,j,k,l->ijkl", scale, scale, scale, scale)
+    cartesian_inputs = {**metadata["inputs"], "basis_representation": "cartesian"}
+    cartesian, cartesian_scale, _ = pyscf_molecule(cartesian_inputs)
+    eri = cartesian.intor("int2e") * np.einsum(
+        "i,j,k,l->ijkl", *([cartesian_scale] * 4)
+    )
     bounds = np.sqrt(np.maximum(np.einsum("ijij->ij", eri), 0))
     mask = bounds[:, :, None, None] * bounds[None, None, :, :] >= threshold
-    screened = eri * mask
+    # The production mask is defined in normalized Cartesian AOs, even for a
+    # spherical public frame. Mask before the independent libcint projection.
+    projection = (
+        np.eye(len(scale))
+        if mol.cart
+        else mol.cart2sph_coeff() * scale[None, :] / cartesian_scale[:, None]
+    )
+    screened = np.einsum(
+        "ap,bq,cr,ds,abcd->pqrs", *([projection] * 4), eri * mask, optimize=True
+    )
     n = len(scale)
     dp = ct.POINTER(ct.c_double)
     call = ct.CDLL(
@@ -354,8 +396,8 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
     a, b = a + a.T, b + b.T
     potentials = []
     with NativeSource(**source_arguments(metadata)) as source:
-        for d in (a, b, 2.3 * a - 0.7 * b):
-            output = np.empty((2, n, n))
+        for density_index, d in enumerate((a, b, 2.3 * a - 0.7 * b)):
+            output = np.full((2, n, n), 12345.0)
             counts = np.zeros(2, dtype=np.uint64)
             error = ct.create_string_buffer(2048)
             code = call(
@@ -363,10 +405,16 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
                 d.ctypes.data_as(dp),
                 threshold,
                 output.ctypes.data_as(dp),
-                counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+                counts.ctypes.data_as(ct.POINTER(ct.c_uint64))
+                if density_index != 1
+                else None,
                 error,
                 len(error),
             )
+            if threshold < prepared_threshold:
+                assert code != 0 and b"screening domain" in error.value
+                np.testing.assert_array_equal(output, 12345.0)
+                return
             assert code == 0, error.value.decode()
             reference = np.stack(
                 [
@@ -375,7 +423,10 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
                 ]
             )
             np.testing.assert_allclose(output, reference, atol=2e-11, rtol=2e-12)
-            assert counts[0] >= counts[1] > 0
+            if density_index != 1:
+                assert counts[0] >= counts[1] > 0
+            else:
+                np.testing.assert_array_equal(counts, 0)
             potentials.append(output[0] - 0.5 * output[1])
     np.testing.assert_allclose(
         potentials[2], 2.3 * potentials[0] - 0.7 * potentials[1], atol=2e-11, rtol=2e-12

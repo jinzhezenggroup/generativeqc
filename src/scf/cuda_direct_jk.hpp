@@ -21,6 +21,9 @@ struct CudaDirectJkDiagnostic {
   std::size_t batch_size{}, nbf{}, coordinates_per_item{};
   std::size_t device_bytes{}, host_bytes{}, host_preparation_bytes{};
   std::size_t resident_value_count{}, resident_value_bytes{};
+  /** Submitted complete-shell value launches, including fixed-mask response.
+   * This is a launch count, not a completed-ERI census or a device timer. */
+  std::size_t materialized_value_launches{};
   /** Last optional construction: submitted values and stream-completed values,
    * including a finite-audit rejection. These are not published-cache counts. */
   std::size_t resident_values_submitted{}, resident_values_completed{};

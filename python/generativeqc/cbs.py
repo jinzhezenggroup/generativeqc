@@ -130,8 +130,12 @@ class CCSDTCBSCalculator:
     selecting ``hf_extrapolation="highest"``. Exponents are model inputs and
     are never fitted to the current geometry.
 
-    All components use conventional FP64, all-electron RHF references. Explicit
-    auxiliary bases select correlation-only DF-MP2 and DF-CCSD(T), not DF-HF.
+    All components use FP64, all-electron RHF references. Explicit auxiliary
+    bases default to correlation-only DF-MP2 and DF-CCSD(T). ``hf_reference="df"``
+    instead uses that same auxiliary basis for stationary RI-JK, its orbital
+    response and its metric/center derivatives. Choose a basis suitable for
+    both JK and correlation fitting; an MP2-fit label alone does not certify
+    HF accuracy. This explicit model choice never changes on resource refusal.
     Open-shell, ECP and frozen-core variants are not silently substituted.
     Native backend/basis/force and complete memory-admission checks still apply.
 
@@ -150,6 +154,7 @@ class CCSDTCBSCalculator:
         correction_basis: BasisSet | str | Path | None = None,
         auxiliary_bases: Sequence[BasisSet | str | Path] | None = None,
         correction_auxiliary_basis: BasisSet | str | Path | None = None,
+        hf_reference: str = "exact",
         device: str = "cpu",
         device_id: int = 0,
         correlation_exponent: float = 3.0,
@@ -163,6 +168,8 @@ class CCSDTCBSCalculator:
         both MP2 and CCSD(T), retaining conventional RHF references. A distinct
         correction basis requires its own explicit auxiliary basis. Equal
         orbital bases must use the same auxiliary snapshot within this model.
+        ``hf_reference="df"`` selects full DF rather than a DF initial guess;
+        the supplied auxiliary snapshots then serve both JK and correlation.
         """
         bases = tuple(mp2_bases)
         if len(bases) != 2 or not all(isinstance(item, CBSBasis) for item in bases):
@@ -219,6 +226,11 @@ class CCSDTCBSCalculator:
         elif correction_auxiliary_basis is not None:
             raise ValueError("correction_auxiliary_basis requires auxiliary_bases")
         self._auxiliary_bases = MappingProxyType(auxiliaries)
+        if hf_reference not in ("exact", "df"):
+            raise ValueError("hf_reference must be 'exact' or 'df'")
+        if hf_reference == "df" and not auxiliaries:
+            raise ValueError("DF-HF CBS requires explicit auxiliary_bases")
+        self.hf_reference = hf_reference
         checked_integer(device_id, "CBS device ID", high=2**31 - 1)
         if hf_extrapolation not in ("exponential", "highest"):
             raise ValueError("hf_extrapolation must be 'exponential' or 'highest'")
@@ -367,9 +379,13 @@ class CCSDTCBSCalculator:
                     precision="fp64",
                     **(
                         {
-                            "density_fitting": "cuda"
-                            if primary == "df-ccsd(t)"
-                            else "correlation_cuda",
+                            "density_fitting": (
+                                "full_cuda"
+                                if self.hf_reference == "df"
+                                else "cuda"
+                                if primary == "df-ccsd(t)"
+                                else "correlation_cuda"
+                            ),
                             "auxiliary_basis": self._auxiliary_bases[identity],
                         }
                         if self._auxiliary_bases
@@ -521,6 +537,7 @@ class CCSDTCBSCalculator:
                     "correlation_exponent": self.correlation_exponent,
                     "frozen_core": 0,
                     "density_fitting": bool(self._auxiliary_bases),
+                    "hf_reference": self.hf_reference,
                     "auxiliary_basis_identities": {
                         identity: basis.identity
                         for identity, basis in self._auxiliary_bases.items()
