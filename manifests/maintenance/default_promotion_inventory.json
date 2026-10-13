@@ -1253,6 +1253,28 @@
       ]
     },
     {
+      "id": "response.materialized-jk",
+      "classification": "already-default",
+      "controls": [
+        "response-option:materialized_jk"
+      ],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "src/scf/cuda/direct_jk.cpp",
+        "docs/developer/response.md"
+      ],
+      "rationale": "Prepared whole-shell recurrence removes repeated per-component preparation from compensated fixed-mask response. Independent exact scalar audits disable both residency and materialization; unavailable storage retains component-wise replay and masks tighter than prepared rows retain the API refusal.",
+      "revisit_condition": "Requalify when source preparation or a derivative backend changes the work balance. Frozen C5-C7 complete E+F improves, while single C1-C2 controls are slower; do not infer a universal benefit or promote low-order hybrid dispatch from kernel timing alone.",
+      "evidence": [
+        "issue:#1972",
+        "docs:docs/developer/response.md",
+        ".agents/notes/implemented/performance/2026-10-13-cbs-response-whole-shell.md"
+      ]
+    },
+    {
       "id": "response.orbital-screening",
       "classification": "negative-evidence",
       "controls": [

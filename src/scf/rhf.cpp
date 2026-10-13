@@ -881,6 +881,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     auto reference = std::make_shared<PhysicalReference>();
     reference->nbf = n;
     reference->nocc = occupied;
+    reference->density_fitted = true;
     reference->overlap = data.one_electron.overlap;
     reference->hcore = data.one_electron.hcore;
     reference->fock = final_fock;

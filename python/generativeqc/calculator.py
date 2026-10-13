@@ -563,13 +563,23 @@ class Calculator:
             "cuda": _native.DENSITY_FITTING_CUDA,
             "auto": _native.DENSITY_FITTING_AUTO,
             "correlation_cuda": _native.DENSITY_FITTING_CORRELATION_CUDA,
+            "full_cuda": _native.DENSITY_FITTING_FULL_CUDA,
         }
         try:
             density_fitting_mode = density_fitting_modes[str(density_fitting).lower()]
         except KeyError as error:
             raise ValueError(
-                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', or 'correlation_cuda'"
+                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', 'correlation_cuda', or 'full_cuda'"
             ) from error
+        if density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA:
+            if method_id not in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T):
+                raise ValueError("full_cuda requires MP2 or DF-CCSD(T)")
+            if device != "cuda":
+                raise NotImplementedError("full DF correlated methods require CUDA")
+            if auxiliary_basis is None:
+                raise ValueError(
+                    "full DF requires an explicit shared JK/correlation auxiliary basis"
+                )
         if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
             if method_id != _native.METHOD_MP2:
                 raise ValueError(
@@ -584,6 +594,7 @@ class Calculator:
         if intrinsic_df_rccsdt and density_fitting_mode not in (
             _native.DENSITY_FITTING_CUDA,
             _native.DENSITY_FITTING_AUTO,
+            _native.DENSITY_FITTING_FULL_CUDA,
         ):
             raise NotImplementedError(
                 "df-rccsd(t) currently requires CUDA density fitting"
@@ -850,7 +861,10 @@ class Calculator:
                 f"method {method!r} is reserved but not implemented"
             )
         self._capabilities = method_capabilities(self._method_name)
-        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+        if density_fitting_mode in (
+            _native.DENSITY_FITTING_CORRELATION_CUDA,
+            _native.DENSITY_FITTING_FULL_CUDA,
+        ):
             self._capabilities = replace(self._capabilities, supports_batch=False)
         from ._cpu_force_resources import (
             qualified_basis,
@@ -1488,7 +1502,10 @@ class Calculator:
             and (
                 self._method == _native.METHOD_DF_RCCSD_T
                 or self._density_fitting_mode
-                == _native.DENSITY_FITTING_CORRELATION_CUDA
+                in (
+                    _native.DENSITY_FITTING_CORRELATION_CUDA,
+                    _native.DENSITY_FITTING_FULL_CUDA,
+                )
             )
         ):
             return "correlation_df"
