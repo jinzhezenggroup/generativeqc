@@ -40,7 +40,7 @@ Frozen integration `aaec57399ef29f96981da368c3a8c6a91af74ae8`, native library
 `766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321`,
 completed the original 96-atom 12-call population in Slurm job 8182 under
 the original 1800 s limit. Cold / warm median / moved / moved-warm median
-were 538.312 / 90.092 / 268.003 / 90.114 s. All observations passed the original
+were 538.312 / 90.092 / 268.003 / 90.203 s. All observations passed the original
 independent E/F gates (max energy 3.28e-11 Eh, force 2.19e-10 Eh/Bohr).
 
 The 3/12/48-atom controls and PBE/r2SCAN 48/96 controls each completed all
