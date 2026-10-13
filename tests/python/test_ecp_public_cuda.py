@@ -13,6 +13,7 @@ from generativeqc._dft_gradient import StationaryKsState
 from generativeqc_compiler.dft import NativeAO
 from test_dft_complete_cuda import no_cpu_derivatives
 from test_ecp import fixture
+from test_ecp_public_cpu import assert_ecp_force_work
 from test_ecp_stationary_cpu import GRID, reference
 
 pytestmark = pytest.mark.skipif(
@@ -164,9 +165,11 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             started = perf_counter()
             cold = batch.execute(strict=True)
             record_property("batch_cold_seconds", perf_counter() - started)
+            assert_ecp_force_work(batch)
             started = perf_counter()
             warm = batch.execute(strict=True)
             record_property("batch_warm_seconds", perf_counter() - started)
+            assert_ecp_force_work(batch)
         assert all(item.warm_start_used for item in warm.items)
         for a, b in zip(cold.items, warm.items, strict=True):
             np.testing.assert_allclose(a.forces, b.forces, atol=1e-9, rtol=0)
@@ -177,6 +180,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             started = perf_counter()
             replay = batch.execute(coordinates=[moved, None], strict=True)
             record_property("batch_changed_geometry_seconds", perf_counter() - started)
+            assert_ecp_force_work(batch)
         fresh_atoms = [(a, r) for (a, _), r in zip(atoms, moved, strict=True)]
         fresh = calc.singlepoint(fresh_atoms, charge=charge, multiplicity=multiplicity)
         np.testing.assert_allclose(
@@ -184,6 +188,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         )
         assert np.max(np.abs(replay.items[0].forces - cold.items[0].forces)) > 1e-5
         failed = batch.execute(coordinates=[[0.0], None])
+        assert_ecp_force_work(batch, successful_indices=(1,))
         assert not failed.items[0].succeeded and failed.items[0].forces is None
         assert failed.items[1].succeeded
         np.testing.assert_allclose(
@@ -198,10 +203,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         assert ledger["rejected_allocations"] == 0
         assert 0 < ledger["peak_bytes"] <= ledger["limit_bytes"]
         record_property("native_scf_ledger", ledger)
-        work = batch.resource_diagnostics["generated_force"]
-        assert [item["index"] for item in work] == [0, 1]
-        assert work[0]["work"]["ecp_quadrature_pair_samples"] > 0
-        assert work[1]["work"]["ecp_quadrature_pair_samples"] == 0
+        work = assert_ecp_force_work(batch)
         for item in work:
             assert item["work"]["additional_device_peak_bound"] <= 512 << 20
             assert item["work"]["additional_host_numeric_bound"] <= 256 << 20
