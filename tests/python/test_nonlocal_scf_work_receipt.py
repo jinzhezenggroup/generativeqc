@@ -45,8 +45,10 @@ def test_nonlocal_work_rejects_malformed_availability() -> None:
         _nonlocal_work(library, 12, 3)
 
 
+@pytest.mark.parametrize("native_seed", [False, True])
 def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch: pytest.MonkeyPatch,
+    native_seed: bool,
 ) -> None:
     """A frozen replay removes pair work; a new geometry cannot inherit the key."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -56,7 +58,7 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     from generativeqc import Calculator, GridSpec, KsOptions
 
     monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
-    monkeypatch.delenv("GENERATIVEQC_VV10_NATIVE_SEED", raising=False)
+    monkeypatch.setenv("GENERATIVEQC_VV10_NATIVE_SEED", str(int(native_seed)))
     calculator = Calculator(
         method="wb97m-v",
         basis="sto-3g",
@@ -72,6 +74,12 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         cold = owner.execute(properties=("energy",)).items[0]
         assert cold.converged
         assert cold.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
+        if native_seed:
+            assert cold.ks_diagnostic.nonlocal_work["provisional_focks"] > 0
+            assert cold.ks_diagnostic.nonlocal_work["target_focks"] >= 2
+            rows = cold.ks_diagnostic.to_payload()["history"]
+            assert rows[0]["operator_scope"] == "provisional-semilocal-rsh"
+            assert rows[-1]["operator_scope"] == "full-target"
         owner.set_warm_start_updates(False)
         warm = owner.execute(properties=("energy",)).items[0]
         work = warm.ks_diagnostic.nonlocal_work

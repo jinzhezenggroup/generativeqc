@@ -86,7 +86,19 @@ class KsDiagnostic:
         numerical values remain visible for callers to reject, not hidden as
         missing stage baselines.
         """
-        return asdict(self)
+        payload = asdict(self)
+        # The optional native initial-density experiment keeps its work in the
+        # same history. Those rows describe the provisional operator, so they
+        # must never look like physical WB97M-V target checks to readers.
+        provisional = (self.nonlocal_work or {}).get("provisional_focks", 0)
+        if provisional:
+            for row in payload["history"]:
+                row["operator_scope"] = (
+                    "provisional-semilocal-rsh"
+                    if row["iteration"] <= provisional
+                    else "full-target"
+                )
+        return payload
 
 
 @dataclass(frozen=True)
