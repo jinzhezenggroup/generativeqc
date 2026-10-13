@@ -613,16 +613,21 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
   const long double tile_elements = staged_pairs * auxiliary_tile;
   const bool resident =
       retain_three_center || (auxiliary_tile == naux && ao_pair_tile == nbf * nbf);
+  // Setup transfers two metric matrices and the spectrum to the value owner.
+  // The remaining scaled metric, scales and metric solver workspace die before
+  // any lazy SCF/final-state allocation can be requested. Account for their
+  // disjoint lifetimes rather than spending the same budget on both phases.
+  const long double retained_metric_doubles =
+      static_cast<long double>(batch_size) * (2.0L * naux * naux + naux);
   const long double setup_doubles =
-      static_cast<long double>(batch_size) * (3.0L * naux * naux + 2.0L * naux);
+      static_cast<long double>(batch_size) * (1.0L * naux * naux + naux);
   // Metric setup and compact SCF use different solvers and dimensions. Both
   // have a fixed workspace floor; a quadratic-only metric estimate can admit
   // a tile that leaves no room for the actual small-system provider query.
   // Charge both owners conservatively, matching the native diagnostic, and
   // reject provider queries that exceed these shape-only allowances.
-  const long double solver_workspace_bytes =
-      static_cast<long double>(df_eigen_workspace_allowance(naux)) +
-      df_scf_workspace_allowance(nbf, batch_size);
+  const long double setup_workspace_bytes =
+      static_cast<long double>(df_eigen_workspace_allowance(naux));
   const long double contraction_doubles =
       7.0L * matrix_elements + static_cast<long double>(batch_size) * naux + 3.0L * tile_elements +
       (resident ? 0.0L : tile_elements) +
@@ -631,24 +636,28 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
   // planner covers value/SCF storage and reserves no retired coordinate scratch.
   // One-electron/Pulay assembly and the lazy device SCF driver retain up to
   // twenty AO matrices and one graph reservation per active batch item.
-  // Only occupied mode adds two factor matrices and their generation controls,
-  // preserving the dense planner's original minimum and residency thresholds.
+  // Only occupied mode adds two factor matrices and their generation controls.
   // These match the native plan's conservative RHF/UHF lazy-state allowance. Include the small
-  // convergence/occupation vectors and metric status too; a positive budget cannot be spent
+  // convergence/occupation vectors too; a positive budget cannot be spent
   // entirely before SCF state is allocated.
   const long double one_electron_doubles = (occupied_exchange ? 23.0L : 21.0L) * matrix_elements;
   const long double control_bytes =
       static_cast<long double>(batch_size) *
       (16 * sizeof(double) + 2 * sizeof(std::int32_t) + 2 * sizeof(std::uint8_t) +
-       sizeof(std::uint32_t) + sizeof(int) +
+       sizeof(std::uint32_t) +
        (occupied_exchange ? 2 * sizeof(std::uint32_t) + sizeof(int) : 0));
-  const long double bytes =
-      static_cast<long double>(fixed_device_bytes) + control_bytes +
+  const long double scf_bytes =
+      control_bytes + df_scf_workspace_allowance(nbf, batch_size) +
       static_cast<long double>(df_eigen_device_reservation(nbf)) +
       static_cast<long double>(df_final_snapshot_device_reservation(nbf, batch_size) +
                                df_final_validation_device_reservation(nbf)) +
-      static_cast<long double>(metric_bytes) * batch_size + solver_workspace_bytes +
-      (setup_doubles + contraction_doubles + one_electron_doubles) * sizeof(double);
+      one_electron_doubles * sizeof(double);
+  const long double bytes =
+      static_cast<long double>(fixed_device_bytes) +
+      static_cast<long double>(batch_size) * sizeof(int) +  // metric solver status
+      static_cast<long double>(metric_bytes) * batch_size +
+      (retained_metric_doubles + contraction_doubles) * sizeof(double) +
+      std::max(setup_doubles * sizeof(double) + setup_workspace_bytes, scf_bytes);
   if (bytes > static_cast<long double>(std::numeric_limits<std::size_t>::max())) {
     return std::numeric_limits<std::size_t>::max();
   }
@@ -1321,8 +1330,8 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
                                                          std::size_t source_device_bytes,
                                                          bool allow_zero_rank_coulomb) {
   if (!budget.feasible || !budget.live_resource || budget.requested_bytes ||
-      !budget.response_bytes || (!restricted_rank && !allow_zero_rank_coulomb) ||
-      restricted_rank > nbf)
+      budget.response_override_bytes || !budget.response_bytes ||
+      (!restricted_rank && !allow_zero_rank_coulomb) || restricted_rank > nbf)
     return budget;
   const long double basis_count = nbf, auxiliary_count = naux, occupied_rank = restricted_rank;
   // The generated singleton response stages four metric matrices, density/AO
@@ -1336,19 +1345,66 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
       sizeof(double) *
           (4.0L * auxiliary_count * auxiliary_count + 69.0L * basis_count * basis_count +
            2.0L * auxiliary_count + 2.0L * auxiliary_count * occupied_rank * occupied_rank));
-  const auto response = std::max(response_floor, budget.total_bytes / 5);
-  if (response >= budget.response_bytes || response >= budget.total_bytes) return budget;
-  const auto value = budget.total_bytes - response;
-  try {
-    (void)plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
-                                            source_device_bytes, 0, false);
-  } catch (const DensityFittingBudgetError&) {
-    return budget;
+  // Prefer the existing response margin. A rank-zero Coulomb consumer may
+  // instead use its complete shape-derived response floor if that is what
+  // admits a resident value owner within this unchanged total envelope.
+  const auto preferred = std::max(response_floor, budget.total_bytes / 5);
+  for (const auto response : {preferred, response_floor}) {
+    if (response != preferred && (restricted_rank || !allow_zero_rank_coulomb)) break;
+    if (response >= budget.response_bytes || response >= budget.total_bytes) continue;
+    const auto value = budget.total_bytes - response;
+    try {
+      (void)plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
+                                              source_device_bytes, 0, false);
+    } catch (const DensityFittingBudgetError&) {
+      continue;
+    }
+    auto result = budget;
+    result.value_bytes = value;
+    result.response_bytes = response;
+    return result;
   }
-  auto result = budget;
-  result.value_bytes = value;
-  result.response_bytes = response;
-  return result;
+  // A geometry rebuild observes persistent CUDA modules and force arenas that
+  // were absent from the first preparation. The generic fractional margin can
+  // then drop an otherwise feasible packed B and multiply every subsequent J
+  // build's work. For this method-authenticated pure-J owner only, borrow just
+  // the minimum resident allowance from that extra margin. The absolute live
+  // headroom, explicit limits and complete response floor remain hard bounds.
+  if (!restricted_rank && allow_zero_rank_coulomb &&
+      budget.observed_free_bytes > budget.reserved_headroom_bytes) {
+    const auto available = budget.observed_free_bytes - budget.reserved_headroom_bytes;
+    if (available > response_floor && available > budget.total_bytes) {
+      const auto fits = [&](std::size_t value) {
+        try {
+          (void)plan_packed_density_fitting_tiles(1, nbf, naux, 0, value,
+                                                  source_device_bytes, 0, false);
+          return true;
+        } catch (const DensityFittingBudgetError&) {
+          return false;
+        }
+      };
+      auto upper = available - response_floor;
+      if (fits(upper)) {
+        // Reuse the actual planner rather than duplicating its allocation
+        // formula. Rank zero has monotone resident admission; byte bisection
+        // spends no GPU work and preserves the smallest sufficient allowance.
+        std::size_t lower = 1;
+        while (lower < upper) {
+          const auto middle = lower + (upper - lower) / 2;
+          if (fits(middle))
+            upper = middle;
+          else
+            lower = middle + 1;
+        }
+        auto result = budget;
+        result.value_bytes = upper;
+        result.response_bytes = response_floor;
+        result.total_bytes = upper + response_floor;
+        return result;
+      }
+    }
+  }
+  return budget;
 }
 
 DensityFittingTilePlan plan_requested_density_fitting_tiles(
