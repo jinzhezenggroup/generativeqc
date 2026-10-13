@@ -1003,7 +1003,8 @@ def _generic_spec(array: np.ndarray, *, differentiable: builtins.bool) -> Tensor
 class CompiledFunction:
     """Shape/dtype-specialized quantum-chemistry TensorIR compiler.
 
-    CPU execution is compiled C++ with float64 semantics. CUDA uses the existing
+    CPU execution is compiled C++ with FP64 arithmetic and typed Boolean data.
+    CUDA uses the existing
     TensorIR planner and native executor with explicit host staging. Reference
     interpretation is opt-in; unsupported lowering never selects it implicitly.
     Optional TensorSpecs retain AO/orbital/spin domains instead of inferring
@@ -1228,7 +1229,8 @@ def compile(
 ):
     """Compile Array API expressions to native CPU/CUDA code through TensorIR.
 
-    Native CPU currently requires float64; reference and CUDA have their own
+    Native CPU admits FP64 arithmetic, finite FP64 comparisons and typed Boolean
+    inputs/constants/views; reference and CUDA have their own
     explicitly bounded primitive/dtype admission. Shapes specialize on first
     call. Specs optionally declare scientific domains. Cache, byte/work/node
     budgets and finite compiler timeouts apply to native execution. CUDA stages
@@ -1367,7 +1369,7 @@ def capabilities() -> dict[str, object]:
             "scientific_metadata_requires_explicit_indices": True,
             "compiled_call": "shape-dtype-specialized-native-tensorir",
             "compiled_backends": ("cpu", "cuda", "reference"),
-            "native_cpu_dtypes": ("float64",),
+            "native_cpu_dtypes": ("bool", "float64"),
             "molecular_operators": ("MolecularModel",),
             "molecular_derivatives": "native-analytic-nuclear-first-order",
             "molecular_backend_fallback": False,

@@ -97,17 +97,28 @@ def test_native_cpu_coverage_is_explicit_and_float64_only() -> None:
     supported = set(_NATIVE_CPU_CASES) | {
         "reshape_explicit_indices",
         "broadcast_to_explicit_indices",
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
     }
     assert {name for name, entry in matrix.items() if entry["native_cpu"]} == supported
     assert report["native_cpu_scope"] == (
         "bounded-tensorir-subset-not-array-api-conformance"
     )
-    assert "all-live-nodes-float64" in report["native_cpu_requires"]
+    assert "all-live-nodes-float64-or-typed-bool" in report["native_cpu_requires"]
     assert (
         "static-shapes-within-byte-work-node-budgets" in report["native_cpu_requires"]
     )
     for name, entry in matrix.items():
-        assert entry["native_cpu_dtypes"] == (("float64",) if name in supported else ())
+        assert ("float64" in entry["native_cpu_dtypes"]) == (name in supported)
+        assert ("bool" in entry["native_cpu_dtypes"]) == (
+            entry["category"]
+            in {"array-creation", "shape-transform", "static-indexing"}
+            and name in supported
+        )
     for name in (
         "equal",
         "not_equal",
@@ -117,7 +128,7 @@ def test_native_cpu_coverage_is_explicit_and_float64_only() -> None:
         "less_equal",
     ):
         assert matrix[name]["native_cpu_notes"] == (
-            "unsupported-boolean-results-and-comparison-primitives"
+            "finite-float64-operands; one-byte-bool-result; non-differentiable"
         )
 
 
@@ -198,18 +209,18 @@ def test_native_cpu_identity_astype_only_elides_the_cast(copy: bool) -> None:
 @pytest.mark.parametrize(
     "name", ("equal", "not_equal", "greater", "greater_equal", "less", "less_equal")
 )
-def test_native_cpu_boolean_comparisons_are_not_qualified(name: str) -> None:
+def test_native_cpu_boolean_comparisons_use_typed_bytes(name: str) -> None:
     values = np.asarray([1.0, 2.0])
     program = xp.compile(lambda x: getattr(xp, name)(x, 1)).lower(values)
     assert program.outputs["output"].spec.dtype == "bool"
-    with pytest.raises(ValueError, match="bool data or comparisons"):
-        describe_cpu_compilation(program)
+    _, _, resources, _ = describe_cpu_compilation(program)
+    assert resources["typed_bytes"] == 1
 
 
-def test_native_cpu_boolean_creation_is_not_qualified() -> None:
+def test_native_cpu_boolean_creation_uses_typed_bytes() -> None:
     program = xp.compile(lambda x: xp.ones_like(x)).lower(np.asarray([True, False]))
-    with pytest.raises(ValueError, match="bool data or comparisons"):
-        describe_cpu_compilation(program)
+    _, _, resources, _ = describe_cpu_compilation(program)
+    assert resources["typed_bytes"] == 1
 
 
 @pytest.mark.parametrize("name", ("reshape", "broadcast_to"))
