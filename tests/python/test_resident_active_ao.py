@@ -114,9 +114,16 @@ def test_resident_selected_features_and_density_jets(
                         )
                 with pytest.raises(RuntimeError, match="expired"):
                     _ = task.view
+            # Dense feature leases have no map storage at all; malformed maps
+            # are rejected at capability admission, before indexed validation.
+            map_error = (
+                "active AO maps require a local CUDA plan"
+                if selection == "dense"
+                else "sorted unique in-range"
+            )
             for invalid in ([1, 0], [0, 0], [-1], [basis.nao], [0.5]):
                 with (
-                    pytest.raises(ValueError, match="sorted unique in-range"),
+                    pytest.raises(ValueError, match=map_error),
                     grid.feature_task_device_points(
                         points.data.ptr, count, invalid, ("rho",)
                     ),
