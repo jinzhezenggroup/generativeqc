@@ -100,7 +100,7 @@ bool convert_cpu_orbitals(const Gfn2RuntimeRequest& request,
   source.charge = request.charge;
   source.multiplicity = request.multiplicity;
   source.electron_count = static_cast<int>(rounded_electrons);
-  source.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  source.basis_representation = core::kSphericalBasis;
   source.atoms.reserve(request.atomic_numbers.size());
   for (std::size_t atom = 0; atom < request.atomic_numbers.size(); ++atom) {
     const auto atomic_number = request.atomic_numbers[atom];

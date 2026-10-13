@@ -478,6 +478,7 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart SKIP_77)
   endif()
 
+  generativeqc_native_test(generativeqc_native_api_inputs_tests tests/native/test_native_api_inputs.cpp)
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_dft_integral_sources_tests
                        tests/native/test_dft_integral_sources.cpp)

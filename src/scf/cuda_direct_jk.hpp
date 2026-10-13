@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/cuda_derivative_sources.hpp"
 #include "scf/fock_build.hpp"
 

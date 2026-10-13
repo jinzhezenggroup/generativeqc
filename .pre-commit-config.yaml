@@ -46,6 +46,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: native-api-boundaries
+        name: Check C API handle ownership and native core isolation
+        entry: python3 tools/check_native_api_boundaries.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: compiler-structure
         name: Check scientific compiler dependency directions
         entry: python3 tools/check_compiler_structure.py
