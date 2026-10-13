@@ -79,7 +79,8 @@ def test_coverage_distinguishes_boolean_data_and_reference_execution() -> None:
     assert matrix["equal"]["ad"] == "non-differentiable"
     assert matrix["sum"]["audited_keywords"]["keepdims"] == "generic-arrays-only"
     assert matrix["astype"]["audited_keywords"]["device"] == "None-only"
-    assert "where" not in matrix
+    assert matrix["where"]["ad"] == "unsupported; forward-reference-only"
+    assert matrix["where"]["native_cpu"] is False
     for name, operation in matrix.items():
         if name not in {
             "reshape_explicit_indices",

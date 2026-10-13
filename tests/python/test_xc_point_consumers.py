@@ -75,7 +75,8 @@ int main() {
     auto launch = resolve_point_launcher(code, false);
     if (launch != &launch_split_hybrid_points<5>) return 7;
     const auto capability = resolve_point_capabilities(code, false);
-    if (capability.local_ao_selection || capability.mixed_density_contraction) return 12;
+    if (capability.local_ao_selection != (code == generated::kM062XFunctionalCode) ||
+        capability.mixed_density_contraction) return 12;
     launch();
     if (selected_functional != 5 || selected_response) return 8;
     try {

@@ -506,6 +506,15 @@ def lower_precision(
                 ensure_dtype(mapping[node.inputs[0]], compute_dtype),
                 *(mapping[child] for child in node.inputs[1:]),
             )
+        elif node.op == "where":
+            # Selection's result is real, but its predicate is typed Boolean data.
+            inputs = (
+                mapping[node.inputs[0]],
+                *(
+                    ensure_dtype(mapping[child], compute_dtype)
+                    for child in node.inputs[1:]
+                ),
+            )
         else:
             inputs = tuple(
                 ensure_dtype(mapping[child], compute_dtype) for child in node.inputs

@@ -579,6 +579,7 @@ def test_capabilities_cover_every_primitive_and_claim_only_slice_a() -> None:
     report = capabilities()
     non_differentiable = set(report["non_differentiable_primitives"])
     assert non_differentiable == {
+        "where",
         "equal",
         "not_equal",
         "greater",

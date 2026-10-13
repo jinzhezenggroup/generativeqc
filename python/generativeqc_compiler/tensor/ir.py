@@ -156,6 +156,10 @@ for op in COMPARISONS:
         "real floating operands only; Boolean result is non-differentiable",
         "no derivative through comparison",
     )
+PRIMITIVES["where"] = PrimitiveContract(
+    "forward reference only; Boolean condition and real branches have no AD rule",
+    "eager evaluation of all three operands; one selection per result element",
+)
 
 
 def _common(inputs: tuple[Node, ...]) -> TensorSpec:
@@ -226,6 +230,41 @@ def _infer(
     op: str, inputs: tuple[Node, ...], a: dict, declared: TensorSpec
 ) -> TensorSpec:
     """Infer safe result metadata; explicit view/cast types are checked here too."""
+    if op == "where":
+        if len(inputs) != 3:
+            raise ValueError("where requires exactly three operands")
+        condition, left, right = inputs
+        if condition.spec.dtype != "bool":
+            raise ValueError("where condition must be bool data")
+        if left.spec.dtype not in ("float32", "float64") or (
+            left.spec.dtype != right.spec.dtype
+        ):
+            raise ValueError("where branches require the same real float dtype")
+        if any(
+            value.spec.representation != "general"
+            or value.spec.symmetries
+            or any(
+                index.space.kind != "matrix"
+                or index.space.name != f"_array_extent_{index.space.size}"
+                or index.space.spin is not None
+                for index in value.spec.indices
+            )
+            for value in inputs
+        ):
+            raise ValueError(
+                "where supports only generic arrays; scientific domains are unsupported"
+            )
+        domains = tuple(index.domain for index in left.spec.indices)
+        if any(
+            tuple(index.domain for index in value.spec.indices) != domains
+            for value in (condition, right)
+        ):
+            raise ValueError(
+                "where operands require identical index domains; broadcast explicitly"
+            )
+        return left.spec.result(
+            differentiable=left.spec.differentiable or right.spec.differentiable
+        )
     if op == "cast":
         if len(inputs) != 1:
             raise ValueError("cast requires exactly one operand")
@@ -574,6 +613,7 @@ _ATTRS = {
     "reduce": {"axes"},
     "broadcast": {"axes"},
     "cast": {"dtype"},
+    "where": set(),
     **{op: set() for op in COMPARISONS},
 }
 
@@ -662,6 +702,17 @@ def compare(op: str, left: Node, right: Node) -> Node:
     if op not in COMPARISONS:
         raise ValueError(f"unsupported TensorIR comparison: {op}")
     return _make(op, (left, right))
+
+
+def where(condition: Node, left: Node, right: Node) -> Node:
+    """Select generic real values using bool data, with explicit casts/broadcasts.
+
+    All operands remain live and finite-checked, including the unselected branch.
+    This forward reference primitive has no AD or native lowering qualification.
+    """
+    inputs = (condition, left, right)
+    spec = _infer("where", inputs, {}, left.spec)
+    return Node("where", inputs, spec)
 
 
 def add(*inputs: Node, coefficients: typing.Any = None) -> Node:

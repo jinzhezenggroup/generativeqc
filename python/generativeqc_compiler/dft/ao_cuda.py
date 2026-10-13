@@ -986,7 +986,7 @@ def emit_native_xc_point_dispatch() -> str:
     lines.extend(
         (
             "  if (!response && generated::split_hybrid_registered(functional))",
-            "    return {false, false};",
+            "    return {generated::split_hybrid_fp64_local_ao(functional), false};",
             "  if (!response && generated::automatic_cuda_point_entry(functional))",
             "    return {false, false};",
             '  throw std::invalid_argument("unsupported CUDA XC point consumer");',
