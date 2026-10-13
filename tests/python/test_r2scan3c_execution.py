@@ -552,3 +552,263 @@ def test_cuda_r2scan3c_spd_total_matches_independent_analytic_oracle(
     assert force_error < 1e-7
     assert d4_error < 2e-9
     assert gcp_error < 2e-9
+
+
+def test_df_canonical_r2scan3c_cpu_force_composes_and_replays() -> None:
+    """DF electronic force and external D4/gCP gradients each appear once."""
+    controls = {
+        "device": "cpu",
+        "density_fitting": "cpu",
+        "auxiliary_basis": "def2-svp",
+        "ks_options": KsOptions(grid=GRID),
+        "max_iterations": 200,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+    }
+    graph = resolve_method("R2SCAN-3c")
+    electronic = Calculator(
+        method="r2scan-rks", basis=load_r2scan3c_basis(), **controls
+    )
+    composite = Calculator(method="r2scan-3c-rks", **controls)
+    assert "forces" in electronic.capabilities.supported_properties
+    assert "forces" in composite.capabilities.supported_properties
+    assert composite._basis.identity == load_r2scan3c_basis().identity
+
+    xyz = np.asarray([position for _, position in H2], dtype=np.float64)
+    moved = xyz.copy()
+    moved[1] += [0.02, -0.01, 0.03]
+    moved_atoms = [
+        (symbol, tuple(row)) for (symbol, _), row in zip(H2, moved, strict=True)
+    ]
+    with composite.prepare_batch([H2], warm_start=True) as batch:
+        cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        changed = batch.execute(
+            coordinates=[moved], strict=True, properties=("energy", "forces")
+        ).items[0]
+        # Coordinate overrides are per execution; omission replays the
+        # original prepared geometry for electronic and correction owners.
+        moved_warm = batch.execute(
+            coordinates=[moved], strict=True, properties=("energy", "forces")
+        ).items[0]
+        reset = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+    fresh = composite.singlepoint(moved_atoms, properties=("energy", "forces"))
+
+    for row, atoms in ((cold, H2), (changed, moved_atoms)):
+        electronic_result = electronic.singlepoint(
+            atoms, properties=("energy", "forces")
+        )
+        numbers, coordinates = _numbers_and_coordinates(atoms)
+        correction = evaluate_r2scan3c_correction(
+            graph, numbers, coordinates, device="cpu"
+        )
+        assert row.converged and row.dispersion is not None
+        assert row.energy == pytest.approx(
+            electronic_result.energy + correction.energy, abs=1e-8
+        )
+        np.testing.assert_allclose(
+            row.forces,
+            electronic_result.forces - correction.gradient,
+            atol=3e-7,
+            rtol=0,
+        )
+        assert row.dispersion.d4.energy == pytest.approx(
+            correction.d4.energy, abs=2e-13
+        )
+        assert row.dispersion.gcp.energy == pytest.approx(
+            correction.gcp.energy, abs=2e-13
+        )
+        np.testing.assert_allclose(
+            row.dispersion.gradient, correction.gradient, atol=2e-11, rtol=0
+        )
+        np.testing.assert_allclose(row.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
+
+    assert warm.energy == pytest.approx(cold.energy, abs=1e-9)
+    np.testing.assert_allclose(warm.forces, cold.forces, atol=3e-7, rtol=0)
+    assert moved_warm.energy == pytest.approx(changed.energy, abs=1e-9)
+    np.testing.assert_allclose(moved_warm.forces, changed.forces, atol=3e-7, rtol=0)
+    assert reset.energy == pytest.approx(cold.energy, abs=1e-9)
+    np.testing.assert_allclose(reset.forces, cold.forces, atol=3e-7, rtol=0)
+    assert changed.energy == pytest.approx(fresh.energy, abs=1e-8)
+    np.testing.assert_allclose(changed.forces, fresh.forces, atol=3e-7, rtol=0)
+
+
+def test_df_noncanonical_d4_composite_remains_energy_only() -> None:
+    """Adding a D4 force provider must not widen unrelated DF compositions."""
+    calc = Calculator(
+        method="r2scan-d4-rks",
+        basis="sto-3g",
+        device="cpu",
+        density_fitting="cpu",
+        auxiliary_basis="def2-svp",
+        ks_options=KsOptions(grid=GRID),
+    )
+    assert not calc._density_fitted_composite_force_eligible()
+    assert "forces" not in calc.capabilities.supported_properties
+    with pytest.raises(ValueError, match="does not support properties: forces"):
+        calc.singlepoint(H2, properties=("energy", "forces"))
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
+    reason="independent CUDA DF qualification requires a Slurm allocation",
+)
+def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() -> None:
+    """3-atom canonical DF E/F: cold, five warm, moved and five moved-warm.
+
+    The PySCF force differentiates both auxiliary integrals and the metric
+    under the exact unpruned moving grid. D4 and gCP have independent sources.
+    """
+    allocation = _real_cuda_allocation()
+    pyscf = pytest.importorskip("pyscf")
+    dftd4 = pytest.importorskip("dftd4")
+    from dftd4.interface import DampingParam, DispersionModel
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc.basis import load_basis
+    from generativeqc_compiler.dft import NativeAO
+    from test_dft_df_public import pyscf_energy_gradient
+
+    from tools.generativeqc_gcp.reference import evaluate_r2scan3c_gcp as reference_gcp
+
+    auxiliary = load_basis(
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json"
+    )
+    basis_spec = load_r2scan3c_basis()
+    calc = Calculator(
+        method="r2scan-3c-rks",
+        device="cuda",
+        density_fitting="cuda",
+        auxiliary_basis=auxiliary,
+        ks_options=KsOptions(grid=GridSpec(12, 8, 16)),
+        max_iterations=200,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+    assert calc._basis.identity == basis_spec.identity
+    assert calc._representation_name == "spherical"
+    assert "forces" in calc.capabilities.supported_properties
+
+    def reference(batch: typing.Any, atoms: typing.Any) -> tuple[float, np.ndarray]:
+        with NativeAO(atoms, basis=basis_spec, representation="spherical") as basis:
+            state = StationaryKsState.from_native(batch, basis)
+            try:
+                coulomb, exchange, threshold = state._source.fock_provider_proof()
+                assert coulomb == "density-fitted" and exchange is None
+                assert threshold == calc._density_fitting_relative_threshold
+                electronic_energy, electronic_gradient = pyscf_energy_gradient(
+                    calc, state, atoms, 1, "R2SCAN"
+                )
+            finally:
+                state._source.close()
+        numbers, xyz = _numbers_and_coordinates(atoms)
+        damping = DampingParam(s6=1.0, s8=0.0, s9=2.0, a1=0.42, a2=5.65)
+        d4 = DispersionModel(
+            np.asarray(numbers, dtype=np.int32),
+            xyz,
+            charge=0.0,
+            ga=2.0,
+            gc=1.0,
+        ).get_dispersion(damping, grad=True)
+        gcp = reference_gcp(tuple(numbers), xyz)
+        return (
+            electronic_energy + float(d4["energy"]) + gcp.energy,
+            -electronic_gradient - d4["gradient"] - gcp.gradient,
+        )
+
+    moved = np.asarray([xyz for _, xyz in WATER], dtype=np.float64)
+    moved[1] += [0.025, -0.01, 0.035]
+    moved_atoms = [
+        (symbol, tuple(row)) for (symbol, _), row in zip(WATER, moved, strict=True)
+    ]
+    errors: dict[str, list[dict[str, float]]] = {"fixed": [], "moved": []}
+
+    with calc.prepare_batch([WATER], warm_start=True) as batch:
+        first = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        first_reference = reference(batch, WATER)
+        for repeat in range(6):
+            row = (
+                first
+                if repeat == 0
+                else batch.execute(strict=True, properties=("energy", "forces")).items[
+                    0
+                ]
+            )
+            assert row.converged and row.dispersion is not None
+            errors["fixed"].append(
+                {
+                    "energy": abs(row.energy - first_reference[0]),
+                    "force": float(np.max(np.abs(row.forces - first_reference[1]))),
+                }
+            )
+        first_moved = batch.execute(
+            coordinates=[moved], strict=True, properties=("energy", "forces")
+        ).items[0]
+        moved_reference = reference(batch, moved_atoms)
+        for repeat in range(6):
+            row = (
+                first_moved
+                if repeat == 0
+                else batch.execute(
+                    coordinates=[moved], strict=True, properties=("energy", "forces")
+                ).items[0]
+            )
+            assert row.converged and row.dispersion is not None
+            errors["moved"].append(
+                {
+                    "energy": abs(row.energy - moved_reference[0]),
+                    "force": float(np.max(np.abs(row.forces - moved_reference[1]))),
+                }
+            )
+        correction_diagnostic = batch.dispersion_diagnostic
+        metrics = batch.last_density_fitting_metric_diagnostics()
+
+    direction = np.asarray(
+        [[0.13, -0.07, 0.11], [-0.05, 0.17, 0.03], [0.09, 0.02, -0.14]]
+    )
+    step = 1e-4
+    displaced_energies = []
+    for sign in (1, -1):
+        displaced = [
+            (symbol, tuple(row))
+            for (symbol, _), row in zip(
+                WATER,
+                np.asarray([xyz for _, xyz in WATER]) + sign * step * direction,
+                strict=True,
+            )
+        ]
+        displaced_energies.append(
+            calc.singlepoint(displaced, properties=("energy",)).energy
+        )
+    finite_difference = (displaced_energies[0] - displaced_energies[1]) / (2 * step)
+    projected = float(-np.sum(first.forces * direction))
+    max_energy_error = max(
+        entry["energy"] for rows in errors.values() for entry in rows
+    )
+    max_force_error = max(entry["force"] for rows in errors.values() for entry in rows)
+    translation_error = max(
+        float(np.max(np.abs(row.sum(axis=0))))
+        for row in (first.forces, first_moved.forces)
+    )
+    _cuda_evidence(
+        "canonical-3atom-r2scan3c-df-independent-force",
+        {
+            "allocation": allocation,
+            "method": "r2scan-3c-rks",
+            "basis_identity": basis_spec.identity,
+            "auxiliary_basis_identity": auxiliary.identity,
+            "pyscf_version": pyscf.__version__,
+            "dftd4_version": dftd4.__version__,
+            "errors": errors,
+            "metric_diagnostics": [str(value) for value in metrics],
+            "correction_identity": correction_diagnostic.method_ir_identity,
+            "max_energy_error": max_energy_error,
+            "max_force_error": max_force_error,
+            "translation_error": translation_error,
+            "directional_fd_error": abs(finite_difference - projected),
+        },
+    )
+    assert max_energy_error < 1e-8
+    assert max_force_error < 1e-7
+    assert translation_error < 2e-8
+    assert abs(finite_difference - projected) < 5e-6

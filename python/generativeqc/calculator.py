@@ -947,7 +947,7 @@ class Calculator:
             and self._precision_mode == _native.PRECISION_FP64
             and not basis_has_ecp
             and self._automatic_libxc_name is None
-            and self._dispersion_method_ir is None
+            and self._density_fitted_composite_force_eligible()
             and self._ks_options is not None
             and (
                 (
@@ -1160,6 +1160,24 @@ class Calculator:
                     else frozenset()
                 ),
             )
+
+    def _density_fitted_composite_force_eligible(self) -> bool:
+        """Keep DF correction admission separate from fitted electronic forces.
+
+        Only the canonical r2SCAN-3c graph has a qualified, additive D4+gCP
+        gradient owner. The constructor already binds its defining basis;
+        compare the full canonical manifest as well as its public name.
+        Other corrected DF methods remain energy-only until qualified.
+        """
+        graph = self._dispersion_method_ir
+        if graph is None:
+            return True
+        if graph.identifier != "R2SCAN-3c":
+            return False
+        from generativeqc_compiler.method import resolve_method
+
+        canonical = resolve_method("R2SCAN-3c", spin=graph.spin)
+        return graph.manifest_identity == canonical.manifest_identity
 
     def _default_properties(self, *, batch: bool = False) -> frozenset[str]:
         """New bounded CPU forces are opt-in; retain established defaults."""
