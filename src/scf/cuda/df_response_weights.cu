@@ -1480,6 +1480,9 @@ cudaError_t contract_cuda_df_response_weights(
   auto* weights = raw + tile * matrix;
   auto* charges = weights + tile * matrix;
   auto* potentials = charges + terms.size() * a;
+  const bool has_exchange = std::any_of(
+      terms.begin(), terms.end(),
+      [](const auto& term) { return term.exchange_coefficient != 0; });
   runtime::cuda_trace::TraceRegion metric_inverse("metric_inverse", stream);
   inverse_kernel<<<blocks(aa), threads, 0, stream>>>(a, metric.inverse_square_root, inverse);
   metric_inverse.finish();
@@ -1523,11 +1526,16 @@ cudaError_t contract_cuda_df_response_weights(
     const auto count = std::min(tile, a - begin);
     error = cudaMemsetAsync(weights, 0, count * matrix * sizeof(double), stream);
     if (error != cudaSuccess) return error;
-    if (begin != 0) {
-      for (std::size_t p = 0; p < count; ++p) read_values(begin + p, raw + p * matrix);
-    } else {
-      runtime::cuda_trace::trace_counter("raw_value_cache_hits", count);
-      runtime::cuda_trace::trace_counter("raw_value_reuse_bytes", count * matrix * sizeof(double));
+    // The raw P panel is required only by exchange's cross-metric Gram.
+    // J-only weights are D*p and need no further source visit after the
+    // charge pass, including for truncated metrics and scalar diagnostics.
+    if (has_exchange) {
+      if (begin != 0) {
+        for (std::size_t p = 0; p < count; ++p) read_values(begin + p, raw + p * matrix);
+      } else {
+        runtime::cuda_trace::trace_counter("raw_value_cache_hits", count);
+        runtime::cuda_trace::trace_counter("raw_value_reuse_bytes", count * matrix * sizeof(double));
+      }
     }
     runtime::cuda_trace::TraceRegion coulomb_weights("coulomb_response_weights", stream);
     for (std::size_t t = 0; t < terms.size(); ++t)
@@ -1536,6 +1544,12 @@ cudaError_t contract_cuda_df_response_weights(
             matrix, a, begin, count, terms[t].coulomb_coefficient, densities + t * matrix,
             potentials + t * a, weights);
     coulomb_weights.finish();
+    if (!has_exchange) {
+      error = cudaGetLastError();
+      if (error != cudaSuccess) return error;
+      consume(0, {begin, matrix, 1, a}, count * matrix, weights);
+      continue;
+    }
     for (std::size_t q = 0; q < a; ++q) {
       const double* exchange_values = values;
       if (q >= begin && q - begin < count) {
