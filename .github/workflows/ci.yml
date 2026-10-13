@@ -93,7 +93,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -221,7 +222,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -358,7 +360,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -741,7 +744,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -937,7 +941,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1044,7 +1049,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1337,7 +1343,8 @@ jobs:
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1689,7 +1696,8 @@ jobs:
         shell: bash
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
