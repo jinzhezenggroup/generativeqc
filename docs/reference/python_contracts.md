@@ -452,7 +452,13 @@ Reference compiled calls admit only CPU bool/float32/float64 arrays; comparisons
 consume finite real operands and return checked bool outputs.
 The experimental `compile` supports native CPU (default, float64), CUDA
 (explicit host staging) and reference execution. Native backends reject live
-Boolean data/comparisons rather than reinterpreting storage. Derivative and
+`where` before compiler discovery or allocation. Materializing native CPU admits
+its bounded Boolean input/constant/view and finite float64 comparison subset;
+CUDA/portable/scalar/bundle paths retain their Boolean restrictions. Captured
+`where` is a finite generic-real forward reference contract with explicit
+promotion/broadcasts and evaluation of all live operands. Scientific annotations,
+nonfinite branches and selection AD are unsupported. See the experimental array
+guide for the complete selection contract. Derivative and
 forward programs share resource/primitive admission. Unsupported backends
 fail rather than falling back. Capability
 reports separate frontend representation, execution and production qualification.

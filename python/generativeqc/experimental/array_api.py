@@ -796,7 +796,11 @@ def searchsorted(
 
 
 def where(condition: typing.Any, x1: typing.Any, x2: typing.Any, /) -> typing.Any:
-    """Execute standard where on CPU, or its bounded TensorIR lowering."""
+    """Select eager CPU values, or capture finite generic real reference selection.
+
+    Captured conditions are Boolean; real branches promote and broadcast explicitly.
+    All live operands are checked. Captured selection has no AD or native backend.
+    """
     return _dispatch("where", condition, x1, x2)
 
 

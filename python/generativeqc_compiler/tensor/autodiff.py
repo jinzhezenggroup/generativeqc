@@ -181,7 +181,7 @@ def capabilities() -> dict:
         "schema_version": AD_VERSION,
         "rule_version": AD_RULE_VERSION,
         "primitives": sorted(AD_PRIMITIVES),
-        "non_differentiable_primitives": sorted(COMPARISONS),
+        "non_differentiable_primitives": sorted(COMPARISONS | {"where"}),
         "modes": ["jvp", "vjp"],
         "backend": BACKEND,
         "packed_symmetry": False,
