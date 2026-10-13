@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -593,15 +593,15 @@
       "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 183917,
-      "sha256": "c19a26b9205ce2d755b2498977b2e52bf8caef557e0eda91f776750653c19d4d",
+      "bytes": 185892,
+      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377",
       "role": "Complete DF endpoint chart"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 295556,
-      "sha256": "67f81cb2475b8a9a9cd8552b56a12e20be400b2e8d324ef16f7d28244411f6c6",
+      "bytes": 330160,
+      "sha256": "a841fb8731cf03c3d6391dac9fee5588fdbae6947c3509698d59a15d79b2f943",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
