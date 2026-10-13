@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,7 @@ import pytest
 from _cpp_source_support import (
     cpp_function_definition,
     cpp_function_definition_signature,
+    cpp_record_definition,
 )
 
 if TYPE_CHECKING:
@@ -267,6 +269,19 @@ def streamed_probe(
     source = (ROOT / "src/scf/cuda/df_response_weights.cu").read_text()
     generated = emit_df_hf_response_cuda()
     pieces = [_SHIM]
+    # Master may route these borrowed products through the tensor provider.
+    # Execute its actual records/forwarders above the same queued cuBLAS double;
+    # keep the pre-adapter branch executable until that master change is merged.
+    provider = (ROOT / "src/tensor/cuda_runtime.cuh").read_text()
+    pieces.append("namespace generativeqc_tensor {\n")
+    for record, submit in (
+        ("ColumnGemmView", "submit_column_gemm"),
+        ("ColumnGemvView", "submit_column_gemv"),
+    ):
+        if submit in source:
+            pieces.append(cpp_record_definition(provider, record) + ";")
+            pieces.append(cpp_function_definition(provider, submit))
+    pieces.append("}\n")
     pieces.append(_host_launches(emit_symmetric_matrix_function_vjp_cuda()))
     pieces.append("namespace generativeqc::scf {\nnamespace generated {\n")
     pieces.append(cpp_function_definition(generated, "df_rhf_charge_contract"))
@@ -314,20 +329,28 @@ def streamed_probe(
     pieces.extend(("}\n", _DRIVER))
     unit = directory / "probe.cpp"
     unit.write_text("\n".join(pieces))
-    return native_cxx.build_executable(
-        [unit],
-        directory / "probe",
-        compile_args=(
-            "-std=c++20",
-            "-O1",
-            "-fsanitize=undefined",
-            "-fno-sanitize-recover=undefined",
-            "-I" + str(directory),
-            "-I" + str(ROOT / "include"),
-            "-I" + str(ROOT / "src"),
-        ),
-        link_args=("-fsanitize=undefined",),
-    )
+    try:
+        return native_cxx.build_executable(
+            [unit],
+            directory / "probe",
+            compile_args=(
+                "-std=c++20",
+                "-O1",
+                "-fsanitize=undefined",
+                "-fno-sanitize-recover=undefined",
+                "-I" + str(directory),
+                "-I" + str(ROOT / "include"),
+                "-I" + str(ROOT / "src"),
+            ),
+            link_args=("-fsanitize=undefined",),
+        )
+    except subprocess.CalledProcessError as error:
+        # Pytest otherwise drops captured compiler diagnostics from CI reports.
+        diagnostics = error.stderr or "compiler/linker returned no stderr"
+        print(diagnostics[:8192], file=sys.stderr)
+        if len(diagnostics) > 8192:
+            print("[compiler stderr truncated after 8192 characters]", file=sys.stderr)
+        raise
 
 
 def _fixture(truncated: bool = False) -> dict[str, np.ndarray | float | int]:
