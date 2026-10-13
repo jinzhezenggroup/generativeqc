@@ -191,26 +191,34 @@ print(first.energies)
 
 ## Benchmarks
 
-Complete **DFT energy + analytic forces** on an RTX 5090, based on master
+Complete **HF and DFT energy + analytic forces** on an RTX 5090, based on master
 `e0ad22036`, measured on 2026-10-13. The report identifies original measurements
 and reruns with the force-memory fix. Cold includes construction, preparation
 and the first calculation; warm reuses a fixed converged density. Compiler
 caches are retained.
 
-![Cold and warm DFT energy-plus-force timings for GenerativeQC and GPU4PySCF](benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
+**Direct J/K**
+
+![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
+
+**Density fitting (DF)** — both engines use the same cc-pVDZ-JKFIT auxiliary basis.
+
+![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-dft-20261013/df-cold-warm.svg)
 
 Both engines use matching water clusters, FP64, def2-SVP and explicit moving
-grids. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP.
+grids for DFT. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP.
 Native corrections use CUDA D4 and native CPU gCP; the independent reference
 uses CPU D4 and gCP. Each plotted native point passes energy
 and force checks across cold, warm and changed-geometry calls. Missing points
-are labeled; crosses show warm repeats with differing SCF work.
+are labeled. Lines connect medians of all successful endpoint repeats, bars show
+min/max, and crosses retain differing SCF work. Iteration counts do not imply
+equal work between engines; failed or incomplete endpoints have no timing.
 
-See the [timing table](benchmarks/results/readme-dft-20261013/timings.md) and
+See the [direct](benchmarks/results/readme-dft-20261013/timings.md) and
+[DF timing tables](benchmarks/results/readme-dft-20261013/df-timings.md), and
 [measurement protocol, accuracy and limitations](benchmarks/results/readme-dft-20261013/README.md).
-Other dated measurements, including
-[direct and density-fitted HF](benchmarks/results/df-source-screening-20261004/README.md),
-are retained in the [benchmark archive](benchmarks/results/README.md).
+DF coverage and unsupported combinations are listed in that report.
+Other dated measurements are retained in the [benchmark archive](benchmarks/results/README.md).
 
 ## Documentation
 

@@ -1,30 +1,37 @@
-# DFT energy and analytic forces: cold and warm
+# HF and DFT energy and analytic forces: cold and warm
 
 Measurements are based on master `e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c`
 on 2026-10-13. PBE, PBE0, B3LYP and r2SCAN at **12 and 96 atoms** were remeasured
 with this change's conditional force-memory handoff; other points retain the
-original master measurements. Each point retains its actual native source
-inventory identity and library hash in [summary.json.gz](summary.json.gz).
+original master measurements. HF and DF were newly measured using the fixed build.
+Each point retains its actual native source
+inventory identity and library hash in [summary.json.xz](summary.json.xz).
 [manifest.json](manifest.json) identifies both snapshots and the changed files.
 
-![Cold and warm complete DFT endpoints](dft-cold-warm.svg)
+![Cold and warm complete direct HF/DFT endpoints](dft-cold-warm.svg)
+
+![Cold and warm complete DF HF/DFT endpoints](df-cold-warm.svg)
+
+See the [DF timing table](df-timings.md) for the separate density-fitted population.
 
 See the [complete timing table](timings.md) for all sizes and both engines.
-Cold is one observed call per point; stable warm series show the median and
-minimum–maximum of five repeats. Crosses/ranges retain repeats with different
-SCF iteration or Fock-build counts instead of pooling them into a median.
+Cold is one observed call per point; warm series connect the median of all five
+complete endpoint repeats and show their minimum–maximum range. Crosses and †
+retain differing SCF iteration/build counts. Only failed or missing endpoints
+break lines; endpoint statistics never imply equal SCF work.
 
 ## Measurements and acceptance
 
-**25 of 28 native points** passed all 12 endpoint checks
-(300 native observations); **26 of 28 reference points** completed.
+The direct matrix has **29 of 32 native points** passing all 12 endpoint checks
+(348 native observations); **30 of 32 reference points** completed.
 Across accepted native observations, maximum absolute errors were **2.319e-11 Eh**
-and **9.159e-11 Eh/Bohr**. All reference electronic XC evaluations
+and **9.159e-11 Eh/Bohr**. All DFT reference electronic XC evaluations
 reported the CUDA Libxc backend. These are complete endpoint observations;
-no iteration-normalized speedup is claimed.
+no iteration-normalized speedup is claimed. HF and DF additions are tabulated below.
 
 | Functional | Qualified native sizes (atoms) |
 | --- | --- |
+| HF | 3, 12, 48, 96 |
 | PBE | 3, 12, 48, 96 |
 | PBE0 | 3, 12, 48, 96 |
 | B3LYP | 3, 12, 48, 96 |
@@ -53,9 +60,13 @@ The ωB97M-V reference has a 1800-second per-point limit and a 3600-second
 outer allocation limit. Its retained outcome identifies which limit stopped
 each incomplete point. No native timing is inferred from an incomplete oracle.
 
-Host validation: 140 tests passed across force ownership/admission, ctypes
+Initial host validation: 140 tests passed across force ownership/admission, ctypes
 bridges, telemetry and benchmark publication. The real-device lifetime/oracle
-probe and ten native CLI force/finite-difference cases also passed.
+probe and ten native CLI force/finite-difference cases also passed. The HF/DF
+publication follow-up passes 215 host tests, including endpoint gates, plotting
+statistics, prepared-force fixtures and evidence-retention checks.
+The final interruption/reporting follow-up passes 27 focused benchmark tests;
+operator cancellation retains partial evidence without publishing its timings.
 
 Every published native point must complete 12 independently checked endpoints:
 cold, five fixed-density warm calls, changed geometry, and five moved-geometry
@@ -64,6 +75,77 @@ absolute errors of **1e-8 Eh** and **1e-7 Eh/Bohr**. The comparison does not div
 wall time by iterations or assert equivalent stopping rules between engines.
 The full scalar observations retain native iterations/Fock builds, reference
 SCF J/K builds, residuals, errors and available resource/work diagnostics.
+
+## Density-fitted coverage and negative probes
+
+The separate DF matrix uses **HF, PBE, PBE0 and r²SCAN**, the same spherical
+cc-pVDZ-JKFIT auxiliary snapshot in both engines, and independent DF references.
+All native storage, response and memory planning use the recorded source
+snapshot's public defaults.
+GPU4PySCF gradients explicitly include auxiliary-basis/metric response as well
+as moving-grid response for DFT. Direct and DF are different approximations
+and are never gated against each other's energies.
+
+The DF matrix has **14 of 16 native points** passing all 12 endpoint checks
+(168 observations); all **16 reference points** completed. Maximum accepted
+native errors are **8.027e-11 Eh** and **1.557e-10 Eh/Bohr**. HF and PBE0 pass
+at all four sizes; PBE and r²SCAN pass at 3, 12 and 48 atoms.
+
+The two 96-atom semilocal points expose a severe default streamed-DF performance
+defect, tracked in [#2411](https://github.com/jinzhezenggroup/generativeqc/issues/2411).
+Each eventually completed its first cold call, but its warm population remained
+incomplete. These partial cold observations are diagnostic evidence, excluded
+from both the plotted timings and acceptance totals:
+
+| Method / atoms | Cold E+F (s) | Integral derivative interval (s) | DF streamed |
+| --- | ---: | ---: | --- |
+| PBE / 48 | 21.634 | 0.408 | false |
+| PBE / 96 | 1225.048 | 627.548 | true |
+| r²SCAN / 48 | 42.475 | 0.382 | false |
+| r²SCAN / 96 | 1221.951 | 617.521 | true |
+
+PBE job 8012 exhausted the original 1800-second whole-point limit during
+`warm/0` (exit 124). r²SCAN job 8014 was explicitly cancelled at
+2026-10-13 14:01:01 +08:00 during `warm/0`, before that limit; its outcome is
+**interrupted**, not timeout. Both cold calls converged and met the numerical
+gates. The observed route and phase timings establish a performance cliff;
+they do not establish a deadlock or its precise repeated-work mechanism.
+The PBE0/96 control uses a resident DF plan and takes 77.368 s cold, including
+3.107 s in the integral derivative interval.
+
+Supplemental probes retain the other requested functionals' actual limits;
+they are not plotted as qualified DF series:
+
+| DF method | Atoms | Native outcome |
+| --- | ---: | --- |
+| B3LYP | 3 | Energy converges, then force fails: `invalid KS final-state model for functional 3` |
+| r²SCAN-3c | 3 | Public capability does not advertise analytic forces for this DF/basis combination |
+| M06-2X | 3 | Preparation rejects the split-global-hybrid DF combination; requires direct J/K |
+| ωB97M-V | 3, 12 | 3 atoms pass; 12-atom cold energy error **2.4092e-8 Eh** exceeds the **1e-8 Eh** gate |
+
+The larger ωB97M-V DF probe was stopped after the 12-atom gate failed; 48 atoms
+retain the interrupted reference outcome, and 96 atoms were not attempted.
+Its 3-atom success, 12-atom failure and interrupted larger probe remain in
+[df-summary.json.xz](df-summary.json.xz), alongside the other negative probes.
+All eight methods remain represented in the direct comparison; unsupported
+DF forces are not substituted with direct forces.
+
+The benchmark findings have separate actionable issues with reproduction,
+source identities and acceptance gates:
+
+| Finding | Follow-up |
+| --- | --- |
+| PBE/r²SCAN DF streaming performance cliff | [#2411](https://github.com/jinzhezenggroup/generativeqc/issues/2411) |
+| B3LYP DF final-state/force failure | [#2412](https://github.com/jinzhezenggroup/generativeqc/issues/2412) |
+| ωB97M-V DF energy accuracy failure | [#2413](https://github.com/jinzhezenggroup/generativeqc/issues/2413) |
+| M06-2X DF support missing | [#2414](https://github.com/jinzhezenggroup/generativeqc/issues/2414) |
+| r²SCAN-3c DF force capability missing | [#2415](https://github.com/jinzhezenggroup/generativeqc/issues/2415) |
+| Direct r²SCAN-3c/96 incomplete cold endpoint | [#2416](https://github.com/jinzhezenggroup/generativeqc/issues/2416) |
+| GPU4PySCF ωB97M-V/48,96 incomplete reference populations | [#2417](https://github.com/jinzhezenggroup/generativeqc/issues/2417) |
+
+These findings remain unresolved by the force-cache and plotting fixes. The
+reference issue is a benchmark blocker; the available evidence does not prove
+an upstream GPU4PySCF correctness bug.
 
 ## Default OOM correction
 
@@ -76,7 +158,7 @@ pass all 12 cold/warm/moved checks, including the formerly failing cold calls.
 The 12-atom controls completed without cache eviction; the native lifetime
 probe separately verifies retention of admitted ERIs when memory is sufficient.
 
-[force-memory.json.gz](force-memory.json.gz) retains the per-call memory receipts
+[force-memory.json.xz](force-memory.json.xz) retains the per-call memory receipts
 and additional validation. A diagnostic pressure injection left 64 MiB free:
 master failed with OOM; the fixed endpoint completed all 12 checks. Its timings
 are excluded from this figure. M06-2X and ωB97M-V three-atom controls also passed.
@@ -120,8 +202,8 @@ reference timeouts listed above are separate limitations.
   corrections also remain inside every timed endpoint. The figure labels the
   reference CPU corrections.
 - WB97M-V includes self-consistent VV10 and the shared molecular density-screening
-  policy. No density fitting, mixed precision, experimental AO selection or
-  preliminary-density override is enabled in this matrix.
+  policy. Direct and DF use separate, matching independent oracles. No mixed
+  precision, experimental AO selection or preliminary-density override is enabled.
 
 ## Hardware and provenance
 
@@ -143,8 +225,10 @@ AMD EPYC 9354 processors; each Slurm allocation requests eight CPU threads.
 The remote source is a plain synchronized snapshot, so its raw Git fields are
 null. The manifest records the base revision and both native source inventories and
 loaded-library hashes; per-file hashes bind the actual benchmark and Python
-consumers. The eight remeasured points use the fixed build; the remaining
-points preserve their original master provenance.
+consumers. The eight remeasured DFT points and all new HF/DF points use the fixed build;
+the remaining direct DFT points preserve their original master provenance.
+The exact earlier source/build campaigns are retained losslessly in
+[source-campaigns.json.xz](source-campaigns.json.xz).
 
 ## Reproduction
 
@@ -174,8 +258,14 @@ PYTHONPATH=.:python python -m tools.render_readme_dft \
 ```
 
 `README_BENCHMARK_METHODS`, `README_BENCHMARK_SIZES` and
-`README_BENCHMARK_POINT_TIMEOUT` select a bounded subset; defaults are the seven
+`README_BENCHMARK_POINT_TIMEOUT` select a bounded subset; defaults are the eight
 documented methods, four sizes, five repeats and 1800 seconds per engine/size.
+For the separate DF campaign, set `README_BENCHMARK_DENSITY_FITTING=cuda` and
+use a distinct `README_BENCHMARK_OUTPUT`. `README_BENCHMARK_AUXILIARY_BASIS`
+selects the explicit auxiliary snapshot; the default is cc-pVDZ-JKFIT. Select
+`README_BENCHMARK_METHODS="hf pbe pbe0 r2scan"` for the plotted DF population,
+and pass `--density-fitting --methods hf pbe pbe0 r2scan` to the reducer.
+Unsupported combinations remain explicit outcomes.
 The runner also accepts `reference` and `native` separately, preserving the
 independent reference JSON. Use a fresh output directory for each campaign.
 
@@ -183,7 +273,7 @@ Re-render the committed reduction without a GPU:
 
 ```bash
 PYTHONPATH=.:python python -m tools.render_readme_dft \
-  --summary benchmarks/results/readme-dft-20261013/summary.json.gz \
+  --summary benchmarks/results/readme-dft-20261013/summary.json.xz \
   --output .artifacts/readme-figure
 ```
 
@@ -191,3 +281,32 @@ The compact archive retains original-file hashes and independent cold/moved
 reference vectors. Large native arrays, build products and trial logs remain in
 ignored local artifact storage. Hashes establish integrity, not authentication
 or a new numerical qualification of a different source revision.
+
+## Connected medians and the GPU4PySCF replay audit
+
+The previous renderer deliberately broke a line when SCF iterations/builds
+varied between repeats, although all those endpoints completed. The updated
+figure connects medians of all accepted endpoints and keeps full ranges and
+work counts. It neither discards slower observations nor normalizes by iterations.
+
+A separate [GPU4PySCF 1.8.1 audit](reference-replay-audit.json) reproduces
+PBE/48 warm iteration counts **4, 5, 4, 4, 4**. The frozen input density remains
+byte-identical through every replay; repeated potentials differ by up to
+**3.553e-15**. The stock solver creates fresh DIIS history per call and uses
+a strict **1e-12 Eh** energy test alongside its orbital-gradient test. Recorded
+energy changes near that cutoff can add an iteration. Every replay converged.
+These observations do not establish a wrong-energy/force bug in GPU4PySCF.
+Audit timings are excluded from both figures; no reference tolerance was relaxed.
+
+## Evidence storage
+
+The XZ archives are ordinary JSON after decompression (`lzma.open(path, "rt")`).
+They preserve every scalar observation, diagnostic field and independent
+reference vector. Original gzip bytes are recoverable from the existing Git
+commit recorded in the manifest. The separately reviewed upstream density
+fixture storage repair remains intact. No evidence was published as a Release
+or removed from Git history.
+
+Later upstream integrations on this PR do not relabel these frozen measurements
+as timings of a newer source or initialization policy. Use the recorded source
+inventories and consumer hashes when reproducing this population.

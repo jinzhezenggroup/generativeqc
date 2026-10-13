@@ -11,6 +11,9 @@ readme_python="${README_BENCHMARK_PYTHON:-python}"
 readme_output="${README_BENCHMARK_OUTPUT:-.artifacts/readme-dft}"
 readme_timeout="${README_BENCHMARK_POINT_TIMEOUT:-1800}"
 readme_repeats="${README_BENCHMARK_REPEATS:-5}"
+readme_df="${README_BENCHMARK_DENSITY_FITTING:-none}"
+case "$readme_df" in none|cuda) ;; *) exit 2 ;; esac
+readme_aux="${README_BENCHMARK_AUXILIARY_BASIS:-benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json}"
 [[ "$readme_timeout" =~ ^[1-9][0-9]*$ && "$readme_repeats" =~ ^[1-9][0-9]*$ ]] || exit 2
 export OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8
 export PYTHONPATH=".:python${PYTHONPATH:+:$PYTHONPATH}"
@@ -30,7 +33,7 @@ with tempfile.TemporaryDirectory(dir=path.parent) as temporary:
     pending.replace(path)
 PY
 readme_failed=0
-for method in ${README_BENCHMARK_METHODS:-pbe pbe0 b3lyp r2scan r2scan-3c m06-2x wb97m-v}; do
+for method in ${README_BENCHMARK_METHODS:-hf pbe pbe0 b3lyp r2scan r2scan-3c m06-2x wb97m-v}; do
     basis="$readme_output/inputs/def2-svp.json"
     [[ "$method" != r2scan-3c ]] || basis=python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json
     for atoms in ${README_BENCHMARK_SIZES:-3 12 48 96}; do
@@ -38,7 +41,8 @@ for method in ${README_BENCHMARK_METHODS:-pbe pbe0 b3lyp r2scan r2scan-3c m06-2x
         mkdir -p "$directory"
         for engine in reference native; do
             [[ "$readme_engine" == both || "$readme_engine" == "$engine" ]] || continue
-            extra=()
+            extra=(--density-fitting "$readme_df")
+            [[ "$readme_df" != cuda ]] || extra+=(--auxiliary-basis-file "$readme_aux")
             if [[ "$engine" == native ]]; then
                 # A failed reference remains visible; never time against a partial oracle.
                 if ! "$readme_python" - "$directory/reference.json" <<'PY'
@@ -51,7 +55,7 @@ PY
                     readme_failed=1
                     continue
                 fi
-                extra=(--reference "$directory/reference.json")
+                extra+=(--reference "$directory/reference.json")
             fi
             result=0
             timeout --kill-after=10 "$readme_timeout" "$readme_python" -m benchmarks.readme_dft \

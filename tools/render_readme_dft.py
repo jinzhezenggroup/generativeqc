@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import lzma
 import math
 from pathlib import Path
 from statistics import median
@@ -19,6 +20,7 @@ from benchmarks.readme_dft import METHODS, SCHEMA
 from tools.render_omol25_benchmarks import collect
 
 LABELS = {
+    "hf": "HF",
     "pbe": "PBE",
     "pbe0": "PBE0",
     "b3lyp": "B3LYP",
@@ -38,7 +40,7 @@ def phase_rows(entry: dict[str, Any], phase: str) -> list[dict[str, Any]]:
 
 
 def stable_work(rows: list[dict[str, Any]]) -> bool:
-    """Do not pool replays that converged through different amounts of SCF work."""
+    """Identify differing SCF work without discarding complete endpoint samples."""
     return (
         len(
             {
@@ -51,13 +53,13 @@ def stable_work(rows: list[dict[str, Any]]) -> bool:
 
 
 def timing_cell(entry: dict[str, Any], phase: str) -> str:
-    """Show seconds; a mixed-work repeat set remains an explicitly marked range."""
+    """Report an endpoint median, marking the full range when SCF work varies."""
     rows = phase_rows(entry, phase)
     if not rows:
         return entry["status"].replace("_", " ")
     values = [row["complete_seconds"] for row in rows]
     if not stable_work(rows):
-        return f"{min(values):.3f}–{max(values):.3f}†"
+        return f"{median(values):.3f} [{min(values):.3f}–{max(values):.3f}]†"
     return f"{median(values):.3f}"
 
 
@@ -68,25 +70,29 @@ def work_cell(entry: dict[str, Any], phase: str) -> str:
         for row in phase_rows(entry, phase)
     }
     return (
-        ", ".join(f"{iterations}/{builds}" for iterations, builds in sorted(pairs))
+        ", ".join(
+            f"{iterations}/{builds if builds is not None else '—'}"
+            for iterations, builds in sorted(pairs)
+        )
         or "—"
     )
 
 
 def collect_point(directory: Path, size: int) -> dict[str, Any]:
-    """Retain stable-work medians and fix provenance labels without altering raw files."""
+    """Retain complete endpoint medians and correct the provenance sampling label."""
     point = collect(directory, size, schema=SCHEMA)
     for entry in point["engines"].values():
         # Slurm can terminate the whole runner before its per-point timeout
         # writes an outcome. Preserve the observed signal exit, not a fake 124.
         if (entry.get("outcome") or {}).get("reason") == "slurm_time_limit":
             entry["status"] = "timeout"
-        if "medians" in entry:
-            entry["medians"] = {
-                phase: value
-                for phase, value in entry["medians"].items()
-                if stable_work(phase_rows(entry, phase))
-            }
+        elif (entry.get("outcome") or {}).get("reason") in (
+            "operator_cancelled",
+            "stopped_after_12_atom_energy_gate_failure",
+        ):
+            # An explicit diagnostic stop is distinct from exhausting a time
+            # limit. Preserve partial records, but never plot their timings.
+            entry["status"] = "interrupted"
         state = entry.get("environment", {}).get("accelerator", {}).get("nvidia_smi")
         if state:
             # This driver samples provenance before setup/measurement. The
@@ -94,6 +100,20 @@ def collect_point(directory: Path, size: int) -> dict[str, Any]:
             state["raw_sampling_point_label"] = state["sampling_point"]
             state["sampling_point"] = "before endpoint measurements"
     return point
+
+
+def phase_statistics(entry: dict[str, Any], phase: str) -> tuple[float, float, float]:
+    """Only missing/failed endpoints break a line; SCF variability stays measured.
+
+    These are wall-time statistics of the requested endpoint, not estimates for
+    fixed SCF work. Keep every accepted repeat and display its full range.
+    """
+    rows = phase_rows(entry, phase)
+    if not rows:
+        return float("nan"), 0.0, 0.0
+    times = [row["complete_seconds"] for row in rows]
+    center = median(times)
+    return center, center - min(times), max(times) - center
 
 
 def render(summary: dict[str, Any], destination: Path) -> None:
@@ -112,7 +132,12 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         }
     )
     methods = list(summary["methods"])
-    ncols = 4
+    composite_note = (
+        "r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP. "
+        if "r2scan-3c" in methods
+        else ""
+    )
+    ncols = 4 if len(methods) >= 7 or len(methods) == 4 else min(3, len(methods))
     nrows = math.ceil(len(methods) / ncols)
     fig, axes = plt.subplots(nrows, ncols, figsize=(15, 3.4 * nrows), squeeze=False)
     for ax, method in zip(axes.flat, methods, strict=False):
@@ -123,26 +148,17 @@ def render(summary: dict[str, Any], destination: Path) -> None:
                 for point in points:
                     rows = phase_rows(point["engines"][engine], phase)
                     x = point["atoms"]
-                    if not rows:
-                        xs.append(x)
-                        ys.append(float("nan"))
-                        lows.append(0.0)
-                        highs.append(0.0)
-                        continue
-                    times = [row["complete_seconds"] for row in rows]
-                    if not stable_work(rows):
+                    center, low, high = phase_statistics(
+                        point["engines"][engine], phase
+                    )
+                    if rows and not stable_work(rows):
                         ax.scatter(
-                            [x] * len(times),
-                            times,
+                            [x] * len(rows),
+                            [row["complete_seconds"] for row in rows],
                             color=color,
                             marker="x",
                             s=24,
                         )
-                        center = float("nan")
-                        low = high = 0.0
-                    else:
-                        center = median(times)
-                        low, high = center - min(times), max(times) - center
                     xs.append(x)
                     ys.append(center)
                     lows.append(low)
@@ -198,7 +214,8 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         ax.text(
             0.03,
             0.68,
-            "Cold: preparation + first calculation\nWarm: fixed post-cold density\nError bars: minimum–maximum\nCrosses: differing SCF work\n\nr²SCAN-3c reference includes\nCPU D4 and gCP corrections.",
+            "Cold: preparation + first calculation\nWarm: fixed post-cold density\nError bars: minimum–maximum\nCrosses: differing SCF work\n\n"
+            + composite_note,
             va="top",
             fontsize=10,
             linespacing=1.7,
@@ -222,8 +239,18 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         frameon=False,
         bbox_to_anchor=(0.5, 1.0),
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.93), h_pad=2, w_pad=2)
-    figure = destination / "dft-cold-warm.svg"
+    route = "DF · cc-pVDZ-JKFIT" if summary.get("density_fitting") else "Direct"
+    fig.text(
+        0.5,
+        0.018,
+        f"{route} · lower is faster · warm: median of 5 fixed-density replays · bars: min–max · crosses: varying SCF work\n"
+        f"Cold includes preparation. {composite_note}Failed/incomplete points remain gaps.",
+        ha="center",
+        fontsize=9,
+    )
+    fig.tight_layout(rect=(0, 0.08, 1, 0.93), h_pad=2, w_pad=2)
+    prefix = "df" if summary.get("density_fitting") else "dft"
+    figure = destination / f"{prefix}-cold-warm.svg"
     fig.savefig(figure, metadata={"Date": None}, facecolor="white")
     plt.close(fig)
     figure.write_text(
@@ -231,7 +258,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
     )
 
     lines = [
-        "# Complete DFT endpoint timings",
+        f"# Complete {route} endpoint timings",
         "",
         "| Functional | Atoms (AOs) | GenerativeQC cold (s) | GPU4PySCF cold (s) | GenerativeQC warm (s) | GPU4PySCF warm (s) |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -250,9 +277,9 @@ def render(summary: dict[str, Any], destination: Path) -> None:
             )
     lines += [
         "",
-        "Warm cells show the median when SCF work is stable. † marks the full range of",
-        "repeats with differing SCF work; these are not pooled into a median.",
-        "r²SCAN-3c uses def2-mTZVPP and includes CPU D4/gCP in the reference endpoint.",
+        "Warm cells show the median of all five complete endpoints. † marks differing",
+        "SCF work and includes the full range; timings are never normalized by iterations.",
+        *([composite_note.strip()] if composite_note else []),
         "",
         "## Observed SCF work",
         "",
@@ -277,11 +304,20 @@ def render(summary: dict[str, Any], destination: Path) -> None:
     lines += [
         "",
         "The [measurement report](README.md) describes the protocol and unsuccessful",
-        "points; [summary.json.gz](summary.json.gz) retains all scalar observations,",
+        "points; "
+        + (
+            "[df-summary.json.xz](df-summary.json.xz)"
+            if summary.get("density_fitting")
+            else "[summary.json.xz](summary.json.xz)"
+        )
+        + " retains all scalar observations,",
         "residuals, errors and independent cold/moved reference forces.",
         "",
     ]
-    (destination / "timings.md").write_text("\n".join(lines))
+    (
+        destination
+        / ("df-timings.md" if summary.get("density_fitting") else "timings.md")
+    ).write_text("\n".join(lines))
 
 
 def main() -> None:
@@ -293,6 +329,11 @@ def main() -> None:
     parser.add_argument("--sizes", nargs="+", type=int, default=[3, 12, 48, 96])
     parser.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
     parser.add_argument(
+        "--density-fitting",
+        action="store_true",
+        help="Label a separately gated DF campaign",
+    )
+    parser.add_argument(
         "--source-commit",
         help="Exact native source revision, recorded alongside binary and consumer hashes",
     )
@@ -303,15 +344,22 @@ def main() -> None:
             "schema": "generativeqc.readme-dft-summary.v1",
             "source_commit": args.source_commit,
             "sizes": args.sizes,
+            "density_fitting": args.density_fitting,
             "methods": {
                 method: [collect_point(args.raw / method, size) for size in args.sizes]
                 for method in args.methods
             },
         }
         payload = (json.dumps(summary, indent=2, allow_nan=False) + "\n").encode()
-        (args.output / "summary.json.gz").write_bytes(gzip.compress(payload, mtime=0))
+        name = "df-summary.json.xz" if args.density_fitting else "summary.json.xz"
+        (args.output / name).write_bytes(lzma.compress(payload))
     else:
-        summary = json.loads(gzip.decompress(args.summary.read_bytes()))
+        # Older committed campaigns use gzip; xz retains the same JSON exactly
+        # while compressing repeated force/provenance diagnostics more compactly.
+        decompress = (
+            lzma.decompress if args.summary.suffix == ".xz" else gzip.decompress
+        )
+        summary = json.loads(decompress(args.summary.read_bytes()))
     render(summary, args.output)
 
 

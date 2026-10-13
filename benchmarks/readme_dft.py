@@ -11,7 +11,7 @@ import argparse
 from benchmarks.readme_omol25 import EndpointSpec
 from benchmarks.readme_omol25 import main as run_endpoint
 
-METHODS = ("pbe", "pbe0", "b3lyp", "r2scan", "r2scan-3c", "m06-2x", "wb97m-v")
+METHODS = ("hf", "pbe", "pbe0", "b3lyp", "r2scan", "r2scan-3c", "m06-2x", "wb97m-v")
 SCHEMA = "generativeqc.readme-dft.v1"
 
 

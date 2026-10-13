@@ -1,5 +1,8 @@
 """Scientific identities and complete timing boundaries for README comparisons."""
 
+import json
+from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -8,6 +11,80 @@ from generativeqc import GridSpec, load_r2scan3c_basis
 
 from benchmarks.readme_dft import specification
 from benchmarks.readme_omol25 import protocol, reference_energy_forces
+from tools.render_readme_dft import collect_point, phase_statistics, timing_cell
+
+
+def test_hf_and_df_protocols_have_distinct_scientific_identities() -> None:
+    spec = specification("hf")
+    assert spec.native_method == "rhf"
+    basis = load_r2scan3c_basis()
+    direct = protocol(3, basis, GridSpec(), 5, benchmark=spec)
+    auxiliary = SimpleNamespace(name="explicit-jkfit", identity="auxiliary-identity")
+    fitted = protocol(
+        3,
+        basis,
+        GridSpec(),
+        5,
+        benchmark=replace(spec, density_fitting=True),
+        auxiliary_basis=auxiliary,
+    )
+    assert direct["method"] == "RHF"
+    assert direct["grid"] is None
+    assert not direct["density_fitting"]
+    assert fitted["density_fitting"]
+    assert fitted["auxiliary_basis_identity"] == auxiliary.identity
+    assert fitted["reference_auxbasis_response"]
+    with pytest.raises(ValueError, match="auxiliary basis identity"):
+        protocol(3, basis, GridSpec(), 5, benchmark=replace(spec, density_fitting=True))
+
+
+def test_varying_work_keeps_endpoint_median_but_failed_points_remain_gaps() -> None:
+    entry = {
+        "status": "measured",
+        "records": [
+            {
+                "phase": "warm",
+                "iterations": iterations,
+                "scf_jk_builds": iterations + 1,
+                "complete_seconds": seconds,
+            }
+            for iterations, seconds in [
+                (1, 1.0),
+                (2, 3.0),
+                (1, 2.0),
+                (3, 9.0),
+                (1, 1.5),
+            ]
+        ],
+    }
+    assert phase_statistics(entry, "warm") == (2.0, 1.0, 7.0)
+    assert timing_cell(entry, "warm") == "2.000 [1.000–9.000]†"
+    assert np.isnan(phase_statistics(entry, "cold")[0])
+    entry["status"] = "timeout"
+    assert np.isnan(phase_statistics(entry, "warm")[0])
+
+
+@pytest.mark.parametrize(
+    "reason", ["operator_cancelled", "stopped_after_12_atom_energy_gate_failure"]
+)
+def test_operator_stop_retains_partial_evidence_without_publishing_timings(
+    tmp_path: Path, reason: str
+) -> None:
+    directory = tmp_path / "96"
+    directory.mkdir()
+    row = {"phase": "cold", "complete_seconds": 1220.0, "gate": True}
+    (directory / "native.json").write_text(
+        json.dumps(
+            {"status": "running", "stage": "warm/0", "protocol": {}, "records": [row]}
+        )
+    )
+    outcome = {"exit_code": 143, "reason": reason}
+    (directory / "native.outcome").write_text(json.dumps(outcome))
+    entry = collect_point(tmp_path, 96)["engines"]["native"]
+    assert entry["status"] == "interrupted"
+    assert entry["outcome"] == outcome
+    assert entry["records"] == [row]
+    assert np.isnan(phase_statistics(entry, "cold")[0])
 
 
 def test_composite_protocol_retains_basis_and_corrections() -> None:

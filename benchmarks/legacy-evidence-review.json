@@ -223,20 +223,12 @@
       "review_document": "benchmarks/results/native-memory-arena-20261011/README.md"
     },
     "readme-dft-20261013": {
-      "owner": "Complete DFT cold/warm endpoint and conditional force-memory handoff review",
-      "reason": "Retain all reported scalar endpoint observations, per-point original-versus-fixed source identities, independent cold/moved reference vectors, work counts and unsuccessful outcomes. The SVG is a GPU-free rendering of those exact compact records. Native force vectors remain in ignored raw evidence; their reported error scalars are not relabeled as newly recomputed vector comparisons. No archive relocation or storage-budget exemption.",
+      "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
+      "reason": "Retain all reported scalar observations, per-point actual source identities, independent cold/moved reference vectors, work counts and unsuccessful outcomes. Figures connect complete endpoint medians with work variability retained. Native force vectors remain in ignored raw evidence; retained scalar errors are not relabeled as newly recomputed vector comparisons. No storage-budget exemption.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     }
   },
   "files": [
-    {
-      "bytes": 145996,
-      "classification": "required-compact-accepted-evidence",
-      "family": "native-memory-arena-20261011",
-      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
-      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
-      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
-    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -534,6 +526,14 @@
       "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
     },
     {
+      "bytes": 145996,
+      "classification": "required-compact-accepted-evidence",
+      "family": "native-memory-arena-20261011",
+      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
+      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
+      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
+    },
+    {
       "bytes": 148102,
       "classification": "required-compact-accepted-evidence",
       "family": "one-electron-values-rtx5090",
@@ -598,28 +598,36 @@
       "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
     },
     {
+      "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
+      "family": "readme-dft-20261013",
+      "bytes": 139308,
+      "sha256": "5487514376f54a7a2648323e96916defd68307ea9978f7c642e6af57cd02f697",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
+      "family": "readme-dft-20261013",
+      "bytes": 175175,
+      "sha256": "02185cd63a858542958685a2260c205aaca3de8012a38cc08a09f477b2c2fb2b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete endpoint chart"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
+      "family": "readme-dft-20261013",
+      "bytes": 246304,
+      "sha256": "623a0e9a0bc23cd337c8306d51a37caa96f49923218fa67a079f806d1d1ad994",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+    },
+    {
       "bytes": 230258,
       "classification": "required-compact-accepted-evidence",
       "family": "retention-checkout",
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/summary.json.gz",
-      "family": "readme-dft-20261013",
-      "bytes": 729766,
-      "sha256": "a001e2d5f851c8b4106a3081b405902f3867048637fd88e4087d67f9184e42d5",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All scalar cold/warm/moved observations, independent reference vectors, original and fixed source inventories, accuracy gates, work counts and explicit incomplete points."
-    },
-    {
-      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
-      "family": "readme-dft-20261013",
-      "bytes": 151076,
-      "sha256": "1fe5d14c173c6c0c02fb5436bf7f297a72251d9a8771af3e24af3f25099a8869",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Reproducible complete-endpoint timing figure preserving stable work-group medians, nonuniform-work ranges, timeouts and mixed CPU-correction reference boundaries."
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

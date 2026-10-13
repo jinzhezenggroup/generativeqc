@@ -3,6 +3,9 @@
 Status: implemented
 Date: 2026-10-13
 
+The HF/DF scope and mixed-work plotting rule are superseded by
+[complete endpoint statistics](2026-10-13-readme-hf-df-endpoint-statistics.md).
+
 ## Decision
 
 Reuse the independent moving-grid energy-plus-force protocol for PBE, PBE0,

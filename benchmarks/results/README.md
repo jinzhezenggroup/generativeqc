@@ -1,7 +1,7 @@
 # Published GPU benchmark artifacts
 
-The [2026-10-13 DFT comparison](readme-dft-20261013/README.md) measures complete
-cold/warm energy-plus-force endpoints based on master `e0ad22036` for PBE, PBE0,
+The [2026-10-13 HF/DFT comparison](readme-dft-20261013/README.md) measures complete
+cold/warm direct and density-fitted endpoints based on master `e0ad22036` for HF, PBE, PBE0,
 B3LYP, r2SCAN, r2SCAN-3c, M06-2X and ωB97M-V. The report distinguishes original
 master measurements from the force-memory fix reruns. It retains independent numerical
 checks, per-repeat SCF work and unsuccessful outcomes alongside the README

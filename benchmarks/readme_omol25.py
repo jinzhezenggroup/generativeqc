@@ -25,6 +25,7 @@ from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_THRESHOLD,
 )
 
+from benchmarks._retained_basis import load_retained_comparison_basis
 from benchmarks._support import environment_metadata, raw_output_path
 from benchmarks.compare_df_direct_endpoint import check_endpoint, reference_work_counter
 from benchmarks.compare_gpu4pyscf_batch import (
@@ -34,7 +35,11 @@ from benchmarks.compare_gpu4pyscf_batch import (
     require_tuned_native_build,
 )
 from benchmarks.readme_hf_scaling import scaling_cases
-from benchmarks.readme_wb97mv import reference_engine, reference_vv10_domain
+from benchmarks.readme_wb97mv import (
+    configure_reference_full_fock,
+    reference_engine,
+    reference_vv10_domain,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -51,11 +56,12 @@ class EndpointSpec:
     basis: str
     schema: str
     reference_full_fock: bool = False
+    density_fitting: bool = False
 
     @property
     def native_method(self) -> str:
         """Use the registered RKS identifier, not a bare XC functional alias."""
-        return f"{self.method}-rks"
+        return "rhf" if self.method == "hf" else f"{self.method}-rks"
 
     @property
     def has_vv10(self) -> bool:
@@ -139,8 +145,11 @@ def protocol(
     repeats: int,
     *,
     benchmark: EndpointSpec = OMOL25,
+    auxiliary_basis: Any = None,
 ) -> dict[str, Any]:
     """Describe inputs without loading a native library or touching the GPU."""
+    if benchmark.density_fitting and auxiliary_basis is None:
+        raise ValueError("DF protocol requires an explicit auxiliary basis identity")
     original = scaling_cases()[f"water-{atoms}"].atoms
     moved = [
         (
@@ -162,15 +171,28 @@ def protocol(
                 "case": f"water-{atoms}",
                 "atoms": atoms,
                 "aos": aos,
-                "method": f"{benchmark.method.upper()}/RKS",
+                "method": "RHF"
+                if benchmark.method == "hf"
+                else f"{benchmark.method.upper()}/RKS",
                 "basis": benchmark.basis,
                 "basis_identity": basis.identity,
                 "representation": "spherical",
                 "geometries_bohr": [original, moved],
-                "grid": asdict(spec),
+                "grid": None if benchmark.method == "hf" else asdict(spec),
                 "properties": ["energy", "forces"],
                 "force_return": "host_array_in_timed_endpoint",
-                "density_fitting": False,
+                "density_fitting": benchmark.density_fitting,
+                **(
+                    {
+                        "auxiliary_basis": auxiliary_basis.name,
+                        "auxiliary_basis_identity": auxiliary_basis.identity,
+                        "density_fitting_relative_threshold": 1e-10,
+                        "density_fitting_memory_budget_bytes": 0,
+                        "reference_auxbasis_response": True,
+                    }
+                    if benchmark.density_fitting
+                    else {}
+                ),
                 **(
                     {
                         "reference_corrections": "CPU dftd4 + independent CPU gCP; included in every endpoint",
@@ -261,6 +283,8 @@ def reference_xc_backend(engine: Any, *, spin: int = 0) -> dict[str, Any]:
     backend. Missing flags remain unknown, never evidence of CPU fallback.
     This describes semilocal evaluation, not exact exchange or VV10 kernels.
     """
+    if not hasattr(engine, "xc"):
+        return {"backend": "no-semilocal-xc", "components": []}
     record = {
         "xc_code": engine.xc,
         "spin": spin,
@@ -312,6 +336,7 @@ def native_endpoint_record(
     prepare: float,
     owner: Any,
     force_work: Any,
+    has_xc: bool = True,
 ) -> dict[str, Any]:
     """Serialize the public endpoint, preserving absent forces and diagnostics."""
     from benchmarks.dft_force_components import normalize_force_work
@@ -344,7 +369,9 @@ def native_endpoint_record(
         "prepare_seconds": prepare,
         "complete_seconds": seconds + prepare,
         "native_scf_ao_work": (
-            read_ao_work(owner) if item.status == 0 and item.converged else None
+            read_ao_work(owner)
+            if has_xc and item.status == 0 and item.converged
+            else None
         ),
         "native_force_components": (
             normalize_force_work(force_work) if force_work is not None else None
@@ -395,6 +422,9 @@ def reference_energy_forces(
         raise RuntimeError("GPU4PySCF SCF did not converge")
     gradient = engine.nuc_grad_method()
     gradient.grid_response = True
+    if hasattr(engine, "with_df"):
+        # Nuclear derivatives include motion of the fitting basis and metric.
+        gradient.auxbasis_response = True
     forces = export(-gradient.kernel())
     if correction is not None:
         correction_energy, correction_gradient = correction()
@@ -464,6 +494,8 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     parser.add_argument("engine", choices=("reference", "native"))
     parser.add_argument("--atoms", type=int, choices=SIZES, required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
+    parser.add_argument("--density-fitting", choices=("none", "cuda"), default="none")
+    parser.add_argument("--auxiliary-basis-file", type=Path)
     parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--reference", type=Path)
@@ -497,6 +529,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         parser.error("repeats and grid dimensions must be positive")
     if args.engine == "native" and args.reference is None:
         parser.error("native execution requires the independent --reference JSON")
+    if (args.density_fitting == "cuda") != (args.auxiliary_basis_file is not None):
+        parser.error("DF requires an explicit matching --auxiliary-basis-file")
+    benchmark = replace(benchmark, density_fitting=args.density_fitting == "cuda")
     try:
         force_options = force_execution_options(
             active_ao=args.force_active_ao,
@@ -526,6 +561,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     basis, reference_basis = load_comparison_basis(
         args.basis_file, case, role="orbital", compute_forces=True
     )
+    auxiliary_basis = reference_auxiliary = None
+    if benchmark.density_fitting:
+        auxiliary_basis, reference_auxiliary = load_retained_comparison_basis(
+            args.auxiliary_basis_file, case, role="auxiliary", compute_forces=True
+        )
     if basis.name.lower() != benchmark.basis.lower():
         raise ValueError(
             f"this benchmark requires the complete {benchmark.basis} basis"
@@ -535,7 +575,14 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         angular_polar=args.grid[1],
         angular_azimuth=args.grid[2],
     )
-    scientific = protocol(args.atoms, basis, spec, args.repeats, benchmark=benchmark)
+    scientific = protocol(
+        args.atoms,
+        basis,
+        spec,
+        args.repeats,
+        benchmark=benchmark,
+        auxiliary_basis=auxiliary_basis,
+    )
     oracle = None
     if args.engine == "native" and args.reference.exists():
         oracle = json.loads(args.reference.read_text())
@@ -603,13 +650,32 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 save(f"{phase}/prepare")
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
-                engine = reference_engine(
-                    geometry,
-                    reference_basis,
-                    spec,
-                    xc=benchmark.reference_xc,
-                    full_fock=benchmark.reference_full_fock,
-                )
+                if benchmark.method == "hf":
+                    from gpu4pyscf.scf import hf
+                    from pyscf import gto
+
+                    engine = hf.RHF(
+                        gto.M(
+                            atom=geometry,
+                            basis=reference_basis,
+                            unit="Bohr",
+                            cart=False,
+                            verbose=0,
+                        )
+                    )
+                else:
+                    engine = reference_engine(
+                        geometry,
+                        reference_basis,
+                        spec,
+                        xc=benchmark.reference_xc,
+                    )
+                if benchmark.density_fitting:
+                    engine = engine.density_fit(auxbasis=reference_auxiliary)
+                # Wrap the final engine: binding get_veff before density_fit()
+                # would keep a bound method on the original direct owner.
+                if benchmark.reference_full_fock:
+                    configure_reference_full_fock(engine)
                 from gpu4pyscf.dft import libxc
                 from gpu4pyscf.lib import cutensor
 
@@ -683,16 +749,17 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 baseline = execute_reference(phase, 0, density, prepare_seconds)
                 retain(baseline, baseline)
                 density = engine.make_rdm1().copy()
-                record.setdefault("grid_points", []).append(
-                    {
-                        "semilocal": len(engine.grids.weights),
-                        **(
-                            {"vv10": len(engine.nlcgrids.weights)}
-                            if benchmark.has_vv10
-                            else {}
-                        ),
-                    }
-                )
+                if benchmark.method != "hf":
+                    record.setdefault("grid_points", []).append(
+                        {
+                            "semilocal": len(engine.grids.weights),
+                            **(
+                                {"vv10": len(engine.nlcgrids.weights)}
+                                if benchmark.has_vv10
+                                else {}
+                            ),
+                        }
+                    )
                 for repeat in range(args.repeats):
                     retain(
                         execute_reference(
@@ -727,7 +794,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 basis=basis,
                 device="cuda",
                 basis_representation="spherical",
-                ks_options=KsOptions(grid=spec),
+                ks_options=None if benchmark.method == "hf" else KsOptions(grid=spec),
+                density_fitting=args.density_fitting,
+                auxiliary_basis=auxiliary_basis,
+                density_fitting_relative_threshold=1e-10,
+                density_fitting_memory_budget_bytes=0,
                 energy_tolerance=1e-12,
                 density_tolerance=1e-10,
                 screening_tolerance=1e-12,
@@ -822,12 +893,20 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                         prepare=prepare,
                         owner=owner,
                         force_work=force_work,
+                        has_xc=benchmark.method != "hf",
                     )
+                    if benchmark.density_fitting:
+                        row["density_fitting_metric"] = [
+                            diagnostic.to_dict()
+                            for diagnostic in owner.last_density_fitting_metric_diagnostics()
+                        ]
                     retain(row, baseline)
                     if repeat == 0:
                         owner.set_warm_start_updates(False)
             owner._public_dft_cuda_force = original_force
-            record["native_force_components"] = normalize_force_work(force_work)
+            record["native_force_components"] = (
+                normalize_force_work(force_work) if force_work is not None else None
+            )
         record["status"] = "measured"
         save("complete")
     except NotImplementedError as error:

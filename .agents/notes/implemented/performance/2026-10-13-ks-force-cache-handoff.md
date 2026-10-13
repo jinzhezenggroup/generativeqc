@@ -61,7 +61,7 @@ storage without confusing ERI reuse with derivative reuse.
 
 ## Evidence
 
-The report's [force-memory archive](../../../../benchmarks/results/readme-dft-20261013/force-memory.json.gz)
+The report's [force-memory archive](../../../../benchmarks/results/readme-dft-20261013/force-memory.json.xz)
 binds source inventory `1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16`
 and the actual Release library. Evidence is retained locally under
 `.artifacts/force-memory-20261013/`; original master evidence remains under

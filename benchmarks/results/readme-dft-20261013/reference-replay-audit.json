@@ -1,0 +1,560 @@
+{
+  "schema": "generativeqc.reference-replay-audit.v1",
+  "excluded_from_benchmark": true,
+  "method": "PBE",
+  "atoms": 48,
+  "cold": {
+    "energy": -1220.7719668727689,
+    "max_force": 0.017016057378890448,
+    "trajectory": [
+      {
+        "iteration": 1,
+        "delta_e": 1.0414240550894647,
+        "orbital_gradient": 2.8176016970304554,
+        "density_step": 5.709041685068298
+      },
+      {
+        "iteration": 2,
+        "delta_e": 2.556387618583358,
+        "orbital_gradient": 4.590243227542705,
+        "density_step": 5.415683435974411
+      },
+      {
+        "iteration": 3,
+        "delta_e": -3.988978539267009,
+        "orbital_gradient": 0.10603583894897935,
+        "density_step": 3.6818092154862865
+      },
+      {
+        "iteration": 4,
+        "delta_e": -0.0010093939390571904,
+        "orbital_gradient": 0.08546372130743843,
+        "density_step": 0.13229147402480257
+      },
+      {
+        "iteration": 5,
+        "delta_e": -0.001224144563821028,
+        "orbital_gradient": 0.02487662576542225,
+        "density_step": 0.0748208531832269
+      },
+      {
+        "iteration": 6,
+        "delta_e": -0.00011166372405568836,
+        "orbital_gradient": 0.002388255788768456,
+        "density_step": 0.018145109050166936
+      },
+      {
+        "iteration": 7,
+        "delta_e": -8.451843314105645e-07,
+        "orbital_gradient": 0.0010400712429678436,
+        "density_step": 0.00218215232591514
+      },
+      {
+        "iteration": 8,
+        "delta_e": -1.6710419004084542e-07,
+        "orbital_gradient": 0.00044037105872810485,
+        "density_step": 0.0009737723991778987
+      },
+      {
+        "iteration": 9,
+        "delta_e": -3.534341885824688e-08,
+        "orbital_gradient": 2.8796650411873265e-05,
+        "density_step": 0.00032104131815638377
+      },
+      {
+        "iteration": 10,
+        "delta_e": 3.410605131648481e-11,
+        "orbital_gradient": 3.309398714265707e-05,
+        "density_step": 4.2891548591960046e-05
+      },
+      {
+        "iteration": 11,
+        "delta_e": -2.000888343900442e-10,
+        "orbital_gradient": 1.9846692405796937e-06,
+        "density_step": 2.4127947332638842e-05
+      },
+      {
+        "iteration": 12,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 4.6875187532033503e-07,
+        "density_step": 2.0467218224379016e-06
+      },
+      {
+        "iteration": 13,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 2.7245710547866914e-07,
+        "density_step": 4.9978683712914e-07
+      },
+      {
+        "iteration": 14,
+        "delta_e": 9.094947017729282e-13,
+        "orbital_gradient": 5.556044065717999e-08,
+        "density_step": 2.0193430673670888e-07
+      },
+      {
+        "iteration": 15,
+        "delta_e": -1.8189894035458565e-12,
+        "orbital_gradient": 1.7297263199211555e-08,
+        "density_step": 3.709609680318951e-08
+      },
+      {
+        "iteration": 16,
+        "delta_e": 9.094947017729282e-13,
+        "orbital_gradient": 9.367402810321439e-09,
+        "density_step": 1.1417938969401868e-08
+      },
+      {
+        "iteration": 17,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 1.766680751398083e-08,
+        "density_step": 1.3534453964982433e-08
+      },
+      {
+        "iteration": 18,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 1.0188369443890189e-08,
+        "density_step": 1.2076205252525115e-08
+      },
+      {
+        "iteration": 19,
+        "delta_e": 9.094947017729282e-13,
+        "orbital_gradient": 1.2509355194700967e-08,
+        "density_step": 9.069688947342367e-09
+      },
+      {
+        "iteration": 20,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 8.243092611201605e-09,
+        "density_step": 4.934825782317522e-09
+      },
+      {
+        "iteration": 21,
+        "delta_e": -1.3642420526593924e-12,
+        "orbital_gradient": 7.988429618947978e-09,
+        "density_step": 3.749107839549072e-09
+      },
+      {
+        "iteration": 22,
+        "delta_e": 1.8189894035458565e-12,
+        "orbital_gradient": 7.382550801351859e-09,
+        "density_step": 4.940861820738954e-09
+      },
+      {
+        "iteration": 23,
+        "delta_e": 9.094947017729282e-13,
+        "orbital_gradient": 1.0298046126460468e-08,
+        "density_step": 1.0635747712214543e-08
+      },
+      {
+        "iteration": 24,
+        "delta_e": -9.094947017729282e-13,
+        "orbital_gradient": 8.369932901626197e-09,
+        "density_step": 2.942164195828375e-09
+      },
+      {
+        "iteration": 25,
+        "delta_e": 0.0,
+        "orbital_gradient": 5.971264648843198e-09,
+        "density_step": 2.0729779415209746e-09
+      },
+      {
+        "iteration": 26,
+        "delta_e": 0.0,
+        "orbital_gradient": 3.700457904776934e-09,
+        "density_step": 3.2631583829666137e-09
+      },
+      {
+        "iteration": 27,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 2.4426444105823936e-09,
+        "density_step": 1.6834124348563188e-09
+      },
+      {
+        "iteration": 28,
+        "delta_e": 0.0,
+        "orbital_gradient": 2.5385660375422396e-09,
+        "density_step": 2.4779000241353447e-09
+      },
+      {
+        "iteration": 29,
+        "delta_e": 1.3642420526593924e-12,
+        "orbital_gradient": 3.5288699432024324e-09,
+        "density_step": 1.2088361505747077e-09
+      },
+      {
+        "iteration": 30,
+        "delta_e": -1.3642420526593924e-12,
+        "orbital_gradient": 4.413500094415683e-09,
+        "density_step": 7.40826129957611e-10
+      },
+      {
+        "iteration": 31,
+        "delta_e": 1.3642420526593924e-12,
+        "orbital_gradient": 4.556680506335102e-09,
+        "density_step": 9.530645414020906e-10
+      },
+      {
+        "iteration": 32,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 1.352446352369675e-09,
+        "density_step": 2.6310566592401004e-09
+      },
+      {
+        "iteration": 33,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 1.6612040254844285e-09,
+        "density_step": 1.566211997058429e-09
+      },
+      {
+        "iteration": 34,
+        "delta_e": 0.0,
+        "orbital_gradient": 2.5542668572896048e-09,
+        "density_step": 7.855983905502844e-10
+      },
+      {
+        "iteration": 35,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 2.557776480514222e-09,
+        "density_step": 5.130302999371505e-10
+      },
+      {
+        "iteration": 36,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 2.2567658155348777e-09,
+        "density_step": 4.157945011841345e-10
+      },
+      {
+        "iteration": 37,
+        "delta_e": 0.0,
+        "orbital_gradient": 1.2740472827938762e-09,
+        "density_step": 7.765582341223888e-10
+      },
+      {
+        "iteration": 38,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 5.257447875326325e-10,
+        "density_step": 8.169116859275989e-10
+      },
+      {
+        "iteration": 39,
+        "delta_e": -1.3642420526593924e-12,
+        "orbital_gradient": 1.2124061055418784e-09,
+        "density_step": 7.706058244570143e-10
+      },
+      {
+        "iteration": 40,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 1.990381049595964e-09,
+        "density_step": 6.43291822074167e-10
+      },
+      {
+        "iteration": 41,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 1.6766124205705876e-09,
+        "density_step": 3.129661609040959e-10
+      },
+      {
+        "iteration": 42,
+        "delta_e": 1.8189894035458565e-12,
+        "orbital_gradient": 9.423188867693238e-10,
+        "density_step": 5.641887327380585e-10
+      },
+      {
+        "iteration": 43,
+        "delta_e": -9.094947017729282e-13,
+        "orbital_gradient": 4.040339138098007e-10,
+        "density_step": 5.883007542321383e-10
+      },
+      {
+        "iteration": 44,
+        "delta_e": 0.0,
+        "orbital_gradient": 6.82247666727712e-10,
+        "density_step": 4.606077564412861e-10
+      },
+      {
+        "iteration": 45,
+        "delta_e": 0.0,
+        "orbital_gradient": 1.025862587249356e-09,
+        "density_step": 3.1164611183948026e-10
+      },
+      {
+        "iteration": 46,
+        "delta_e": 0.0,
+        "orbital_gradient": 1.0460752653674362e-09,
+        "density_step": 1.2726901438511074e-10
+      },
+      {
+        "iteration": 47,
+        "delta_e": 0.0,
+        "orbital_gradient": 7.865854951553567e-10,
+        "density_step": 2.1066572891168272e-10
+      },
+      {
+        "iteration": 48,
+        "delta_e": -4.547473508864641e-13,
+        "orbital_gradient": 3.7185816466599113e-10,
+        "density_step": 3.4123898600101053e-10
+      },
+      {
+        "iteration": 49,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 3.708656394386279e-10,
+        "density_step": 4.0704475140492795e-10
+      },
+      {
+        "iteration": 50,
+        "delta_e": 0.0,
+        "orbital_gradient": 6.580334608219828e-10,
+        "density_step": 2.5148721401211446e-10
+      },
+      {
+        "iteration": 51,
+        "delta_e": 9.094947017729282e-13,
+        "orbital_gradient": 7.013358081319247e-10,
+        "density_step": 9.086569550478793e-11
+      },
+      {
+        "iteration": 52,
+        "delta_e": -9.094947017729282e-13,
+        "orbital_gradient": 5.381563447477416e-10,
+        "density_step": 1.4050498888721078e-10
+      },
+      {
+        "iteration": 53,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 2.799422685759258e-10,
+        "density_step": 2.081486351502495e-10
+      },
+      {
+        "iteration": 54,
+        "delta_e": -9.094947017729282e-13,
+        "orbital_gradient": 1.7011451163886444e-10,
+        "density_step": 2.2474903019743105e-10
+      },
+      {
+        "iteration": 55,
+        "delta_e": 1.3642420526593924e-12,
+        "orbital_gradient": 3.4548433042388026e-10,
+        "density_step": 1.7460706362733305e-10
+      },
+      {
+        "iteration": 56,
+        "delta_e": -1.8189894035458565e-12,
+        "orbital_gradient": 4.424835331356045e-10,
+        "density_step": 9.041488397056151e-11
+      },
+      {
+        "iteration": 57,
+        "delta_e": 9.094947017729282e-13,
+        "orbital_gradient": 4.0075611971253877e-10,
+        "density_step": 5.676517950169573e-11
+      },
+      {
+        "iteration": 58,
+        "delta_e": 0.0,
+        "orbital_gradient": 2.3404640079292807e-10,
+        "density_step": 1.3139278412412577e-10
+      },
+      {
+        "iteration": 59,
+        "delta_e": 4.547473508864641e-13,
+        "orbital_gradient": 9.959977310584784e-11,
+        "density_step": 1.5636164630273295e-10
+      }
+    ],
+    "seconds_diagnostic_only": 41.778320122510195,
+    "converged": true
+  },
+  "replays": [
+    {
+      "energy": -1220.7719668727689,
+      "max_force": 0.017016057376111338,
+      "trajectory": [
+        {
+          "iteration": 1,
+          "delta_e": -4.547473508864641e-13,
+          "orbital_gradient": 1.9803529125994293e-10,
+          "density_step": 2.0884789159185335e-10
+        },
+        {
+          "iteration": 2,
+          "delta_e": 0.0,
+          "orbital_gradient": 3.951176785363376e-10,
+          "density_step": 4.1634312529566547e-10
+        },
+        {
+          "iteration": 3,
+          "delta_e": 9.094947017729282e-13,
+          "orbital_gradient": 1.9785232829048737e-10,
+          "density_step": 4.161592504157072e-10
+        },
+        {
+          "iteration": 4,
+          "delta_e": 0.0,
+          "orbital_gradient": 3.913554695274745e-12,
+          "density_step": 1.3939862582203188e-10
+        }
+      ],
+      "seconds_diagnostic_only": 4.973009642213583,
+      "converged": true,
+      "input_seed_sha256": "9d12a91ba4a053fa1376913a1ac6b9fa67f39223ae28a69f4ea9a3fd21171c23"
+    },
+    {
+      "energy": -1220.7719668727698,
+      "max_force": 0.017016057376030513,
+      "trajectory": [
+        {
+          "iteration": 1,
+          "delta_e": -9.094947017729282e-13,
+          "orbital_gradient": 1.9806526467524266e-10,
+          "density_step": 2.0883979051625094e-10
+        },
+        {
+          "iteration": 2,
+          "delta_e": 0.0,
+          "orbital_gradient": 3.9517814572119146e-10,
+          "density_step": 4.1634576379834177e-10
+        },
+        {
+          "iteration": 3,
+          "delta_e": -9.094947017729282e-13,
+          "orbital_gradient": 1.978843632311136e-10,
+          "density_step": 4.162177365946144e-10
+        },
+        {
+          "iteration": 4,
+          "delta_e": 1.3642420526593924e-12,
+          "orbital_gradient": 3.898921220383649e-12,
+          "density_step": 1.394092047190463e-10
+        },
+        {
+          "iteration": 5,
+          "delta_e": -4.547473508864641e-13,
+          "orbital_gradient": 1.1268460180900966e-12,
+          "density_step": 1.9765553774693684e-12
+        }
+      ],
+      "seconds_diagnostic_only": 5.587869614362717,
+      "converged": true,
+      "input_seed_sha256": "9d12a91ba4a053fa1376913a1ac6b9fa67f39223ae28a69f4ea9a3fd21171c23"
+    },
+    {
+      "energy": -1220.7719668727702,
+      "max_force": 0.01701605737611045,
+      "trajectory": [
+        {
+          "iteration": 1,
+          "delta_e": -4.547473508864641e-13,
+          "orbital_gradient": 1.9805804247403912e-10,
+          "density_step": 2.0885831556835942e-10
+        },
+        {
+          "iteration": 2,
+          "delta_e": 0.0,
+          "orbital_gradient": 3.951626104919054e-10,
+          "density_step": 4.1639637420315687e-10
+        },
+        {
+          "iteration": 3,
+          "delta_e": -9.094947017729282e-13,
+          "orbital_gradient": 1.9788893677666263e-10,
+          "density_step": 4.162054121374728e-10
+        },
+        {
+          "iteration": 4,
+          "delta_e": 0.0,
+          "orbital_gradient": 3.906340000033839e-12,
+          "density_step": 1.394105873901307e-10
+        }
+      ],
+      "seconds_diagnostic_only": 4.958165381103754,
+      "converged": true,
+      "input_seed_sha256": "9d12a91ba4a053fa1376913a1ac6b9fa67f39223ae28a69f4ea9a3fd21171c23"
+    },
+    {
+      "energy": -1220.7719668727702,
+      "max_force": 0.01701605737611045,
+      "trajectory": [
+        {
+          "iteration": 1,
+          "delta_e": -9.094947017729282e-13,
+          "orbital_gradient": 1.9805024220484683e-10,
+          "density_step": 2.08862999989217e-10
+        },
+        {
+          "iteration": 2,
+          "delta_e": 9.094947017729282e-13,
+          "orbital_gradient": 3.951290559214973e-10,
+          "density_step": 4.1635542876834126e-10
+        },
+        {
+          "iteration": 3,
+          "delta_e": 0.0,
+          "orbital_gradient": 1.9785597685050613e-10,
+          "density_step": 4.161757661664693e-10
+        },
+        {
+          "iteration": 4,
+          "delta_e": -9.094947017729282e-13,
+          "orbital_gradient": 3.916808017585752e-12,
+          "density_step": 1.393921223383847e-10
+        }
+      ],
+      "seconds_diagnostic_only": 4.994245570152998,
+      "converged": true,
+      "input_seed_sha256": "9d12a91ba4a053fa1376913a1ac6b9fa67f39223ae28a69f4ea9a3fd21171c23"
+    },
+    {
+      "energy": -1220.7719668727698,
+      "max_force": 0.01701605737611578,
+      "trajectory": [
+        {
+          "iteration": 1,
+          "delta_e": -4.547473508864641e-13,
+          "orbital_gradient": 1.980478224714348e-10,
+          "density_step": 2.0885329285407998e-10
+        },
+        {
+          "iteration": 2,
+          "delta_e": -9.094947017729282e-13,
+          "orbital_gradient": 3.9512911696181557e-10,
+          "density_step": 4.164019524827298e-10
+        },
+        {
+          "iteration": 3,
+          "delta_e": 4.547473508864641e-13,
+          "orbital_gradient": 1.9785917050260926e-10,
+          "density_step": 4.162152470293693e-10
+        },
+        {
+          "iteration": 4,
+          "delta_e": 0.0,
+          "orbital_gradient": 3.918098603711459e-12,
+          "density_step": 1.3938591198980168e-10
+        }
+      ],
+      "seconds_diagnostic_only": 4.9596448093652725,
+      "converged": true,
+      "input_seed_sha256": "9d12a91ba4a053fa1376913a1ac6b9fa67f39223ae28a69f4ea9a3fd21171c23"
+    }
+  ],
+  "potential_max_abs_differences": [
+    3.552713678800501e-15,
+    3.552713678800501e-15,
+    3.552713678800501e-15,
+    3.552713678800501e-15
+  ],
+  "gpu4pyscf_hf_source_sha256": "c4608fb29bd6b985b17235e972dad68b11d2fca06b38e565c0ee7ebb560275e9",
+  "fixed_seed_sha256": "9d12a91ba4a053fa1376913a1ac6b9fa67f39223ae28a69f4ea9a3fd21171c23",
+  "stock_diis": true,
+  "energy_tolerance": 1e-12,
+  "gradient_tolerance": 1e-10,
+  "driver": {
+    "sha256": "3abcfd6f3a7c91a7cc0f35590e5ce3562f7be4ca9e462597b1a2a9c2bba41413",
+    "source": "\"\"\"Diagnostic replay audit; excluded from every benchmark timing population.\"\"\"\nimport hashlib\nimport inspect\nimport json\nfrom pathlib import Path\n\nimport cupy as cp\nfrom generativeqc import GridSpec\nfrom benchmarks.readme_hf_scaling import scaling_cases\nfrom benchmarks.compare_gpu4pyscf_batch import load_comparison_basis\nfrom benchmarks.readme_wb97mv import reference_engine\nfrom benchmarks.readme_omol25 import reference_energy_forces\nfrom gpu4pyscf.scf import hf\n\nbase = Path('/data/jzzeng/gqc-readme-hf-df-20261013')\ncase = scaling_cases()['water-48']\n_, basis = load_comparison_basis(base/'qualified/none/inputs/def2-svp.json',case,role='orbital',compute_forces=True)\nengine = reference_engine(case.atoms,basis,GridSpec(48,16,32),xc='PBE',full_fock=True)\nengine.conv_tol=1e-12\nengine.conv_tol_grad=1e-10\nengine.direct_scf_tol=1e-14\nengine.max_cycle=100\n\ndef digest(dm):\n    return hashlib.sha256(cp.asnumpy(dm).tobytes()).hexdigest()\n\ndef execute(seed):\n    trajectory=[]\n    def callback(env):\n        trajectory.append({'iteration':int(env['cycle'])+1,'delta_e':float(env['e_tot']-env['last_hf_e']),'orbital_gradient':float(env['norm_gorb']),'density_step':float(env['norm_ddm'])})\n    engine.callback=callback\n    energy,forces,seconds=reference_energy_forces(engine,seed,export=cp.asnumpy,synchronize=cp.cuda.Stream.null.synchronize)\n    return {'energy':energy,'max_force':float(abs(forces).max()),'trajectory':trajectory,'seconds_diagnostic_only':seconds,'converged':bool(engine.converged)}\n\ncold=execute(None)\nseed=engine.make_rdm1().copy()\nseed_hash=digest(seed)\nrows=[]\nfor _ in range(5):\n    row=execute(seed)\n    row['input_seed_sha256']=digest(seed)\n    assert row['input_seed_sha256']==seed_hash\n    rows.append(row)\n# Reevaluate one frozen density directly; a differing potential demonstrates\n# floating-point variability before either diagonalization or DIIS occurs.\nvalues=[engine.get_veff(dm=seed.copy()).copy() for _ in range(5)]\ndifferences=[float(cp.max(cp.abs(x-values[0]))) for x in values[1:]]\nresult={'schema':'generativeqc.reference-replay-audit.v1','excluded_from_benchmark':True,'method':'PBE','atoms':48,'cold':cold,'replays':rows,'potential_max_abs_differences':differences,'gpu4pyscf_hf_source_sha256':hashlib.sha256(Path(inspect.getfile(hf)).read_bytes()).hexdigest(),'fixed_seed_sha256':seed_hash,'stock_diis':True,'energy_tolerance':engine.conv_tol,'gradient_tolerance':engine.conv_tol_grad}\n(base/'reference-replay-audit.json').write_text(json.dumps(result,indent=2)+'\\n')\nprint(json.dumps(result))\n"
+  },
+  "slurm_job_id": "8016",
+  "node": "n1",
+  "time_limit": "00:15:00",
+  "gpu": "NVIDIA GeForce RTX 5090"
+}
