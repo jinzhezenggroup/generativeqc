@@ -108,7 +108,6 @@
       "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
       "references": {
         "cublasCreate": 1,
-        "cublasDgemmStridedBatched": 1,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1
       }

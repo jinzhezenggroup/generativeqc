@@ -71,6 +71,7 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     # only its six ordinary GEMMs have moved behind the shared adapter.
     setup = "src/scf/cuda/df_plan_setup.cpp"
     assert "cublasDgemm" not in inventory.get(setup, {})
+    assert "cublasDgemmStridedBatched" not in inventory.get(setup, {})
 
 
 @pytest.mark.parametrize(

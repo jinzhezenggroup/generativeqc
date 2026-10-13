@@ -39,6 +39,20 @@ cublasStatus_t cublasDgemm(cublasHandle_t handle, cublasOperation_t ta, cublasOp
   return CUBLAS_STATUS_SUCCESS;
 }
 
+// FP64 strided provider double: preserve input broadcast and transpose semantics.
+cublasStatus_t cublasDgemmStridedBatched(
+    cublasHandle_t handle, cublasOperation_t ta, cublasOperation_t tb, int m, int n, int k,
+    const double* alpha, const double* a, int lda, long long stride_a, const double* b, int ldb,
+    long long stride_b, const double* beta, double* c, int ldc, long long stride_c, int batches) {
+  assert(handle && alpha && beta && batches > 0);
+  for (int batch = 0; batch < batches; ++batch) {
+    const auto status = cublasDgemm(handle, ta, tb, m, n, k, alpha, a + batch * stride_a, lda,
+                                   b + batch * stride_b, ldb, beta, c + batch * stride_c, ldc);
+    if (status != CUBLAS_STATUS_SUCCESS) return status;
+  }
+  return CUBLAS_STATUS_SUCCESS;
+}
+
 struct CudaDensityFittingJkPlan {
   cublasHandle_t blas;
   cudaStream_t stream;
@@ -152,6 +166,88 @@ void invalid(CudaDensityFittingJkPlan& plan) {
   plan.blas = saved;
 }
 
+void batched(CudaDensityFittingJkPlan& plan) {
+  // Exercise input broadcasting, independent batches, all transposes,
+  // padded leading dimensions, alpha/beta and invalid view admission.
+  constexpr int m = 2, n = 3, k = 4, batches = 3;
+  for (bool ta : {false, true}) {
+    for (bool tb : {false, true}) {
+      const int lda = (ta ? k : m) + 2, ldb = (tb ? n : k) + 2, ldc = m + 3;
+      const auto stride_a = ta ? (lda * m + 7) : 0;
+      const auto stride_b = tb ? 0 : (ldb * n + 6);
+      const auto stride_c = ldc * n + 5;
+      std::vector<double> a(1 + (batches - 1) * stride_a + lda * (ta ? m : k), sentinel);
+      std::vector<double> b(1 + (batches - 1) * stride_b + ldb * (tb ? k : n), sentinel);
+      std::vector<double> c(1 + batches * stride_c, sentinel), expected = c;
+      for (int batch = 0; batch < batches; ++batch) {
+        if (stride_a || batch == 0) {
+          for (int i = 0; i < m; ++i)
+            for (int p = 0; p < k; ++p)
+              a[1 + batch * stride_a + (ta ? p + i * lda : i + p * lda)] =
+                  2.0 * i + p + 0.25 * (ta ? batch : 0);
+        }
+        if (stride_b || batch == 0) {
+          for (int p = 0; p < k; ++p)
+            for (int j = 0; j < n; ++j)
+              b[1 + batch * stride_b + (tb ? j + p * ldb : p + j * ldb)] =
+                  p - 2.0 * j + 0.5 * (tb ? 0 : batch);
+        }
+        for (int j = 0; j < n; ++j)
+          for (int i = 0; i < m; ++i) {
+            double sum = 0;
+            for (int p = 0; p < k; ++p) {
+              const double av = 2.0 * i + p + 0.25 * (ta ? batch : 0);
+              const double bv = p - 2.0 * j + 0.5 * (tb ? 0 : batch);
+              sum += av * bv;
+            }
+            const double seed = 3 + batch + i + j;
+            c[1 + batch * stride_c + i + j * ldc] = seed;
+            expected[1 + batch * stride_c + i + j * ldc] = -1.25 * sum + 0.5 * seed;
+          }
+      }
+      std::string detail = "unchanged";
+      const ScfMatrixBatchView view{
+          {a.data() + 1, static_cast<std::size_t>(lda), static_cast<std::size_t>(stride_a)},
+          {b.data() + 1, static_cast<std::size_t>(ldb), static_cast<std::size_t>(stride_b)},
+          {c.data() + 1, static_cast<std::size_t>(ldc), static_cast<std::size_t>(stride_c)},
+          m, n, k, batches, ta, tb, -1.25, 0.5};
+      assert(scf_matrix_product_batched_view(plan, view, "batch", detail) ==
+             GENERATIVEQC_STATUS_SUCCESS);
+      for (std::size_t i = 0; i < c.size(); ++i)
+        assert(std::abs(c[i] - expected[i]) < 1e-12);
+      assert(detail == "unchanged");
+    }
+  }
+  double data[64]{};
+  const ScfMatrixBatchView valid{{data, 4, 0}, {data, 4, 0}, {data, 4, 16},
+                                 2, 3, 4, 2, false, false};
+  for (int slot = 0; slot < 5; ++slot) {
+    auto view = valid;
+    switch (slot) {
+      case 0: view.batches = 0; break;
+      case 1: view.rows = 0; break;
+      case 2: view.columns = std::numeric_limits<std::size_t>::max(); break;
+      case 3: view.left.leading_dimension = 1; break;
+      case 4: view.right.batch_stride = std::numeric_limits<std::size_t>::max(); break;
+    }
+    plan.blas->submitted = false;
+    std::string detail;
+    assert(scf_matrix_product_batched_view(plan, view, "invalid", detail) ==
+           GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    assert(!plan.blas->submitted && !detail.empty());
+  }
+  for (const auto failure : {CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_EXECUTION_FAILED}) {
+    plan.blas->result = failure;
+    std::string detail;
+    assert(scf_matrix_product_batched_view(plan, valid, "batched failure", detail) ==
+           (failure == CUBLAS_STATUS_ALLOC_FAILED ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                  : GENERATIVEQC_STATUS_CUDA_ERROR));
+    assert(detail == "batched failure failed with cuBLAS status " +
+                         std::to_string(static_cast<int>(failure)));
+  }
+  plan.blas->result = CUBLAS_STATUS_SUCCESS;
+}
+
 void failures(CudaDensityFittingJkPlan& plan) {
   double input[4]{}, output[4] = {1, 2, 3, 4};
   for (const auto failure : {CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_NOT_INITIALIZED,
@@ -182,6 +278,8 @@ int main(int argc, char** argv) {
     invalid(plan);
   else if (mode == "failures")
     failures(plan);
+  else if (mode == "batched")
+    batched(plan);
   else
     return 1;
   assert(plan.blas == &handle && plan.stream == stream && handle.stream == stream);

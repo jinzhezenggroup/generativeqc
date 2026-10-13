@@ -783,20 +783,14 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                      cuda_failure(cuda_error, "scale CUDA DF metric eigenvectors", detail));
   }
 
-  const double one = 1.0;
-  const double zero = 0.0;
-  blas_status = cublasDgemmStridedBatched(
-      candidate->blas, CUBLAS_OP_N, CUBLAS_OP_T, static_cast<int>(naux), static_cast<int>(naux),
-      static_cast<int>(naux), &one, setup.scaled_eigenvectors, static_cast<int>(naux),
-      static_cast<long long>(metric_elements), setup.metrics, static_cast<int>(naux),
-      static_cast<long long>(metric_elements), &zero, setup.inverse_square_roots,
-      static_cast<int>(naux), static_cast<long long>(metric_elements),
-      static_cast<int>(batch_size));
-  if (blas_status != CUBLAS_STATUS_SUCCESS) {
-    return fail_plan(
-        candidate,
-        blas_failure(blas_status, "construct CUDA DF metric inverse square root", detail));
-  }
+  const auto metric_product = scf_matrix_product_batched_view(
+      *candidate,
+      {{setup.scaled_eigenvectors, naux, metric_elements},
+       {setup.metrics, naux, metric_elements},
+       {setup.inverse_square_roots, naux, metric_elements},
+       naux, naux, naux, batch_size, false, true},
+      "construct CUDA DF metric inverse square root", detail);
+  if (metric_product != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, metric_product);
   if (metric_progress.enabled()) {
     // The journal needs a completed boundary before raw generation starts.
     // The ordinary, unprofiled path retains its existing stream ordering.

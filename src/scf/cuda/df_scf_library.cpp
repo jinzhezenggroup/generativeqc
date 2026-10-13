@@ -85,20 +85,50 @@ generativeqc_status scf_matrix_product_view(
                                          : blas_failure(status, failure_context, detail);
 }
 
+generativeqc_status scf_matrix_product_batched_view(CudaDensityFittingJkPlan& plan,
+                                                    const ScfMatrixBatchView& view,
+                                                    const char* failure_context,
+                                                    std::string& detail) {
+  constexpr auto dimension_limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+  constexpr auto stride_limit = static_cast<std::size_t>(std::numeric_limits<long long>::max());
+  if (!plan.blas || !view.left.data || !view.right.data || !view.output.data || !view.rows ||
+      !view.columns || !view.reduction || !view.batches ||
+      std::max({view.rows, view.columns, view.reduction, view.batches,
+                view.left.leading_dimension, view.right.leading_dimension,
+                view.output.leading_dimension}) > dimension_limit ||
+      std::max({view.left.batch_stride, view.right.batch_stride, view.output.batch_stride}) >
+          stride_limit ||
+      view.left.leading_dimension < (view.transpose_left ? view.reduction : view.rows) ||
+      view.right.leading_dimension < (view.transpose_right ? view.columns : view.reduction) ||
+      view.output.leading_dimension < view.rows) {
+    detail = "invalid prepared CUDA DF batched matrix product view";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const cublasStatus_t status = cublasDgemmStridedBatched(
+      plan.blas, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+      view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, static_cast<int>(view.rows),
+      static_cast<int>(view.columns), static_cast<int>(view.reduction), &view.alpha,
+      view.left.data, static_cast<int>(view.left.leading_dimension),
+      static_cast<long long>(view.left.batch_stride), view.right.data,
+      static_cast<int>(view.right.leading_dimension),
+      static_cast<long long>(view.right.batch_stride), &view.beta, view.output.data,
+      static_cast<int>(view.output.leading_dimension),
+      static_cast<long long>(view.output.batch_stride), static_cast<int>(view.batches));
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(status, failure_context, detail);
+}
+
 generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
                                      std::size_t batch_size, std::size_t nbf, const double* left,
                                      std::size_t left_stride, const double* right,
                                      std::size_t right_stride, double* output,
                                      std::size_t output_stride, double alpha, double beta,
                                      const char* failure_context, std::string& detail) {
-  const cublasStatus_t status = cublasDgemmStridedBatched(
-      plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(nbf),
-      static_cast<int>(nbf), static_cast<int>(nbf), &alpha, left, static_cast<int>(nbf),
-      static_cast<long long>(left_stride), right, static_cast<int>(nbf),
-      static_cast<long long>(right_stride), &beta, output, static_cast<int>(nbf),
-      static_cast<long long>(output_stride), static_cast<int>(batch_size));
-  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
-                                         : blas_failure(status, failure_context, detail);
+  return scf_matrix_product_batched_view(
+      plan,
+      {{left, nbf, left_stride}, {right, nbf, right_stride},
+       {output, nbf, output_stride}, nbf, nbf, nbf, batch_size, transpose_left, false, alpha, beta},
+      failure_context, detail);
 }
 
 generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left,
