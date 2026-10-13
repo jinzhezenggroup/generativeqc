@@ -300,6 +300,14 @@ struct PreparedFockPlan::Impl {
       // packed planner may drop optional U under automatic budget pressure.
       // Reuse RHF's resident-value crossover without reserving RHF-owned SCF
       // factors: this method already owns and validates its restricted Cocc.
+      // Generated physical J integrals are AO-pair symmetric even without
+      // exact exchange or an occupied C owner. Allow a rank-zero packed B
+      // before selecting a repeatedly regenerated streamed source. This
+      // changes neither the accepted density nor the J/force operator.
+      const bool coulomb_only_packing =
+          strategy.spec.spin == FockSpin::Restricted && strategy.spec.coulomb.present &&
+          strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+          !strategy.spec.exchange.present;
       const auto plan_values = [&](std::size_t n, std::size_t a, std::size_t fixed) {
         // Packed-raw is not an admitted borrowed-response consumer and does
         // not have the same optional-U budget fallback. Keep its old capacity.
@@ -307,7 +315,8 @@ struct PreparedFockPlan::Impl {
         const auto packed_rank =
             request == DfPairStorageRequest::SymmetricLower ? 0 : reserved_rank;
         auto tiles = plan_requested_density_fitting_tiles(
-            request, 1, n, a, n, packed_rank, plan_budget, fixed, true, 0, reserved_rank != 0);
+            request, 1, n, a, n, packed_rank, plan_budget, fixed, true, 0,
+            reserved_rank != 0 || coulomb_only_packing);
         const bool needs_occupied_capacity =
             tiles.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
             tiles.value_storage.rank_capacity < reserved_rank;
