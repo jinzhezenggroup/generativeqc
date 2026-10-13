@@ -371,6 +371,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::unique_ptr<scf::cuda_execution::DirectJkSourceLease> phase_source;
   bool phase_source_cold{};
   bool phase_source_range{};
+  double range_warm_energy{std::numeric_limits<double>::infinity()};
+  double range_warm_energy_correction{};
+  std::string range_bucket_policy, range_capacity_policy;
+
+  static std::string range_policy_value(const char* key) {
+    const auto* value = std::getenv(key);
+    return value ? value : "";
+  }
+
+  /** Reuse only this immutable geometry owner's audited radial source.
+   * Policy changes and force-memory eviction fall back to the separately
+   * rebased incumbent energy. No density, Fock or force evaluation is skipped. */
+  bool retain_range_source_for_replay(bool use_warm) const {
+    return use_warm && range_source_active() && std::isfinite(range_warm_energy) &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY") == "1" &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == "1" &&
+           range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK") == range_bucket_policy &&
+           range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES") == range_capacity_policy &&
+           !incremental_direct_jk && !nonlocal_freeze_range && configured_chunk_width() == 1 &&
+           !precision_schedule.any_lower_precision() && !runtime::active_device_resource_ledger;
+  }
 
   bool range_source_active() const noexcept {
     return phase_source_range && phase_source && phase_source->active();
@@ -393,6 +414,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   void retire_phase_source(bool audit) {
+    range_warm_energy = std::numeric_limits<double>::infinity();
     phase_source_range = false;
     if (!phase_source) return;
     auto retired = std::move(phase_source);
@@ -510,6 +532,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return;
     }
     phase_source_range = has_range_correction;
+    if (phase_source_range) {
+      range_bucket_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK");
+      range_capacity_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES");
+    }
     phase_device_bytes = phase_source->device_bytes();
     phase_host_bytes = phase_source->capacity_bytes() - phase_device_bytes;
     resource.provider_device_bytes = sum(resource.provider_device_bytes, phase_device_bytes);
@@ -711,6 +737,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   void clear_warm_state() noexcept {
+    range_warm_energy = std::numeric_limits<double>::infinity();
     warm_ready = false;
     warm_energy = std::numeric_limits<double>::infinity();
     warm_energy_correction = 0.0;
@@ -1476,7 +1503,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     nonlocal_inner_iterations = nonlocal_exact_epoch_iterations = 0;
     nonlocal_seed_iterations = nonlocal_exact_iterations = 0;
     pending_nonlocal_seed = false;
-    retire_phase_source(false);
+    const bool retain_range_source = retain_range_source_for_replay(use_warm);
+    if (!retain_range_source) retire_phase_source(false);
     std::vector<double> prepared;
     if (input) prepared = seed(input);  // Validate before replacing current state.
     auto retained_history = std::move(output.dft_diagnostic.history);
@@ -1522,7 +1550,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Native cold guesses arrive as a density too. Preserve their provenance
       // instead of treating every non-null pointer as a warm or external seed.
       phase_source_cold = (!input || seed_origin == CudaKsSeedOrigin::NativeColdGuess) && !use_warm;
-      prepare_phase_source(phase_source_cold, use_warm);
+      if (!retain_range_source) prepare_phase_source(phase_source_cold, use_warm);
       // The bounded device-control prototype is qualified only for strict-FP64
       // direct all-electron RKS. AUTO must stay on the legacy host-controlled
       // path so its FP32 mixed-J stage and independent FP64 refinement cannot be
@@ -1615,12 +1643,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
         device_chunk_region.mark_failure("CUDA KS device region preparation failed");
       throw;
     }
-    // Cache energies are anchored to the incumbent. A forced resident warm
-    // phase must establish its own history rather than compare providers.
-    warm_energy_baseline =
-        use_warm && !device_chunk_mode && !phase_source && std::isfinite(warm_energy);
-    previous_energy = warm_energy_baseline ? warm_energy : std::numeric_limits<double>::infinity();
-    previous_energy_correction = warm_energy_baseline ? warm_energy_correction : 0.0;
+    // The retained radial source and incumbent provider each own an energy
+    // baseline for the same accepted warm density. Never compare schedules at
+    // the sub-ulp energy gate, including after force-memory cache retirement.
+    const double baseline = retain_range_source ? range_warm_energy : warm_energy;
+    const double correction =
+        retain_range_source ? range_warm_energy_correction : warm_energy_correction;
+    warm_energy_baseline = use_warm && !device_chunk_mode &&
+                           (!phase_source || retain_range_source) && std::isfinite(baseline);
+    previous_energy = warm_energy_baseline ? baseline : std::numeric_limits<double>::infinity();
+    previous_energy_correction = warm_energy_baseline ? correction : 0.0;
     is_active = true;
   }
 
@@ -1905,7 +1937,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
           retire_phase_source(false);
         else
           audit_phase_source();
-        if (auditing_phase && output.converged && warm_updates) rebase_warm_energy();
+        if (auditing_phase && output.converged && warm_updates) {
+          // Preserve the accepted source-schedule energy before preparing the
+          // independent incumbent fallback. Both refer to the same warm D.
+          if (range_source_active()) {
+            range_warm_energy = warm_energy;
+            range_warm_energy_correction = warm_energy_correction;
+          }
+          rebase_warm_energy();
+        }
         auditing_phase = false;
       }
       if (is_failed) {

@@ -86,6 +86,8 @@ struct Owner {
   };
   std::unique_ptr<Source> phase_source;
   bool phase_source_range{};
+  double range_warm_energy{}, range_warm_energy_correction{};
+  bool range_source_active() const { return phase_source_range && bool(phase_source); }
   struct Region {
     bool bound = true;
     void invalidate() { bound = false; }
