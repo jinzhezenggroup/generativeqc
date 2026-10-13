@@ -194,6 +194,11 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(
   if(status==GENERATIVEQC_STATUS_SUCCESS) plan->mask=mask;
   return status;
 }
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t budget, std::uint32_t mask,
+    FockOperator, double, std::string& detail) {
+  return prepare_cuda_direct_jk_selected_resident_values(plan,budget,mask,detail);
+}
 CudaDirectJkDiagnostic cuda_direct_jk_plan_diagnostic(const CudaDirectJkPlan* plan) noexcept {
   CudaDirectJkDiagnostic diagnostic;
   if(plan && mode==12) {

@@ -275,6 +275,14 @@ __global__ void canonical_jk_kernel(
                                                     fourth, values.selected, false, true);
       if (work_census) evaluated += 2U;
     } else {
+      if (source_values) {
+        // A resident lease binds one radial operator. Preparation has no
+        // density or output matrices: publish its exact scalar before the
+        // ordinary J/K scatter, including SR/LR exchange-only sources.
+        source_values[work] = canonical_quartet<AngularOrder, Cartesian, double>(
+            batch, system, first, second, third, fourth, -1, exchange_range, exchange_omega);
+        continue;
+      }
       double full_value = 0.0;
       if (want_j || (want_k && exchange_range == generativeqc::integrals::CoulombRange::Full)) {
         using Scalar = std::conditional_t<MixedJ, MixedPrecisionFloat, double>;
@@ -282,10 +290,6 @@ __global__ void canonical_jk_kernel(
             batch, system, first, second, third, fourth, -1,
             generativeqc::integrals::CoulombRange::Full, 0.0));
         if (work_census || mixed_coulomb_work_count) ++evaluated;
-      }
-      if (source_values) {
-        source_values[work] = full_value;
-        continue;
       }
       if (want_j)
         accumulate_direct_fock_integral<Unrestricted>(

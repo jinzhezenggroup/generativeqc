@@ -49,6 +49,7 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
         "std::size_t cuda_direct_jk_resident_value_bytes(",
         "generativeqc_status prepare_cuda_direct_jk_resident_values(",
         "std::size_t cuda_direct_jk_selected_resident_value_bytes(",
+        "generativeqc_status prepare_cuda_direct_jk_range_resident_values(",
         "generativeqc_status prepare_cuda_direct_jk_selected_resident_values(",
         "bool cuda_direct_jk_linear_available(",
         "std::size_t cuda_direct_jk_compensation_elements(",
@@ -107,7 +108,8 @@ enum generativeqc_status {
   GENERATIVEQC_STATUS_INVALID_ARGUMENT
 };
 constexpr int cudaMemcpyDeviceToHost = 0;
-enum class DirectCoulombRange { Full };
+enum class DirectCoulombRange { Full, Short, Long };
+enum class FockOperator { FullRange, ShortRange, LongRange };
 struct CudaDirectJkPlan;
 // The extracted definition does not include the header's restricted-spin default.
 std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins = 1);
@@ -209,6 +211,8 @@ struct CudaDirectJkPlan {
   std::vector<std::array<size_t, 8>> canonical_pair_offsets{{{0, 2, 2, 2, 2, 2, 2, 2}}};
   int device_id{};
   double* resident_values{};
+  FockOperator resident_operator{FockOperator::FullRange};
+  double resident_omega{};
   size_t resident_value_count{}, device_bytes{16};
   std::uint32_t resident_bucket_mask{(1U << 28) - 1};
   Diagnostic diagnostic;
@@ -425,6 +429,26 @@ int main() {
               GENERATIVEQC_STATUS_SUCCESS,
           "frozen layout downloaded rows again");
     state.copy = cudaSuccess;
+    {
+      CudaDirectJkPlan radial;
+      radial.screening_tolerance = 1e-12;
+      radial.canonical_row_prefix = prefix.data();
+      check(prepare_cuda_direct_jk_range_resident_values(
+                &radial, sizeof(double), 1, FockOperator::LongRange, 0.3, detail) ==
+                GENERATIVEQC_STATUS_OUT_OF_MEMORY && !radial.resident_values,
+            "range capacity refusal published an incomplete source");
+      check(prepare_cuda_direct_jk_range_resident_values(
+                &radial, 2 * sizeof(double), 1, FockOperator::LongRange, 0.3, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "range source could not retry a refused lease");
+      check(prepare_cuda_direct_jk_range_resident_values(
+                &radial, 2 * sizeof(double), 1, FockOperator::ShortRange, 0.3, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                prepare_cuda_direct_jk_range_resident_values(
+                    &radial, 2 * sizeof(double), 1, FockOperator::LongRange, 0.4, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "range cache changed its immutable radial identity");
+    }
     {
       CudaDirectJkPlan partial;
       partial.screening_tolerance = 1e-12;
