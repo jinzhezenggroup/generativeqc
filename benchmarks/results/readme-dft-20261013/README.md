@@ -32,23 +32,36 @@ Direct WB97M-V passes all 12 calls at 48 atoms within 1800 s with
 [#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454), automatic exact
 force reuse [#2462](https://github.com/jinzhezenggroup/generativeqc/pull/2462),
 automatic exact SCF reuse [#2467](https://github.com/jinzhezenggroup/generativeqc/pull/2467),
-and the composite phased-Becke budget repair
-[#2468](https://github.com/jinzhezenggroup/generativeqc/pull/2468). Cold/warm/moved/moved-warm are
-575.813 / 15.548 / 405.620 / 15.580 s. The warm median moves from 67.707 s
+the composite phased-Becke budget repair
+[#2468](https://github.com/jinzhezenggroup/generativeqc/pull/2468), and default bounded
+native frozen-VV10 initialization. Cold/warm/moved/moved-warm are now
+388.993 / 15.453 / 290.381 / 15.559 s, compared with
+575.813 / 15.548 / 405.620 / 15.580 s before initialization. The warm median moves from 67.707 s
 (bilateral source) to 39.029 s (force reuse), 18.435 s (SCF reuse), then 15.548 s
-(correctly budgeted Becke); all four complete populations remain retained.
-Maximum current 48-atom energy/force errors are 4.320e-12 Eh / 6.520e-11 Eh/Bohr.
+(correctly budgeted Becke); all superseded complete populations remain retained.
+Maximum current 48-atom energy/force errors are 4.320e-12 Eh / 1.787e-11 Eh/Bohr.
 Every frozen replay records zero SCF and force VV10 pair sweeps, while physical
 Focks and remaining work still run. Both geometry owners allocate 41,706,304
 phased bytes and actually visit all 1,179,648 points in 1,152 phase batches.
 The preceding source had zero phased bytes/batches despite requesting the path.
 
-Both new default rounds pass all 36 calls at 3/12/48 atoms. The figure uses the
-latest complete round at all three sizes, including its slower 29.237-s 3-atom
-cold point; it does not choose the faster 16.172-s cold point from the preceding
-SCF-only round. Earlier startup/cache controls and superseded observations remain
-in the receipts. Experimental initializers and explicit device-final-validation
-are disabled in the plotted source. The 96-atom endpoint remains unresolved.
+The latest default round passes all 36 calls at 3/12/48 atoms. The figure uses
+this one round at all three sizes: 3-atom cold/warm/moved/moved-warm are
+17.498 / 0.420 / 5.072 / 0.420 s, and 12-atom values are
+34.235 / 1.797 / 20.423 / 1.786 s. Earlier startup/cache controls and all
+superseded populations remain in the receipts. Only the bounded native
+frozen-VV10 initializer is automatic; incremental J/K, range freezing, DIIS
+continuation, longer delta chains and explicit device-final-validation are absent.
+All provisional and target Focks share the original 100-iteration budget, and
+only consecutive physical target states can satisfy the unchanged gates.
+
+At 96 atoms, default cold completes in 1332.267 s and all five warm calls
+complete with median 59.321 s. All six returned E/F records pass the independent
+gates (maximum errors 6.821e-12 Eh / 2.342e-11 Eh/Bohr). The whole sequence
+times out in moved/0 at the original 1800 s limit. Its complete cold/warm phases
+are plotted with the sequence explicitly marked incomplete; no moved timing or
+full-population acceptance is inferred. The 96-atom endpoint and #2426 remain
+unresolved.
 
 Default-off initializer trials are retained separately: one 96-atom cold returns
 in 1562.126 s, and its revised inner solve regresses to 1629.527 s. Both hit the
@@ -57,7 +70,12 @@ initializer completes in 411.440 / 18.234 / 313.692 / 18.256 s, but it is not a
 default result. Freezing range exchange as well increases small-system iteration
 counts and is not promoted. Its original null gates remain unchanged; an offline
 comparison with the identical independent protocol is retained separately.
-Neither partial 96-atom trial closes #2426.
+Later incremental initialization and bounded eight-delta experiments complete
+96-atom cold in 1328.238 / 1352.005 s and all five warm calls, but both time out
+in moved/0. The longer chain yields little complete 48-atom improvement and is
+not promoted. Unshifted and approximately rebased inner DIIS do not reduce the
+small-system iteration count and are also not promoted. All partial trials,
+negative results and source identities remain separate from default curves.
 
 These are before/after complete endpoint observations, not isolated attribution
 of every source change. The newer integration uses the current native public
@@ -182,11 +200,21 @@ Both are ancestors of the frozen
 Automatic exact force reuse is qualified on `9aabd59a3` with library SHA256
 `4c7b6ace6f07466af7967c0cc1f4453a7ff09a03c0ebcf13316527105e6779c7`, retained on
 [its frozen source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-automatic-source-20261014).
-Automatic SCF reuse is qualified on `3b15b73d7`, and the plotted phased-budget
+Automatic SCF reuse is qualified on `3b15b73d7`, and the preceding phased-budget
 round uses `948fb1058` with library SHA256
 `4a5ccdabd0a3c67eeab53281a52ae4d0c556e364f9e421d0d29b1f2f16fb5e39`.
 Both, and the separately labeled initializer trials, are retained in
 [the frozen source ancestry](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-scf-phased-source-20261014).
+The current default initializer populations use `22ff59fd3`, library SHA256
+`242be46485a289310f0034feb5ff3f8532f8993e8f22961194f15c7f703becb3`, retained on
+[the frozen initializer source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-default-initializer-source-20261014).
+That source passes 28 receipt/budget/replay and independent molecular E/F checks;
+22 receipt/budget/replay cases also pass both memcheck and synccheck with zero
+errors. These checks use finite n4 Slurm allocations and the default initializer
+policy. A separate intrusive n1 short-iteration trace counts six actual Fock
+evaluations across a failed-seed retry, including four VV10 sweeps averaging
+81.964 s; the configured three-iteration limit is per attempt. Its 470.728 s
+execution is diagnostic only and never a benchmark sample.
 The PR branches can differ from these assembled snapshots; only the recorded
 snapshot identities identify a measured population.
 Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.
