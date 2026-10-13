@@ -293,9 +293,7 @@ def test_m06_local_ao_does_not_admit_mixed_density(
 
 
 @pytest.mark.parametrize("mode", ["budget", "ledger"])
-def test_m06_map_capacity_fallback_stays_fp64(
-    admission_probe: Path, mode: str
-) -> None:
+def test_m06_map_capacity_fallback_stays_fp64(admission_probe: Path, mode: str) -> None:
     assert _run(admission_probe, "unset", "m062x", mode=mode) == "dense:0:0"
 
 
