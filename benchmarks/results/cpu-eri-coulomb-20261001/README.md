@@ -92,7 +92,7 @@ Before the fixed twenty-round campaign, all three source trees were compiled to
 477 bytecode files each (`repo`: 174 → 477, detached baseline: 57 → 477, candidate:
 289 → 477). The normalized campaign selected the actual baseline build's `repo`
 Python/source tree. `bytecode-control.json`, full inventories, imported paths,
-and binary hashes are retained in `supporting-evidence.json.gz` and the campaign.
+and binary hashes are retained in `supporting-evidence.json.xz` and the campaign.
 Both campaigns use the same frozen endpoint inputs and native libraries. The
 earlier pilot remains visible but is not pooled into the primary estimator.
 
