@@ -683,6 +683,326 @@
           }
         ]
       },
+      "7963": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7963",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "M06-2X/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
+      "7964": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7964",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "PBE0/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "PBE0/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "B3LYP/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
+      "7965": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7965",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "timeout",
+            "outcome": {
+              "exit_code": 124,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "WB97M-V/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "timeout",
+            "outcome": {
+              "exit_code": 143,
+              "reason": "slurm_time_limit",
+              "slurm_job_id": "7965",
+              "slurm_state": "TIMEOUT",
+              "slurm_exit_code": "0:15",
+              "allocation_time_limit_seconds": 3600,
+              "point_time_limit_seconds": 1800,
+              "provenance": "Post-run scontrol TIMEOUT and srun exit 143; runner was terminated before writing its per-point outcome."
+            }
+          }
+        ],
+        "observed_slurm_states": [
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:57:12",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T10:28:03",
+            "EndTime": "2026-10-13T11:28:03",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:53:06",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T10:28:03",
+            "EndTime": "2026-10-13T11:28:03",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          },
+          {
+            "JobState": "TIMEOUT",
+            "Reason": "TimeLimit",
+            "ExitCode": "0:15",
+            "RunTime": "01:00:08",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T10:28:03",
+            "EndTime": "2026-10-13T11:28:11",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
+          }
+        ]
+      },
+      "7969": {
+        "scheduler": {
+          "SLURM_JOB_ID": "7969",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "points": [
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 3,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 12,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 48,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          },
+          {
+            "method": "R2SCAN-3C/RKS",
+            "atoms": 96,
+            "engine": "reference",
+            "status": "measured",
+            "outcome": {
+              "exit_code": 0,
+              "time_limit_seconds": 1800
+            }
+          }
+        ]
+      },
       "7971": {
         "scheduler": {
           "SLURM_JOB_ID": "7971",
@@ -826,17 +1146,17 @@
           }
         ]
       },
-      "7964": {
+      "7972": {
         "scheduler": {
-          "SLURM_JOB_ID": "7964",
+          "SLURM_JOB_ID": "7972",
           "SLURM_JOB_PARTITION": "main",
           "SLURM_GPUS_ON_NODE": "1"
         },
         "points": [
           {
-            "method": "PBE0/RKS",
+            "method": "R2SCAN-3C/RKS",
             "atoms": 3,
-            "engine": "reference",
+            "engine": "native",
             "status": "measured",
             "outcome": {
               "exit_code": 0,
@@ -844,9 +1164,9 @@
             }
           },
           {
-            "method": "PBE0/RKS",
+            "method": "R2SCAN-3C/RKS",
             "atoms": 12,
-            "engine": "reference",
+            "engine": "native",
             "status": "measured",
             "outcome": {
               "exit_code": 0,
@@ -854,9 +1174,9 @@
             }
           },
           {
-            "method": "PBE0/RKS",
+            "method": "R2SCAN-3C/RKS",
             "atoms": 48,
-            "engine": "reference",
+            "engine": "native",
             "status": "measured",
             "outcome": {
               "exit_code": 0,
@@ -864,143 +1184,52 @@
             }
           },
           {
-            "method": "PBE0/RKS",
+            "method": "R2SCAN-3C/RKS",
             "atoms": 96,
-            "engine": "reference",
-            "status": "measured",
+            "engine": "native",
+            "status": "timeout",
             "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "B3LYP/RKS",
-            "atoms": 3,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "B3LYP/RKS",
-            "atoms": 12,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "B3LYP/RKS",
-            "atoms": 48,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "B3LYP/RKS",
-            "atoms": 96,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
+              "exit_code": 124,
               "time_limit_seconds": 1800
             }
           }
-        ]
-      },
-      "7963": {
-        "scheduler": {
-          "SLURM_JOB_ID": "7963",
-          "SLURM_JOB_PARTITION": "main",
-          "SLURM_GPUS_ON_NODE": "1"
-        },
-        "points": [
+        ],
+        "observed_slurm_states": [
           {
-            "method": "R2SCAN/RKS",
-            "atoms": 3,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:14:06",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T12:11:09",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
           },
           {
-            "method": "R2SCAN/RKS",
-            "atoms": 12,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
+            "JobState": "RUNNING",
+            "Reason": "None",
+            "ExitCode": "0:0",
+            "RunTime": "00:10:00",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T12:11:09",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
           },
           {
-            "method": "R2SCAN/RKS",
-            "atoms": 48,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN/RKS",
-            "atoms": 96,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "M06-2X/RKS",
-            "atoms": 3,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "M06-2X/RKS",
-            "atoms": 12,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "M06-2X/RKS",
-            "atoms": 48,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "M06-2X/RKS",
-            "atoms": 96,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
+            "JobState": "FAILED",
+            "Reason": "NonZeroExitCode",
+            "ExitCode": "1:0",
+            "RunTime": "00:37:55",
+            "TimeLimit": "01:00:00",
+            "StartTime": "2026-10-13T11:11:09",
+            "EndTime": "2026-10-13T11:49:04",
+            "NodeList": "node1",
+            "NumCPUs": "8",
+            "TresPerNode": "gres/gpu:5090:1"
           }
         ]
       },
@@ -1125,235 +1354,6 @@
             "TimeLimit": "01:00:00",
             "StartTime": "2026-10-13T11:11:09",
             "EndTime": "2026-10-13T12:11:09",
-            "NodeList": "node1",
-            "NumCPUs": "8",
-            "TresPerNode": "gres/gpu:5090:1"
-          }
-        ]
-      },
-      "7969": {
-        "scheduler": {
-          "SLURM_JOB_ID": "7969",
-          "SLURM_JOB_PARTITION": "main",
-          "SLURM_GPUS_ON_NODE": "1"
-        },
-        "points": [
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 3,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 12,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 48,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 96,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          }
-        ]
-      },
-      "7972": {
-        "scheduler": {
-          "SLURM_JOB_ID": "7972",
-          "SLURM_JOB_PARTITION": "main",
-          "SLURM_GPUS_ON_NODE": "1"
-        },
-        "points": [
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 3,
-            "engine": "native",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 12,
-            "engine": "native",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 48,
-            "engine": "native",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "R2SCAN-3C/RKS",
-            "atoms": 96,
-            "engine": "native",
-            "status": "timeout",
-            "outcome": {
-              "exit_code": 124,
-              "time_limit_seconds": 1800
-            }
-          }
-        ],
-        "observed_slurm_states": [
-          {
-            "JobState": "RUNNING",
-            "Reason": "None",
-            "ExitCode": "0:0",
-            "RunTime": "00:14:06",
-            "TimeLimit": "01:00:00",
-            "StartTime": "2026-10-13T11:11:09",
-            "EndTime": "2026-10-13T12:11:09",
-            "NodeList": "node1",
-            "NumCPUs": "8",
-            "TresPerNode": "gres/gpu:5090:1"
-          },
-          {
-            "JobState": "RUNNING",
-            "Reason": "None",
-            "ExitCode": "0:0",
-            "RunTime": "00:10:00",
-            "TimeLimit": "01:00:00",
-            "StartTime": "2026-10-13T11:11:09",
-            "EndTime": "2026-10-13T12:11:09",
-            "NodeList": "node1",
-            "NumCPUs": "8",
-            "TresPerNode": "gres/gpu:5090:1"
-          },
-          {
-            "JobState": "FAILED",
-            "Reason": "NonZeroExitCode",
-            "ExitCode": "1:0",
-            "RunTime": "00:37:55",
-            "TimeLimit": "01:00:00",
-            "StartTime": "2026-10-13T11:11:09",
-            "EndTime": "2026-10-13T11:49:04",
-            "NodeList": "node1",
-            "NumCPUs": "8",
-            "TresPerNode": "gres/gpu:5090:1"
-          }
-        ]
-      },
-      "7965": {
-        "scheduler": {
-          "SLURM_JOB_ID": "7965",
-          "SLURM_JOB_PARTITION": "main",
-          "SLURM_GPUS_ON_NODE": "1"
-        },
-        "points": [
-          {
-            "method": "WB97M-V/RKS",
-            "atoms": 3,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "WB97M-V/RKS",
-            "atoms": 12,
-            "engine": "reference",
-            "status": "measured",
-            "outcome": {
-              "exit_code": 0,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "WB97M-V/RKS",
-            "atoms": 48,
-            "engine": "reference",
-            "status": "timeout",
-            "outcome": {
-              "exit_code": 124,
-              "time_limit_seconds": 1800
-            }
-          },
-          {
-            "method": "WB97M-V/RKS",
-            "atoms": 96,
-            "engine": "reference",
-            "status": "timeout",
-            "outcome": {
-              "exit_code": 143,
-              "reason": "slurm_time_limit",
-              "slurm_job_id": "7965",
-              "slurm_state": "TIMEOUT",
-              "slurm_exit_code": "0:15",
-              "allocation_time_limit_seconds": 3600,
-              "point_time_limit_seconds": 1800,
-              "provenance": "Post-run scontrol TIMEOUT and srun exit 143; runner was terminated before writing its per-point outcome."
-            }
-          }
-        ],
-        "observed_slurm_states": [
-          {
-            "JobState": "RUNNING",
-            "Reason": "None",
-            "ExitCode": "0:0",
-            "RunTime": "00:57:12",
-            "TimeLimit": "01:00:00",
-            "StartTime": "2026-10-13T10:28:03",
-            "EndTime": "2026-10-13T11:28:03",
-            "NodeList": "node1",
-            "NumCPUs": "8",
-            "TresPerNode": "gres/gpu:5090:1"
-          },
-          {
-            "JobState": "RUNNING",
-            "Reason": "None",
-            "ExitCode": "0:0",
-            "RunTime": "00:53:06",
-            "TimeLimit": "01:00:00",
-            "StartTime": "2026-10-13T10:28:03",
-            "EndTime": "2026-10-13T11:28:03",
-            "NodeList": "node1",
-            "NumCPUs": "8",
-            "TresPerNode": "gres/gpu:5090:1"
-          },
-          {
-            "JobState": "TIMEOUT",
-            "Reason": "TimeLimit",
-            "ExitCode": "0:15",
-            "RunTime": "01:00:08",
-            "TimeLimit": "01:00:00",
-            "StartTime": "2026-10-13T10:28:03",
-            "EndTime": "2026-10-13T11:28:11",
             "NodeList": "node1",
             "NumCPUs": "8",
             "TresPerNode": "gres/gpu:5090:1"
@@ -2557,8 +2557,8 @@
   },
   "files": {
     "README.md": {
-      "sha256": "b54fa0fa08d2aceeef3aaf0d4a6864e302e0510db48978543e6e47de2791cf32",
-      "bytes": 10633
+      "sha256": "da5092e657bb39d734363baea99695f8225c9434c3bf0955e53f745dd5576f00",
+      "bytes": 10737
     },
     "summary.json.gz": {
       "sha256": "a001e2d5f851c8b4106a3081b405902f3867048637fd88e4087d67f9184e42d5",

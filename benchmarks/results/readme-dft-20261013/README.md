@@ -116,7 +116,9 @@ reference timeouts listed above are separate limitations.
   `ga=2`, `gc=1`) and gCP. Its reference combines GPU4PySCF electronic calculations
   with CPU dftd4 4.3.0 and the independent CPU gCP qualification provider. Both
   corrections and their geometry-dependent setup are evaluated inside **every**
-  reference endpoint. This CPU contribution is explicitly labeled in the figure.
+  reference endpoint. The native endpoint uses CUDA D4 and native CPU gCP; its
+  corrections also remain inside every timed endpoint. The figure labels the
+  reference CPU corrections.
 - WB97M-V includes self-consistent VV10 and the shared molecular density-screening
   policy. No density fitting, mixed precision, experimental AO selection or
   preliminary-density override is enabled in this matrix.

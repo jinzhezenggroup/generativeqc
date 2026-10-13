@@ -200,8 +200,9 @@ caches are retained.
 ![Cold and warm DFT energy-plus-force timings for GenerativeQC and GPU4PySCF](benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
 
 Both engines use matching water clusters, FP64, def2-SVP and explicit moving
-grids. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP; its
-reference includes CPU corrections. Each plotted native point passes energy
+grids. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP.
+Native corrections use CUDA D4 and native CPU gCP; the independent reference
+uses CPU D4 and gCP. Each plotted native point passes energy
 and force checks across cold, warm and changed-geometry calls. Missing points
 are labeled; crosses show warm repeats with differing SCF work.
 
