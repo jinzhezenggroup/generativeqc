@@ -570,8 +570,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
                       (p.use_orbitals && !p.orbital_ready))))
       throw std::invalid_argument("invalid grid tile/output");
     if (defer_error_to_consumer && (!features || feature_output || jet_output))
-      throw std::invalid_argument(
-          "deferred CUDA grid errors require a device-only feature lease");
+      throw std::invalid_argument("deferred CUDA grid errors require a device-only feature lease");
     p.last_points = npoint;
     p.last_active = active;
     p.last_identity_map = identity_map;
