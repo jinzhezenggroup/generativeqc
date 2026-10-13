@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-13
 
+The whole-population prerequisite below is superseded by
+[independent benchmark execution](2026-10-13-independent-benchmark-execution.md):
+completed phases remain visible when a later phase or the other engine times out.
+Unknown accuracy stays explicit and independent numerical gates are unchanged.
+
 ## Problem
 
 The initial README refresh omitted HF and DF from the inline comparison. Its

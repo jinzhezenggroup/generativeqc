@@ -32,11 +32,13 @@
 | M06-2X | 96 (768) | 637.567 | 97.687 | 47.156 | 13.406 |
 | ωB97M-V | 3 (24) | 39.632 | 27.917 | 0.771 | 2.575 |
 | ωB97M-V | 12 (96) | 56.981 | 109.918 | 6.078 | 8.837 |
-| ωB97M-V | 48 (384) | reference unavailable | timeout | reference unavailable | timeout |
-| ωB97M-V | 96 (768) | reference unavailable | timeout | reference unavailable | timeout |
+| ωB97M-V | 48 (384) | 781.601 | 1216.489 | 89.817 | 105.410 |
+| ωB97M-V | 96 (768) | timeout | timeout | timeout | timeout |
 
 Warm cells show the median of all five complete endpoints. † marks differing
 SCF work and includes the full range; timings are never normalized by iterations.
+‡ marks completed native calls without an independent accuracy check for that geometry.
+A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.
 r²SCAN-3c: native CPU gCP; reference CPU D4 + gCP.
 
 ## Observed SCF work
@@ -78,7 +80,7 @@ between engines; complete endpoint time includes analytic forces as well.
 | M06-2X | 96 | 18/19 | 41/42 | 1/1 | 1/2 |
 | ωB97M-V | 3 | 14/14 | 32/33 | 1/1 | 1/2 |
 | ωB97M-V | 12 | 20/20 | 45/46 | 1/1 | 1/2 |
-| ωB97M-V | 48 | — | — | — | — |
+| ωB97M-V | 48 | 19/19 | 45/46 | 1/1 | 1/2 |
 | ωB97M-V | 96 | — | — | — | — |
 
 The [measurement report](README.md) describes the protocol and unsuccessful

@@ -600,24 +600,24 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 139308,
-      "sha256": "5487514376f54a7a2648323e96916defd68307ea9978f7c642e6af57cd02f697",
+      "bytes": 139392,
+      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 175175,
-      "sha256": "02185cd63a858542958685a2260c205aaca3de8012a38cc08a09f477b2c2fb2b",
+      "bytes": 187516,
+      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete endpoint chart"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 246304,
-      "sha256": "623a0e9a0bc23cd337c8306d51a37caa96f49923218fa67a079f806d1d1ad994",
+      "bytes": 250780,
+      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
     },

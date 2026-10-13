@@ -44,17 +44,10 @@ for method in ${README_BENCHMARK_METHODS:-hf pbe pbe0 b3lyp r2scan r2scan-3c m06
             extra=(--density-fitting "$readme_df")
             [[ "$readme_df" != cuda ]] || extra+=(--auxiliary-basis-file "$readme_aux")
             if [[ "$engine" == native ]]; then
-                # A failed reference remains visible; never time against a partial oracle.
-                if ! "$readme_python" - "$directory/reference.json" <<'PY'
-import json, pathlib, sys
-path = pathlib.Path(sys.argv[1])
-sys.exit(0 if path.exists() and json.loads(path.read_text())["status"] == "measured" else 1)
-PY
-                then
-                    printf '{"exit_code":1,"reason":"reference_unavailable"}\n' > "$directory/native.outcome"
-                    readme_failed=1
-                    continue
-                fi
+                # Reference completion must not decide whether native runs.
+                # Available geometry oracles are still checked; absent ones
+                # produce explicit unchecked timings, never passing accuracy.
+                extra+=(--allow-missing-reference)
                 extra+=(--reference "$directory/reference.json")
             fi
             result=0

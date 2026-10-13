@@ -3,7 +3,8 @@
 Measurements are based on master `e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c`
 on 2026-10-13. PBE, PBE0, B3LYP and r2SCAN at **12 and 96 atoms** were remeasured
 with this change's conditional force-memory handoff; other points retain the
-original master measurements. HF and DF were newly measured using the fixed build.
+original master measurements. HF, DF and the independent ωB97M-V/48,96 native
+reruns use the fixed build. Original reference files are preserved unchanged.
 Each point retains its actual native source
 inventory identity and library hash in [summary.json.xz](summary.json.xz).
 [manifest.json](manifest.json) identifies both snapshots and the changed files.
@@ -15,10 +16,13 @@ inventory identity and library hash in [summary.json.xz](summary.json.xz).
 See the [DF timing table](df-timings.md) for the separate density-fitted population.
 
 See the [complete timing table](timings.md) for all sizes and both engines.
-Cold is one observed call per point; warm series connect the median of all five
-complete endpoint repeats and show their minimum–maximum range. Crosses and †
-retain differing SCF iteration/build counts. Only failed or missing endpoints
-break lines; endpoint statistics never imply equal SCF work.
+Cold is one observed complete call per point; warm series require all five
+repeats and show their median and minimum–maximum range. Crosses and † retain
+differing SCF iteration/build counts. Each engine runs independently, and a
+later failure does not erase completed phases. Open markers and ‡ identify
+completed native phases without an independent accuracy check for that geometry.
+Incomplete or numerically failed phases have no plotted time; statistics never
+imply equal SCF work.
 
 ## Measurements and acceptance
 
@@ -45,34 +49,70 @@ in the recorded force-provider lookup/construction interval. This first-call
 cost remains in the cold comparison. One observed cold call with retained
 caches does not establish a monotonic size trend or an empty-cache launch cost.
 
-Unsuccessful points remain explicit; their partial timings are excluded:
+Whole-population outcomes remain explicit alongside completed-phase timings:
 
 | Functional | Atoms | Engine | Outcome |
 | --- | ---: | --- | --- |
 | r²SCAN-3c | 96 | native | Time limit; last stage `cold/0` |
 | ωB97M-V | 48 | reference | Time limit; last stage `moved/0` |
-| ωB97M-V | 48 | native | Skipped: complete reference unavailable |
+| ωB97M-V | 48 | native | Point time limit in `moved-warm/0`; cold, five warm calls and moved completed |
 | ωB97M-V | 96 | reference | Time limit; last stage `cold/0` |
-| ωB97M-V | 96 | native | Skipped: complete reference unavailable |
+| ωB97M-V | 96 | native | Point time limit in `cold/0`; no completed call |
 
 A converged SCF energy with missing analytic forces cannot pass the endpoint gate.
 The ωB97M-V reference has a 1800-second per-point limit and a 3600-second
 outer allocation limit. Its retained outcome identifies which limit stopped
-each incomplete point. No native timing is inferred from an incomplete oracle.
+each incomplete point. Native timings come from native execution, regardless of
+reference completion. The original reference files are retained unchanged;
+valid cold/moved oracles can check their geometry even when later calls time out.
+A whole-point deadline includes setup and multiple calls, so it is not a
+per-call lower bound or a speedup denominator.
+
+The independent native reruns use separate Slurm allocations (jobs 8032/8033)
+and the original 1800-second whole-point limit. The original geometry's completed
+phases now remain visible for **both** engines:
+
+| ωB97M-V size / phase | Native (s) | GPU4PySCF (s) | Native accuracy |
+| --- | ---: | ---: | --- |
+| 48 / cold | 781.601 | 1216.489 | Independent E/F gates pass |
+| 48 / warm, median of five | 89.817 | 105.410 | All five independent E/F gates pass |
+| 48 / moved | 544.708 | Incomplete at time limit | Unchecked: independent geometry oracle unavailable |
+| 96 / cold | Incomplete at point time limit | Incomplete at allocation time limit | No completed native result |
+
+The six checked native 48-atom calls have maximum errors **4.548e-12 Eh** and
+**2.775e-11 Eh/Bohr**. Native cold and warm are faster in these observations;
+SCF work differs, and no iteration-normalized speedup is claimed. The native
+moved call returns finite converged energy/host forces, but its independent
+errors and gate remain **null**, never zero or passing. Neither engine completes
+the entire 48-atom population; native proceeds to `moved-warm/0`, while the
+reference stops at `moved/0`. Native/96 also times out, as an actual independently
+observed native outcome. These observations are not inferred from reference
+failure.
+
+A separate three-atom real-device control (job 8038) completes all 12 calls
+without any reference supplied, preserving null accuracy gates. A subsequent
+independent comparison of its retained arrays passes all 12 calls, with maximum
+errors 1.009e-12 Eh / 9.160e-11 Eh/Bohr. This diagnostic validation remains
+outside the timing populations and does not rewrite the original null gates;
+its hashes and receipt are retained in the manifest.
 
 Initial host validation: 140 tests passed across force ownership/admission, ctypes
 bridges, telemetry and benchmark publication. The real-device lifetime/oracle
 probe and ten native CLI force/finite-difference cases also passed. The HF/DF
 publication follow-up passes 215 host tests, including endpoint gates, plotting
 statistics, prepared-force fixtures and evidence-retention checks.
-The final interruption/reporting follow-up passes 27 focused benchmark tests;
-operator cancellation retains partial evidence without publishing its timings.
+The independent-execution follow-up passes 65 focused benchmark tests, including
+missing/partial reference orchestration, phase reduction and unchanged strict
+consumers. Interrupted populations retain their complete phases and outcomes.
 
-Every published native point must complete 12 independently checked endpoints:
+Whole-population acceptance requires 12 independently checked endpoints:
 cold, five fixed-density warm calls, changed geometry, and five moved-geometry
-warm calls. All must return finite energy and host forces, converge and meet
+warm calls. Each must return finite energy and host forces, converge and meet
 absolute errors of **1e-8 Eh** and **1e-7 Eh/Bohr**. The comparison does not divide
 wall time by iterations or assert equivalent stopping rules between engines.
+The figure additionally retains complete individual phase populations, with
+independent accuracy explicitly marked when unavailable. It never averages a
+partial warm set or treats an unchecked result as a passing numerical gate.
 The full scalar observations retain native iterations/Fock builds, reference
 SCF J/K builds, residuals, errors and available resource/work diagnostics.
 
@@ -90,12 +130,16 @@ The DF matrix has **14 of 16 native points** passing all 12 endpoint checks
 (168 observations); all **16 reference points** completed. Maximum accepted
 native errors are **8.027e-11 Eh** and **1.557e-10 Eh/Bohr**. HF and PBE0 pass
 at all four sizes; PBE and r²SCAN pass at 3, 12 and 48 atoms.
+These error totals describe the fully qualified populations; the separately
+checked 96-atom cold calls below have maximum energy error **2.520e-10 Eh**,
+also within the unchanged gate.
 
 The two 96-atom semilocal points expose a severe default streamed-DF performance
 defect, tracked in [#2411](https://github.com/jinzhezenggroup/generativeqc/issues/2411).
 Each eventually completed its first cold call, but its warm population remained
-incomplete. These partial cold observations are diagnostic evidence, excluded
-from both the plotted timings and acceptance totals:
+incomplete. These completed cold observations are now plotted independently;
+they remain excluded from the full-population acceptance totals, and no warm
+time is published for the incomplete warm sets:
 
 | Method / atoms | Cold E+F (s) | Integral derivative interval (s) | DF streamed |
 | --- | ---: | ---: | --- |
@@ -142,6 +186,7 @@ source identities and acceptance gates:
 | r²SCAN-3c DF force capability missing | [#2415](https://github.com/jinzhezenggroup/generativeqc/issues/2415) |
 | Direct r²SCAN-3c/96 incomplete cold endpoint | [#2416](https://github.com/jinzhezenggroup/generativeqc/issues/2416) |
 | GPU4PySCF ωB97M-V/48,96 incomplete reference populations | [#2417](https://github.com/jinzhezenggroup/generativeqc/issues/2417) |
+| Independently observed native ωB97M-V/48,96 incomplete populations | [#2426](https://github.com/jinzhezenggroup/generativeqc/issues/2426) |
 
 These findings remain unresolved by the force-cache and plotting fixes. The
 reference issue is a benchmark blocker; the available evidence does not prove
@@ -266,8 +311,12 @@ selects the explicit auxiliary snapshot; the default is cc-pVDZ-JKFIT. Select
 `README_BENCHMARK_METHODS="hf pbe pbe0 r2scan"` for the plotted DF population,
 and pass `--density-fitting --methods hf pbe pbe0 r2scan` to the reducer.
 Unsupported combinations remain explicit outcomes.
-The runner also accepts `reference` and `native` separately, preserving the
-independent reference JSON. Use a fresh output directory for each campaign.
+The runner also accepts `reference` and `native` separately. Native execution
+always proceeds, using `--allow-missing-reference` in the shared driver; a missing
+geometry oracle produces null accuracy gates, not a skipped calculation.
+Use separate finite allocations to keep an exhausted reference allocation from
+preventing native work. Preserve any reference JSON supplied to the native run
+as an immutable snapshot, and use a fresh output directory for each campaign.
 
 Re-render the committed reduction without a GPU:
 
@@ -286,8 +335,10 @@ or a new numerical qualification of a different source revision.
 
 The previous renderer deliberately broke a line when SCF iterations/builds
 varied between repeats, although all those endpoints completed. The updated
-figure connects medians of all accepted endpoints and keeps full ranges and
-work counts. It neither discards slower observations nor normalizes by iterations.
+figure connects medians of every complete phase population and keeps full ranges
+and work counts. Completion is independent of the other engine and later phases;
+known failed accuracy gates are never plotted, and unchecked accuracy is explicit.
+The figure neither discards slower observations nor normalizes by iterations.
 
 A separate [GPU4PySCF 1.8.1 audit](reference-replay-audit.json) reproduces
 PBE/48 warm iteration counts **4, 5, 4, 4, 4**. The frozen input density remains
