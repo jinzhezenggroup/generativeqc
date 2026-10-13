@@ -27,6 +27,17 @@ job in the driver executable, with matching target, resource directory and C
 language. External assembler/frontend, plugin/module/sysroot jobs and unobserved
 job models fail closed. Clang does not inherit GCC's cc1/as/specs assumptions.
 The job diagnostic is data to validate, never a command to execute.
+The Clang recipe also returns its resolved `compiler.executable`; use that path
+for object compilation. Invocation-entry/system-driver selection is checked
+around queries and before returning a key, so entry symlink retargeting fails
+closed even when the original canonical driver remains unchanged.
+
+Clang's `-M` quoting differs from GCC: it normalizes literal header backslashes
+to `/` and may leave filename tabs unquoted. Collection cross-checks actual
+opened-header paths with `-E -H` and replays that trace. Backslashes, control
+characters, terminal spaces and mismatched trace paths are unsupported even if
+normalized or split decoy files exist. This does not relax the GCC grammar.
+Spaces inside paths, `#` and `$` retain real compiler/object dependency tests.
 
 ## Completeness boundary
 
@@ -128,6 +139,10 @@ for opaque inputs; the selected cache must honor it. Real qualification changes
 a manifest-covered `.incbin` input with identical C source/preprocessor output and
 checks different actual object bytes through the same verified cache launcher.
 Clang does not reuse GCC's `-frandom-seed` policy.
+An uncacheable `.incbin` safe fallback proves fresh object bytes, but does not
+prove a cache hit or the salt's hashing behavior. Qualification must also exercise
+cacheable ordinary C: unchanged command replay hits, while a refreshed opaque
+manifest changes the salt and causes a miss under the same verified launcher.
 
 ## Verification
 

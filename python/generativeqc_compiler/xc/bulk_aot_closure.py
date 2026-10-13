@@ -249,8 +249,20 @@ def collect_cpu_closure(
         if str(Path.cwd()) != working_directory:
             raise ValueError("working-directory-changed")
 
+    def check_clang_selection() -> None:
+        if not is_clang:
+            return
+        selected = shutil.which(compiler, path=CPU_ENVIRONMENT["PATH"])
+        if (
+            selected is None
+            or Path(selected).resolve() != path
+            or _system_clang() != path
+        ):
+            raise ValueError("compiler-selection-changed")
+
     def query(arguments: list[str], *, diagnostic: bool = False) -> str:
         check_working_directory()
+        check_clang_selection()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError
@@ -263,6 +275,7 @@ def collect_cpu_closure(
             environment=dict(CPU_ENVIRONMENT),
         )
         check_working_directory()
+        check_clang_selection()
         if result.timed_out:
             raise TimeoutError
         if result.returncode:
@@ -336,6 +349,8 @@ def collect_cpu_closure(
             "flags": list(effective_flags),
             "working_directory": working_directory,
         }
+        if is_clang:
+            recipe["compiler"]["executable"] = str(path)
         snapshot(manifest.files)
         required = {str(path)}
         downstream = {}
@@ -421,7 +436,32 @@ def collect_cpu_closure(
                 raise ValueError("source-missing-from-dependencies")
             return names
 
+        def clang_headers() -> set[str]:
+            trace = query([*effective_flags, "-E", "-H", str(source)], diagnostic=True)
+            traced = set()
+            for line in trace.splitlines():
+                match = re.fullmatch(r"\.+ (.+)", line)
+                if match is None:
+                    continue
+                header_path = match[1]
+                # Clang's make output normalizes literal backslashes to '/'
+                # and leaves filename tabs unquoted. A real normalized/split
+                # decoy is not evidence of the header actually opened. Admit
+                # only trace paths with an unambiguous make representation.
+                if (
+                    "\\" in header_path
+                    or any(ord(char) < 32 or ord(char) == 127 for char in header_path)
+                    or header_path.endswith(" ")
+                    or not Path(header_path).is_absolute()
+                ):
+                    raise ValueError("unsupported-clang-dependency-path")
+                traced.add(header_path)
+            return traced
+
         names = scan()
+        traced = clang_headers() if is_clang else set()
+        if is_clang and not traced <= set(names):
+            return failure("clang-header-trace-mismatch")
         headers = tuple(
             CacheDependency("header", name, hash_input(Path(name)))
             for name in names
@@ -480,6 +520,8 @@ def collect_cpu_closure(
             != preprocessed
         ):
             return failure("preprocessor-output-changed")
+        if is_clang and clang_headers() != traced:
+            return failure("clang-header-trace-changed")
         for name, resolved in downstream.items():
             found = shutil.which(
                 query(["-print-prog-name=" + name]), path=CPU_ENVIRONMENT["PATH"]
@@ -494,6 +536,7 @@ def collect_cpu_closure(
             return failure("source-or-compiler-changed")
         reasons = []
         check_working_directory()
+        check_clang_selection()
         if not manifest.complete:
             reasons.append("toolchain-manifest-incomplete")
         if not required <= observed:

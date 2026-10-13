@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import re
 import shutil
 import sys
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.common.compiler_cache import resolve_compiler_cache
 from generativeqc_compiler.common.compiler_process import CompileResult, run_compiler
 from generativeqc_compiler.common.provenance import file_hash
 from generativeqc_compiler.xc import bulk_aot_closure as collector
@@ -74,6 +76,7 @@ def test_explicit_clang_opt_in(fake_clang: tuple) -> None:
     )
     assert not result.reasons and result.closure is not None and result.closure.reusable
     assert result.recipe is not None
+    assert result.recipe["compiler"]["executable"] == str(driver)
     assert result.recipe["flags"][:2] == ["--no-default-config", "-fintegrated-as"]
     assert result.recipe["flags"][-1].startswith("-fdebug-compilation-dir=")
     for incomplete in (None, replace(manifest, complete=False)):
@@ -177,7 +180,7 @@ def test_real_native_object_dependencies_store_and_math(
     compiler, manifest = request.getfixturevalue("real_" + family)
     root = tmp_path / "headers with spaces"
     root.mkdir()
-    header = root / "value\t\\ #$ header.h"
+    header = root / "value #$ header.h"
     header.write_text("#define OFFSET 0.5\n", encoding="utf-8")
     text = f'#include "{header.name}"\n#include <stddef.h>\ndouble point(double r) {{ return r*r*(r+OFFSET); }}\n'
     source = root / "point.c"
@@ -198,23 +201,22 @@ def test_real_native_object_dependencies_store_and_math(
     assert before.recipe is not None
     obj = root / "point.o"
     depfile = root / "point.d"
-    built = compile_controlled(
-        [
-            compiler,
-            *before.recipe["flags"],
-            "-MD",
-            "-MF",
-            str(depfile),
-            "-MT",
-            "closure",
-            "-H",
-            "-c",
-            str(source),
-            "-o",
-            str(obj),
-        ],
-        monkeypatch,
-    )
+    object_command = [
+        compiler,
+        *before.recipe["flags"],
+        "-MD",
+        "-MF",
+        str(depfile),
+        "-MT",
+        "closure",
+        "-H",
+        "-c",
+        str(source),
+        "-o",
+        str(obj),
+    ]
+    launcher = resolve_compiler_cache(60)
+    built = compile_controlled(object_command, monkeypatch)
     assert built.returncode == 0 and not built.timed_out, built.stderr
     observed = {record.identity for record in before.headers}
     # Independently emitted by the object compilation, not the collector's -M.
@@ -225,7 +227,11 @@ def test_real_native_object_dependencies_store_and_math(
         match.group(1)
         for match in re.finditer(r"^\.+ (.+)$", built.stderr, re.MULTILINE)
     }
-    assert traced == observed
+    if family == "clang":
+        assert traced == observed
+    else:
+        # GCC implicitly consumes this header without reporting it in -H.
+        assert observed - traced == {"/usr/include/stdc-predef.h"}
     assert str(header) in observed
     assert all(
         file_hash(Path(record.identity)) == record.content_sha256
@@ -266,10 +272,41 @@ def test_real_native_object_dependencies_store_and_math(
     library.point.argtypes = [ctypes.c_double]
     library.point.restype = ctypes.c_double
     # Independent decimal evaluation of the retained polynomial density fixture.
+    numerical_rows = []
     for value in ("0", "0.125", "1", "2.75"):
         r = Decimal(value)
         reference = r**3 + r**2 / 2
-        assert library.point(float(r)) == pytest.approx(float(reference), rel=1e-14)
+        observed_value = library.point(float(r))
+        assert observed_value == pytest.approx(float(reference), rel=1e-14)
+        numerical_rows.append(
+            {"rho": value, "observed": observed_value, "reference": str(reference)}
+        )
+    (root / "qualification.json").write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "fixture": "polynomial density / Decimal reference",
+                "compiler": compiler,
+                "launcher": {"path": str(launcher.path), "version": launcher.version},
+                "command": object_command,
+                "source_text": source.read_text(),
+                "fixture_header_contents": header.read_text(),
+                "environment": collector.CPU_ENVIRONMENT,
+                "recipe": before.recipe,
+                "before": before.closure.to_payload(),
+                "after": after.closure.to_payload(),
+                "dependencies": depfile.read_text(),
+                "header_trace": built.stderr,
+                "stored_object": str(hit.artifact_path),
+                "object_sha256": file_hash(hit.artifact_path),
+                "shared_library_sha256": file_hash(shared),
+                "numerical_rows": numerical_rows,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     header.write_text("#define OFFSET 0.75\n", encoding="utf-8")
     changed = collect()
     assert not changed.reasons and changed.closure is not None
@@ -278,9 +315,13 @@ def test_real_native_object_dependencies_store_and_math(
         bulk_aot_store.lookup_artifact(tmp_path / "store", changed.closure).status
         == "miss"
     )
-    hit.artifact_path.write_bytes(b"corrupt object")
+    corruption = bulk_aot_store.store_artifact(
+        tmp_path / "corrupt-store", after.closure, hit.artifact_path
+    )
+    assert corruption.artifact_path is not None
+    corruption.artifact_path.write_bytes(b"corrupt object")
     assert (
-        bulk_aot_store.lookup_artifact(tmp_path / "store", after.closure).status
+        bulk_aot_store.lookup_artifact(tmp_path / "corrupt-store", after.closure).status
         == "corrupt"
     )
 
@@ -342,6 +383,14 @@ def test_real_clang_dependency_quoting_and_decoys(
     other.write_text("/* second include */\n", encoding="utf-8")
     # Decoys cannot justify interpreting ambiguous compiler output as real input.
     (tmp_path / "foo ").write_text("/* decoy */\n", encoding="utf-8")
+    if "\\" in name:
+        normalized = Path(str(header).replace("\\", "/"))
+        normalized.parent.mkdir(parents=True, exist_ok=True)
+        normalized.write_text("/* Clang slash-normalized decoy */\n", encoding="utf-8")
+    if "\t" in name:
+        (tmp_path / name.split("\t", 1)[0]).write_text(
+            "/* tab-split decoy */\n", encoding="utf-8"
+        )
     merged = Path(str(header) + " " + str(other))
     merged.parent.mkdir(parents=True, exist_ok=True)
     merged.write_text("/* merged decoy */\n", encoding="utf-8")
@@ -354,7 +403,12 @@ def test_real_clang_dependency_quoting_and_decoys(
         label="real Clang dependency quoting",
         environment=collector.CPU_ENVIRONMENT,
     )
-    assert emitted.returncode == 0 and not emitted.timed_out, emitted.stderr
+    assert not emitted.timed_out
+    if name.endswith("\\"):
+        # Clang rejects a quoted header name ending in a backslash itself.
+        assert emitted.returncode != 0
+    else:
+        assert emitted.returncode == 0, emitted.stderr
     result = collector.collect_cpu_closure(
         variant(text),
         source,
@@ -362,17 +416,9 @@ def test_real_clang_dependency_quoting_and_decoys(
         compiler_family="clang",
         toolchain=manifest,
     )
-    if name.endswith("\\"):
-        assert result.reasons and (
-            result.closure is None or result.closure.cache_key is None
-        )
-    else:
-        assert (
-            not result.reasons
-            and result.closure is not None
-            and result.closure.reusable
-        )
-        assert {h.identity for h in result.headers} == {str(header), str(other)}
+    assert result.reasons and (
+        result.closure is None or result.closure.cache_key is None
+    )
 
 
 def test_real_clang_poison_invalidation_and_failure(
@@ -409,7 +455,10 @@ def test_real_clang_poison_invalidation_and_failure(
     (tmp_path / "optional.h").write_text("/* never included */\n", encoding="utf-8")
     changed = collect()
     assert not changed.reasons and changed.closure is not None
-    assert changed.headers == before.headers
+    # Clang records successful __has_include probes in its -M dependencies.
+    assert {header.identity for header in changed.headers} == {
+        str(tmp_path / "optional.h")
+    }
     assert changed.closure.cache_key != before.closure.cache_key
     reordered = collect(flags=("-O2", "-std=c99", "-fPIC"))
     assert (
@@ -431,3 +480,38 @@ def test_real_clang_poison_invalidation_and_failure(
     # Restore poisoned inherited values before unrelated Python/plugin teardown.
     for key in ("LD_PRELOAD", "CCC_OVERRIDE_OPTIONS"):
         monkeypatch.delenv(key)
+
+
+def test_real_clang_entry_selection_drift(
+    tmp_path: Path, real_clang: tuple, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    compiler, manifest = real_clang
+    entry = tmp_path / "clang-entry"
+    entry.symlink_to(compiler)
+    replacement = tmp_path / "changed-driver"
+    replacement.write_bytes(b"\x7fELFreplacement-not-executed")
+    source = tmp_path / "point.c"
+    text = "int point(void) { return 1; }\n"
+    source.write_text(text, encoding="utf-8")
+    original = collector.run_compiler
+    changed = False
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        nonlocal changed
+        result = original(command, timeout, **kwargs)
+        if "-E" in command and not changed:
+            entry.unlink()
+            entry.symlink_to(replacement)
+            changed = True
+        return result
+
+    monkeypatch.setattr(collector, "run_compiler", run)
+    result = collector.collect_cpu_closure(
+        variant(text),
+        source,
+        compiler=str(entry),
+        compiler_family="clang",
+        toolchain=manifest,
+    )
+    assert changed and result.reasons == ("compiler-selection-changed",)
+    assert result.closure is not None and result.closure.cache_key is None
