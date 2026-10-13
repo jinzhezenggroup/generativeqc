@@ -237,6 +237,23 @@ feasible. Remaining expensive classes include `fddp dddd fddd fdfp fsdd fpdd
 fpps`; improving those requires separate bounded schedules/endpoint evidence,
 not relaxing precision, screening, physical checks, or the memory guard.
 
+## Subsequent reference qualification
+
+The historical timings above precede the materialized-reference compensation
+repair (`dcc773b35`) and value-only Rys registry-link repair (`89cda7cbf`). The
+first preserves the compensated output plane through the whole-shell
+contractor; executable host cancellation/traversal tests protect it. The second
+does not advertise nonexistent force entrypoints for value-only Rys recipes;
+strict-link tests cover both registry emitters. Lazy loading had hidden those
+undefined symbols in the earlier Python qualification.
+
+The [screened-reference iteration note](2026-10-13-screened-rhf-reference-iterations.md)
+records subsequent source-matched tests and endpoints with both repairs. It
+also supersedes the all-iterations-zero-screening policy for nonresident
+reference preparation, while preserving unscreened final refinement and the
+published conventional RHF reference. Do not relabel these older receipts as
+measurements of the later library.
+
 ## Revisit
 
 Profile actual generated-class gaps on tuned builds before changing their

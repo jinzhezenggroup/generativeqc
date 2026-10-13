@@ -313,6 +313,31 @@ def test_invalid_native_controls_fail_before_gpu_setup(
     assert message in result.stderr
 
 
+@pytest.mark.parametrize("cutoff", ("-1", "nan", "inf", "1e-5", "1e-12x"))
+def test_invalid_reference_screening_fails_before_gpu_setup(cutoff: str) -> None:
+    """Reject malformed or out-of-policy benchmark controls before reading input."""
+    binary = os.environ.get("GENERATIVEQC_DF_PRECONVERGENCE_BINARY")
+    if not binary:
+        pytest.skip("requires the compiled preconvergence experiment")
+    result = subprocess.run(
+        [
+            binary,
+            "/nonexistent/input",
+            "-",
+            "/nonexistent/output",
+            "auto-direct",
+            "hf",
+            f"--reference-screening={cutoff}",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "invalid reference screening tolerance" in result.stderr
+
+
 def test_native_density_handoff_and_failed_preconvergence(tmp_path: Path) -> None:
     """Exercise actual native HF and E+F, including the bounded cold fallback."""
     binary = os.environ.get("GENERATIVEQC_DF_PRECONVERGENCE_BINARY")

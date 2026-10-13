@@ -367,7 +367,7 @@ void short_budget() {
   require(refused,"one byte below mandatory reference admitted");
 }
 void scientific() {
-  for(int field=0;field!=11;++field) {
+  for(int field=0;field!=12;++field) {
     Owner owner; auto o=options(); run(owner,o); auto changed=o;
     switch(field) {
       case 0: changed.energy_tolerance*=2; break;
@@ -383,6 +383,7 @@ void scientific() {
       case 10:
         changed.resolved_fock_build=owner.p->options.resolved_fock_build;
         changed.resolved_fock_build->spec.exchange.coefficient=-0.25; break;
+      case 11: changed.reference_iteration_screening_tolerance=0; break;
     }
     require(!run(owner,changed).execution_plan_reused,"scientific option mismatch reused plan");
   }
