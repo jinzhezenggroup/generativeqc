@@ -193,8 +193,9 @@ Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
 compressed summaries. Later source changes do not relabel these measurements.
-The source audit reconstructs the native source inventory and verifies all
-43 recorded consumer files from those Git trees. Host integration tests and
+The source audit reconstructs each native source inventory and verifies all
+recorded consumer files (43 or 44, as recorded for each frozen revision).
+Host integration tests and
 independent CUDA tests qualify the changes; intrusive
 profilers, setup failures and compiler-forbidden controls stay outside clean
 benchmark populations.
