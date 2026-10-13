@@ -40,7 +40,9 @@ generativeqc_status scf_matrix_product_view(
 /** Explicit physical batched matrix views in column-major storage.
  * Zero input batch stride denotes read-only broadcasting. All strides are
  * element counts (not bytes); provider selection and resource lifetime stay
- * outside scientific callers. No handles or device storage are created here.
+ * outside scientific callers. Writable batch spans must be disjoint; single
+ * batches may use any representable stride. Callers retain allocation capacity
+ * and lifetime ownership. No handles or device storage are created here.
  */
 struct ScfMatrixBatchView {
   struct Input {
