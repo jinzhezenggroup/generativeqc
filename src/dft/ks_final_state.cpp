@@ -27,11 +27,8 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const auto& fock = identity.determinant.model;
 #if GENERATIVEQC_HAS_CUDA
   const bool split_hybrid = generated::split_hybrid_registered(model.functional);
-  const bool qualified_split_df =
-      split_hybrid && generated::split_hybrid_cuda_df_energy_force(model.functional);
 #else
   const bool split_hybrid = false;
-  const bool qualified_split_df = false;
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);

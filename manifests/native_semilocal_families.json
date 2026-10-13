@@ -187,7 +187,7 @@
         "response": "unavailable",
         "graph_replay": "qualification-required"
       },
-      "cuda_global_hybrid_exact_exchange": "1/5",
+      "cuda_global_hybrid_exact_exchange": null,
       "native_range_exchange": false,
       "native_nonlocal_correlation": false,
       "cuda_nonlocal_correlation": false,
@@ -200,12 +200,13 @@
           "spins": [
             1
           ],
-          "exact_exchange": "1/5",
+          "exact_exchange": "libxc",
           "semilocal_exchange": "1",
           "semilocal_correlation": "1"
         }
       ],
-      "legacy_cpu_point_response_slot": null
+      "legacy_cpu_point_response_slot": null,
+      "libxc_hybrid_method": "B3LYP"
     },
     {
       "symbol": "Wb97mv",

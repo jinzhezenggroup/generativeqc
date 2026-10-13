@@ -1,6 +1,10 @@
 """Single-source generation gates for curated native semilocal metadata."""
 
+import json
+from fractions import Fraction
 from pathlib import Path
+
+import pytest
 
 from generativeqc_compiler.xc._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
@@ -262,3 +266,33 @@ def test_legacy_cpu_point_response_abi_slots_are_generated() -> None:
         SEMILOCAL_FAMILY_BY_CODE[code]["legacy_cpu_point_response_slot"] == slot
         for code, slot in slots.items()
     )
+
+
+def test_b3lyp_fractions_are_source_derived_from_pinned_libxc(tmp_path: Path) -> None:
+    from generativeqc_compiler.method._generated_libxc_methods import LIBXC_METHODS
+
+    record = LIBXC_METHODS["B3LYP"]
+    assert Fraction(record["exact_exchange"]) == Fraction(1, 5)
+    assert tuple((name, Fraction(weight)) for name, weight in record["components"]) == (
+        ("LDA_X", Fraction(2, 25)),
+        ("GGA_X_B88", Fraction(18, 25)),
+        ("LDA_C_VWN_RPA", Fraction(19, 100)),
+        ("GGA_C_LYP", Fraction(81, 100)),
+    )
+    manifest = json.loads(generator.MANIFEST.read_text(encoding="utf-8"))
+    b3lyp = next(item for item in manifest["families"] if item["symbol"] == "B3lyp")
+    assert b3lyp["cuda_global_hybrid_exact_exchange"] is None
+    assert b3lyp["libxc_hybrid_method"] == "B3LYP"
+    assert b3lyp["cpu_stationary_force_profiles"][0]["exact_exchange"] == "libxc"
+
+    resolved = next(item for item in generator.load_manifest() if item["symbol"] == "B3lyp")
+    assert Fraction(resolved["cuda_global_hybrid_exact_exchange"]) == Fraction(1, 5)
+    assert (
+        Fraction(resolved["cpu_stationary_force_profiles"][0]["exact_exchange"])
+        == Fraction(1, 5)
+    )
+    b3lyp["components"][1][1] = "71/100"
+    invalid = tmp_path / "wrong-libxc-components.json"
+    invalid.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="do not match pinned Libxc metadata"):
+        generator.load_manifest(invalid)
