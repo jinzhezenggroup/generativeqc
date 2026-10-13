@@ -29,7 +29,7 @@ mixed-precision Fast, and is deliberately excluded from this change.
 ## Evidence
 
 `benchmarks/results/pbe0-source-reuse-20261013/` preserves the original
-source-matched endpoint records, reconstruction patch, independent oracle,
+endpoint records, reconstruction patch, independent oracle,
 GPU tests and memcheck. Ordinary PBE0 FP64 E+F improves from 2.114368 to
 1.758106 s (24 AO) and 6.120576 to 3.401016 s (96 AO). Five alternating-order
 repetitions include construction, SCF, analytic forces, export, release and
@@ -37,10 +37,18 @@ CUDA synchronization. The reference gates are 1e-7 Eh and 1e-6 Eh/bohr.
 No mixed arithmetic executes. Census records count canonical source values,
 not primitive FLOPs or a complete count of baseline recomputation.
 
+The three reconstructed native changes match this PR apart from formatting,
+but the full reconstructed source fingerprint does not match the recorded binary.
+The evidence README records both identities and the missing original build-input
+inventory; complete measured-build provenance remains unverified. These timings
+describe the retained binary, not a remeasurement of the integrated head.
+
 Host boundary tests protect small-source eligibility, capacity refusal and
-unchanged pure/RHF/f-shell policies. GPU coverage includes signed RKS/UKS
+unchanged pure/RHF/f-shell policies. Submitted GPU cases cover signed RKS/UKS
 J/K, partial residency, PBE0/B3LYP states, warm/external seeds, AUTO strict
-refinement, chunk widths, complete gradients and zero-error/leak memcheck.
+refinement, chunk widths and complete gradients. Terse pytest receipts preserve
+aggregate totals without independently verifiable source/job bindings; retained
+zero-error/leak memcheck covers two ordinary-FP64 water calls.
 
 ## Revisit when
 
