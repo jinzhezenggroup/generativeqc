@@ -142,6 +142,7 @@ def test_composite_correction_and_host_export_are_inside_endpoint_timer() -> Non
     assert events == ["clock", "export", "correction", "clock"]
     assert seconds == 3.0
 
+
 def test_wb97mv_df_protocol_records_the_mixed_range_exchange_oracle() -> None:
     spec = specification("wb97m-v")
     auxiliary = SimpleNamespace(name="explicit-jkfit", identity="auxiliary-identity")
@@ -205,9 +206,7 @@ def test_mixed_wb97mv_oracle_keeps_full_df_and_routes_lr_energy_and_force() -> N
         == "df full JK derivative"
     )
     assert (
-        gradient.jk_energy_per_atom(
-            dm="D1", j_factor=0, k_factor=0.85, omega=0.3
-        )
+        gradient.jk_energy_per_atom(dm="D1", j_factor=0, k_factor=0.85, omega=0.3)
         == "exact LR K derivative"
     )
     assert [call[0] for call in calls] == [

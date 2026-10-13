@@ -138,7 +138,9 @@ def _bind_reference_mixed_rsh_df(
         ) -> typing.Any:
             if omega is not None and omega != 0:
                 if not np.isfinite(omega) or omega <= 0 or j_factor != 0:
-                    raise ValueError("matched WB97M-V DF only permits exact LR K derivatives")
+                    raise ValueError(
+                        "matched WB97M-V DF only permits exact LR K derivatives"
+                    )
                 # Keep the DF J/full-K and their auxiliary/metric response.
                 # The LR correction has no auxiliary/metric response by design.
                 return direct_jk_gradient(
