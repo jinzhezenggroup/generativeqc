@@ -208,12 +208,6 @@
     },
     {
       "path": "src/scf/cuda/df_scf_library.cpp",
-      "prefix": "generativeqc_status scf_gemm_strided(",
-      "sha256": "0323a9070c107604ec72a6859e58558adb807d846f4e1e9bbae022da03fcc8f2",
-      "token_sha256": "c5ceeb324dcaaf6ecbe5894a4916228e0568d2e36b61d20b669db4cd5668f6a4"
-    },
-    {
-      "path": "src/scf/cuda/df_scf_library.cpp",
       "prefix": "generativeqc_status scf_gemm(",
       "sha256": "dd906fe6e7feb01136785f868f38a5455a5fd11a2158749a57677e7b23bd8b57",
       "token_sha256": "f15c2cd846fcc147a83b4c0f648997ec4735d990a836d1888f4a419c360c6744"

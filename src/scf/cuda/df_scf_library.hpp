@@ -20,6 +20,34 @@ generativeqc_status scf_matrix_product_view(
     const double* right, std::size_t right_ld, double* output, std::size_t output_ld, double alpha,
     double beta, const char* failure_context, std::string& detail);
 
+/** Explicit physical batched matrix views in column-major storage.
+ * Zero input batch stride denotes read-only broadcasting. All strides are
+ * element counts (not bytes); provider selection and resource lifetime stay
+ * outside scientific callers. Writable batch spans must be disjoint; single
+ * batches may use any representable stride. Callers retain allocation capacity
+ * and lifetime ownership. No handles or device storage are created here.
+ */
+struct ScfMatrixBatchView {
+  struct Input {
+    const double* data{};
+    std::size_t leading_dimension{}, batch_stride{};
+  };
+  struct Output {
+    double* data{};
+    std::size_t leading_dimension{}, batch_stride{};
+  };
+  Input left{}, right{};
+  Output output{};
+  std::size_t rows{}, columns{}, reduction{}, batches{};
+  bool transpose_left{}, transpose_right{};
+  double alpha{1.0}, beta{};
+};
+
+generativeqc_status scf_matrix_product_batched_view(CudaDensityFittingJkPlan& plan,
+                                                    const ScfMatrixBatchView& view,
+                                                    const char* failure_context,
+                                                    std::string& detail);
+
 /** Submit an explicit strided batched GEMM through the borrowed DF SCF BLAS provider.
  * Scientific callers own equation/order semantics; this boundary owns only
  * library submission, strides, accumulation coefficients, and failure mapping.
