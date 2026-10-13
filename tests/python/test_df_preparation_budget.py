@@ -471,6 +471,30 @@ int main() {
   explicit_response.response_override_bytes = explicit_response.response_bytes;
   if (resolve_method_owned_df_resident_budget(
           explicit_response,768,3712,160,100ULL<<20) != explicit_response) return 27;
+  // Setup-only metric scratch and lazily created SCF state never coexist.
+  // The real wide basis must fit the original live envelope, without changing
+  // free memory, its headroom, or the complete response allocation contract.
+  const auto wide_budget = resolve_df_budget(
+      {1088,3712,96,1,0,true},{31ULL<<30,32ULL<<30,true},0);
+  const auto wide_split = resolve_method_owned_df_resident_budget(
+      wide_budget,1088,3712,0,100ULL<<20,true);
+  const auto wide_values = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,1088,3712,1088,0,
+      wide_split.value_bytes,100ULL<<20,true,0,true);
+  if (wide_split == wide_budget ||
+      wide_split.value_bytes + wide_split.response_bytes != wide_budget.total_bytes ||
+      wide_split.reserved_headroom_bytes != wide_budget.reserved_headroom_bytes ||
+      !wide_values.stores_full_three_center ||
+      wide_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+      wide_values.peak_workspace_bytes > wide_split.value_bytes) return 28;
+  auto wide_explicit = wide_budget;
+  wide_explicit.response_override_bytes = wide_explicit.response_bytes;
+  if (resolve_method_owned_df_resident_budget(
+          wide_explicit,1088,3712,0,100ULL<<20,true) != wide_explicit) return 29;
+  const auto tight_wide = resolve_df_budget(
+      {1088,3712,96,1,0,true},{28ULL<<30,32ULL<<30,true},0);
+  if (resolve_method_owned_df_resident_budget(
+          tight_wide,1088,3712,0,100ULL<<20,true) != tight_wide) return 30;
   return 0;
 }
 """)
