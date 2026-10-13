@@ -60,17 +60,26 @@ def test_package_audit_reports_complete_legacy_and_component_footprint(
         root, architecture="sm_120", native_library=native
     )
 
-    assert len(result.artifacts) == 20
-    assert result.aot_binary_bytes == 200
-    assert result.manifest_bytes == 60
-    assert result.aot_package_bytes == 260
+    count = 2 * len(audit.QUALIFIED_STATIONARY_AOT_PROFILES)
+    assert len(result.artifacts) == count
+    assert result.aot_binary_bytes == 10 * count
+    assert result.manifest_bytes == 3 * count
+    assert result.aot_package_bytes == 13 * count
     assert result.native_library_bytes == 120
-    assert result.aot_to_native_ratio == pytest.approx(200 / 120)
-    assert sum(item.component_domain is None for item in result.artifacts) == 10
-    assert sum(item.component_domain is not None for item in result.artifacts) == 10
-    assert {"pbe0_rks", "pbe0_uks", "b3lyp_rks", "b3lyp_uks"} <= {
-        item.name for item in result.artifacts
-    }
+    assert result.aot_to_native_ratio == pytest.approx(10 * count / 120)
+    assert sum(item.component_domain is None for item in result.artifacts) == count // 2
+    assert (
+        sum(item.component_domain is not None for item in result.artifacts)
+        == count // 2
+    )
+    assert {
+        "pbe0_rks",
+        "pbe0_uks",
+        "b3lyp_rks",
+        "b3lyp_uks",
+        "m06_2x_rks",
+        "m06_2x_uks",
+    } <= {item.name for item in result.artifacts}
     assert all(item.code_kinds == ("cubin",) for item in result.artifacts)
     assert not any(item.driver_ptx_jit_required for item in result.artifacts)
 
@@ -213,7 +222,7 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
         )
         (root / f"generativeqc_stationary_{name}.json").write_text(json.dumps(metadata))
     result = audit.audit_stationary_aot_directory(root, architecture="sm_120")
-    assert len(result.artifacts) == 20
+    assert len(result.artifacts) == 2 * len(audit.QUALIFIED_STATIONARY_AOT_PROFILES)
     audit.assert_native_cubin_path(result)
     library = root / "libgenerativeqc_stationary_pbe_uks.so"
     original = library.read_bytes()
