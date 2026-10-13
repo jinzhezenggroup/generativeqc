@@ -308,6 +308,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       *nonlocal_effective_density{}, *nonlocal_effective_gradient{}, *nonlocal_vrho{},
       *nonlocal_vsigma{}, *nonlocal_workspace{};
   int *nonlocal_domain_error{}, *nonlocal_pair_error{};
+  double* nonlocal_energy{};
+  int* nonlocal_cache_mismatch{};
+  std::uint64_t* nonlocal_cache_counters{};
+  bool nonlocal_cache_enabled{}, nonlocal_cache_ready{};
+  std::string nonlocal_cache_schedule;
   nlc::Vv10CudaDeviceLayout nonlocal_layout{};
   std::unique_ptr<CudaXcPlan> xc;
   CudaXcAoSelectionWork prepared_ao_work;
@@ -698,7 +703,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::logic_error("resident VV10 workspace is not double-aligned");
     const auto points = xc_layout.npoint;
     const auto workspace_doubles = nonlocal_layout.workspace_bytes / sizeof(double);
-    const auto doubles = sum(product(11, points), sum(workspace_doubles, std::size_t{2}));
+    const auto doubles = sum(product(11, points),
+                             sum(workspace_doubles, nonlocal_cache_enabled ? 7U : 2U));
     if (!storage) return product(doubles, sizeof(double));
     auto* cursor = static_cast<double*>(storage);
     auto take = [&](std::size_t count) {
@@ -716,6 +722,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     nonlocal_workspace = take(workspace_doubles);
     nonlocal_domain_error = reinterpret_cast<int*>(take(1));
     nonlocal_pair_error = reinterpret_cast<int*>(take(1));
+    nonlocal_energy = nonlocal_workspace;
+    if (nonlocal_cache_enabled) {
+      // Retain scalar energy outside the dead pair scratch used by the key.
+      // This fixed 40-byte optional lease is included in the owner bound.
+      nonlocal_energy = take(1);
+      nonlocal_cache_mismatch = reinterpret_cast<int*>(take(1));
+      nonlocal_cache_counters = reinterpret_cast<std::uint64_t*>(take(3));
+    }
     if (cursor != static_cast<double*>(storage) + doubles)
       throw std::logic_error("resident VV10 KS arena partition mismatch");
     return product(doubles, sizeof(double));
@@ -1113,6 +1127,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // while avoiding that row's otherwise unnecessary partner traversal.
       nonlocal_layout =
           nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false, true);
+      const auto* cache_choice = std::getenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE");
+      const auto parameters = nonlocal_correlation->parameters();
+      nonlocal_cache_enabled = cache_choice && std::string_view(cache_choice) == "1" &&
+                               xc_layout.npoint >= 3 &&
+                               parameters.variant == nlc::Vv10Variant::vv10 &&
+                               parameters.coefficient <= 0x1p32;
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
       if (nonlocal_arena_bytes > nonlocal_correlation->resources().device_workspace_bytes)
         throw std::invalid_argument(
@@ -1468,6 +1488,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemsetAsync(nonlocal_domain_error, 0, sizeof(int), stream));
         check(cudaMemsetAsync(nonlocal_pair_error, 0, sizeof(int), stream));
       }
+      if (nonlocal_cache_enabled)
+        check(cudaMemsetAsync(nonlocal_cache_counters, 0, 3 * sizeof(std::uint64_t), stream));
       if (use_warm) {
         check(cudaMemcpyAsync(density, warm, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
@@ -1585,15 +1607,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
             nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
             nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
       });
-      run_resident_nonlocal_cuda([&] {
-        nlc::enqueue_vv10_cuda_device(
-            nonlocal_layout, nonlocal_correlation->parameters(), device, stream, quadrature.points,
-            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
-            nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_workspace, nonlocal_vrho,
-            nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error);
-      });
+      enqueue_nonlocal_pairs(quadrature.points);
       xc->enqueue_replay_nonlocal_potential(nonlocal_effective_weights, nonlocal_effective_gradient,
-                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_workspace);
+                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_energy);
     }
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
@@ -1917,6 +1933,39 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
   }
 
+  /** Reuse only bitwise-identical pair ingredients on this fixed-grid owner.
+   * Semilocal XC, J/K, AO assembly, physical residual and convergence all run
+   * anew. A failed prior pair/domain generation or schedule change is a miss. */
+  void enqueue_nonlocal_pairs(const double* points) {
+    const auto* selection = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
+    const std::string schedule = selection ? selection : "";
+    const int* mismatch = nullptr;
+    if (nonlocal_cache_enabled && nonlocal_cache_ready && schedule == nonlocal_cache_schedule) {
+      nlc::enqueue_vv10_force_key_compare_cuda(
+          stream, xc_layout.npoint, nonlocal_correlation->parameters(), nonlocal_effective_weights,
+          nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_workspace,
+          nonlocal_domain_error, nonlocal_pair_error, nonlocal_cache_mismatch);
+      mismatch = nonlocal_cache_mismatch;
+    }
+    if (nonlocal_cache_enabled)
+      nlc::enqueue_vv10_cache_work_cuda(stream, mismatch, nonlocal_cache_counters);
+    nonlocal_cache_ready = false;
+    run_resident_nonlocal_cuda([&] {
+      nlc::enqueue_vv10_cuda_device(
+          nonlocal_layout, nonlocal_correlation->parameters(), device, stream, points,
+          nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+          nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_energy, nonlocal_vrho,
+          nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error, mismatch);
+    });
+    if (nonlocal_cache_enabled) {
+      nlc::enqueue_vv10_store_force_key_cuda(
+          stream, xc_layout.npoint, nonlocal_effective_density, nonlocal_workspace,
+          nonlocal_domain_error, nonlocal_domain_error, nonlocal_pair_error);
+      nonlocal_cache_schedule = schedule;
+      nonlocal_cache_ready = true;
+    }
+  }
+
   CudaXcView stage_xc(std::uint64_t next_generation,
                       generativeqc::runtime::PrecisionPhase phase =
                           generativeqc::runtime::PrecisionPhase::StrictAudit) {
@@ -1943,18 +1992,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       });
       domain_trace.finish();
       runtime::cuda_trace::TraceRegion pair_trace("nonlocal_pair_features", stream);
-      run_resident_nonlocal_cuda([&] {
-        nlc::enqueue_vv10_cuda_device(
-            nonlocal_layout, nonlocal_correlation->parameters(), device, stream, quadrature.points,
-            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
-            nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_workspace, nonlocal_vrho,
-            nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error);
-      });
+      enqueue_nonlocal_pairs(quadrature.points);
       pair_trace.finish();
       runtime::cuda_trace::trace_call("nonlocal_ao_potential", stream, [&] {
         xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
                                        nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-                                       nonlocal_workspace);
+                                       nonlocal_energy);
       });
       return xc->view(next_generation);
     }
@@ -2268,6 +2311,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!is_pending) throw std::logic_error("no pending CUDA KS iteration");
     cuda_ks_detail::Scalars physical{};
     std::uint64_t mixed_coulomb_recurrences{};
+    std::array<std::uint64_t, 3> nonlocal_work{};
     try {
       check(cudaMemcpyAsync(&physical, scalar_records, sizeof(physical), cudaMemcpyDeviceToHost,
                             stream));
@@ -2278,6 +2322,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(&host_incremental_max_abs_delta_density,
                               incremental_max_abs_delta_density, sizeof(double),
                               cudaMemcpyDeviceToHost, stream));
+      if (nonlocal_cache_enabled)
+        check(cudaMemcpyAsync(nonlocal_work.data(), nonlocal_cache_counters,
+                              sizeof(nonlocal_work), cudaMemcpyDeviceToHost, stream));
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       cudaStreamSynchronize(stream);
@@ -2289,6 +2336,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     movement.scalar_d2h_bytes +=
         sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U) +
         (incremental_direct_jk ? sizeof(host_incremental_max_abs_delta_density) : 0U);
+    if (nonlocal_cache_enabled) movement.scalar_d2h_bytes += sizeof(nonlocal_work);
     if (incremental_direct_jk)
       output.incremental_direct_jk.max_abs_delta_density = host_incremental_max_abs_delta_density;
     ++movement.synchronizations;
@@ -2305,8 +2353,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       ++nonlocal_exact_iterations;
     if (device_nonlocal)
       output.dft_diagnostic.nonlocal_work = {
-          1, nonlocal_seed_iterations, nonlocal_exact_iterations, 0, 0,
-          nonlocal_exact_iterations};
+          1, nonlocal_seed_iterations, nonlocal_exact_iterations, nonlocal_work[0], nonlocal_work[1],
+          nonlocal_cache_enabled ? nonlocal_work[2] : nonlocal_exact_iterations};
     if (pending_mixed_coulomb || pending_mixed_density)
       ++output.precision.mixed_stage_fock_builds;
     else

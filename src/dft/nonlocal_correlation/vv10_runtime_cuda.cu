@@ -738,10 +738,10 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
       (point_derivative == nullptr) != (weight_derivative == nullptr))
     throw std::invalid_argument("resident VV10 CUDA geometry outputs disagree with layout");
   if (cache_mismatch &&
-      (parameters.variant != Vv10Variant::vv10 || !layout.features || !layout.geometry ||
+      (parameters.variant != Vv10Variant::vv10 || !layout.features ||
        !layout.mask_zero_weight_rows || layout.point_count > (std::uint64_t{1} << 32) ||
        std::fabs(parameters.coefficient) > 0x1p32))
-    throw std::invalid_argument("exact VV10 force reuse is outside its admitted owner domain");
+    throw std::invalid_argument("exact VV10 component reuse is outside its admitted owner domain");
 
   runtime::CudaDeviceScope device(device_id);
   auto* cursor = static_cast<double*>(workspace);

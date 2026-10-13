@@ -1,5 +1,6 @@
 """Optional VV10 work receipts preserve unavailable and measured-zero states."""
 
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -42,3 +43,43 @@ def test_nonlocal_work_rejects_malformed_availability() -> None:
     )
     with pytest.raises(ValueError, match="availability"):
         _nonlocal_work(library, 12, 3)
+
+
+def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A frozen replay removes pair work; a new geometry cannot inherit the key."""
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("requires an explicitly Slurm-allocated GPU")
+    assert os.environ.get("SLURM_JOB_ID")
+    import numpy as np
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
+    monkeypatch.delenv("GENERATIVEQC_VV10_NATIVE_SEED", raising=False)
+    calculator = Calculator(
+        method="wb97m-v",
+        basis="sto-3g",
+        device="cuda",
+        basis_representation="spherical",
+        max_iterations=100,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        ks_options=KsOptions(grid=GridSpec(8, 6, 12)),
+    )
+    atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
+    with calculator.prepare_batch([atoms], warm_start=True) as owner:
+        cold = owner.execute(properties=("energy",)).items[0]
+        assert cold.converged
+        assert cold.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
+        owner.set_warm_start_updates(False)
+        warm = owner.execute(properties=("energy",)).items[0]
+        work = warm.ks_diagnostic.nonlocal_work
+        assert warm.converged and abs(warm.energy - cold.energy) < 1e-10
+        assert work["pair_cache_hits"] == work["target_focks"]
+        assert work["pair_sweeps"] == 0
+        moved = np.array([[a[1] for a in atoms]])
+        moved[0, 1, 2] += 0.001
+        after = owner.execute(moved, properties=("energy",)).items[0]
+        assert after.converged
+        assert after.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
