@@ -45,6 +45,15 @@ cuBLAS submission and failure mapping. All eight direct GEMM submissions in
 and one long-reduction product. The source-backed and streamed panel schedules,
 FP64 precision, trace labels, alpha/beta and output reductions are unchanged.
 The old `df_exchange.cpp` direct-vendor inventory entry is retired.
+DF occupied-exchange follows the same path for streamed, resident and tiled
+projections, two direct exchange matrix contractions and its lower-triangle
+Gram. The shared provider retains the exact SYRK lower-triangle candidate
+when supported, plus the pre-existing full GEMM fallback; the scientific
+owner still performs its original mirror/reduction without changing visit order.
+The prepared DF handle creation/stream/host-pointer setup and release now
+reside in the same shared provider adapter. The plan continues to own stream
+and resource lifetime, disposing dependent bindings before its handle and
+stream; partial setup is drained by the same failure cleanup.
 
 Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation

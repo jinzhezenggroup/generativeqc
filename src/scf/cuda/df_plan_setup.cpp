@@ -461,16 +461,8 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   if (cuda_error != cudaSuccess) {
     return fail_plan(candidate, cuda_failure(cuda_error, "create CUDA DF stream", detail));
   }
-  cublasStatus_t blas_status = cublasCreate(&candidate->blas);
-  if (blas_status == CUBLAS_STATUS_SUCCESS) {
-    blas_status = cublasSetStream(candidate->blas, candidate->stream);
-  }
-  if (blas_status == CUBLAS_STATUS_SUCCESS) {
-    blas_status = cublasSetPointerMode(candidate->blas, CUBLAS_POINTER_MODE_HOST);
-  }
-  if (blas_status != CUBLAS_STATUS_SUCCESS) {
-    return fail_plan(candidate, blas_failure(blas_status, "initialize CUDA DF cuBLAS", detail));
-  }
+  auto provider_status = prepare_df_blas(*candidate, detail);
+  if (provider_status != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, provider_status);
   if (!candidate->streamed || integral_source != nullptr) {
     try {
       if (!candidate->streamed) {

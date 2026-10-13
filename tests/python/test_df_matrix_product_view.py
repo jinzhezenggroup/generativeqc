@@ -33,12 +33,17 @@ def product_probe(
         bodies.append(cpp_function_definition((ROOT / path).read_text(), name))
     header = (ROOT / "src/scf/cuda/df_scf_library.hpp").read_text()
     bodies.insert(0, cpp_record_definition(header, "ScfMatrixBatchView") + ";")
-    bodies.append(
-        cpp_function_definition(
-            (ROOT / "src/scf/cuda/df_scf_library.cpp").read_text(),
-            "scf_matrix_product_batched_view",
+    for name in (
+        "scf_matrix_product_batched_view",
+        "scf_occupied_gram",
+        "prepare_df_blas",
+        "release_df_blas",
+    ):
+        bodies.append(
+            cpp_function_definition(
+                (ROOT / "src/scf/cuda/df_scf_library.cpp").read_text(), name
+            )
         )
-    )
     (folder / "df_matrix_product.inc").write_text("\n".join(bodies))
     (folder / "cuda_runtime_api.h").write_text(
         "#pragma once\nstruct cudaStream; using cudaStream_t = cudaStream*;\n"
@@ -47,7 +52,7 @@ def product_probe(
         [ROOT / "tests/native/test_df_matrix_product_view.cpp"],
         folder / "probe",
         compile_args=(
-            "-std=c++17",
+            "-std=c++20",
             "-O0",
             "-Wall",
             "-Wextra",
@@ -69,6 +74,8 @@ def product_probe(
         "batched_overlap",
         "batched_overflow",
         "batched_invalid",
+        "gram",
+        "owner",
     ),
 )
 def test_df_matrix_product_contract(product_probe: Path, mode: str) -> None:

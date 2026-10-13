@@ -75,6 +75,9 @@ def test_df_metric_and_density_science_use_provider_boundary() -> None:
     # Exchange now borrows the same column-major FP64 views for all
     # resident, streamed and source-backed GEMM products.
     assert "src/scf/cuda/df_exchange.cpp" not in inventory
+    assert "src/scf/cuda/df_occupied_exchange.cpp" not in inventory
+    assert "src/scf/cuda/df_plan_lifetime.cpp" not in inventory
+    assert "src/scf/cuda/df_plan_setup.cpp" not in inventory
 
 
 @pytest.mark.parametrize(

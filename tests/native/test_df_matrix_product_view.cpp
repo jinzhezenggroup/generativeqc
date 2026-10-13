@@ -20,6 +20,53 @@ struct cublasContext {
   bool submitted{};
 };
 
+namespace {
+cublasStatus_t create_error = CUBLAS_STATUS_SUCCESS;
+cublasStatus_t stream_error = CUBLAS_STATUS_SUCCESS;
+cublasStatus_t mode_error = CUBLAS_STATUS_SUCCESS;
+int handles_created = 0, handles_destroyed = 0;
+}  // namespace
+cublasStatus_t cublasCreate(cublasHandle_t* handle) {
+  if (create_error != CUBLAS_STATUS_SUCCESS) return create_error;
+  *handle = new cublasContext{};
+  ++handles_created;
+  return CUBLAS_STATUS_SUCCESS;
+}
+cublasStatus_t cublasDestroy(cublasHandle_t handle) {
+  if (handle) {
+    ++handles_destroyed;
+    delete handle;
+  }
+  return CUBLAS_STATUS_SUCCESS;
+}
+cublasStatus_t cublasSetStream(cublasHandle_t handle, cudaStream_t stream) {
+  if (stream_error != CUBLAS_STATUS_SUCCESS) return stream_error;
+  assert(handle);
+  handle->stream = stream;
+  return CUBLAS_STATUS_SUCCESS;
+}
+cublasStatus_t cublasSetPointerMode(cublasHandle_t handle, cublasPointerMode_t mode) {
+  assert(handle && mode == CUBLAS_POINTER_MODE_HOST);
+  return mode_error;
+}
+cublasStatus_t cublasDsyrk(cublasHandle_t handle, cublasFillMode_t triangle,
+                           cublasOperation_t transpose, int n, int k, const double* alpha,
+                           const double* u, int ldu, const double* beta, double* output,
+                           int ldout) {
+  assert(handle && triangle == CUBLAS_FILL_MODE_LOWER && transpose == CUBLAS_OP_T);
+  handle->submitted = true;
+  if (handle->result != CUBLAS_STATUS_SUCCESS) return handle->result;
+  for (int column = 0; column < n; ++column) {
+    for (int row = column; row < n; ++row) {
+      double product = 0;
+      for (int p = 0; p < k; ++p) product += u[p + row * ldu] * u[p + column * ldu];
+      output[row + column * ldout] =
+          *alpha * product + (*beta == 0 ? 0 : *beta * output[row + column * ldout]);
+    }
+  }
+  return CUBLAS_STATUS_SUCCESS;
+}
+
 cublasStatus_t cublasDgemm(cublasHandle_t handle, cublasOperation_t ta, cublasOperation_t tb, int m,
                            int n, int k, const double* alpha, const double* a, int lda,
                            const double* b, int ldb, const double* beta, double* c, int ldc) {
@@ -364,6 +411,72 @@ void batched_admission(CudaDensityFittingJkPlan& plan, const std::string& mode) 
          GENERATIVEQC_STATUS_SUCCESS);
 }
 
+void gram(CudaDensityFittingJkPlan& plan) {
+  constexpr int n = 3, k = 2;
+  double coefficients[] = {1, 2, 3, -1, 4, 2};
+  double output[n * n];
+  for (bool lower : {false, true}) {
+    std::fill(std::begin(output), std::end(output), sentinel);
+    bool wrote_lower = false;
+    std::string detail = "unchanged";
+    assert(scf_occupied_gram(plan, n, k, 1.25, coefficients, output, lower, wrote_lower,
+                             "occupied gram", detail) == GENERATIVEQC_STATUS_SUCCESS);
+    assert(wrote_lower == lower && detail == "unchanged");
+    for (int i = 0; i < n; ++i)
+      for (int j = 0; j < n; ++j) {
+        const double expected = 1.25 * (coefficients[i * k] * coefficients[j * k] +
+                                        coefficients[i * k + 1] * coefficients[j * k + 1]);
+        if (lower && i < j)
+          assert(output[i + j * n] == sentinel);
+        else
+          assert(output[i + j * n] == expected);
+      }
+  }
+  bool wrote_lower = true;
+  std::string detail;
+  plan.blas->submitted = false;
+  assert(scf_occupied_gram(plan, 0, k, 1, coefficients, output, false, wrote_lower, "bad gram",
+                           detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  assert(!plan.blas->submitted && !wrote_lower);
+  for (const auto error : {CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_EXECUTION_FAILED}) {
+    plan.blas->result = error;
+    assert(scf_occupied_gram(plan, n, k, 1, coefficients, output, true, wrote_lower, "failed gram",
+                             detail) == (error == CUBLAS_STATUS_ALLOC_FAILED
+                                             ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                             : GENERATIVEQC_STATUS_CUDA_ERROR));
+    assert(detail ==
+           "failed gram failed with cuBLAS status " + std::to_string(static_cast<int>(error)));
+  }
+  plan.blas->result = CUBLAS_STATUS_SUCCESS;
+}
+
+void owner(CudaDensityFittingJkPlan& plan) {
+  const auto existing = plan.blas;
+  plan.blas = nullptr;
+  const auto created = handles_created, destroyed = handles_destroyed;
+  std::string detail;
+  assert(prepare_df_blas(plan, detail) == GENERATIVEQC_STATUS_SUCCESS);
+  assert(plan.blas && plan.blas->stream == plan.stream && detail.empty());
+  assert(prepare_df_blas(plan, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  release_df_blas(plan);
+  assert(!plan.blas && handles_created == created + 1 && handles_destroyed == destroyed + 1);
+  release_df_blas(plan);
+  assert(handles_destroyed == destroyed + 1);
+  for (int phase = 0; phase < 3; ++phase) {
+    create_error = phase == 0 ? CUBLAS_STATUS_ALLOC_FAILED : CUBLAS_STATUS_SUCCESS;
+    stream_error = phase == 1 ? CUBLAS_STATUS_EXECUTION_FAILED : CUBLAS_STATUS_SUCCESS;
+    mode_error = phase == 2 ? CUBLAS_STATUS_INVALID_VALUE : CUBLAS_STATUS_SUCCESS;
+    const auto expected =
+        phase == 0 ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_CUDA_ERROR;
+    assert(prepare_df_blas(plan, detail) == expected);
+    assert(detail.find("initialize CUDA DF cuBLAS") != std::string::npos);
+    release_df_blas(plan);
+    assert(!plan.blas && handles_created == handles_destroyed);
+  }
+  create_error = stream_error = mode_error = CUBLAS_STATUS_SUCCESS;
+  plan.blas = existing;
+}
+
 void failures(CudaDensityFittingJkPlan& plan) {
   double input[4]{}, output[4] = {1, 2, 3, 4};
   for (const auto failure : {CUBLAS_STATUS_ALLOC_FAILED, CUBLAS_STATUS_NOT_INITIALIZED,
@@ -398,7 +511,12 @@ int main(int argc, char** argv) {
     batched(plan);
   else if (mode == "batched_overlap" || mode == "batched_overflow" || mode == "batched_invalid")
     batched_admission(plan, mode);
+  else if (mode == "gram")
+    gram(plan);
+  else if (mode == "owner")
+    owner(plan);
   else
     return 1;
   assert(plan.blas == &handle && plan.stream == stream && handle.stream == stream);
+  return 0;
 }
