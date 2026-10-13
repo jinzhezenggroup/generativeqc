@@ -74,6 +74,82 @@ class NativeCliScopeTests(unittest.TestCase):
         for event in ("push", "workflow_dispatch"):
             self.assertEqual(scope.select_tier(event, "", HEAD), "release")
 
+    def test_master_only_cuda_cache_seed_does_not_duplicate_pr_or_queue_builds(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        cli_job = workflow.split("\n  native-cli-artifact:\n", 1)[1]
+        dependencies = cli_job.split("\n    steps:", 1)[0]
+        self.assertIn("needs: cuda-compile", dependencies)
+        self.assertIn("needs.cuda-compile.result == 'success'", dependencies)
+
+        def step_condition(name: str) -> str:
+            step = cli_job.split(f"\n      - name: {name}\n", 1)[1].split(
+                "\n      - name:", 1
+            )[0]
+            return next(
+                line.strip()
+                for line in step.splitlines()
+                if line.strip().startswith("if:")
+            )
+
+        self.assertEqual(
+            step_condition("Seed fast CUDA CI objects in the shared cache"),
+            "if: github.event_name == 'push' && github.ref == 'refs/heads/master' "
+            "&& steps.cli_scope.outputs.tier != 'skip'",
+        )
+        self.assertIn(
+            "steps.fast_cuda_seed.outputs.cache_stats_reset == 'true'",
+            step_condition("Report fast CUDA seed compiler cache"),
+        )
+        self.assertEqual(
+            step_condition("Build monolithic C++ CUDA CLI (release or fast PR)"),
+            "if: steps.cli_scope.outputs.tier != 'skip'",
+        )
+        self.assertIn(
+            "github.event_name == 'push' && github.ref == 'refs/heads/master'",
+            step_condition("Save complete shared CUDA ccache on master"),
+        )
+
+    def test_cuda_cache_age_prune_and_capacity_before_master_publication(
+        self,
+    ) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        cuda_compile = workflow.split("\n  cuda-compile:\n", 1)[1].split(
+            "\n  master-cache-cleanup:\n", 1
+        )[0]
+        cli_job = workflow.split("\n  native-cli-artifact:\n", 1)[1]
+        # Both consumer and publisher must have matching capacity; the
+        # repository-wide Actions cache quota is a separate bound.
+        for job in (cuda_compile, cli_job):
+            self.assertIn("CCACHE_MAXSIZE: 5G", job)
+            self.assertNotIn("CCACHE_MAXSIZE: 3G", job)
+
+        name = "Retire unused CUDA objects before publishing the cache"
+        maintenance = cli_job.split(f"\n      - name: {name}\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        self.assertIn(
+            "always() && github.event_name == 'push' && "
+            "github.ref == 'refs/heads/master'",
+            maintenance,
+        )
+        self.assertIn("steps.fast_cuda_seed.outcome != 'skipped'", maintenance)
+        self.assertIn("ccache --evict-older-than 7d", maintenance)
+        self.assertIn("ccache --cleanup", maintenance)
+        self.assertNotIn("ccache --clear", maintenance)
+        # A failing CLI can still publish successful partial compiler work.
+        # Both immutable cache saves and the trusted artifact mirror receive
+        # the same pruned snapshot, never a pre-pruning directory.
+        sequence = (
+            name,
+            "Save complete shared CUDA ccache on master",
+            "Preserve partial master CUDA compiler work",
+            "Publish trusted master CUDA ccache snapshot",
+        )
+        positions = [cli_job.index(f"\n      - name: {step}\n") for step in sequence]
+        self.assertEqual(positions, sorted(positions))
+
     def test_git_diff_paths_keep_spaces_and_detect_deletions(self) -> None:
         paths = b"docs/user/read me.md\0src/xtb/native/deleted.cpp\0"
         with patch.object(
