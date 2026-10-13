@@ -45,6 +45,27 @@ def product_probe(
             )
         )
     (folder / "df_matrix_product.inc").write_text("\n".join(bodies))
+    tensor = (ROOT / "src/tensor/cuda_runtime.cuh").read_text()
+    response_bodies = []
+    for name in ("ColumnGemmView", "ColumnBatchedGemmView", "ColumnGemvView"):
+        response_bodies.append(cpp_record_definition(tensor, name) + ";")
+    response_bodies.append(
+        "template <class Handle>\n" + cpp_record_definition(tensor, "ColumnGeamView") + ";"
+    )
+    for name in (
+        "submit_column_gemm",
+        "submit_column_batched_gemm",
+        "submit_column_gemv",
+        "submit_column_geam",
+    ):
+        response_bodies.append(
+            cpp_function_definition(
+                tensor, name, include_template=(name == "submit_column_geam")
+            )
+        )
+    (folder / "borrowed_response_ops.inc").write_text(
+        "namespace generativeqc_tensor {\n" + "\n".join(response_bodies) + "\n}\n"
+    )
     (folder / "cuda_runtime_api.h").write_text(
         "#pragma once\nstruct cudaStream; using cudaStream_t = cudaStream*;\n"
     )
@@ -76,6 +97,7 @@ def product_probe(
         "batched_invalid",
         "gram",
         "owner",
+        "borrowed_response",
     ),
 )
 def test_df_matrix_product_contract(product_probe: Path, mode: str) -> None:
