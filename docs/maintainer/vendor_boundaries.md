@@ -40,7 +40,11 @@ The existing DF SCF `scf_gemm_strided` path also delegates to the shared
 batched-view implementation. The new contract accepts independent transpose
 flags, bounded M/N/K/batch dimensions and physical strides in elements,
 including zero input strides for broadcast, while preserving the original
-cuBLAS submission and failure mapping.
+cuBLAS submission and failure mapping. All eight direct GEMM submissions in
+`df_exchange.cpp` now borrow that same adapter: seven strided-batched products
+and one long-reduction product. The source-backed and streamed panel schedules,
+FP64 precision, trace labels, alpha/beta and output reductions are unchanged.
+The old `df_exchange.cpp` direct-vendor inventory entry is retired.
 
 Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation

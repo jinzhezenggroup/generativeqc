@@ -32,7 +32,7 @@ def product_probe(
     ):
         bodies.append(cpp_function_definition((ROOT / path).read_text(), name))
     header = (ROOT / "src/scf/cuda/df_scf_library.hpp").read_text()
-    bodies.insert(0, cpp_record_definition(header, "ScfMatrixBatchView"))
+    bodies.insert(0, cpp_record_definition(header, "ScfMatrixBatchView") + ";")
     bodies.append(
         cpp_function_definition(
             (ROOT / "src/scf/cuda/df_scf_library.cpp").read_text(),
