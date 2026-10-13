@@ -209,6 +209,10 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
                 receipt = result.incremental_direct_jk
                 assert receipt["active"] and receipt["delta_builds"] > 0
                 assert receipt["post_scf_full_builds"] > 0
+                warm = owner.execute(properties=("energy",)).items[0]
+                assert warm.converged and warm.iterations == 1
+                assert not warm.incremental_direct_jk["active"]
+                assert abs(warm.energy - result.energy) < 1e-10
             monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "0")
             monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "0")
             with calculator.prepare_batch([atoms]) as reference:

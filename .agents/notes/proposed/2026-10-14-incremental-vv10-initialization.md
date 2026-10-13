@@ -28,3 +28,15 @@ and complete original-protocol endpoint qualification before promotion.
 The integration source also receives the same maximum point-count and absolute
 coefficient cache guards already present in the SCF-reuse PR. Measured source
 identities remain separate; earlier measurements are not relabeled.
+
+The first combination (`de4ec88dc`, work-receipt source `395854e78`) passes
+15 real-device receipt/budget cases, but exposes the incumbent incremental
+policy's three-Fock warm epoch: 3-atom replays regress from about 0.42 to
+1.16 seconds. Four restricted independent-molecule tests correctly reject
+that extra warm work before reaching their external comparisons; the two
+unrestricted cases pass. These are retained failed qualification attempts.
+The experiment therefore uses ordinary full-density execution on a truly
+resident frozen replay, retaining its existing validated energy baseline.
+Each later solve restores the requested incremental policy, so transported
+or external changing densities still receive the complete delta/full audit.
+The allocated arena remains accounted, and default behavior is unchanged.

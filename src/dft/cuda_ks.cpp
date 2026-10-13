@@ -1405,6 +1405,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // operator. Freezing range K cannot compose with the delta reconstruction.
     const bool incremental_seed_requested =
         incremental_seed && std::string_view(incremental_seed) == "1" && !freeze_range_requested;
+    // The incremental initializer targets changing densities. A frozen replay
+    // already owns a validated energy baseline, and the ordinary full-density
+    // path can certify it in one Fock. Do not impose a new three-Fock delta
+    // epoch on that incumbent. Restore policy activity for each later solve;
+    // the preallocated optional arena and its complete budget remain intact.
+    const bool frozen_incremental_replay =
+        incremental_seed_requested && outer_requested && use_warm && device_nonlocal &&
+        spins == 1 && nonlocal_correlation &&
+        nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10;
+    incremental_direct_jk = incremental_direct_jk_policy.active && !frozen_incremental_replay;
     nonlocal_seed_trace = seed_selection && std::string_view(seed_selection) == "1";
     const bool nonlocal_initialization =
         (nonlocal_seed_trace || outer_requested) && device_nonlocal && spins == 1 &&
