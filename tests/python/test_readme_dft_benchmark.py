@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -169,11 +170,11 @@ def test_mixed_wb97mv_oracle_keeps_full_df_and_routes_lr_energy_and_force() -> N
     """No GPU needed: verify both method-dispatch boundaries and signed weights."""
     calls = []
 
-    def fitted_k(**kwargs):
+    def fitted_k(**kwargs: Any) -> str:
         calls.append(("df_k", kwargs))
         return "df full K"
 
-    def fitted_gradient(**kwargs):
+    def fitted_gradient(**kwargs: Any) -> str:
         calls.append(("df_gradient", kwargs))
         return "df full JK derivative"
 
@@ -184,13 +185,13 @@ def test_mixed_wb97mv_oracle_keeps_full_df_and_routes_lr_energy_and_force() -> N
         nuc_grad_method=lambda: SimpleNamespace(jk_energy_per_atom=fitted_gradient),
     )
 
-    def direct_k(owner, mol, dm, **kwargs):
+    def direct_k(owner: Any, mol: Any, dm: Any, **kwargs: Any) -> str:
         assert owner is engine
         assert mol is engine.mol
         calls.append(("exact_k", dict(dm=dm, **kwargs)))
         return "exact LR K"
 
-    def direct_gradient(gradient, **kwargs):
+    def direct_gradient(gradient: Any, **kwargs: Any) -> str:
         assert gradient is not None
         calls.append(("exact_gradient", kwargs))
         return "exact LR K derivative"
