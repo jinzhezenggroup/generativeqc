@@ -345,6 +345,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // VV10 potential. Every accepted endpoint still uses the unmodified full
   // target operator, consecutive physical energy checks and original budget.
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
+  double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
@@ -1372,12 +1373,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto* outer_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
     const bool outer_requested = outer_selection && std::string_view(outer_selection) == "1";
     nonlocal_seed_trace = seed_selection && std::string_view(seed_selection) == "1";
-    nonlocal_seed_stage = (nonlocal_seed_trace || outer_requested) && device_nonlocal &&
-                          spins == 1 && nonlocal_correlation &&
-                          nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10 &&
-                          !precision_schedule.any_lower_precision() && !incremental_direct_jk &&
-                          !use_warm && options.max_iterations > 2;
-    nonlocal_outer_active = outer_requested && nonlocal_seed_stage;
+    const bool nonlocal_initialization =
+        (nonlocal_seed_trace || outer_requested) && device_nonlocal && spins == 1 &&
+        nonlocal_correlation &&
+        nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10 &&
+        !precision_schedule.any_lower_precision() && !incremental_direct_jk && !use_warm &&
+        options.max_iterations > 2;
+    nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    // A transported/external density may already approximate the full target.
+    // Anchor it first instead of pulling it back to the semilocal-only solution.
+    const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
+    nonlocal_seed_stage = nonlocal_initialization && (!outer_requested || native_cold_seed);
+    nonlocal_inner_residual_tolerance = 1e-9;
     nonlocal_frozen_stage = pending_nonlocal_frozen = false;
     nonlocal_inner_iterations = nonlocal_exact_epoch_iterations = 0;
     nonlocal_seed_iterations = nonlocal_exact_iterations = 0;
@@ -1475,7 +1482,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           !precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1 &&
           (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
           provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
-      if (nonlocal_seed_stage) device_chunk_mode = false;
+      if (nonlocal_initialization) device_chunk_mode = false;
       if (device_chunk_mode) {
         const auto binding = device_chunk_binding();
         if (!device_chunk_region.matches(binding))
@@ -2483,9 +2490,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool enter_strict_refinement =
         mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
                                       options.max_iterations, physical.maximum_residual);
+    // Inner residuals only control how soon to refresh the expensive operator;
+    // they are never publication gates. Early fixed-point problems need not be
+    // oversolved below their changing VV10-anchor error. The ordinary strict
+    // target acceptance above remains unchanged.
+    const double nonlocal_stage_tolerance = pending_nonlocal_seed
+                                                ? (nonlocal_outer_active ? 1e-5 : 1e-9)
+                                                : nonlocal_inner_residual_tolerance;
     const bool enter_nonlocal_target =
         (pending_nonlocal_seed || pending_nonlocal_frozen) &&
-        (physical.maximum_residual < 1e-9 ||
+        (physical.maximum_residual < nonlocal_stage_tolerance ||
          (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >= 16 ||
          output.iterations + (nonlocal_outer_active ? 20U : 2U) >= options.max_iterations);
     if (pending_nonlocal_seed || pending_nonlocal_frozen) {
@@ -2505,13 +2519,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
     } else if (nonlocal_outer_active && !converged) {
       output.converged = false;
       is_active = output.iterations < options.max_iterations;
-      if (physical.maximum_residual < 1e-8 || output.iterations + 20 >= options.max_iterations) {
+      const double target_residual_gate = std::min(1e-9, options.density_tolerance);
+      if (physical.maximum_residual < target_residual_gate ||
+          output.iterations + 20 >= options.max_iterations) {
         // Close with consecutive fresh physical Focks and the original strict
         // energy/density/residual gates, never an inner or stale-potential gate.
         nonlocal_outer_active = false;
       } else {
         nonlocal_frozen_stage = true;
         nonlocal_inner_iterations = 0;
+        nonlocal_inner_residual_tolerance = std::clamp(
+            physical.maximum_residual * 1e-3, std::min(1e-12, target_residual_gate * 0.1), 1e-7);
         // The just-computed target Fock is also the first exact Fock of this
         // fixed-potential inner problem. Retain that one valid DIIS entry.
       }

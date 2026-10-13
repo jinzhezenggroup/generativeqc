@@ -129,6 +129,12 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         after = owner.execute(moved, properties=("energy",)).items[0]
         assert after.converged
         assert after.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
+        if native_seed == "frozen":
+            # Transported target densities start with a fresh physical anchor;
+            # discarding VV10 first needlessly moves them away from that target.
+            scopes = after.ks_diagnostic.nonlocal_history_scopes
+            assert scopes[0] == "full-target"
+            assert "provisional-semilocal-rsh" not in scopes
 
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
