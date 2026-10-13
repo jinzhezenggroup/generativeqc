@@ -847,3 +847,187 @@ def test_collection_adapter_is_repeatable_without_broadening_selection(
     assert targets == ["tests/python"]
     assert "--ignore=tests/python/test_late.py" in arguments
     assert "--ignore=tests/python/test_a.py" not in arguments
+
+
+def _prioritized_posthf_targets(targets: list[str], root: Path) -> list[str]:
+    helper = ROOT / ".github/scripts/ci_prioritize_posthf_files.sh"
+    result = subprocess.run(
+        [
+            "bash",
+            "-eu",
+            "-c",
+            (
+                'test_targets=("$@")\n'
+                f"source {shlex.quote(str(helper))}\n"
+                'for target in "${test_targets[@]}"; do printf "%s\\0" "$target"; done\n'
+            ),
+            "priority",
+            *targets,
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.split("\0")[:-1]
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "merge_group", "schedule", "workflow_dispatch")
+)
+@pytest.mark.parametrize("shard", SHARDS)
+def test_measured_file_priority_only_changes_routine_posthf_scheduling(
+    event: str, shard: str
+) -> None:
+    distribution, selected, extra = _selection(event, shard)
+    prioritized = shard == "posthf" and event in {"pull_request", "merge_group"}
+    assert ("--no-loadscope-reorder" in extra) == prioritized
+    if prioritized:
+        assert distribution == "loadfile"
+        assert selected[:4] == [
+            "tests/python/test_uccsd_lambda.py",
+            "tests/python/test_uccsd_t_owner.py",
+            "tests/python/test_uccsd_physical_response.py",
+            "tests/python/test_dft_complete_cpu.py",
+        ]
+        # The shared collection adapter must not undo the measured file order.
+        targets, arguments = _split_collection(
+            _collection_arguments(shard, selected, ROOT)
+        )
+        assert targets == selected
+        assert arguments == []
+
+
+@pytest.mark.parametrize(
+    "targets",
+    (
+        [],
+        ["tests/python/test_future.py", "tests/python/test_missing.py"],
+        [
+            "tests/python/test_future.py",
+            "tests/python/test_uccsd_physical_response.py",
+            "tests/python/test_other.py::test_case[space in id]",
+            "tests/python/test_uccsd_lambda.py",
+            "tests/python/test_future.py",
+            "tests/python/test_uccsd_lambda.py",
+        ],
+    ),
+)
+def test_posthf_order_preserves_unknown_missing_and_duplicate_targets(
+    targets: list[str], tmp_path: Path
+) -> None:
+    actual = _prioritized_posthf_targets(targets, tmp_path)
+    assert Counter(actual) == Counter(targets)
+    assert _prioritized_posthf_targets(actual, tmp_path) == actual
+    unknown = [path for path in targets if "test_uccsd_" not in path]
+    assert [path for path in actual if "test_uccsd_" not in path] == unknown
+    if "tests/python/test_uccsd_lambda.py" in targets:
+        assert actual[:2] == ["tests/python/test_uccsd_lambda.py"] * 2
+
+
+def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixtures(
+    tmp_path: Path,
+) -> None:
+    """Exercise the installed xdist scheduler, not a model of its behavior."""
+    directory = tmp_path / "tests/python"
+    directory.mkdir(parents=True)
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        "import json, os\nfrom pathlib import Path\n"
+        "def pytest_runtest_logreport(report):\n"
+        "    worker = os.environ.get('PYTEST_XDIST_WORKER')\n"
+        "    if worker and (report.when == 'call' or (report.when == 'setup' and report.skipped)):\n"
+        "        with Path(worker + '.jsonl').open('a') as stream:\n"
+        "            stream.write(json.dumps([report.nodeid, report.outcome]) + '\\n')\n",
+        encoding="utf-8",
+    )
+    priority = [
+        "test_uccsd_lambda.py",
+        "test_uccsd_t_owner.py",
+        "test_uccsd_physical_response.py",
+        "test_dft_complete_cpu.py",
+    ]
+    ordinary = [f"test_future_{index}.py" for index in range(4)]
+    for name in [*priority, *ordinary]:
+        count = 3 if name in priority else 8
+        (directory / name).write_text(
+            "import os, pytest\nfrom pathlib import Path\n"
+            "@pytest.fixture(scope='module')\n"
+            "def shared():\n"
+            "    with Path('fixtures-' + os.environ['PYTEST_XDIST_WORKER'] + '.txt').open('a') as stream:\n"
+            "        stream.write(__file__ + '\\n')\n"
+            "    return 42\n"
+            f"@pytest.mark.parametrize('value', range({count}))\n"
+            "def test_value(shared, value):\n    assert shared == 42\n"
+            "@pytest.mark.skip(reason='preserve skip')\n"
+            "def test_skip(shared):\n    raise AssertionError('skipped')\n",
+            encoding="utf-8",
+        )
+    selected = [f"tests/python/{name}" for name in [*ordinary, *reversed(priority)]]
+    ordered = _prioritized_posthf_targets(selected, tmp_path)
+    adapted, collection_args = _split_collection(
+        _collection_arguments("posthf", ordered, tmp_path)
+    )
+    env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTEST_ADDOPTS": ""}
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "xdist.plugin",
+        "-n",
+        "4",
+        "--dist=loadfile",
+    ]
+    inventories = []
+    first_files = []
+    for targets, arguments in (
+        (selected, []),
+        (adapted, [*collection_args, "--no-loadscope-reorder"]),
+    ):
+        result = subprocess.run(
+            command + targets + arguments,
+            cwd=tmp_path,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=90,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "44 passed, 8 skipped" in result.stdout
+        records = [
+            [json.loads(line) for line in path.read_text().splitlines()]
+            for path in sorted(tmp_path.glob("gw*.jsonl"))
+        ]
+        inventories.append(Counter(tuple(row) for rows in records for row in rows))
+        assert sum(inventories[-1].values()) == 52
+        assert (
+            sum(
+                count
+                for (_, outcome), count in inventories[-1].items()
+                if outcome == "skipped"
+            )
+            == 8
+        )
+        first_files.append(
+            {Path(rows[0][0].split("::", 1)[0]).name for rows in records}
+        )
+        owners = {}
+        for worker, rows in enumerate(records):
+            for node, _ in rows:
+                owners.setdefault(node.split("::", 1)[0], set()).add(worker)
+        assert all(len(workers) == 1 for workers in owners.values())
+        fixtures = [
+            line
+            for path in tmp_path.glob("fixtures-*.txt")
+            for line in path.read_text().splitlines()
+        ]
+        assert Counter(Path(path).name for path in fixtures) == Counter(
+            [*priority, *ordinary]
+        )
+        for path in [*tmp_path.glob("gw*.jsonl"), *tmp_path.glob("fixtures-*.txt")]:
+            path.unlink()
+    assert inventories[0] == inventories[1]
+    assert first_files == [set(ordinary), set(priority)]
