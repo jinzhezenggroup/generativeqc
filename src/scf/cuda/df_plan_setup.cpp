@@ -783,13 +783,18 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
                      cuda_failure(cuda_error, "scale CUDA DF metric eigenvectors", detail));
   }
 
-  const auto metric_product = scf_matrix_product_batched_view(
-      *candidate,
-      {{setup.scaled_eigenvectors, naux, metric_elements},
-       {setup.metrics, naux, metric_elements},
-       {setup.inverse_square_roots, naux, metric_elements},
-       naux, naux, naux, batch_size, false, true},
-      "construct CUDA DF metric inverse square root", detail);
+  const auto metric_product =
+      scf_matrix_product_batched_view(*candidate,
+                                      {{setup.scaled_eigenvectors, naux, metric_elements},
+                                       {setup.metrics, naux, metric_elements},
+                                       {setup.inverse_square_roots, naux, metric_elements},
+                                       naux,
+                                       naux,
+                                       naux,
+                                       batch_size,
+                                       false,
+                                       true},
+                                      "construct CUDA DF metric inverse square root", detail);
   if (metric_product != GENERATIVEQC_STATUS_SUCCESS) return fail_plan(candidate, metric_product);
   if (metric_progress.enabled()) {
     // The journal needs a completed boundary before raw generation starts.
