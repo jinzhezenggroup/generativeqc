@@ -259,3 +259,58 @@ measurements of the later library.
 Profile actual generated-class gaps on tuned builds before changing their
 dispatch. Further optimizations should target measured remaining classes or
 source reuse without replacing exact reference semantics with density fitting.
+## Hosted resource-ledger requalification after promotion
+
+The first hosted CI for head `085aea32695c430cd4329f564220f16e4fc6c160`
+compiled the canonical eight-shard release context successfully. The exact
+checkout was synthetic merge `8827875eb60d328e675ac474f1728d46b537a888`
+(tree `e0eea507909fea797811c105c101f0c130013ac0`).
+[Job 115188395377](https://github.com/jinzhezenggroup/generativeqc/actions/runs/38361914950/job/115188395377)
+completed the shard-6 cache miss in 676.97 s with compiler exit zero. The gate
+then rejected the old source/preprocessed/manifest identities and the expanded
+kernel inventory. It did **not** report a resource regression or compiler
+timeout.
+
+[Artifact 11796364827](https://github.com/jinzhezenggroup/generativeqc/actions/runs/38361914950/artifacts/11796364827)
+is 43,143 bytes, ZIP SHA256
+`57d60fa861b1420b1b50973efc64fcc290dc182d1c5f5a1018ee296b4f545d21`.
+All 17 ZIP members pass CRC. The report-selected cache record is
+`9d4360b4fda0afee9b5d13f61a45d4c20bf978eaf6f381d86d653a481320776d`;
+its raw `cuobjdump.txt` reproduces all 102 reported kernel rows and its
+`nvcc.log` matches the retained compile-record hash. Restored historical cache
+records in the same archive are not the new measurement.
+
+All 86 previously qualified kernels retain exactly the same REG/STACK/SHARED/
+LOCAL values, including the ordinary dsss/ddss/ddps streaming consumers.
+Sixteen added rows are the RHF/UHF ordinary/persistent variants of four newly
+promoted value-only classes co-located in shard 6:
+
+| Class | REG, ordinary / persistent | STACK bytes | SHARED, ordinary / persistent |
+| --- | ---: | ---: | ---: |
+| fdpp | 96 / 96 | 256 | 1520 / 1528 |
+| ffps | 166 / 164 | 112 | 1520 / 1528 |
+| fppp | 166 / 166 | 120 | 1520 / 1528 |
+| fsps | 252 / 254 | 64 | 1504 / 1512 |
+
+Each row has LOCAL zero; ptxas explicitly reports zero spill loads/stores.
+Nonzero stack frames remain recorded rather than relabeled as spill-free
+zero-stack kernels. These four classes are not the full 22-class promotion,
+and static resource results do not establish dynamic traffic or new endpoint
+performance. The independent device qualification above retains its scope.
+
+Local regeneration matches the measured shard source SHA256
+`699d162defae5ba377c018997bc765b3c097ca3d2e17c7ea75301b9ae02f7f06` and
+manifest SHA256 `dd9ff7e8c9df954b5c82749b60d9331cbadb6afba32ab165889ab0e9e8152d9d`.
+All 231 compiler/generator/compensated-header input blobs match the actual
+CI checkout. The measured preprocessed identity, original toolchain/release
+flags and exact resource rows deliberately extend the required ledger. No
+resource limits, comparison rules or compile timeout are relaxed; all 408
+single-field REG/STACK/SHARED/LOCAL mutation checks still reject drift.
+
+The separate legacy integral-artifact byte-preservation test is a historical
+migration receipt, not a permanent source-spelling contract. Preserve its
+original JSON hashes and make replay explicit with
+`GENERATIVEQC_CHECK_LEGACY_INTEGRAL_ARTIFACTS=1`. It intentionally detects this
+later profile expansion. Ordinary CI still checks the retained catalog,
+executable registry/ABI dispatch, capability and numerical contracts, cache
+identity, and the independently measured resource ledger.
