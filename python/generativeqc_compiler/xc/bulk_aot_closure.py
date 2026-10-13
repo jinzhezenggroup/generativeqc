@@ -1,4 +1,4 @@
-"""Opt-in Linux GCC dependency collection for offline CPU AOT objects.
+"""Opt-in native Linux C dependency collection for offline CPU AOT objects.
 
 A GCC depfile observes headers, not the complete downstream toolchain. Reuse
 requires a separately asserted, exact toolchain manifest; discovery never
@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import platform
 import re
+import shlex
 import shutil
 import stat
 import sys
@@ -39,16 +40,21 @@ def _system_gcc() -> Path:
     return Path("/usr/bin/gcc").resolve()
 
 
+def _system_clang() -> Path:
+    return Path("/usr/bin/clang").resolve()
+
+
 @dataclass(frozen=True)
 class CpuToolchainManifest:
-    """Caller-owned trust boundary for inputs GCC cannot enumerate via -M.
+    """Caller-owned trust boundary for inputs a C depfile cannot enumerate.
 
     Every record has role ``toolchain-file``, an absolute file identity and its
     expected hash. ``complete`` asserts an immutable compilation snapshot covers
     all downstream executables, loaded libraries, specs/configuration and header
     search namespaces (including absent/shadowing headers and PCH). It must not
     be set from a guessed list or from the depfile. The collector verifies listed
-    files and requires the actual driver, cc1 and assembler, but cannot prove the
+    files and requires the actual driver and selected executable jobs (GCC cc1/as
+    or the admitted Clang integrated frontend/assembler), but cannot prove the
     caller's coverage assertion. An incomplete manifest is still diagnostic.
     """
 
@@ -175,13 +181,16 @@ def collect_cpu_closure(
     source_path: Path,
     *,
     compiler: str = "gcc",
+    compiler_family: str = "gcc",
     flags: tuple[str, ...] = ("-std=c99", "-O1", "-fPIC"),
     toolchain: CpuToolchainManifest | None = None,
     timeout: float = 60,
 ) -> CpuClosureResult:
     """Collect actual system/user headers and verify an explicit toolchain.
 
-    Supports only native Linux ELF GCC C, plain object flags and absolute -I
+    Supports native Linux ELF GCC C by default; ``compiler_family="clang"``
+    explicitly admits system Clang C with disabled default configuration and an
+    observed integrated frontend/assembler job. Supports plain flags and absolute -I
     directories, under ``CPU_ENVIRONMENT``. Wrappers, plugins, response files,
     alternate targets/sysroots, inherited environments and other compilers fail
     closed. The recipe includes the physical source path: __FILE__ and quoted
@@ -201,6 +210,8 @@ def collect_cpu_closure(
         raise TypeError("toolchain must be CpuToolchainManifest")
     if sys.platform != "linux" or variant.backend != "cpu":
         return CpuClosureResult(None, None, ("unsupported-cpu-platform-or-backend",))
+    if compiler_family not in {"gcc", "clang"}:
+        return CpuClosureResult(None, None, ("unsupported-compiler-family",))
     try:
         _validate_flags(flags)
     except (ValueError, TypeError):
@@ -210,7 +221,8 @@ def collect_cpu_closure(
         return CpuClosureResult(None, None, ("compiler-not-found",))
     path = Path(executable).resolve()
     source = source_path.absolute()
-    if path != _system_gcc():
+    is_clang = compiler_family == "clang"
+    if path != (_system_clang() if is_clang else _system_gcc()):
         return CpuClosureResult(None, None, ("unsupported-compiler-wrapper",))
     if source.suffix != ".c":
         return CpuClosureResult(None, None, ("unsupported-source-language",))
@@ -237,11 +249,13 @@ def collect_cpu_closure(
         if str(Path.cwd()) != working_directory:
             raise ValueError("working-directory-changed")
 
-    def query(arguments: list[str]) -> str:
+    def query(arguments: list[str], *, diagnostic: bool = False) -> str:
         check_working_directory()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError
+        if is_clang and "--no-default-config" not in arguments:
+            arguments = ["--no-default-config", *arguments]
         result = run_compiler(
             [str(path), *arguments],
             remaining,
@@ -255,7 +269,7 @@ def collect_cpu_closure(
             raise ValueError("compiler-command-failed")
         # Remove record terminators only: GCC quotes a filename's terminal
         # space/tab, and trimming that whitespace destroys dependency identity.
-        return result.stdout.rstrip("\r\n")
+        return (result.stderr if diagnostic else result.stdout).rstrip("\r\n")
 
     def snapshot(files: tuple[CacheDependency, ...]) -> None:
         for item in files:
@@ -291,7 +305,10 @@ def collect_cpu_closure(
         executable_hash = hash_input(path)
         version = query(["--version"])
         # __GNUC__ is also defined by clang; require GCC's driver banner/query.
-        if "Free Software Foundation" not in version or not re.fullmatch(
+        if is_clang:
+            if not re.search(r"\bclang version [0-9]+\.", version):
+                return failure("unsupported-compiler")
+        elif "Free Software Foundation" not in version or not re.fullmatch(
             r"[0-9]+(?:\.[0-9]+)*", query(["-dumpfullversion"])
         ):
             return failure("unsupported-compiler")
@@ -301,6 +318,14 @@ def collect_cpu_closure(
         if target.split("-", 1)[0] != platform.machine():
             return failure("unsupported-cpu-target")
         effective_flags = (*flags, "-Werror=date-time")
+        if is_clang:
+            # Do not enter Clang's user/system/default configuration domain.
+            # Explicitly select its integrated assembler; verify the actual job.
+            effective_flags = (
+                "--no-default-config",
+                "-fintegrated-as",
+                *effective_flags,
+            )
         if hash_input(source) != variant.source_sha256:
             return failure("source-mismatch")
         check_time_macros(source)
@@ -314,7 +339,7 @@ def collect_cpu_closure(
         snapshot(manifest.files)
         required = {str(path)}
         downstream = {}
-        for name in ("cc1", "as"):
+        for name in () if is_clang else ("cc1", "as"):
             tool = query(["-print-prog-name=" + name])
             found = shutil.which(tool, path=CPU_ENVIRONMENT["PATH"])
             if found is None:
@@ -323,7 +348,54 @@ def collect_cpu_closure(
             required.add(resolved)
             downstream[name] = resolved
         observed = {str(Path(item.identity).resolve()) for item in manifest.files}
-        specs = query(["-dumpspecs"])
+
+        def clang_context() -> dict[str, Any]:
+            resource = query(["--no-default-config", "-print-resource-dir"])
+            if not Path(resource).is_absolute() or not Path(resource).is_dir():
+                raise ValueError("unsupported-clang-resource-directory")
+            plan = query(
+                [*effective_flags, "-###", "-c", str(source), "-o", "/dev/null"],
+                diagnostic=True,
+            )
+            # -### is a diagnostic protocol, not a shell script to execute.
+            # Admit exactly one quoted cc1 object job in the driver executable.
+            lines = [
+                line for line in plan.splitlines() if line.lstrip().startswith('"')
+            ]
+            if len(lines) != 1:
+                raise ValueError("unsupported-clang-job-model")
+            job = shlex.split(lines[0])
+
+            def selected(option: str) -> str | None:
+                if job.count(option) != 1:
+                    return None
+                index = job.index(option) + 1
+                return job[index] if index < len(job) else None
+
+            if (
+                len(job) < 2
+                or not Path(job[0]).is_absolute()
+                or Path(job[0]).resolve() != path
+                or job[1] != "-cc1"
+                or "-emit-obj" not in job
+                or "-no-integrated-as" in job
+                or "-fno-integrated-as" in job
+                or selected("-triple") != target
+                or selected("-resource-dir") != resource
+                or selected("-x") != "c"
+                or any(
+                    arg in job for arg in ("-load", "-plugin", "-isysroot", "-fmodules")
+                )
+                or job[-1] != str(source)
+            ):
+                raise ValueError("unsupported-clang-job-model")
+            return {
+                "resource_directory": resource,
+                "object_job": job,
+                "driver_plan": plan,
+            }
+
+        specs = clang_context() if is_clang else query(["-dumpspecs"])
         # -M alone cannot observe __has_include branches which include no file,
         # or diagnostics/time macro expansions. Bind actual preprocessor output
         # too, without confusing it with the downstream toolchain closure.
@@ -362,7 +434,7 @@ def collect_cpu_closure(
             *manifest.files,
             CacheDependency(
                 "system-header-manifest",
-                "gcc-M",
+                "clang-M" if is_clang else "gcc-M",
                 canonical_hash([item.to_payload() for item in headers]),
             ),
             CacheDependency(
@@ -372,7 +444,7 @@ def collect_cpu_closure(
             ),
             CacheDependency(
                 "cpu-build-context",
-                "gcc-native",
+                "clang-native" if is_clang else "gcc-native",
                 canonical_hash(
                     {
                         "schema": SCHEMA,
@@ -396,7 +468,10 @@ def collect_cpu_closure(
             or hash_input(path) != executable_hash
         ):
             return failure("source-or-compiler-changed")
-        if query(["--version"]) != version or query(["-dumpspecs"]) != specs:
+        if (
+            query(["--version"]) != version
+            or (clang_context() if is_clang else query(["-dumpspecs"])) != specs
+        ):
             return failure("compiler-configuration-changed")
         if (
             canonical_hash(
@@ -431,11 +506,18 @@ def collect_cpu_closure(
             complete=not reasons,
         )
         # A compiler cache may not enumerate cc1/config/opaque assembler inputs.
-        # Transport the observed closure identity into a real GCC compile option
+        # Transport the observed closure identity into a real driver option
         # so those changes invalidate its command identity as well as our store.
         # Hash the unsalted payload once; the final key includes the returned flag
         # without any self-reference. Partial observations remain non-reusable.
-        recipe["flags"].append("-frandom-seed=" + canonical_hash(closure.to_payload()))
+        salt = canonical_hash(closure.to_payload())
+        recipe["flags"].append(
+            # No debug flags are admitted. This Clang option supplies command
+            # identity without injecting a macro into scientific C expressions.
+            "-fdebug-compilation-dir=generativeqc-closure-" + salt
+            if is_clang
+            else "-frandom-seed=" + salt
+        )
         closure = closure_from_probe_recipe(
             recipe,
             backend="cpu",
