@@ -5,6 +5,22 @@
 
 namespace generativeqc::scf::initial_guess {
 
+/** Huckel changes only the cold density; the molecular exact/DF operator stays
+ * with the immutable target. Atomic preparation remains native CPU FP64. */
+inline bool automatic_huckel_model_eligible(generativeqc_method method,
+                                            generativeqc_method_family family,
+                                            generativeqc_backend backend,
+                                            generativeqc_precision_mode precision,
+                                            generativeqc_density_fitting_mode, bool restricted,
+                                            bool has_ecp) noexcept {
+  const bool hf = family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK;
+  const bool ks = family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL;
+  return (hf || ks) &&
+         (backend == GENERATIVEQC_BACKEND_CPU_REFERENCE || backend == GENERATIVEQC_BACKEND_CUDA) &&
+         precision == GENERATIVEQC_PRECISION_FP64 && restricted && !has_ecp &&
+         (!hf || method == GENERATIVEQC_METHOD_RHF);
+}
+
 /** Execution-only MINAO policy shared by discovery and native admission.
  * Model-only discovery does not replace system, seed-budget, or density gates.
  */

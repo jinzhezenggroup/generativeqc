@@ -1,4 +1,4 @@
-"""Explicit bounded FP64 CPU lowering of ordinary TensorIR primitives.
+"""Explicit bounded FP64/Boolean CPU lowering of ordinary TensorIR primitives.
 
 This materializing correctness backend accepts the ordinary FP64 primitives
 needed by generated stationary/response programs, including indexing/reordering,
@@ -26,6 +26,7 @@ from generativeqc_compiler.common.source_cache import cache_source
 
 from .batch_schedule import scatter_add_inverted_table
 from .cuda_emit import _coordinate, _flat
+from .ir import BOOLEAN_VIEWS, COMPARISONS
 from .optimize import prepare_for_backend
 from .program import Program
 from .types import checked_size
@@ -38,30 +39,45 @@ def _literal(pair: typing.Any) -> typing.Any:
     return value.hex()
 
 
-CPU_PRIMITIVES = frozenset(
-    {
-        "input",
-        "constant",
-        "add",
-        "multiply",
-        "divide",
-        "exp",
-        "log",
-        "sqrt",
-        "power",
-        "scaled_bilinear",
-        "einsum",
-        "transpose",
-        "reshape",
-        "slice",
-        "gather",
-        "indexed_gather",
-        "scatter_add",
-        "segment_sum",
-        "reduce",
-        "broadcast",
-    }
+CPU_PRIMITIVES = (
+    frozenset(
+        {
+            "input",
+            "constant",
+            "add",
+            "multiply",
+            "divide",
+            "exp",
+            "log",
+            "sqrt",
+            "power",
+            "scaled_bilinear",
+            "einsum",
+            "transpose",
+            "reshape",
+            "slice",
+            "gather",
+            "indexed_gather",
+            "scatter_add",
+            "segment_sum",
+            "reduce",
+            "broadcast",
+        }
+    )
+    | COMPARISONS
 )
+
+
+def _byte_layout(nodes: typing.Iterable[typing.Any]) -> tuple[list[int], int]:
+    """Align FP64 fields and retain one byte per Boolean, including empty fields."""
+    offsets, cursor = [], 0
+    for node in nodes:
+        alignment = node.spec.itemsize
+        cursor = (cursor + alignment - 1) // alignment * alignment
+        offsets.append(cursor)
+        cursor += node.spec.size * alignment
+        checked_size(cursor, "CPU typed storage extent")
+    return offsets, cursor
 
 
 def _cpu_codegen_policy(program: Program) -> str:
@@ -178,7 +194,12 @@ def describe_cpu_compilation(
     and the native CPU JIT owner. A caller's descriptive provenance is retained
     on its Program but does not invalidate otherwise identical compiled code.
     """
-    prepared = prepare_for_backend(program, "cpu")
+    if not isinstance(program, Program):
+        raise TypeError("CPU lowering requires a TensorIR Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        prepared = prepare_for_backend(program, "cpu", allow_cpu_boolean=True)
+    else:
+        prepared = prepare_for_backend(program, "cpu")
     source, resources = _emit_prepared_cpu(
         prepared,
         max_bytes=max_bytes,
@@ -199,7 +220,8 @@ def _emit_prepared_cpu(
 ) -> typing.Any:
     """Emit the supplied graph unchanged, preserving its input/output ABI.
 
-    No packed-storage semantics or implicit dtype conversion are admitted.
+    No scientific packed representation or implicit dtype conversion is admitted.
+    Boolean programs use a distinct byte-count ABI with aligned typed fields.
     Index expressions are shared with CUDA; CUDA emission bytes are unchanged.
     """
     if not isinstance(program, Program):
@@ -215,14 +237,19 @@ def _emit_prepared_cpu(
     if max_nodes == 0 or max_nodes > 16384:
         raise ValueError("CPU node budget must lie in [1, 16384]")
     nodes = program.live_nodes
+    typed = any(node.spec.dtype == "bool" for node in nodes)
     if len(nodes) > max_nodes:
         raise ValueError("CPU program exceeds node budget")
     offsets, cursor, inputs, work = {}, 0, [], 0
     for node in nodes:
         if node.op not in CPU_PRIMITIVES:
             raise ValueError(f"unsupported CPU primitive: {node.op}")
-        if node.spec.dtype != "float64":
-            raise ValueError("CPU lowering requires real float64 semantics")
+        if node.spec.dtype not in ("float64", "bool"):
+            raise ValueError("CPU lowering requires float64 or typed bool semantics")
+        if node.spec.dtype == "bool" and node.op not in (
+            {"input", "constant"} | BOOLEAN_VIEWS | COMPARISONS
+        ):
+            raise ValueError(f"unsupported CPU Boolean primitive: {node.op}")
         offsets[node], cursor = cursor, cursor + node.spec.size
         if node.op == "input":
             inputs.append(node)
@@ -244,6 +271,15 @@ def _emit_prepared_cpu(
     no = sum(n.spec.size for n in program.outputs.values())
     arena = cursor + no
     required = 8 * (arena + 2 * ni + 3 * no)
+    if typed:
+        node_offsets, cursor = _byte_layout(nodes)
+        offsets = dict(zip(nodes, node_offsets, strict=True))
+        input_offsets, ni = _byte_layout(inputs)
+        output_offsets, no = _byte_layout(program.outputs.values())
+        # The detached output tail starts at an FP64-aligned byte address.
+        cursor = (cursor + 7) // 8 * 8
+        arena = cursor + no
+        required = arena + 2 * ni + 3 * no
     if required > min(max_bytes, (1 << 63) - 1) or work > max_work:
         raise ValueError("CPU program exceeds byte/work budget")
     lines = [
@@ -258,22 +294,53 @@ def _emit_prepared_cpu(
         f"return generativeqc_tensor_cpu::run(input, ni, output, no, budget, {ni}ULL, {no}ULL, {arena}ULL, {required}ULL,",
         "[](const double* input, double* p) {",
     ]
+    if typed:
+        lines[-3:] = [
+            f'extern "C" int {symbol}(const unsigned char* input, size_t ni, unsigned char* output, size_t no, size_t budget) noexcept {{',
+            f"return generativeqc_tensor_cpu::run_typed(input, ni, output, no, budget, {ni}ULL, {no}ULL, {arena}ULL, {required}ULL,",
+            "[](const unsigned char* input, unsigned char* p) {",
+        ]
     input_cursor = 0
+    input_number = 0
     for i, node in enumerate(nodes):
         a, shape = node.attrs, node.spec.shape
 
         def read(child: typing.Any, index: typing.Any = "z") -> typing.Any:
+            if typed:
+                dtype = "unsigned char" if child.spec.dtype == "bool" else "double"
+                return f"generativeqc_tensor_cpu::load<{dtype}>(p + {offsets[child]}ULL + ({index}) * {child.spec.itemsize}ULL)"
             return f"p[{offsets[child]}ULL + ({index})]"
 
         c = [_coordinate("z", shape, axis) for axis in range(len(shape))]
         body = []
         if node.op == "input":
-            expression = f"input[{input_cursor}ULL + z]"
-            input_cursor += node.spec.size
+            if typed:
+                dtype = "unsigned char" if node.spec.dtype == "bool" else "double"
+                expression = f"generativeqc_tensor_cpu::load<{dtype}>(input + {input_offsets[input_number]}ULL + z * {node.spec.itemsize}ULL)"
+                if node.spec.dtype == "bool":
+                    body.append(f"if ({expression} > 1) return false;")
+                input_number += 1
+            else:
+                expression = f"input[{input_cursor}ULL + z]"
+                input_cursor += node.spec.size
         elif node.op == "constant":
-            values = ", ".join(_literal(v) for v in a["values"]) or "0.0"
-            lines.append(f"static const double constant_{i}[] = {{{values}}};")
+            boolean = node.spec.dtype == "bool"
+            values = ", ".join(
+                str(int(v)) if boolean else _literal(v) for v in a["values"]
+            ) or ("0" if boolean else "0.0")
+            dtype = "unsigned char" if boolean else "double"
+            lines.append(f"static const {dtype} constant_{i}[] = {{{values}}};")
             expression = f"constant_{i}[z]"
+        elif node.op in COMPARISONS:
+            operator = {
+                "equal": "==",
+                "not_equal": "!=",
+                "greater": ">",
+                "greater_equal": ">=",
+                "less": "<",
+                "less_equal": "<=",
+            }[node.op]
+            expression = f"({read(node.inputs[0])} {operator} {read(node.inputs[1])})"
         elif node.op == "add":
             body.append("double value = 0.0;")
             for child, factor in zip(node.inputs, a["coefficients"], strict=True):
@@ -402,19 +469,28 @@ def _emit_prepared_cpu(
                 raise ValueError(f"unsupported CPU primitive: {node.op}")
             if index is not None:
                 expression = read(child, index)
+        assignment = f"{read(node)} = {expression};"
+        if typed:
+            dtype = "unsigned char" if node.spec.dtype == "bool" else "double"
+            assignment = f"generativeqc_tensor_cpu::store<{dtype}>(p + {offsets[node]}ULL + z * {node.spec.itemsize}ULL, {expression});"
         lines += [
             f"for (I z = 0; z < {node.spec.size}LL; ++z) {{",
             *body,
-            f"{read(node)} = {expression};",
-            f"if (!std::isfinite({read(node)})) return false;",
+            assignment,
+            *(
+                [f"if (!std::isfinite({read(node)})) return false;"]
+                if node.spec.dtype == "float64"
+                else []
+            ),
             "}",
         ]
-    for node in program.outputs.values():
+    for output_number, node in enumerate(program.outputs.values()):
         if node.spec.size:
             lines.append(
-                f"std::copy_n(p + {offsets[node]}, {node.spec.size}, p + {cursor});"
+                f"std::copy_n(p + {offsets[node]}, {node.spec.size * node.spec.itemsize if typed else node.spec.size}, p + {cursor + output_offsets[output_number] if typed else cursor});"
             )
-        cursor += node.spec.size
+        if not typed:
+            cursor += node.spec.size
     lines += ["return true; });", "}"]
     source = (
         "\n".join(lines).replace(
@@ -428,6 +504,7 @@ def _emit_prepared_cpu(
         "output_count": no,
         "required_bytes": required,
         "scalar_work": work,
+        **({"typed_bytes": 1} if typed else {}),
     }
 
 
@@ -479,10 +556,13 @@ class NativeTensorProgram:
         )
         self.library = ct.CDLL(str(self.artifact.library))
         self.call = getattr(self.library, symbol)
+        self.pointer_type = ct.POINTER(
+            ct.c_ubyte if self.resources.get("typed_bytes") else ct.c_double
+        )
         self.call.argtypes = [
-            ct.POINTER(ct.c_double),
+            self.pointer_type,
             ct.c_size_t,
-            ct.POINTER(ct.c_double),
+            self.pointer_type,
             ct.c_size_t,
             ct.c_size_t,
         ]
@@ -500,10 +580,10 @@ class NativeTensorProgram:
             value = np.asarray(feeds[name])
             if (
                 value.shape != node.spec.shape
-                or value.dtype != np.float64
+                or value.dtype != np.dtype(node.spec.dtype)
                 or not np.isfinite(value).all()
             ):
-                raise ValueError(f"invalid float64 tensor input: {name}")
+                raise ValueError(f"invalid {node.spec.dtype} tensor input: {name}")
             for symmetry in node.spec.symmetries:
                 if not np.allclose(
                     value,
@@ -513,21 +593,44 @@ class NativeTensorProgram:
                 ):
                     raise ValueError(f"input {name} violates its declared symmetry")
             values.append(value.reshape(-1))
-        packed = np.concatenate(values) if values else np.empty(0)
-        output = np.empty(self.resources["output_count"])
+        typed = self.resources.get("typed_bytes", False)
+        if typed:
+            packed = np.zeros(self.resources["input_count"], dtype=np.uint8)
+            input_offsets, _ = _byte_layout(self.inputs)
+            for offset, value in zip(input_offsets, values, strict=True):
+                raw = np.ascontiguousarray(value).view(np.uint8)
+                packed[offset : offset + raw.size] = raw
+        else:
+            packed = np.concatenate(values) if values else np.empty(0)
+        output = np.empty(
+            self.resources["output_count"], dtype=np.uint8 if typed else np.float64
+        )
         code = self.call(
-            packed.ctypes.data_as(ct.POINTER(ct.c_double)),
+            packed.ctypes.data_as(self.pointer_type),
             packed.size,
-            output.ctypes.data_as(ct.POINTER(ct.c_double)),
+            output.ctypes.data_as(self.pointer_type),
             output.size,
             self.max_bytes,
         )
         if code:
             raise ValueError(f"native CPU tensor evaluation failed ({code})")
         result, cursor = {}, 0
-        for name, node in self.program.outputs.items():
-            result[name] = immutable(
-                output[cursor : cursor + node.spec.size].reshape(node.spec.shape)
-            )
+        output_offsets = _byte_layout(self.program.outputs.values())[0] if typed else []
+        for number, (name, node) in enumerate(self.program.outputs.items()):
+            if typed:
+                cursor = output_offsets[number]
+                value = output[
+                    cursor : cursor + node.spec.size * node.spec.itemsize
+                ].view(np.dtype(node.spec.dtype))
+            else:
+                value = output[cursor : cursor + node.spec.size]
+            if node.spec.dtype == "bool":
+                # The scientific immutable helper deliberately converts to FP64.
+                # Boolean publication must retain its dtype on a bytes owner.
+                result[name] = np.frombuffer(value.tobytes(), dtype=np.bool_).reshape(
+                    node.spec.shape
+                )
+            else:
+                result[name] = immutable(value.reshape(node.spec.shape))
             cursor += node.spec.size
         return result

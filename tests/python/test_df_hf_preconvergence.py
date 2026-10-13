@@ -20,6 +20,16 @@ from benchmarks.df_hf_preconvergence import (
 from tools.generativeqc_validation.record import load_publication_record
 
 
+def test_qm7_input_requires_pinned_dataset(tmp_path: Path) -> None:
+    """Reject absent/unverified geometries before importing the offline oracle."""
+    with pytest.raises(ValueError, match="requires the pinned"):
+        prepare_case("qm7-c7h16-tz", tmp_path / "output.input")
+    unverified = tmp_path / "qm7.mat"
+    unverified.write_bytes(b"not the reference dataset")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        prepare_case("qm7-c7h16-tz", tmp_path / "output.input", qm7=unverified)
+
+
 def test_lossless_default_evidence_retains_original_receipt() -> None:
     directory = (
         Path(__file__).resolve().parents[2]
@@ -301,6 +311,31 @@ def test_invalid_native_controls_fail_before_gpu_setup(
     )
     assert result.returncode != 0
     assert message in result.stderr
+
+
+@pytest.mark.parametrize("cutoff", ("-1", "nan", "inf", "1e-5", "1e-12x"))
+def test_invalid_reference_screening_fails_before_gpu_setup(cutoff: str) -> None:
+    """Reject malformed or out-of-policy benchmark controls before reading input."""
+    binary = os.environ.get("GENERATIVEQC_DF_PRECONVERGENCE_BINARY")
+    if not binary:
+        pytest.skip("requires the compiled preconvergence experiment")
+    result = subprocess.run(
+        [
+            binary,
+            "/nonexistent/input",
+            "-",
+            "/nonexistent/output",
+            "auto-direct",
+            "hf",
+            f"--reference-screening={cutoff}",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode != 0
+    assert "invalid reference screening tolerance" in result.stderr
 
 
 def test_native_density_handoff_and_failed_preconvergence(tmp_path: Path) -> None:

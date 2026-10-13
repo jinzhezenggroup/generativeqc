@@ -109,7 +109,7 @@ int main() {
       case 6: modified.shells[0].primitives[0].exponent = 1.01; break;
       case 7: modified.shells[0].primitives[0].coefficient = 0.701; break;
       case 8: modified.shells[0].primitives.pop_back(); break;
-      case 9: modified.basis_representation = GENERATIVEQC_BASIS_SPHERICAL; break;
+      case 9: modified.basis_representation = core::kSphericalBasis; break;
       case 10: std::swap(modified.shells[0], modified.shells[1]); break;
     }
     assert(!identity.matches(modified));

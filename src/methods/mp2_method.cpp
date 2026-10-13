@@ -11,7 +11,6 @@
 #include <optional>
 #include <string_view>
 
-#include "api/handles.hpp"
 #include "methods/batch_capabilities.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
@@ -748,10 +747,10 @@ generativeqc_status validate_mp2_system(generativeqc_method, const core::System&
 
 std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& d) {
+    const generativeqc_method_descriptor& d, const core::System* auxiliary_basis) {
   const auto density_fitting_mode = d.density_fitting_mode;
   if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA)
-    return prepare_df_rccsdt_calculation(caps, context, system, d);
+    return prepare_df_rccsdt_calculation(caps, context, system, d, auxiliary_basis);
   if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
@@ -775,8 +774,10 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "canonical MP2 requires FP64 precision");
   std::optional<core::System> auxiliary;
   if (density_fitted) {
-    auxiliary =
-        d.density_fitting_auxiliary_basis ? d.density_fitting_auxiliary_basis->data : system;
+    if (d.density_fitting_auxiliary_basis != nullptr && auxiliary_basis == nullptr)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "auxiliary basis must be resolved at the API boundary");
+    auxiliary = d.density_fitting_auxiliary_basis ? *auxiliary_basis : system;
     if (auxiliary->atoms.size() != system.atoms.size())
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "RI-MP2 auxiliary basis must contain the same atoms");
@@ -875,7 +876,8 @@ std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilitie
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags) {
+                                                 generativeqc_batch_flags flags,
+                                                 const core::System*) {
   const bool warm_starts_enabled = (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0;
   constexpr generativeqc_batch_flags profiling_flags =
       GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |

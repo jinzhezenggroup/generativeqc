@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "scf/cuda_eigensolver_policy.hpp"
 #include "scf/direct_task_layout.hpp"
 #include "scf/types.hpp"

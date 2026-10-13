@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -219,6 +220,11 @@ class PreparedBatch {
   /** Output selection is per replay; retained scientific controls stay immutable.
    * A false force request skips response evaluation for the complete fleet. */
   std::vector<BatchItemResult> execute(const Coordinates& coordinates, bool compute_forces = true);
+  /** Select force work per original input slot under the same lifecycle gate.
+   * Each byte is 0 or 1. Owners without this optional execution policy reject
+   * it explicitly; ordinary whole-fleet execution retains its existing contract. */
+  std::vector<BatchItemResult> execute_selected_forces(const Coordinates& coordinates,
+                                                       std::span<const std::uint8_t> forces);
   [[nodiscard]] const runtime::CompiledExecutionRegion& execution_lifecycle() const noexcept {
     return lifecycle_;
   }
@@ -236,8 +242,13 @@ class PreparedBatch {
  protected:
   virtual std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
                                                     bool compute_forces) = 0;
+  virtual std::vector<BatchItemResult> execute_selected_forces_impl(
+      const Coordinates& coordinates, std::span<const std::uint8_t> forces);
 
  private:
+  std::vector<BatchItemResult> execute_request(
+      const Coordinates& coordinates, bool compute_forces,
+      std::optional<std::span<const std::uint8_t>> selected_forces);
   runtime::CompiledExecutionRegion lifecycle_;
 };
 
@@ -257,12 +268,14 @@ class MethodError final : public std::runtime_error {
 
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
                                              std::vector<core::System> systems,
                                              const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags);
+                                             generativeqc_batch_flags flags,
+                                             const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods
 

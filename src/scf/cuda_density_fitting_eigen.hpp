@@ -49,6 +49,11 @@ struct CudaDfEigenDiagnostic : solver::EigenFrameDiagnostic {
   bool workspace_reused{};
 };
 
+/** Retained numeric host payload coexisting with atomic cold preparation.
+ * Excludes runtime/handle/object overhead; device allocations stay charged
+ * to the prepared target arena. No storage is allocated by this query. */
+std::size_t cuda_density_fitting_seed_host_numeric_bytes(const CudaDensityFittingJkPlan* plan);
+
 /** Detect invalid ownership before clearing outputs, preserving aliased inputs. */
 inline bool df_eigen_outputs_alias(const std::vector<double>& matrix,
                                    const std::vector<double>* overlap,

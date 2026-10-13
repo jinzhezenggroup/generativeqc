@@ -71,6 +71,14 @@ class NativeTensorProgramBundle:
             raise ValueError("native TensorIR bundle requires at least one program")
         if any(not isinstance(program, Program) for program in programs):
             raise TypeError("native TensorIR bundle entries must be TensorIR Programs")
+        if any(
+            node.spec.dtype == "bool"
+            for program in programs
+            for node in program.live_nodes
+        ):
+            raise ValueError(
+                "native CPU bundles do not support bool data or comparisons"
+            )
 
         logical_ids = tuple(program.logical_hash for program in programs)
         if len(set(logical_ids)) != len(logical_ids):

@@ -308,10 +308,11 @@ class DensityFittingBudgetError : public std::invalid_argument {
     std::size_t automatic_rhf_rank = 0, bool retain_raw = true);
 
 /** Resolve dense/packed value storage from the requested policy and executable
- * resource plan. Automatic promotion is bounded to singleton RHF or an explicit
- * method-owned restricted occupation reservation, not arbitrary-density callers:
- * retain dense whenever it is fully resident, otherwise use a single fitted
- * packed owner only when that owner fits the same value allowance.
+ * resource plan. Automatic promotion is bounded to singleton RHF, a
+ * method-owned restricted occupation reservation, or a restricted physical
+ * Coulomb-only Fock owner. The latter uses rank zero, with no occupied-factor
+ * lease. Arbitrary-density callers retain dense storage: only replace a
+ * streamed plan with one packed fitted owner that fits the same allowance.
  */
 [[nodiscard]] DensityFittingTilePlan plan_requested_density_fitting_tiles(
     DfPairStorageRequest request, std::size_t batch_size, std::size_t nbf, std::size_t naux,
@@ -322,12 +323,13 @@ class DensityFittingBudgetError : public std::invalid_argument {
 /** Admit a method-owned singleton restricted resident B within the resolved
  * total envelope. Only live automatic budgets may rebalance value/response
  * capacity; explicit caps and probe-failure budgets retain their original split.
- * The caller must validate the restricted occupation and automatic selector.
- * Preserve a bounded occupied-response workspace and at least 20% for response;
- * return the original split if the native packed planner still cannot fit. */
+ * The caller must validate the restricted occupation and automatic selector;
+ * a restricted, physical J-only owner may explicitly admit rank zero without
+ * acquiring an occupied projection. Preserve a bounded response workspace and
+ * at least 20% for response; leave the original split if packing cannot fit. */
 [[nodiscard]] DfResolvedBudget resolve_method_owned_df_resident_budget(
     const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
-    std::size_t source_device_bytes);
+    std::size_t source_device_bytes, bool allow_zero_rank_coulomb = false);
 
 /** Additional lazy SCF DIIS capacity, conservatively covering joined-spin UHF.
  * Add this to fixed_device_bytes before choosing K panels, and to native

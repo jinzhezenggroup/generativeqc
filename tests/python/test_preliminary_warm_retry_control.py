@@ -153,9 +153,11 @@ HARNESS = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include "generativeqc/generativeqc.h"
+#include "generativeqc/generativeqc.hpp"
+#include "methods/method.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
+using generativeqc::methods::MethodError;
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
 namespace core { struct System {}; }
@@ -185,6 +187,7 @@ struct Native {
 struct Warm { std::vector<double> density{1}; };
 struct Item {
   Native scf;
+  std::exception_ptr failure;
   bool warm_start_used{}, warm_start_fallback{};
   generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   generativeqc_status status{GENERATIVEQC_STATUS_SUCCESS};
@@ -197,12 +200,16 @@ generativeqc_status exception_status() {
   catch (const std::bad_alloc&) { return GENERATIVEQC_STATUS_OUT_OF_MEMORY; }
   catch (...) { return GENERATIVEQC_STATUS_NUMERICAL_FAILURE; }
 }
-auto item_exception_status() { return exception_status(); }
+// DFT_FAILURE_POLICY
 Native solve(const Options& options, const std::vector<double>* seed) {
   ++calls;
   policies.push_back(options.preliminary_guess.has_value());
   seeds.push_back(seed != nullptr);
   if (options.preliminary_guess && !seed) ++preparations;
+  if (calls == 1 && scenario == "typed_numerical")
+    throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "typed seed failure");
+  if (calls == 1 && scenario == "device_error")
+    throw MethodError(GENERATIVEQC_STATUS_CUDA_ERROR, "device failure");
   if (calls == 1 && scenario == "runtime_error") throw std::runtime_error("warm failure");
   if (calls == 2 && scenario == "core_runtime_error") throw std::runtime_error("core failure");
   if ((calls == 1 && scenario == "bad_alloc") ||
@@ -242,7 +249,7 @@ struct StubKsPlan {
   Options options_;
   std::vector<double> warm_{1};
   // DFT_POLICY
-  Native run(const std::vector<double>* initial_density, bool reuse_warm,
+  Native run_cpu(const std::vector<double>* initial_density, bool reuse_warm,
              bool update_warm, bool allow_preliminary = true) {
     // DFT_OPTIONS
     return solve(execution_options, seed);
@@ -255,6 +262,7 @@ struct Calculation {
 };
 struct BatchResult : Item { Calculation calculation; };
 struct KsItem {
+  std::exception_ptr failure;
   std::unique_ptr<StubKsPlan> plan{std::make_unique<StubKsPlan>()};
   std::optional<Warm> warm{Warm{}};
   bool resident_warm{};
@@ -282,6 +290,7 @@ Item run_dft(bool resident) {
     result.scf = std::move(native);
   };
   // DFT_RETRY
+  results[0].failure = items_[0].failure;
   return results[0];
 }
 int main(int argc, char** argv) {
@@ -298,11 +307,18 @@ int main(int argc, char** argv) {
   policy_enabled = argc < 4 || std::string(argv[3]) != "disabled";
   shared_policy_enabled = argc < 5 ? policy_enabled : std::string(argv[4]) != "disabled";
   const auto item = route == "hf" ? run_hf() : run_dft(route == "dft-resident");
+  std::string detail;
+  if (item.failure) {
+    try { std::rethrow_exception(item.failure); }
+    catch (const std::exception& error) { detail = error.what(); }
+  }
   const auto& d = item.scf.preliminary_guess;
   std::cout << "{\"calls\":" << calls << ",\"preparations\":" << preparations
             << ",\"status\":" << item.status << ",\"oom\":" << GENERATIVEQC_STATUS_OUT_OF_MEMORY
             << ",\"success\":" << GENERATIVEQC_STATUS_SUCCESS
             << ",\"numerical_failure\":" << GENERATIVEQC_STATUS_NUMERICAL_FAILURE
+            << ",\"device_error\":" << GENERATIVEQC_STATUS_CUDA_ERROR
+            << ",\"detail\":\"" << detail << "\""
             << ",\"fallback\":" << item.warm_start_fallback
             << ",\"kind\":" << d.requested_kind
             << ",\"outcome\":" << static_cast<unsigned>(d.outcome)
@@ -326,9 +342,15 @@ def host_control_harness(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("source-control harness requires ccache and a C++20 compiler")
     subprocess.run([ccache, "--version"], check=True, capture_output=True)
     hf, dft, options, policy = control_sources()
+    owner = (ROOT / "src/methods/dft_method.cpp").read_text()
+    failures = "\n".join(
+        cpp_function_definition(owner, name)
+        for name in ("item_exception_status", "retryable_seed_failure")
+    )
     source = HARNESS.replace("// HF_RETRY", hf).replace("// DFT_RETRY", dft)
     source = source.replace("// DFT_OPTIONS", options)
     source = source.replace("// DFT_POLICY", policy)
+    source = source.replace("// DFT_FAILURE_POLICY", failures)
     directory = tmp_path_factory.mktemp("preliminary-control")
     path = directory / "control.cpp"
     object_path = directory / "control.o"
@@ -389,12 +411,22 @@ def probe(
 
 
 @pytest.mark.parametrize("route", ["hf", "dft-imported", "dft-resident"])
-@pytest.mark.parametrize("scenario", ["success", "nonconverged", "runtime_error"])
+@pytest.mark.parametrize(
+    "scenario", ["success", "nonconverged", "runtime_error", "typed_numerical"]
+)
 @pytest.mark.parametrize("shared_policy", [True, False])
 def test_actual_warm_retry_controls_use_only_core_and_count_work(
     host_control_harness: Path, route: str, scenario: str, shared_policy: bool
 ) -> None:
     result = probe(host_control_harness, route, scenario, shared_policy=shared_policy)
+    if route.startswith("dft") and scenario == "runtime_error":
+        assert result["calls"] == 1 and result["status"] == result["numerical_failure"]
+        assert result["first_seed"] and result["last_seed"]
+        assert result["first_policy"] and result["last_policy"]
+        assert result["preparations"] == 0 and not result["fallback"]
+        assert result["kind"] == 0 and result["attempts"] == 0
+        assert result["detail"] == "warm failure"
+        return
     retry = scenario != "success"
     assert result["calls"] == 1 + retry
     assert result["preparations"] == 0
@@ -405,7 +437,7 @@ def test_actual_warm_retry_controls_use_only_core_and_count_work(
     assert result["fallback"] == retry
     assert result["kind"] == 1 and result["outcome"] == 1
     assert result["attempts"] == 1 + retry
-    assert result["complete"] == (scenario != "runtime_error")
+    assert result["complete"] == (scenario not in {"runtime_error", "typed_numerical"})
     assert result["discarded_iterations"] == (7 if scenario == "nonconverged" else 0)
     assert result["discarded_focks"] == (
         (1 << 33) + 7 if scenario == "nonconverged" else 0
@@ -467,7 +499,9 @@ def test_disabled_policy_preserves_existing_hf_outer_retry_behavior(
     [
         ("success", 1, "success"),
         ("nonconverged", 2, "success"),
-        ("runtime_error", 2, "success"),
+        ("runtime_error", 1, "numerical_failure"),
+        ("typed_numerical", 2, "success"),
+        ("device_error", 1, "device_error"),
         ("bad_alloc", 1, "oom"),
         ("core_bad_alloc", 2, "oom"),
         ("core_runtime_error", 2, "numerical_failure"),

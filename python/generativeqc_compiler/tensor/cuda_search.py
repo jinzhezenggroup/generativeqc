@@ -199,6 +199,10 @@ def execution_key(plan: TensorPlan) -> str:
         else None
     )
     payload["staging_width"] = plan.schedule.staging_width if packed_steps else None
+    if plan.executable_reduction_groups:
+        payload["shared_streamed_reduction_execution"] = [
+            group.to_payload() for group in plan.executable_reduction_groups
+        ]
     payload["packing_tiles"] = [
         tuple(
             min(tile, size)
@@ -374,6 +378,39 @@ def _effective_arithmetic_work(plan: TensorPlan) -> tuple[int, int, int]:
             scaled = demand * full_reads
             evaluations[child] += (scaled + output_size - 1) // output_size
 
+    # Replace each selected group's unfused virtual demand with the demand of
+    # its per-coordinate scalar cache. This is semantic execution accounting,
+    # not measured device work or an instruction-count claim.
+    for group in plan.executable_reduction_groups:
+        coordinate_count = prod(group.output_shape) * group.reduction_extent
+
+        def group_demand(
+            cached: bool,
+            group: typing.Any = group,
+            coordinate_count: int = coordinate_count,
+        ) -> list[int]:
+            demand = [0] * len(plan.steps)
+            for index in group.steps:
+                demand[index] = plan.steps[index].node.spec.size
+            for index in range(len(plan.steps) - 1, -1, -1):
+                step = plan.steps[index]
+                if cached and index in group.shared_virtual_steps and demand[index]:
+                    demand[index] = coordinate_count
+                if not demand[index] or not step.node.spec.size:
+                    continue
+                for operand, child in enumerate(step.inputs):
+                    if plan.steps[child].virtual:
+                        reads = _full_operand_evaluations(plan, index, operand)
+                        demand[child] += (
+                            demand[index] * reads + step.node.spec.size - 1
+                        ) // step.node.spec.size
+            return demand
+
+        before, after = group_demand(False), group_demand(True)
+        for index, step in enumerate(plan.steps):
+            if step.virtual:
+                evaluations[index] += after[index] - before[index]
+
     effective = plan.estimated_flops
     for index, step in enumerate(plan.steps):
         if not step.virtual or not step.node.spec.size:
@@ -421,6 +458,17 @@ def estimate_schedule(plan: TensorPlan) -> dict:
             elif step.gemm == "packed":
                 estimate += 2 * (plan.schedule.staging_width - 1)
             registers = max(registers, estimate)
+    for group in plan.executable_reduction_groups:
+        shared_bytes = max(
+            shared_bytes,
+            len(group.steps) * cooperative_reduction_shared_bytes(plan, group.steps[0]),
+        )
+        registers = max(
+            registers,
+            16
+            + 2 * len(group.shared_virtual_steps)
+            + 2 * sum(live_values[index] for index in group.steps),
+        )
     source_bytes = len(emit_cuda(plan, embed_static_data=False).encode("utf-8"))
     resident = _resident_blocks(plan, registers, shared_bytes)
     traffic = plan.semantic_traffic
@@ -529,6 +577,9 @@ def estimate_schedule(plan: TensorPlan) -> dict:
         "streamed_reduction_fusion_group_count": len(fusion_groups),
         "streamed_reduction_fusion_groups": [
             group.to_payload() for group in fusion_groups
+        ],
+        "executable_streamed_reduction_groups": [
+            group.to_payload() for group in plan.executable_reduction_groups
         ],
         "estimated_fp64_accumulation_terms": widened_accumulation_terms,
         "estimated_registers_per_thread": registers,

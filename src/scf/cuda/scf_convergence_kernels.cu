@@ -235,19 +235,20 @@ __global__ void select_converged_kernel(std::int32_t batch_size, const std::uint
  * Enter the exact target-precision refinement for the items that used the mixed
  * iterative operator: their energy baseline and DIIS history were built from a
  * different operator, so both are cleared and the item continues from the mixed
- * density in exact FP64. Items that never used mixed precision keep their own
- * verdict, and a failed item is never revived.
+ * density in exact FP64. A screened-reference stage requests all items, since
+ * its target also changes back to the unscreened operator. Otherwise items
+ * outside the census keep their verdict. A failed item is never revived.
  */
 __global__ void enter_target_refinement_kernel(
     std::int32_t batch_size, const std::uint32_t* item_census, std::uint8_t* active,
     std::uint8_t* converged, const std::uint8_t* failed, std::uint32_t* iterations,
     double* previous_energy, double* energy_change, double* density_rms, std::uint32_t* diis_count,
-    std::uint32_t* diis_head) {
+    std::uint32_t* diis_head, bool refine_all) {
   const std::int32_t system =
       static_cast<std::int32_t>(static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x);
   if (system >= batch_size) return;
   if (failed[system] != 0) return;
-  if (item_census == nullptr || item_census[system] == 0U) {
+  if (!refine_all && (item_census == nullptr || item_census[system] == 0U)) {
     active[system] = 0;
     return;
   }
@@ -377,10 +378,11 @@ void launch_enter_target_refinement_kernel(dim3 grid, dim3 block, std::size_t sh
                                            std::uint8_t* converged, const std::uint8_t* failed,
                                            std::uint32_t* iterations, double* previous_energy,
                                            double* energy_change, double* density_rms,
-                                           std::uint32_t* diis_count, std::uint32_t* diis_head) {
+                                           std::uint32_t* diis_count, std::uint32_t* diis_head,
+                                           bool refine_all) {
   enter_target_refinement_kernel<<<grid, block, shared_bytes, stream>>>(
       batch_size, item_census, active, converged, failed, iterations, previous_energy,
-      energy_change, density_rms, diis_count, diis_head);
+      energy_change, density_rms, diis_count, diis_head, refine_all);
 }
 
 void launch_select_final_fock_rebuild_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

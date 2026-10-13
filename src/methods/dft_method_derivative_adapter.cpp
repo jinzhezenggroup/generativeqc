@@ -30,6 +30,18 @@ generativeqc_status dft_cuda_full_range_integral_derivatives(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status dft_cuda_prepare_force_memory(PreparedBatch& batch, std::size_t index,
+                                                  const dft::CudaKsFinalStateToken& expected,
+                                                  std::size_t additional_device_bytes,
+                                                  std::array<std::uint64_t, 4>& receipt,
+                                                  std::string& detail) {
+  receipt = {};
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->cuda_prepare_force_memory(index, expected, additional_device_bytes, receipt, detail);
+  detail = "CUDA force-memory handoff requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status dft_cuda_integral_gradient_additional_device_bytes(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     std::size_t& bytes, std::string& detail) {

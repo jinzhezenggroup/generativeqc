@@ -40,6 +40,10 @@ INITIAL_GUESS_CAPABILITY_HF = 1 << 0
 INITIAL_GUESS_CAPABILITY_LDA = 1 << 1
 INITIAL_GUESS_CAPABILITY_MINAO = 1 << 2
 INITIAL_GUESS_CAPABILITY_AUTO_CPU = 1 << 3
+INITIAL_GUESS_CAPABILITY_HUCKEL = 1 << 4
+INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF = 1 << 5
+INITIAL_GUESS_CAPABILITY_HUCKEL_DF = 1 << 6
+INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU = 1 << 7
 BACKEND_CPU_REFERENCE = 0
 BACKEND_CUDA = 1
 BACKEND_HYBRID_CUDA = 2
@@ -1368,6 +1372,12 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         ctypes.c_uint32,
     ]
     library.generativeqc_batch_execute.restype = ctypes.c_int
+    selected_forces = getattr(
+        library, "generativeqc_ks_batch_execute_selected_forces_v1", None
+    )
+    if selected_forces is not None:
+        selected_forces.argtypes = library.generativeqc_batch_execute.argtypes
+        selected_forces.restype = ctypes.c_int
     d3_prepare = getattr(library, "generativeqc_d3_batch_prepare", None)
     if d3_prepare is not None:
         library.generativeqc_d3_table_sha256.argtypes = []

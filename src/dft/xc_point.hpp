@@ -156,12 +156,31 @@ GENERATIVEQC_XC_HD inline Jet cube_root(const Jet& x) {
 GENERATIVEQC_XC_HD inline double square_root(double x) { return ::sqrt(x); }
 GENERATIVEQC_XC_HD inline Jet square_root(const Jet& x) { return power(x, 0.5); }
 
+GENERATIVEQC_XC_HD inline double subnormal_reduced_gradient(double gradient, double rho,
+                                                            double rho13) {
+  return (gradient / rho) / rho13;
+}
+template <unsigned N>
+GENERATIVEQC_XC_HD inline PointJet<N> subnormal_reduced_gradient(const PointJet<N>& gradient,
+                                                                 const PointJet<N>& rho,
+                                                                 const PointJet<N>& rho13) {
+  const double ratio = gradient.v / rho.v;
+  PointJet<N> out(ratio / rho13.v);
+  // Divide each directional term before subtraction: the usual quotient
+  // numerator can itself be subnormal, losing a representable response.
+  for (unsigned i = 0; i < N; ++i)
+    out.d[i] =
+        (gradient.d[i] / rho.v - ratio * (rho.d[i] / rho.v) - ratio * (rho13.d[i] / rho13.v)) /
+        rho13.v;
+  return out;
+}
+
 template <class Scalar>
 struct ExchangeValue {
   Scalar energy{}, rho{}, gradient[3]{};
 };
 using Exchange = ExchangeValue<double>;
-template <class Scalar, bool StableSubnormalRatio = false>
+template <class Scalar>
 GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const Scalar& rho,
                                                                const Scalar gradient[3]) {
   ExchangeValue<Scalar> out;
@@ -187,12 +206,11 @@ GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const S
     if (largest <= primal(rho43) / primal(norm)) {
       Scalar u[3], u2 = 0.0;
       for (unsigned k = 0; k < 3; ++k) {
-        // At exact zero gradient rho^(4/3) can underflow although its
-        // directional ratio is finite. Factor the division before forming
-        // that product; ordinary nonzero-gradient value arithmetic is intact.
-        const bool factored =
-            primal(rho43) == 0.0 || (StableSubnormalRatio && primal(rho43) < DBL_MIN);
-        u[k] = factored ? (gradient[k] / rho) / rho13 : gradient[k] / rho43;
+        // A subnormal rho^(4/3) loses relative precision even when the
+        // reduced gradient and its direction are representable. Factor only
+        // that tail division; normal-density arithmetic stays unchanged.
+        const bool factored = primal(rho43) < DBL_MIN;
+        u[k] = factored ? subnormal_reduced_gradient(gradient[k], rho, rho13) : gradient[k] / rho43;
         u2 = u2 + u[k] * u[k];
       }
       const Scalar denominator = kappa + mu * u2;
@@ -217,12 +235,11 @@ GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const S
   out.rho = -cx * (4.0 / 3.0) * rho13 * (enhancement - 2.0 * radial_response);
   return out;
 }
-template <bool StableSubnormalRatio = false>
 GENERATIVEQC_XC_HD inline Exchange exchange(bool pbe, double rho, const double gradient[3]) {
   // Preserve the value-only exact-zero-gradient branch, including when rho43
   // underflows; response rejects unrepresentable directional coefficients.
   const bool nonzero = gradient[0] != 0.0 || gradient[1] != 0.0 || gradient[2] != 0.0;
-  return exchange_value<double, StableSubnormalRatio>(pbe && nonzero, rho, gradient);
+  return exchange_value<double>(pbe && nonzero, rho, gradient);
 }
 
 template <class Scalar>
@@ -288,7 +305,7 @@ GENERATIVEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a
 /** Evaluate full-spin LDA_XC_PW or PBE energy and AO-potential coefficients.
  * Invalid inputs return valid=false on both CPU and CUDA (no device throw).
  * At zero spin density, reference gradient components must be zero or subnormal. */
-template <unsigned DerivativeCount, bool Restricted = false, bool StableSubnormalRatio = false>
+template <unsigned DerivativeCount, bool Restricted = false>
 GENERATIVEQC_XC_HD inline Value evaluate_with_channels(bool pbe, const double rho[2],
                                                        const double gradient[2][3],
                                                        double exchange_scale = 1.0,
@@ -336,8 +353,7 @@ GENERATIVEQC_XC_HD inline Value evaluate_with_channels(bool pbe, const double rh
   const Jet energy = detail::correlation_per_scale(pbe, a, b, g, scale, gradient_ratio);
   out.energy = correlation_scale * (scale * energy.v);
   out.valid = detail::finite(out.energy);
-  static_assert(!StableSubnormalRatio || Restricted);
-  const auto first_exchange = detail::exchange<StableSubnormalRatio>(pbe, rho[0], gradient[0]);
+  const auto first_exchange = detail::exchange(pbe, rho[0], gradient[0]);
   for (unsigned s = 0; s < 2; ++s) {
     const auto x =
         Restricted || s == 0 ? first_exchange : detail::exchange(pbe, rho[s], gradient[s]);
@@ -366,9 +382,8 @@ GENERATIVEQC_XC_HD inline Value evaluate(bool pbe, const double rho[2], const do
 
 /** PBE0 value for a producer-proven equal-spin feature source.
  * The four input coordinates are per-spin density and Cartesian gradient.
- * Validation remains in the shared numerical core. Only this private lowering
- * avoids division by a quantized subnormal rho^(4/3); existing entries and
- * response algebra keep their original arithmetic and fallback behavior.
+ * Validation and subnormal-ratio arithmetic remain in the shared numerical
+ * core, including ordinary physical and response consumers.
  */
 GENERATIVEQC_XC_HD inline Value evaluate_pbe0_restricted_bound(double spin_density,
                                                                const double spin_gradient[3]) {
@@ -376,7 +391,7 @@ GENERATIVEQC_XC_HD inline Value evaluate_pbe0_restricted_bound(double spin_densi
   double gradient[2][3];
   for (unsigned axis = 0; axis < 3; ++axis)
     gradient[0][axis] = gradient[1][axis] = spin_gradient[axis];
-  return evaluate_with_channels<4, true, true>(true, rho, gradient, 0.75, 1.0);
+  return evaluate_with_channels<4, true>(true, rho, gradient, 0.75, 1.0);
 }
 
 /** Enforce the compiler's interior-v1 potential domain before evaluation.

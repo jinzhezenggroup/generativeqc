@@ -1,7 +1,8 @@
 # Small-hybrid exact FP64 source reuse
 
-These are retained measurements of the native policy submitted in this change,
-not a mixed-precision Fast qualification. The unrelated experimental facade is
+These are retained measurements associated with the native policy in this change;
+complete measured-build provenance remains unverified as detailed below.
+They are not a mixed-precision Fast qualification. The unrelated experimental facade is
 not submitted. Its historical `fast` rows remain in the raw files for integrity;
 use the ordinary `fp64` rows when evaluating this optimization.
 
@@ -32,9 +33,16 @@ These discrete-model gates do not bound basis/grid error or qualify NVE MD.
 
 ## Source identity and reconstruction
 
-Measurements used master 4f4c1aeb0bd32baf4bbdda276947b7ce911c453d plus the
-uncompressed `runtime.patch.xz`. The submitted native change is identical;
-subsequent master integration is not relabeled as a new measurement.
+The archive identifies master 4f4c1aeb0bd32baf4bbdda276947b7ce911c453d plus
+the uncompressed `runtime.patch.xz` as its source. All nine reconstructed patch
+post-images match their Git blob IDs, and the three production C++ files match
+this PR apart from formatting. However, the historical identity generator over
+all 1,716 reconstructed inputs returns
+`084701b1ff1062774b15fa7089301e8d6b058c77d655529eb012918a3f194ecc`,
+which differs from the retained binary's identity below. The original build-input
+inventory or corrected reconstruction is still needed to resolve this gap.
+Timings qualify the retained binary only; neither complete source-matched build
+provenance nor a new measurement of the integrated head is claimed.
 
 - Native source: b72ce4fd6ac8046b6b35a8eeb4641ab44f65113b71320025ee9bc5012b7731a2
 - Library SHA256: c6cd6e18f6a00a0669fd51e4d74b435b22c99717299530b1c0ed3f2b90e2f7df
@@ -62,13 +70,20 @@ ccache. Imports, building and probes are not part of endpoint medians.
 
 ## Validation receipts
 
-- Four small-source GPU tests pass on the final binary (Slurm 7982): independent
+- The reported Slurm 7982 receipt contains four passing small-source GPU tests:
+  the submitted test cases cover independent
   signed RKS/UKS J/K, partial/full residency, PBE0/B3LYP states, warm/frozen/
   external seeds, FP64/AUTO refinement, chunk widths 1/2 and capacity guards.
-- A complete resident PBE0 gradient test passes (Slurm 7980), including its
+- The reported Slurm 7980 receipt contains one passing complete resident PBE0
+  gradient test; the submitted test includes its
   no-production-CPU-derivative guard and independent reference.
-- Final compute-sanitizer memcheck (Slurm 7982): zero errors, zero bytes leaked.
+- Retained compute-sanitizer memcheck: two ordinary-FP64 water calls,
+  zero errors and zero bytes leaked.
   Instrumented timings are not used for speed claims.
+
+The terse pytest logs contain aggregate totals without commands, source identities
+or Slurm IDs; those bindings are reported metadata, not independently verified
+receipt fields. Test changes are absent from the historical runtime patch.
 
 Raw JSON, logs and the CMake cache are preserved byte-for-byte. Historical
 `strict_fp64` facade rows demonstrate no independent Fast advantage and must

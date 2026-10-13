@@ -174,7 +174,7 @@ generativeqc_status validate_uccsd_system(generativeqc_method method, const core
 
 std::unique_ptr<PreparedCalculation> prepare_uccsd_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System*) {
   if (context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native unrestricted CC currently requires the CPU backend; no fallback");

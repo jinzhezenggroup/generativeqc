@@ -12,7 +12,7 @@ import os
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -21,6 +21,7 @@ from generativeqc import Atom, Calculator, KsOptions
 from generativeqc.ks import (
     cuda_mixed_density_fitted_force_eligible,
     mixed_density_fitted_force_eligible,
+    split_hybrid_df_force_admitted,
 )
 from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.method import (
@@ -86,7 +87,10 @@ def test_mixed_df_requires_every_generated_provider_capability(
         ({"_precision_mode": "auto"}, False),
         ({"_basis": "def2-qzvp"}, False),
         ({"_automatic_libxc_name": "unqualified"}, False),
-        ({"_dispersion_method_ir": object()}, False),
+        (
+            {"_dispersion_method_ir": resolve_method("R2SCAN-D4(BJ-EEQ-ATM)")},
+            False,
+        ),
         ({"ecp": True}, False),
         ({"schedule": "host_unfused"}, False),
         ({"fitted": False}, False),
@@ -115,6 +119,9 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
     for attribute, value in override.items():
         if attribute.startswith("_"):
             setattr(owner, attribute, value)
+    owner._density_fitted_composite_force_eligible = MethodType(
+        Calculator._density_fitted_composite_force_eligible, owner
+    )
     source = (
         Path(__file__).resolve().parents[2] / "python/generativeqc/calculator.py"
     ).read_text()
@@ -139,6 +146,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
         "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
+        "split_hybrid_df_force_admitted": split_hybrid_df_force_admitted,
     }
     exec(  # noqa: S102 - Only the local repository's public predicate is executed.
         compile(ast.Module(body=[assignment], type_ignores=[]), str(__file__), "exec"),

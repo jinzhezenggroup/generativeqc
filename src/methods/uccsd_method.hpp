@@ -12,6 +12,7 @@ generativeqc_status validate_uccsd_system(generativeqc_method method, const core
  * derivative properties and optional Hamiltonians never select prototypes. */
 std::unique_ptr<PreparedCalculation> prepare_uccsd_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods::detail

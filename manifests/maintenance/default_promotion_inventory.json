@@ -157,6 +157,7 @@
         "docs/developer/df_hf_preconvergence.md",
         ".agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md",
         ".agents/notes/implemented/performance/2026-10-09-df-rhf-work-admission.md",
+        ".agents/notes/implemented/performance/2026-10-13-resident-df-guess-budget.md",
         "tests/python/test_df_hf_guess_policy.py",
         "tests/python/test_df_hf_preconvergence.py"
       ]
@@ -606,6 +607,28 @@
       ]
     },
     {
+      "id": "tensor.shared-streamed-reductions",
+      "classification": "needs-qualification",
+      "controls": [
+        "tensor-schedule:shared_streamed_reductions"
+      ],
+      "owner_issues": [
+        783
+      ],
+      "sources": [
+        "python/generativeqc_compiler/tensor/cuda_plan.py"
+      ],
+      "rationale": "Shared producer reuse remains explicitly selected and defaults off. Coordinate, precision, independence, readiness, storage and bounded expansion/resource proofs admit only legal groups; other groups retain unfused execution. Source-bound H200 numerical/replay/alias/derivative evidence covers the retained synthetic (T) domain, but the 8x16 full lifecycle is about 9.6% slower than default. Prior instrumented work counters are separate artifacts, and full SCF/CCSD, molecular forces and parent production acceptance remain unqualified.",
+      "revisit_condition": "Reconsider promotion only after independent source/device/workload-bound numerical and resource qualification plus significant interleaved complete production endpoint evidence. Preserve unfused fallback, exact execution-partition identity and the default-off policy on every unsupported or stale context; lower launch/work counts alone are insufficient.",
+      "evidence": [
+        "issue:#783",
+        "pr:#2408",
+        "docs/developer/tensor_cuda.md",
+        "benchmarks/results/shared-streamed-reductions-20261013/README.md",
+        ".agents/notes/implemented/performance/2026-10-13-shared-streamed-reduction-lowering.md"
+      ]
+    },
+    {
       "id": "tensor.direct-gemm",
       "classification": "already-default",
       "controls": [
@@ -881,13 +904,27 @@
         "python/generativeqc/initial_guess.py",
         ".agents/notes/implemented/performance/2026-10-07-minao-default.md"
       ],
-      "rationale": "Automatic MINAO is guarded to FP64 all-electron H-Ar restricted exact CPU HF/KS and CUDA KS. Existing densities take precedence, unsupported batches retain Hcore, the additional-phase numeric cap and single Hcore retry remain bounded, and explicit None rolls back. CUDA complete cold E+force evidence supports measured benefit; CPU uses the same scientifically admitted construction without claiming the CUDA speedup.",
+      "rationale": "Automatic MINAO remains the compatibility default for older libraries without native Huckel support, guarded to its original FP64 all-electron H-Ar restricted exact CPU HF/KS and CUDA KS domains. Existing densities take precedence, unsupported batches retain Hcore and explicit None rolls back. Current libraries prefer the separately registered native Huckel default.",
       "revisit_condition": "Revisit for root/state regressions, complete-endpoint regressions, or broader provider/domain qualification. Do not turn on HF/LDA preliminary solves, DF, UKS, ECP, mixed precision, or unsupported elements through this default.",
       "evidence": [
         "pr:#2068",
         "note:.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md",
         "note:.agents/notes/implemented/performance/2026-10-07-minao-default.md"
       ]
+    },
+    {
+      "id": "initial.huckel-auto",
+      "classification": "already-default",
+      "controls": ["initial-guess:huckel-auto"],
+      "owner_issues": [192, 2052],
+      "sources": [
+        "python/generativeqc/calculator.py",
+        "python/generativeqc/initial_guess.py",
+        ".agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"
+      ],
+      "rationale": "Native Modified Huckel is the user-authorized FP64 all-electron restricted H-Ar CPU/CUDA HF/KS default, including DF. Positive additive target-domain capability bits prevent old libraries from advertising unimplemented CUDA RHF/DF integrations. Exact atomic preparation does not change the target approximation. Budget limits, strict independent numerical gates, warm precedence and one ordinary Hcore retry remain mandatory. Measured benefits are workload-specific, not a universal speedup claim.",
+      "revisit_condition": "Revisit on root/state or complete-endpoint regressions. Unsupported spin, ECP, elements, precision and resource-planner domains remain unchanged; preserve explicit None rollback and independent DF numerical validation.",
+      "evidence": ["note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"]
     },
     {
       "id": "initial.basis-projection",

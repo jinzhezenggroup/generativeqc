@@ -47,10 +47,12 @@ def _supports_scalar_rys(
 def _supports_component_lane_rys(
     spec: ShellClassSpec,
     schedule: ScheduleIR,
+    *,
+    value_only: bool = False,
 ) -> bool:
     """Return whether the backend decoder can lower ``spec`` component-wise."""
 
-    return supports_component_lane_rys(spec, schedule)
+    return supports_component_lane_rys(spec, schedule, value_only=value_only)
 
 
 def supports_exchange_work_buckets(selection: KernelSelection) -> bool:
@@ -201,7 +203,11 @@ class KernelSelection:
                 "independent fock_schedule"
             )
         if self.recurrence == "rys3":
-            component_lanes = _supports_component_lane_rys(self.spec, self.schedule)
+            component_lanes = _supports_component_lane_rys(
+                self.spec,
+                self.schedule,
+                value_only=selected_integral.derivative is None,
+            )
             uniform_warps = _supports_uniform_warp_rys(self.spec, self.schedule)
             packed_tasks = (
                 task_parallel_rys_eligible(selected_integral)
@@ -218,7 +224,7 @@ class KernelSelection:
                     "or bounded value-only packed quartets"
                 )
         high_root_component_lanes = _supports_component_lane_rys(
-            self.spec, self.schedule
+            self.spec, self.schedule, value_only=selected_integral.derivative is None
         )
         high_root_uniform_warps = _supports_uniform_warp_rys(self.spec, self.schedule)
         if self.recurrence in ("rys4", "rys5") and not (

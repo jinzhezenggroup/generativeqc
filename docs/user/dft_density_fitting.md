@@ -7,6 +7,13 @@ KS calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
+Restricted FP64 all-electron H-Ar DF calculations use native Modified Hückel
+under `initial_guess="auto"`, on CPU and CUDA. Exact atomic preparation changes
+only the initial density: the molecular fitted operators, auxiliary basis,
+metric threshold and force response stay unchanged. Warm/imported densities
+take precedence, and `initial_guess=None` restores Hcore. See
+[initial guesses](initial_guesses.md) for bounded fallback and compatibility.
+
 CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
@@ -29,6 +36,15 @@ automatic mixed precision. Full-range DF forces
 continue to differentiate the same auxiliary basis and Coulomb metric used by
 the energy, including auxiliary-center and metric response. This interface does not change
 the selected functional or grid.
+
+The canonical r2SCAN-3c composite has a separate DF force-composition
+admission: its versioned def2-mTZVPP basis is fixed, the fitted r2SCAN
+electronic response retains auxiliary/metric and moving-grid derivatives, and
+its D4+gCP force/energy corrections remain separate and counted once.
+Other external-correction DF MethodIRs stay energy-only until their complete
+derivative compositions are qualified. This does not admit ECP or unsupported
+auxiliary/basis domains, nor does admission alone establish a successful
+source-matched independent CUDA qualification.
 
 The CUDA mixed force planner dry-queries the native LR derivative capacity under the
 live final-state token before AO/Becke tile admission. It charges that independent

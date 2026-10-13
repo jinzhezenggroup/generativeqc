@@ -523,7 +523,9 @@ def test_production_manifest_drives_generated_registry_and_shards(
         "ppss",
         "dsss",
     )
-    assert tuple(spec.name for spec in fock_specifications) == (
+    assert tuple(
+        spec.name for spec in fock_specifications if max(spec.angular) <= 2
+    ) == (
         "ssss",
         "psss",
         "dppp",
@@ -618,13 +620,14 @@ def test_production_manifest_drives_generated_registry_and_shards(
         spec.name: (
             PairStorage.RECOMPUTED
             if spec.name in ("dddp", "dddd", "ddds")
+            or (max(spec.angular) == 3 and spec.name != "fpps")
             else PairStorage.MATERIALIZED
         )
         for spec in (selection.spec for selection in selections)
     }
     assert tuple(selection.consumers for selection in selections) == tuple(
         (KernelConsumer.FOCK,)
-        if selection.spec.name == "psss"
+        if selection.spec not in specifications
         else (
             (KernelConsumer.FORCE,)
             if selection.spec.name == "fpps"
@@ -1457,9 +1460,12 @@ def test_codegen_capability_report_covers_catalog_and_manifest() -> None:
     assert second_force["supported"] is False
     assert "order-one derivatives" in second_force["reasons"][0]
     assert rows["fsps"]["production"]["force"] is False
-    assert rows["fsps"]["production"]["status"] == "manifest_gap"
+    assert rows["fsps"]["production"]["fock"] is True
+    assert rows["fsps"]["production"]["status"] == "manifest_selected"
+    assert rows["fddp"]["production"]["fock"] is False
+    assert rows["fddp"]["production"]["status"] == "manifest_gap"
     assert (
-        rows["fsps"]["production"]["promotion_gate"]
+        rows["fddp"]["production"]["promotion_gate"]
         == "real_molecular_endpoint_and_resource_gates"
     )
     assert rows["dpps"]["production"]["force"] is True

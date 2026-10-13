@@ -48,6 +48,14 @@ only a closed-shell singlet is currently admitted.
 Supply `auxiliary_bases=(low_fit, high_fit)` to select **DF-MP2 correlation**
 extrapolation and a **DF-CCSD(T)−DF-MP2** correction. The reference is still
 conventional exact RHF in every orbital basis; this is not a DF-HF composite.
+When the CUDA reference uses nonresident direct integrals, preliminary FP64
+iterations use Schwarz and density-weighted J/K screening. The same plan then
+clears its operator-dependent DIIS history and reconverges with unscreened FP64
+integrals before publishing the reference. Final convergence and physical-frame
+checks are unchanged; this does not introduce a screened reference into the
+correlation energy or analytic forces. Resident-integral routes retain their
+existing execution policy.
+
 For a distinct correction orbital basis, also supply
 `correction_auxiliary_basis`. For example, with checked local records:
 

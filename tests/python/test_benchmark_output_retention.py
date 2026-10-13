@@ -297,6 +297,83 @@ def test_prepared_lifecycle_cli_rejects_retained_output_before_qualification(
 
 
 @pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
+def test_huckel_df_rejects_retained_output_before_measurement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination_kind: str
+) -> None:
+    from benchmarks import _retention, huckel_df_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original evidence", encoding="utf-8")
+    destination = retained
+    if destination_kind == "alias":
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    elif destination_kind == "traversal":
+        destination = tmp_path / ".artifacts/../benchmarks/results"
+
+    def forbidden(*args: typing.Any) -> typing.NoReturn:
+        raise AssertionError("invalid output reached CUDA/oracle measurement")
+
+    monkeypatch.setattr(huckel_df_endpoint, "measure", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "huckel_df_endpoint",
+            "--atoms",
+            "3",
+            "--arm",
+            "huckel",
+            "--output",
+            str(destination / existing.name),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        huckel_df_endpoint.main()
+    assert error.value.code == 2
+    assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
+def test_huckel_df_accepts_scratch_output_without_changing_measurement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from benchmarks import _retention, huckel_df_endpoint
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    captured = []
+    monkeypatch.setattr(huckel_df_endpoint, "measure", captured.append)
+    destination = tmp_path / ".artifacts/benchmarks/huckel.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "huckel_df_endpoint",
+            "--atoms",
+            "48",
+            "--arm",
+            "core",
+            "--repeat",
+            "2",
+            "--output",
+            str(destination),
+        ],
+    )
+    huckel_df_endpoint.main()
+    assert len(captured) == 1
+    assert vars(captured[0]) == {
+        "atoms": 48,
+        "arm": "core",
+        "repeat": 2,
+        "output": destination,
+    }
+    assert not destination.parent.exists()
+
+
+@pytest.mark.parametrize("destination_kind", ["retained", "alias", "traversal"])
 def test_xc_trajectory_rejects_retained_output_before_gpu_or_input_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, destination_kind: str
 ) -> None:

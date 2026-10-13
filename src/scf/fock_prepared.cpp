@@ -5,6 +5,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -19,7 +20,7 @@ constexpr std::size_t kDefaultDeviceBudget = 256U * 1024U * 1024U;
 void checked(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
 }
 bool needs(const FockBuildSpec& spec, FockApproximation approximation) {
   return (spec.coulomb.present && spec.coulomb.approximation == approximation) ||
@@ -299,6 +300,14 @@ struct PreparedFockPlan::Impl {
       // packed planner may drop optional U under automatic budget pressure.
       // Reuse RHF's resident-value crossover without reserving RHF-owned SCF
       // factors: this method already owns and validates its restricted Cocc.
+      // Generated physical J integrals are AO-pair symmetric even without
+      // exact exchange or an occupied C owner. Allow a rank-zero packed B
+      // before selecting a repeatedly regenerated streamed source. This
+      // changes neither the accepted density nor the J/force operator.
+      const bool coulomb_only_packing =
+          strategy.spec.spin == FockSpin::Restricted && strategy.spec.coulomb.present &&
+          strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+          !strategy.spec.exchange.present;
       const auto plan_values = [&](std::size_t n, std::size_t a, std::size_t fixed) {
         // Packed-raw is not an admitted borrowed-response consumer and does
         // not have the same optional-U budget fallback. Keep its old capacity.
@@ -306,14 +315,16 @@ struct PreparedFockPlan::Impl {
         const auto packed_rank =
             request == DfPairStorageRequest::SymmetricLower ? 0 : reserved_rank;
         auto tiles = plan_requested_density_fitting_tiles(
-            request, 1, n, a, n, packed_rank, plan_budget, fixed, true, 0, reserved_rank != 0);
+            request, 1, n, a, n, packed_rank, plan_budget, fixed, true, 0,
+            reserved_rank != 0 || coulomb_only_packing);
         const bool needs_occupied_capacity =
             tiles.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
             tiles.value_storage.rank_capacity < reserved_rank;
-        if (request == DfPairStorageRequest::Automatic && reserved_rank &&
+        if (request == DfPairStorageRequest::Automatic &&
+            (reserved_rank != 0 || coulomb_only_packing) &&
             (!tiles.stores_full_three_center || needs_occupied_capacity)) {
-          const auto resident =
-              resolve_method_owned_df_resident_budget(resolved, n, a, reserved_rank, fixed);
+          const auto resident = resolve_method_owned_df_resident_budget(
+              resolved, n, a, reserved_rank, fixed, coulomb_only_packing);
           if (resident != resolved) {
             const auto promoted = plan_requested_density_fitting_tiles(
                 request, 1, n, a, n, packed_rank, resident.value_bytes, fixed, true, 0, true);
@@ -349,6 +360,11 @@ struct PreparedFockPlan::Impl {
           plan_values(nbf, naux, cuda_density_fitting_integral_source_device_bytes(source.get()));
       data.resolved_budget = resolved;
       data.df_gradient_budget = resolved.response_bytes;
+      // A qualified automatic pure-J owner may reclaim fractional headroom
+      // for its minimum resident plan. Publish the final complete allowance,
+      // including any already allocated exact provider, rather than the
+      // generic pre-promotion target.
+      diagnostic.device_budget_bytes = diagnostic.device_bytes + resolved.total_bytes;
       diagnostic.response_device_bytes = resolved.response_bytes;
       runtime::df_progress::Scope budget_trace("prepared_df_resource_policy");
       runtime::df_progress::number("resolved_total_budget_bytes", resolved.total_bytes);

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "generator": "tools.generativeqc_validation.second_derivatives.libcint_eri_hessian",
+    "pyscf_version": "2.14.0",
+    "libcint_sha256": "950bb0a297507369dce95b9013ef2c5b64b0fa36a0018c303c98e95efce7db7e",
+    "generated_date": "2026-10-13",
+    "normalization": "unnormalized Cartesian primitives; PySCF normalization removed by generator",
+    "source_commit": "bcf4e746444328109c37d7743bd1c319420f9a6e",
+    "generator_source_sha256": "16a5257ed3d992f98e8fdd0a29f9ac83df756fcedc38ebe0128465f393dbfd77"
+  },
+  "angular": [
+    2,
+    2,
+    2,
+    2
+  ],
+  "exponents": [
+    0.6,
+    0.8,
+    1.1,
+    0.9
+  ],
+  "centers": [
+    [
+      0.13,
+      -0.31,
+      0.24
+    ],
+    [
+      -0.43,
+      0.27,
+      0.51
+    ],
+    [
+      0.68,
+      -0.14,
+      -0.22
+    ],
+    [
+      -0.21,
+      0.48,
+      -0.63
+    ]
+  ],
+  "component_indices": [
+    0,
+    310,
+    1295
+  ],
+  "output_indices": [
+    0,
+    1,
+    6,
+    11
+  ],
+  "weights": [
+    0.73,
+    -0.31,
+    0.17
+  ],
+  "direction": [
+    [
+      -0.10430559734726512,
+      -0.6188625869963478,
+      0.03578739292501993
+    ],
+    [
+      -0.07568446776914842,
+      0.4408565682405149,
+      -1.0192798453410474
+    ],
+    [
+      0.4406348873040738,
+      -2.387957285298111,
+      -1.4551009669205868
+    ],
+    [
+      -1.4539353393197043,
+      -1.7616096834067099,
+      0.4592539823508085
+    ]
+  ],
+  "expected_hvp": [
+    0.07863680226855924,
+    -0.018674926278475425,
+    0.2587852703791046,
+    -0.22348333098414805
+  ]
+}

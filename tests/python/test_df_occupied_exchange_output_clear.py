@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from _cpp_source_support import cpp_function_definition, cpp_record_definition
+from test_df_matrix_product_view import write_borrowed_response_ops
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -24,6 +25,7 @@ def occupied_probe(
     tmp_path_factory: pytest.TempPathFactory, required_native_cxx: NativeCxx
 ) -> Path:
     folder = tmp_path_factory.mktemp("occupied-exchange-host")
+    write_borrowed_response_ops(folder)
     header = (ROOT / "src/scf/cuda/df_scf_library.hpp").read_text()
     provider = (ROOT / "src/scf/cuda/df_scf_library.cpp").read_text()
     bodies = [cpp_record_definition(header, "ScfMatrixBatchView") + ";"]

@@ -63,6 +63,7 @@ from .ir import (
     slice_tensor,
     sqrt,
     transpose,
+    where,
 )
 from .optimize import PASSES, optimize, prepare_for_backend, rewrite
 from .precision import (
@@ -220,4 +221,5 @@ __all__ = [
     "transpose_program",
     "vjp",
     "weighted_density_program",
+    "where",
 ]

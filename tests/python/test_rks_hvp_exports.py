@@ -1,10 +1,11 @@
-"""Exercise the actual lazy export table without loading numerical dependencies."""
+"""Exercise real RKS HVP exports in fresh interpreters without native execution."""
 
 from __future__ import annotations
 
-import ast
-import importlib
+import os
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -14,54 +15,44 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("order", ["function", "result", "implementation"])
 @pytest.mark.parametrize("repeat", [1, 2])
-def test_rks_hvp_export_is_independent_of_import_order(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, order: str, repeat: int
-) -> None:
-    # Copy only the real export machinery into an isolated package. The stub
-    # implementation exercises Python import binding, not Hessian mathematics.
-    source = (ROOT / "tools/generativeqc_hessian/__init__.py").read_text(
-        encoding="utf-8"
-    )
-    tree = ast.parse(source)
-    lazy = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "_LAZY"
-            for target in node.targets
-        )
-    )
-    getter = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "__getattr__"
-    )
-    mapping = ast.literal_eval(lazy.value)
-    name = f"hvp_export_{order}_{repeat}"
-    package = tmp_path / name
-    package.mkdir()
-    (package / "__init__.py").write_text(
-        "import typing\n" + ast.unparse(lazy) + "\n" + ast.unparse(getter) + "\n",
-        encoding="utf-8",
-    )
-    implementation = mapping["rks_hvp"]
-    (package / f"{implementation}.py").write_text(
-        "class RKSHVPResult: pass\ndef rks_hvp(): return RKSHVPResult()\n",
-        encoding="utf-8",
-    )
-    monkeypatch.syspath_prepend(str(tmp_path))
-    try:
-        module = importlib.import_module(name)
-        if order == "result":
-            _ = module.RKSHVPResult
+def test_rks_hvp_export_is_independent_of_import_order(order: str, repeat: int) -> None:
+    # Each interpreter starts with an empty import cache for the actual packages.
+    # No export-table source fragments or fake implementation modules are needed.
+    code = textwrap.dedent(
+        """
+        import importlib
+        import sys
+
+        order, repeat = sys.argv[1:]
+        package = importlib.import_module("tools.generativeqc_hessian")
+        if order == "function":
+            from tools.generativeqc_hessian import rks_hvp
+        elif order == "result":
+            from tools.generativeqc_hessian import RKSHVPResult
         elif order == "implementation":
-            importlib.import_module(f"{name}.{implementation}")
-        for _ in range(repeat):
-            exported = __import__(name, fromlist=["rks_hvp", "RKSHVPResult"])
-            assert callable(exported.rks_hvp)
-            assert isinstance(exported.rks_hvp(), exported.RKSHVPResult)
-    finally:
-        for key in tuple(sys.modules):
-            if key == name or key.startswith(name + "."):
-                del sys.modules[key]
+            importlib.import_module("tools.generativeqc_hessian.rks_molecular")
+
+        for _ in range(int(repeat)):
+            from tools.generativeqc_hessian import RKSHVPResult, rks_hvp
+
+            assert callable(rks_hvp)
+            assert isinstance(RKSHVPResult, type)
+            assert package.rks_hvp is rks_hvp
+            assert package.RKSHVPResult is RKSHVPResult
+
+            # The compatibility facade must expose the installed production objects.
+            owner = importlib.import_module("generativeqc.rks_hessian")
+            assert rks_hvp is owner.rks_hvp
+            assert RKSHVPResult is owner.RKSHVPResult
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code, order, str(repeat)],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "python")},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

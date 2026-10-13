@@ -2066,6 +2066,45 @@ int main() {
         }
       }
 
+      // #2411: J-only must not replay the P/Q exchange Gram. Exercise the
+      // exact generated-source GPU reader with a partial auxiliary panel;
+      // the source visit count is one complete A per requested P block,
+      // rather than one per ordered P/Q pair. Resident and packed paths
+      // must retain the same independently calculated force.
+      const auto j_only_oracle = generativeqc::scf::build_density_fitting_rhf_gradient(
+          integrals, generated_rhf_density, 1e-12, {1.0, 0.0});
+      const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
+          {generated_rhf_density, 1.0, 0.0}};
+      for (auto* response_plan :
+           {source_plan.get(), generated_resident.get(), packed_response_plan.get()}) {
+        for (std::size_t budget : {16384U, 65536U}) {
+          std::vector<double> actual;
+          std::string detail;
+          generativeqc::scf::DfGradientResources work;
+          require(
+              generativeqc::scf::execute_cuda_density_fitting_generated_force_response(
+                  response_plan, 0, orbital, auxiliary, integrals.three_center, integrals.metric,
+                  j_only_terms, 0, budget, 3, actual, detail, &work) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+          require_matrix_close(actual, j_only_oracle.derivative, 8e-10,
+                               "J-only bounded GPU response differs from CPU oracle");
+          if (response_plan == source_plan.get()) {
+            const auto width = work.auxiliary_weight_tile;
+            require(width < integrals.naux, "streamed J-only test did not exercise bounded panels");
+            const auto panels = (integrals.naux + width - 1) / width;
+            const auto pair_tiles =
+                (integrals.nbf * integrals.nbf + integrals.naux - 1) / integrals.naux;
+            require(work.value_slices == panels * pair_tiles &&
+                        work.recomputed_value_bytes == panels * integrals.naux * integrals.nbf *
+                                                           integrals.nbf * sizeof(double),
+                    "streamed J-only response regenerated a quadratic number of raw panels");
+          } else {
+            require(work.recomputed_value_bytes == 0,
+                    "resident J-only response unexpectedly regenerated raw integrals");
+          }
+        }
+      }
+
       // A finite discarded eigenspace has a nonzero response when the metric
       // rotates. Compare its GPU Frechet map to the independent raw derivative
       // oracle, rather than testing only the full-rank -M+ E M+ shortcut.
@@ -2285,6 +2324,25 @@ int main() {
                 "batched generated DF response differs from independent CPU oracle");
           }
         }
+
+        // A pure Coulomb response has no exchange Gram. Check the bounded
+        // streamed source and the retained source against independent CPU
+        // derivative tensors, with a short final auxiliary panel.
+        const auto j_only_expected =
+            generativeqc::scf::build_density_fitting_rhf_gradient(raw, total, 1e-12, {1.0, 0.0})
+                .derivative;
+        const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
+            {total, 1.0, 0.0}};
+        for (auto* plan : {physical_resident.get(), batch_source_plan.get()}) {
+          std::vector<double> actual;
+          require(
+              generativeqc::scf::execute_cuda_density_fitting_generated_force_response(
+                  plan, item, physical_orbital, source_auxiliary, raw.three_center, raw.metric,
+                  j_only_terms, 0, 65536, 3, actual, cuda_detail) == GENERATIVEQC_STATUS_SUCCESS,
+              cuda_detail.c_str());
+          require_matrix_close(actual, j_only_expected, 5e-10,
+                               "J-only streamed/resident DF response differs from CPU oracle");
+        }
       }
     } else {
       std::cout << "CUDA DF J/K checks skipped: no allocated CUDA device\n";
@@ -2335,6 +2393,35 @@ int main() {
                 bounded_plan.peak_workspace_bytes <= 1024ULL * 1024 * 1024 &&
                 bounded_plan.ao_pair_tile > 0 && bounded_plan.auxiliary_tile > 0,
             "large DF plan exceeded its memory budget");
+    // #2411: a restricted J-only method has no occupied rank, yet a
+    // physical symmetric source can retain one packed fitted tensor under
+    // a budget that cannot retain the dense N^2*Naux value. The default
+    // arbitrary-density/unknown-method caller must remain streamed.
+    {
+      constexpr std::size_t n = 768, a = 3712;
+      const auto packed =
+          generativeqc::scf::plan_packed_density_fitting_tiles(1, n, a, 0, 0, 0, 0, false);
+      const auto dense_required = n * n * a * sizeof(double);
+      require(packed.peak_workspace_bytes < dense_required,
+              "single-owner packed J-only shape has no density benefit");
+      const auto budget =
+          packed.peak_workspace_bytes + (dense_required - packed.peak_workspace_bytes) / 2;
+      const auto without_method = generativeqc::scf::plan_requested_density_fitting_tiles(
+          generativeqc::scf::DfPairStorageRequest::Automatic, 1, n, a, n, 0, budget, 0, true, 0,
+          false);
+      const auto j_only = generativeqc::scf::plan_requested_density_fitting_tiles(
+          generativeqc::scf::DfPairStorageRequest::Automatic, 1, n, a, n, 0, budget, 0, true, 0,
+          true);
+      require(!without_method.stores_full_three_center &&
+                  without_method.value_storage.pairs == generativeqc::scf::DfPairStorage::Dense,
+              "unqualified automatic DF storage must preserve streamed fallback");
+      require(j_only.stores_full_three_center &&
+                  j_only.value_storage.pairs ==
+                      generativeqc::scf::DfPairStorage::SymmetricLowerSingle &&
+                  j_only.value_storage.rank_capacity == 0 && j_only.peak_workspace_bytes <= budget,
+              "method-authorized J-only DF should retain a rank-zero packed value");
+    }
+
     bool rejected_tiny_budget = false;
     try {
       (void)generativeqc::scf::plan_density_fitting_tiles(1, 8, 8, 2, 512);

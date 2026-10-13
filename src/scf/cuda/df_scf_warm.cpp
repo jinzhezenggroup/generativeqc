@@ -5,6 +5,7 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "runtime/cuda_component_trace.hpp"
 #include "scf/cuda/df_final_validation.hpp"
 #include "scf/cuda/df_runtime.hpp"
@@ -84,7 +85,7 @@ void prepare_cuda_density_fitting_rhf_warm_state(CudaDensityFittingJkPlan* plan,
     if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT ||
         status == GENERATIVEQC_STATUS_OUT_OF_MEMORY)
       return;
-    if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
     if (snapshot.density.size() != 1 || snapshot.density[0] != density) return;
     auto candidate = std::make_shared<RhfWarmState>();
     candidate->token = token;
@@ -127,7 +128,11 @@ void prepare_cuda_density_fitting_rhf_warm_state(CudaDensityFittingJkPlan* plan,
     // Drain even on launch/copy failure before releasing pageable destinations.
     const auto drained = cudaStreamSynchronize(plan->stream);
     if (error == cudaSuccess) error = drained;
-    if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
+    if (error != cudaSuccess)
+      throw generativeqc::Error(error == cudaErrorMemoryAllocation
+                                    ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                    : GENERATIVEQC_STATUS_CUDA_ERROR,
+                                cudaGetErrorString(error));
     if (!std::isfinite(candidate->energy)) return;
     runtime::cuda_trace::trace_counter("extra_jk_builds", 0);
     runtime::cuda_trace::trace_counter("energy_reductions", 1);

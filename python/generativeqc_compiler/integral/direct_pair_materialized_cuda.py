@@ -18,6 +18,7 @@ def emit_direct_pair_materialized_support() -> str:
     return r"""
 #if defined(__CUDACC__)
 #include "generated_direct_shell_pair_hermite.cuh"
+#include "runtime/compensated_atomic.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_screening.cuh"
 
@@ -259,7 +260,10 @@ __device__ inline void contract_materialized_direct_pair_fock(
           accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
               separate_exchange, i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
       } else {
-        accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density, fock,
+        // Exported-reference HF owns a correction plane; ordinary and
+        // independent J/K callers retain their existing accumulation sinks.
+        accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
+            runtime::CompensatedOutput{fock, batch.reference_fock_correction},
             i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
       }
     }

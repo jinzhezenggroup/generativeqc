@@ -74,7 +74,8 @@ void launch_enter_target_refinement_kernel(dim3 grid, dim3 block, std::size_t sh
                                            std::uint8_t* converged, const std::uint8_t* failed,
                                            std::uint32_t* iterations, double* previous_energy,
                                            double* energy_change, double* density_rms,
-                                           std::uint32_t* diis_count, std::uint32_t* diis_head);
+                                           std::uint32_t* diis_count, std::uint32_t* diis_head,
+                                           bool refine_all = false);
 
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_select_final_fock_rebuild_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

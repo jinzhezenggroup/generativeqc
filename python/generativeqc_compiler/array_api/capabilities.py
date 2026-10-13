@@ -9,6 +9,7 @@ FRONTEND_VERSION = 1
 ## The 2025.12 standard is a comparison target, not an implementation claim.
 # Group definitions own the bounded preview inventory and its matrix together.
 _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
+    "real-selection": ("where",),
     "real-elementwise": (
         "add",
         "subtract",
@@ -73,6 +74,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 # test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
     {
+        "where",
         "add",
         "equal",
         "not_equal",
@@ -121,6 +123,7 @@ SUPPORTED_FUNCTIONS = frozenset(
 )
 
 _OPERATION_DTYPES: dict[str, str] = {
+    "real-selection": "bool condition; float32|float64 branches",
     "real-elementwise": "float32|float64",
     "real-comparison": "float32|float64 -> bool",
     "array-creation": "bool|float32|float64 (operation-specific admission)",
@@ -132,6 +135,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
+    "real-selection": "unsupported; forward-reference-only",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
@@ -213,6 +217,12 @@ _OPERATION_OVERRIDES: dict[str, dict[str, str]] = {
 _NATIVE_CPU_OPERATIONS = frozenset(
     {
         "add",
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
         "subtract",
         "multiply",
         "divide",
@@ -251,9 +261,18 @@ _NATIVE_CPU_OPERATIONS = frozenset(
     }
 )
 
+_NATIVE_CPU_BOOLEAN_OPERATIONS = (
+    frozenset(
+        _OPERATION_GROUPS["array-creation"]
+        + _OPERATION_GROUPS["shape-transform"]
+        + _OPERATION_GROUPS["static-indexing"]
+    )
+    & _NATIVE_CPU_OPERATIONS
+)
+
 _NATIVE_CPU_NOTES: dict[str, str] = {
     **{
-        name: "unsupported-boolean-results-and-comparison-primitives"
+        name: "finite-float64-operands; one-byte-bool-result; non-differentiable"
         for name in _OPERATION_GROUPS["real-comparison"]
     },
     "astype": (
@@ -282,7 +301,11 @@ def _operation_matrix() -> dict[str, dict[str, object]]:
             "ad": _AD_STATUS[category],
             "native_cpu": name in _NATIVE_CPU_OPERATIONS,
             "native_cpu_dtypes": (
-                ("float64",) if name in _NATIVE_CPU_OPERATIONS else ()
+                ("bool", "float64")
+                if name in _NATIVE_CPU_BOOLEAN_OPERATIONS
+                else ("float64",)
+                if name in _NATIVE_CPU_OPERATIONS
+                else ()
             ),
             "native_cpu_notes": _NATIVE_CPU_NOTES.get(
                 name,
@@ -311,7 +334,7 @@ def capabilities() -> dict[str, object]:
         "operation_matrix": _operation_matrix(),
         "native_cpu_scope": "bounded-tensorir-subset-not-array-api-conformance",
         "native_cpu_requires": (
-            "all-live-nodes-float64",
+            "all-live-nodes-float64-or-typed-bool",
             "all-live-primitives-supported-by-CPU_PRIMITIVES",
             "frontend-operation-and-keyword-constraints",
             "finite-runtime-values-and-operation-domains",
@@ -332,9 +355,11 @@ def capabilities() -> dict[str, object]:
         "dtype_promotion": "generic-float32-float64-explicit-cast",
         "scientific_dtype_promotion": False,
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
-        "boolean_data": "typed-input-constant-comparison-reference-only",
+        "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
-        "boolean_native_lowering": False,
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; no-AD-or-native",
+        "boolean_native_lowering": True,
+        "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views; no-AD-or-where",
         "astype_devices": "device-none-only-cpu-reference",
         "uniform_creation": "typed-bool-or-exact-real-scalar-tensorir-broadcast",
         "creation_devices": "device-none-only-cpu-reference",
