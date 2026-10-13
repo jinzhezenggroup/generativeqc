@@ -2066,6 +2066,47 @@ int main() {
         }
       }
 
+      // #2411: J-only must not replay the P/Q exchange Gram. Exercise the
+      // exact generated-source GPU reader with a partial auxiliary panel;
+      // the source visit count is one complete A per requested P block,
+      // rather than one per ordered P/Q pair. Resident and packed paths
+      // must retain the same independently calculated force.
+      const auto j_only_oracle = generativeqc::scf::build_density_fitting_rhf_gradient(
+          integrals, generated_rhf_density, 1e-12, {1.0, 0.0});
+      const std::vector<generativeqc::scf::DensityFittingDensityResponse> j_only_terms{
+          {generated_rhf_density, 1.0, 0.0}};
+      for (auto* response_plan :
+           {source_plan.get(), generated_resident.get(), packed_response_plan.get()}) {
+        for (std::size_t budget : {16384U, 65536U}) {
+          std::vector<double> actual;
+          std::string detail;
+          generativeqc::scf::DfGradientResources work;
+          require(generativeqc::scf::execute_cuda_density_fitting_generated_force_response(
+                      response_plan, 0, orbital, auxiliary, integrals.three_center,
+                      integrals.metric, j_only_terms, 0, budget, 3, actual, detail, &work) ==
+                      GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+          require_matrix_close(actual, j_only_oracle.derivative, 8e-10,
+                               "J-only bounded GPU response differs from CPU oracle");
+          if (response_plan == source_plan.get()) {
+            const auto width = work.auxiliary_weight_tile;
+            require(width < integrals.naux,
+                    "streamed J-only test did not exercise bounded panels");
+            const auto panels = (integrals.naux + width - 1) / width;
+            const auto pair_tiles =
+                (integrals.nbf * integrals.nbf + integrals.naux - 1) / integrals.naux;
+            require(work.value_slices == panels * pair_tiles &&
+                        work.recomputed_value_bytes ==
+                            panels * integrals.naux * integrals.nbf * integrals.nbf *
+                                sizeof(double),
+                    "streamed J-only response regenerated a quadratic number of raw panels");
+          } else {
+            require(work.recomputed_value_bytes == 0,
+                    "resident J-only response unexpectedly regenerated raw integrals");
+          }
+        }
+      }
+
       // A finite discarded eigenspace has a nonzero response when the metric
       // rotates. Compare its GPU Frechet map to the independent raw derivative
       // oracle, rather than testing only the full-rank -M+ E M+ shortcut.
