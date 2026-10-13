@@ -28,11 +28,24 @@ failed or incomplete phases have no successful timing. No timeout was increased.
 | [#2418](https://github.com/jinzhezenggroup/generativeqc/issues/2418) | [#2436](https://github.com/jinzhezenggroup/generativeqc/pull/2436) packages exact M06-2X stationary AOT plans. Source `61b9387f3` gives 3-atom direct cold 4.378 s versus historical 229.691 s. A separate empty artifact-cache run passes all 12 calls with runtime compiler discovery and invocation forbidden. Later source-matched populations remain separately identified. |
 | [#2421](https://github.com/jinzhezenggroup/generativeqc/issues/2421) | [#2437](https://github.com/jinzhezenggroup/generativeqc/pull/2437) adds automatic HF/DF value-response planning and exact-state final occupied projection reuse. All 12 calls pass at 96 atoms. Warm: 59.318 → 3.201 s; new cold 32.994 s, moved 28.670 s. |
 
-Direct WB97M-V now passes all 12 calls at 48 atoms within 1800 s with
-[#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454): cold 576.151 s,
-warm 67.707 s, moved 406.924 s, moved-warm 67.946 s. Its maximum energy/force
-errors are 4.548e-12 Eh / 6.528e-11 Eh/Bohr. Small 3/12-atom populations also
-pass. The 96-atom endpoint remains unresolved, so #2426 stays open.
+Direct WB97M-V passes all 12 calls at 48 atoms within 1800 s with
+[#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454) and automatic
+exact force-component reuse in [#2462](https://github.com/jinzhezenggroup/generativeqc/pull/2462):
+cold 578.966 s, warm 39.029 s, moved 409.380 s, moved-warm 38.951 s. Warm drops
+42.4% from the preceding bilateral source's 67.707 s. Its maximum energy/force
+errors are 4.548e-12 Eh / 6.526e-11 Eh/Bohr. Each frozen replay records one exact
+force-pair hit and zero force-pair sweeps; SCF and remaining force work still run.
+Small 3/12-atom default populations also pass all 12 calls. The 96-atom endpoint
+remains unresolved, so #2426 stays open.
+
+The first 3-atom default cold observation is retained at 16.330 s, including
+10.812 s of force preparation. Separate fresh-process controls with retained
+caches give 6.378 s (automatic reuse) and 6.409 s (explicit opt-out), versus
+1.132 s of force preparation in a later SCF-reuse control. This locates the
+startup difference without attributing all preparation to compilation. The
+later controls do not replace the first cold point or enter plotted medians.
+Experimental SCF component reuse and native initializers are disabled in the
+plotted source; their validation does not relabel those timings.
 
 These are before/after complete endpoint observations, not isolated attribution
 of every source change. The newer integration uses the current native public
@@ -154,6 +167,10 @@ Pure-J spatial populations use `aaec57399`; bilateral VV10 populations use
 `08b866dc5404feebf024011fe95a9e04b16ba55256078874d4fcda080e21fdd0`.
 Both are ancestors of the frozen
 [VV10 qualification source](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-qualified-source-20261014).
+Automatic exact force reuse is qualified on `9aabd59a3` with library SHA256
+`4c7b6ace6f07466af7967c0cc1f4453a7ff09a03c0ebcf13316527105e6779c7`, retained on
+[its frozen source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-automatic-source-20261014).
+Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
 compressed summaries. Later source changes do not relabel these measurements.
