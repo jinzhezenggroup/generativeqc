@@ -342,7 +342,6 @@ def test_emitted_bound_point_preserves_all_independent_references(
     library.emitted_point.argtypes = [ct.c_bool, pointer, pointer]
     fixture = np.loadtxt(ROOT / "tests/data/xc/pbe0_restricted_point.tsv")
     assert fixture.shape == (87, 17)
-    failures = []
     for index, row in enumerate(fixture):
         inputs = np.ascontiguousarray(row[:8])
         expected = row[8:]
@@ -363,9 +362,8 @@ def test_emitted_bound_point_preserves_all_independent_references(
         tolerance = 5e-10 * np.abs(expected) + 1e-322
         assert np.all(np.isfinite(bound))
         assert np.all(np.abs(bound - expected) <= tolerance), index
-        if not np.all(np.abs(general - expected) <= tolerance):
-            failures.append(index)
-    assert failures == [8, 9, 65, 66, 67, 68]
+        assert np.all(np.isfinite(general))
+        assert np.all(np.abs(general - expected) <= tolerance), index
 
 
 _NATIVE_PREFIX = r"""

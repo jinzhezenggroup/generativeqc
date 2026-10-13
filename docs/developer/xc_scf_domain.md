@@ -88,6 +88,15 @@ spin. The density derivative uses `cbrt(rho_s)` independently of any
 underflow in the exchange energy. This introduces no density floor or new
 boundary prescription.
 
+When the low-gradient denominator `rho_s*cbrt(rho_s)` is subnormal,
+all physical and response consumers form the reduced Cartesian gradient as
+`(grad(rho_s)/rho_s)/cbrt(rho_s)` instead of dividing by that quantized
+product. Its response divides directional terms before subtraction, avoiding
+subnormal quotient numerators; scaled terms are multiplied separately to
+avoid overflow in an intermediate sum. Normal denominators retain their
+existing arithmetic. This is shared by full-spin, equal-spin, and independently
+weighted exchange/correlation compositions, with unchanged admission policies.
+
 In the large-gradient tail, PBE correlation combines `epsilon_PW+H`
 *before* evaluation. With `G=gamma phi^3`, `u=A_PBE t^2` and `v=1/(1+u)`,
 
