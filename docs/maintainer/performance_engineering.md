@@ -301,6 +301,16 @@ screening, coefficient lanes, precision, or derivative equations. Compare each
 option independently in the same binary, with diagnostics disabled, before
 considering default promotion.
 
+`-DGENERATIVEQC_CUDA_XC_MATRIX_TILE=8|16|32` exposes the compiler's existing
+bounded matrix schedules for a build-level experiment; the default remains 16.
+It changes shared-panel reuse and block dimensions for the same density and
+symmetric-potential definitions, without changing jet count or precision.
+Retain the CMake setting, generated-grid-source hash and library hash for each
+arm, and include ragged/tiny-map and full SCF+force controls. Alternative legal
+tile sizes are not qualified production defaults. In meta-GGA campaigns,
+identify the shared-branch XC prerequisite separately and report force-side
+projection independently of SCF density/Vxc work.
+
 ## Work amplification is a first-class metric
 
 A schedule can satisfy a memory budget while repeating expensive work many

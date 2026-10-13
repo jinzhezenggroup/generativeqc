@@ -1337,7 +1337,8 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
-    ARGS --output "${GENERATIVEQC_GRID_SOURCE}" ${_generativeqc_grid_ao_schedule_args})
+    ARGS --output "${GENERATIVEQC_GRID_SOURCE}"
+      --xc-matrix-tile "${GENERATIVEQC_CUDA_XC_MATRIX_TILE}" ${_generativeqc_grid_ao_schedule_args})
 
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")

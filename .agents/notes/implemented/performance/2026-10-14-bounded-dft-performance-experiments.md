@@ -76,3 +76,20 @@ Promote a direct scheduling candidate only with a robust >=5% complete
 regression. AO discovery requires repeatable cold/moved benefit without warm
 regression. Four-jet work requires a separately identified post-#2464 control;
 do not re-credit that PR's CSE or silently mix its source with master timings.
+
+## Four-jet experiment admission
+
+The separately qualified #2464 image at `786c31a481ad6cd743c14e8b2920f3a89b5ef8c6`
+(library `bc2b09850386e26b67b439173ba7ce0fd367a042765c1d6c0e3452a054761fe0`)
+was profiled again on n4 for M06-2X/direct/96. One diagnostic warm call records
+0.924 s in `batch_density_products` and 1.342 s in `batch_local_potentials`;
+the native SCF/publication host interval is 6.218 s. The force geometry-point
+kernel is a distinct 1.247 s. These identify matrix work after shared-branch
+CSE rather than repeating its old point-expression attribution.
+
+Expose the existing compiler-owned 8/16/32 matrix schedule candidates through
+CMake, retaining 16 by default. The 32 candidate trades more shared-panel reuse
+for a larger CTA and possible occupancy loss. It needs no second bilinear,
+vendor provider, additional panel allocation or dropped tau lane. A matched
+post-CSE build must decide this tradeoff with complete endpoints; legal static
+resource bounds are not performance evidence.
