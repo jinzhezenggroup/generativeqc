@@ -2480,7 +2480,7 @@ class PreparedStationaryCudaExecution:
                     tile_points=tile_points,
                     budget_bytes=grid_plan.peak_bytes,
                     device_id=device,
-                    active_ao_capacity=basis.nao,
+                    active_ao_capacity=grid_plan.active_ao_capacity,
                     ingredients=(
                         ("rho", "gradient", "tau") if needs_first else ("rho",)
                     ),
@@ -2728,6 +2728,7 @@ def _plan_stationary_cuda_tile(
     max_device_bytes: int,
     max_host_bytes: int,
     max_ecp_pair_samples: int,
+    reserve_active_ao: bool = True,
 ) -> _StationaryCudaTileLayout:
     """Retain the ordinary force owner inventory for each candidate tile.
 
@@ -2741,7 +2742,10 @@ def _plan_stationary_cuda_tile(
         backend="cuda",
         order=2 if needs_first else 1,
         tile_points=tile_points,
-        active_ao_capacity=n,
+        # Indexed density preparation owns additional dense packing/validation
+        # buffers. A consumer without AO maps must use the dense contract, so
+        # unused optional storage cannot exclude an otherwise bounded force.
+        active_ao_capacity=n if reserve_active_ao else None,
         budget_bytes=max_device_bytes,
     )
     # Admit the bounded fallback first. Optional lane expansion uses only the
@@ -3237,6 +3241,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             max_device_bytes=max_device_bytes,
             max_host_bytes=max_host_bytes,
             max_ecp_pair_samples=max_ecp_pair_samples,
+            reserve_active_ao=resident_ao_cutoff is not None,
         )
         # Prepared ECP retains all tensor owners simultaneously. Its later lease
         # admission charges their host storage in addition to the ordinary bound;
@@ -3448,7 +3453,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         tile_points=tile_points,
                         budget_bytes=grid_plan.peak_bytes,
                         device_id=device,
-                        active_ao_capacity=n,
+                        active_ao_capacity=grid_plan.active_ao_capacity,
                         # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
                         # additionally consumes tau from the same current density.
                         ingredients=("rho", "gradient", "tau")

@@ -178,7 +178,9 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         "ecp": False,
         "device": 0,
         "spec": spec,
-        "grid_plan": SimpleNamespace(allocation_bytes=10, peak_bytes=10),
+        "grid_plan": SimpleNamespace(
+            allocation_bytes=10, peak_bytes=10, active_ao_capacity=None
+        ),
         "source_bytes": 20,
         "tile_points": 4,
         "primitive_tile": 5,

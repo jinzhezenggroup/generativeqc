@@ -15,11 +15,11 @@ from generativeqc_compiler.method.stationary_resources import (
 )
 
 
-def _ordinary(atoms: int = 24, **options: object) -> object:
+def _ordinary(atoms: int = 24, *, aos: int | None = None, **options: object) -> object:
     """Use production capacities, not a reduced standalone AO scratch model."""
     basis = SimpleNamespace(
         natom=atoms,
-        nao=8 * atoms,
+        nao=8 * atoms if aos is None else aos,
         nprimitive=22 * atoms // 3,
         numeric_bytes=2608 * atoms,
         packed=SimpleNamespace(size=3 * atoms + 44 * atoms // 3 + 128 * atoms),
@@ -45,6 +45,31 @@ def _ordinary(atoms: int = 24, **options: object) -> object:
         basis,
         **arguments,
     )
+
+
+def test_dense_large_basis_does_not_reserve_unused_indexed_density_storage() -> None:
+    """1088-AO forces fit the public cap when no AO maps were requested.
+
+    This uses the complete production admission, including the concurrent
+    native integral provider. It must not borrow an indexed owner's buffers
+    or raise either of the existing public byte caps.
+    """
+    with pytest.raises(ValueError, match="host.*budget"):
+        _ordinary(96, aos=1088, tile_points=1)
+    dense = _ordinary(96, aos=1088, reserve_active_ao=False)
+    assert dense.grid_plan.active_ao_capacity is None
+    assert dense.host_bound <= 256 << 20
+    assert (
+        dense.grid_plan.peak_bytes
+        + dense.source_resources.allocation_bytes
+        + dense.native_geometry_reserve
+        <= 512 << 20
+    )
+    with pytest.raises(ValueError, match="host.*budget"):
+        _ordinary(
+            96, aos=1088, reserve_active_ao=False,
+            max_host_bytes=dense.host_bound - 1,
+        )
 
 
 @pytest.mark.parametrize(
@@ -349,6 +374,7 @@ def _ecp_admission(prepared: bool, host_budget: int) -> tuple[typing.Any, dict]:
         "max_grid_pair_visits": None,
         "max_pending_grid_tiles": 64,
         "max_pending_grid_pair_visits": 100_000_000,
+        "resident_ao_cutoff": 1e-16,
         "prepared": object() if prepared else None,
     }
     function = next(
