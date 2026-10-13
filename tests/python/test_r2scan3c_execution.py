@@ -586,9 +586,12 @@ def test_df_canonical_r2scan3c_cpu_force_composes_and_replays() -> None:
         changed = batch.execute(
             coordinates=[moved], strict=True, properties=("energy", "forces")
         ).items[0]
-        moved_warm = batch.execute(strict=True, properties=("energy", "forces")).items[
-            0
-        ]
+        # Coordinate overrides are per execution; omission replays the
+        # original prepared geometry for electronic and correction owners.
+        moved_warm = batch.execute(
+            coordinates=[moved], strict=True, properties=("energy", "forces")
+        ).items[0]
+        reset = batch.execute(strict=True, properties=("energy", "forces")).items[0]
     fresh = composite.singlepoint(moved_atoms, properties=("energy", "forces"))
 
     for row, atoms in ((cold, H2), (changed, moved_atoms)):
@@ -624,6 +627,8 @@ def test_df_canonical_r2scan3c_cpu_force_composes_and_replays() -> None:
     np.testing.assert_allclose(warm.forces, cold.forces, atol=3e-7, rtol=0)
     assert moved_warm.energy == pytest.approx(changed.energy, abs=1e-9)
     np.testing.assert_allclose(moved_warm.forces, changed.forces, atol=3e-7, rtol=0)
+    assert reset.energy == pytest.approx(cold.energy, abs=1e-9)
+    np.testing.assert_allclose(reset.forces, cold.forces, atol=3e-7, rtol=0)
     assert changed.energy == pytest.approx(fresh.energy, abs=1e-8)
     np.testing.assert_allclose(changed.forces, fresh.forces, atol=3e-7, rtol=0)
 
@@ -744,9 +749,9 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
             row = (
                 first_moved
                 if repeat == 0
-                else batch.execute(strict=True, properties=("energy", "forces")).items[
-                    0
-                ]
+                else batch.execute(
+                    coordinates=[moved], strict=True, properties=("energy", "forces")
+                ).items[0]
             )
             assert row.converged and row.dispersion is not None
             errors["moved"].append(
