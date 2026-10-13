@@ -31,6 +31,8 @@ The Clang recipe also returns its resolved `compiler.executable`; use that path
 for object compilation. Invocation-entry/system-driver selection is checked
 around queries and before returning a key, so entry symlink retargeting fails
 closed even when the original canonical driver remains unchanged.
+Clang driver regularity is checked before reading ELF bytes, so a named FIFO
+that satisfies executable lookup is rejected without blocking on its writer.
 
 Clang's `-M` quoting differs from GCC: it normalizes literal header backslashes
 to `/` and may leave filename tabs unquoted. Collection cross-checks actual

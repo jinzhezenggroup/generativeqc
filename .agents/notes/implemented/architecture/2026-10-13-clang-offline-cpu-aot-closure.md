@@ -135,6 +135,36 @@ The expanded retained archive is `.cache/pr2444-probe-evidence.tar.gz`, SHA-256
 `ed872e179a18866f9bc68fd0eb43c0c26632ddfa6a7d9f9601ea983fe71a21a5`.
 It includes the preceding observations and receipts, not only the final PASS.
 
+### Nonregular driver input guard
+
+A final POSIX boundary probe reproduced a separate early-input failure:
+`shutil.which` accepts an executable FIFO, but reading the driver's ELF prefix
+before regularity validation blocks outside the collector's compiler subprocess
+deadline. A controlled child with a 0.1-second collection deadline required the
+outer two-second process owner to kill it. No system driver was modified.
+
+Clang now hashes/validates the regular driver before opening its ELF prefix;
+the default GCC ordering and identities are preserved. The POSIX control checks
+the explicit `nonregular-dependency-file` rejection in a finite child, without
+executing a compiler or promoting mock compiler evidence.
+
+Real Linux requalification: **150 passed, 22 subtests passed, no SKIP**, plus
+Ruff, compiler/native API/docstring checks. The same snapshot's ordinary cache
+probe again passes replay-hit and refreshed-salt-miss controls. This latest
+snapshot supersedes preceding acceptance results while retaining them.
+
+Snapshot base `b77bb3fcc0f0812784230ecbb1c7dbe179b3d377`, LF archive SHA-256
+`fc7db3e9228ab41d8201fe159fcdea6f47689dbcaa27a835f534fbd162437be9`, patch
+`93f3d3d38e753f6fa5417ad43c2c8be8ea1f4b47b3382fd40117bf4cb08f511d`.
+Collector/test SHA-256:
+`4ceba938b5f819eb48634af274164a60ed1c1ed399918437c659759cea88c04a` /
+`ba906db04d472bcdb198667578515b78c419cd517e84765b225e6e1e6243e369`.
+Ordinary object SHA-256:
+`e06335e21732e7aa110d12851b237a539239d54cb3e3ad6c549abcc31da22b71`;
+receipt SHA-256 `e944bd47624877668df35253f82c54db77d1dd69549836ce77f44b8381df1068`.
+The expanded ignored evidence archive `.cache/pr2444-regularity-evidence.tar.gz`
+has SHA-256 `a3af6a5d270705ab421e96ed7b53df1f49bf4305caa046b9a7f040325c61c32f`.
+
 ## Consequences and revisit conditions
 
 This is a narrow offline C object protocol. It does not establish production

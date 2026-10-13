@@ -311,11 +311,15 @@ def collect_cpu_closure(
                 carry = data[-32:]
 
     try:
+        # A named FIFO can satisfy executable lookup; never open a nonregular
+        # Clang input while waiting for ELF bytes outside the process deadline.
+        executable_hash = hash_input(path) if is_clang else None
         with path.open("rb") as stream:
             magic = stream.read(4)
         if magic != b"\x7fELF":
             return failure("unsupported-compiler-wrapper")
-        executable_hash = hash_input(path)
+        if executable_hash is None:
+            executable_hash = hash_input(path)
         version = query(["--version"])
         # __GNUC__ is also defined by clang; require GCC's driver banner/query.
         if is_clang:

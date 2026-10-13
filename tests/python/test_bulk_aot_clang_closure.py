@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import os
 import re
 import shutil
 import sys
@@ -556,3 +557,33 @@ def test_real_clang_unopened_probe_with_existing_decoys(
     )
     assert result.reasons
     assert result.closure is not None and result.closure.cache_key is None
+
+
+def test_linux_nonregular_clang_driver_is_rejected_before_open(tmp_path: Path) -> None:
+    if sys.platform != "linux":
+        pytest.skip("POSIX nonregular-driver control")
+    driver = tmp_path / "clang-fifo"
+    os.mkfifo(driver)
+    driver.chmod(0o755)
+    source = tmp_path / "point.c"
+    source.write_text("int point(void) { return 0; }\n", encoding="utf-8")
+    code = """from pathlib import Path
+from types import SimpleNamespace
+from generativeqc_compiler.xc import bulk_aot_closure as c
+import sys
+c._system_clang = lambda: Path(sys.argv[1])
+result = c.collect_cpu_closure(SimpleNamespace(backend="cpu"), Path(sys.argv[2]),
+    compiler=sys.argv[1], compiler_family="clang", timeout=.1)
+assert result.reasons == ("nonregular-dependency-file",), result.reasons
+assert result.closure is None
+"""
+    result = run_compiler(
+        [sys.executable, "-c", code, str(driver), str(source)],
+        5,
+        label="nonregular Clang driver guard",
+        environment={
+            **collector.CPU_ENVIRONMENT,
+            "PYTHONPATH": str(Path(collector.__file__).parents[2]),
+        },
+    )
+    assert not result.timed_out and result.returncode == 0, result.stderr
