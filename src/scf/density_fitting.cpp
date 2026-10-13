@@ -1375,9 +1375,9 @@ DensityFittingTilePlan plan_requested_density_fitting_tiles(
       break;
   }
 
-  // A method-owned restricted reservation qualifies the same capacity crossover
-  // without creating an RHF SCF owner or inferring occupations from dimensions.
-  // Batch/UHF/general-density callers retain their existing dense policy.
+  // A method-authorized restricted owner also qualifies the capacity crossover
+  // without inventing RHF SCF factors. This includes physical J-only methods
+  // with rank zero; batch/UHF/arbitrary-density callers stay on the dense plan.
   if (!generated_source || batch != 1 || (!automatic_rhf_rank && !allow_method_owned_packing))
     return dense();
 
