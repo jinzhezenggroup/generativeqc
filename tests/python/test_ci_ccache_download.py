@@ -11,8 +11,12 @@ import time
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -32,7 +36,9 @@ def _download_commands() -> list[tuple[str, ...]]:
 
 
 @contextmanager
-def _server(statuses: list[int], *, stall: bool = False):
+def _server(
+    statuses: list[int], *, stall: bool = False
+) -> Iterator[tuple[str, list[int]]]:
     observed = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -63,7 +69,9 @@ def _server(statuses: list[int], *, stall: bool = False):
         thread.join(timeout=2)
 
 
-def _run(command: tuple[str, ...], url: str, tmp_path: Path, *, short=False):
+def _run(
+    command: tuple[str, ...], url: str, tmp_path: Path, *, short: bool = False
+) -> tuple[subprocess.CompletedProcess[str], Path]:
     curl = shutil.which("curl")
     if curl is None:
         pytest.skip("requires the curl used by the CI download")
