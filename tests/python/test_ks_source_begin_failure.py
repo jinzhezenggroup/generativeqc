@@ -76,6 +76,9 @@ struct Owner {
   std::uint64_t owner = 1;
   bool has_exchange = true, has_range_correction{}, fitted_coulomb{}, incremental_direct_jk{};
   bool device_nonlocal{}, device_chunk_mode{};
+  bool nonlocal_seed_stage{}, nonlocal_cache_enabled{};
+  int *nonlocal_domain_error{}, *nonlocal_pair_error{};
+  std::uint64_t* nonlocal_cache_counters{};
   void* nonlocal_correlation{};
   double exchange_coefficient{};
   unsigned spins = 1;
@@ -120,6 +123,9 @@ struct Owner {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;
     const bool use_warm = false;
+    // This probe exercises optional source-admission failures; its ordinary
+    // begin transaction has no provisional nonlocal initializer.
+    const bool nonlocal_initialization = false;
     std::vector<double> prepared;
 """
         + transaction
