@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ PYTHON_COMPAT_OUTPUT = (
     ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
 )
 SCHEMA = "generativeqc.native-semilocal-families.v3"
+LIBXC_HYBRIDS = ROOT / "python/generativeqc_compiler/method/_generated_libxc_methods.py"
 FAST_PATH_FIELDS = (
     "component_scaling",
     "mixed_ao_precision",
@@ -30,6 +33,55 @@ FAST_PATH_STATUS_CPP = {
 }
 
 
+@lru_cache(maxsize=1)
+def _pinned_libxc_hybrid_methods() -> Any:
+    """Read the pinned C-owner-extracted Libxc method metadata product."""
+    return runpy.run_path(str(LIBXC_HYBRIDS))["LIBXC_METHODS"]
+
+
+def _resolve_libxc_hybrid(item: dict[str, Any]) -> None:
+    """Replace curated XC/EXX duplicates with Libxc-authoritative fractions.
+
+    The generated product is separately checked against SHA-verified pinned
+    Libxc C files by tools/generate_libxc_methods.py --check.
+    Backend/force qualification remains owned by the native manifest.
+    """
+    identifier = item.get("libxc_hybrid_method")
+    if identifier is None:
+        return
+    if not isinstance(identifier, str) or not identifier:
+        raise ValueError("native Libxc hybrid identifier must be a nonempty string")
+    record = _pinned_libxc_hybrid_methods().get(identifier)
+    if record is None or record.get(
+        "registration"
+    ) != "HYB_GGA_XC_" + identifier.replace("-", "_"):
+        raise ValueError("native hybrid has no matching generated Libxc registration")
+    if (
+        record.get("family") != "hyb_gga"
+        or Fraction(record["range_omega"]) != 0
+        or Fraction(record["short_range_exchange"]) != 0
+        or Fraction(record["long_range_exchange"]) != 0
+        or Fraction(item["range_omega"]) != 0
+        or item["coefficient_policy"] != "exact"
+    ):
+        raise ValueError("native hybrid components disagree with pinned Libxc metadata")
+    if item["components"] != "libxc":
+        raise ValueError("native Libxc hybrid components must be source-derived")
+    item["components"] = [
+        [name, str(Fraction(weight))] for name, weight in record["components"]
+    ]
+    exact = Fraction(record["exact_exchange"])
+    if not 0 < exact <= 1 or item["cuda_global_hybrid_exact_exchange"] is not None:
+        raise ValueError("native Libxc hybrid must derive its exact-exchange fraction")
+    item["cuda_global_hybrid_exact_exchange"] = str(exact)
+    for profile in item.get("cpu_stationary_force_profiles", []):
+        if profile["exact_exchange"] != "libxc":
+            raise ValueError(
+                "native Libxc hybrid CPU force coefficient must be source-derived"
+            )
+        profile["exact_exchange"] = str(exact)
+
+
 def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema") != SCHEMA:
@@ -38,6 +90,8 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     if not isinstance(raw, list) or not raw:
         raise ValueError("native semilocal family manifest requires families")
     families = tuple(raw)
+    for item in families:
+        _resolve_libxc_hybrid(item)
     codes = [item.get("code") for item in families]
     if codes != list(range(len(families))):
         raise ValueError("native semilocal family codes must be contiguous from zero")

@@ -47,6 +47,8 @@ def test_split_hybrid_registry_uses_stable_libxc_encoded_codes() -> None:
             )
             == fraction
         )
+    assert entries["M06-2X"]["cuda_df_energy_force"] is True
+    assert entries["MN15"]["cuda_df_energy_force"] is False
     assert GGA_CODE_BASE != MGGA_CODE_BASE
 
 
@@ -65,6 +67,7 @@ def test_split_hybrid_registry_is_host_safe_and_device_generated() -> None:
         "split_hybrid_fast_path_capabilities",
         "CudaXcCapability::QualificationRequired",
         "split_hybrid_composition",
+        "split_hybrid_cuda_df_energy_force",
         "return {27U, 50U, true};",
         "return {11U, 25U, true};",
         "#if defined(__CUDACC__)",
@@ -112,6 +115,8 @@ def test_split_hybrid_dft_point_bindings_share_registry_authority() -> None:
         ROOT / "python/generativeqc_compiler/dft/_generated_split_hybrid_consumers.py"
     )
     assert emit_dft_point_consumers() == committed.read_text(encoding="utf-8")
+    assert SPLIT_HYBRIDS["M06-2X"]["cuda_df_energy_force"] is True
+    assert SPLIT_HYBRIDS["MN15"]["cuda_df_energy_force"] is False
     assert SPLIT_HYBRID_POINT_CONSUMERS == tuple(
         (record["functional_code"], {"gga": 4, "mgga": 5}[record["family"]])
         for record in SPLIT_HYBRIDS.values()

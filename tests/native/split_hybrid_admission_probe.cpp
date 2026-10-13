@@ -5,6 +5,7 @@
 #include <limits>
 #include <string>
 
+#include "dft/global_hybrid_fock.hpp"
 #include "methods/dft_admission.hpp"
 
 int main() {
@@ -50,6 +51,37 @@ int main() {
         }
         return true;
       };
+      const auto code = generativeqc::dft::generated::split_hybrid_functional_code(
+          method.exchange, method.correlation);
+      const auto composition = generativeqc::dft::global_hybrid_composition(code);
+      const bool qualified_df = generativeqc::dft::cuda_global_hybrid_df_admitted(code);
+      if (!composition.present || !composition.fixed_semilocal ||
+          composition.exact_exchange != method.exact ||
+          composition.semilocal_exchange_scale != 1.0 ||
+          composition.semilocal_correlation_scale != 1.0)
+        return 1;
+      for (const auto j : {generativeqc::scf::FockApproximation::Exact,
+                           generativeqc::scf::FockApproximation::DensityFitted}) {
+        for (const auto k : {generativeqc::scf::FockApproximation::Exact,
+                             generativeqc::scf::FockApproximation::DensityFitted}) {
+          generativeqc::scf::FockBuildSpec spec;
+          spec.spin = spin == 1 ? generativeqc::scf::FockSpin::Restricted
+                                : generativeqc::scf::FockSpin::Unrestricted;
+          spec.derivative_order = 0;
+          spec.exchange.coefficient = -method.exact / (spin == 1 ? 2.0 : 1.0);
+          spec.coulomb.approximation = j;
+          spec.exchange.approximation = k;
+          const bool admitted =
+              j == k && (j == generativeqc::scf::FockApproximation::Exact || qualified_df);
+          if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0) !=
+              admitted) {
+            std::cerr << "J/K provider identity disagrees with Libxc hybrid composition\n";
+            return 1;
+          }
+          spec.exchange.coefficient *= 2.0;
+          if (generativeqc::dft::cuda_global_hybrid_jk_match(spec, code, spin, 1.0, 1.0)) return 1;
+        }
+      }
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "canonical")) return 1;
       std::swap(components[0], components[1]);
       if (!check(GENERATIVEQC_STATUS_SUCCESS, "reordered components")) return 1;
@@ -91,7 +123,27 @@ int main() {
       if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "mixed precision")) return 1;
       descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
-      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "density fitting")) return 1;
+      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                 "CUDA density fitting"))
+        return 1;
+      descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_AUTO;
+      if (!check(qualified_df ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                 "automatic CUDA density fitting"))
+        return 1;
+      descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CPU fitted provider on CUDA")) return 1;
+      descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+      options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
+      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "fitted host XC")) return 1;
+      options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
+      descriptor.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+      if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "fitted mixed precision")) return 1;
+      descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
+      if (qualified_df) {
+        exchange.fock_coefficient *= 2.0;
+        if (!check(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "fitted wrong K normalization")) return 1;
+        exchange = original_exchange;
+      }
       descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
       options.struct_size = 0;
       if (!check(GENERATIVEQC_STATUS_ABI_MISMATCH, "short ABI")) return 1;

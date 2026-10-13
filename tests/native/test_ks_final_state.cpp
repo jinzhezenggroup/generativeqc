@@ -387,6 +387,93 @@ void cuda_global_hybrid_identity() {
   require(!scaled_pbe.validate(), "CUDA accepted an unqualified scaled PBE hybrid");
 }
 
+#if GENERATIVEQC_HAS_CUDA
+void cuda_split_hybrid_identity() {
+  struct Method {
+    std::uint32_t code;
+    double fraction;
+    bool fitted;
+  };
+  // Stable Libxc-encoded M06-2X/MN15 identities, with independent expectations.
+  for (const bool unrestricted : {false, true}) {
+    for (const auto method :
+         {Method{0x201c2U, 27.0 / 50.0, true}, Method{0x2010cU, 11.0 / 25.0, false}}) {
+      Fixture original;
+      original.id.determinant.model = cuda_global_hybrid_fock(
+          unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted, method.fraction);
+      original.id.model.functional = method.code;
+      original.id.model.scf_domain_version = 4;
+      if (unrestricted) {
+        original.id.determinant.occupied = {1, 0};
+        original.id.model.spins = 2;
+        original.physical.density = {{.5, 0, 0, 0}, {0, 0, 0, 0}};
+        original.physical.fock.push_back(original.physical.fock[0]);
+        original.candidate.spins.push_back(original.candidate.spins[0]);
+      }
+      original.limits.require_canonicality = true;
+      for (const auto j : {FockApproximation::Exact, FockApproximation::DensityFitted}) {
+        for (const auto k : {FockApproximation::Exact, FockApproximation::DensityFitted}) {
+          auto state = original;
+          auto spec = state.id.determinant.model.spec;
+          spec.coulomb.approximation = j;
+          spec.exchange.approximation = k;
+          state.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
+          state.sync();
+          const bool admitted = j == k && (j == FockApproximation::Exact || method.fitted);
+          VerifiedKsFinalState verified;
+          require(state.validate(true, &verified) == admitted,
+                  "split-hybrid final-state admission disagrees with its physical J/K model");
+          if (!admitted) continue;
+          require(verified.identity == state.id &&
+                      verified.weighted_density.size() == state.id.model.spins,
+                  "split-hybrid force snapshot lost provider identity or weighted density");
+          const KsFinalStateEvidence evidence{state.id,
+                                              state.candidate.fock_density_generation,
+                                              true,
+                                              state.physical.components,
+                                              state.physical.reported_energy,
+                                              0.0};
+          KsFinalStateDiagnostic accepted;
+          std::string detail;
+          require(
+              validate_ks_final_state_evidence(state.id, 2, evidence, state.limits,
+                                               verified.diagnostic.determinant, accepted, detail),
+              "split-hybrid resident final-state evidence rejected");
+          auto stale = evidence;
+          --stale.identity.model.scf_domain_version;
+          require(
+              !validate_ks_final_state_evidence(state.id, 2, stale, state.limits,
+                                                verified.diagnostic.determinant, accepted, detail),
+              "split-hybrid accepted stale functional evidence");
+          stale = evidence;
+          stale.identity.determinant.model.spec.exchange.approximation =
+              k == FockApproximation::Exact ? FockApproximation::DensityFitted
+                                            : FockApproximation::Exact;
+          require(
+              !validate_ks_final_state_evidence(state.id, 2, stale, state.limits,
+                                                verified.diagnostic.determinant, accepted, detail),
+              "split-hybrid accepted switched physical provider evidence");
+          auto invalid = state;
+          invalid.id.determinant.model.spec.exchange.coefficient -= 0.01;
+          invalid.id.determinant.model =
+              resolve_fock_build(invalid.id.determinant.model.spec, FockBackend::Cuda, 0.0, 1e-10);
+          invalid.sync();
+          require(!invalid.validate(true), "split-hybrid accepted a modified exchange fraction");
+          invalid = state;
+          invalid.id.model.semilocal_exchange_scale = 0.9;
+          invalid.sync();
+          require(!invalid.validate(true), "split-hybrid accepted modified semilocal scaling");
+          invalid = state;
+          --invalid.id.model.scf_domain_version;
+          invalid.sync();
+          require(!invalid.validate(true), "split-hybrid accepted an unsupported domain version");
+        }
+      }
+    }
+  }
+}
+#endif
+
 void identity_rejection() {
   const std::vector<std::function<void(KsFinalStateIdentity&)>> changes{
       [](auto& id) { ++id.determinant.factor.basis; },
@@ -457,6 +544,9 @@ int main() {
     backend_product_policy();
     analytic_rks_and_uks();
     cuda_global_hybrid_identity();
+#if GENERATIVEQC_HAS_CUDA
+    cuda_split_hybrid_identity();
+#endif
     identity_rejection();
     model_and_state_rejection();
     std::cout << "KS final-state contract tests passed\n";
