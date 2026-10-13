@@ -6,7 +6,40 @@ from typing import Any
 
 import pytest
 from generativeqc import _native
-from generativeqc.ks_diagnostics import _nonlocal_work
+from generativeqc.ks_diagnostics import _nonlocal_history_scopes, _nonlocal_work
+
+
+def test_nonlocal_history_preserves_interleaved_operator_scopes() -> None:
+    """An inner solve is not a contiguous prefix once VV10 anchors are refreshed."""
+
+    def query(handle: int, index: int, values: Any, count: int) -> int:
+        assert (handle, index, count) == (12, 3, 5)
+        values[:] = (1, 0, 2, 0, 0)
+        return _native.STATUS_SUCCESS
+
+    library = SimpleNamespace(
+        generativeqc_internal_batch_get_nonlocal_history_scopes_v1=query
+    )
+    assert _nonlocal_history_scopes(library, 12, 3, 5) == (
+        "provisional-semilocal-rsh",
+        "full-target",
+        "provisional-frozen-vv10",
+        "full-target",
+        "full-target",
+    )
+    assert _nonlocal_history_scopes(SimpleNamespace(), 12, 3, 5) is None
+
+
+def test_nonlocal_history_rejects_unknown_scope() -> None:
+    def query(handle: int, index: int, values: Any, count: int) -> int:
+        values[0] = 3
+        return _native.STATUS_SUCCESS
+
+    library = SimpleNamespace(
+        generativeqc_internal_batch_get_nonlocal_history_scopes_v1=query
+    )
+    with pytest.raises(ValueError, match="operator scope"):
+        _nonlocal_history_scopes(library, 12, 3, 1)
 
 
 def test_nonlocal_work_keeps_exact_reuse_zeros() -> None:
@@ -45,10 +78,10 @@ def test_nonlocal_work_rejects_malformed_availability() -> None:
         _nonlocal_work(library, 12, 3)
 
 
-@pytest.mark.parametrize("native_seed", [False, True])
+@pytest.mark.parametrize("native_seed", ["off", "semilocal", "frozen"])
 def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     monkeypatch: pytest.MonkeyPatch,
-    native_seed: bool,
+    native_seed: str,
 ) -> None:
     """A frozen replay removes pair work; a new geometry cannot inherit the key."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -58,7 +91,12 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
     from generativeqc import Calculator, GridSpec, KsOptions
 
     monkeypatch.setenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE", "1")
-    monkeypatch.setenv("GENERATIVEQC_VV10_NATIVE_SEED", str(int(native_seed)))
+    monkeypatch.setenv(
+        "GENERATIVEQC_VV10_NATIVE_SEED", str(int(native_seed == "semilocal"))
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", str(int(native_seed == "frozen"))
+    )
     calculator = Calculator(
         method="wb97m-v",
         basis="sto-3g",
@@ -74,7 +112,7 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
         cold = owner.execute(properties=("energy",)).items[0]
         assert cold.converged
         assert cold.ks_diagnostic.nonlocal_work["pair_sweeps"] > 0
-        if native_seed:
+        if native_seed != "off":
             assert cold.ks_diagnostic.nonlocal_work["provisional_focks"] > 0
             assert cold.ks_diagnostic.nonlocal_work["target_focks"] >= 2
             rows = cold.ks_diagnostic.to_payload()["history"]

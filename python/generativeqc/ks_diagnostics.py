@@ -78,6 +78,7 @@ class KsDiagnostic:
     history: tuple[KsIteration, ...]
     coulomb_exchange_work: dict[str, typing.Any] | None = None
     nonlocal_work: dict[str, int] | None = None
+    nonlocal_history_scopes: tuple[str, ...] | None = None
 
     def to_payload(self) -> typing.Any:
         """Copy every iteration; known unavailable stage baselines are null.
@@ -91,7 +92,12 @@ class KsDiagnostic:
         # same history. Those rows describe the provisional operator, so they
         # must never look like physical WB97M-V target checks to readers.
         provisional = (self.nonlocal_work or {}).get("provisional_focks", 0)
-        if provisional:
+        if self.nonlocal_history_scopes is not None:
+            for row, scope in zip(
+                payload["history"], self.nonlocal_history_scopes, strict=True
+            ):
+                row["operator_scope"] = scope
+        elif provisional:
             for row in payload["history"]:
                 row["operator_scope"] = (
                     "provisional-semilocal-rsh"
@@ -238,7 +244,30 @@ def read_ks_diagnostic(
         history=tuple(rows),
         coulomb_exchange_work=_coulomb_exchange_work(library, handle, index),
         nonlocal_work=_nonlocal_work(library, handle, index),
+        nonlocal_history_scopes=_nonlocal_history_scopes(
+            library, handle, index, len(history)
+        ),
     )
+
+
+def _nonlocal_history_scopes(
+    library: typing.Any, handle: typing.Any, index: typing.Any, count: int
+) -> tuple[str, ...] | None:
+    """Distinguish interleaved inner problems from physical target evaluations."""
+    query = getattr(
+        library, "generativeqc_internal_batch_get_nonlocal_history_scopes_v1", None
+    )
+    if index is None or query is None or not count:
+        return None
+    values = (ctypes.c_uint64 * count)()
+    status = query(handle, index, values, count)
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    names = ("full-target", "provisional-semilocal-rsh", "provisional-frozen-vv10")
+    if any(value >= len(names) for value in values):
+        raise ValueError("invalid native nonlocal operator scope")
+    return tuple(names[value] for value in values)
 
 
 def _nonlocal_work(

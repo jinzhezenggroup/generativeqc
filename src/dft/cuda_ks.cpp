@@ -341,6 +341,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
   // successful target state. Full VV10 starts a fresh energy/DIIS epoch.
   bool nonlocal_seed_stage{}, pending_nonlocal_seed{}, nonlocal_seed_trace{};
   unsigned nonlocal_seed_iterations{}, nonlocal_exact_iterations{};
+  // Experimental nested solve: cheap inner iterations retain the last exact
+  // VV10 potential. Every accepted endpoint still uses the unmodified full
+  // target operator, consecutive physical energy checks and original budget.
+  bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
+  unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   nlc::Vv10Plan* nonlocal_correlation{};
@@ -703,8 +708,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::logic_error("resident VV10 workspace is not double-aligned");
     const auto points = xc_layout.npoint;
     const auto workspace_doubles = nonlocal_layout.workspace_bytes / sizeof(double);
-    const auto doubles = sum(product(11, points),
-                             sum(workspace_doubles, nonlocal_cache_enabled ? 7U : 2U));
+    const auto doubles =
+        sum(product(11, points), sum(workspace_doubles, nonlocal_cache_enabled ? 7U : 2U));
     if (!storage) return product(doubles, sizeof(double));
     auto* cursor = static_cast<double*>(storage);
     auto take = [&](std::size_t count) {
@@ -1129,10 +1134,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
           nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false, true);
       const auto* cache_choice = std::getenv("GENERATIVEQC_VV10_SCF_COMPONENT_REUSE");
       const auto parameters = nonlocal_correlation->parameters();
-      nonlocal_cache_enabled = cache_choice && std::string_view(cache_choice) == "1" &&
-                               xc_layout.npoint >= 3 &&
-                               parameters.variant == nlc::Vv10Variant::vv10 &&
-                               parameters.coefficient <= 0x1p32;
+      nonlocal_cache_enabled =
+          cache_choice && std::string_view(cache_choice) == "1" && xc_layout.npoint >= 3 &&
+          parameters.variant == nlc::Vv10Variant::vv10 && parameters.coefficient <= 0x1p32;
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
       if (nonlocal_arena_bytes > nonlocal_correlation->resources().device_workspace_bytes)
         throw std::invalid_argument(
@@ -1365,12 +1369,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
 #endif
     const bool use_warm = !input && reuse_warm && warm_ready;
     const auto* seed_selection = std::getenv("GENERATIVEQC_VV10_NATIVE_SEED");
+    const auto* outer_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
+    const bool outer_requested = outer_selection && std::string_view(outer_selection) == "1";
     nonlocal_seed_trace = seed_selection && std::string_view(seed_selection) == "1";
-    nonlocal_seed_stage = nonlocal_seed_trace && device_nonlocal && spins == 1 &&
-                          nonlocal_correlation &&
+    nonlocal_seed_stage = (nonlocal_seed_trace || outer_requested) && device_nonlocal &&
+                          spins == 1 && nonlocal_correlation &&
                           nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10 &&
                           !precision_schedule.any_lower_precision() && !incremental_direct_jk &&
                           !use_warm && options.max_iterations > 2;
+    nonlocal_outer_active = outer_requested && nonlocal_seed_stage;
+    nonlocal_frozen_stage = pending_nonlocal_frozen = false;
+    nonlocal_inner_iterations = nonlocal_exact_epoch_iterations = 0;
     nonlocal_seed_iterations = nonlocal_exact_iterations = 0;
     pending_nonlocal_seed = false;
     retire_phase_source(false);
@@ -1943,9 +1952,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     run_resident_nonlocal_cuda([&] {
       if (nonlocal_cache_enabled && nonlocal_cache_ready && schedule == nonlocal_cache_schedule) {
         nlc::enqueue_vv10_force_key_compare_cuda(
-            stream, xc_layout.npoint, nonlocal_correlation->parameters(), nonlocal_effective_weights,
-            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_workspace,
-            nonlocal_domain_error, nonlocal_pair_error, nonlocal_cache_mismatch);
+            stream, xc_layout.npoint, nonlocal_correlation->parameters(),
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_workspace, nonlocal_domain_error, nonlocal_pair_error,
+            nonlocal_cache_mismatch);
         mismatch = nonlocal_cache_mismatch;
       }
       if (nonlocal_cache_enabled)
@@ -1961,9 +1971,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     });
     if (nonlocal_cache_enabled) {
       run_resident_nonlocal_cuda([&] {
-        nlc::enqueue_vv10_store_force_key_cuda(
-            stream, xc_layout.npoint, nonlocal_effective_density, nonlocal_workspace,
-            nonlocal_domain_error, nonlocal_domain_error, nonlocal_pair_error);
+        nlc::enqueue_vv10_store_force_key_cuda(stream, xc_layout.npoint, nonlocal_effective_density,
+                                               nonlocal_workspace, nonlocal_domain_error,
+                                               nonlocal_domain_error, nonlocal_pair_error);
       });
       nonlocal_cache_schedule = schedule;
       nonlocal_cache_ready = true;
@@ -1987,6 +1997,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                      nonlocal_raw_gradient);
       });
       const auto quadrature = xc->grid_view();
+      if (nonlocal_frozen_stage) {
+        // Keep the anchor gradient, screening mask and scalar pair derivatives
+        // together: their AO assembly is precisely V_nlc[D_anchor]. Only raw
+        // current-density features above are overwritten by this inner step.
+        // Its energy is provisional and can never satisfy the target gate.
+        xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
+                                       nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
+                                       nonlocal_energy);
+        return xc->view(next_generation);
+      }
       runtime::cuda_trace::TraceRegion domain_trace("nonlocal_density_domain", stream);
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
@@ -2233,6 +2253,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       mixed_precision_executed =
           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
       pending_nonlocal_seed = nonlocal_seed_stage;
+      pending_nonlocal_frozen = nonlocal_frozen_stage;
       const auto potential = stage_xc(++generation, density_phase);
       pending_generations[0] = generation;
       ++movement.submitted_iterations;
@@ -2327,8 +2348,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                               incremental_max_abs_delta_density, sizeof(double),
                               cudaMemcpyDeviceToHost, stream));
       if (nonlocal_cache_enabled)
-        check(cudaMemcpyAsync(nonlocal_work.data(), nonlocal_cache_counters,
-                              sizeof(nonlocal_work), cudaMemcpyDeviceToHost, stream));
+        check(cudaMemcpyAsync(nonlocal_work.data(), nonlocal_cache_counters, sizeof(nonlocal_work),
+                              cudaMemcpyDeviceToHost, stream));
       check(cudaStreamSynchronize(stream));
     } catch (...) {
       cudaStreamSynchronize(stream);
@@ -2351,13 +2372,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_iterations = 0;
     ++output.iterations;
     ++output.fock_builds;
-    if (pending_nonlocal_seed)
+    if (pending_nonlocal_seed || pending_nonlocal_frozen)
       ++nonlocal_seed_iterations;
-    else if (device_nonlocal)
+    else if (device_nonlocal) {
       ++nonlocal_exact_iterations;
+      ++nonlocal_exact_epoch_iterations;
+    }
+    if (pending_nonlocal_frozen) ++nonlocal_inner_iterations;
     if (device_nonlocal)
       output.dft_diagnostic.nonlocal_work = {
-          1, nonlocal_seed_iterations, nonlocal_exact_iterations, nonlocal_work[0], nonlocal_work[1],
+          1,
+          nonlocal_seed_iterations,
+          nonlocal_exact_iterations,
+          nonlocal_work[0],
+          nonlocal_work[1],
           nonlocal_cache_enabled ? nonlocal_work[2] : nonlocal_exact_iterations};
     if (pending_mixed_coulomb || pending_mixed_density)
       ++output.precision.mixed_stage_fock_builds;
@@ -2385,13 +2413,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.density_rms = physical.density_rms;
     const bool new_target_epoch =
         (mixed_precision_executed && refinement_iterations == 1) ||
-        (nonlocal_seed_iterations && nonlocal_exact_iterations == 1 && !pending_nonlocal_seed);
-    const bool first_strict_energy = new_target_epoch &&
-                                     std::isinf(output.energy_change) && output.energy_change > 0.0;
+        (nonlocal_seed_iterations && nonlocal_exact_epoch_iterations == 1 &&
+         !pending_nonlocal_seed && !pending_nonlocal_frozen);
+    const bool first_strict_energy =
+        new_target_epoch && std::isinf(output.energy_change) && output.energy_change > 0.0;
     const double history_energy_change = first_strict_energy ? -1.0 : output.energy_change;
     diagnostic.history.push_back({output.iterations, diagnostic.components, history_energy_change,
                                   physical.density_change, physical.residual, diagnostic.electrons,
                                   stabilize_occupations});
+    diagnostic.history.back().nonlocal_operator_scope =
+        pending_nonlocal_seed ? 1U : (pending_nonlocal_frozen ? 2U : 0U);
     // The kernel validates electronic components; their host-side sum with
     // the nuclear term must also be finite before any convergence/cache gate.
     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
@@ -2437,9 +2468,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refine_incremental_energy(physical.density_change, physical.residual,
                               physical.maximum_residual);
     const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
-    const bool converged = has_energy_history && full_energy_history &&
-                           !pending_nonlocal_seed &&
-                           (!nonlocal_seed_iterations || nonlocal_exact_iterations >= 2) &&
+    const bool converged = has_energy_history && full_energy_history && !pending_nonlocal_seed &&
+                           !pending_nonlocal_frozen &&
+                           (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2) &&
                            output.energy_change < options.energy_tolerance &&
                            physical.density_change < options.density_tolerance &&
                            physical.residual < std::min(1e-9, options.density_tolerance) &&
@@ -2453,18 +2484,36 @@ struct CudaKsPlan::Impl : KsStateStorage {
         mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
                                       options.max_iterations, physical.maximum_residual);
     const bool enter_nonlocal_target =
-        pending_nonlocal_seed &&
-        (physical.maximum_residual < 1e-9 || nonlocal_seed_iterations >= 16 ||
-         output.iterations + 2 >= options.max_iterations);
-    if (pending_nonlocal_seed) {
+        (pending_nonlocal_seed || pending_nonlocal_frozen) &&
+        (physical.maximum_residual < 1e-9 ||
+         (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >= 16 ||
+         output.iterations + (nonlocal_outer_active ? 20U : 2U) >= options.max_iterations);
+    if (pending_nonlocal_seed || pending_nonlocal_frozen) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.
       output.converged = false;
       is_active = output.iterations < options.max_iterations;
       if (enter_nonlocal_target) {
         nonlocal_seed_stage = false;
+        nonlocal_frozen_stage = false;
+        nonlocal_exact_epoch_iterations = 0;
+        // Leave a bounded ordinary full-target tail if the nested solve stalls.
+        if (output.iterations + 20 >= options.max_iterations) nonlocal_outer_active = false;
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+      }
+    } else if (nonlocal_outer_active && !converged) {
+      output.converged = false;
+      is_active = output.iterations < options.max_iterations;
+      if (physical.maximum_residual < 1e-8 || output.iterations + 20 >= options.max_iterations) {
+        // Close with consecutive fresh physical Focks and the original strict
+        // energy/density/residual gates, never an inner or stale-potential gate.
+        nonlocal_outer_active = false;
+      } else {
+        nonlocal_frozen_stage = true;
+        nonlocal_inner_iterations = 0;
+        // The just-computed target Fock is also the first exact Fock of this
+        // fixed-potential inner problem. Retain that one valid DIIS entry.
       }
     } else if (enter_strict_refinement) {
       // AUTO may use FP32 only as an iterative accelerator. Reset nonlinear
@@ -2564,8 +2613,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // An approximate energy cannot be the baseline of a strict stopping test.
     // The first FP64 observation starts a new energy epoch beside the fresh DIIS.
     const bool new_energy_epoch = enter_strict_refinement || enter_nonlocal_target;
-    previous_energy = new_energy_epoch ? std::numeric_limits<double>::infinity()
-                                      : physical.electronic_energy;
+    previous_energy =
+        new_energy_epoch ? std::numeric_limits<double>::infinity() : physical.electronic_energy;
     previous_energy_correction = new_energy_epoch ? 0.0 : physical.electronic_energy_correction;
     try {
       if (output.converged && complete_precision_inventory_domain()) {
