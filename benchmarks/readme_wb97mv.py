@@ -78,6 +78,125 @@ def configure_reference_full_fock(engine: typing.Any) -> None:
     engine.get_veff = full_veff
 
 
+def _bind_reference_mixed_rsh_df(
+    engine: typing.Any,
+    direct_k: typing.Callable[..., typing.Any],
+    direct_jk_gradient: typing.Callable[..., typing.Any],
+) -> None:
+    """Combine independent full-range DF and exact long-range exchange providers.
+
+    GPU4PySCF's default density_fit() computes both full-range and
+    long-range K through RI. The native WB97M-V DF operator instead uses
+    J_DF + c_SR K_DF(full) + (c_LR-c_SR) K_exact(LR). Match both the SCF
+    potential/energy and its analytic nuclear derivative; changing only the
+    energy oracle would break the stationary force comparison.
+    """
+    fitted_k = engine.get_k
+    fitted_gradient_method = engine.nuc_grad_method
+
+    def mixed_k(
+        mol: typing.Any = None,
+        dm: typing.Any = None,
+        hermi: int = 1,
+        omega: float | None = None,
+        lr_factor: float | None = None,
+        sr_factor: float | None = None,
+    ) -> typing.Any:
+        if omega is None or omega == 0:
+            return fitted_k(
+                mol=mol,
+                dm=dm,
+                hermi=hermi,
+                omega=omega,
+                lr_factor=lr_factor,
+                sr_factor=sr_factor,
+            )
+        if not np.isfinite(omega) or omega <= 0:
+            raise ValueError("matched WB97M-V DF requires positive long-range omega")
+        # Call GPU4PySCF's unbound direct SCF method, not the DF mixin.
+        return direct_k(
+            engine,
+            engine.mol if mol is None else mol,
+            engine.make_rdm1() if dm is None else dm,
+            hermi=hermi,
+            omega=omega,
+            lr_factor=lr_factor,
+            sr_factor=sr_factor,
+        )
+
+    def mixed_gradient_method() -> typing.Any:
+        gradient = fitted_gradient_method()
+        fitted_jk_gradient = gradient.jk_energy_per_atom
+
+        def mixed_jk_gradient(
+            dm: typing.Any = None,
+            j_factor: float = 1,
+            k_factor: float = 1,
+            omega: float = 0,
+            hermi: int = 0,
+            verbose: typing.Any = None,
+        ) -> typing.Any:
+            if omega is not None and omega != 0:
+                if not np.isfinite(omega) or omega <= 0 or j_factor != 0:
+                    raise ValueError("matched WB97M-V DF only permits exact LR K derivatives")
+                # Keep the DF J/full-K and their auxiliary/metric response.
+                # The LR correction has no auxiliary/metric response by design.
+                return direct_jk_gradient(
+                    gradient,
+                    dm=dm,
+                    j_factor=j_factor,
+                    k_factor=k_factor,
+                    omega=omega,
+                    hermi=hermi,
+                    verbose=verbose,
+                )
+            return fitted_jk_gradient(
+                dm=dm,
+                j_factor=j_factor,
+                k_factor=k_factor,
+                omega=omega,
+                hermi=hermi,
+                verbose=verbose,
+            )
+
+        gradient.jk_energy_per_atom = mixed_jk_gradient
+        return gradient
+
+    engine.get_k = mixed_k
+    engine.nuc_grad_method = mixed_gradient_method
+
+
+def configure_reference_mixed_rsh_df(engine: typing.Any) -> None:
+    """Configure the independently evaluated native-equivalent WB97M-V DF oracle.
+
+    Install after density_fit(), on the final engine, and before timing.
+    A default DF-RSH energy or DF-RSH gradient is not a matched reference.
+    """
+    if (
+        str(getattr(engine, "xc", "")).upper().replace("-", "_") != "WB97M_V"
+        or getattr(engine.mol, "spin", None) != 0
+        or getattr(engine, "with_df", None) is None
+        or getattr(engine, "only_dfj", None) is not False
+    ):
+        raise ValueError("mixed WB97M-V reference requires restricted full-J/K DF")
+    omega, alpha, hyb = engine._numint.rsh_and_hybrid_coeff(
+        engine.xc, spin=engine.mol.spin
+    )
+    if (
+        not all(np.isfinite(value) for value in (omega, alpha, hyb))
+        or omega <= 0
+        or alpha <= hyb
+    ):
+        raise ValueError("mixed WB97M-V reference requires full plus long-range K")
+
+    from gpu4pyscf.grad import rhf as direct_gradient
+    from gpu4pyscf.scf import hf as direct_hf
+
+    _bind_reference_mixed_rsh_df(
+        engine, direct_hf.SCF.get_k, direct_gradient.Gradients.jk_energy_per_atom
+    )
+
+
 def reference_engine(
     atoms: typing.Any,
     basis: typing.Any,
