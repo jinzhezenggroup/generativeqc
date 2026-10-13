@@ -55,11 +55,14 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
         )
-    (directory / "publication.json").write_text(json.dumps({"files": files}))
+    (directory / "publication.json").write_text(
+        json.dumps({"schema": "generativeqc.benchmark-publication.v1", "files": files})
+    )
     review = tmp_path / "review.json"
     review.write_text(
         json.dumps(
             {
+                "schema": "generativeqc.legacy-large-evidence-review.v1",
                 "threshold_bytes": 1_000_000,
                 "files": [],
             }
