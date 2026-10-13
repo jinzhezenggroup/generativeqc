@@ -11,6 +11,7 @@ class SplitHybridRecord(TypedDict):
     functional_code: int
     components: tuple[tuple[str, str], ...]
     exact_exchange: str
+    cuda_df_energy_force: bool
 
 
 SPLIT_HYBRIDS: Mapping[str, SplitHybridRecord] = MappingProxyType({
@@ -22,6 +23,7 @@ SPLIT_HYBRIDS: Mapping[str, SplitHybridRecord] = MappingProxyType({
             ("MGGA_C_M06_2X", "1"),
         ),
         "exact_exchange": "27/50",
+        "cuda_df_energy_force": True,
     })),
     "MN15": cast("SplitHybridRecord", MappingProxyType({
         "family": "mgga",
@@ -31,6 +33,7 @@ SPLIT_HYBRIDS: Mapping[str, SplitHybridRecord] = MappingProxyType({
             ("MGGA_C_MN15", "1"),
         ),
         "exact_exchange": "11/25",
+        "cuda_df_energy_force": False,
     })),
 })
 

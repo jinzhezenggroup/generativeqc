@@ -6,6 +6,7 @@ they do not load a native library or claim AUTO numerical qualification.
 
 import ast
 from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
@@ -22,10 +23,12 @@ from generativeqc.ks import (
     cuda_nonlocal_force_basis_eligible,
     ks_coefficients,
     mixed_density_fitted_force_eligible,
+    split_hybrid_df_force_admitted,
 )
 from generativeqc_compiler.method import (
     D4Spec,
     DispersionCorrectionPrimitive,
+    ExactExchangePrimitive,
     compile_ks_execution_plan,
     resolve_bulk_ks,
     resolve_method,
@@ -154,6 +157,7 @@ def _promoted(
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
         "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
+        "split_hybrid_df_force_admitted": split_hybrid_df_force_admitted,
         "SPLIT_HYBRID_SCF_DOMAIN": SPLIT_HYBRID_SCF_DOMAIN,
         "D4Spec": D4Spec,
         "DispersionCorrectionPrimitive": DispersionCorrectionPrimitive,
@@ -296,7 +300,11 @@ def test_density_fitted_force_uses_own_strict_precision_admission(
         density_fitting=True,
         include_semilocal=True,
         device=device,
-    ) is (precision == _native.PRECISION_FP64)
+    ) is (
+        precision == _native.PRECISION_FP64
+        and method != "MN15"
+        and (method != "M06-2X" or device == "cuda")
+    )
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
@@ -424,3 +432,38 @@ def test_automatic_semilocal_promotion_remains_cpu_fp64_only(
         device=device,
         automatic_name=name,
     ) is (device == "cpu" and precision == _native.PRECISION_FP64)
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_split_hybrid_df_source_qualifies_exact_graph_not_method_name(
+    spin: str,
+) -> None:
+    method = resolve_method("M06-2X", spin=spin)
+    renamed = replace(method, identifier="opaque-qualified-split")
+    assert split_hybrid_df_force_admitted(
+        renamed, backend="cuda", xc_schedule="device_fused"
+    )
+    assert not split_hybrid_df_force_admitted(
+        renamed, backend="cpu", xc_schedule="device_fused"
+    )
+    assert not split_hybrid_df_force_admitted(
+        renamed, backend="cuda", xc_schedule="host_unfused"
+    )
+    wrong_fraction = replace(
+        renamed,
+        primitives=tuple(
+            replace(node, coefficient=Fraction(3, 7))
+            if isinstance(node, ExactExchangePrimitive)
+            else node
+            for node in renamed.primitives
+        ),
+    )
+    assert wrong_fraction != renamed
+    assert not split_hybrid_df_force_admitted(
+        wrong_fraction, backend="cuda", xc_schedule="device_fused"
+    )
+    assert not split_hybrid_df_force_admitted(
+        resolve_method("MN15", spin=spin),
+        backend="cuda",
+        xc_schedule="device_fused",
+    )

@@ -21,6 +21,7 @@ from generativeqc import Atom, Calculator, KsOptions
 from generativeqc.ks import (
     cuda_mixed_density_fitted_force_eligible,
     mixed_density_fitted_force_eligible,
+    split_hybrid_df_force_admitted,
 )
 from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.method import (
@@ -145,6 +146,7 @@ def test_public_mixed_df_gate_preserves_owner_boundaries(
         "cuda_nonlocal_force_basis_eligible": cuda_nonlocal_force_basis_eligible,
         "cuda_mixed_density_fitted_force_eligible": cuda_mixed_density_fitted_force_eligible,
         "mixed_density_fitted_force_eligible": mixed_density_fitted_force_eligible,
+        "split_hybrid_df_force_admitted": split_hybrid_df_force_admitted,
     }
     exec(  # noqa: S102 - Only the local repository's public predicate is executed.
         compile(ast.Module(body=[assignment], type_ignores=[]), str(__file__), "exec"),
