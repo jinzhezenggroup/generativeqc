@@ -376,9 +376,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   const auto functional = ks_xc_functional_code(execution_plan);
   const bool cuda_matched_global_hybrid =
       cuda_global_hybrid &&
-      dft::global_hybrid_coefficients_match(
-          fock, functional, execution_plan.spin_channels, options.semilocal_exchange_scale,
-          options.semilocal_correlation_scale) &&
+      dft::global_hybrid_coefficients_match(fock, functional, execution_plan.spin_channels,
+                                            options.semilocal_exchange_scale,
+                                            options.semilocal_correlation_scale) &&
       (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
        dft::cuda_global_hybrid_df_admitted(functional));
   if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&

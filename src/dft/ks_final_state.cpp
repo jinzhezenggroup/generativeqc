@@ -59,11 +59,10 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const bool cuda_primary_exchange =
       fock.backend == scf::FockBackend::Cuda && !model.range_correction &&
       !model.nonlocal_correlation &&
-      (hybrid.present
-           ? cuda_matched_global_hybrid
-           : (!split_hybrid && semilocal_family_has_cuda_ks(family) &&
-              fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
-              fock.spec.exchange.approximation == scf::FockApproximation::Exact));
+      (hybrid.present ? cuda_matched_global_hybrid
+                      : (!split_hybrid && semilocal_family_has_cuda_ks(family) &&
+                         fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
+                         fock.spec.exchange.approximation == scf::FockApproximation::Exact));
   const bool cuda_range_exchange = [&] {
     if (!family_metadata || !family_metadata->native_range_exchange || molecular_nonlocal ||
         fock.backend != scf::FockBackend::Cuda || !model.range_correction ||
@@ -87,8 +86,8 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       automatic_libxc ? automatic_entry.program->domain_version
                       : (split_hybrid ? 4U : semilocal_family_domain_version(family));
   if (model.version != 1 || model.scf_domain_version != expected_domain_version ||
-      (split_hybrid && fock.backend != scf::FockBackend::Cuda) || !model.tile_points || !model.owner ||
-      (model.spins != 1 && model.spins != 2) ||
+      (split_hybrid && fock.backend != scf::FockBackend::Cuda) || !model.tile_points ||
+      !model.owner || (model.spins != 1 && model.spins != 2) ||
       !((fock.backend == scf::FockBackend::Cpu && model.device == -1) ||
         (fock.backend == scf::FockBackend::Cuda && model.device >= 0)) ||
       identity.determinant.occupied.size() != model.spins ||
@@ -124,8 +123,7 @@ bool valid_model(const KsFinalStateIdentity& identity) {
        (model.semilocal_exchange_scale != hybrid.semilocal_exchange_scale ||
         model.semilocal_correlation_scale != hybrid.semilocal_correlation_scale ||
         !fock.spec.exchange.present ||
-        fock.spec.exchange.coefficient !=
-            -hybrid.exact_exchange / (model.spins == 1 ? 2.0 : 1.0) ||
+        fock.spec.exchange.coefficient != -hybrid.exact_exchange / (model.spins == 1 ? 2.0 : 1.0) ||
         (fock.backend == scf::FockBackend::Cuda && !cuda_matched_global_hybrid))))
     return false;
   try {
