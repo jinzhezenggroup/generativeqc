@@ -316,6 +316,17 @@ class CudaKsPlan {
   generativeqc_status read_final_state(const CudaKsFinalStateToken& expected,
                                        bool compute_weighted_density, VerifiedKsFinalState& state,
                                        std::string& detail);
+  /** At an idle force boundary, retire optional SCF ERIs only if the requested
+   * additional device envelope exceeds currently free memory. D/W/XC, the
+   * exact final token and the last-good warm seed remain owned by this plan.
+   * Receipt: requested bytes, free before, free after, retired device bytes.
+   * This is not a reservation: the actual consumer still owns allocation and
+   * budget failure. A conservative upper bound must not reject a smaller fit. */
+  generativeqc_status prepare_force_memory(const CudaKsFinalStateToken& expected,
+                                           std::size_t additional_device_bytes,
+                                           std::array<std::uint64_t, 4>& receipt,
+                                           std::string& detail);
+
   const CudaKsResources& resources() const noexcept;
   /** Optional prepared-operation provenance; null means that the owner did
    * not admit a separate preparation budget. No selection happens here. */

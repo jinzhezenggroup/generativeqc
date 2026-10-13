@@ -1002,6 +1002,35 @@ generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
   }
 }
 
+generativeqc_status generativeqc_ks_snapshot_cuda_prepare_force_memory_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint64_t additional_device_bytes, std::uint64_t* receipt, std::size_t count) {
+  if (!batch || !snapshot || !receipt || count != 4 ||
+      additional_device_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::fill(receipt, receipt + count, 0);
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::array<std::uint64_t, 4> candidate{};
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_prepare_force_memory(
+        *batch->plan, snapshot->index, snapshot->token,
+        static_cast<std::size_t>(additional_device_bytes), candidate, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy(candidate.begin(), candidate.end(), receipt);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_additional_device_bytes_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint64_t* bytes) {
   if (!batch || !snapshot || !bytes) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

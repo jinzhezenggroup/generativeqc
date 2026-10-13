@@ -309,6 +309,53 @@ void solve_parity(const Fixture& fixture, bool b3lyp, const std::string& state_b
               plan.transfers().phase_resident_values_built == built &&
               plan.resources().provider_device_bytes > base_bytes,
           "post-SCF value reuse lost the final density or rebuilt ERIs: " + source_detail);
+  // A force handoff must leave a roomy energy-only lease intact, but reclaim
+  // just the optional source when the next consumer needs more than free VRAM.
+  // Asking for free+1 exercises pressure deterministically without exhausting
+  // the physical device or changing the SCF source-selection policy.
+  std::array<std::uint64_t, 4> memory_receipt{};
+  const auto retained_bytes = plan.resources().provider_device_bytes;
+  const auto retained_host_bytes = plan.resources().retained_host_numeric_bytes;
+  const auto seed_before_handoff = plan.warm_density();
+  require(plan.prepare_force_memory(token, 0, memory_receipt, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              memory_receipt[3] == 0 && plan.resources().provider_device_bytes == retained_bytes,
+          "roomy force handoff retired reusable SCF values");
+  auto stale_token = token;
+  stale_token.version = 0;
+  require(plan.prepare_force_memory(stale_token, memory_receipt[1] + 1, memory_receipt,
+                                    source_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              plan.resources().provider_device_bytes == retained_bytes,
+          "stale force handoff changed SCF ownership");
+  dft::CudaKsResidentStationaryWeightsBinding weights_before, weights_after;
+  dft::KsFinalStateDiagnostic weights_diagnostic;
+  require(
+      plan.prepare_resident_final_stationary_weights(token, weights_before, weights_diagnostic,
+                                                     source_detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "pre-handoff resident D/W proof: " + source_detail);
+  std::size_t free_bytes{}, total_bytes{};
+  cuda_check(cudaMemGetInfo(&free_bytes, &total_bytes));
+  require(plan.prepare_force_memory(token, free_bytes + 1, memory_receipt, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              memory_receipt[3] == retained_bytes - base_bytes && memory_receipt[3] > 0 &&
+              plan.resources().provider_device_bytes == base_bytes &&
+              plan.resources().retained_host_numeric_bytes < retained_host_bytes &&
+              plan.resident_final_density(token, density_after, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              plan.resident_final_stationary_weights(token, weights_after, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              density_after.alpha == density_before.alpha &&
+              weights_after.density == weights_before.density &&
+              weights_after.weighted_density == weights_before.weighted_density &&
+              plan.warm_density() == seed_before_handoff,
+          "pressured force handoff lost state, token or resource accounting: " + source_detail);
+  dft::CudaKsFinalStateToken after_handoff;
+  require(plan.final_state_token(after_handoff, source_detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              after_handoff == token &&
+              plan.prepare_force_memory(token, total_bytes, memory_receipt, source_detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              memory_receipt[3] == 0,
+          "repeat force handoff changed the final token or double-retired values");
   setenv("GENERATIVEQC_KS_RESIDENT_VALUES", "auto", 1);
   const auto warm = plan.run(nullptr, true);
   require(warm.converged && std::abs(warm.energy - baseline.energy) < 2e-9 &&

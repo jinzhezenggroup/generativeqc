@@ -1,0 +1,252 @@
+{
+  "schema": "generativeqc.readme-dft-evidence.v2",
+  "measured_date": "2026-10-13",
+  "source_base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+  "native_source_snapshots": {
+    "1e43ea9f0977fedbc38cd27db4966d8a7675095fa1be691ac148173756d2113c": {
+      "base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+      "production_changes": []
+    },
+    "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16": {
+      "base_commit": "e0ad22036fe83d9bcaed277d0be9a1dbcb453e1c",
+      "production_changes": [
+        "conditional SCF ERI-cache reclamation at force entry"
+      ],
+      "remeasured_points": [
+        {
+          "method": "pbe",
+          "atoms": 12
+        },
+        {
+          "method": "pbe",
+          "atoms": 96
+        },
+        {
+          "method": "pbe0",
+          "atoms": 12
+        },
+        {
+          "method": "pbe0",
+          "atoms": 96
+        },
+        {
+          "method": "b3lyp",
+          "atoms": 12
+        },
+        {
+          "method": "b3lyp",
+          "atoms": 96
+        },
+        {
+          "method": "r2scan",
+          "atoms": 12
+        },
+        {
+          "method": "r2scan",
+          "atoms": 96
+        }
+      ]
+    }
+  },
+  "acceptance": {
+    "native_points": 29,
+    "native_observations": 348,
+    "reference_points": 30,
+    "maximum_energy_error_eh": 2.319211489520967e-11,
+    "maximum_force_error_eh_per_bohr": 9.158790392760352e-11
+  },
+  "files": {
+    "README.md": {
+      "bytes": 21468,
+      "sha256": "719006baf6ab189b43fc009b4ece6e13b30528e5c3ceeed0d45054539960d68b"
+    },
+    "df-cold-warm.svg": {
+      "bytes": 107891,
+      "sha256": "648fb924528ef58b5aafe3c04c14fcc7aefd77530fda7b2766bd663a4d42d445"
+    },
+    "df-summary.json.xz": {
+      "bytes": 139392,
+      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730"
+    },
+    "df-timings.md": {
+      "bytes": 2941,
+      "sha256": "39a17b50327764b44c92cfaaad17246483ae0b9a8b24aef7bf740ec588fde8ac"
+    },
+    "dft-cold-warm.svg": {
+      "bytes": 187516,
+      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada"
+    },
+    "force-memory.json.xz": {
+      "bytes": 37176,
+      "sha256": "3d097f4f410700d971dd15bfc82220d3abdb25038c89548a2e1256060c496fe0"
+    },
+    "reference-replay-audit.json": {
+      "bytes": 19485,
+      "sha256": "7a7250d519c83eb9d3af0d1cfef5bdfd94a929ad1edb4fb30dde2f7d3ec30934"
+    },
+    "source-campaigns.json.xz": {
+      "bytes": 18216,
+      "sha256": "7cc3227266ce5e85e16cbc534558226a7f2de7677d9d3b5c638bdf8bc6e4e59d"
+    },
+    "summary.json.xz": {
+      "bytes": 250780,
+      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01"
+    },
+    "timings.md": {
+      "bytes": 4729,
+      "sha256": "aa16800a863710339c92b7554073d777b2bd521e3ca8e918d11096af2ecff50d"
+    }
+  },
+  "uncompressed_summary": {
+    "bytes": 8944231,
+    "sha256": "2385c58e06574bcc55ba58bc644abbbd935fbbb93ec063b8bf820ac3f6d6a74f"
+  },
+  "original_master_campaign_report_retention": ".artifacts/force-memory-20261013/master-report",
+  "uncompressed_df_summary": {
+    "bytes": 4597504,
+    "sha256": "a84a893e7c51f269e550f9fdbd3fa4b9dde2a3812cafc10ba2a2ae823421e47e"
+  },
+  "force_memory_uncompressed": {
+    "bytes": 946323,
+    "sha256": "007f4b949bd808aaf497161fb26d6da25f0cce85ae530bea796e6957171a97ff"
+  },
+  "df_acceptance": {
+    "native_points": 14,
+    "native_observations": 168,
+    "reference_points": 16,
+    "maximum_energy_error_eh": 8.026290743146092e-11,
+    "maximum_force_error_eh_per_bohr": 1.5564172173299085e-10
+  },
+  "previous_publication": {
+    "git_commit": "c086430567afeac82d087b3da75a4912ffff93d6",
+    "path": "benchmarks/results/readme-dft-20261013",
+    "note": "Original gzip bytes and original master/fixed population records remain recoverable from this existing Git commit."
+  },
+  "hf_df_followup": {
+    "native_source_identity": "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16",
+    "native_library_sha256": "622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9",
+    "production_changes_from_previous_publication": [],
+    "harness": "benchmarks/readme_omol25.py with actual RHF and matched explicit DF support; individual records retain actual source hashes",
+    "native_configuration": "default planner; no packed-B, response-memory, density seed or force-budget overrides",
+    "auxiliary_basis": {
+      "path": "benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json",
+      "sha256": "e2b3b46cc696396d01f3af18adc492cb38c0f086abb28aa977aacb933bbe3871"
+    },
+    "rendering": "Superseded by independent_execution_followup: complete phases retained even when a later phase times out; unknown accuracy is explicit.",
+    "reference_audit": "reference-replay-audit.json; diagnostic only, excluded from timing populations"
+  },
+  "rendering_source_sha256": {
+    "tools/render_readme_dft.py": "3616468b7df195c905870ae0f225bbd4527a217ed4cc6c57b506a8701e7edfa1",
+    "tools/render_omol25_benchmarks.py": "5feb71d99d8d6a30894729beff07ef2d1112d573b93d69bd120df22d0cb0b053"
+  },
+  "source_campaigns": {
+    "path": "source-campaigns.json.xz",
+    "uncompressed_bytes": 119968,
+    "uncompressed_sha256": "dc4c7e83080ff8f201462215e77ad07c4fa6eed6ab2e088cec0e380ee2a69775"
+  },
+  "independent_execution_followup": {
+    "native_source_identity": "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16",
+    "native_library_sha256": "622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9",
+    "production_changes_from_previous_publication": [],
+    "missing_reference_device_validation": {
+      "purpose": "Real-device missing-reference control; excluded from benchmark timings. Post-run independent comparison does not rewrite original null gates.",
+      "native_raw_sha256": "53a9108a99a8a070b62d12be732d398c73ec8db4248145d21c90f161c14f7b34",
+      "reference_sha256": "fd938141b271287e55ce178c92e6509cda26df428be0fe1c99961b11a3929fe7",
+      "native_source_identity": "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16",
+      "native_library_sha256": "622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9",
+      "scheduler": {
+        "SLURM_JOB_ID": "8038",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      },
+      "observations": 12,
+      "maximum_energy_error_eh": 1.0089706847793423e-12,
+      "maximum_force_error_eh_per_bohr": 9.159356606502911e-11,
+      "all_independent_gates": true
+    },
+    "methods": {
+      "wb97m-v": [
+        48,
+        96
+      ]
+    },
+    "measurement_policy": "Run each engine independently. Retain complete cold/moved calls and all requested warm repeats even when a later phase fails; missing accuracy is explicit, never a passing gate.",
+    "reference_policy": "Original reference bytes reused unchanged. Available geometry baselines remain independently checked; missing baselines yield null errors and null accuracy gates.",
+    "direct_phase_acceptance": {
+      "native": {
+        "cold": {
+          "checked": 30,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 30,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 29,
+          "unchecked": 1
+        },
+        "moved-warm": {
+          "checked": 29,
+          "unchecked": 0
+        }
+      },
+      "reference": {
+        "cold": {
+          "checked": 31,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 31,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 30,
+          "unchecked": 0
+        },
+        "moved-warm": {
+          "checked": 30,
+          "unchecked": 0
+        }
+      }
+    },
+    "df_phase_acceptance": {
+      "native": {
+        "cold": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 14,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 14,
+          "unchecked": 0
+        },
+        "moved-warm": {
+          "checked": 14,
+          "unchecked": 0
+        }
+      },
+      "reference": {
+        "cold": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "moved-warm": {
+          "checked": 16,
+          "unchecked": 0
+        }
+      }
+    }
+  }
+}

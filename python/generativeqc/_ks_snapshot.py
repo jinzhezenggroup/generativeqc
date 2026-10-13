@@ -663,6 +663,53 @@ class NativeKsSnapshot:
             atoms=atoms, aos=aos, primitives=primitives
         )
 
+    def cuda_prepare_force_memory(self, additional_device_bytes: int) -> dict[str, int]:
+        """Release optional SCF caches under pressure, preserving this exact token.
+
+        The caller supplies its additional force envelope, excluding already live
+        owners. This is an advisory handoff, not a reservation or a force budget.
+        Older native libraries retain their allocation behavior.
+        """
+        if (
+            type(additional_device_bytes) is not int
+            or not 0 <= additional_device_bytes <= 1 << 40
+        ):
+            raise ValueError(
+                "additional force device bytes must be an integer in [0,2**40]"
+            )
+        self.check_current()
+        prepare = getattr(
+            self._library, "generativeqc_ks_snapshot_cuda_prepare_force_memory_v1", None
+        )
+        if prepare is None:
+            return {}
+        prepare.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.c_uint64,
+            ct.POINTER(ct.c_uint64),
+            ct.c_size_t,
+        ]
+        prepare.restype = ct.c_int
+        receipt = (ct.c_uint64 * 4)()
+        status = prepare(
+            self._batch._batch, self._handle, additional_device_bytes, receipt, 4
+        )
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        return dict(
+            zip(
+                (
+                    "additional_device_bytes",
+                    "free_before_bytes",
+                    "free_after_bytes",
+                    "reclaimed_device_bytes",
+                ),
+                map(int, receipt),
+                strict=True,
+            )
+        )
+
     def cuda_integral_gradient_additional_device_bytes(self) -> int:
         """Dry-query lazy derivative capacity without creating any CUDA owner.
 

@@ -221,17 +221,14 @@
       "owner": "native FP64 cross-size arena complete-endpoint qualification",
       "reason": "Lossless XZ recompression retains the exact original 6,352,916 decoded JSON bytes, including all cold/warm/moved-warm measurements, independent references, source and script receipts, full logs and unfavorable serial-scratch evidence. No observations, policy caps or acceptance decisions change; original and decoded identities are pinned in storage.json.",
       "review_document": "benchmarks/results/native-memory-arena-20261011/README.md"
+    },
+    "readme-dft-20261013": {
+      "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
+      "reason": "Retain all reported scalar observations, per-point actual source identities, independent cold/moved reference vectors, work counts and unsuccessful outcomes. Figures connect complete endpoint medians with work variability retained. Native force vectors remain in ignored raw evidence; retained scalar errors are not relabeled as newly recomputed vector comparisons. No storage-budget exemption.",
+      "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     }
   },
   "files": [
-    {
-      "bytes": 145996,
-      "classification": "required-compact-accepted-evidence",
-      "family": "native-memory-arena-20261011",
-      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
-      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
-      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
-    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -521,6 +518,14 @@
       "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
     },
     {
+      "bytes": 145996,
+      "classification": "required-compact-accepted-evidence",
+      "family": "native-memory-arena-20261011",
+      "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
+      "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
+      "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
+    },
+    {
       "bytes": 148102,
       "classification": "required-compact-accepted-evidence",
       "family": "one-electron-values-rtx5090",
@@ -583,6 +588,30 @@
       "path": "benchmarks/results/pbe0-spd-spatial-reuse-20261011/raw-receipts.json.xz",
       "role": "decision-or-audit-record",
       "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
+      "family": "readme-dft-20261013",
+      "bytes": 139392,
+      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
+      "family": "readme-dft-20261013",
+      "bytes": 187516,
+      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete endpoint chart"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
+      "family": "readme-dft-20261013",
+      "bytes": 250780,
+      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
     },
     {
       "bytes": 230258,

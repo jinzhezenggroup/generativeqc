@@ -263,7 +263,7 @@ def test_prepared_d_shell_execution_selects_component_aot(
 
     with pytest.raises(StopAfterStationaryLoad):
         owner.ensure(
-            state=object(),
+            state=SimpleNamespace(_source=SimpleNamespace()),
             basis=_d_shell_basis(),
             contract=SimpleNamespace(spin=0),
             plan=plan,
