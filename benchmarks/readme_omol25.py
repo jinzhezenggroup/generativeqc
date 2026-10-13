@@ -37,6 +37,7 @@ from benchmarks.compare_gpu4pyscf_batch import (
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_wb97mv import (
     configure_reference_full_fock,
+    configure_reference_mixed_rsh_df,
     reference_engine,
     reference_vv10_domain,
 )
@@ -191,6 +192,18 @@ def protocol(
                         "reference_auxbasis_response": True,
                     }
                     if benchmark.density_fitting
+                    else {}
+                ),
+                **(
+                    {
+                        "reference_rsh_exchange": {
+                            "primary_j": "density-fitted-full-range",
+                            "primary_k": "density-fitted-full-range",
+                            "long_range_correction_k": "exact-direct",
+                            "long_range_correction_gradient": "exact-direct-analytic",
+                        },
+                    }
+                    if benchmark.density_fitting and benchmark.has_vv10
                     else {}
                 ),
                 **(
@@ -748,6 +761,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 # would keep a bound method on the original direct owner.
                 if benchmark.reference_full_fock:
                     configure_reference_full_fock(engine)
+                if benchmark.density_fitting and benchmark.has_vv10:
+                    # The default GPU4PySCF DF-RSH object also fits K_LR,
+                    # unlike native's independently prepared exact LR owner.
+                    # Match both K_LR in SCF and its analytic gradient.
+                    configure_reference_mixed_rsh_df(engine)
                 from gpu4pyscf.dft import libxc
                 from gpu4pyscf.lib import cutensor
 
