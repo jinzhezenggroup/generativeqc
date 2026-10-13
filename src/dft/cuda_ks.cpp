@@ -2303,6 +2303,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       ++nonlocal_seed_iterations;
     else if (device_nonlocal)
       ++nonlocal_exact_iterations;
+    if (device_nonlocal)
+      output.dft_diagnostic.nonlocal_work = {
+          1, nonlocal_seed_iterations, nonlocal_exact_iterations, 0, 0,
+          nonlocal_exact_iterations};
     if (pending_mixed_coulomb || pending_mixed_density)
       ++output.precision.mixed_stage_fock_builds;
     else
@@ -2327,7 +2331,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.electronic_energy, physical.electronic_energy_correction, previous_energy,
         previous_energy_correction);
     output.density_rms = physical.density_rms;
-    const bool first_strict_energy = mixed_precision_executed && refinement_iterations == 1 &&
+    const bool new_target_epoch =
+        (mixed_precision_executed && refinement_iterations == 1) ||
+        (nonlocal_seed_iterations && nonlocal_exact_iterations == 1 && !pending_nonlocal_seed);
+    const bool first_strict_energy = new_target_epoch &&
                                      std::isinf(output.energy_change) && output.energy_change > 0.0;
     const double history_energy_change = first_strict_energy ? -1.0 : output.energy_change;
     diagnostic.history.push_back({output.iterations, diagnostic.components, history_energy_change,
@@ -2397,11 +2404,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
         pending_nonlocal_seed &&
         (physical.maximum_residual < 1e-9 || nonlocal_seed_iterations >= 16 ||
          output.iterations + 2 >= options.max_iterations);
-    if (nonlocal_seed_trace)
-      std::fprintf(stderr,
-                   "VV10_NATIVE_SEED iteration=%u seed=%u exact=%u residual=%.17g\n",
-                   output.iterations, nonlocal_seed_iterations, nonlocal_exact_iterations,
-                   physical.maximum_residual);
     if (pending_nonlocal_seed) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.

@@ -70,6 +70,10 @@ struct ScfDiagnostic {
   IncrementalXcDiagnostic incremental_xc;
   CudaXcAoSelectionWork cuda_ao_selection;
   scf::CoulombExchangeWork coulomb_exchange_work{};
+  /** Private run-local VV10 work receipt: available, provisional Focks, target
+   * Focks, exact-key probes, hits, executed pair sweeps. Zero availability means
+   * these counters were not measured, rather than evidence of zero work. */
+  std::array<std::uint64_t, 6> nonlocal_work{};
   std::vector<ScfIteration> history;
 };
 }  // namespace generativeqc::dft

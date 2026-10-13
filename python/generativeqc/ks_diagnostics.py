@@ -77,6 +77,7 @@ class KsDiagnostic:
     physical_residual_max: float
     history: tuple[KsIteration, ...]
     coulomb_exchange_work: dict[str, typing.Any] | None = None
+    nonlocal_work: dict[str, int] | None = None
 
     def to_payload(self) -> typing.Any:
         """Copy every iteration; known unavailable stage baselines are null.
@@ -224,6 +225,36 @@ def read_ks_diagnostic(
         physical_residual_max=summary.physical_residual_max,
         history=tuple(rows),
         coulomb_exchange_work=_coulomb_exchange_work(library, handle, index),
+        nonlocal_work=_nonlocal_work(library, handle, index),
+    )
+
+
+def _nonlocal_work(
+    library: typing.Any, handle: typing.Any, index: typing.Any
+) -> typing.Any:
+    """Read completed run-local VV10 counters; older libraries remain unavailable."""
+    query = getattr(library, "generativeqc_internal_batch_get_nonlocal_work_v1", None)
+    if index is None or query is None:
+        return None
+    values = (ctypes.c_uint64 * 6)()
+    status = query(handle, index, values, len(values))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    if values[0] != 1:
+        raise ValueError("invalid native nonlocal work availability")
+    return dict(
+        zip(
+            (
+                "provisional_focks",
+                "target_focks",
+                "pair_cache_probes",
+                "pair_cache_hits",
+                "pair_sweeps",
+            ),
+            values[1:],
+            strict=True,
+        )
     )
 
 
