@@ -1,6 +1,6 @@
 # Proposal: exact VV10 force ingredient reuse
 
-Status: automatic candidate; default-route endpoint qualification pending
+Status: automatic route qualified; pending integration
 Date: 2026-10-14
 
 ## Problem
@@ -97,7 +97,7 @@ The candidate now considers exact force reuse automatically for at least 65536
 points, matching the large-domain pair schedule crossover. Snapshot seeding,
 variant, coefficient, schedule and exact-key/error checks still apply.
 Explicit `GENERATIVEQC_VV10_COMPONENT_REUSE=0` disables reuse; `1` admits small
-qualification fixtures too. Default-route endpoint validation is still pending.
+qualification fixtures too. Default-route qualification is recorded below.
 
 Clean frozen source `129d1fa3c` opt-in populations each pass all 12 calls:
 
@@ -118,3 +118,43 @@ The original 1800-second point limit and all independent gates are unchanged.
 Native and all 43 consumer file hashes have been reconstructed from the frozen
 Git tree, available on `codex/benchmark-vv10-reuse-qualified-source-20261014`.
 These opt-in measurements do not relabel the forthcoming automatic source.
+
+
+## Default-route qualification
+
+Frozen integrated source `9aabd59a3a5f0e94ce9fb768646722d45e5da0a6`, library
+`4c7b6ace6f07466af7967c0cc1f4453a7ff09a03c0ebcf13316527105e6779c7`, completes
+all 36 original-default calls on Slurm 8284/8285, with every VV10 selector unset:
+
+| Atoms | Cold with preparation (s) | Warm median (s) | Moved (s) | Moved-warm median (s) |
+| --- | ---: | ---: | ---: | ---: |
+| 3 | 16.330320 | 0.492156 | 4.608717 | 0.491725 |
+| 12 | 42.786122 | 3.010895 | 31.844993 | 3.028606 |
+| 48 | 578.965630 | 39.028821 | 409.380168 | 38.951268 |
+
+Maximum errors are 4.548e-12 Eh / 9.160e-11 Eh/Bohr. Each cold/moved call has
+one force pair sweep; every frozen replay has one exact hit and zero force
+pair sweeps. The 48-atom warm median is 42.4% below the preceding bilateral
+source's 67.707403 s. The original whole-point deadline and numerical gates
+remain unchanged. No native/96 completion is established.
+
+The first 3-atom cold includes 10.811690 s of force preparation. Separate
+fresh-process retained-cache controls (Slurm 8290) give 6.378 s with automatic
+reuse and 6.409 s with explicit opt-out; their warm medians are 0.492 / 0.599 s.
+The first cold observation is retained in publication, not replaced by either
+control. Preparation contains more than compilation, so no isolated JIT cause
+is inferred from these intervals.
+
+The same frozen integration passes 268 scheduled phase/capacity/admission and
+SCF-work cases on n4, six independent complete molecular E/F cases, and 32 cases
+under each of memcheck/synccheck with zero errors. n4 qualification explicitly
+preloads the build's CUDA 12.9.1 user-space runtimes to avoid older optional
+wheel SONAMEs; two failed prerequisite attempts remain retained. Formal timings
+remain on n1 and check the assigned GPU UUID and absence of other compute PIDs.
+
+The measured integration includes default-off SCF experiments and a broader
+feature-only exact-cache guard; those do not activate in these plotted calls.
+Compared with this PR, force arithmetic/ownership is unchanged; the integration
+also retains an unused density-key helper. Native and all 43 consumer hashes
+were reconstructed from the frozen Git source. See #2457 and
+`codex/benchmark-vv10-automatic-source-20261014` for publication/provenance.
