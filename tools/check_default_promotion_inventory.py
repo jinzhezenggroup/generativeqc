@@ -445,9 +445,10 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
         r'initial_guess:\s*InitialGuessSpec\s*\|\s*typing\.Literal\["auto"\]\s*\|\s*None\s*=\s*"auto"',
         calculator,
     ):
-        raise ValueError("initial-guess default drifted from guarded automatic MINAO")
+        raise ValueError("initial-guess default drifted from guarded automatic Huckel")
     result["initial-guess:preliminary-scf"] = calculator_relative.as_posix()
     result["initial-guess:minao-auto"] = calculator_relative.as_posix()
+    result["initial-guess:huckel-auto"] = calculator_relative.as_posix()
 
     progressive_relative = Path("python/generativeqc/progressive.py")
     progressive = _read(root / progressive_relative)
@@ -649,14 +650,13 @@ def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
 
 
 def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
-    """Keep automatic source construction tied to its qualified bounded domain."""
+    """Discover the control; compiled source-policy tests own AO thresholds."""
     policy_relative = Path("src/scf/cuda/direct_jk_source_policy.hpp")
     policy = _read(root / policy_relative)
     required = (
         '!value || std::string_view(value) == "auto"',
         "if (!cold_phase)",
         "maximum_angular != 3 || !generic_fock",
-        "nbf < 64 || direct_nbf < 128",
         "maximum_iterations < 8",
     )
     owner_relative = Path("src/scf/cuda/rhf_resident_values.cpp")

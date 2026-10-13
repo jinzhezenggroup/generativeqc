@@ -3,6 +3,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "scf/solver/final_state.hpp"
 #ifdef GENERATIVEQC_TEST_DEVICE_FINAL_STATE
 #include <cuda_runtime_api.h>
@@ -476,6 +477,23 @@ void provider_failure_and_nonlinear_exhaustion() {
                 result.status == (fault == 1 ? FinalStateStatus::OutOfMemory
                                              : FinalStateStatus::ProviderFailure),
             "invalid physical provider published a state or silently fell back");
+  }
+  for (const auto status : {GENERATIVEQC_STATUS_CUDA_ERROR, GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                            GENERATIVEQC_STATUS_OUT_OF_MEMORY}) {
+    const PhysicalFockOperation typed = [&](const auto&, const auto&) -> PhysicalFockFrame {
+      throw generativeqc::Error(status, "typed provider failure");
+    };
+    const auto result = select_final_state(a.id, a.s, a.h, a.x, a.nuclear, a.d, &a.c, typed,
+                                           a.eigen(), a.limits, true, false, backend);
+    require(!result.state && result.provider_exception && result.fock_evaluations == 1,
+            "typed provider failure lost its original exception or published a state");
+    try {
+      std::rethrow_exception(result.provider_exception);
+    } catch (const generativeqc::Error& error) {
+      require(error.status() == status, "provider failure changed its native status");
+      continue;
+    }
+    require(false, "typed provider failure did not survive selection");
   }
   for (const bool throws : {false, true}) {
     const initial_guess::EigenOperation bad = [&](const auto&, const auto*, const auto*,

@@ -157,14 +157,24 @@ def test_failed_query_does_not_silently_fall_back() -> None:
         _automatic_minao_model_eligible(calc, restricted=True, has_ecp=False)
 
 
+@pytest.mark.parametrize("version,capabilities", [(1, 15), (2, 255)])
 def test_public_calculator_does_not_reselect_native_declined_policy(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, version: int, capabilities: int
 ) -> None:
     library = _native.load_library(device="cpu")
-    if not hasattr(library, "generativeqc_initial_guess_auto_kind_v1"):
+    name = f"generativeqc_initial_guess_auto_kind_v{version}"
+    if not hasattr(library, name):
         pytest.skip("native automatic-policy export required")
     query = PolicyQuery(0)
-    monkeypatch.setattr(library, "generativeqc_initial_guess_auto_kind_v1", query)
+    monkeypatch.setattr(
+        library, "generativeqc_initial_guess_capabilities_v1", lambda: capabilities
+    )
+    monkeypatch.setattr(library, name, query)
+    if version == 2:
+        # The legacy MINAO alternative must also honor its native owner's veto.
+        monkeypatch.setattr(
+            library, "generativeqc_initial_guess_auto_kind_v1", PolicyQuery(0)
+        )
     monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: library)
     calc = Calculator("rhf", "sto-3g", device="cpu")
     assert calc.initial_guess is None
@@ -226,10 +236,16 @@ def test_positive_execution_capability_without_query_is_an_error() -> None:
         _uses_native_automatic_cpu(calc)
 
 
+@pytest.mark.parametrize("version,capabilities", [(1, 15), (2, 255)])
 def test_resource_planner_obeys_native_system_policy(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, version: int, capabilities: int
 ) -> None:
     """An eligible element/population must not override a native Hcore decision."""
+    library = _native.load_library(device="cpu")
+    monkeypatch.setattr(
+        library, "generativeqc_initial_guess_capabilities_v1", lambda: capabilities
+    )
+    monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: library)
     calc = Calculator("rhf", "sto-3g", device="cpu")
     systems = [[("He", (0, 0, 0))]]
     target = calc._base_resource_request(systems, properties=("energy",))
@@ -240,7 +256,7 @@ def test_resource_planner_obeys_native_system_policy(
     )
     query = SystemPolicyQuery(0)
     monkeypatch.setattr(
-        calc._library, "generativeqc_initial_guess_auto_system_kind_v1", query
+        calc._library, f"generativeqc_initial_guess_auto_system_kind_v{version}", query
     )
     request = with_initial_guess_resources(target, calc, systems, [0], [1])
     assert request.candidates == target.candidates

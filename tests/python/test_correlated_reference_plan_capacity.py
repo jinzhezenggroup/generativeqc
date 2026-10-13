@@ -14,7 +14,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _cpp_source_support import cpp_function_declaration, cpp_record_definition
+from _cpp_source_support import (
+    cpp_function_definition_signature,
+    cpp_record_definition,
+)
 from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -83,10 +86,10 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     bucket_header = (ROOT / "src/scf/cuda/rhf_bucket_internal.hpp").read_text()
     owner = cpp_record_definition(bucket_header, "CudaRhfBucketPlan")
-    # Derive the fake driver's complete ABI from the production declaration.
-    # New optional driver arguments must not silently break every host probe.
-    driver_signature = cpp_function_declaration(
-        bucket_header, "execute_hf_cuda_bucket_driver"
+    # Derive the fake driver's complete ABI from its production definition.
+    # The included header checks the ABI and owns any optional-argument defaults.
+    driver_signature = cpp_function_definition_signature(
+        driver, "execute_hf_cuda_bucket_driver"
     )
     fields = re.findall(r"std::vector<[^>]+> (\w+);", topology)
     fields.remove("ecp_systems")

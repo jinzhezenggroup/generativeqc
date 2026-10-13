@@ -501,20 +501,33 @@ def weighted_gram_candidate(
     if schedule not in (
         "occupied-cpu",
         "occupied-cuda",
+        "occupied-scalar-cuda",
         "column-scaled-cpu",
         "checked-pair-cuda",
     ):
         raise ValueError("unqualified weighted Gram schedule")
     backend = "cuda" if schedule.endswith("cuda") else "cpu"
+    if schedule == "occupied-scalar-cuda" and region.weighted:
+        raise ValueError("runtime scalar CUDA schedule admits only plain density")
     if (
-        schedule in ("occupied-cuda", "column-scaled-cpu", "checked-pair-cuda")
+        schedule
+        in (
+            "occupied-cuda",
+            "occupied-scalar-cuda",
+            "column-scaled-cpu",
+            "checked-pair-cuda",
+        )
         and region.coefficients.spec.shape[-2] != region.coefficients.spec.shape[-1]
     ):
         raise ValueError("retained weighted Gram schedule requires square coefficients")
     values = (*region.contraction.inputs, region.contraction)
     # Explicit column-major coefficient views for CPU DGEMM and Gaussian CUDA;
     # the original logical AO/orbital modes never change.
-    column_major = schedule in ("column-scaled-cpu", "occupied-cuda")
+    column_major = schedule in (
+        "column-scaled-cpu",
+        "occupied-cuda",
+        "occupied-scalar-cuda",
+    )
     layouts = []
     for position, value in enumerate(values):
         shape = value.spec.shape
@@ -552,7 +565,7 @@ def weighted_gram_candidate(
     # Occupied-prefix kernels compute the same weight inline, not in a new panel.
     semantics["occupation_representation"] = (
         "occupied-prefix-uniform-scalar"
-        if schedule == "occupied-cpu"
+        if schedule in ("occupied-cpu", "occupied-scalar-cuda")
         else "occupied-prefix-weight-1-or-2"
         if schedule == "occupied-cuda"
         else "explicit-fractional"

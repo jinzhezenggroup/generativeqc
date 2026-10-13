@@ -3,10 +3,43 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
+#include <sstream>
 
 #include "scf/reference/linalg.hpp"
 
 namespace generativeqc::scf::solver {
+bool order_eigenpairs(std::vector<double>& eigenvalues, std::vector<double>& coefficients,
+                      std::size_t dimension) {
+  const auto finite = [](const auto& values) {
+    return std::all_of(values.begin(), values.end(),
+                       [](double value) { return std::isfinite(value); });
+  };
+  if (&eigenvalues == &coefficients || dimension == 0 ||
+      dimension > std::numeric_limits<std::size_t>::max() / dimension ||
+      eigenvalues.size() != dimension || coefficients.size() != dimension * dimension ||
+      !finite(eigenvalues) || !finite(coefficients))
+    return false;
+  if (std::is_sorted(eigenvalues.begin(), eigenvalues.end())) return true;
+  std::vector<std::size_t> order(dimension), destination(dimension);
+  std::iota(order.begin(), order.end(), 0);
+  std::stable_sort(order.begin(), order.end(), [&](std::size_t left, std::size_t right) {
+    return eigenvalues[left] < eigenvalues[right];
+  });
+  for (std::size_t column = 0; column < dimension; ++column) destination[order[column]] = column;
+  // Each swap fixes one original column's destination. Permutation cycles
+  // therefore cost at most n-1 full-column swaps without a second n-by-n frame.
+  for (std::size_t column = 0; column < dimension; ++column)
+    while (destination[column] != column) {
+      const auto other = destination[column];
+      std::swap(eigenvalues[column], eigenvalues[other]);
+      for (std::size_t row = 0; row < dimension; ++row)
+        std::swap(coefficients[row * dimension + column], coefficients[row * dimension + other]);
+      std::swap(destination[column], destination[other]);
+    }
+  return true;
+}
+
 bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<double>* overlap,
                           const std::vector<double>& values,
                           const std::vector<double>& coefficients, std::size_t n,
@@ -16,12 +49,29 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
     return std::all_of(values.begin(), values.end(),
                        [](double value) { return std::isfinite(value); });
   };
-  if (diagnostic.solver_info != 0 || n == 0 || n > std::numeric_limits<std::size_t>::max() / n ||
-      matrix.size() != n * n || coefficients.size() != n * n || values.size() != n ||
-      (overlap && overlap->size() != n * n) || !finite(matrix) || !finite(coefficients) ||
-      !finite(values) || (overlap && !finite(*overlap)) ||
-      !std::is_sorted(values.begin(), values.end())) {
-    detail = "DF eigensolver returned invalid info, shape, finite values or eigenvalue order";
+  if (diagnostic.solver_info != 0) {
+    detail =
+        "DF eigensolver returned nonzero solver info: " + std::to_string(diagnostic.solver_info);
+    return false;
+  }
+  if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n || matrix.size() != n * n ||
+      coefficients.size() != n * n || values.size() != n || (overlap && overlap->size() != n * n)) {
+    detail = "DF eigensolver returned invalid frame dimensions";
+    return false;
+  }
+  if (!finite(matrix) || !finite(coefficients) || !finite(values) ||
+      (overlap && !finite(*overlap))) {
+    detail = "DF eigensolver returned nonfinite frame inputs or outputs";
+    return false;
+  }
+  const auto unordered = std::is_sorted_until(values.begin(), values.end());
+  if (unordered != values.end()) {
+    const auto position = static_cast<std::size_t>(unordered - values.begin());
+    std::ostringstream message;
+    message.precision(std::numeric_limits<double>::max_digits10);
+    message << "DF eigensolver returned unordered eigenvalues at index " << position
+            << ": previous=" << values[position - 1] << ", current=" << values[position];
+    detail = message.str();
     return false;
   }
   // These host matrix checks share elementary products with the oracle,
