@@ -114,6 +114,11 @@ allocation refusal retains exact Direct refinement. Lease construction and
 strict replay work remain part of the endpoint and precision/resource ledgers.
 This does not enable device chunks or graph replay for an AUTO trajectory.
 
+The [optional prepared-owner KS source policy](scf_module_boundaries.md#optional-prepared-owner-ks-values)
+also admits small cold screened s/p/d hybrid sources. This is exact FP64 work reduction,
+not precision lowering, and benefits ordinary FP64 calculations too. The full
+live memory/lifetime guards and explicit disable control remain authoritative.
+
 `benchmarks/dft_mixed_thresholds.py` provides an exploratory, source-matched
 threshold screen using frozen DFT-MP-v1 geometries and grids. It measures public
 energy or complete energy+force calls in fresh processes, retains failures, and

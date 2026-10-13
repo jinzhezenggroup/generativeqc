@@ -1,9 +1,15 @@
 """Preserve native KS admission while deriving curated families from metadata."""
 
+from __future__ import annotations
+
+import re
+import subprocess
 from fractions import Fraction
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 from generativeqc.ks import (
     KsOptions,
     _native_semilocal_code,
@@ -17,6 +23,9 @@ from generativeqc_compiler.method import (
     original_nonlocal_correlation,
     resolve_method,
 )
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
@@ -92,7 +101,9 @@ def test_pure_semilocal_family_does_not_admit_new_nonlocal_contributions(
         ks_coefficients(graph)
 
 
-def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
+def test_cuda_rsh_admission_is_resolved_provider_capability(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     root = Path(__file__).resolve().parents[2]
     # Admission moved, while prepared CUDA provider eligibility stays with the owner.
     source = (
@@ -112,37 +123,148 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
     scaled_gate = options[scaled_begin:scaled_end]
     assert "!execution_plan.range_exchange" in scaled_gate
 
-    helper_begin = source.index("bool cuda_rsh_provider_compatible(")
-    helper_end = source.index("#endif", helper_begin)
-    helper = source[helper_begin:helper_end]
-    for fact in (
-        "provider.strategy()",
-        "prepared_cuda_fock_binding(provider)",
-        "FockBackend::Cuda",
-        "FockApproximation::Exact",
-        "FockOperator::FullRange",
-        "FockOperator::LongRange",
-        "correction_spec.spin == primary_spec.spin",
-        "correction.screening_tolerance == primary.screening_tolerance",
-        "FockApproximation::DensityFitted",
-        "range_provider->strategy() != correction",
-        "range_provider->matches_system(provider.system())",
-        "prepared_cuda_fock_binding(*range_provider)",
-        "range_binding.device_id == primary_binding.device_id",
-        "range_binding.nbf == primary_binding.nbf",
-        "exact_primary && range_provider == nullptr",
-    ):
-        assert fact in helper
-    assert "Wb97mv" not in helper
-    assert "descriptor.method" not in helper
-
-    constructor_begin = source.index("KsPreparedCalculation(")
-    constructor_end = source.index("std::size_t atom_count()", constructor_begin)
-    constructor = source[constructor_begin:constructor_end]
-    assert (
-        "cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())"
-        in constructor
+    helper = cpp_function_definition(source, "cuda_rsh_provider_compatible")
+    # Locate the actual CUDA range admission statement by its inputs, rather
+    # than the scalar facade or its position among unrelated owner methods.
+    guard = re.search(
+        r"if\s*\(backend_\s*==\s*GENERATIVEQC_BACKEND_CUDA\s*&&"
+        r"\s*execution_plan_\.range_exchange\s*&&",
+        source,
     )
+    assert guard is not None
+    admission = source[guard.start() : source.index("#endif", guard.start())]
+    cpp, binary = tmp_path / "admission.cpp", tmp_path / "admission"
+    cpp.write_text(
+        r"""
+#include <cassert>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <optional>
+#include "generativeqc/generativeqc.hpp"
+#include "scf/fock_build.hpp"
+namespace generativeqc::scf {
+// Provider doubles expose only the resolved strategy, prepared device binding
+// and system identity consumed by the actual admission function.
+struct Binding {
+  bool available{true}; int device_id{0}; std::size_t nbf{8};
+  explicit operator bool() const { return available; }
+};
+struct PreparedFockPlan {
+  ResolvedFockBuild resolved;
+  Binding binding;
+  unsigned identity{1};
+  const auto& strategy() const { return resolved; }
+  auto system() const { return identity; }
+  bool matches_system(unsigned other) const { return identity == other; }
+};
+auto prepared_cuda_fock_binding(const PreparedFockPlan& plan) { return plan.binding; }
+}
+namespace scf = generativeqc::scf;
+using MethodError = generativeqc::Error;
+HELPER
+struct Owner {
+  scf::PreparedFockPlan fock_;
+  std::optional<scf::ResolvedFockBuild> range_strategy_;
+  std::unique_ptr<scf::PreparedFockPlan> range_correction_;
+  generativeqc_backend backend_{GENERATIVEQC_BACKEND_CUDA};
+  struct { bool range_exchange{true}; } execution_plan_;
+  bool admits() {
+    try {
+      ADMISSION
+      return true;
+    } catch (const MethodError& error) {
+      assert(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+      return false;
+    }
+  }
+};
+void check(scf::PreparedFockPlan primary, scf::ResolvedFockBuild correction,
+           scf::PreparedFockPlan range, bool has_range, bool expected) {
+  auto* selected = has_range ? &range : nullptr;
+  assert(cuda_rsh_provider_compatible(primary, correction, selected) == expected);
+  Owner owner{primary, correction,
+              has_range ? std::make_unique<scf::PreparedFockPlan>(range) : nullptr};
+  assert(owner.admits() == expected);
+  owner.range_strategy_.reset();
+  assert(!owner.admits());
+  owner.execution_plan_.range_exchange = false;
+  assert(owner.admits());
+}
+int main() {
+  using namespace scf;
+  for (auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+    for (bool fitted : {false, true}) {
+      for (bool exchange : {false, true}) {
+        PreparedFockPlan primary, range;
+        auto& p = primary.resolved;
+        p.backend = FockBackend::Cuda;
+        p.spec.spin = spin; p.spec.derivative_order = 0;
+        p.spec.coulomb.approximation = fitted ? FockApproximation::DensityFitted
+                                            : FockApproximation::Exact;
+        p.spec.exchange.approximation = p.spec.coulomb.approximation;
+        p.spec.exchange.present = exchange;
+        ResolvedFockBuild correction = p;
+        correction.spec.coulomb.present = false;
+        correction.spec.exchange.present = true;
+        correction.spec.exchange.approximation = FockApproximation::Exact;
+        correction.spec.exchange.op = FockOperator::LongRange;
+        correction.spec.exchange.omega = 0.3;
+        range.resolved = correction;
+        check(primary, correction, range, fitted, true);
+        check(primary, correction, range, !fitted, false);
+        for (unsigned fault = 0; fault < 28; ++fault) {
+          auto bad = primary; auto c = correction; auto r = range;
+          switch (fault) {
+            case 0: bad.binding.available = false; break;
+            case 1: bad.resolved.backend = FockBackend::Cpu; break;
+            case 2: bad.resolved.spec.derivative_order = 1; break;
+            case 3: bad.resolved.spec.coulomb.present = false; break;
+            case 4: bad.resolved.spec.coulomb.coefficient = 0.5; break;
+            case 5: bad.resolved.spec.coulomb.op = FockOperator::LongRange; break;
+            case 6: bad.resolved.spec.coulomb.omega = 0.2; break;
+            case 7: c.backend = FockBackend::Cpu; break;
+            case 8: c.spec.spin = spin == FockSpin::Restricted ? FockSpin::Unrestricted
+                                                            : FockSpin::Restricted; break;
+            case 9: c.spec.derivative_order = 1; break;
+            case 10: c.spec.coulomb.present = true; break;
+            case 11: c.spec.exchange.present = false; break;
+            case 12: c.spec.exchange.approximation = FockApproximation::DensityFitted; break;
+            case 13: c.spec.exchange.op = FockOperator::FullRange; break;
+            case 14: c.spec.exchange.omega = 0; break;
+            case 15: c.spec.exchange.omega = -0.1; break;
+            case 16: c.spec.exchange.omega = std::numeric_limits<double>::quiet_NaN(); break;
+            case 17: c.spec.exchange.coefficient = std::numeric_limits<double>::infinity(); break;
+            case 18: c.screening_tolerance *= 2; break;
+            case 19: bad.resolved.spec.coulomb.approximation = FockApproximation::SeminumericalCosx; break;
+            case 20: r.resolved.screening_tolerance *= 2; break;
+            case 21: r.identity = 2; break;
+            case 22: r.binding.available = false; break;
+            case 23: r.binding.device_id = 1; break;
+            case 24: ++r.binding.nbf; break;
+            case 25: bad.resolved.spec.exchange.approximation = fitted
+                       ? FockApproximation::Exact : FockApproximation::DensityFitted; break;
+            case 26: bad.resolved.spec.exchange.op = FockOperator::LongRange; break;
+            case 27: bad.resolved.spec.exchange.omega = 0.2; break;
+          }
+          if (fault < 20 || (fault < 25 && fitted) || (fault >= 25 && exchange))
+            check(bad, c, r, fitted, false);
+        }
+      }
+    }
+  }
+}
+""".replace("HELPER", helper).replace("ADMISSION", admission)
+    )
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=("-std=c++20", f"-I{root / 'include'}", f"-I{root / 'src'}"),
+    )
+    checked = subprocess.run(
+        [str(binary)], check=False, capture_output=True, text=True, timeout=10
+    )
+    assert checked.returncode == 0, checked.stderr
 
 
 @pytest.mark.parametrize(

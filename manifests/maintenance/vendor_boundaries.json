@@ -66,26 +66,6 @@
         "cusolverDnParams": 1
       }
     },
-    "src/scf/cuda/df_gradient_bridge.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
-      "references": {
-        "cublasDgemm": 4,
-        "cublasDgemv": 1
-      }
-    },
-    "src/scf/cuda/df_response_weights.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
-      "references": {
-        "cublasDgeam": 2,
-        "cublasDgemm": 38,
-        "cublasDgemmStridedBatched": 3,
-        "cublasDgemv": 5
-      }
-    },
     "src/scf/cuda/df_scf_library.cpp": {
       "classification": "provider",
       "contract": "src/scf/cuda/df_scf_library.hpp",
@@ -329,21 +309,23 @@
     "src/tensor/cuda_runtime.cuh": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
-      "reason": "TensorIR CUDA provider templates own dense primitives, admitted reductions and provider provenance; scientific generators consume semantic operations.",
+      "reason": "Existing TensorIR CUDA prepared executor and shared borrowed strict-FP64 column-major GEMM/GEMV/GEAM/strided-GEMM provider submissions. Scientific response callers supply semantic views and borrow the existing plan handle/stream; error statuses retain original native provenance for draining cleanup, and CuMetal GEAM capability remains guarded.",
       "references": {
         "cublasCreate": 1,
         "cublasDaxpy": 1,
         "cublasDdot": 1,
         "cublasDestroy": 1,
-        "cublasDgemm": 1,
-        "cublasDgemmStridedBatched": 1,
+        "cublasDgemm": 2,
+        "cublasDgemmStridedBatched": 2,
         "cublasGetVersion": 1,
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 3,
         "cublasSetStream": 1,
         "cublasSetWorkspace": 1,
         "cublasSgemm": 1,
-        "cublasSgemmStridedBatched": 1
+        "cublasSgemmStridedBatched": 1,
+        "cublasDgeam": 2,
+        "cublasDgemv": 1
       }
     },
     "src/tensor/cuda_square_linalg.hpp": {

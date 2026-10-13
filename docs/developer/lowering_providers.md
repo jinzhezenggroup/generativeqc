@@ -525,6 +525,31 @@ algorithm and rank. The shared table exposes these records per variant/slot via
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.
 
+## Retained density and history schedules
+
+Ordinary HF/KS and DF-SCF plain density share the `tensor.weighted_gram`
+recognizer and CUDA emitter. DF binds the `occupied-scalar-cuda` candidate to
+its existing occupied-prefix, column-major eigenframe, runtime occupation
+weight and `size_t` dimensions. No occupation panel, packing or workspace is
+introduced. Exact weights 1 and 2 permit mirrored publication only when the
+DF launch covers the complete domain; arbitrary weights and clipped launches
+retain their original product orientations and write domain. Weighted density
+keeps its separately qualified multiplication order.
+
+`tensor.history_combination` lowers the canonical `diis_extrapolation_program`
+for both CPU pointer-row histories and CUDA indexed element views. Both consume
+one provider-neutral semantic request and retain increasing chronological FP64
+coefficient application. The CUDA runtime supplies a `RingHistoryElement` view
+after history retirement. The solver still decides whether the solve succeeded,
+retains the current Fock on singular failure, and owns output publication and
+active masks. All ordinary CUDA DIIS schedules use this coefficient lowerer;
+Gram-cache selection and its optional work counters remain separate.
+
+These retained schedules allocate no resources, add no launches and introduce
+no library selection or default promotion. Host probes execute the emitted
+arithmetic, including poisoned retired slots and incomplete density launches;
+they do not establish CUDA Graph or complete energy/force endpoint acceptance.
+
 ## Borrowed structured SCF regions
 
 `tensor.structured_scf` defines seven strict-FP64 regions: occupied Gram,

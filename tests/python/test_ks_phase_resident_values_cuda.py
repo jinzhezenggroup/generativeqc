@@ -16,7 +16,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("case", ["water", "methane", "water-spd"])
+@pytest.mark.parametrize("case", ["water", "methane", "water-spd", "water-small-spd"])
 @pytest.mark.parametrize("chunk_width", ["1", "2"])
 @pytest.mark.parametrize("precision", ["fp64", "auto"])
 def test_global_hybrid_phase_source(
@@ -29,7 +29,7 @@ def test_global_hybrid_phase_source(
     pyscf.lib.num_threads(2)
     atoms = (
         [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 1.4, 1.1)), ("H", (0.0, -1.4, 1.1))]
-        if case == "water"
+        if case in ("water", "water-small-spd")
         else [
             ("C", (0.0, 0.0, 0.0)),
             ("H", (1.2, 1.2, 1.2)),
@@ -44,7 +44,8 @@ def test_global_hybrid_phase_source(
         atoms = scaling_cases()["water-24"].atoms
     basis = {
         symbol: pyscf.gto.basis.load(
-            "def2-svp" if case == "water-spd" else "aug-cc-pvtz", symbol
+            "def2-svp" if case in ("water-spd", "water-small-spd") else "aug-cc-pvtz",
+            symbol,
         )
         for symbol in {symbol for symbol, _ in atoms}
     }

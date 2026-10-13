@@ -145,6 +145,8 @@ def test_active_siblings_preserve_parallelism_without_polling(
         "Seed shared Linux CPU ccache (GCC, coverage, Clang, Python)",
         "Pass CI checks",
         "unknown advisory report",
+        "Native C++ CUDA CLI package (sm_120)",
+        "Qualify native C++ CUDA CLI package (sm_120)",
     ],
 )
 def test_optional_failures_never_stop_cli(
@@ -603,9 +605,10 @@ def test_required_sibling_inventory_matches_aggregate_workflow() -> None:
         "cuda-direct-aot",
         "python",
         "native-cli-artifact",
+        "native-cli-qualification",
     }
     names = set()
-    for name in needed - {"native-cli-artifact"}:
+    for name in needed - {"native-cli-artifact", "native-cli-qualification"}:
         body = _job(name)
         if name == "cpu":
             compilers = re.search(r"compiler: \[([^\]]+)\]", body).group(1).split(",")
@@ -633,17 +636,40 @@ def test_partial_rerun_cannot_turn_unqualified_cli_green(
     payload["jobs"][0]["conclusion"] = "failure"
     cli_status = "failure" if _run(monkeypatch, env, payload) else "success"
     assert cli_status == "failure"
-    # The real aggregate includes CLI, permits no failures, and grants no PR or
-    # queue skip exception (also exercised in test_native_cli_workflow.py).
-    assert "native-cli-artifact" in re.search(
+    # The real aggregate includes CLI and permits no failures. The selected
+    # PR/queue branch cannot skip (exercised in test_native_cli_workflow.py).
+    assert "native-cli-qualification" in re.search(
         r"needs: \[([^\]]+)\]", _job("pass")
     ).group(1)
-    assert (
-        "allowed-skips: ${{ github.event_name == 'schedule' && 'native-cli-artifact' || '' }}"
-        in _job("pass")
-    )
     repaired_python_status = "success"
     assert {cli_status, repaired_python_status} != {"success"}
     # If CLI itself reruns, an exact-attempt partial list simply builds normally.
     partial = {"jobs": payload["jobs"][:1], "total_count": 1}
     assert _run(monkeypatch, env, partial) == 0
+
+
+@pytest.mark.parametrize(
+    "selected", ["native-cli-artifact", "native-cli-qualification"]
+)
+def test_cli_branch_records_do_not_hide_a_required_sibling_failure(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], selected: str
+) -> None:
+    payload = _payload()
+    for index, key in enumerate(
+        ("native-cli-artifact", "native-cli-qualification"), 100
+    ):
+        name = re.search(r"^    name: (.+)$", _job(key), re.MULTILINE)[1]
+        payload["jobs"].append(
+            {
+                **payload["jobs"][0],
+                "name": name,
+                "id": index,
+                "status": "in_progress" if key == selected else "completed",
+                "conclusion": None if key == selected else "skipped",
+                "completed_at": None if key == selected else "2026-10-12T22:57:28Z",
+            }
+        )
+    payload["total_count"] = len(payload["jobs"])
+    assert _run(monkeypatch, env, payload) == 0
+    payload["jobs"][0]["conclusion"] = "failure"
+    assert _run(monkeypatch, env, payload) == 1

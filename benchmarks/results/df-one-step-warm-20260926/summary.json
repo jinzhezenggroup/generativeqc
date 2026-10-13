@@ -861,9 +861,12 @@
       "bytes": 54150
     },
     {
-      "path": "references.json",
-      "sha256": "6342a524e0658e1a59394ccd085d5c418bdd0655937b44a5c75f0163e8702814",
-      "bytes": 229005
+      "path": "references.json.gz",
+      "sha256": "baa05ed1f34a69316aacb51c8b951f0d6ab41028f5fe493681808b4c9d509132",
+      "bytes": 35791,
+      "encoding": "gzip",
+      "decoded_bytes": 229005,
+      "decoded_sha256": "6342a524e0658e1a59394ccd085d5c418bdd0655937b44a5c75f0163e8702814"
     },
     {
       "path": "work.json",

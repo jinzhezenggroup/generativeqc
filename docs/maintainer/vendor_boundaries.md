@@ -54,6 +54,23 @@ The prepared DF handle creation/stream/host-pointer setup and release now
 reside in the same shared provider adapter. The plan continues to own stream
 and resource lifetime, disposing dependent bindings before its handle and
 stream; partial setup is drained by the same failure cleanup.
+The DF response evaluator now borrows strict-FP64 column-major tensor views
+from `tensor/cuda_runtime.cuh` for all ordinary/batched GEMM, GEMV and GEAM
+submissions. These operations do not create another handle, select a provider,
+change pointer modes, pack views or introduce stream synchronization. The
+existing native-status exception boundary remains so the response bridge can
+drain on error and preserve allocation versus execution failure. GEAM
+availability is checked *inside* the shared provider layer using the existing
+dependent capability rule; CuMetal retains the established generated gather
+fallback. The same column-major borrowed views now cover four raw/fitted DF response
+projection GEMMs and the final one-vector shard-reduction GEMV in
+`df_gradient_bridge.cu`. It retains original borrowed handle, callback
+ordering, response error propagation and gradient output layout; the gradient
+consumer's former direct-vendor entry is retired.
+
+This is a mechanical retained-provider migration; canonical
+precision/provider co-selection and method-level diagnostic algebra switches
+are still separate #1889/#1890 work.
 
 Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation
