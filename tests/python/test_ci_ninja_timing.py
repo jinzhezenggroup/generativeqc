@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
-import yaml
 
 from tools import report_ci_ninja_timing as timing
 
@@ -231,41 +232,62 @@ def test_summary_write_failure_keeps_stdout_and_does_not_fail(tmp_path: Path) ->
     assert str(tmp_path) not in result.stdout + result.stderr
 
 
-def workflow_steps() -> list[dict]:
-    return yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"][
-        "native-cli-artifact"
-    ]["steps"]
+def workflow_job(workflow: str, name: str) -> str:
+    section = workflow.split(f"\n  {name}:\n", 1)[1]
+    return re.split(r"\n  [A-Za-z0-9_-]+:\n", section, maxsplit=1)[0]
+
+
+def workflow_steps() -> dict[str, str]:
+    # Match the adjacent CI tests: these bounded step fixtures need only the
+    # standard library, not a YAML package absent from hosted Python test jobs.
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    section = workflow_job(workflow, "native-cli-artifact")
+    return {part.splitlines()[0]: part for part in section.split("      - name: ")[1:]}
+
+
+def workflow_script(step: str) -> str:
+    value = step.split("        run: ", 1)[1]
+    if value.startswith("|\n"):
+        return textwrap.dedent(value[2:])
+    if value.startswith(">-\n"):
+        return " ".join(textwrap.dedent(value[3:]).splitlines())
+    return value.strip()
 
 
 def test_workflow_diagnostics_are_bounded_non_gating_and_share_existing_build() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     steps = workflow_steps()
-    names = [step.get("name") for step in steps]
+    names = list(steps)
     assert names.index(BOUNDARY) + 1 == names.index(BUILD)
     assert names.index(BUILD) + 1 == names.index(REPORT)
-    for step in steps:
-        if step.get("name") in (BOUNDARY, REPORT):
-            assert step["continue-on-error"] is True
-            assert step["timeout-minutes"] == 1
-            assert "steps.cli_scope.outputs.tier != 'skip'" in step["if"]
-    reporter = next(step for step in steps if step.get("name") == REPORT)
-    assert "always()" in reporter["if"]
-    assert "steps.native_cli_build.outcome != 'skipped'" in reporter["if"]
-    assert "steps.native_cli_build.outcome != ''" in reporter["if"]
+    for name in (BOUNDARY, REPORT):
+        step = steps[name]
+        assert "\n        continue-on-error: true\n" in step
+        assert "\n        timeout-minutes: 1\n" in step
+        condition = step.split("\n        if: ", 1)[1].splitlines()[0]
+        assert "steps.cli_scope.outputs.tier != 'skip'" in condition
+    reporter = steps[REPORT]
+    condition = reporter.split("\n        if: ", 1)[1].splitlines()[0]
+    assert "always()" in condition
+    assert "steps.native_cli_build.outcome != 'skipped'" in condition
+    assert "steps.native_cli_build.outcome != ''" in condition
     assert (
-        reporter["env"]["FRESH_NINJA_LOG"]
-        == "${{ steps.cli_ninja_boundary.outputs.fresh }}"
+        "\n          FRESH_NINJA_LOG: ${{ steps.cli_ninja_boundary.outputs.fresh }}\n"
+        in reporter
     )
-    build = next(step for step in steps if step.get("name") == BUILD)
-    assert "continue-on-error" not in build
-    assert workflow["jobs"]["native-cli-qualification"]["steps"] == steps
+    assert "continue-on-error:" not in steps[BUILD]
+    producer = workflow_job(workflow, "native-cli-artifact")
+    consumer = workflow_job(workflow, "native-cli-qualification")
+    anchor = re.search(r"^    steps: &([A-Za-z0-9_]+)$", producer, re.MULTILINE)
+    assert anchor is not None
+    assert f"\n    steps: *{anchor[1]}\n" in consumer
 
 
 @pytest.mark.parametrize("exit_code", [0, 23])
 def test_actual_workflow_build_then_report_keeps_build_result(
     tmp_path: Path, exit_code: int
 ) -> None:
-    steps = {step.get("name"): step for step in workflow_steps()}
+    steps = workflow_steps()
     bindir = tmp_path / "bin"
     bindir.mkdir()
     cmake = bindir / "cmake"
@@ -296,7 +318,7 @@ def test_actual_workflow_build_then_report_keeps_build_result(
                 for line in (tmp_path / "output").read_text().splitlines()
                 if line.startswith("fresh=")
             )
-        script = steps[name]["run"].replace(
+        script = workflow_script(steps[name]).replace(
             "python3 tools/report_ci_ninja_timing.py",
             f"{shlex.quote(sys.executable)} {shlex.quote(str(HELPER))}",
         )
