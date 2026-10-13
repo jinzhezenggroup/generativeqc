@@ -122,7 +122,9 @@ def test_native_uks_ragged_replay_move_failed_neighbor_and_stale_state(
             pytest.fail("native UKS replay invoked Python stationary science")
 
         monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden)
-        monkeypatch.setattr(portable, "_native_dft_force_eligible", lambda: False)
+        monkeypatch.setattr(
+            portable, "_native_dft_force_eligible", lambda index=None: False
+        )
         old_state = None
         moved = [np.array([position for _, position in atoms]) for atoms in [H2, ATOMS]]
         moved[0][1] += [0.02, -0.01, 0.03]

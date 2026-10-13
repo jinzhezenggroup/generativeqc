@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "methods/batch_capabilities.hpp"
 #include "methods/method.hpp"
 
@@ -75,11 +77,33 @@ PreparedBatch::PreparedBatch(generativeqc_backend backend, int device) {
 
 std::vector<BatchItemResult> PreparedBatch::execute(const Coordinates& coordinates,
                                                     bool compute_forces) {
+  return execute_request(coordinates, compute_forces, std::nullopt);
+}
+
+std::vector<BatchItemResult> PreparedBatch::execute_selected_forces(
+    const Coordinates& coordinates, std::span<const std::uint8_t> forces) {
+  return execute_request(coordinates, false, forces);
+}
+
+std::vector<BatchItemResult> PreparedBatch::execute_selected_forces_impl(
+    const Coordinates&, std::span<const std::uint8_t>) {
+  throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                    "prepared batch does not support per-item force selection");
+}
+
+std::vector<BatchItemResult> PreparedBatch::execute_request(
+    const Coordinates& coordinates, bool compute_forces,
+    std::optional<std::span<const std::uint8_t>> selected_forces) {
   if (lifecycle_.failed()) reset_execution();
   lifecycle_.begin();
   try {
     invalidate_result();
-    auto results = execute_impl(coordinates, compute_forces);
+    if (selected_forces && (selected_forces->size() != size() ||
+                            std::any_of(selected_forces->begin(), selected_forces->end(),
+                                        [](auto value) { return value > 1; })))
+      throw std::invalid_argument("force selection must contain one boolean per batch item");
+    auto results = selected_forces ? execute_selected_forces_impl(coordinates, *selected_forces)
+                                   : execute_impl(coordinates, compute_forces);
     if (results.size() != size())
       throw std::logic_error("prepared batch returned an incomplete result fleet");
     // A completed ragged dispatch is not a claim that every item succeeded.
