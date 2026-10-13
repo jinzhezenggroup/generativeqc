@@ -145,11 +145,12 @@ RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::
                                         bool retain_df_response, bool df_matrix_gemm,
                                         void*, std::size_t batch_limit, bool derived_denominators, bool packed_diis,
                                         std::optional<bool> ccsd_mixed_precision,
-                                        double ccsd_mixed_switch_residual, bool df_mp2_mode) {
+                                        double ccsd_mixed_switch_residual, bool df_mp2_mode, bool df_reference) {
   assert(packed_diis == expected_packed);
   assert(ccsd_mixed_precision == expected_ccsd_mixed);
   assert(ccsd_mixed_switch_residual == expected_ccsd_switch);
   assert(df_mp2_mode == expected_demand.mp2);
+  assert(df_reference == expected_demand.df_reference);
   if (group_defaults) {
     assert(retain_df_response == expected_forces);
     assert(df_matrix_gemm && derived_denominators && batch_limit == 32);
@@ -196,6 +197,7 @@ assert(lambda_resident_krylov == expected_resident_krylov);
 assert(lambda_primal_matrix == (physical_replay == nullptr));
 assert(demand.mp2 == expected_demand.mp2);
 assert(demand.companions == expected_demand.companions);
+assert(demand.df_reference == expected_demand.df_reference);
 if (group_defaults) {
   assert(forces == expected_forces && with_triples == !expected_demand.mp2);
   assert(df_auxiliary_reduction && lambda_matrix_gemm && lambda_batch_limit == 32);
@@ -226,6 +228,7 @@ int main() {
                                expected_serial_scratch, expected_ccsd_mixed, expected_lambda_mixed, expected_resident_krylov,
                                expected_ccsd_switch, expected_demand);
   };
+  for (bool fitted : {false, true})
   for (bool mp2 : {false, true})
   for (unsigned companions : {0U, 1U})
   for (bool mixed_lambda : {false, true})
@@ -238,7 +241,7 @@ int main() {
   for (bool selected_packed : {false, true})
   for (bool parallel_gap : {false, true})
   for (bool gap_cotangents : {false, true}) {
-  expected_demand = {mp2, companions};
+  expected_demand = {mp2, companions, fitted};
   using generativeqc::runtime::PrecisionDtype;
   expected_w = mixed_w
       ? runtime::PrecisionDirective{PrecisionDtype::Fp32, PrecisionDtype::Fp32,
@@ -265,7 +268,7 @@ int main() {
     reset();
     phase = p;
     auto r = call();
-    assert(preparations == 1 && r.primal.reference_seconds == 0.125 &&
+    assert(preparations == 1 && r.primal.reference_seconds == (fitted ? 0.0 : 0.125) &&
            r.reference_guess.density.capacity() == 0);
     assert(calls == 2 && late_calls == 2 && drains == 2 && live == 0 && clears == 1 &&
            cache.retained == 0 && r.recycling_discarded_primal_attempt && r.semantic_work == 13 &&
@@ -390,11 +393,12 @@ int main() {
   expected_gap_cotangents = false;
   expected_w = {};
   expected_lambda_interval = 30;
+  for (bool fitted : {false, true})
   for (bool mp2 : {false, true})
   for (unsigned companions : {0U, 1U, 2U, 3U})
   for (bool forces : {false, true}) {
     if (mp2 && (companions & 2U)) continue;
-    expected_demand = {mp2, companions};
+    expected_demand = {mp2, companions, fitted};
     expected_forces = forces;
     calls = drains = clears = late_calls = preparations = 0;
     failure = 0;
@@ -402,7 +406,7 @@ int main() {
     const auto result = run_df_correlation_group_native(
         execution, system, auxiliary, descriptor, forces, expected_demand);
     assert(calls == 1 && drains == 1 && late_calls == 1 && live == 0 && clears == 0);
-    assert(preparations == 1 && result.primal.reference_seconds == 0.125 &&
+    assert(preparations == 1 && result.primal.reference_seconds == (fitted ? 0.0 : 0.125) &&
            !result.recycling_discarded_primal_attempt);
   }
   puts(
