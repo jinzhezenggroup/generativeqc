@@ -93,6 +93,19 @@ acceptance or parent #783 closure is claimed. Reconstruction patches, checksums,
 per-source numeric rows and the negative default comparison are retained under
 `benchmarks/results/shared-streamed-reductions-20261013/`.
 
+The exact-head review then exposed an emitter bookkeeping gap: an unrelated
+1,200-node virtual chain is legal outside the paths actually inlined around
+caches, but recursive reachability overflowed Python's stack. An unrelated
+diamond also made the root-access discovery repeat paths exponentially.
+The tested repair provided by `njzjz-bot` computes reachability topologically
+and visits only reachable, previously unseen root-access nodes. Preserve this
+implementation contribution when selecting a genuinely independent reviewer.
+Host verification passed 252/20 skips; 15 before/after ordinary/resident
+fixture pairs retain source bytes, partitions and identities. A separate new
+H200 source-bound suite passed 23 tests and repeated representative (T) oracle,
+replay/recovery, PTXAS and lifecycle checks. These results belong to the repair
+snapshot in `reach-repair-records.json.gz`, not the earlier recorded source.
+
 ## Revisit when
 
 Source-matched device measurements justify different subgroup bounds or a

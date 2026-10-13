@@ -43,10 +43,22 @@
       "sha256": "7b1de304071559eb1e8bc7ae9f7bcc12eb62800d43a184ae20f76edea00ba54a"
     },
     {
-      "bytes": 5645,
+      "bytes": 5870,
       "path": "evidence.json",
       "role": "evidence",
-      "sha256": "7607d31a0b9d8b152e989b09198f9dbebe1f56a7ff3d115b7e00ea5450748084"
+      "sha256": "871aff2c430034a51f14b9efbe5246a49c8503f4858f5f60346c44e64eea4871"
+    },
+    {
+      "bytes": 11243,
+      "path": "reach-repair-records.json.gz",
+      "role": "samples",
+      "sha256": "a5b210981d881b5b0a33338e88d2babc767c3577da71fdc5fc1eb79f56e51ccc"
+    },
+    {
+      "bytes": 1588,
+      "path": "reach-repair.patch.gz",
+      "role": "source-patch",
+      "sha256": "1d8e1c0c469125573e3e678f68dfef346f7158c883ece76c70eac5a608c50273"
     }
   ],
   "reproduction": {

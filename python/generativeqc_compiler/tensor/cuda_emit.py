@@ -8,7 +8,6 @@ including general einsums and denominators, executes on the allocated GPU.
 from __future__ import annotations
 
 import typing
-from functools import cache
 from math import prod
 
 from .cuda_dtype import scalar_type
@@ -636,20 +635,23 @@ def _shared_streamed_kernel(plan: TensorPlan, group: typing.Any, prefix: str) ->
             index
         ].node.op in ("cast", "reshape")
 
-    @cache
-    def reaches_shared(index: int) -> bool:
-        if index in shared:
-            return True
-        return (
-            plan.steps[index].virtual
-            and preserved(index)
-            and any(reaches_shared(child) for child in plan.steps[index].inputs)
+    # The graph is topological. Unrelated branches may be arbitrarily deep,
+    # even though the paths actually inlined around a cache are bounded.
+    reaches_shared: list[bool] = []
+    for index, step in enumerate(plan.steps):
+        reaches_shared.append(
+            index in shared
+            or (
+                step.virtual
+                and preserved(index)
+                and any(reaches_shared[child] for child in step.inputs)
+            )
         )
 
     def local_read(child: int, index: str, namespace: str = "") -> str:
         if child in shared:
             return f"shared_{child}"
-        if reaches_shared(child):
+        if reaches_shared[child]:
             ty = scalar_type(plan.steps[child].node.spec.dtype).ctype
             body = _value(plan, child, namespace, read=local_read)
             return f"([&](I z) -> {ty} {{ {body} }})({index})"
@@ -657,8 +659,12 @@ def _shared_streamed_kernel(plan: TensorPlan, group: typing.Any, prefix: str) ->
 
     def root_read(child: int, index: str, namespace: str = "") -> str:
         pending = [child]
+        seen: set[int] = set()
         while pending:
             current = pending.pop()
+            if current in seen or not reaches_shared[current]:
+                continue
+            seen.add(current)
             if current in shared:
                 indices.setdefault(current, index)
             if plan.steps[current].virtual and preserved(current):

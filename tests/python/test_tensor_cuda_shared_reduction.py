@@ -156,6 +156,37 @@ def test_recursive_scalar_expansion_has_finite_fallback() -> None:
     assert plan.executable_reduction_groups == ()
 
 
+@pytest.mark.parametrize("diamond", [False, True])
+def test_deep_unshared_branch_preserves_shared_emission(diamond: bool) -> None:
+    from generativeqc_compiler.tensor.cuda_emit import emit_cuda
+    from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
+
+    axes = (
+        Index("q", IndexSpace("q", "batch", 7)),
+        Index("k", IndexSpace("k", "batch", 64)),
+    )
+    a, b, c = (
+        input_tensor(name, TensorSpec(axes, role="input")) for name in ("a", "b", "c")
+    )
+    shared = multiply(a, b)
+    unrelated = c
+    for _ in range(1200):
+        unrelated = multiply(unrelated, unrelated if diamond else c)
+    program = Program(
+        {
+            "left": reduce_sum(add(unrelated, shared), (1,)),
+            "right": reduce_sum(multiply(shared, a), (1,)),
+        }
+    )
+    baseline, candidate = shared_plan(program, False), shared_plan(program)
+    assert candidate.executable_reduction_groups
+    assert candidate.program.logical_hash == baseline.program.logical_hash
+    assert candidate.arena_bytes == baseline.arena_bytes
+    for plan in (baseline, candidate):
+        assert emit_cuda(plan)
+        assert resident_source(plan)
+
+
 @pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_TENSOR_CUDA_TEST") != "1",
     reason="requires explicitly allocated GPU",
