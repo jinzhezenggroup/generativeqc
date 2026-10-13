@@ -8,6 +8,6 @@ generativeqc_status validate_df_rccsdt_system(generativeqc_method, const core::S
                                               std::string&);
 std::unique_ptr<PreparedCalculation> prepare_df_rccsdt_calculation(
     const Capabilities&, core::ContextState&, const core::System&,
-    const generativeqc_method_descriptor&);
+    const generativeqc_method_descriptor&, const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods::detail

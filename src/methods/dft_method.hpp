@@ -207,13 +207,15 @@ generativeqc_status read_dft_final_state(PreparedBatch& batch, std::size_t index
 
 std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor);
+    const generativeqc_method_descriptor& descriptor,
+    const core::System* auxiliary_basis = nullptr);
 
 std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilities,
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags);
+                                                 generativeqc_batch_flags flags,
+                                                 const core::System* auxiliary_basis = nullptr);
 
 }  // namespace generativeqc::methods::detail
 

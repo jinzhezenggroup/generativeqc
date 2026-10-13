@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"

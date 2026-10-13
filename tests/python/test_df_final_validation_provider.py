@@ -153,15 +153,18 @@ int main(int argc, char** argv) {
     catch (const std::bad_alloc&) { oom=true; }
     assert(oom && drained == 2 && submitted == 0);
   } else {
-    // Preserve the original runtime_error mapping, including ALLOC_FAILED.
+    // Preserve terminal native status through the shared submission owner.
     for (int failure : {3, 7, 13, 14}) {
       vendor_failure = failure;
       bool rejected=false;
       try {
         Drain drain{stream};
         gemm(plan,a.data(),b.data(),c.data(),transpose_left,transpose_right,rank,expected_scale);
-      } catch (const std::runtime_error& error) {
-        rejected = std::string(error.what()) ==
+      } catch (const std::bad_alloc&) {
+        rejected = failure == CUBLAS_STATUS_ALLOC_FAILED;
+      } catch (const generativeqc::Error& error) {
+        rejected = failure != CUBLAS_STATUS_ALLOC_FAILED &&
+            error.status() == GENERATIVEQC_STATUS_CUDA_ERROR && std::string(error.what()) ==
             "cuBLAS final-validation product failed: " + std::to_string(failure);
       }
       assert(rejected);

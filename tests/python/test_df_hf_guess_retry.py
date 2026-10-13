@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 _SHIM = r"""
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -20,6 +21,8 @@ _SHIM = r"""
 #include <string>
 #include <vector>
 #include "methods/df_hf_guess.hpp"
+#include "generativeqc/generativeqc.hpp"
+#include "runtime/resource_usage.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/density_fitting.hpp"
 #include "molecule/basis.hpp"
@@ -41,6 +44,7 @@ void number(const char*,auto){}
 void label(const char*,const char*){}
 }
 namespace initial_guess {
+using PreliminaryDiagnostic=scf::initial_guess::PreliminaryDiagnostic;
 struct OverlapOrthogonalizer {};
 Matrix prepare_overlap_orthogonalizer(const core::System&,const Matrix&,std::size_t,OverlapOrthogonalizer*,int){return {1.0};}
 }
@@ -53,6 +57,12 @@ using CudaDensityFittingPlanPtr=std::shared_ptr<int>;
 CudaDensityFittingPlanPtr make_cuda_density_fitting_plan(const DensityFittingScfData&,const ScfOptions&,int,std::size_t,bool,void*,const core::System*,const core::System*){return std::make_shared<int>(0);}
 int df_setup_eigen(int*){return 0;}
 int df_initial_orbital_request(){return 0;}
+std::size_t cuda_density_fitting_seed_host_numeric_bytes(int*) {return 0;}
+std::size_t df_seed_retained_capacity(const DensityFittingScfData&) {return 0;}
+std::optional<Matrix> prepare_df_huckel_density(const core::System&,const DensityFittingScfData&,
+    const ScfOptions&,const Matrix*,initial_guess::PreliminaryDiagnostic&,int,std::size_t) {
+  return std::nullopt;
+}
 Matrix prepare_initial_density(const core::System&,const auto&,const Matrix&,std::size_t,const Matrix*,std::optional<EigenResult>&,int,int){return {1.0};}
 void discard_density_fitting_tensor_storage(DensityFittingScfData&){}
 struct CudaDensityFittingDeviceScfItem {bool converged{};unsigned iterations{};double energy{},energy_change{},density_rms{};};

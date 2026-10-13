@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "scf/df_response_weights.hpp"
 
 namespace generativeqc::scf {
@@ -13,7 +14,7 @@ void require(bool condition, const char* detail) {
 void checked(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
-  if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) throw generativeqc::Error(status, detail);
 }
 }  // namespace
 

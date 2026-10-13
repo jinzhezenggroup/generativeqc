@@ -11,7 +11,6 @@
 #include <optional>
 #include <utility>
 
-#include "api/handles.hpp"
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_spd_force_policy.hpp"
@@ -165,10 +164,13 @@ void add_transfers(dft::CudaKsTransfers& target, const dft::CudaKsTransfers& val
 /** Own auxiliary shells and rebind centers when a batch item moves. The source
  * owner copies the result, so descriptor/temporary system lifetimes never leak
  * into a prepared calculation. An omitted auxiliary basis means the orbital basis. */
-std::optional<core::System> ks_auxiliary_template(
-    const generativeqc_method_descriptor& descriptor) {
+std::optional<core::System> ks_auxiliary_template(const generativeqc_method_descriptor& descriptor,
+                                                  const core::System* native_auxiliary) {
   if (!descriptor.density_fitting_auxiliary_basis) return std::nullopt;
-  return descriptor.density_fitting_auxiliary_basis->data;
+  if (native_auxiliary == nullptr)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "auxiliary basis must be resolved at the API boundary");
+  return *native_auxiliary;
 }
 
 void validate_ks_auxiliary_geometry(const core::System& system,
@@ -534,6 +536,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return density;
     } catch (const std::bad_alloc&) {
       throw;
+    } catch (const generativeqc::Error& error) {
+      if (error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+      diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::PreparationFailed;
+      diagnostic.work_counters_complete = false;
+      diagnostic.preparation_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return std::nullopt;
     } catch (const std::exception&) {
       diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::PreparationFailed;
       diagnostic.work_counters_complete = false;
@@ -2744,7 +2753,8 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
                                                   core::ContextState& context,
                                                   std::vector<core::System> systems,
                                                   const generativeqc_method_descriptor& descriptor,
-                                                  generativeqc_batch_flags flags) {
+                                                  generativeqc_batch_flags flags,
+                                                  const core::System* auxiliary_basis) {
   if ((flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "KS batches support warm starts but not HF-specific profiling flags");
@@ -2763,13 +2773,13 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(const Capabilities& capabiliti
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT ECP density fitting is not qualified");
   }
-  if (!systems.empty())
-    validate_ks_auxiliary_geometry(systems.front(), ks_auxiliary_template(descriptor));
+  const auto auxiliary = ks_auxiliary_template(descriptor, auxiliary_basis);
+  if (!systems.empty()) validate_ks_auxiliary_geometry(systems.front(), auxiliary);
   auto grid = ks_grid_options(descriptor, options, execution_plan);
   return std::make_unique<KsPreparedBatch>(
       capabilities, std::move(systems), execution_plan, std::move(options), std::move(grid),
       context.requested_backend, context.device_id,
-      (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0, ks_auxiliary_template(descriptor));
+      (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0, auxiliary);
 }
 
 /** Single-system ABI/SDK view of the same native scheduler used by Python.
@@ -2831,11 +2841,11 @@ class KsPreparedCalculation final : public PreparedCalculation, public KsSingleO
 
 std::unique_ptr<PreparedCalculation> prepare_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
   // Retained native calculations historically reuse their last good density.
   // Python singlepoint remains cold by constructing a fresh owner per call.
   auto owner = prepare_ks_batch(capabilities, context, {system}, descriptor,
-                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, auxiliary_basis);
   return std::make_unique<KsPreparedCalculation>(capabilities, system.atoms.size(),
                                                  context.requested_backend, context.device_id,
                                                  std::move(owner));
@@ -2845,8 +2855,10 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
                                                  core::ContextState& context,
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
-                                                 generativeqc_batch_flags flags) {
-  return prepare_ks_batch(capabilities, context, std::move(systems), descriptor, flags);
+                                                 generativeqc_batch_flags flags,
+                                                 const core::System* auxiliary_basis) {
+  return prepare_ks_batch(capabilities, context, std::move(systems), descriptor, flags,
+                          auxiliary_basis);
 }
 
 }  // namespace generativeqc::methods::detail
