@@ -268,11 +268,10 @@ struct ColumnGemmView {
   int output_ld{};
 };
 inline cublasStatus_t submit_column_gemm(const ColumnGemmView& view) {
-  return cublasDgemm(
-      view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
-      view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows, view.columns,
-      view.reduction, view.alpha, view.left, view.left_ld, view.right, view.right_ld,
-      view.beta, view.output, view.output_ld);
+  return cublasDgemm(view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                     view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows, view.columns,
+                     view.reduction, view.alpha, view.left, view.left_ld, view.right, view.right_ld,
+                     view.beta, view.output, view.output_ld);
 }
 
 struct ColumnBatchedGemmView {
@@ -293,12 +292,12 @@ struct ColumnBatchedGemmView {
   int batches{};
 };
 inline cublasStatus_t submit_column_batched_gemm(const ColumnBatchedGemmView& view) {
-  return cublasDgemmStridedBatched(
-      view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
-      view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows, view.columns,
-      view.reduction, view.alpha, view.left, view.left_ld, view.left_batch_stride,
-      view.right, view.right_ld, view.right_batch_stride, view.beta, view.output,
-      view.output_ld, view.output_batch_stride, view.batches);
+  return cublasDgemmStridedBatched(view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                                   view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows,
+                                   view.columns, view.reduction, view.alpha, view.left,
+                                   view.left_ld, view.left_batch_stride, view.right, view.right_ld,
+                                   view.right_batch_stride, view.beta, view.output, view.output_ld,
+                                   view.output_batch_stride, view.batches);
 }
 
 struct ColumnGemvView {
@@ -315,20 +314,19 @@ struct ColumnGemvView {
   int output_stride{};
 };
 inline cublasStatus_t submit_column_gemv(const ColumnGemvView& view) {
-  return cublasDgemv(view.handle, view.transpose ? CUBLAS_OP_T : CUBLAS_OP_N,
-                     view.rows, view.columns, view.alpha, view.matrix, view.ld,
-                     view.input, view.input_stride, view.beta, view.output,
-                     view.output_stride);
+  return cublasDgemv(view.handle, view.transpose ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows,
+                     view.columns, view.alpha, view.matrix, view.ld, view.input, view.input_stride,
+                     view.beta, view.output, view.output_stride);
 }
 
 // Some CUDA-compatible runtimes intentionally omit GEAM. Keep the original
 // dependent capability test within the provider, so the scientific owner can
 // retain its generated transpose fallback without spelling a vendor API.
 template <class Handle>
-inline constexpr bool column_geam_available = requires(Handle handle, int m, int n,
-                                                       const double* a, double* output) {
-  cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, a, a, n, a, a, n, output, m);
-};
+inline constexpr bool column_geam_available =
+    requires(Handle handle, int m, int n, const double* a, double* output) {
+      cublasDgeam(handle, CUBLAS_OP_T, CUBLAS_OP_T, m, n, a, a, n, a, a, n, output, m);
+    };
 
 template <class Handle>
 struct ColumnGeamView {
@@ -347,9 +345,9 @@ struct ColumnGeamView {
 template <class Handle>
 inline cublasStatus_t submit_column_geam(const ColumnGeamView<Handle>& view) {
   return cublasDgeam(view.handle, view.transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
-                     view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N,
-                     view.rows, view.columns, view.alpha, view.left, view.left_ld,
-                     view.beta, view.right, view.right_ld, view.output, view.output_ld);
+                     view.transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, view.rows, view.columns,
+                     view.alpha, view.left, view.left_ld, view.beta, view.right, view.right_ld,
+                     view.output, view.output_ld);
 }
 
 // Row-major C = op(A) op(B) is column-major C^T = op(B)^T op(A)^T.

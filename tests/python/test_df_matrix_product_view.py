@@ -50,7 +50,9 @@ def product_probe(
     for name in ("ColumnGemmView", "ColumnBatchedGemmView", "ColumnGemvView"):
         response_bodies.append(cpp_record_definition(tensor, name) + ";")
     response_bodies.append(
-        "template <class Handle>\n" + cpp_record_definition(tensor, "ColumnGeamView") + ";"
+        "template <class Handle>\n"
+        + cpp_record_definition(tensor, "ColumnGeamView")
+        + ";"
     )
     for name in (
         "submit_column_gemm",

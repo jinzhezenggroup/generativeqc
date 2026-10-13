@@ -104,8 +104,8 @@ cublasStatus_t cublasDgemmStridedBatched(cublasHandle_t handle, cublasOperation_
 }
 
 cublasStatus_t cublasDgemv(cublasHandle_t handle, cublasOperation_t trans, int m, int n,
-                           const double* alpha, const double* a, int lda, const double* x,
-                           int incx, const double* beta, double* y, int incy) {
+                           const double* alpha, const double* a, int lda, const double* x, int incx,
+                           const double* beta, double* y, int incy) {
   handle->submitted = true;
   if (handle->result != CUBLAS_STATUS_SUCCESS) return handle->result;
   for (int out = 0; out < (trans == CUBLAS_OP_T ? n : m); ++out) {
@@ -117,9 +117,9 @@ cublasStatus_t cublasDgemv(cublasHandle_t handle, cublasOperation_t trans, int m
   return CUBLAS_STATUS_SUCCESS;
 }
 
-cublasStatus_t cublasDgeam(cublasHandle_t handle, cublasOperation_t ta, cublasOperation_t tb,
-                           int m, int n, const double* alpha, const double* a, int lda,
-                           const double* beta, const double* b, int ldb, double* c, int ldc) {
+cublasStatus_t cublasDgeam(cublasHandle_t handle, cublasOperation_t ta, cublasOperation_t tb, int m,
+                           int n, const double* alpha, const double* a, int lda, const double* beta,
+                           const double* b, int ldb, double* c, int ldc) {
   handle->submitted = true;
   if (handle->result != CUBLAS_STATUS_SUCCESS) return handle->result;
   for (int j = 0; j < n; ++j)
@@ -135,8 +135,8 @@ struct CudaDensityFittingJkPlan {
   cublasHandle_t blas;
   cudaStream_t stream;
 };
-#include "df_matrix_product.inc"
 #include "borrowed_response_ops.inc"
+#include "df_matrix_product.inc"
 
 namespace {
 constexpr double sentinel = -987654;
@@ -512,45 +512,41 @@ void borrowed_response(cublasHandle_t handle) {
   double c[6]{};
   const double one = 1.0, zero = 0.0;
   handle->submitted = false;
-  assert(generativeqc_tensor::submit_column_gemm(
-             {handle, false, false, 2, 3, 2, &one, a, 2, b, 2, &zero, c, 2}) ==
-         CUBLAS_STATUS_SUCCESS);
+  assert(generativeqc_tensor::submit_column_gemm({handle, false, false, 2, 3, 2, &one, a, 2, b, 2,
+                                                  &zero, c, 2}) == CUBLAS_STATUS_SUCCESS);
   assert(handle->submitted);
   for (int j = 0; j < 3; ++j)
-    for (int i = 0; i < 2; ++i)
-      assert(c[i + j * 2] == a[i] * b[j * 2] + a[i + 2] * b[1 + j * 2]);
+    for (int i = 0; i < 2; ++i) assert(c[i + j * 2] == a[i] * b[j * 2] + a[i + 2] * b[1 + j * 2]);
 
   double y[6] = {7, sentinel, 8, sentinel, 9, sentinel};
   double x[2] = {2, 3};
   const double half = 0.5;
   assert(generativeqc_tensor::submit_column_gemv(
-             {handle, true, 2, 3, &one, a, 2, x, 1, &half, y, 2}) ==
-         CUBLAS_STATUS_SUCCESS);
+             {handle, true, 2, 3, &one, a, 2, x, 1, &half, y, 2}) == CUBLAS_STATUS_SUCCESS);
   assert(y[0] == 8 + half * 7 && y[2] == 18 + half * 8 && y[4] == 28 + half * 9);
   assert(y[1] == sentinel && y[3] == sentinel && y[5] == sentinel);
 
   double transpose[6]{};
-  assert(generativeqc_tensor::submit_column_geam(
-             generativeqc_tensor::ColumnGeamView<cublasHandle_t>{
-                 handle, true, true, 3, 2, &one, a, 2, &zero, a, 2, transpose, 3}) ==
-         CUBLAS_STATUS_SUCCESS);
+  assert(
+      generativeqc_tensor::submit_column_geam(generativeqc_tensor::ColumnGeamView<cublasHandle_t>{
+          handle, true, true, 3, 2, &one, a, 2, &zero, a, 2, transpose, 3}) ==
+      CUBLAS_STATUS_SUCCESS);
   for (int j = 0; j < 2; ++j)
     for (int i = 0; i < 3; ++i) assert(transpose[i + j * 3] == a[j + i * 2]);
 
   double alpha[] = {1, 0, 0, 1}, right[] = {2, 3, 4, 5, 6, 7, 8, 9};
   double output[8]{};
-  assert(generativeqc_tensor::submit_column_batched_gemm(
-             {handle, false, false, 2, 2, 2, &one, alpha, 2, 0, right, 2, 4,
-              &zero, output, 2, 4, 2}) == CUBLAS_STATUS_SUCCESS);
+  assert(generativeqc_tensor::submit_column_batched_gemm({handle, false, false, 2, 2, 2, &one,
+                                                          alpha, 2, 0, right, 2, 4, &zero, output,
+                                                          2, 4, 2}) == CUBLAS_STATUS_SUCCESS);
   for (int i = 0; i < 8; ++i) assert(output[i] == right[i]);
 
   handle->result = CUBLAS_STATUS_EXECUTION_FAILED;
   assert(generativeqc_tensor::submit_column_gemm(
              {handle, false, false, 2, 2, 2, &one, a, 2, b, 2, &zero, output, 2}) ==
          CUBLAS_STATUS_EXECUTION_FAILED);
-  assert(generativeqc_tensor::submit_column_gemv(
-             {handle, false, 2, 2, &one, a, 2, x, 1, &zero, y, 1}) ==
-         CUBLAS_STATUS_EXECUTION_FAILED);
+  assert(generativeqc_tensor::submit_column_gemv({handle, false, 2, 2, &one, a, 2, x, 1, &zero, y,
+                                                  1}) == CUBLAS_STATUS_EXECUTION_FAILED);
   handle->result = CUBLAS_STATUS_SUCCESS;
 }
 
