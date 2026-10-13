@@ -492,7 +492,7 @@ int main() {
   if (resolve_method_owned_df_resident_budget(
           wide_explicit,1088,3712,0,100ULL<<20,true) != wide_explicit) return 29;
   const auto tight_wide = resolve_df_budget(
-      {1088,3712,96,1,0,true},{24ULL<<30,32ULL<<30,true},0);
+      {1088,3712,96,1,0,true},{23ULL<<30,32ULL<<30,true},0);
   if (resolve_method_owned_df_resident_budget(
           tight_wide,1088,3712,0,100ULL<<20,true) != tight_wide) return 30;
   // Persistent force arenas/modules reduce observed free memory on a moved

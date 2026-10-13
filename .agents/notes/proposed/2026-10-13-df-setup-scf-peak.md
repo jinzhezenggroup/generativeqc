@@ -65,7 +65,7 @@ byte admission to select the smallest sufficient value allowance, adds the
 complete shape-derived response floor, and publishes the final total. This is
 a deliberate increase of the automatic target for that crossover, not a change
 to an explicit caller cap, solver workspace bound, physical-memory observation,
-SCF stopping rule or benchmark deadline. A 24-GiB-free control retains streaming;
+SCF stopping rule or benchmark deadline. A 23-GiB-free control retains streaming;
 a 29-GiB-free rebuild admits B while preserving the absolute headroom. Failure
 to fit the minimum resident plan leaves the original bounded fallback.
 
