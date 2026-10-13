@@ -79,6 +79,7 @@ void launch(size_t n, const double* x, const uint64_t* indices,
       const generated::ParallelPairOutputs output{out,out+n,out+2*n,out+3*n,out+6*n,error};
       generated::parallel_pair_initialize<Geometry><<<(n+127)/128,128>>>(input,output);
       generated::parallel_pair_kernel<Geometry><<<8,128>>>(input,output);
+      generated::parallel_pair_zero_rows<<<8,128>>>(input,output);
       generated::parallel_pair_finalize<Geometry><<<(n+127)/128,128>>>(input,output);
     } else {
       pair_kernel_ordered<Vv10Variant::vv10,true,Geometry,Mask,true>

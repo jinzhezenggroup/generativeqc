@@ -4,7 +4,7 @@ Native owners admit the numerical domain, exclusive output leases and stream.
 The CUDA templates only schedule/reduce those already generated pair outputs.
 """
 
-VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-fp64-v1"
+VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-zero-warp-fp64-v2"
 
 
 def native_parallel_pair_cuda() -> str:
@@ -132,6 +132,45 @@ __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutpu
   }
 }
 
+// Positive-zero rows still have observable feature/weight response. A warp
+// owns each such row and reduces the compact nonzero partners in FP64. The
+// decision is uniform within a warp; inactive lanes contribute zero. These
+// rows never receive bilateral atomics, so the row owner writes each sum once.
+// Work remains Z*N, but neighboring lanes now load neighboring partner slots.
+
+__global__ void parallel_pair_zero_rows(ParallelPairInputs input, ParallelPairOutputs output) {
+  if (*input.rejected != 0) return;
+  const unsigned lane = threadIdx.x % 32;
+  const size_t warp = (size_t(blockIdx.x) * blockDim.x + threadIdx.x) / 32;
+  const size_t stride = size_t(gridDim.x) * blockDim.x / 32;
+  for (size_t row = warp; row < input.point_count; row += stride) {
+    const double factor = input.weighted_density[row];
+    if (factor != 0.0 || signbit(factor)) continue;
+    double phi = 0.0, w = 0.0, k = 0.0;
+    for (std::uint64_t slot = lane; slot < *input.active_count; slot += 32) {
+      const auto j = input.indices[slot];
+      const double dx = input.points[3 * j] - input.points[3 * row];
+      const double dy = input.points[3 * j + 1] - input.points[3 * row + 1];
+      const double dz = input.points[3 * j + 2] - input.points[3 * row + 2];
+      const auto p =
+          pair_values_vv10_admitted<false>(dx * dx + dy * dy + dz * dz, input.omega[row],
+                                           input.omega[j], input.kappa[row], input.kappa[j]);
+      const double partner = input.weighted_density[j];
+      phi += partner * p.phi;
+      w += partner * p.dphi_domega;
+      k += partner * p.dphi_dkappa;
+    }
+    phi = parallel_pair_warp_sum(phi);
+    w = parallel_pair_warp_sum(w);
+    k = parallel_pair_warp_sum(k);
+    if (lane == 0) {
+      output.energy_terms[row] = phi;
+      output.vrho[row] = w;
+      output.vsigma[row] = k;
+    }
+  }
+}
+
 template <bool Geometry>
 __global__ void parallel_pair_finalize(ParallelPairInputs input, ParallelPairOutputs output) {
   if (*input.rejected != 0) return;
@@ -140,24 +179,6 @@ __global__ void parallel_pair_finalize(ParallelPairInputs input, ParallelPairOut
   const double factor = input.weighted_density[row];
   if (factor == 0.0 && signbit(factor)) return;
   double phi = output.energy_terms[row], w = output.vrho[row], k = output.vsigma[row];
-  // Positive-zero integration weights have observable feature/weight response,
-  // but exert no back reaction on nonzero partners. Evaluate these rows once
-  // against the compact nonzero list; they are absent from bilateral atomics.
-  // The density-screened negative-zero domain returned above remains excluded.
-  if (factor == 0.0) {
-    for (std::uint64_t slot = 0; slot < *input.active_count; ++slot) {
-      const auto j = input.indices[slot];
-      const double dx = input.points[3*j] - input.points[3*row];
-      const double dy = input.points[3*j+1] - input.points[3*row+1];
-      const double dz = input.points[3*j+2] - input.points[3*row+2];
-      const auto pair = pair_values_vv10_admitted<false>(
-          dx*dx+dy*dy+dz*dz, input.omega[row], input.omega[j], input.kappa[row], input.kappa[j]);
-      const double partner = input.weighted_density[j];
-      phi += partner * pair.phi;
-      w += partner * pair.dphi_domega;
-      k += partner * pair.dphi_dkappa;
-    }
-  }
   const double rho = input.density[row];
   output.energy_terms[row] = input.coefficient * factor * (input.beta + 0.5 * phi);
   row_feature_values(phi, w, k, rho, input.domega_drho[row], input.domega_dsigma[row],

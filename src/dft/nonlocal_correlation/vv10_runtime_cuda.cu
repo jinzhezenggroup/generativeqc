@@ -341,7 +341,7 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
       if (bounds_rejected != nullptr) {
         if (parallel_pairs) {
           // Admission bounds npoint to 2^32, below this launch's row capacity.
-          // All three kernels borrow only expired output slots on this stream.
+          // All four kernels borrow only expired output slots on this stream.
           const generated::ParallelPairInputs input{layout.point_count,
                                                     points,
                                                     density,
@@ -362,6 +362,8 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
               <<<blocks, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           generated::parallel_pair_kernel<Geometry><<<680, threads, 0, stream>>>(input, output);
+          runtime::cuda_resource_check(cudaGetLastError());
+          generated::parallel_pair_zero_rows<<<680, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           generated::parallel_pair_finalize<Geometry>
               <<<blocks, threads, 0, stream>>>(input, output);
