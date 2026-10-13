@@ -460,16 +460,49 @@ jobs:
         id: trusted_cuda_ccache_download
         if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache.outputs.run_id != ''
         continue-on-error: true
+        # The downloader's inactivity timeout does not bound a slow transfer.
+        # Leave the required compile budget available and try actions/cache next.
+        timeout-minutes: 2
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: cuda-ccache-master-12.9-sm120-v3
-          path: ~/.cache/ccache
+          # Extraction precedes digest validation. Never expose partial files to
+          # ccache or overwrite the normal fallback cache on failure/timeout.
+          path: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          digest-mismatch: error
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
+      - name: Activate verified trusted CUDA ccache snapshot
+        id: trusted_cuda_ccache_activate
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_DIR: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          test -d "$TRUSTED_CUDA_CCACHE_DIR"
+          # Select the completed cache without copying several GB a second time.
+          printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_DIR" >> "$GITHUB_ENV"
+      - name: Discard incomplete trusted CUDA cache download
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_DIR: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          # Remove only this attempted download, never the normal/selected cache.
+          expected="${RUNNER_TEMP:?}/trusted-cuda-ccache-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
+          if [[ "${TRUSTED_CUDA_CCACHE_DIR:-}" != "$expected" || "${CCACHE_DIR:-}" == "$expected" ]]; then
+            echo "::warning::Refusing to remove an unexpected or selected cache path."
+            exit 1
+          fi
+          rm -rf -- "$expected"
       - name: Restore shared Linux CUDA ccache
         id: cuda_ccache
-        if: github.event_name != 'merge_group' || steps.trusted_cuda_ccache_download.outcome != 'success'
+        if: github.event_name != 'merge_group' || steps.trusted_cuda_ccache_activate.outcome != 'success'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
