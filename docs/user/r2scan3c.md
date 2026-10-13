@@ -12,12 +12,32 @@ a different method identity. The first supported element domain is Z=1..18.
 
 | Path | Energy | Forces | Batch/replay | Notes |
 | --- | --- | --- | --- | --- |
-| CPU RKS/UKS | yes | not promoted | yes | exact canonical basis; D4 and gCP are explicit components |
-| CUDA RKS/UKS | yes | gated | yes | s/p force uses packaged AOT; all-electron s/p/d force uses bounded JIT when NVCC is available; gCP remains a disclosed CPU component |
+| CPU RKS/UKS, direct | yes | not promoted | yes | exact canonical basis; D4 and gCP are explicit components |
+| CPU RKS/UKS, DF | yes | gated | yes | complete electronic DF response plus separately checked D4 and gCP gradients; bounded CPU force domain |
+| CUDA RKS/UKS, direct | yes | gated | yes | s/p force uses packaged AOT; all-electron s/p/d force uses bounded JIT when NVCC is available |
+| CUDA RKS/UKS, DF | yes | gated | yes | electronic DF response including auxiliary and metric; D4 and CPU gCP remain explicit, separately timed components |
 
 method_capabilities() intentionally reports the conservative backend-neutral
 surface (energy plus batch support). Force availability is resolved by
 Calculator after the device, basis, and stationary-gradient domain are known.
+
+For density fitting, the canonical r2SCAN-3c MethodIR retains the same pinned
+def2-mTZVPP orbital basis, D4(BJ)-EEQ-ATM and gCP parameters. Its complete
+electronic DF force uses the selected auxiliary basis and differentiates both
+three-center integrals and the fitting metric, as well as the full moving grid.
+The D4 and gCP geometry derivatives are evaluated exactly once by the separate
+correction owner and added after the electronic response. This composite is
+admitted only where the electronic backend has a prepared analytic force owner;
+other D4/DF compositions are not promoted by this exception. The CPU consumer's
+8-atom, 64-AO and 128-primitive limits still apply, and CUDA's native
+per-item resource and generated derivative domain remain authoritative.
+
+Real-device qualification for the canonical DF endpoint (including changed
+geometry, translation and an independent reference) is in
+`tests/python/test_r2scan3c_execution.py` and the source-matched
+`benchmarks/run_readme_dft_benchmarks.sh` harness from #2401. CPU or ordinary
+CI without a scheduler-allocated CUDA device does not establish CUDA
+performance or force qualification.
 
 Production total energy is assembled once as E_r2SCAN + E_D4 + E_gCP.
 Where forces are admitted, the corresponding force is

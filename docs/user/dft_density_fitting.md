@@ -37,6 +37,15 @@ continue to differentiate the same auxiliary basis and Coulomb metric used by
 the energy, including auxiliary-center and metric response. This interface does not change
 the selected functional or grid.
 
+The canonical r2SCAN-3c composite has a separate DF force-composition
+admission: its versioned def2-mTZVPP basis is fixed, the fitted r2SCAN
+electronic response retains auxiliary/metric and moving-grid derivatives, and
+its D4+gCP force/energy corrections remain separate and counted once.
+Other external-correction DF MethodIRs stay energy-only until their complete
+derivative compositions are qualified. This does not admit ECP or unsupported
+auxiliary/basis domains, nor does admission alone establish a successful
+source-matched independent CUDA qualification.
+
 The CUDA mixed force planner dry-queries the native LR derivative capacity under the
 live final-state token before AO/Becke tile admission. It charges that independent
 owner alongside the complete nonlocal/grid inventory, with the same conservative

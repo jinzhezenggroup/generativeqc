@@ -75,7 +75,7 @@ def pyscf_energy(
         ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
-        cart=True,
+        cart=calc._representation_name == "cartesian",
         spin=multiplicity - 1,
         verbose=0,
     )
@@ -129,7 +129,7 @@ def pyscf_energy_gradient(
         ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
-        cart=True,
+        cart=calc._representation_name == "cartesian",
         spin=multiplicity - 1,
         verbose=0,
     )
