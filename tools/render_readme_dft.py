@@ -1,6 +1,7 @@
-"""Publish independently gated cold/warm DFT endpoints from retained evidence.
+"""Publish independently executed cold/warm DFT endpoints from retained evidence.
 
-Only complete, accurate runs become plotted timings. Raw arrays remain in the
+Only complete phase populations become timings; unchecked accuracy is explicit.
+Raw arrays remain in the
 ignored run directory; the compact archive keeps work counts, residuals,
 independent cold/moved oracles, errors and hashes of every original record.
 """
@@ -33,10 +34,23 @@ COLORS = {"native": "#087e8b", "reference": "#cf5c36"}
 
 
 def phase_rows(entry: dict[str, Any], phase: str) -> list[dict[str, Any]]:
-    """Failed or partial endpoints never supply timings to the figure or table."""
-    if entry["status"] != "measured":
+    """Keep complete phase populations, independently of the other engine.
+
+    The raw reducer certifies phase completeness and separates checked results
+    from unchecked completion. Legacy reductions retain their original gates.
+    """
+    status = entry.get("phase_status", {}).get(phase, entry["status"])
+    if status not in ("measured", "completed_unchecked"):
         return []
     return [row for row in entry["records"] if row["phase"] == phase]
+
+
+def phase_unchecked(entry: dict[str, Any], phase: str) -> bool:
+    """Unknown accuracy is a visible property of the phase, not a failed gate."""
+    return (
+        entry.get("phase_status", {}).get(phase, entry["status"])
+        == "completed_unchecked"
+    )
 
 
 def stable_work(rows: list[dict[str, Any]]) -> bool:
@@ -58,9 +72,10 @@ def timing_cell(entry: dict[str, Any], phase: str) -> str:
     if not rows:
         return entry["status"].replace("_", " ")
     values = [row["complete_seconds"] for row in rows]
+    unchecked = "‡" if phase_unchecked(entry, phase) else ""
     if not stable_work(rows):
-        return f"{median(values):.3f} [{min(values):.3f}–{max(values):.3f}]†"
-    return f"{median(values):.3f}"
+        return f"{median(values):.3f} [{min(values):.3f}–{max(values):.3f}]†{unchecked}"
+    return f"{median(values):.3f}{unchecked}"
 
 
 def work_cell(entry: dict[str, Any], phase: str) -> str:
@@ -80,7 +95,7 @@ def work_cell(entry: dict[str, Any], phase: str) -> str:
 
 def collect_point(directory: Path, size: int) -> dict[str, Any]:
     """Retain complete endpoint medians and correct the provenance sampling label."""
-    point = collect(directory, size, schema=SCHEMA)
+    point = collect(directory, size, schema=SCHEMA, independent_engines=True)
     for entry in point["engines"].values():
         # Slurm can terminate the whole runner before its per-point timeout
         # writes an outcome. Preserve the observed signal exit, not a fake 124.
@@ -145,6 +160,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         for engine, color in COLORS.items():
             for phase, style in (("cold", "--"), ("warm", "-")):
                 xs, ys, lows, highs = [], [], [], []
+                unchecked = []
                 for point in points:
                     rows = phase_rows(point["engines"][engine], phase)
                     x = point["atoms"]
@@ -163,17 +179,28 @@ def render(summary: dict[str, Any], destination: Path) -> None:
                     ys.append(center)
                     lows.append(low)
                     highs.append(high)
+                    unchecked.append(phase_unchecked(point["engines"][engine], phase))
                 ax.errorbar(
                     xs,
                     ys,
                     yerr=[lows, highs],
                     color=color,
                     linestyle=style,
-                    marker="o" if phase == "warm" else "s",
-                    markersize=4,
                     linewidth=1.7,
                     capsize=3,
                 )
+                for x, y, pending in zip(xs, ys, unchecked, strict=True):
+                    if math.isfinite(y):
+                        ax.plot(
+                            x,
+                            y,
+                            linestyle="none",
+                            marker="o" if phase == "warm" else "s",
+                            markersize=4,
+                            markeredgecolor=color,
+                            markerfacecolor="white" if pending else color,
+                            zorder=4,
+                        )
         basis = (
             "def2-mTZVPP · includes D4 + gCP" if method == "r2scan-3c" else "def2-SVP"
         )
@@ -187,13 +214,14 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         ax.spines[["top", "right"]].set_visible(False)
         missing = []
         for engine, label in (
-            ("native", "Native not qualified"),
-            ("reference", "Reference incomplete"),
+            ("native", "Native sequence incomplete"),
+            ("reference", "Reference sequence incomplete"),
         ):
             sizes = [
                 str(point["atoms"])
                 for point in points
-                if point["engines"][engine]["status"] != "measured"
+                if point["engines"][engine]["status"]
+                not in ("measured", "completed_unchecked")
             ]
             if sizes:
                 missing.append(f"{label}: {', '.join(sizes)} atoms")
@@ -232,10 +260,29 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         for engine, label in (("native", "GenerativeQC"), ("reference", "GPU4PySCF"))
         for phase, style, marker in (("cold", "--", "s"), ("warm", "-", "o"))
     ]
+    has_unchecked = any(
+        phase_unchecked(point["engines"][engine], phase)
+        for points in summary["methods"].values()
+        for point in points
+        for engine in COLORS
+        for phase in ("cold", "warm")
+    )
+    if has_unchecked:
+        legend.append(
+            Line2D(
+                [],
+                [],
+                color="gray",
+                linestyle="none",
+                marker="o",
+                markerfacecolor="white",
+                label="Accuracy unchecked",
+            )
+        )
     fig.legend(
         handles=legend,
         loc="upper center",
-        ncol=4,
+        ncol=len(legend),
         frameon=False,
         bbox_to_anchor=(0.5, 1.0),
     )
@@ -244,7 +291,7 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         0.5,
         0.018,
         f"{route} · lower is faster · warm: median of 5 fixed-density replays · bars: min–max · crosses: varying SCF work\n"
-        f"Cold includes preparation. {composite_note}Failed/incomplete points remain gaps.",
+        f"Cold includes preparation. {composite_note}Complete phases shown independently; open markers: accuracy unchecked.",
         ha="center",
         fontsize=9,
     )
@@ -279,6 +326,8 @@ def render(summary: dict[str, Any], destination: Path) -> None:
         "",
         "Warm cells show the median of all five complete endpoints. † marks differing",
         "SCF work and includes the full range; timings are never normalized by iterations.",
+        "‡ marks completed native calls without an independent accuracy check for that geometry.",
+        "A later timeout does not discard completed phases; incomplete warm repeat sets are not plotted.",
         *([composite_note.strip()] if composite_note else []),
         "",
         "## Observed SCF work",

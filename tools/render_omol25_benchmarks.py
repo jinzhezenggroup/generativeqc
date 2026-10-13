@@ -16,7 +16,13 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
-from benchmarks.readme_omol25 import SCHEMA, SIZES, check_record
+from benchmarks.readme_omol25 import (
+    SCHEMA,
+    SIZES,
+    check_record,
+    complete_execution,
+    reference_baselines,
+)
 
 
 def digest(path: Path) -> str:
@@ -60,7 +66,85 @@ def validate(
             raise ValueError("independent energy/force acceptance failed")
 
 
-def collect(directory: Path, atoms: int, *, schema: str = SCHEMA) -> dict[str, Any]:
+def independent_phase_status(
+    raw: dict[str, Any],
+    reference: dict[str, Any] | None,
+    *,
+    atoms: int,
+    schema: str,
+) -> dict[str, str]:
+    """Validate complete phase populations independently of later timeouts.
+
+    A cold/moved phase needs one call; a warm phase needs every requested repeat.
+    Available geometry oracles are rechecked from raw force arrays. Missing
+    oracles permit completion evidence, but can never establish accuracy.
+    """
+    if raw.get("schema") != schema or (
+        reference is not None and reference.get("schema") != schema
+    ):
+        raise ValueError("endpoint timing schema mismatch")
+    scientific = raw["protocol"]
+    if scientific.get("force_return") != "host_array_in_timed_endpoint":
+        raise ValueError("force host export is not part of the recorded endpoint")
+    if scientific.get("atoms") != atoms:
+        raise ValueError("endpoint atom count differs from the requested point")
+    baselines = reference_baselines(reference, scientific, allow_missing=True)
+    repeats = scientific["repeats"]
+    required = {
+        (phase, geometry, repeat)
+        for phase, geometry, count in (
+            ("cold", 0, 1),
+            ("warm", 0, repeats),
+            ("moved", 1, 1),
+            ("moved-warm", 1, repeats),
+        )
+        for repeat in range(count)
+    }
+    seen = set()
+    checks: dict[str, list[str]] = {
+        phase: [] for phase in ("cold", "warm", "moved", "moved-warm")
+    }
+    for row in raw["records"]:
+        key = (row["phase"], row["geometry"], row["repeat"])
+        if key not in required or key in seen:
+            raise ValueError("duplicate or mislabeled endpoint")
+        seen.add(key)
+        if not complete_execution(row, atoms):
+            status = "failed"
+        elif (baseline := baselines.get(row["geometry"])) is not None:
+            status = (
+                "measured"
+                if check_record(row, baseline)["gate"] and row.get("gate") is True
+                else "failed"
+            )
+        else:
+            if row.get("gate") is not None:
+                raise ValueError("accuracy gate has no independent geometry reference")
+            status = (
+                "completed_unchecked" if row.get("execution_gate") is True else "failed"
+            )
+        checks[row["phase"]].append(status)
+    result = {}
+    for phase, values in checks.items():
+        count = repeats if phase in ("warm", "moved-warm") else 1
+        if "failed" in values:
+            result[phase] = "failed"
+        elif len(values) != count:
+            result[phase] = "incomplete"
+        else:
+            result[phase] = (
+                "completed_unchecked" if "completed_unchecked" in values else "measured"
+            )
+    return result
+
+
+def collect(
+    directory: Path,
+    atoms: int,
+    *,
+    schema: str = SCHEMA,
+    independent_engines: bool = False,
+) -> dict[str, Any]:
     """Preserve failures independently of the other engine's successful result."""
     point: dict[str, Any] = {"atoms": atoms, "engines": {}}
     reference_path = directory / str(atoms) / "reference.json"
@@ -122,17 +206,52 @@ def collect(directory: Path, atoms: int, *, schema: str = SCHEMA) -> dict[str, A
             for row in raw["records"]
         ]
         completed = (
-            raw["status"] == "measured"
+            raw["status"] in ("measured", "completed_unchecked")
             and outcome is not None
             and outcome["exit_code"] == 0
         )
-        if completed:
-            if reference is None or reference["status"] != "measured":
-                raise ValueError("measured point has no complete independent reference")
-            if engine == "native" and raw["reference_sha256"] != digest(reference_path):
+        if independent_engines:
+            # Bind even a partial oracle: later files cannot silently requalify
+            # an unchecked run or change which reference generated its gates.
+            if engine == "native" and raw.get("reference_sha256") != (
+                digest(reference_path) if reference is not None else None
+            ):
                 raise ValueError("native run used a different independent reference")
-            validate(raw, reference, schema=schema)
-            entry["status"] = "measured"
+            entry["phase_status"] = independent_phase_status(
+                raw,
+                reference if engine == "native" else raw,
+                atoms=atoms,
+                schema=schema,
+            )
+        if completed:
+            if independent_engines:
+                phases = set(entry["phase_status"].values())
+                if not phases <= {"measured", "completed_unchecked"}:
+                    raise ValueError(
+                        "completed point has missing or failed endpoint phases"
+                    )
+                entry["status"] = (
+                    "completed_unchecked"
+                    if "completed_unchecked" in phases
+                    else "measured"
+                )
+            else:
+                if (
+                    raw["status"] != "measured"
+                    or reference is None
+                    or reference["status"] != "measured"
+                ):
+                    raise ValueError(
+                        "measured point has no complete independent reference"
+                    )
+                if engine == "native" and raw["reference_sha256"] != digest(
+                    reference_path
+                ):
+                    raise ValueError(
+                        "native run used a different independent reference"
+                    )
+                validate(raw, reference, schema=schema)
+                entry["status"] = "measured"
             entry["medians"] = {
                 phase: median(
                     row["complete_seconds"]

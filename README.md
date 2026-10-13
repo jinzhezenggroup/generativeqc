@@ -208,11 +208,13 @@ caches are retained.
 Both engines use matching water clusters, FP64, def2-SVP and explicit moving
 grids for DFT. r2SCAN-3c uses its defining def2-mTZVPP basis and includes D4/gCP.
 Native corrections use CUDA D4 and native CPU gCP; the independent reference
-uses CPU D4 and gCP. Each plotted native point passes energy
-and force checks across cold, warm and changed-geometry calls. Missing points
-are labeled. Lines connect medians of all successful endpoint repeats, bars show
-min/max, and crosses retain differing SCF work. Iteration counts do not imply
-equal work between engines; failed or incomplete endpoints have no timing.
+uses CPU D4 and gCP. The engines run independently. Completed cold calls and
+complete warm repeat sets remain visible even when a later phase or the other
+engine times out. Filled native markers pass independent energy/force checks;
+open markers indicate completed calls whose accuracy is still unchecked.
+Lines connect medians, bars show min/max, and crosses retain differing SCF work.
+Iteration counts do not imply equal work between engines; incomplete phases
+and timeout outcomes remain explicit.
 
 See the [direct](benchmarks/results/readme-dft-20261013/timings.md) and
 [DF timing tables](benchmarks/results/readme-dft-20261013/df-timings.md), and

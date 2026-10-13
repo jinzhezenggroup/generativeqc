@@ -57,24 +57,24 @@
   },
   "files": {
     "README.md": {
-      "bytes": 17934,
-      "sha256": "341c8650204a6f4d04f7795fd1d7850bede37636fcab32584aa9776a793d6a4d"
+      "bytes": 21468,
+      "sha256": "719006baf6ab189b43fc009b4ece6e13b30528e5c3ceeed0d45054539960d68b"
     },
     "df-cold-warm.svg": {
-      "bytes": 95272,
-      "sha256": "88a5f2799ba37de8ba10404e6620432116b09425320fe1052873dc0e48358761"
+      "bytes": 107891,
+      "sha256": "648fb924528ef58b5aafe3c04c14fcc7aefd77530fda7b2766bd663a4d42d445"
     },
     "df-summary.json.xz": {
-      "bytes": 139308,
-      "sha256": "5487514376f54a7a2648323e96916defd68307ea9978f7c642e6af57cd02f697"
+      "bytes": 139392,
+      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730"
     },
     "df-timings.md": {
-      "bytes": 2753,
-      "sha256": "a9cf7b92e6a09433f638869cbeebd2dad9d05eec2753dc16c014abe3e74e4545"
+      "bytes": 2941,
+      "sha256": "39a17b50327764b44c92cfaaad17246483ae0b9a8b24aef7bf740ec588fde8ac"
     },
     "dft-cold-warm.svg": {
-      "bytes": 175175,
-      "sha256": "02185cd63a858542958685a2260c205aaca3de8012a38cc08a09f477b2c2fb2b"
+      "bytes": 187516,
+      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada"
     },
     "force-memory.json.xz": {
       "bytes": 37176,
@@ -89,22 +89,22 @@
       "sha256": "7cc3227266ce5e85e16cbc534558226a7f2de7677d9d3b5c638bdf8bc6e4e59d"
     },
     "summary.json.xz": {
-      "bytes": 246304,
-      "sha256": "623a0e9a0bc23cd337c8306d51a37caa96f49923218fa67a079f806d1d1ad994"
+      "bytes": 250780,
+      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01"
     },
     "timings.md": {
-      "bytes": 4595,
-      "sha256": "42b4f4f1f7d3c017d7f238c8bc90e5f480b2c98a0f5337ffd78a8a4738fa2eb1"
+      "bytes": 4729,
+      "sha256": "aa16800a863710339c92b7554073d777b2bd521e3ca8e918d11096af2ecff50d"
     }
   },
   "uncompressed_summary": {
-    "bytes": 8756210,
-    "sha256": "9de2b0ce947ef0b1ccfc3e4a9b6de4809c9f5dfa6ec9d6a04e443cc65f3ec08c"
+    "bytes": 8944231,
+    "sha256": "2385c58e06574bcc55ba58bc644abbbd935fbbb93ec063b8bf820ac3f6d6a74f"
   },
   "original_master_campaign_report_retention": ".artifacts/force-memory-20261013/master-report",
   "uncompressed_df_summary": {
-    "bytes": 4591508,
-    "sha256": "a5d6b9b09d61d27986ecce81722388d7a7303894a7b2eff865038a6886c547ac"
+    "bytes": 4597504,
+    "sha256": "a84a893e7c51f269e550f9fdbd3fa4b9dde2a3812cafc10ba2a2ae823421e47e"
   },
   "force_memory_uncompressed": {
     "bytes": 946323,
@@ -132,16 +132,121 @@
       "path": "benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json",
       "sha256": "e2b3b46cc696396d01f3af18adc492cb38c0f086abb28aa977aacb933bbe3871"
     },
-    "rendering": "All accepted endpoint medians connected; full range and SCF-work variability retained. Failures never provide times.",
+    "rendering": "Superseded by independent_execution_followup: complete phases retained even when a later phase times out; unknown accuracy is explicit.",
     "reference_audit": "reference-replay-audit.json; diagnostic only, excluded from timing populations"
   },
   "rendering_source_sha256": {
-    "tools/render_readme_dft.py": "a9277cfdfb26dd6d8f361c2fe6c384bf516f173d89881eb8d42a83b590db477d",
-    "tools/render_omol25_benchmarks.py": "b6159d3f996228e329dc20efed20369c405a92921d48e3440c3b767626384aba"
+    "tools/render_readme_dft.py": "3616468b7df195c905870ae0f225bbd4527a217ed4cc6c57b506a8701e7edfa1",
+    "tools/render_omol25_benchmarks.py": "5feb71d99d8d6a30894729beff07ef2d1112d573b93d69bd120df22d0cb0b053"
   },
   "source_campaigns": {
     "path": "source-campaigns.json.xz",
     "uncompressed_bytes": 119968,
     "uncompressed_sha256": "dc4c7e83080ff8f201462215e77ad07c4fa6eed6ab2e088cec0e380ee2a69775"
+  },
+  "independent_execution_followup": {
+    "native_source_identity": "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16",
+    "native_library_sha256": "622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9",
+    "production_changes_from_previous_publication": [],
+    "missing_reference_device_validation": {
+      "purpose": "Real-device missing-reference control; excluded from benchmark timings. Post-run independent comparison does not rewrite original null gates.",
+      "native_raw_sha256": "53a9108a99a8a070b62d12be732d398c73ec8db4248145d21c90f161c14f7b34",
+      "reference_sha256": "fd938141b271287e55ce178c92e6509cda26df428be0fe1c99961b11a3929fe7",
+      "native_source_identity": "1de96258bf4ffdbff20b21854d055eac1b4fbc082ceb885b8478008f0da6bd16",
+      "native_library_sha256": "622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9",
+      "scheduler": {
+        "SLURM_JOB_ID": "8038",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      },
+      "observations": 12,
+      "maximum_energy_error_eh": 1.0089706847793423e-12,
+      "maximum_force_error_eh_per_bohr": 9.159356606502911e-11,
+      "all_independent_gates": true
+    },
+    "methods": {
+      "wb97m-v": [
+        48,
+        96
+      ]
+    },
+    "measurement_policy": "Run each engine independently. Retain complete cold/moved calls and all requested warm repeats even when a later phase fails; missing accuracy is explicit, never a passing gate.",
+    "reference_policy": "Original reference bytes reused unchanged. Available geometry baselines remain independently checked; missing baselines yield null errors and null accuracy gates.",
+    "direct_phase_acceptance": {
+      "native": {
+        "cold": {
+          "checked": 30,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 30,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 29,
+          "unchecked": 1
+        },
+        "moved-warm": {
+          "checked": 29,
+          "unchecked": 0
+        }
+      },
+      "reference": {
+        "cold": {
+          "checked": 31,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 31,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 30,
+          "unchecked": 0
+        },
+        "moved-warm": {
+          "checked": 30,
+          "unchecked": 0
+        }
+      }
+    },
+    "df_phase_acceptance": {
+      "native": {
+        "cold": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 14,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 14,
+          "unchecked": 0
+        },
+        "moved-warm": {
+          "checked": 14,
+          "unchecked": 0
+        }
+      },
+      "reference": {
+        "cold": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "warm": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "moved": {
+          "checked": 16,
+          "unchecked": 0
+        },
+        "moved-warm": {
+          "checked": 16,
+          "unchecked": 0
+        }
+      }
+    }
   }
 }

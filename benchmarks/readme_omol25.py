@@ -262,6 +262,59 @@ def check_record(row: dict[str, Any], oracle: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def complete_execution(row: dict[str, Any], atoms: int) -> bool:
+    """Check observable E+F completion without claiming independent accuracy.
+
+    In particular, a converged energy with absent or malformed host forces is
+    never a completed endpoint, even when no independent oracle is available.
+    """
+    try:
+        forces = np.asarray(row["forces"], dtype=float)
+        return bool(
+            row["status"] == 0
+            and row["converged"]
+            and forces.shape == (atoms, 3)
+            and np.isfinite(forces).all()
+            and np.isfinite(float(row["energy"]))
+            and np.isfinite(float(row["complete_seconds"]))
+            and row["complete_seconds"] > 0
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def reference_baselines(
+    oracle: dict[str, Any] | None,
+    scientific: dict[str, Any],
+    *,
+    allow_missing: bool = False,
+) -> dict[int, dict[str, Any]]:
+    """Use completed geometry oracles even if later reference calls timed out.
+
+    Execution independence never permits a different Hamiltonian, geometry,
+    basis or grid. Missing geometry baselines stay absent; they are not replaced
+    by native results or by a reference from the other geometry.
+    """
+    if oracle is None:
+        if allow_missing:
+            return {}
+        raise ValueError("independent reference is unavailable")
+    if oracle["protocol"] != scientific:
+        raise ValueError("independent reference protocol differs")
+    baselines = {}
+    for row in oracle["records"]:
+        if row["phase"] not in ("cold", "moved"):
+            continue
+        geometry = 0 if row["phase"] == "cold" else 1
+        if row["geometry"] != geometry or geometry in baselines:
+            raise ValueError("duplicate or mislabeled independent reference")
+        if complete_execution(row, scientific["atoms"]) and row.get("gate") is True:
+            baselines[geometry] = row
+    if not allow_missing and (oracle["status"] != "measured" or len(baselines) != 2):
+        raise ValueError("independent reference is incomplete")
+    return baselines
+
+
 def require_force_endpoint(capabilities: dict[str, Any]) -> None:
     """Honor the candidate's public capability, without hard-coding an SPD gate.
 
@@ -394,14 +447,24 @@ def native_endpoint_record(
 def retain_endpoint_record(
     record: dict[str, Any],
     row: dict[str, Any],
-    reference: dict[str, Any],
+    reference: dict[str, Any] | None,
     save: Callable[[str], None],
 ) -> None:
-    """Persist the actual endpoint before rejecting its independent gate."""
-    row.update(check_record(row, reference))
+    """Persist completion separately from accuracy; known gate failures still fail."""
+    if reference is None:
+        completed = complete_execution(row, record["protocol"]["atoms"])
+        row.update(
+            execution_gate=completed,
+            energy_error=None,
+            force_error=None,
+            gate=None if completed else False,
+            accuracy_status="reference_unavailable",
+        )
+    else:
+        row.update(check_record(row, reference))
     record["records"].append(row)
     save(record["stage"])
-    if not row["gate"]:
+    if row["gate"] is False:
         raise RuntimeError(f"independent energy/force gate failed: {row['phase']}")
 
 
@@ -499,6 +562,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--reference", type=Path)
+    parser.add_argument(
+        "--allow-missing-reference",
+        action="store_true",
+        help="Measure native completion independently; missing accuracy gates remain unchecked",
+    )
     parser.add_argument("--reference-full-fock", action="store_true")
     parser.add_argument(
         "--preliminary-provider",
@@ -527,7 +595,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
     if args.repeats < 1 or min(args.grid) < 1:
         parser.error("repeats and grid dimensions must be positive")
-    if args.engine == "native" and args.reference is None:
+    if (
+        args.engine == "native"
+        and args.reference is None
+        and not args.allow_missing_reference
+    ):
         parser.error("native execution requires the independent --reference JSON")
     if (args.density_fitting == "cuda") != (args.auxiliary_basis_file is not None):
         parser.error("DF requires an explicit matching --auxiliary-basis-file")
@@ -584,7 +656,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         auxiliary_basis=auxiliary_basis,
     )
     oracle = None
-    if args.engine == "native" and args.reference.exists():
+    if args.engine == "native" and args.reference and args.reference.exists():
         oracle = json.loads(args.reference.read_text())
     record: dict[str, Any] = {
         "schema": benchmark.schema,
@@ -635,7 +707,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         record["stage"] = stage
         args.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
 
-    def retain(row: dict[str, Any], reference: dict[str, Any]) -> None:
+    def retain(row: dict[str, Any], reference: dict[str, Any] | None) -> None:
         retain_endpoint_record(record, row, reference, save)
 
     owner = None
@@ -772,6 +844,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         else:
             from benchmarks.ks_preliminary_density import prepare_seed
 
+            baselines = reference_baselines(
+                oracle, scientific, allow_missing=args.allow_missing_reference
+            )
             if force_options:
                 from generativeqc._stationary_composite_cuda import (
                     PreparedCompositeStationaryCudaGradient,
@@ -819,14 +894,6 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             }
             save("native/capability")
             require_force_endpoint(record["native_capabilities"])
-            if (
-                oracle is None
-                or oracle["protocol"] != scientific
-                or oracle["status"] != "measured"
-            ):
-                raise ValueError(
-                    "independent reference protocol differs or is incomplete"
-                )
             save("cold/prepare")
             cp.cuda.Stream.null.synchronize()
             started = perf_counter()
@@ -856,12 +923,7 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             record["preliminary_wrapper_seconds"] = seed_seconds
             prepare_seconds += seed_seconds
             for geometry_index in range(2):
-                baseline = next(
-                    row
-                    for row in oracle["records"]
-                    if row["geometry"] == geometry_index
-                    and row["phase"] in ("cold", "moved")
-                )
+                baseline = baselines.get(geometry_index)
                 coords = (
                     None
                     if geometry_index == 0
@@ -907,7 +969,11 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             record["native_force_components"] = (
                 normalize_force_work(force_work) if force_work is not None else None
             )
-        record["status"] = "measured"
+        record["status"] = (
+            "completed_unchecked"
+            if any(row["gate"] is None for row in record["records"])
+            else "measured"
+        )
         save("complete")
     except NotImplementedError as error:
         record.update(status="unsupported", error=f"{type(error).__name__}: {error}")
