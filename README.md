@@ -193,7 +193,9 @@ print(first.energies)
 
 Complete **HF and DFT energy + analytic forces** on an RTX 5090, measured on
 2026-10-13. The report combines the original #2401 observations with qualified
-benchmark issue fixes; each point retains its actual source and build identity. Cold includes construction, preparation
+benchmark issue fixes, including complete direct and DF r²SCAN-3c populations
+through 96 atoms. Each point retains its actual source and build identity.
+Cold includes construction, preparation
 and the first calculation; warm reuses a fixed converged density. Compiler
 caches are retained.
 
