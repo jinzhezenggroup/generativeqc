@@ -117,8 +117,8 @@
   },
   "files": {
     "README.md": {
-      "bytes": 15204,
-      "sha256": "8d3a49116f559d46526cc146cd8c9361b8071b721e26bd322b6f1fed78f4de71"
+      "bytes": 15526,
+      "sha256": "74628e3b123d89f48edfb4a2031c7973dfc592656df21bba9bb4c53f187bdb1f"
     },
     "df-cold-warm.svg": {
       "bytes": 185892,
@@ -141,8 +141,8 @@
       "sha256": "cde02a58a72edf6a60713fe230b11ca68a2bb8e5b054698714e94a7d25810827"
     },
     "followup-receipts.json.xz": {
-      "bytes": 142684,
-      "sha256": "616ec7ecfc3a7a52d9e55219d5ecc8875cf849cf02eada1a0c2aeef1e8e5a5f1"
+      "bytes": 149660,
+      "sha256": "39cf82b1c29195f4a4cf256a3f9cd9cd0045384b294e4d6b605811e666527259"
     },
     "force-memory.json.xz": {
       "bytes": 37176,
@@ -157,8 +157,8 @@
       "sha256": "7cc3227266ce5e85e16cbc534558226a7f2de7677d9d3b5c638bdf8bc6e4e59d"
     },
     "summary.json.xz": {
-      "bytes": 421896,
-      "sha256": "63b0fcd625ad449308ae02dad661a3b17100550507d19f1e287253c990f4a018"
+      "bytes": 425168,
+      "sha256": "2b8eeac9ca19d68596389838a4e5ea0f6c5ce5cef3c305bde68731cd89ff8771"
     },
     "timings.md": {
       "bytes": 4724,
@@ -170,8 +170,8 @@
     }
   },
   "uncompressed_summary": {
-    "bytes": 18617409,
-    "sha256": "72b72e24aecb4833bb9c41d571f73b7c57f43366de5c3c629af96c114f39bed9"
+    "bytes": 18764294,
+    "sha256": "560b87034c3c78a403cd4cddede17eb4d2dd0e5e8139b63637e10fbad911b47f"
   },
   "original_master_campaign_report_retention": ".artifacts/force-memory-20261013/master-report",
   "uncompressed_df_summary": {
@@ -1557,6 +1557,26 @@
           "SLURM_GPUS_ON_NODE": "1"
         },
         "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "wb97m-v",
+        "atoms": 96,
+        "source_commit": "7001858f1adf0ce851b0feda7e92d5fcd48425fe",
+        "source_identity": "b3fa1f682d66ecad198b085bdb8f458630349c7dad73ca9bee957d289f2acdaf",
+        "library_sha256": "08b866dc5404feebf024011fe95a9e04b16ba55256078874d4fcda080e21fdd0",
+        "raw_sha256": "ee7bada75a597b30002d81b961536ae0aafa10906383d079287f7fed5513636c",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/vv10-zero-warp-qualified/none/wb97m-v/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8241",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false,
+        "outcome": {
+          "exit_code": 124,
+          "time_limit_seconds": 1800
+        }
       }
     ],
     "policy": "Each complete independently checked 12-call population replaces its prior point. A newer failed/incomplete point updates an unqualified or missing point; only complete checked phases become timings, with failures and partial rows visible. Unchecked/setup/mismatched runs are excluded and retained separately.",
@@ -2159,7 +2179,7 @@
         "native_source_identity": "b3fa1f682d66ecad198b085bdb8f458630349c7dad73ca9bee957d289f2acdaf",
         "source_inventory_files": 1724,
         "consumer_files_verified": 44,
-        "native_records_audited": 3,
+        "native_records_audited": 4,
         "consumer_hashes": {
           "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
           "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",

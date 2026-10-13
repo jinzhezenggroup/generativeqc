@@ -77,11 +77,15 @@ Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
   takes 116.0 s in nonlocal pairs versus 4.24 s in semilocal density/features
   and 2.45 s in nonlocal AO potential assembly on the older source. A 180-second
   trace of `7001858f1` measures an 82.6 s bilateral pair call; this short trace
-  is not a formal 1800-second outcome. An independent 96-atom cold oracle has
-  separately converged in 4617.1 s (45 iterations), with complete finite E/F
-  and retained residuals. Its diagnostic duration is excluded from reference
-  timing populations and speedups. Neither result establishes native/96
-  completion. The original reference and native time limits stay visible.
+  is not a formal 1800-second outcome. A subsequent formal run on that source
+  (Slurm 8241) reaches the unchanged 1800-second whole-point limit in cold/0,
+  with no completed native E/F records. Independent 96-atom cold and moved
+  oracles have separately converged in 4617.1 / 4578.2 s (45 iterations each),
+  with complete finite E/F and retained residuals. Both start from independent
+  atomic guesses. Their diagnostic durations are excluded from reference timing
+  populations and speedups. These accuracy-only receipts provide the alternative
+  oracle allowed by #2417; they do not resolve the reference timing population
+  or native/96 performance. Original and new time limits stay visible.
 - The superseded M06-2X/DF 96-atom timeout and an earlier slower 48-atom
   population remain in the summaries. A same-source 48-atom replay already
   reduced cold/warm to 102.832/12.012 s before the local-AO change; this variation
