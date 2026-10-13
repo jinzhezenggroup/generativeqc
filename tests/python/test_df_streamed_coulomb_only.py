@@ -98,3 +98,15 @@ def test_streamed_j_only_does_not_revisit_auxiliary_panel_pairs() -> None:
     assert dispatch < source.index(
         "return contract_full_rank_panels(", dispatch
     )
+
+def test_rank_deficient_j_only_avoids_exchange_source_rereads() -> None:
+    """Keep spectral VJP but skip the exchange-only P/Q source traversal."""
+    source = (ROOT / "src/scf/cuda/df_response_weights.cu").read_text()
+    fallback = source[source.index("  const bool has_exchange = std::any_of(") :]
+    assert "if (has_exchange) {" in fallback
+    assert "if (!has_exchange) {" in fallback
+    first_exit = fallback.index("if (!has_exchange) {")
+    assert fallback.index("continue;", first_exit) < fallback.index(
+        "for (std::size_t q = 0; q < a; ++q)", first_exit
+    )
+    assert "launch_symmetric_pseudoinverse_vjp(" in fallback
