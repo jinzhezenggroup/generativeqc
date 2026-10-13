@@ -11,7 +11,11 @@ import numpy as np
 from generativeqc import GridSpec
 
 from benchmarks._retained_basis import load_retained_comparison_basis
-from benchmarks._support import cuda_accelerator_metadata, environment_metadata
+from benchmarks._support import (
+    cuda_accelerator_metadata,
+    environment_metadata,
+    raw_output_path,
+)
 from benchmarks.readme_dft import specification
 from benchmarks.readme_omol25 import (
     gpu_convergence_payload,
@@ -40,15 +44,15 @@ def main() -> None:
     """
     if not os.environ.get("SLURM_JOB_ID"):
         raise RuntimeError("GPU execution requires a finite Slurm allocation")
-    import cupy as cp
-
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--template", type=Path, required=True)
     parser.add_argument("--basis", type=Path, required=True)
     parser.add_argument("--geometry", type=int, choices=(0, 1), required=True)
     parser.add_argument("--auxiliary", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     a = parser.parse_args()
+    import cupy as cp
+
     original = json.loads(a.template.read_text())
     p = original["protocol"]
     assert p["method"] == "WB97M-V/RKS"

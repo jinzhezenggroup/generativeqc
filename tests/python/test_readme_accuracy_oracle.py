@@ -186,6 +186,49 @@ def test_renderer_rejects_accuracy_receipt_symlink_escape(tmp_path: Path) -> Non
         collect_point(tmp_path, 3)
 
 
+@pytest.mark.parametrize("alias", [False, True])
+def test_geometry_driver_rejects_retained_output_before_cuda(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    alias: bool,
+) -> None:
+    from benchmarks import _support
+    from benchmarks import readme_geometry_oracle as driver
+
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "receipt.json"
+    original.write_text("retained reference")
+    destination = retained
+    if alias:
+        destination = tmp_path / "alias"
+        destination.symlink_to(retained, target_is_directory=True)
+    monkeypatch.setattr(_support, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setenv("SLURM_JOB_ID", "host-only-fixture")
+    monkeypatch.setitem(sys.modules, "cupy", None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "geometry-oracle",
+            "--template",
+            "unused-template.json",
+            "--basis",
+            "unused-basis.json",
+            "--geometry",
+            "1",
+            "--output",
+            str(destination / "receipt.json"),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        driver.main()
+    assert error.value.code == 2
+    assert "raw_output_path" in capsys.readouterr().err
+    assert original.read_text() == "retained reference"
+
+
 def test_receipt_hash_binds_exactly_the_parsed_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
