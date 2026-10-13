@@ -61,7 +61,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_order_seven_f
       const auto second_pair = bra < ket ? bra : ket;
       if (direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Force>(
               batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
-              shell_pair_density_bounds, nullptr, false, false)) {
+              shell_pair_density_bounds, nullptr, false, exchange_coefficient == 0.0)) {
         const ActiveShellQuartetTile task{first_pair, second_pair, 0U};
         const auto shell_class = direct_quartet_shell_class_device(
             batch.shell_angular[batch.shell_pair_first[first_pair]],

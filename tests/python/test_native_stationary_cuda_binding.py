@@ -123,7 +123,9 @@ def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
     assert f"native_exchange_slot = {exchange_slot};" in source
 
 
-@pytest.mark.parametrize("selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks")])
+@pytest.mark.parametrize(
+    "selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks", "m06_2x_rks")]
+)
 def test_native_registry_contains_only_built_profiles(
     selected: tuple[str, ...], tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
@@ -214,6 +216,7 @@ def test_native_registry_rejects_unknown_or_duplicate_profiles() -> None:
 def test_native_model_matches_independent_native_ks_lowering(profile: str) -> None:
     """The existing SDK transport lowerer independently checks emitted point scales."""
     from generativeqc.ks import (
+        SPLIT_HYBRID_SCF_DOMAIN,
         _native_semilocal_code,
         _scf_domain_for_ir,
         ks_coefficients,
@@ -227,7 +230,10 @@ def test_native_model_matches_independent_native_ks_lowering(profile: str) -> No
         profile
     )
     assert functional == _native_semilocal_code(plan.method)
-    assert SCF_DOMAIN_BY_VERSION[domain] == _scf_domain_for_ir(plan.method)
+    expected_domain = (
+        SPLIT_HYBRID_SCF_DOMAIN if domain == 4 else SCF_DOMAIN_BY_VERSION[domain]
+    )
+    assert expected_domain == _scf_domain_for_ir(plan.method)
     actual_exchange, actual_correlation, _ = ks_coefficients(plan.method)
     assert float(exchange_scale) == actual_exchange
     assert float(correlation_scale) == actual_correlation

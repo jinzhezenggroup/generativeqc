@@ -18,9 +18,10 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("selection", ("identity", "subset", "empty"))
+@pytest.mark.parametrize("features_only", (False, True))
+@pytest.mark.parametrize("selection", ("identity", "subset", "empty", "dense"))
 def test_resident_selected_features_and_density_jets(
-    tmp_path: Path, selection: str
+    tmp_path: Path, selection: str, features_only: bool
 ) -> None:
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require finite Slurm"
     import cupy as cp
@@ -38,6 +39,7 @@ def test_resident_selected_features_and_density_jets(
     with NativeAO(**basis_arguments(meta)) as basis:
         ids = {
             "identity": None,
+            "dense": None,
             "subset": np.arange(0, basis.nao, 2, dtype=np.uintp),
             "empty": np.empty(0, dtype=np.uintp),
         }[selection]
@@ -47,7 +49,8 @@ def test_resident_selected_features_and_density_jets(
             artifact,
             order=2,
             tile_points=7,
-            active_ao_capacity=max(1, active),
+            active_ao_capacity=None if selection == "dense" else max(1, active),
+            features_only=features_only,
             ingredients=("rho", "gradient", "tau"),
         ) as grid:
             grid.set_density(arrays["density"])
@@ -60,6 +63,10 @@ def test_resident_selected_features_and_density_jets(
                     view = task.view
                     assert view.nactive == active and view.nao == basis.nao
                     work = task.density_jets(4)
+                    if selection == "dense":
+                        assert not view.local_potential and not view.potential
+                        with pytest.raises(RuntimeError):
+                            task.scatter(np.zeros((2, active, active)))
 
                     # Explicit copies are test diagnostics, outside production.
                     def download(
@@ -80,6 +87,11 @@ def test_resident_selected_features_and_density_jets(
                         with cp.cuda.ExternalStream(stream):
                             return values.get()
 
+                    if features_only:
+                        with pytest.raises(RuntimeError, match="features-only"):
+                            task.scatter(np.zeros((2, active, active)))
+                        with pytest.raises(RuntimeError, match="features-only"):
+                            task.xc(np.zeros(count), 0)
                     features = download(view.features, (13, count))
                     contracted = (
                         download(work, (2, 4, count, active)) if active else None
@@ -109,9 +121,16 @@ def test_resident_selected_features_and_density_jets(
                         )
                 with pytest.raises(RuntimeError, match="expired"):
                     _ = task.view
+            # Dense feature leases have no map storage at all; malformed maps
+            # are rejected at capability admission, before indexed validation.
+            map_error = (
+                "active AO maps require a local CUDA plan"
+                if selection == "dense"
+                else "sorted unique in-range"
+            )
             for invalid in ([1, 0], [0, 0], [-1], [basis.nao], [0.5]):
                 with (
-                    pytest.raises(ValueError, match="sorted unique in-range"),
+                    pytest.raises(ValueError, match=map_error),
                     grid.feature_task_device_points(
                         points.data.ptr, count, invalid, ("rho",)
                     ),

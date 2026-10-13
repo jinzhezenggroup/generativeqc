@@ -454,22 +454,6 @@
       "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
     },
     {
-      "bytes": 153158,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/384-404.json",
-      "role": "scientific-record",
-      "sha256": "e2f5728f31e23805bbc1f2fd3b3ecc52486eaf68b82abe2c46d385b74f36c1e1"
-    },
-    {
-      "bytes": 226206,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/768-404.json",
-      "role": "scientific-record",
-      "sha256": "1ba17b6d525922968c5af89e5667fdc6ffedac9d54e8e04111d39719ea4444b9"
-    },
-    {
       "bytes": 131267,
       "classification": "required-compact-accepted-evidence",
       "family": "issue404-combined-rys",
@@ -608,8 +592,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 188062,
-      "sha256": "1db53ae625851527240df00621970162b9a2bf776e1a7ac6ed1b8c603dd83e28",
+      "bytes": 187647,
+      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -624,8 +608,8 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 308028,
-      "sha256": "fb978f7ddde6e4b1969e7d6c5bf834c1c1e32bec96bebd88b54f43ceb2b00342",
+      "bytes": 397852,
+      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },

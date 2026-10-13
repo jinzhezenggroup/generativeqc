@@ -24,6 +24,7 @@ failed or incomplete phases have no successful timing. No timeout was increased.
 | [#2413](https://github.com/jinzhezenggroup/generativeqc/issues/2413) | WB97M-V DF passes all 12 calls at 3 and 12 atoms with the matching independent full-range-DF/exact-long-range-K oracle. The old default-reference mismatch remains in historical probes. Large WB endpoints remain unresolved. |
 | [#2414](https://github.com/jinzhezenggroup/generativeqc/issues/2414) | [#2438](https://github.com/jinzhezenggroup/generativeqc/pull/2438) qualifies M06-2X FP64 local AO execution. Direct and DF pass all 12 independent calls at 3/12/48/96 atoms. DF/96 cold: 628.378 → 150.082 s; warm: 116.061 → 36.357 s. The older timeout remains retained. |
 | [#2415](https://github.com/jinzhezenggroup/generativeqc/issues/2415) | [#2443](https://github.com/jinzhezenggroup/generativeqc/pull/2443) removes the DF resident/streamed crossover on geometry rebuilds. Canonical r²SCAN-3c DF passes all 12 calls at 3/12/48/96 atoms, including D4/gCP. DF/96 cold/warm/moved/moved-warm: 226.247 / 23.080 / 145.915 / 23.085 s; the prior cold and moved timeouts remain retained. |
+| [#2416](https://github.com/jinzhezenggroup/generativeqc/issues/2416) | [#2446](https://github.com/jinzhezenggroup/generativeqc/pull/2446) forwards pure-J force demand; [#2450](https://github.com/jinzhezenggroup/generativeqc/pull/2450) admits the existing spatial schedule automatically. Direct r²SCAN-3c now completes all 12 calls at 3/12/48/96 atoms under the original limits. At 96 atoms: cold 538.312 s, warm 90.092 s, moved 268.003 s, moved-warm 90.203 s. Prior final-replay timeouts remain retained. |
 | [#2418](https://github.com/jinzhezenggroup/generativeqc/issues/2418) | [#2436](https://github.com/jinzhezenggroup/generativeqc/pull/2436) packages exact M06-2X stationary AOT plans. Source `61b9387f3` gives 3-atom direct cold 4.378 s versus historical 229.691 s. A separate empty artifact-cache run passes all 12 calls with runtime compiler discovery and invocation forbidden. Later source-matched populations remain separately identified. |
 | [#2421](https://github.com/jinzhezenggroup/generativeqc/issues/2421) | [#2437](https://github.com/jinzhezenggroup/generativeqc/pull/2437) adds automatic HF/DF value-response planning and exact-state final occupied projection reuse. All 12 calls pass at 96 atoms. Warm: 59.318 → 3.201 s; new cold 32.994 s, moved 28.670 s. |
 
@@ -34,22 +35,22 @@ counts are preserved. M06-2X API-cold timing includes package loading. Its
 separate compiler-forbidden control establishes AOT use, not a reconstruction
 of the historical compiler-cache state.
 
-The current reductions contain 29 fully qualified direct points (348 calls)
+The current reductions contain 30 fully qualified direct points (360 calls)
 and 30 fully qualified DF points (360 calls). Maximum accepted errors are
-2.274e-11 / 9.159e-11 for direct and 2.261e-10 / 1.573e-10 for DF, in Eh and
+3.275e-11 / 2.201e-10 for direct and 2.261e-10 / 1.573e-10 for DF, in Eh and
 Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
 
 ## Remaining qualification
 
-- #2416: [#2439](https://github.com/jinzhezenggroup/generativeqc/pull/2439)'s
-  bounded SCF AO-map staging and read-only force-grid leases remove the
-  diagnosed host capacity cliffs. Direct/48 passes all 12 calls (86.302-s cold,
-  26.070-s warm median). Direct/96 returns cold in 500.751 s and passes all
-  11 returned E/F calls, but the 1800-s point limit interrupts the final moved
-  replay. Its complete warm series has a 105.539-s median; integral derivatives
-  contribute about 77.8 s per call. Initial capacity failures and the final
-  incomplete population remain retained. The incomplete moved-warm series has
-  no successful median.
+- #2416's ordinary-resource population is qualified on source `aaec57399`.
+  PBE/r²SCAN 48/96 controls also complete all 12 calls. Initial small controls
+  exposed a separate resource-dependent force refusal, reproduced with 8 GiB
+  free: the optional shell stack lease was unavailable after successful SCF.
+  [#2451](https://github.com/jinzhezenggroup/generativeqc/pull/2451) preserves the
+  existing canonical GPU force fallback and passes independent Libcint checks
+  plus a complete 12-atom pressure population. Pressure runs and diagnostic
+  error-detail wrappers are excluded from the plotted timings; their failures
+  and successes remain in `followup-receipts.json.xz`.
 - #2415 is now qualified at 96 atoms on source `3660e04d2`. Source `227c55c06`
   timed out in cold SCF; the intermediate `fedf81b83` completed cold and five
   warm calls but timed out after geometry movement. Both failures remain in

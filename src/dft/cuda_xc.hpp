@@ -126,7 +126,7 @@ struct CudaXcAoTiles {
 
 /** Worst-case admission for sampled-jet discovery. The device bound includes
  * the dense arena and one global-capacity map per tile; host peak includes
- * those maps, offsets, and the current tile's flags. No mean AO count enters
+ * offsets/launchers and only the current tile's indices/flags. No mean AO count enters
  * admission. Discovery borrows the already charged AO/work scratch. */
 struct CudaXcAoSelectionResources {
   std::size_t device_bytes{}, host_peak_bytes{}, max_entries{}, tiles{};
@@ -137,6 +137,13 @@ CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& de
  * Only physical FP64 execution is admitted; response retains its dense route.
  * No discovery, screening threshold, CUDA allocation or GPU work occurs here. */
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps);
+
+/** Charge a map produced and validated incrementally on the plan stream.
+ * The producer must establish sorted, unique, in-range indices and tile
+ * offsets; this helper validates only shape, derivative capability and capacity.
+ */
+CudaXcLayout cuda_xc_local_ao_layout_shape(CudaXcLayout dense, std::size_t entries,
+                                           int derivative_order);
 
 CudaXcFastPathCapabilities cuda_xc_fast_path_capabilities(std::uint32_t functional) noexcept;
 

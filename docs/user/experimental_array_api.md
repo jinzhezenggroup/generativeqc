@@ -469,9 +469,12 @@ against its retained-byte budget; selection costs one unit of logical work per
 result element. All live operands are evaluated and finite-checked, so an invalid
 or nonfinite unselected branch still raises, even under a constant condition.
 Scientific index domains, representations and symmetry annotations are not
-admitted by this selection primitive. `where` has no JVP/VJP/HVP rule and no
-native CPU/CUDA/portable/scalar/bundle qualification; those paths reject before
-compiler discovery or device execution. This captured contract does not change
+admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
+tests support only external fixed Boolean masks in finite generic real graphs;
+see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
+The public compiled AD wrappers, generated derivative programs and HVP remain
+unsupported for `where`, as do native CPU/CUDA/portable/scalar/bundle paths,
+which reject before compiler discovery or device execution. This captured contract does not change
 the broader standard eager namespace or promise full IEEE conformance.
 
 `einsum` and `slice` remain bounded GenerativeQC extensions, not standard API

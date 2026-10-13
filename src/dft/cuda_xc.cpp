@@ -192,7 +192,8 @@ CudaXcExecutionCapabilities cuda_xc_execution_capabilities(const CudaXcLayout& l
   };
 }
 
-CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps) {
+CudaXcLayout cuda_xc_local_ao_layout_shape(CudaXcLayout dense, std::size_t entries,
+                                           int derivative_order) {
   if (!cuda_xc_execution_capabilities(dense).local_ao_selection || dense.ao_map_entries ||
       dense.host_ao_map_bytes)
     throw std::invalid_argument("local CUDA XC maps require a dense physical FP64 layout");
@@ -201,8 +202,26 @@ CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& ma
                              : dense.jets == 10 ? 2
                              : dense.jets == 20 ? 3
                                                 : -1;
-  if (required_order < 0 || maps.derivative_order < required_order || maps.derivative_order > 3)
+  if (required_order < 0 || derivative_order < required_order || derivative_order > 3)
     throw std::invalid_argument("local CUDA XC map lacks the required derivative capability");
+  const auto tiles = 1 + (dense.npoint - 1) / dense.tile_points;
+  constexpr auto overflow = "local CUDA XC map storage overflow";
+  if (entries > size_mul(tiles, dense.nao, overflow))
+    throw std::invalid_argument("local CUDA XC map exceeds its dense domain");
+  dense.local_ao = true;
+  dense.map_derivative_order = derivative_order;
+  dense.ao_map_entries = entries;
+  dense.host_ao_map_bytes =
+      size_add(size_mul(size_add(tiles, 1, overflow), sizeof(std::size_t), overflow),
+               size_mul(tiles, sizeof(CudaXcDensityLauncher), overflow), overflow);
+  dense.device_bytes =
+      size_add(dense.device_bytes, size_mul(entries, sizeof(std::size_t), overflow), overflow);
+  return dense;
+}
+
+CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps) {
+  const auto selected =
+      cuda_xc_local_ao_layout_shape(dense, maps.indices.size(), maps.derivative_order);
   const auto tiles = 1 + (dense.npoint - 1) / dense.tile_points;
   if (maps.offsets.size() != tiles + 1 || maps.offsets.front() != 0 ||
       maps.offsets.back() != maps.indices.size())
@@ -215,16 +234,7 @@ CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& ma
       if (maps.indices[i] >= dense.nao || (i > first && maps.indices[i - 1] >= maps.indices[i]))
         throw std::invalid_argument("local CUDA XC AO maps must be sorted, unique and in range");
   }
-  constexpr auto overflow = "local CUDA XC map storage overflow";
-  dense.local_ao = true;
-  dense.map_derivative_order = maps.derivative_order;
-  dense.ao_map_entries = maps.indices.size();
-  dense.host_ao_map_bytes =
-      size_add(size_mul(maps.offsets.size(), sizeof(std::size_t), overflow),
-               size_mul(tiles, sizeof(CudaXcDensityLauncher), overflow), overflow);
-  dense.device_bytes = size_add(
-      dense.device_bytes, size_mul(maps.indices.size(), sizeof(std::size_t), overflow), overflow);
-  return dense;
+  return selected;
 }
 
 CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& dense) {
@@ -237,10 +247,10 @@ CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& de
   const auto indices = size_mul(result.max_entries, sizeof(std::size_t), overflow);
   result.device_bytes = size_add(dense.device_bytes, indices, overflow);
   const auto offsets = size_mul(size_add(result.tiles, 1, overflow), sizeof(std::size_t), overflow);
-  result.host_peak_bytes =
-      size_add(size_add(size_add(indices, offsets, overflow),
-                        size_mul(dense.nao, sizeof(unsigned), overflow), overflow),
-               size_mul(result.tiles, sizeof(CudaXcDensityLauncher), overflow), overflow);
+  result.host_peak_bytes = size_add(
+      size_add(size_add(size_mul(dense.nao, sizeof(std::size_t), overflow), offsets, overflow),
+               size_mul(dense.nao, sizeof(unsigned), overflow), overflow),
+      size_mul(result.tiles, sizeof(CudaXcDensityLauncher), overflow), overflow);
   return result;
 }
 
@@ -577,12 +587,23 @@ bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
   const auto started = std::chrono::steady_clock::now();
   CudaXcAoTiles maps;
   maps.derivative_order = layout_.jets == 1 ? 0 : 1;
-  // Reserve once from the conservative admission, preventing vector growth
-  // from briefly holding two copies of a geometry's selected map storage.
-  maps.indices.reserve(bound.max_entries);
+  // Upload each discovered tile into the already reserved device map. Retain
+  // just one tile on the host: the former all-tile vector caused a 64-MiB
+  // admission cliff even though the persistent CPU owner needs only offsets.
+  maps.indices.reserve(layout_.nao);
   maps.offsets.reserve(bound.tiles + 1);
   maps.offsets.push_back(0);
   std::vector<unsigned> flags(layout_.nao);
+  auto* indices = reinterpret_cast<std::size_t*>(static_cast<char*>(arena_) + layout_.device_bytes);
+  // An async copy may still borrow the tile vector if discovery/launcher
+  // construction throws. Drain before its backing storage leaves this scope.
+  struct UploadDrain {
+    cudaStream_t stream;
+    bool active{true};
+    ~UploadDrain() {
+      if (active) (void)cudaStreamSynchronize(stream);
+    }
+  } upload_drain{stream_};
   CudaXcAoSelectionWork work;
   work.requested = true;
   work.cutoff = cutoff;
@@ -593,10 +614,16 @@ bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
     const auto count = std::min(layout_.tile_points, layout_.npoint - begin);
     cuda_xc_detail::select_ao(layout_, stream_, basis_, points_ + 3 * begin, count, cutoff, ao_,
                               work_, error_, flags.data());
+    // select_ao synchronizes this stream, completing the previous tile upload
+    // before its host vector is reused. The increasing AO loop proves ordering.
+    maps.indices.clear();
     for (std::size_t ao = 0; ao < layout_.nao; ++ao)
       if (flags[ao]) maps.indices.push_back(ao);
-    const auto active = maps.indices.size() - maps.offsets.back();
-    maps.offsets.push_back(maps.indices.size());
+    const auto active = maps.indices.size();
+    if (active)
+      check(cudaMemcpyAsync(indices + maps.offsets.back(), maps.indices.data(),
+                            active * sizeof(std::size_t), cudaMemcpyHostToDevice, stream_));
+    maps.offsets.push_back(maps.offsets.back() + active);
     ++work.tiles;
     work.empty_tiles += active == 0;
     work.min_active = std::min(work.min_active, active);
@@ -617,21 +644,14 @@ bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
                size_add(size_mul(layout_.nao, sizeof(unsigned), "AO transfer overflow"),
                         sizeof(int), "AO transfer overflow"),
                "AO transfer overflow");
-  const auto selected = cuda_xc_local_ao_layout(layout_, maps);
+  const auto entries = maps.offsets.back();
+  const auto selected = cuda_xc_local_ao_layout_shape(layout_, entries, maps.derivative_order);
   auto launchers = local_density_launchers(selected, maps.offsets);
   // The appended map begins exactly after the unchanged dense scratch. Publish
   // its layout only after the copy has completed; a failed preparation leaves
   // the original dense route valid and no partial map externally observable.
-  auto* indices = reinterpret_cast<std::size_t*>(static_cast<char*>(arena_) + layout_.device_bytes);
-  try {
-    if (!maps.indices.empty())
-      check(cudaMemcpyAsync(indices, maps.indices.data(), maps.indices.size() * sizeof(std::size_t),
-                            cudaMemcpyHostToDevice, stream_));
-    check(cudaStreamSynchronize(stream_));
-  } catch (...) {
-    cudaStreamSynchronize(stream_);
-    throw;
-  }
+  check(cudaStreamSynchronize(stream_));
+  upload_drain.active = false;
   local_density_launchers_ = std::move(launchers);
   ao_offsets_ = std::move(maps.offsets);
   ao_ids_ = indices;
@@ -641,7 +661,7 @@ bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
   provider_density_binding_.reset();
   density_provider_.reset();
   layout_ = selected;
-  transfers_.setup_h2d_bytes += maps.indices.size() * sizeof(std::size_t);
+  transfers_.setup_h2d_bytes += entries * sizeof(std::size_t);
   transfers_.synchronizations += bound.tiles + 1;
   work.selected = true;
   work.discovery_seconds =

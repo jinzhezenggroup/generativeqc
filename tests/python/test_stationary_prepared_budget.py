@@ -108,7 +108,9 @@ def test_prepared_artifact_resources_close_when_publication_fails(
             ecp=False,
             device=0,
             spec=SimpleNamespace(partition_iterations=1),
-            grid_plan=SimpleNamespace(peak_bytes=1, allocation_bytes=1),
+            grid_plan=SimpleNamespace(
+                peak_bytes=1, allocation_bytes=1, active_ao_capacity=None
+            ),
             source_bytes=1,
             tile_points=8,
             primitive_tile=16,
@@ -178,7 +180,9 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         "ecp": False,
         "device": 0,
         "spec": spec,
-        "grid_plan": SimpleNamespace(allocation_bytes=10, peak_bytes=10),
+        "grid_plan": SimpleNamespace(
+            allocation_bytes=10, peak_bytes=10, active_ao_capacity=None
+        ),
         "source_bytes": 20,
         "tile_points": 4,
         "primitive_tile": 5,

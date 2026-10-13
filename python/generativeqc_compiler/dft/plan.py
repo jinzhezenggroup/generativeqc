@@ -38,6 +38,7 @@ class TilePlan:
     active_ao_capacity: int | None = None
     orbital_capacity: tuple[int, int] | None = None
     orbital_tile: int = 0
+    features_only: bool = False
 
     @property
     def peak_bytes(self) -> typing.Any:
@@ -96,6 +97,7 @@ class TilePlan:
                         "points": self.tile_points,
                         "orbitals": self.orbital_capacity,
                         "orbital_tile": self.orbital_tile,
+                        "features_only": self.features_only,
                     }
                 ),
                 tuple(ingredients),
@@ -121,8 +123,11 @@ def plan_tiles(
     active_ao_capacity: typing.Any = None,
     orbital_capacity: typing.Any = None,
     orbital_tile: typing.Any = 32,
+    features_only: bool = False,
 ) -> typing.Any:
     """Fail before evaluation/allocation; no silent point count/backend changes."""
+    if type(features_only) is not bool or (features_only and backend != "cuda"):
+        raise ValueError("features-only grid capacity requires CUDA and a Boolean flag")
     jets = len(jet_indices(order))
     checked_int(tile_points, "tile points")
     checked_int(budget_bytes, "grid budget", high=2**63 - 1)
@@ -152,7 +157,10 @@ def plan_tiles(
         + 8192
     )
     if active_ao_capacity is not None:
-        host += 8 * (12 * m * m + 2 * m)
+        # Indexed density gathering is native device work. The extra square
+        # host buffers serve explicit potential scatter validation/publication;
+        # feature-only leases forbid those consumers before packing any input.
+        host += 8 * ((0 if features_only else 12 * m * m) + 2 * m)
     if orbital_capacity is not None:
         # Retained/copy C, occupations, weighted-factor upload staging and
         # detached Psi-sized diagnostic scratch; caller history is excluded.
@@ -186,6 +194,7 @@ def plan_tiles(
         active_ao_capacity,
         orbital_capacity,
         orbital_tile,
+        features_only,
     )
     if plan.peak_bytes > budget_bytes:
         raise ValueError(
