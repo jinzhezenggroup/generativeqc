@@ -810,6 +810,8 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
             "pbe0_uks",
             "b3lyp_rks",
             "b3lyp_uks",
+            "m06_2x_rks",
+            "m06_2x_uks",
         ],
         "component_domain": "spd",
     }

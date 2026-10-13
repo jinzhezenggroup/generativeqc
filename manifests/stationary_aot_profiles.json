@@ -30,6 +30,12 @@
       "family": "B3lyp",
       "method": "B3LYP",
       "legacy": false
+    },
+    {
+      "name": "m06_2x",
+      "family": "split:M06-2X",
+      "method": "M06-2X",
+      "legacy": false
     }
   ]
 }
