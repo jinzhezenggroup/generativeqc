@@ -1,0 +1,79 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "source_revision": "e07349607ff1b8c05d75d444222c0ae0a38d21c1",
+  "scope": "Storage-only gzip migration. Decoded bytes, numerical acceptance, source/library identities and historical recovery paths are unchanged.",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-hf-huckel-20261012/measured-production.patch.gz",
+      "decoded_path": "benchmarks/results/cuda-hf-huckel-20261012/measured-production.patch",
+      "bytes": 18995,
+      "sha256": "1548bb67d3d7cea23f149b157f09a8851758066402ea279488ffc9042822665a",
+      "decoded_bytes": 77184,
+      "decoded_sha256": "e98435f0c0c58386b1ec65dddc2615f95bb82084606a66927f839e59b34c8c45"
+    },
+    {
+      "path": "benchmarks/results/cuda-hf-huckel-20261012/recovery.json.gz",
+      "decoded_path": "benchmarks/results/cuda-hf-huckel-20261012/recovery.json",
+      "bytes": 1893,
+      "sha256": "1fc0d5600279d93764fc30cee11c8aaa2b747215ef841fa03b4842de8b85b3fa",
+      "decoded_bytes": 6084,
+      "decoded_sha256": "e7bf283e194a355fdc1ba7a73a754411a967547ddeb47ed5c4778223fc25082e"
+    },
+    {
+      "path": "benchmarks/results/cuda-hf-huckel-20261012/runner.py.gz",
+      "decoded_path": "benchmarks/results/cuda-hf-huckel-20261012/runner.py",
+      "bytes": 5581,
+      "sha256": "6d50d0af5a2a3a7984f26f901edd15aebe08abfa5f7a8e5a8bcf478510c89d0c",
+      "decoded_bytes": 18815,
+      "decoded_sha256": "62eedddaaccdb0b3e45e6810ecb31a17def86617922862c8170302e7a9ecca6f"
+    },
+    {
+      "path": "benchmarks/results/cuda-hf-huckel-20261012/summary.json.gz",
+      "decoded_path": "benchmarks/results/cuda-hf-huckel-20261012/summary.json",
+      "bytes": 961,
+      "sha256": "a42920a5bf37d5851dd4c75d933c05e1c492dae8855e4be341fd87b506944377",
+      "decoded_bytes": 3316,
+      "decoded_sha256": "534420ad82e1ac315fa2873c11803dd0cb651cdd1896833099d739842aeb1c1e"
+    },
+    {
+      "path": "benchmarks/results/default-huckel-df-20261012/summary.json.gz",
+      "decoded_path": "benchmarks/results/default-huckel-df-20261012/summary.json",
+      "bytes": 4580,
+      "sha256": "16b880fba20cf025e9c16a407c491dd93a0e5512e8b36ad0c452aeae1396a376",
+      "decoded_bytes": 30415,
+      "decoded_sha256": "e13994d8d6ea7f1dc5d4c1f9ea334ddf9e3b07aec45f4f6ad03f1210adca2221"
+    },
+    {
+      "path": "benchmarks/results/default-huckel-df-20261012/validation.json.gz",
+      "decoded_path": "benchmarks/results/default-huckel-df-20261012/validation.json",
+      "bytes": 2377,
+      "sha256": "01e50d81b984f00a2a3066202b49795137f91850205e5bd13dc086d460ce444b",
+      "decoded_bytes": 7772,
+      "decoded_sha256": "0a0fc66de9c25bd32ad89ec2c982c670139360b63fec3e16cff6ad4bb3a8b3d0"
+    },
+    {
+      "path": "benchmarks/results/native-huckel-20261012/measured-production.patch.gz",
+      "decoded_path": "benchmarks/results/native-huckel-20261012/measured-production.patch",
+      "bytes": 11879,
+      "sha256": "8ebf6c6fb9d964a2aa71fb10b3c9b38c1891a6062f1036f2fd81c980f7751305",
+      "decoded_bytes": 44054,
+      "decoded_sha256": "a3edb7c3ca722e482c9f837a6125b02463f4e4738c5e6a56b225e06f2c06ee7f"
+    },
+    {
+      "path": "benchmarks/results/native-huckel-20261012/recovery.json.gz",
+      "decoded_path": "benchmarks/results/native-huckel-20261012/recovery.json",
+      "bytes": 1692,
+      "sha256": "f306a27ed6ea8694c5f9d48ad102ed2c58d1ec4097e295c192aebbe8d9bb2213",
+      "decoded_bytes": 5310,
+      "decoded_sha256": "14dafef3c02b2b9eb57685b9fc93189f7e7eebcc782fd2b9809b0dafed8219aa"
+    },
+    {
+      "path": "benchmarks/results/native-huckel-20261012/summary.json.gz",
+      "decoded_path": "benchmarks/results/native-huckel-20261012/summary.json",
+      "bytes": 1760,
+      "sha256": "91bf7f2d72e8e3d7dc022222f220f0701f4b53d78149fcfd5ac833bbf53dbf42",
+      "decoded_bytes": 6835,
+      "decoded_sha256": "3d9c9544b0ae6b7334573ceac9ffc36362785d43c5a29a309764b51d14930486"
+    }
+  ]
+}

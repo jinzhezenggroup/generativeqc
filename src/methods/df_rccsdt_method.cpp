@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "api/handles.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "methods/df_ccsdt_force.hpp"
 #endif
@@ -150,10 +149,13 @@ generativeqc_status validate_df_rccsdt_system(generativeqc_method method,
 
 std::unique_ptr<PreparedCalculation> prepare_df_rccsdt_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
-    const generativeqc_method_descriptor& descriptor) {
+    const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis) {
   runtime::ExecutionContext execution(context);
   validate_descriptor(descriptor, execution);
-  core::System auxiliary = descriptor.density_fitting_auxiliary_basis->data;
+  if (auxiliary_basis == nullptr)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "auxiliary basis must be resolved at the API boundary");
+  core::System auxiliary = *auxiliary_basis;
   if (auxiliary.atoms.size() != system.atoms.size())
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "DF-RCCSD(T) auxiliary geometry differs from the orbital system");

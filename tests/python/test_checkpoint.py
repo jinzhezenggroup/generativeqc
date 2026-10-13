@@ -383,26 +383,31 @@ def test_atomic_publish_failure_preserves_old_file(
     inspect_checkpoint(path)
 
 
+@pytest.mark.parametrize("initial_guess", [None, "auto"])
 def test_size_limits_resource_headroom_and_disabled_warm_starts(
     tmp_path: typing.Any,
+    initial_guess: typing.Any,
 ) -> None:
     path = tmp_path / "state"
-    save(path)
+    save(path, initial_guess=initial_guess)
+    calculator = calc(initial_guess=initial_guess)
     with (
-        calc().prepare_batch([H2], warm_start=False) as target,
+        calculator.prepare_batch([H2], warm_start=False) as target,
         pytest.raises(CheckpointError, match="warm-enabled"),
     ):
         target.load_checkpoint(path)
-    with calc().prepare_batch([H2]) as target:
+    with calculator.prepare_batch([H2]) as target:
         with pytest.raises(MemoryError, match="max_bytes"):
             target.load_checkpoint(path, max_bytes=100)
         target.execute(strict=True)
         with pytest.raises(MemoryError):
             target.save_checkpoint(path, max_bytes=100)
-    # Sufficient for HF alone, deliberately insufficient for checkpoint staging.
-    with calc(resource_budget=ResourceBudget(host_bytes=1 << 20)).prepare_batch(
-        [H2]
-    ) as target:
+    # Admit the selected cold policy exactly, leaving no checkpoint headroom.
+    # Automatic Huckel includes preparation workspace beyond the Hcore inventory.
+    peak = calculator.estimate_resources([H2]).peak_bytes["host"]
+    with calc(
+        initial_guess=initial_guess, resource_budget=ResourceBudget(host_bytes=peak)
+    ).prepare_batch([H2]) as target:
         with pytest.raises(MemoryError, match="headroom"):
             target.load_checkpoint(path)
         assert target.execute(strict=True).items[0].restart_origin == "cold"

@@ -412,6 +412,13 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
     return outputs;
   }
+  if (requested_options.preliminary_guess &&
+      (unrestricted || requested_options.export_physical_reference ||
+       requested_options.preliminary_guess->kind != initial_guess::PreliminaryKind::Huckel)) {
+    std::vector<RhfBucketItem> outputs(systems.size());
+    fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    return outputs;
+  }
 
   // Resolve legacy internal callers once per prepared execution, before any
   // device setup. Fock kernels and final exact force assembly share this guard.
@@ -509,9 +516,31 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
       return outputs;
     }
   }
-  std::vector<RhfBucketItem> outputs =
-      execute_hf_cuda_bucket_driver(**plan, candidate, systems, options, device_id, unrestricted,
-                                    shell_class_profiling, inactive_eigensolver_profiling);
+  std::vector<initial_guess::PreliminaryDiagnostic> seed_diagnostics;
+  if (options.preliminary_guess) {
+    seed_diagnostics.resize(systems.size());
+    for (std::size_t index = 0; index < seed_diagnostics.size(); ++index) {
+      auto& diagnostic = seed_diagnostics[index];
+      diagnostic.requested_kind = static_cast<std::uint32_t>(options.preliminary_guess->kind);
+      diagnostic.target_attempts = 1;
+      if (initial_densities[index])
+        diagnostic.outcome = initial_guess::PreliminaryOutcome::ExplicitDensity;
+    }
+  }
+  const auto execute_driver = [&] {
+    try {
+      return execute_hf_cuda_bucket_driver(
+          **plan, candidate, systems, options, device_id, unrestricted, shell_class_profiling,
+          inactive_eigensolver_profiling, options.preliminary_guess ? &seed_diagnostics : nullptr);
+    } catch (...) {
+      // Publication/allocation failures can leave a partially written arena.
+      // Release it before propagating; never certify or reuse that generation.
+      delete *plan;
+      *plan = nullptr;
+      throw;
+    }
+  };
+  std::vector<RhfBucketItem> outputs = execute_driver();
   const bool retry_without_cublas = !(*plan)->initialized && (*plan)->retry_without_cublas;
   if (!(*plan)->initialized) {
     delete *plan;
@@ -528,14 +557,67 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
       return outputs;
     }
     (*plan)->cublas_enabled = false;
-    outputs =
-        execute_hf_cuda_bucket_driver(**plan, candidate, systems, options, device_id, unrestricted,
-                                      shell_class_profiling, inactive_eigensolver_profiling);
+    outputs = execute_driver();
     for (auto& output : outputs) ++output.scf.precision.execution_retries;
     if (!(*plan)->initialized) {
       delete *plan;
       *plan = nullptr;
     }
+  }
+  for (std::size_t index = 0; index < seed_diagnostics.size(); ++index) {
+    auto& diagnostic = seed_diagnostics[index];
+    auto& result = outputs[index].scf;
+    // Resident HF already counts operator work in its precision ledger. The
+    // preparation/retry contract must use that census, not a default-zero
+    // scalar counter. Leave the legacy no-policy public reporting unchanged.
+    if (result.precision.operator_work_counters_valid) {
+      result.fock_builds = result.precision.mixed_stage_fock_builds +
+                           result.precision.strict_stage_fock_builds +
+                           result.precision.post_scf_fock_builds;
+    } else {
+      diagnostic.work_counters_complete = false;
+    }
+    if (diagnostic.outcome == initial_guess::PreliminaryOutcome::Disabled) {
+      diagnostic.outcome = initial_guess::PreliminaryOutcome::PreparationFailed;
+      diagnostic.work_counters_complete = false;
+    }
+    outputs[index].scf.preliminary_guess = diagnostic;
+    outputs[index].scf.initial_density_used =
+        outputs[index].scf.initial_density_used ||
+        diagnostic.outcome == initial_guess::PreliminaryOutcome::Used;
+    const bool numerical_failure = outputs[index].status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    const bool exhausted =
+        outputs[index].status == GENERATIVEQC_STATUS_SCF_NOT_CONVERGED ||
+        (outputs[index].status == GENERATIVEQC_STATUS_SUCCESS && !outputs[index].scf.converged);
+    if (diagnostic.outcome != initial_guess::PreliminaryOutcome::Used ||
+        (!numerical_failure && !exhausted))
+      continue;
+    diagnostic.discarded_target_iterations = outputs[index].scf.iterations;
+    diagnostic.discarded_target_fock_builds = outputs[index].scf.fock_builds;
+    diagnostic.work_counters_complete = diagnostic.work_counters_complete && !numerical_failure;
+    diagnostic.outcome = initial_guess::PreliminaryOutcome::TargetRetried;
+    diagnostic.target_attempts = 2;
+    // Release the original bucket before a single-item core retry. Never keep
+    // two GPU arenas live or rerun already successful peers to repair one seed.
+    candidate = cuda_execution::HostBatch{};
+    delete *plan;
+    *plan = nullptr;
+    execution_plan_reused = false;
+    auto target_options = options;
+    target_options.preliminary_guess.reset();
+    auto retry =
+        run_hf_cuda_bucket_cached(plan, {systems[index]}, target_options, {nullptr}, device_id,
+                                  false, shell_class_profiling, inactive_eigensolver_profiling);
+    outputs[index] = std::move(retry.front());
+    auto& retried = outputs[index].scf;
+    if (retried.precision.operator_work_counters_valid) {
+      retried.fock_builds = retried.precision.mixed_stage_fock_builds +
+                            retried.precision.strict_stage_fock_builds +
+                            retried.precision.post_scf_fock_builds;
+    } else {
+      diagnostic.work_counters_complete = false;
+    }
+    outputs[index].scf.preliminary_guess = diagnostic;
   }
   for (auto& output : outputs) output.execution_plan_reused = execution_plan_reused;
   return outputs;

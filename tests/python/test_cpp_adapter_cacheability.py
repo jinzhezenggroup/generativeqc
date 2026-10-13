@@ -110,10 +110,12 @@ def test_ordered_static_libraries_link_after_all_translation_units(
         source, obj = tmp_path / f"{name}.cpp", tmp_path / f"{name}.o"
         source.write_text(code)
         native_cxx.compile_object(source, obj, args=("-fPIC",))
+        # Archive creation is fixture setup, not the adapter's deadline contract.
+        # Use the same finite budget as native fixture linking on busy runners.
         subprocess.run(
             ["ar", "rcs", str(tmp_path / f"lib{name}.a"), str(obj)],
             check=True,
-            timeout=10,
+            timeout=60,
         )
     monkeypatch.setenv("LIBRARY_PATH", str(tmp_path))
     source = tmp_path / "caller.cpp"

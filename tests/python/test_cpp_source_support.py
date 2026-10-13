@@ -6,6 +6,7 @@ import pytest
 from _cpp_source_support import (
     cpp_function_declaration,
     cpp_function_definition,
+    cpp_function_definition_signature,
     cpp_if_block,
     cpp_record_definition,
 )
@@ -40,6 +41,23 @@ std::vector<RhfBucketItem> execute(
     assert signature.startswith("std::vector<RhfBucketItem> execute(")
     assert "const std::vector<core::System>& systems" in signature
     assert not signature.endswith(";")
+
+
+def test_definition_signature_leaves_defaults_in_the_header() -> None:
+    source = """
+int execute(int value, const char* detail = nullptr) noexcept;
+int execute(int value, const char* detail /* { ignored } */) noexcept {
+  return value;
+}
+"""
+    signature = cpp_function_definition_signature(source, "execute")
+    assert signature == (
+        "int execute(int value, const char* detail /* { ignored } */) noexcept"
+    )
+    with pytest.raises(ValueError, match="found 0"):
+        cpp_function_definition_signature("int execute(int value = 1);", "execute")
+    with pytest.raises(ValueError, match="found 2"):
+        cpp_function_definition_signature("void f() {}\nvoid f(int x) {}", "f")
 
 
 def test_record_uses_definition_not_forward_declaration() -> None:

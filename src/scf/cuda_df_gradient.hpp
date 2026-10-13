@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "generativeqc/generativeqc.h"
 #include "runtime/strided_range.hpp"
 #include "scf/df_response_weights.hpp"
 namespace generativeqc::scf {

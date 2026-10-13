@@ -8,9 +8,10 @@ scf::FockBuildSpec ump2_reference_fock_spec();
 generativeqc_status validate_ump2_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_ump2_calculation(
     const Capabilities&, core::ContextState&, const core::System&,
-    const generativeqc_method_descriptor&);
+    const generativeqc_method_descriptor&, const core::System* auxiliary_basis = nullptr);
 std::unique_ptr<PreparedBatch> prepare_ump2_batch(const Capabilities&, core::ContextState&,
                                                   std::vector<core::System>,
                                                   const generativeqc_method_descriptor&,
-                                                  generativeqc_batch_flags);
+                                                  generativeqc_batch_flags,
+                                                  const core::System* auxiliary_basis = nullptr);
 }  // namespace generativeqc::methods::detail

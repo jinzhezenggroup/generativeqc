@@ -60,6 +60,7 @@
 #include "scf/cuda/direct_tile_compaction.hpp"
 #include "scf/cuda/direct_tile_validation.hpp"
 #include "scf/cuda/eigensolver.hpp"
+#include "scf/cuda/hf_initial_guess.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/nuclear_kernels.hpp"
@@ -450,11 +451,11 @@ void fill_global_failure(std::vector<RhfBucketItem>& outputs, generativeqc_statu
 
 namespace {
 
-std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const HostBatch& host,
-                                                  const std::vector<core::System>& systems,
-                                                  const ScfOptions& options, int device_id,
-                                                  bool unrestricted, bool shell_class_profiling,
-                                                  bool inactive_eigensolver_profiling) {
+std::vector<RhfBucketItem> execute_hf_cuda_bucket(
+    CudaRhfBucketPlan& plan, const HostBatch& host, const std::vector<core::System>& systems,
+    const ScfOptions& options, int device_id, bool unrestricted, bool shell_class_profiling,
+    bool inactive_eigensolver_profiling,
+    std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
   const runtime::ResidencyExecution residency_execution(runtime::ResidencyOwner::hf_bucket);
   using SourceRole = runtime::ResidencyRole;
   using SourceSite = runtime::ResidencySite;
@@ -1133,7 +1134,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // trusted only when its complete values, geometry and plan identity match a
   // previously published resident/frozen state. Arbitrary external dm0,
   // changed geometry and partial warm batches take the bounded fallback.
-  const bool force_ready_seed_provenance = !any_system_warm || device_resident_density_hit;
+  bool force_ready_seed_provenance = !any_system_warm || device_resident_density_hit;
   // Final determinant orbitals are tracked inside the already allocated
   // weighted-density scratch. The Graph shape depends only on this plan-stable
   // force/reuse capability, not on whether a particular warm seed has valid
@@ -3128,6 +3129,22 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
       return outputs;
     }
+  }
+
+  if (seed_diagnostics) {
+    // The ordinary target solver is idle. History buffers are unused until
+    // DIIS count advances; borrow them without allocating another GPU owner.
+    prepare_hf_cuda_initial_densities(
+        plan, host, systems, options,
+        {overlap, density, fock_history, residual_history, eigenvalues, solver_info, active},
+        *seed_diagnostics);
+    // Hückel publishes a density, not the matching core coefficient frame.
+    // Retain ordinary force canonicalization until a separately qualified
+    // seed-orbital contract can prove that first-iteration retained state.
+    if (std::any_of(seed_diagnostics->begin(), seed_diagnostics->end(), [](const auto& diagnostic) {
+          return diagnostic.outcome == initial_guess::PreliminaryOutcome::Used;
+        }))
+      force_ready_seed_provenance = false;
   }
 
   if (track_force_final_orbitals && force_ready_seed_provenance) {
@@ -5468,9 +5485,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
     CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
     const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
-    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling) {
+    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    std::vector<initial_guess::PreliminaryDiagnostic>* seed_diagnostics) {
   return execute_hf_cuda_bucket(plan, host, systems, options, device_id, unrestricted,
-                                shell_class_profiling, inactive_eigensolver_profiling);
+                                shell_class_profiling, inactive_eigensolver_profiling,
+                                seed_diagnostics);
 }
 
 generativeqc_status contract_cuda_weighted_eri_primitives(
