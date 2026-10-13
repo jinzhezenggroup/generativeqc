@@ -8,6 +8,28 @@
 
 namespace generativeqc::dft::cuda_ks_detail {
 namespace {
+__global__ void rebase_provisional_diis_kernel(
+    std::size_t elements, unsigned capacity, const double* fock, const double* residual,
+    const std::uint32_t* count, const std::uint32_t* head, double* fock_history,
+    double* residual_history) {
+  const unsigned live = *count, next = *head;
+  if (capacity < 2 || live < 2 || live > capacity || next >= capacity) return;
+  const unsigned newest = (next + capacity - 1) % capacity;
+  const unsigned first = (next + capacity - live) % capacity;
+  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < elements;
+       i += std::size_t(blockDim.x) * gridDim.x) {
+    // Each worker owns this element in every live slot, so it snapshots the
+    // latest value before modifying any history and needs no interblock fence.
+    const double df = fock[i] - fock_history[std::size_t(newest) * elements + i];
+    const double dr = residual[i] - residual_history[std::size_t(newest) * elements + i];
+    for (unsigned j = 0; j < live; ++j) {
+      const auto offset = std::size_t((first + j) % capacity) * elements + i;
+      fock_history[offset] += df;
+      residual_history[offset] += dr;
+    }
+  }
+}
+
 __global__ void reset_control_kernel(unsigned spins, int occupied_alpha, int occupied_beta,
                                      Control* control, std::uint8_t* enabled,
                                      std::uint8_t* spin_enabled) {
@@ -223,6 +245,16 @@ __global__ void advance_kernel(std::size_t matrix, unsigned spins, double nuclea
   }
 }
 }  // namespace
+
+void rebase_provisional_diis(cudaStream_t stream, std::size_t elements, unsigned capacity,
+                             const double* fock, const double* residual,
+                             const std::uint32_t* count, const std::uint32_t* head,
+                             double* fock_history, double* residual_history) {
+  if (!elements || capacity < 2) return;
+  const auto blocks = static_cast<unsigned>(std::min<std::size_t>((elements + 255) / 256, 65535));
+  rebase_provisional_diis_kernel<<<blocks, 256, 0, stream>>>(
+      elements, capacity, fock, residual, count, head, fock_history, residual_history);
+}
 
 void reset_control(cudaStream_t stream, unsigned spins, int occupied_alpha, int occupied_beta,
                    Control* control, std::uint8_t* enabled, std::uint8_t* spin_enabled) {

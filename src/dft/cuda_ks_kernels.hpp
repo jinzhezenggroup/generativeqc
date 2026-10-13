@@ -27,6 +27,14 @@ struct Control {
 
 void reset_control(cudaStream_t stream, unsigned spins, int occupied_alpha, int occupied_beta,
                    Control* control, std::uint8_t* enabled, std::uint8_t* spin_enabled);
+/** Approximate proposal-only continuation: shift live DIIS vectors so the most
+ * recent inner observation agrees with the new anchor. The two observations
+ * may use slightly different densities; physical acceptance must ignore this
+ * transformed history. Callers must invalidate all cached Gram products. */
+void rebase_provisional_diis(cudaStream_t stream, std::size_t elements, unsigned capacity,
+                             const double* fock, const double* residual,
+                             const std::uint32_t* count, const std::uint32_t* head,
+                             double* fock_history, double* residual_history);
 void assemble_fock(cudaStream_t stream, std::size_t n, unsigned spins, const double* hcore,
                    const double* coulomb, const double* exchange, double exchange_coefficient,
                    const double* range_exchange, double range_exchange_coefficient,

@@ -347,6 +347,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool nonlocal_outer_active{}, nonlocal_frozen_stage{}, pending_nonlocal_frozen{};
   bool nonlocal_freeze_range{}, nonlocal_continue_inner_diis{};
   bool nonlocal_provisional_delta_chain{};
+  bool nonlocal_rebase_inner_diis{}, nonlocal_rebase_pending{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1432,6 +1433,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto* continued_diis = std::getenv("GENERATIVEQC_VV10_CONTINUE_INNER_DIIS");
     nonlocal_continue_inner_diis =
         nonlocal_outer_active && continued_diis && std::string_view(continued_diis) == "1";
+    const auto* rebased_diis = std::getenv("GENERATIVEQC_VV10_REBASE_INNER_DIIS");
+    nonlocal_rebase_inner_diis =
+        nonlocal_outer_active && rebased_diis && std::string_view(rebased_diis) == "1";
+    nonlocal_rebase_pending = false;
     nonlocal_freeze_range = nonlocal_outer_active && has_range_correction && freeze_range_requested;
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
@@ -2354,18 +2359,31 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(effective, fock, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
       } else {
-        if (ordered_diis_gram) {
+        // Only a provisional proposal history is shifted. The most recent
+        // inner density is close to this anchor, but is not identical: this is
+        // an approximate secant continuation, never an exact physical history.
+        if (nonlocal_rebase_pending) {
+          cuda_ks_detail::rebase_provisional_diis(stream, elements, history, fock, residual,
+                                                history_count, history_head, fock_history,
+                                                residual_history);
+          nonlocal_rebase_pending = false;
+        }
+        // Rebased residuals invalidate every cached Gram entry. Use the full
+        // existing Gram reduction throughout this optional solve; its admitted
+        // cache storage remains charged and other solver routes are unchanged.
+        if (ordered_diis_gram && !nonlocal_rebase_inner_diis) {
           launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual,
                                          enabled, fock_history, residual_history, gram, weights,
                                          history_count, history_head, effective, raw_gram, true);
         } else {
-          const bool incremental_gram = incremental_diis_gram;
+          const bool incremental_gram = incremental_diis_gram && !nonlocal_rebase_inner_diis;
           if (incremental_gram)
             check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
                                            enabled, history_count, history_head, raw_gram));
           launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                                     fock_history, residual_history, gram, weights, history_count,
-                                    history_head, effective, true, false, nullptr, 0, raw_gram);
+                                    history_head, effective, true, false, nullptr, 0,
+                                    incremental_gram ? raw_gram : nullptr);
         }
         check(cudaGetLastError());
       }
@@ -2598,7 +2616,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // accelerator across nearby frozen potentials. Those entries are not
         // full-target work or acceptance evidence. The initial semilocal switch
         // and every bounded exit still start an uncontaminated target history.
-        if (!nonlocal_continue_inner_diis || pending_nonlocal_seed || !nonlocal_outer_active) {
+        nonlocal_rebase_pending =
+            nonlocal_rebase_inner_diis && pending_nonlocal_frozen && nonlocal_outer_active;
+        if ((!nonlocal_continue_inner_diis && !nonlocal_rebase_inner_diis) ||
+            pending_nonlocal_seed || !nonlocal_outer_active) {
           check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
           check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
         }
@@ -2612,7 +2633,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // Close with consecutive fresh physical Focks and the original strict
         // energy/density/residual gates, never an inner or stale-potential gate.
         nonlocal_outer_active = false;
-        if (nonlocal_continue_inner_diis) {
+        if (nonlocal_continue_inner_diis || nonlocal_rebase_inner_diis) {
           check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
           check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
         }
