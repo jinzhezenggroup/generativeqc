@@ -2,7 +2,19 @@
 # See https://pre-commit.com/hooks.html for more hooks
 # Preserve exact upstream bytes and SHA-guarded frozen migration oracles.
 exclude: ^(upstream/|src/xtb/native/|cmake/3rdparty/implib/|tests/native/fixtures/johnson_prechange_3b97c234/|tests/native/fixtures/spectral_prechange_5c02b1ba/)
+# The mutating hook is local only; CI runs the read-only companion below.
+ci:
+  skip: [auto-compact-evidence-publications]
 repos:
+  - repo: local
+    hooks:
+      - id: auto-compact-evidence-publications
+        name: Compact staged shared publication data (review and restage)
+        entry: python3 tools/compact_evidence_publications.py --pre-commit
+        language: system
+        files: ^benchmarks/results/
+        require_serial: true
+        fail_fast: true
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

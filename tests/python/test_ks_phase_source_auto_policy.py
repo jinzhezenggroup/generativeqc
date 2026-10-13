@@ -64,7 +64,8 @@ def test_screened_cold_candidates_preserve_rhf_policy(
 #include <limits>
 #include "scf/cuda/direct_jk_source_policy.hpp"
 using namespace generativeqc::scf::cuda_execution;
-constexpr auto screened = DirectJkSourceAutoPolicy::screened_cold;
+constexpr auto screened = DirectJkSourceAutoPolicy::screened_hybrid_cold;
+constexpr auto pure = DirectJkSourceAutoPolicy::screened_cold;
 constexpr auto generic = DirectJkSourceAutoPolicy::generic_f;
 constexpr auto automatic = DirectJkSourceSelection::automatic;
 static_assert(direct_jk_source_selection(nullptr)==automatic);
@@ -76,8 +77,15 @@ static_assert(direct_jk_source_auto_refusal(768,800,100,2,true,false));
 static_assert(direct_jk_source_auto_refusal(768,800,100,2,false,false,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,0.0));
 static_assert(direct_jk_source_auto_refusal(768,800,100,2,true,false,screened,-1e-12));
-static_assert(direct_jk_source_auto_refusal(63,128,8,2,true,false,screened,1e-12));
-static_assert(direct_jk_source_auto_refusal(64,127,8,2,true,false,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(23,128,8,2,true,false,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(64,23,8,2,true,false,screened,1e-12));
+static_assert(!direct_jk_source_auto_refusal(24,25,8,2,true,false,screened,1e-12));
+static_assert(!direct_jk_source_auto_refusal(96,100,8,2,true,false,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(24,25,8,2,true,false,pure,1e-12));
+static_assert(direct_jk_source_auto_refusal(96,100,8,2,true,false,pure,1e-12));
+static_assert(!direct_jk_source_auto_refusal(128,128,8,2,true,false,pure,1e-12));
+static_assert(direct_jk_source_auto_refusal(63,128,8,3,true,true,screened,1e-12));
+static_assert(direct_jk_source_auto_refusal(64,127,8,3,true,true,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(64,128,7,2,true,false,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,2,true,false,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,0,true,false,screened,1e-12));
@@ -86,6 +94,8 @@ static_assert(!direct_jk_source_auto_refusal(64,128,8,3,true,true,screened,0.0))
 static_assert(direct_jk_source_auto_refusal(64,128,8,3,true,false,screened,1e-12));
 static_assert(direct_jk_source_auto_refusal(64,128,8,4,true,true,screened,1e-12));
 static_assert(!direct_jk_source_auto_refusal(64,128,8,3,true,true));
+static_assert(direct_jk_source_auto_refusal(63,128,8,3,true,true));
+static_assert(direct_jk_source_auto_refusal(64,127,8,3,true,true));
 static_assert(direct_jk_source_value_ceiling(automatic,screened,2)==(16ULL<<30));
 static_assert(direct_jk_source_value_ceiling(automatic,screened,3)==(8ULL<<30));
 static_assert(direct_jk_source_value_ceiling(automatic,generic,2)==(8ULL<<30));
@@ -99,6 +109,14 @@ static_assert(direct_jk_source_allowance(768,100,required,overhead,maximum,8ULL<
 static_assert(direct_jk_source_allowance(768,100,required,overhead,
                                         required+overhead+values-1,16ULL<<30)<values);
 static_assert(direct_jk_source_allowance(768,100,maximum,1,maximum,16ULL<<30)==0);
+static_assert(direct_jk_source_allowance(24,8,required,overhead,maximum,1ULL<<20,screened)
+              ==(1ULL<<20));
+static_assert(direct_jk_source_allowance(24,8,required,overhead,maximum,1ULL<<20,generic)==0);
+static_assert(direct_jk_source_allowance(24,8,required,overhead,maximum,1ULL<<20,pure)==0);
+static_assert(direct_jk_source_allowance(23,8,required,overhead,maximum,1ULL<<20,screened)==0);
+static_assert(direct_jk_source_allowance(24,3,required,overhead,maximum,1ULL<<20,screened)==0);
+static_assert(direct_jk_source_allowance(24,8,required,overhead,required+overhead,1ULL<<20,
+                                        screened)==0);
 int main() {
   for (const auto* mask : {"", "-1", "+1", "0X1", "0x", "1 ", "268435456", "4294967296"})
     if (direct_jk_resident_bucket_policy(mask, nullptr).valid) return 2;

@@ -409,7 +409,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     unsigned maximum_angular = 0;
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-    constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;
+    // Only hybrid endpoints qualify the smaller reuse threshold. Pure J keeps
+    // its incumbent admission rather than inheriting an unmeasured cost model.
+    const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
+                                          : DirectJkSourceAutoPolicy::screened_cold;
     const auto buckets = direct_jk_resident_bucket_policy(
         std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
         std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),

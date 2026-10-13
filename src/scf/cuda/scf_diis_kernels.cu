@@ -370,13 +370,12 @@ __global__ void update_diis_kernel(
   for (std::size_t element = threadIdx.x; element < vector_size; element += blockDim.x) {
     double value = fock[matrix_offset + element];
     if (nonsingular) {
-      value = 0.0;
-      for (std::uint32_t item = 0; item < count; ++item) {
-        const std::size_t item_offset =
-            static_cast<std::size_t>(system) * history_stride +
-            static_cast<std::size_t>((first + item) % history_capacity) * vector_size;
-        value += rhs[item] * fock_history[item_offset + element];
-      }
+      // The shared compiler owns the coefficient contraction. The solver
+      // supplies its final live window after any dependent-history retirement.
+      const tensor::RingHistoryElement history{
+          fock_history + static_cast<std::size_t>(system) * history_stride, vector_size, element,
+          first, history_capacity};
+      value = tensor::generated::ordered_history_combination(rhs, count, history);
     }
     effective_fock[matrix_offset + element] = value;
   }

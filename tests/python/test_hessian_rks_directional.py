@@ -26,10 +26,15 @@ from tools.generativeqc_response import GMRESOptions, NativeRKSResponse
 
 H2 = [("H", (0.0, 0.0, -0.72)), ("H", (0.08, -0.03, 0.71))]
 LARGE_HE = [("He", (0.13, -0.21, 0.17))]
+# Cross the AO admission boundary with s/p shells, without making this resource
+# test compile every d/d/d/d component. Independent d/f derivative gates live in
+# test_second_derivatives_native.py, including a bounded mixed-component dddd HVP.
 LARGE_HE_BASIS = (
     Shell(0, 0, (Primitive(1.5, 1.0),)),
-    Shell(0, 2, (Primitive(0.8, 1.0),)),
-    Shell(0, 2, (Primitive(0.35, 1.0),)),
+    Shell(0, 1, (Primitive(2.0, 1.0),)),
+    Shell(0, 1, (Primitive(0.8, 1.0),)),
+    Shell(0, 1, (Primitive(0.35, 1.0),)),
+    Shell(0, 1, (Primitive(0.15, 1.0),)),
 )
 GRID = GridSpec(radial_points=10, angular_polar=4, angular_azimuth=8)
 
