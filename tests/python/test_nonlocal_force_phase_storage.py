@@ -366,3 +366,33 @@ def test_exact_pair_component_reuse_and_invalidation(
         )
         _seed_device(cp, owner, producer, consumer, density, gradient)
         assert owner.diagnostic(include_work=True).pair_evaluations == 5
+
+
+def test_large_grid_automatic_reuse_has_explicit_opt_out(
+    cuda_runtime: tuple[Any, ct.CDLL], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Screened large grids exercise automatic ownership without quadratic work."""
+    cp, library = cuda_runtime
+    monkeypatch.delenv("GENERATIVEQC_VV10_COMPONENT_REUSE", raising=False)
+    count = 65536
+    spec = original_nonlocal_correlation("vv10")
+    points = np.zeros((count, 3))
+    weights = np.ones(count)
+    density = np.full(count, THRESHOLD / 2)
+    gradient = np.zeros((count, 3))
+    stream = cp.cuda.Stream(non_blocking=True)
+    with (
+        NonlocalFixedGridPlan(spec, count, device="cuda", library=library) as plan,
+        _owner(plan, points, weights, library) as owner,
+    ):
+        for _ in range(2):
+            result = _seed_device(cp, owner, stream, stream, density, gradient)
+            # MolecularV1 removes every row and partner exactly.
+            np.testing.assert_array_equal(result, np.zeros((6, count)))
+            owner.reset()
+        work = owner.diagnostic(include_work=True)
+        assert (work.pair_cache_hits, work.pair_evaluations) == (1, 1)
+        monkeypatch.setenv("GENERATIVEQC_VV10_COMPONENT_REUSE", "0")
+        _seed_device(cp, owner, stream, stream, density, gradient)
+        work = owner.diagnostic(include_work=True)
+        assert (work.pair_cache_hits, work.pair_evaluations) == (1, 2)

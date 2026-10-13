@@ -1,6 +1,6 @@
 # Proposal: exact VV10 force ingredient reuse
 
-Status: experimental, default off; GPU and complete endpoints pending
+Status: automatic candidate; default-route endpoint qualification pending
 Date: 2026-10-14
 
 ## Problem
@@ -62,3 +62,32 @@ preserve the existing asynchronous resident-force execution contract.
 
 #2426, #2454; the frozen bilateral integration is `7001858f1`.
 Ignored trial receipts are in `.artifacts/qualification/vv10-component-reuse-*`.
+
+
+## Automatic candidate and clean complete populations
+
+The candidate now considers exact force reuse automatically for at least 65536
+points, matching the large-domain pair schedule crossover. Snapshot seeding,
+variant, coefficient, schedule and exact-key/error checks still apply.
+Explicit `GENERATIVEQC_VV10_COMPONENT_REUSE=0` disables reuse; `1` admits small
+qualification fixtures too. Default-route endpoint validation is still pending.
+
+Clean frozen source `129d1fa3c` opt-in populations each pass all 12 calls:
+
+| Atoms | Cold with preparation (s) | Warm median (s) | Moved (s) | Moved-warm median (s) |
+| --- | ---: | ---: | ---: | ---: |
+| 3 | 6.785415 | 0.496386 | 4.804617 | 0.497128 |
+| 12 | 43.423775 | 3.034359 | 32.095988 | 3.041815 |
+| 48 | 575.782563 | 38.714667 | 406.116415 | 38.650074 |
+
+Slurm 8266 (48) and 8269 (3/12) record their assigned distinct GPU UUIDs and
+check for pre-existing compute processes before starting. Every cold/moved call
+reports one force pair sweep; each of the ten frozen replays reports one exact
+hit and zero sweeps. Maximum E/F errors across these populations are
+4.093e-12 Eh / 9.160e-11 Eh/Bohr. The 48-atom warm median improves from the
+preceding frozen bilateral source's 67.707403 s without changing cold SCF work.
+The original 1800-second point limit and all independent gates are unchanged.
+
+Native and all 43 consumer file hashes have been reconstructed from the frozen
+Git tree, available on `codex/benchmark-vv10-reuse-qualified-source-20261014`.
+These opt-in measurements do not relabel the forthcoming automatic source.
