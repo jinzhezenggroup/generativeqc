@@ -217,6 +217,16 @@ def equal(x1: object, x2: object) -> typing.Any:
     return _compare("equal", x1, x2)
 
 
+def where(condition: object, x1: object, x2: object) -> typing.Any:
+    """Select finite real branches on the bounded captured/reference path."""
+    if _symbolic(condition, x1, x2) or _active_capture():
+        return _namespace.where(condition, x1, x2)
+    predicate = _eager_data_array(condition)
+    if predicate.dtype != np.dtype("bool"):
+        raise TypeError("where condition must be bool data")
+    return _eager_compute(np.where, predicate, *_eager_operands(x1, x2, scalars=True))
+
+
 def not_equal(x1: object, x2: object) -> typing.Any:
     """Compare finite real operands elementwise for inequality."""
     return _compare("not_equal", x1, x2)

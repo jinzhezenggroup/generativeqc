@@ -456,6 +456,24 @@ compilation, dynamic indexing/shapes and arbitrary Python control flow are not
 implied by eager support. Unsupported capture functions, including linalg/fft,
 raise instead of evaluating a NumPy fallback during tracing.
 
+Captured `where(condition, x1, x2)` supports a genuine Boolean condition and
+finite generic float32/float64 branches. The branches use explicit casts for
+float promotion; condition and values each broadcast explicitly, including
+scalars and empty axes. Python real branch scalars follow the existing exact
+scalar contract (negative-zero literals are rejected; array signed zeros are
+preserved). Reference outputs are detached and never mutate inputs. The reference
+precision transform preserves the Boolean condition and casts only the real
+branches; generated precision variants remain unqualified reference candidates.
+The reference interpreter counts all live operands, selection results and published copies
+against its retained-byte budget; selection costs one unit of logical work per
+result element. All live operands are evaluated and finite-checked, so an invalid
+or nonfinite unselected branch still raises, even under a constant condition.
+Scientific index domains, representations and symmetry annotations are not
+admitted by this selection primitive. `where` has no JVP/VJP/HVP rule and no
+native CPU/CUDA/portable/scalar/bundle qualification; those paths reject before
+compiler discovery or device execution. This captured contract does not change
+the broader standard eager namespace or promise full IEEE conformance.
+
 `einsum` and `slice` remain bounded GenerativeQC extensions, not standard API
 functions. They preserve explicit-output/no-ellipsis contraction notation and
 exact finite scientific validation. Use `xp.capabilities()` to distinguish
