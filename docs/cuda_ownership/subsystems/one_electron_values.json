@@ -3,7 +3,7 @@
   "evidence": [
     "benchmarks/results/cuda-ownership/one-electron/publication.json",
     "benchmarks/results/one-electron-values-rtx5090/raw-summary.json",
-    "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json"
+    "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json.gz"
   ],
   "generated_capability": "IntegralIR S/T/V all Cartesian s/p/d/f pairs with public spherical contraction",
   "missing_capability": "None for value replacement; independent derivative/force exceptions remain separately owned",
