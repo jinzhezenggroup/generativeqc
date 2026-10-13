@@ -406,6 +406,22 @@ int main() {
   }
   if (resolve_method_owned_df_resident_budget(split,768,3712,0,100ULL<<20) != split)
     return 17;
+  // #2411: only an explicitly validated restricted J-only method may
+  // rebalance a rank-zero packed owner. No occupation is inferred.
+  const auto j_only_split = resolve_method_owned_df_resident_budget(
+      split,768,3712,0,100ULL<<20,true);
+  const auto j_only_values = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,0,
+      j_only_split.value_bytes,100ULL<<20,true,0,true);
+  if (!j_only_values.stores_full_three_center ||
+      j_only_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+      j_only_values.value_storage.rank_capacity != 0 ||
+      j_only_split.response_bytes < split.total_bytes/5 ||
+      j_only_split.total_bytes != split.total_bytes) return 19;
+  const auto j_only_explicit = resolve_df_budget(
+      {768,3712,96,1,0,true},{24ULL<<30,32ULL<<30,true},4ULL<<30);
+  if (resolve_method_owned_df_resident_budget(
+          j_only_explicit,768,3712,0,100ULL<<20,true) != j_only_explicit) return 20;
   const auto force_ready_split = resolve_method_owned_df_resident_budget(
       resolve_df_budget({768,3712,96,1,0,true},{30ULL<<30,32ULL<<30,true},0),
       768,3712,160,100ULL<<20);
