@@ -48,7 +48,7 @@ def test_deferred_feature_lease_hands_error_to_same_stream_consumer() -> None:
     assert "return;" in deferred
     assert "cudaMemcpyDeviceToHost" not in deferred
     assert (
-        "deferred CUDA grid errors require a device-only local feature lease" in block
+        "deferred CUDA grid errors require a device-only feature lease" in block
     )
     host_wrapper = source.split("int grid_cuda_run_selected_deferred_v1", 1)[1].split(
         "int grid_cuda_run_selected_device_deferred_v1", 1

@@ -74,6 +74,56 @@ def test_dense_large_basis_does_not_reserve_unused_indexed_density_storage() -> 
         )
 
 
+def test_feature_only_force_keeps_indexed_maps_under_existing_caps() -> None:
+    """Force feature leases never stage local potential matrices on the host."""
+    layout = _ordinary(96, aos=1088, features_only=True)
+    assert layout.grid_plan.active_ao_capacity == 1088
+    assert layout.grid_plan.features_only
+    assert layout.host_bound <= 256 << 20
+    assert (
+        layout.grid_plan.peak_bytes
+        + layout.source_resources.allocation_bytes
+        + layout.native_geometry_reserve
+        <= 512 << 20
+    )
+
+
+@pytest.mark.parametrize("tile_points", (None, 256))
+def test_optional_force_maps_fall_back_within_the_same_complete_caps(
+    tile_points: int | None,
+) -> None:
+    """An auto map request must not reject an otherwise admitted wide force."""
+
+    def choose(atoms: int, aos: int, host_bytes: int = 256 << 20) -> object:
+        return runtime._plan_stationary_optional_ao_schedule(
+            grid_points=atoms * 24576,
+            tile_points=tile_points,
+            preferred_tile_points=512,
+            requested_maps=True,
+            admit=lambda points, indexed: (
+                _ordinary(
+                    atoms,
+                    aos=aos,
+                    tile_points=points,
+                    reserve_active_ao=indexed,
+                    max_host_bytes=host_bytes,
+                ),
+                None,
+            ),
+        )
+
+    wide, _, reason = choose(96, 1088)
+    assert wide.grid_plan.active_ao_capacity is None
+    assert wide.host_bound <= 256 << 20
+    assert reason and "budget" in reason
+    if tile_points is not None:
+        assert wide.grid_plan.tile_points == tile_points
+    small, _, reason = choose(48, 544)
+    assert small.grid_plan.active_ao_capacity == 544 and reason is None
+    with pytest.raises(ValueError, match="host.*budget"):
+        choose(96, 1088, 1)
+
+
 @pytest.mark.parametrize(
     "atoms,selected", [(3, 1024), (24, 1024), (48, 1024), (96, 256)]
 )
@@ -394,7 +444,8 @@ def _ecp_admission(prepared: bool, host_budget: int) -> tuple[typing.Any, dict]:
     function_code = next(
         value for value in compiled.co_consts if isinstance(value, CodeType)
     )
-    return FunctionType(function_code, scope), scope
+    admit = FunctionType(function_code, scope)
+    return lambda points: admit(points, True), scope
 
 
 @pytest.mark.parametrize("prepared", [False, True])

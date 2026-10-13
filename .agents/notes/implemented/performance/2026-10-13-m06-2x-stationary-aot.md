@@ -1,6 +1,6 @@
 # Decision: package the exact M06-2X stationary force plans
 
-Status: implemented; endpoint qualification pending
+Status: implemented and qualified
 Date: 2026-10-13
 
 ## Problem
@@ -35,3 +35,15 @@ Host admission covers the exact split-hybrid profiles and corrupt/mismatched
 packages without invoking a compiler. Real-device first-process execution must
 show the packaged route, no runtime compiler calls, and independent energy/force
 agreement before the updated cold result is published.
+
+## Complete endpoint qualification
+
+Source `61b9387f3` passes all 12 independent direct and DF calls at 3/12 atoms.
+The 3-atom direct cold endpoint takes 4.378 s (historical 229.691 s), with a
+0.275-s five-call warm median. The 12-atom direct cold endpoint takes 7.703 s.
+A separate process begins with an empty private stationary artifact directory
+and makes both runtime compiler discovery and NVCC invocation raise immediately.
+All 12 calls still pass and no artifact files are created. This establishes
+actual AOT execution, including the native/compiled split-hybrid identity; a
+pre-populated JIT cache is not the explanation. These control timings are not
+used in the chart. The public snapshot records exact source and library hashes.

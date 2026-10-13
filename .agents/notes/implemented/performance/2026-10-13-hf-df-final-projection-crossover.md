@@ -1,6 +1,6 @@
 # Decision: retain the occupied projection across the HF-DF capacity crossover
 
-Status: implemented; endpoint qualification pending
+Status: implemented and qualified
 Date: 2026-10-13
 
 ## Problem
@@ -47,3 +47,19 @@ Keep the independent 1e-8 Eh / 1e-7 Eh/Bohr endpoint gates, finite memory owners
 explicit diagnostic overrides, and exact fallback. Revisit the response floor if
 its live allocations or occupied response algebra change. Do not replace the
 final actual-plan check with the shared resolver's weaker packed-B capacity test.
+
+## Complete endpoint qualification
+
+Source `61b9387f3` with native library SHA256
+`1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa`
+passes every cold, five frozen warm, moved and five moved-warm energy/force gate
+at 3/12/48/96 atoms under public defaults. At 96 atoms the complete times are
+32.994 / 3.201 / 28.670 / 3.202 s (warm values are five-call medians), compared
+with the historical 59.318-s warm endpoint. No explicit response cap or occupied
+consumer override is used. The independent 1e-8 Eh / 1e-7 Eh/Bohr gates are
+unchanged. The source-bound records and SCF counts are in the README DF summary.
+
+Five real-device regression cases cover automatic final projection reuse,
+explicit RHF/UHF controls and independent M06-2X DF endpoints; the native DF
+regression also passes its 48 weighted finite-difference force gates. The
+capacity crossover retains the explicit-cap and unsupported-state fallbacks.

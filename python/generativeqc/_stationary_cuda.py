@@ -2251,6 +2251,7 @@ class PreparedStationaryCudaExecution:
                 "primitive_integral_derivatives": integral_derivatives,
                 "pbe0_restricted_point": _resolve_restricted_point_policy(),
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
+                "grid_features_only": getattr(grid_plan, "features_only", False),
                 "resident_ao_cutoff": resident_ao_cutoff,
                 "resident_ao_cache_bytes": resident_ao_cache_bytes,
                 "resident_ao_producer": resident_ao_producer,
@@ -2481,6 +2482,7 @@ class PreparedStationaryCudaExecution:
                     budget_bytes=grid_plan.peak_bytes,
                     device_id=device,
                     active_ao_capacity=grid_plan.active_ao_capacity,
+                    features_only=getattr(grid_plan, "features_only", False),
                     ingredients=(
                         ("rho", "gradient", "tau") if needs_first else ("rho",)
                     ),
@@ -2729,6 +2731,7 @@ def _plan_stationary_cuda_tile(
     max_host_bytes: int,
     max_ecp_pair_samples: int,
     reserve_active_ao: bool = True,
+    features_only: bool = False,
 ) -> _StationaryCudaTileLayout:
     """Retain the ordinary force owner inventory for each candidate tile.
 
@@ -2746,6 +2749,7 @@ def _plan_stationary_cuda_tile(
         # buffers. A consumer without AO maps must use the dense contract, so
         # unused optional storage cannot exclude an otherwise bounded force.
         active_ao_capacity=n if reserve_active_ao else None,
+        features_only=features_only,
         budget_bytes=max_device_bytes,
     )
     # Admit the bounded fallback first. Optional lane expansion uses only the
@@ -2928,6 +2932,40 @@ def _plan_stationary_cuda_tile(
         native_geometry_reserve,
         source_resources,
     )
+
+
+def _plan_stationary_optional_ao_schedule(
+    *,
+    grid_points: int,
+    tile_points: int | None,
+    preferred_tile_points: int,
+    requested_maps: bool,
+    admit: typing.Callable[[int, bool], tuple[_StationaryCudaTileLayout, typing.Any]],
+) -> tuple[_StationaryCudaTileLayout, typing.Any, str | None]:
+    """Admit optional indexed storage, retaining the complete dense fallback.
+
+    Both searches are dry and include every concurrent owner's original caps.
+    Retrying cannot bypass a grid/work/explicit-tile rejection: dense admission
+    rechecks those same constraints. No native allocation or execution is retried.
+    """
+
+    def choose(indexed: bool) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+        return plan_stationary_cuda_grid_schedule(
+            grid_points=grid_points,
+            tile_points=tile_points,
+            admit=lambda points: admit(points, indexed),
+            preferred_tile_points=preferred_tile_points,
+        )
+
+    try:
+        layout, work = choose(requested_maps)
+        return layout, work, None
+    except ValueError as error:
+        if not requested_maps:
+            raise
+        indexed_rejection = str(error)
+    layout, work = choose(False)
+    return layout, work, indexed_rejection
 
 
 def _stationary_ao_map_reserve(
@@ -3217,7 +3255,16 @@ def _complete_rks_cuda_gradient_diagnostic(
     needs_first = "sigma" in ingredients
     device = int(state._source.metadata[12])
 
-    def admit_tile(points: int) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+    # Validate the requested optional policy even if indexed capacity is later
+    # declined, so fallback cannot conceal a malformed cutoff or cache budget.
+    _stationary_ao_map_reserve(
+        resident_ao_cutoff, resident_ao_cache_bytes, 0, max_host_bytes
+    )
+    requested_resident_ao_cutoff = resident_ao_cutoff
+
+    def admit_tile(
+        points: int, reserve_active_ao: bool
+    ) -> tuple[_StationaryCudaTileLayout, typing.Any]:
         work = plan_stationary_cuda_grid_work(
             atoms=na,
             grid_points=len(state.grid.points),
@@ -3241,7 +3288,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             max_device_bytes=max_device_bytes,
             max_host_bytes=max_host_bytes,
             max_ecp_pair_samples=max_ecp_pair_samples,
-            reserve_active_ao=resident_ao_cutoff is not None,
+            reserve_active_ao=reserve_active_ao,
+            features_only=True,
         )
         # Prepared ECP retains all tensor owners simultaneously. Its later lease
         # admission charges their host storage in addition to the ordinary bound;
@@ -3267,12 +3315,15 @@ def _complete_rks_cuda_gradient_diagnostic(
         and callable(getattr(state._source, "stationary_integral_device_reserve", None))
         else 512
     )
-    layout, grid_work = plan_stationary_cuda_grid_schedule(
+    layout, grid_work, ao_capacity_fallback = _plan_stationary_optional_ao_schedule(
         grid_points=len(state.grid.points),
         tile_points=tile_points,
         admit=admit_tile,
         preferred_tile_points=preferred_tile_points,
+        requested_maps=resident_ao_cutoff is not None,
     )
+    if ao_capacity_fallback is not None:
+        resident_ao_cutoff = None
     grid_plan = layout.grid_plan
     tensor_plans = layout.tensor_plans
     host_bound = layout.host_bound
@@ -3454,6 +3505,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         budget_bytes=grid_plan.peak_bytes,
                         device_id=device,
                         active_ao_capacity=grid_plan.active_ao_capacity,
+                        features_only=getattr(grid_plan, "features_only", False),
                         # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
                         # additionally consumes tau from the same current density.
                         ingredients=("rho", "gradient", "tau")
@@ -3989,7 +4041,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         },
         resident_ao_selection={
             "schema": "generativeqc.stationary-resident-ao-selection.v1",
-            "mode": "disabled"
+            "requested_cutoff": requested_resident_ao_cutoff,
+            "capacity_fallback": ao_capacity_fallback,
+            "mode": "dense-capacity-fallback"
+            if ao_capacity_fallback is not None
+            else "disabled"
             if resident_ao_cutoff is None
             else (
                 "dense-no-resident-grid" if ao_maps is None else resident_ao_producer
