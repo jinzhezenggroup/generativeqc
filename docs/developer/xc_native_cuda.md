@@ -340,10 +340,12 @@ Strict-FP64 restricted resident VV10 solves use bounded native initialization
 before the ordinary physical target tail. The initializer first solves a
 semilocal/range-exchange proposal problem, then refreshes complete VV10 anchors
 between fixed-potential inner solves. Transported densities start with a target
-anchor. Every provisional and target iteration shares the caller's total
-iteration budget; only consecutive complete target evaluations passing the
-unchanged energy, density and physical residual gates can publish a successful
-state or forces. An already stationary target density is held for a further
+anchor. Provisional and full-target iterations share the caller's main SCF
+iteration budget; initialization gets no separate allowance. The existing ECP
+physical-final-closure policy retains its separate bound of four correction
+iterations. Only consecutive complete target evaluations passing the unchanged
+energy, density and physical residual gates can publish a successful state or
+forces. An already stationary target density is held for a further
 physical energy confirmation, instead of applying another sub-tolerance update.
 
 Resident warm replays and unsupported spin, precision, incremental-J/K or
