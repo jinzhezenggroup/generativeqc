@@ -671,6 +671,10 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     DirectSpdForceSchedule spd_schedule) {
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
+  // Pure-J derivatives must not retain shell tasks solely for unused K
+  // density products. Reuse the existing source-specific predicate and its
+  // unchanged force threshold; Fock-purpose compatibility callers keep theirs.
+  const bool coulomb_only = purpose == DirectScreeningPurpose::Force && exchange_coefficient == 0.0;
   auto split = [&]<bool Unrestricted>() {
     // The admitted resident s/p/d cache supports the existing order-seven
     // cooperative algebra without another retained allocation. Its producer
@@ -686,7 +690,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+              exchange_coefficient, radial_operator, 0.0, 0.0, coulomb_only, false, block_domain);
     };
     cudaError_t error;
     if (cooperative_available && block_domain.prefix &&
@@ -729,7 +733,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, Range, 0.0, 0.0, false, false, block_domain);
+              exchange_coefficient, Range, 0.0, 0.0, coulomb_only, false, block_domain);
       return cudaPeekAtLastError();
     };
     return separate_sources ? materialized.template operator()<DirectRangeOperator::FullSources>()
@@ -752,7 +756,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
             global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
-            0.0, false, false, block_domain);
+            0.0, coulomb_only, false, block_domain);
     return cudaPeekAtLastError();
   };
   auto select = [&]<bool Unrestricted, DirectScreeningPurpose Purpose>() {
@@ -770,7 +774,7 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
                 shell_pair_order, shell_pair_block_bounds, system_density_bounds,
                 enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
                 density, active, output, global_cursor, profile, coulomb_coefficient,
-                exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+                exchange_coefficient, radial_operator, 0.0, 0.0, coulomb_only, false, block_domain);
         const auto error = cudaPeekAtLastError();
         if (error != cudaSuccess) return error;
         return launch_direct_force_class_domains(

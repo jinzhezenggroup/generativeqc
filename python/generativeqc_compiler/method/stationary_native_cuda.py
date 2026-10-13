@@ -14,6 +14,7 @@ from fractions import Fraction
 from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES
 from generativeqc_compiler.tensor.cuda_inline import exact_cuda_literal
+from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 
 from .ks_execution import compile_ks_execution_plan
 from .stationary_cuda import (
@@ -43,6 +44,22 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
     plan = compile_ks_execution_plan(_qualified_aot_profile(profile).plan.method)
     functional = plan.semilocal.functional
     actual = dict(functional.components)
+    for record in SPLIT_HYBRIDS.values():
+        expected = {
+            name: Fraction(coefficient) for name, coefficient in record["components"]
+        }
+        if actual != expected or functional.range_omega != 0 or len(plan.exchange) != 1:
+            continue
+        exchange = plan.exchange[0]
+        if (
+            exchange.operator == "full-range"
+            and exchange.omega == 0
+            and exchange.coefficient == Fraction(record["exact_exchange"])
+        ):
+            # Native KS already publishes split-global-hybrid domain v4. The
+            # point program owns its internal X/C coefficients; the stationary
+            # wrapper carries the separately verified exact-exchange weight.
+            return record["functional_code"], 4, Fraction(1), Fraction(1)
     for record in SEMILOCAL_FAMILIES:
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]

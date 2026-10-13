@@ -157,7 +157,7 @@ for op in COMPARISONS:
         "no derivative through comparison",
     )
 PRIMITIVES["where"] = PrimitiveContract(
-    "forward reference only; Boolean condition and real branches have no AD rule",
+    "no unrestricted/generated AD rule; external-mask runtime reference AD only",
     "eager evaluation of all three operands; one selection per result element",
 )
 
@@ -708,7 +708,8 @@ def where(condition: Node, left: Node, right: Node) -> Node:
     """Select generic real values using bool data, with explicit casts/broadcasts.
 
     All operands remain live and finite-checked, including the unselected branch.
-    This forward reference primitive has no AD or native lowering qualification.
+    Runtime reference AD requires an external Boolean mask; generated AD and
+    native lowering remain unqualified.
     """
     inputs = (condition, left, right)
     spec = _infer("where", inputs, {}, left.spec)

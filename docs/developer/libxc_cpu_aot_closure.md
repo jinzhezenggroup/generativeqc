@@ -1,7 +1,7 @@
 # Offline CPU AOT dependency collection
 
 `generativeqc_compiler.xc.bulk_aot_closure.collect_cpu_closure` collects actual
-GCC dependency data for a CPU `SourceVariant` and a caller-owned `.c` file whose
+native C dependency data for a CPU `SourceVariant` and a caller-owned `.c` file whose
 bytes match that variant. It runs only on explicit invocation. It neither builds
 an object nor invokes a compiler during import or ordinary runtime execution.
 
@@ -15,6 +15,37 @@ compiler/include/loader overrides from the caller's environment are not inherite
 Other drivers, wrappers, plugins, response files, languages, targets/sysroots and
 flags yield no reusable closure. This is a deliberately narrow offline support
 domain, not a general build-system interface.
+
+Clang is an explicit alternative: pass `compiler="clang"` and
+`compiler_family="clang"`. The default family remains GCC, including its prior
+recipes and diagnostics. The Clang executable must resolve to `/usr/bin/clang`,
+be ELF, identify itself as Clang, and report a native x86_64/aarch64 Linux target
+matching the host. Collection adds `--no-default-config` and `-fintegrated-as`;
+explicit configuration flags remain unsupported. It binds the queried resource
+directory and actual `-###` object job, admitting exactly one integrated `-cc1`
+job in the driver executable, with matching target, resource directory and C
+language. External assembler/frontend, plugin/module/sysroot jobs and unobserved
+job models fail closed. Clang does not inherit GCC's cc1/as/specs assumptions.
+The job diagnostic is data to validate, never a command to execute.
+The Clang recipe also returns its resolved `compiler.executable`; use that path
+for object compilation. Invocation-entry/system-driver selection is checked
+around queries and before returning a key, so entry symlink retargeting fails
+closed even when the original canonical driver remains unchanged.
+Clang driver regularity is checked before reading ELF bytes, so a named FIFO
+that satisfies executable lookup is rejected without blocking on its writer.
+
+Clang's `-M` quoting differs from GCC: it normalizes literal header backslashes
+to `/` and may leave filename tabs unquoted. Collection cross-checks actual
+opened-header paths with `-E -H` and replays that trace. Backslashes, control
+characters, terminal spaces and mismatched trace paths are unsupported even if
+normalized or split decoy files exist. This does not relax the GCC grammar.
+Spaces inside paths, `#` and `$` retain real compiler/object dependency tests.
+The traced set must exactly match the depfile headers. A successful
+`__has_include` probe that never opens/includes its header appears only in Clang
+`-M`; it is deliberately non-reusable (`clang-header-trace-mismatch`). This
+also rejects ambiguous unopened probes with real normalized/split decoys.
+Ordinary include-consumed paths remain supported. Completeness is still the
+caller assertion; the trace is an identity cross-check, not a snapshot producer.
 
 ## Completeness boundary
 
@@ -47,6 +78,14 @@ have role `toolchain-file`, absolute file identities and expected SHA-256 values
 All listed files are verified, and coverage must include the resolved driver,
 `cc1`, and assembler. These checks are minimum structural requirements, not proof
 of a complete manifest.
+
+For admitted Clang jobs the frontend and assembler are integrated in the driver,
+so executable coverage requires that driver instead of standalone GCC companions.
+The caller's snapshot must still cover loaded libraries, resource files, loader
+and include namespaces, opaque assembler inputs and all relevant configuration
+state. Disabling default configuration narrows the supported domain; it does not
+establish manifest completeness. Resource-directory and job-selection changes
+are bound to context identity and checked again during collection.
 
 Only the manifest producer may assert `complete=True`, based on a controlled,
 immutable toolchain/build snapshot that covers downstream programs, dynamically
@@ -100,10 +139,24 @@ correctness. The producer must include all opaque inputs in its complete
 manifest and verify the selected launcher honors this command identity;
 unsupported cache behavior cannot justify publishing a reusable object.
 
+Clang recipes transport the unsalted closure through
+`-fdebug-compilation-dir=generativeqc-closure-<sha256>`, an accepted Clang command
+option. This collector does not accept debug flags, so the option does not add
+debug metadata or change scientific C expressions. It supplies command identity
+for opaque inputs; the selected cache must honor it. Real qualification changes
+a manifest-covered `.incbin` input with identical C source/preprocessor output and
+checks different actual object bytes through the same verified cache launcher.
+Clang does not reuse GCC's `-frandom-seed` policy.
+An uncacheable `.incbin` safe fallback proves fresh object bytes, but does not
+prove a cache hit or the salt's hashing behavior. Qualification must also exercise
+cacheable ordinary C: unchanged command replay hits, while a refreshed opaque
+manifest changes the salt and causes a miss under the same verified launcher.
+
 ## Verification
 
 ```bash
 PYTHONPATH=python python -m pytest -q tests/python/test_bulk_aot_closure.py \
+  tests/python/test_bulk_aot_clang_closure.py \
   tests/python/test_bulk_aot_cache.py tests/python/test_bulk_aot_store.py
 python tools/check_compiler_structure.py
 ```
@@ -114,3 +167,10 @@ dependency output and file hashes, compile the same source between collections,
 exercise verified store reuse/invalidation, and inject a header mutation between
 real dependency scans. Non-Linux runs skip those integration tests. No GPU or XC
 numerical acceptance is claimed by these toolchain tests.
+
+Linux Clang tests also require a real system Clang. They compare `-M` observations
+with a separate cached object compilation's `-MD` depfile and `-H` input trace,
+publish and retrieve that object through the existing verified store, and execute
+a small polynomial density fixture against an independent Decimal reference.
+This fixture qualifies the stored object's toolchain/reuse behavior, not Libxc,
+installed production bundles, runtime cache completeness or CUDA endpoints.
