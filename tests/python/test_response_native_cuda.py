@@ -248,7 +248,9 @@ def test_cuda_meta_gga_is_not_promoted_to_cpks(restricted: bool) -> None:
         # Only the converged state is needed; CUDA tau nuclear gradients have
         # their own capability boundary and do not participate in this gate.
         batch.execute(strict=True, properties=("energy",))
-        with pytest.raises(ValueError, match="LDA/PBE"):
+        with pytest.raises(
+            ValueError, match="all-electron RKS" if restricted else "LDA/PBE"
+        ):
             adapter.from_native(batch, basis)
 
 

@@ -797,7 +797,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
-            "e603c9db0e0fbe5d5963768bd8f8a6a553c11ee2b791a6a8cc806a9e3941e060"
+            "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
         ),
         "profiles": [
             "lda_rks",
@@ -2027,11 +2027,20 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
         qualify_capacity._source_limits(tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("          --component-domain spd", "          --component-domain sp"),
+        (
+            "target_link_libraries(${target} PRIVATE generativeqc_native_stationary)",
+            "target_link_libraries(${target} PRIVATE missing_native_stationary)",
+        ),
+    ],
+)
 def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
-    tmp_path: Path,
+    tmp_path: Path, old: str, new: str
 ) -> None:
     source = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
-    old = "          --component-domain spd"
     assert old in source
     target = tmp_path / "cmake/GenerativeQCCuda.cmake"
     target.parent.mkdir(parents=True)
@@ -2039,9 +2048,7 @@ def test_packaged_aot_claim_fails_closed_when_cmake_wiring_moves(
         (ROOT / "cmake/GenerativeQCStationaryProfiles.cmake").read_text(),
         encoding="utf-8",
     )
-    target.write_text(
-        source.replace(old, "          --component-domain sp", 1), encoding="utf-8"
-    )
+    target.write_text(source.replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="packaged-AOT CMake contract changed"):
         qualify_capacity._source_package_inventory(tmp_path)

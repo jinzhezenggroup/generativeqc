@@ -241,9 +241,10 @@ constexpr size_t stationary_becke_retained_max_atoms=32;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_threads=32;
 constexpr size_t stationary_geometry_max_scratch_bytes=8<<20, task_stride=9;
 int allocations=0, owners=0, arenas=0, max_threads=1024;
-bool oom=false, runtime_failure=false;
+bool oom=false, runtime_failure=false, driver_failure=false;
 size_t oom_above=std::numeric_limits<size_t>::max();
 struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 int cudaGetLastError() { return 0; }
 struct Context {
   unsigned char* arena{};
@@ -256,6 +257,7 @@ struct Context {
     if(error_offset != bytes-256) throw std::runtime_error("bad error boundary");
     if(oom) throw std::bad_alloc();
     if(runtime_failure) throw std::runtime_error("injected non-allocation failure");
+    if(driver_failure) throw DeviceRuntimeError("injected driver failure");
     arena=new unsigned char[bytes]; ++arenas;
     error=reinterpret_cast<int*>(arena+error_offset);
     if(bytes>oom_above) throw DeviceAllocationError("injected post-allocation cache OOM");
@@ -287,7 +289,7 @@ int main() {
   max_threads=16;
   if(!create(bytes) || result || allocations || owners) return 2;
   max_threads=1024; oom=true;
-  if(!create(bytes) || result || allocations!=1 || owners) return 3;
+  if(create(bytes)!=3 || result || allocations!=1 || owners) return 3;
   oom=false;
   if(create(bytes) || !result || allocations!=2 || owners!=1) return 4;
   auto* p=static_cast<Owner*>(result);
@@ -318,8 +320,13 @@ int main() {
   if(arenas) return 17;
   runtime_failure=true;
   const int prior_allocations=allocations;
-  if(!create(bytes+cache_bytes) || result || owners || arenas || allocations!=prior_allocations+1) return 18;
+  if(create(bytes+cache_bytes)!=1 || result || owners || arenas || allocations!=prior_allocations+1) return 18;
   runtime_failure=false;
+  driver_failure=true;
+  const int before_driver=allocations;
+  if(create(bytes+cache_bytes)!=4 || result || owners || arenas ||
+     allocations!=before_driver+1) return 24;
+  driver_failure=false;
   oom_above=std::numeric_limits<size_t>::max();
   const size_t large_bytes=allocation(96,768,704,256,4096,2,256);
   auto large=[&](size_t budget) {

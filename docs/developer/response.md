@@ -276,8 +276,13 @@ outside this solver numeric-buffer budget and require separate accounting.
 The [production-path inventory](../../manifests/maintenance/electronic_structure_production_paths.json)
 records response/force/HVP owners, bindings and evidence stages separately.
 Its coverage remains a pilot, not completion of #932/#934 or a capability table.
-Default CC Lambda, RHF frame Z and installed native CPKS still have host-vector
-Krylov/orbital seams; generated CUDA actions or resident J/K storage alone do
+Default CC Lambda, RHF frame Z and generic/multi-RHS CPKS compatibility adapters
+still have host-vector Krylov/orbital seams. The installed native RKS object's
+single-RHS `solve`/`solve_resident` endpoint now executes orbital transforms and
+the shared GMRES controller natively with resident vectors, as specified in
+[response backends](response_backends.md#native-cuda-cpks). This does not establish
+resident reconstruction or a complete molecular derivative endpoint.
+Generated CUDA actions or resident J/K storage alone do
 not establish a resident solver endpoint. The resident CPHF tooling is a
 qualification binding, not a public molecular-derivative cutover. Complete CUDA
 semilocal RKS HVP remains unsupported until its missing sources and endpoint

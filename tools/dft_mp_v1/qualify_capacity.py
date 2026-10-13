@@ -129,6 +129,7 @@ from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.dft.plan import plan_tiles
 from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_COMPONENTS,
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     STATIONARY_RUNTIME_SOURCE_NAMES,
     _qualified_aot_plan,
     _stationary_aot_name,
@@ -299,8 +300,11 @@ PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
 )
+# The additional native static wrappers reuse the existing primitive objects.
+# The compiler now supplies the inventory and grouped native generation; retain
+# the full wiring/discovery-policy digest so either integration fails closed.
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "e603c9db0e0fbe5d5963768bd8f8a6a553c11ee2b791a6a8cc806a9e3941e060"
+    "a3b47ec9184ebf5f987c748d997d2599ec091d25e8236dda8922ab00a020631b"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -2713,25 +2717,13 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     profile_policy = (
         repository / "cmake/GenerativeQCStationaryProfiles.cmake"
     ).read_text(encoding="utf-8")
-    names = (
-        "lda_rks",
-        "lda_uks",
-        "pbe_rks",
-        "pbe_uks",
-        "r2scan_rks",
-        "r2scan_uks",
-        "pbe0_rks",
-        "pbe0_uks",
-        "b3lyp_rks",
-        "b3lyp_uks",
-    )
+    names = QUALIFIED_STATIONARY_AOT_PROFILE_NAMES
     required = (
         "generativeqc_stationary_spd_primitives",
         'OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd"',
         "generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)",
     )
     missing = [token for token in required if token not in cmake]
-    missing.extend(name for name in names if name not in profile_policy)
     if missing:
         raise RuntimeError(
             "stationary s/p/d package declaration is incomplete: " + ", ".join(missing)
