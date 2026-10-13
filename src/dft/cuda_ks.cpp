@@ -1398,8 +1398,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Initialization only proposes densities; full target evaluations still
     // certify convergence. An explicit off setting keeps the ordinary solve,
     // and an explicitly selected device chunk retains its own solver policy.
-    const bool outer_requested = outer_selection ? std::string_view(outer_selection) == "1"
-                                                : configured_chunk_width() == 1;
+    const bool outer_requested =
+        outer_selection ? std::string_view(outer_selection) == "1" : configured_chunk_width() == 1;
     nonlocal_seed_trace = seed_selection && std::string_view(seed_selection) == "1";
     const bool nonlocal_initialization =
         (nonlocal_seed_trace || outer_requested) && device_nonlocal && spins == 1 &&
