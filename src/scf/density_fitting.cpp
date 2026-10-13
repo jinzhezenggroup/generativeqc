@@ -644,8 +644,7 @@ std::size_t workspace_bytes(std::size_t ao_pair_tile, std::size_t auxiliary_tile
   const long double control_bytes =
       static_cast<long double>(batch_size) *
       (16 * sizeof(double) + 2 * sizeof(std::int32_t) + 2 * sizeof(std::uint8_t) +
-       sizeof(std::uint32_t) +
-       (occupied_exchange ? 2 * sizeof(std::uint32_t) + sizeof(int) : 0));
+       sizeof(std::uint32_t) + (occupied_exchange ? 2 * sizeof(std::uint32_t) + sizeof(int) : 0));
   const long double scf_bytes =
       control_bytes + df_scf_workspace_allowance(nbf, batch_size) +
       static_cast<long double>(df_eigen_device_reservation(nbf)) +
@@ -1376,8 +1375,8 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget&
     if (available > response_floor && available > budget.total_bytes) {
       const auto fits = [&](std::size_t value) {
         try {
-          (void)plan_packed_density_fitting_tiles(1, nbf, naux, 0, value,
-                                                  source_device_bytes, 0, false);
+          (void)plan_packed_density_fitting_tiles(1, nbf, naux, 0, value, source_device_bytes, 0,
+                                                  false);
           return true;
         } catch (const DensityFittingBudgetError&) {
           return false;

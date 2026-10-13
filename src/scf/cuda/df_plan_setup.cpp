@@ -900,9 +900,9 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   // This record covers the value/SCF plan and its setup. Generated force
   // staging is owned by the separately budgeted bridge and reported through
   // DfGradientResources and the whole-HF allocation ledger.
-  const long double peak_estimate =
-      static_cast<long double>(persistent_device_bytes) - persistent_scf_bytes +
-      std::max(setup_device_bytes, persistent_scf_bytes);
+  const long double peak_estimate = static_cast<long double>(persistent_device_bytes) -
+                                    persistent_scf_bytes +
+                                    std::max(setup_device_bytes, persistent_scf_bytes);
   const std::size_t peak_device_bytes =
       peak_estimate >= static_cast<long double>(std::numeric_limits<std::size_t>::max())
           ? std::numeric_limits<std::size_t>::max()
