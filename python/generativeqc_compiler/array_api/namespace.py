@@ -291,6 +291,40 @@ def _comparison(op: str, x1: object, x2: object) -> VibeArray:
     return _canonical_generic(VibeArray(tensor_ir.compare(op, left.node, right.node)))
 
 
+def where(condition: object, x1: object, x2: object) -> VibeArray:
+    """Capture finite generic real selection; condition and branches broadcast separately."""
+    if type(condition) is bool:
+        condition = full((), condition, dtype="bool")
+    predicate = _array(condition, "where condition")
+    if predicate.dtype != "bool":
+        raise TypeError("where condition must be bool data")
+    arrays = tuple(value for value in (x1, x2) if isinstance(value, VibeArray))
+    if any(
+        not _is_generic_array(value)
+        or value.node.spec.representation != "general"
+        or value.node.spec.symmetries
+        or any(index.space.spin is not None for index in value.node.spec.indices)
+        for value in (predicate, *arrays)
+    ):
+        raise TypeError(
+            "where supports only generic arrays without scientific annotations"
+        )
+    dtype = (
+        "float64"
+        if any(value.dtype == "float64" for value in arrays) or not arrays
+        else "float32"
+    )
+    branches = tuple(
+        value
+        if isinstance(value, VibeArray)
+        else _generic_exact_scalar(value, dtype=dtype, name="where branch scalar")
+        for value in (x1, x2)
+    )
+    left, right = _promote_generic_arrays(*branches)
+    predicate, left, right = broadcast_arrays(predicate, left, right)
+    return VibeArray(tensor_ir.where(predicate.node, left.node, right.node))
+
+
 def equal(x1: object, x2: object) -> VibeArray:
     return _comparison("equal", x1, x2)
 

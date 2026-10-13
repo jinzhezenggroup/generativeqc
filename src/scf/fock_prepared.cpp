@@ -360,6 +360,11 @@ struct PreparedFockPlan::Impl {
           plan_values(nbf, naux, cuda_density_fitting_integral_source_device_bytes(source.get()));
       data.resolved_budget = resolved;
       data.df_gradient_budget = resolved.response_bytes;
+      // A qualified automatic pure-J owner may reclaim fractional headroom
+      // for its minimum resident plan. Publish the final complete allowance,
+      // including any already allocated exact provider, rather than the
+      // generic pre-promotion target.
+      diagnostic.device_budget_bytes = diagnostic.device_bytes + resolved.total_bytes;
       diagnostic.response_device_bytes = resolved.response_bytes;
       runtime::df_progress::Scope budget_trace("prepared_df_resource_policy");
       runtime::df_progress::number("resolved_total_budget_bytes", resolved.total_bytes);

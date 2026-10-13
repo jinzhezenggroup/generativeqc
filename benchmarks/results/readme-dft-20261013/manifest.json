@@ -46,35 +46,88 @@
           "atoms": 96
         }
       ]
+    },
+    "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47": {
+      "git_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+      "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+      "production_changes": "integrated repairs plus HF DF final projection, bounded SCF AO map upload and M06-2X AOT"
+    },
+    "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c": {
+      "git_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+      "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+      "production_changes": "prior repairs plus read-only dense grid leases; optional indexed public capacity remained unresolved"
+    },
+    "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c": {
+      "git_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+      "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+      "production_changes": "prior repairs plus feature-only indexed grid and optional dense capacity fallback"
+    },
+    "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49": {
+      "git_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+      "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+      "production_changes": "prior repairs plus independently qualified M06-2X FP64 local AO capability"
+    },
+    "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29": {
+      "git_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+      "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+      "production_changes": "integrated benchmark issue repairs"
+    },
+    "bb6ec48eafc3327cabf13e85374ff3bfbb0f2690425ab3b029d4a629258a159e": {
+      "git_commit": "fedf81b833ff91ac85db2e94fc914467c93dae79",
+      "library_sha256": "0124217000e7fd05083de16b0ca4940fb75bdeaec206a01bf265e375b663e57c",
+      "production_changes": "prior feature-grid repairs plus disjoint DF setup/SCF workspace peaks; moved-geometry residency cliff remains"
+    },
+    "8ea27122e9e6d8dbb140ee67283d717388ca36001f6c91fe9d7744aa974f09bd": {
+      "git_commit": "3660e04d2b3912de1f349e892852e4b19957b96b",
+      "library_sha256": "e5911b58c3b1b4bc1b2abd288c0e5672e0b111e81a13dc9956bd930f70134c3e",
+      "production_changes": "prior DF lifetime repairs plus minimum automatic resident allowance across geometry rebuilds; explicit caps and absolute headroom preserved"
+    },
+    "e6fef34900e938143aa1ccdd8e842f76a4e1836d154da70be51ecc3d78e4eeef": {
+      "git_commit": "9e21b8cb635e9ef2ce7c2de1ccc83fab86318204",
+      "library_sha256": "d6cb650cb9f66e65282a0b68a2e503f3c24bc49abff70a486d03d777f9d37a1f",
+      "production_changes": "pure-J derivative task demand; the full 96-atom population still times out"
+    },
+    "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a": {
+      "git_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+      "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+      "production_changes": "ordinary-driver small controls for automatic pure-J spatial derivatives"
     }
   },
   "acceptance": {
-    "native_points": 29,
-    "native_observations": 348,
+    "native_points": 30,
+    "native_observations": 360,
     "reference_points": 30,
-    "maximum_energy_error_eh": 2.319211489520967e-11,
-    "maximum_force_error_eh_per_bohr": 9.158790392760352e-11
+    "maximum_energy_error_eh": 3.2741809263825417e-11,
+    "maximum_force_error_eh_per_bohr": 2.200547519811552e-10
   },
   "files": {
     "README.md": {
-      "bytes": 21468,
-      "sha256": "719006baf6ab189b43fc009b4ece6e13b30528e5c3ceeed0d45054539960d68b"
+      "bytes": 13264,
+      "sha256": "6d26166d7f5b2b809de88ab2196816dbccb18d13740d60d61d842794820163af"
     },
     "df-cold-warm.svg": {
-      "bytes": 107891,
-      "sha256": "648fb924528ef58b5aafe3c04c14fcc7aefd77530fda7b2766bd663a4d42d445"
+      "bytes": 185892,
+      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377"
     },
     "df-summary.json.xz": {
-      "bytes": 139392,
-      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730"
+      "bytes": 330160,
+      "sha256": "a841fb8731cf03c3d6391dac9fee5588fdbae6947c3509698d59a15d79b2f943"
     },
     "df-timings.md": {
-      "bytes": 2941,
-      "sha256": "39a17b50327764b44c92cfaaad17246483ae0b9a8b24aef7bf740ec588fde8ac"
+      "bytes": 4513,
+      "sha256": "9d866eb0472c840e86aac73a869140a566f126b54c9a1a2a68e3d3b752ba109a"
     },
     "dft-cold-warm.svg": {
-      "bytes": 187516,
-      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada"
+      "bytes": 187647,
+      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276"
+    },
+    "followup-prior.json.xz": {
+      "bytes": 393624,
+      "sha256": "cde02a58a72edf6a60713fe230b11ca68a2bb8e5b054698714e94a7d25810827"
+    },
+    "followup-receipts.json.xz": {
+      "bytes": 85080,
+      "sha256": "42e31e4517c5fc21ece91d21abb483f6acc69fe85dea82ad39117e6338047ddc"
     },
     "force-memory.json.xz": {
       "bytes": 37176,
@@ -89,33 +142,37 @@
       "sha256": "7cc3227266ce5e85e16cbc534558226a7f2de7677d9d3b5c638bdf8bc6e4e59d"
     },
     "summary.json.xz": {
-      "bytes": 250780,
-      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01"
+      "bytes": 397852,
+      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d"
     },
     "timings.md": {
-      "bytes": 4729,
-      "sha256": "aa16800a863710339c92b7554073d777b2bd521e3ca8e918d11096af2ecff50d"
+      "bytes": 4725,
+      "sha256": "d8f8ffdda923e6d97ca0f17bc6bb9b9e8ba51db66847cd4bc76e4698edcdf482"
+    },
+    "verify.py": {
+      "bytes": 3239,
+      "sha256": "7ed5bbbf57ee163be4efaed2fda3bd28926ac412f26dc06c0d9c2327562d1401"
     }
   },
   "uncompressed_summary": {
-    "bytes": 8944231,
-    "sha256": "2385c58e06574bcc55ba58bc644abbbd935fbbb93ec063b8bf820ac3f6d6a74f"
+    "bytes": 17710208,
+    "sha256": "e8169fc0a835f4476a233a1c414d863430a8e9467539944eec9dc128593ba820"
   },
   "original_master_campaign_report_retention": ".artifacts/force-memory-20261013/master-report",
   "uncompressed_df_summary": {
-    "bytes": 4597504,
-    "sha256": "a84a893e7c51f269e550f9fdbd3fa4b9dde2a3812cafc10ba2a2ae823421e47e"
+    "bytes": 17113611,
+    "sha256": "6c85d86072158fc68aa18783c619aaddc9a7bff706e50fb47f81d65b08341f9b"
   },
   "force_memory_uncompressed": {
     "bytes": 946323,
     "sha256": "007f4b949bd808aaf497161fb26d6da25f0cce85ae530bea796e6957171a97ff"
   },
   "df_acceptance": {
-    "native_points": 14,
-    "native_observations": 168,
-    "reference_points": 16,
-    "maximum_energy_error_eh": 8.026290743146092e-11,
-    "maximum_force_error_eh_per_bohr": 1.5564172173299085e-10
+    "native_points": 30,
+    "native_observations": 360,
+    "reference_points": 30,
+    "maximum_energy_error_eh": 2.2600943339057267e-10,
+    "maximum_force_error_eh_per_bohr": 1.5726861479770093e-10
   },
   "previous_publication": {
     "git_commit": "c086430567afeac82d087b3da75a4912ffff93d6",
@@ -248,5 +305,1691 @@
         }
       }
     }
+  },
+  "benchmark_issue_followup": {
+    "based_on_pr": 2401,
+    "prior_pr_head": "632dfb53fadcea3db1a01de7946c7de1b4f77cc6",
+    "history": "followup-prior.json.xz",
+    "updates": [
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "8d3decb304334d6907eb260950ab2c404dfe5e44dec3b97de91af39c44ba23ba",
+        "raw_directory": ".artifacts/perf-qualified/none/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8077",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "2cef2fc958eb4cc93a5239f45af4a2577841505341d1e52ded41245d46d21a70",
+        "raw_directory": ".artifacts/perf-qualified/none/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8077",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "e20f0a459b8f37760da3c10424022d59d44ac64da70ccc8f9a4ad30a3e484ca6",
+        "raw_directory": ".artifacts/perf-qualified/none/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8080",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "0a4632fbffd993329717ff18f084b7467a49ed1e24ed7d10bea59e634e1ebc2c",
+        "raw_directory": ".artifacts/dense-qualified/none/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8100",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "0846bb5bbf2ce1fff8d72c489d5e3f996d55b4ee06715eec304196c6cbadeb03",
+        "raw_directory": ".artifacts/dense-qualified/none/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8100",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "94ee98f4c871026e0062dc55ba6c020e0c03efc0e686fcc064d637bce1cf654c",
+        "raw_directory": ".artifacts/dense-qualified/none/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8100",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "84a2bf01c3e9755491053cb87942a2b5c5882604c34ca8b87e7237af227446d9",
+        "raw_directory": ".artifacts/dense-qualified/none/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8100",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "d28de9ae286669f374428f526bd0be58e967b048e3b928746b32af12729a5aaf",
+        "raw_directory": ".artifacts/dense-qualified/none/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8106",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "cc527c8de334399be16810272b8f83c68482966a77de16587dc137a4492c5b91",
+        "raw_directory": ".artifacts/dense-qualified/none/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8105",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "c7cc2a31624b8fb805c8e8d9f17bb23a60aab224626ea206c69949aa9a725965",
+        "raw_directory": ".artifacts/features-qualified/none/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8113",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "8575bdf96b76a427095567bc0481e9aa54665bead80c53da35881a5fff75db87",
+        "raw_directory": ".artifacts/features-qualified/none/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8113",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "f31c9917673abb3ccac278beced842feea3dffe1b19d1543860f578533819fea",
+        "raw_directory": ".artifacts/features-qualified/none/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8113",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "3dffca2bb13a7b698b51d557e98c94ac253c049c58d206877345c1943327b366",
+        "raw_directory": ".artifacts/features-qualified/none/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8113",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "6e2effaf89aefa6975bee8360d16da7fd288c9a9155768bb79d3aaa9b23122ab",
+        "raw_directory": ".artifacts/features-qualified/none/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8116",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "24291a221af8acccd698e8496294e6e3df314134b8419ec7f9cc79b90297f107",
+        "raw_directory": ".artifacts/features-qualified/none/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8115",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "6ee6a908933e4a26acbc04db5732b5c934d4d82f8f6039dcacac6464b8d6c244",
+        "raw_directory": ".artifacts/m06maps-qualified/none/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8120",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "4835950ae41d4363eef1481b355215efb9bbe9384a5142849590ae64a4d4cf07",
+        "raw_directory": ".artifacts/m06maps-qualified/none/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8120",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 48,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "5cc9c9215521203adf5c992582760f9f9096b1624ab2f4c791d2afae29a15b2c",
+        "raw_directory": ".artifacts/m06maps-qualified/none/m06-2x/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8121",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "m06-2x",
+        "atoms": 96,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "aba93cc356f8c7023d56f2b2d9542080310673c44fe6a021c18af07dbc40c000",
+        "raw_directory": ".artifacts/m06maps-qualified/none/m06-2x/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8124",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "b3lyp",
+        "atoms": 12,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "cdfc1950c7d5272e605ac8c130057279e1bd982343742508efc31b00c6c29641",
+        "raw_directory": ".artifacts/measured/cuda/b3lyp/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "b3lyp",
+        "atoms": 3,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "9df8b679cc939a60f89fdd939f5a582294384707476bc8f1d784acddf26087d4",
+        "raw_directory": ".artifacts/measured/cuda/b3lyp/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "b3lyp",
+        "atoms": 48,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "40afb8976f765c0e8b6123fdb96649670e0d44dc2312fe1a20aafc6873881532",
+        "raw_directory": ".artifacts/measured/cuda/b3lyp/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8070",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "b3lyp",
+        "atoms": 96,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "c90a36e2fa6b21f129c552849ae71a59653aa13de176bf226b2c3e03f21fcbd7",
+        "raw_directory": ".artifacts/measured/cuda/b3lyp/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8070",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "4759ea428d030c2d049b0cf8a2be7055a7f089410f7e06986c1f63a8e9d10c99",
+        "raw_directory": ".artifacts/measured/cuda/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "d75834c305d147384aa249cbb55780644ff90cc052c2dce79f98c52c58ec20fa",
+        "raw_directory": ".artifacts/measured/cuda/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 48,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "1883c77169e33e7c9ab130de2cbe2723dc8658ad43353f4cc1557dd1bf967cb9",
+        "raw_directory": ".artifacts/measured/cuda/m06-2x/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8072",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 96,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "40e8445ae68808a213b33d42f1e39914c21457320db90ab71cc156d9f24712a9",
+        "raw_directory": ".artifacts/measured/cuda/m06-2x/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8072",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "cuda",
+        "method": "pbe",
+        "atoms": 48,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "79cc1f2be410250af9a03d2cfd528c1db1486c47006986cb55112d51b379b74d",
+        "raw_directory": ".artifacts/measured/cuda/pbe/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8069",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "pbe",
+        "atoms": 96,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "1afa397e8f193d24621d49245542930939df2414ac1acc2a97425366ce039c54",
+        "raw_directory": ".artifacts/measured/cuda/pbe/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8069",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan",
+        "atoms": 48,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "05ea6e7e44466c6a6e4f750eeb7aa30e603c03faa6c061e579a7725dc9350b23",
+        "raw_directory": ".artifacts/measured/cuda/r2scan/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8069",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan",
+        "atoms": 96,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "7b2889512895c72a369010b235585ffb676639d968053038aff7c701316f0b0e",
+        "raw_directory": ".artifacts/measured/cuda/r2scan/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8069",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "845ade7b3b01447e1ad01c0f0eff1a0d65f646248d843ba08f1b270ddbdc3011",
+        "raw_directory": ".artifacts/measured/cuda/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "ea20a504f741481dbee4f371bb13964d33f576a2037b655417badcfad7815458",
+        "raw_directory": ".artifacts/measured/cuda/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "wb97m-v",
+        "atoms": 12,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "ea85435496889288c4ea17755de163f39eeead3f2ff53fb66646469d306f1f73",
+        "raw_directory": ".artifacts/measured/cuda/wb97m-v/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "wb97m-v",
+        "atoms": 3,
+        "source_commit": "b27ee33a250fa5f7d4d7bef043b842d8f73aad00",
+        "source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "library_sha256": "0c75781708ad089be765cb4aeff5a537505c70e4091c6a89278fb211410b934d",
+        "raw_sha256": "5c3a18a1af44d051cf3c336e698ee1c53ffa278a6f8a201577227c1d3f625548",
+        "raw_directory": ".artifacts/measured/cuda/wb97m-v/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8066",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "hf",
+        "atoms": 96,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "94219d55e77f7ea74debf4bd7a4d665b466c2465af7a2790c378bddd9ede1f87",
+        "raw_directory": ".artifacts/perf-measured/cuda/hf/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8074",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "eb5ba2066afa350cf1dd3219594776506e51a930faed3447daafbc16a34d49cd",
+        "raw_directory": ".artifacts/perf-measured/cuda/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8075",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "8119ed4ffee61c5007fc47c255174f2e97f51cd2b20cc8da498a74f22e92188f",
+        "raw_directory": ".artifacts/perf-measured/cuda/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8075",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "cuda",
+        "method": "hf",
+        "atoms": 12,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "b0d76f676836a7743ad58f2a52044fcfd12a55ec1f8fa02471ff7ec9f9abdf21",
+        "raw_directory": ".artifacts/perf-qualified/cuda/hf/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8078",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "hf",
+        "atoms": 3,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "b1911373d4b54122f203194692840e6abb399d1b04cce42202a876570d8d07ab",
+        "raw_directory": ".artifacts/perf-qualified/cuda/hf/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8078",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "hf",
+        "atoms": 48,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "bf5b47b652ee2bcf4d26a0976b492516c732e62a8858bce43a0689caea2ee329",
+        "raw_directory": ".artifacts/perf-qualified/cuda/hf/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8079",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "5a4c02749345627a30b87e3f369274bd0df3f39326b82157bd57895133425de2",
+        "raw_directory": ".artifacts/perf-qualified/cuda/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8078",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "729a3d2caeea38143f45bd3a04b9389b0c7bdd6607c605abb725694ba8755e47",
+        "raw_directory": ".artifacts/perf-qualified/cuda/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8078",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 48,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "fdb375ea95a225f4b6dedad06e435c0a74dbe6c04664bd0a284c2179f24f26ec",
+        "raw_directory": ".artifacts/perf-qualified/cuda/m06-2x/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8081",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 96,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "6d3f059dc89e3e4c1e29d3eeb7778ff26833be80af94bc82132a4842857e52d3",
+        "raw_directory": ".artifacts/perf-qualified/cuda/m06-2x/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8081",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "1800f682e65eb5bad4a511eb47fd51d9d22a82160b1fc656b5897fdfe0e81fdf",
+        "raw_directory": ".artifacts/perf-qualified/cuda/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8078",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "538eca9e989dccd9da4d23ba32df69827e5bfe299f73b1c3167fc61138f27c2e",
+        "raw_directory": ".artifacts/perf-qualified/cuda/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8078",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 48,
+        "source_commit": "61b9387f346769e703db1aa8a86888c0e6bff617",
+        "source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "library_sha256": "1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa",
+        "raw_sha256": "4435adc78f84d007f1426c42f01a14714c39af4f21b594f8efc16d6a07a452f8",
+        "raw_directory": ".artifacts/perf-replay48/cuda/m06-2x/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8112",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "87777520931e581d47ca6f07efcc41fd302e3f58",
+        "source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "library_sha256": "59d9ad5b01399b278a92a96b79ddbf999a6be7b988daaa219c1507c8537fbffb",
+        "raw_sha256": "e93f9645b5dd10832944cfd1f50a3ad2dfe1723dc9c5dc1d46d49c83d7948cc3",
+        "raw_directory": ".artifacts/dense-qualified/cuda/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8107",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "227c55c06632444eca0794972adba0d19375b5e4",
+        "source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "library_sha256": "bd6dd7b4e132926ac2839edd19ca96409699906668c58c121df3c0d4f29cdb4a",
+        "raw_sha256": "1a560f83ae658ee41e8149e3cef77e9b38a15fbd63ada13ee4dc3af7f8cadc8c",
+        "raw_directory": ".artifacts/features-qualified/cuda/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8117",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 12,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "9cf38a8cc48c6f98b9aeefd3890221e85c7f3baefc84ad2f3ebe3bf6ac0c401b",
+        "raw_directory": ".artifacts/m06maps-qualified/cuda/m06-2x/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8118",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 3,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "be12508a952581df63bf780608b023a99245d2991a140cef39f21979fa354d0b",
+        "raw_directory": ".artifacts/m06maps-qualified/cuda/m06-2x/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8118",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 48,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "f0bb6fd4d47b535617e46daec85899e67cef8d7517cb15fd6cd1c470399eb021",
+        "raw_directory": ".artifacts/m06maps-qualified/cuda/m06-2x/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8122",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "m06-2x",
+        "atoms": 96,
+        "source_commit": "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535",
+        "source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "library_sha256": "2695be37dec79b9da1268cb4b836d0dd8a434195e69a633a457b17da2aa8e8cb",
+        "raw_sha256": "533fe3c80b9330ad263dc1cfcad2412967dc3047eadfabdddaab562e213d1bdb",
+        "raw_directory": ".artifacts/m06maps-qualified/cuda/m06-2x/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8125",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "fedf81b833ff91ac85db2e94fc914467c93dae79",
+        "source_identity": "bb6ec48eafc3327cabf13e85374ff3bfbb0f2690425ab3b029d4a629258a159e",
+        "library_sha256": "0124217000e7fd05083de16b0ca4940fb75bdeaec206a01bf265e375b663e57c",
+        "raw_sha256": "b8c5011954ef8dd5793aa3190a7e7ba5f2f42e9547543e4df2cf124693867673",
+        "raw_directory": ".artifacts/dfpeak-qualified/cuda/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8131",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "fedf81b833ff91ac85db2e94fc914467c93dae79",
+        "source_identity": "bb6ec48eafc3327cabf13e85374ff3bfbb0f2690425ab3b029d4a629258a159e",
+        "library_sha256": "0124217000e7fd05083de16b0ca4940fb75bdeaec206a01bf265e375b663e57c",
+        "raw_sha256": "25bc650586d401ccf2b69e3efd26f4f35d88b16768a3e0efdea2e5605cde7bbc",
+        "raw_directory": ".artifacts/dfpeak-qualified/cuda/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8131",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "fedf81b833ff91ac85db2e94fc914467c93dae79",
+        "source_identity": "bb6ec48eafc3327cabf13e85374ff3bfbb0f2690425ab3b029d4a629258a159e",
+        "library_sha256": "0124217000e7fd05083de16b0ca4940fb75bdeaec206a01bf265e375b663e57c",
+        "raw_sha256": "a3f6389a9efc611a081ceabe6d37dd471e54abe68e20bd294153bb0a00f5cf1e",
+        "raw_directory": ".artifacts/dfpeak-qualified/cuda/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8131",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "fedf81b833ff91ac85db2e94fc914467c93dae79",
+        "source_identity": "bb6ec48eafc3327cabf13e85374ff3bfbb0f2690425ab3b029d4a629258a159e",
+        "library_sha256": "0124217000e7fd05083de16b0ca4940fb75bdeaec206a01bf265e375b663e57c",
+        "raw_sha256": "bb7e2d1ac28570da948dc32872f45576644a71e4f3793c358d514c001e9c2f74",
+        "raw_directory": ".artifacts/dfpeak-qualified/cuda/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8132",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": false
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "3660e04d2b3912de1f349e892852e4b19957b96b",
+        "source_identity": "8ea27122e9e6d8dbb140ee67283d717388ca36001f6c91fe9d7744aa974f09bd",
+        "library_sha256": "e5911b58c3b1b4bc1b2abd288c0e5672e0b111e81a13dc9956bd930f70134c3e",
+        "raw_sha256": "503a63bf3fa9a1b3b203413a8fe3a2a0cf493b7d1a83e367cdffa7365cb796e2",
+        "raw_directory": ".artifacts/dfmoved-qualified/cuda/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8157",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "3660e04d2b3912de1f349e892852e4b19957b96b",
+        "source_identity": "8ea27122e9e6d8dbb140ee67283d717388ca36001f6c91fe9d7744aa974f09bd",
+        "library_sha256": "e5911b58c3b1b4bc1b2abd288c0e5672e0b111e81a13dc9956bd930f70134c3e",
+        "raw_sha256": "02a51a962774d8a7e6716d300377115a03aedee37c27488c6331bf2dacddd45d",
+        "raw_directory": ".artifacts/dfmoved-qualified/cuda/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8157",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "3660e04d2b3912de1f349e892852e4b19957b96b",
+        "source_identity": "8ea27122e9e6d8dbb140ee67283d717388ca36001f6c91fe9d7744aa974f09bd",
+        "library_sha256": "e5911b58c3b1b4bc1b2abd288c0e5672e0b111e81a13dc9956bd930f70134c3e",
+        "raw_sha256": "d3f0b753d5db977ea8032d415c772098fadf53efbafb39d9856c687deb4861f7",
+        "raw_directory": ".artifacts/dfmoved-qualified/cuda/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8157",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "cuda",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "3660e04d2b3912de1f349e892852e4b19957b96b",
+        "source_identity": "8ea27122e9e6d8dbb140ee67283d717388ca36001f6c91fe9d7744aa974f09bd",
+        "library_sha256": "e5911b58c3b1b4bc1b2abd288c0e5672e0b111e81a13dc9956bd930f70134c3e",
+        "raw_sha256": "fd6e47752979ab4328fe790960c3bf01a8d78b001425046728fffd332811705a",
+        "raw_directory": ".artifacts/dfmoved-qualified/cuda/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8155",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "9e21b8cb635e9ef2ce7c2de1ccc83fab86318204",
+        "source_identity": "e6fef34900e938143aa1ccdd8e842f76a4e1836d154da70be51ecc3d78e4eeef",
+        "library_sha256": "d6cb650cb9f66e65282a0b68a2e503f3c24bc49abff70a486d03d777f9d37a1f",
+        "raw_sha256": "3b062b11eb1c13b083e0f4cdb55d8dbe7d3f5daf86eb746590788c43d676e6fb",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jforce-qualified/none/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8169",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "9e21b8cb635e9ef2ce7c2de1ccc83fab86318204",
+        "source_identity": "e6fef34900e938143aa1ccdd8e842f76a4e1836d154da70be51ecc3d78e4eeef",
+        "library_sha256": "d6cb650cb9f66e65282a0b68a2e503f3c24bc49abff70a486d03d777f9d37a1f",
+        "raw_sha256": "51baa9cb020225dee08003aedbdc431da84dc592ab3e7c874e545abc3d8d3e07",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jforce-qualified/none/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8169",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "9e21b8cb635e9ef2ce7c2de1ccc83fab86318204",
+        "source_identity": "e6fef34900e938143aa1ccdd8e842f76a4e1836d154da70be51ecc3d78e4eeef",
+        "library_sha256": "d6cb650cb9f66e65282a0b68a2e503f3c24bc49abff70a486d03d777f9d37a1f",
+        "raw_sha256": "646882fe55c9571539ef2bb30d9cb7c3f3c39db9c86bce433968d71ec35f4cd9",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jforce-qualified/none/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8169",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "pbe",
+        "atoms": 48,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "3b9a18920e7611577729abb786756069a661e7fcb3d84d0989453e064ac74c14",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-qualified/none/pbe/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8184",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "pbe",
+        "atoms": 96,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "3afccd7b4ef583f8c22a5c02a8d694e39a7b1849093f6c0dad753147c20ff182",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-qualified/none/pbe/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8184",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan",
+        "atoms": 48,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "4f95fb38e151648ecde20f39bddd62a9a4eefd4a1237765efc380c7adea86844",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-qualified/none/r2scan/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8184",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan",
+        "atoms": 96,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "18073153f21805ccb1b3f72ecaf6674b0f80a2339cbe096d02fc2acd1f6cd461",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-qualified/none/r2scan/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8184",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "96ff8195f4c839f6966bdadb46576d4b5767ccc6d01700e067ba7d79c762dc50",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-qualified/none/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8183",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 96,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "c1f1d548e2c41df4cb9b43fb8cca4ae63c2a34b24b42d8cf53753a9e811acbcb",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-qualified/none/r2scan-3c/96",
+        "scheduler": {
+          "SLURM_JOB_ID": "8182",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 12,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "71daaa7700e767efbdd89362b0f38d324bdca65dd046aecbe37770437f8145d8",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-final-qualified/none/r2scan-3c/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "8207",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 3,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "f6f95552f37dfb711df069e1461a7e1655a2f5435dd480ecc5984504e594c0ff",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-final-qualified/none/r2scan-3c/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "8207",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      },
+      {
+        "mode": "none",
+        "method": "r2scan-3c",
+        "atoms": 48,
+        "source_commit": "aaec57399ef29f96981da368c3a8c6a91af74ae8",
+        "source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "library_sha256": "766617414dad28c4a475d7c9fbf6caf69418ddc3ad1aaefba244c111fc6cc321",
+        "raw_sha256": "8bea7384329749e03e34a83aa9d9d075817c079cfe61d8ec1bd8bdb60aef9743",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/jauto-final-qualified/none/r2scan-3c/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "8207",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true
+      }
+    ],
+    "policy": "Each complete independently checked 12-call population replaces its prior point. A newer failed/incomplete point updates an unqualified or missing point; only complete checked phases become timings, with failures and partial rows visible. Unchecked/setup/mismatched runs are excluded and retained separately.",
+    "excluded_setup_attempts": [
+      {
+        "path": ".artifacts/perf-qualified/none/r2scan-3c/96/native.json",
+        "reason": "native run used a different independent reference",
+        "raw_sha256": "5ec8772215e373c5609feb2520af0191eb7e277f33e16c718208406c62c313ca"
+      },
+      {
+        "path": ".artifacts/perf-measured/cuda/hf/12/native.json",
+        "reason": "native run used a different independent reference",
+        "raw_sha256": "7a702fa195ad30574125ca4ad03a1d1bfd7ae4185377a0a12b91373e3c1a3363"
+      },
+      {
+        "path": ".artifacts/perf-measured/cuda/hf/3/native.json",
+        "reason": "native run used a different independent reference",
+        "raw_sha256": "2220a80d7161b30d7da51f71c1a120d37d4a2f351f079cd88b263efafaced0cc"
+      },
+      {
+        "path": ".artifacts/perf-measured/cuda/hf/48/native.json",
+        "reason": "native run used a different independent reference",
+        "raw_sha256": "be0896a2a017d177a574c39f184198705e43436813cc9062be8910bd20061937"
+      },
+      {
+        "path": ".artifacts/perf-measured/cuda/r2scan-3c/12/native.json",
+        "reason": "native run used a different independent reference",
+        "raw_sha256": "d661fd8a6245de5d68b536f4bc7eb6d03e8151dba9b7a2224d3fb3dda71808e2"
+      },
+      {
+        "path": ".artifacts/perf-measured/cuda/r2scan-3c/3/native.json",
+        "reason": "native run used a different independent reference",
+        "raw_sha256": "01ca9edc96e74e807820d5817110144975e5af954be706bb5debe8584bfa9b42"
+      }
+    ],
+    "source_audit": {
+      "b27ee33a250fa5f7d4d7bef043b842d8f73aad00": {
+        "native_source_identity": "5849852c31592e3a3879b4ee3ca4f226e03e98ccc54e338616bb141d82d01b29",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 16,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "096f04a0d82fe1f551bdb14c88e0aa0237055b1784b9301140322a75286dc29b",
+          "python/generativeqc/batch.py": "7e5129b33862c0f713f87702a1cfe07486851ce0278efeb64b3716849b02dcca",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "61b9387f346769e703db1aa8a86888c0e6bff617": {
+        "native_source_identity": "7b9f1e0f64dd79f30badb418fec41b7d409fce8e6645d9eb1d95a0717ef3ee47",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 22,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "096f04a0d82fe1f551bdb14c88e0aa0237055b1784b9301140322a75286dc29b",
+          "python/generativeqc/batch.py": "7e5129b33862c0f713f87702a1cfe07486851ce0278efeb64b3716849b02dcca",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "87777520931e581d47ca6f07efcc41fd302e3f58": {
+        "native_source_identity": "996f027eda1a667d1353cf8e9a81c9511054486073787a0f2d3df3d8d446d82c",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 7,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "c0e6b52001f5c532b2e459d355518e67ed84fc9e591a15a6d3ff30d62d3fbc88",
+          "python/generativeqc/batch.py": "7e5129b33862c0f713f87702a1cfe07486851ce0278efeb64b3716849b02dcca",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "227c55c06632444eca0794972adba0d19375b5e4": {
+        "native_source_identity": "3b929e3f6a97023d1ce371a70f916813ce08ecc8920113ca57407ffd8713a60c",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 7,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "9aca4ad485df41b29aaf977ac9bfa632558da82593be955eb9d4a8778e4b7b00",
+          "python/generativeqc/batch.py": "acd7f0117726dfc45e0b7a564e85bd606d95024f1a0a85cb48c6ac6b6259df93",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "9e3c5e6e6fa2cb1a832b8fbd85c100e1533f8535": {
+        "native_source_identity": "a4784efaadced8c770a89ba1dac9ef7d9f0e145274620b17975f27df1b531d49",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 8,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "9aca4ad485df41b29aaf977ac9bfa632558da82593be955eb9d4a8778e4b7b00",
+          "python/generativeqc/batch.py": "acd7f0117726dfc45e0b7a564e85bd606d95024f1a0a85cb48c6ac6b6259df93",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "e447f517e98977b8f5d1002d42de351372c4516ab36f4d75bbf3765bcf5c252e",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "fedf81b833ff91ac85db2e94fc914467c93dae79": {
+        "native_source_identity": "bb6ec48eafc3327cabf13e85374ff3bfbb0f2690425ab3b029d4a629258a159e",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 4,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "9aca4ad485df41b29aaf977ac9bfa632558da82593be955eb9d4a8778e4b7b00",
+          "python/generativeqc/batch.py": "acd7f0117726dfc45e0b7a564e85bd606d95024f1a0a85cb48c6ac6b6259df93",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "3660e04d2b3912de1f349e892852e4b19957b96b": {
+        "native_source_identity": "8ea27122e9e6d8dbb140ee67283d717388ca36001f6c91fe9d7744aa974f09bd",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 4,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "9aca4ad485df41b29aaf977ac9bfa632558da82593be955eb9d4a8778e4b7b00",
+          "python/generativeqc/batch.py": "acd7f0117726dfc45e0b7a564e85bd606d95024f1a0a85cb48c6ac6b6259df93",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "8c1755492981e3696104ff2b96c9110b025344a8d378b205ab9bc9172acea799",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "9e21b8cb635e9ef2ce7c2de1ccc83fab86318204": {
+        "native_source_identity": "e6fef34900e938143aa1ccdd8e842f76a4e1836d154da70be51ecc3d78e4eeef",
+        "source_inventory_files": 1723,
+        "consumer_files_verified": 43,
+        "native_records_audited": 5,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "9aca4ad485df41b29aaf977ac9bfa632558da82593be955eb9d4a8778e4b7b00",
+          "python/generativeqc/batch.py": "acd7f0117726dfc45e0b7a564e85bd606d95024f1a0a85cb48c6ac6b6259df93",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "0ce4bdd0511476bed1ab89e89793b8869627587c1c8fb7e1aefcd3d5d99142b0",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      },
+      "aaec57399ef29f96981da368c3a8c6a91af74ae8": {
+        "native_source_identity": "56d7457f19c0366fd48441839c191b1375f2c8a8382f5328a265e082a7ee468a",
+        "source_inventory_files": 1724,
+        "consumer_files_verified": 43,
+        "native_records_audited": 11,
+        "consumer_hashes": {
+          "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+          "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+          "benchmarks/readme_dft.py": "d0ce0667f4e2e8963c386812c75c0f8759b65ffd618158460dd597518e8f372b",
+          "benchmarks/readme_omol25.py": "dcd6e542cac125fa257beb5fb99fe818f1f8f61e45043b4ce2a572e2e771027d",
+          "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+          "benchmarks/readme_wb97mv.py": "014aa502ba3e2086ce3a3fa18c2a1f61140c5b8293e6756d2d13bf90c0e8474f",
+          "python/generativeqc/_force_active_ao.py": "b2b65ee825eea08edac64fa1e19d866082892448fde406839830d7d124064b3b",
+          "python/generativeqc/_ks_snapshot.py": "e56592804b0fb6970909756432c258d67e94e7ba08eab7df3e5d0872894a46e0",
+          "python/generativeqc/_snapshot_grid_cache.py": "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d",
+          "python/generativeqc/_stationary_composite_cuda.py": "445cfc9005a518612bc4bc044767d2d53e7ad6d5be89686d36917a80848d03f8",
+          "python/generativeqc/_stationary_cuda.py": "9aca4ad485df41b29aaf977ac9bfa632558da82593be955eb9d4a8778e4b7b00",
+          "python/generativeqc/batch.py": "acd7f0117726dfc45e0b7a564e85bd606d95024f1a0a85cb48c6ac6b6259df93",
+          "python/generativeqc/calculator.py": "8bc44b375d8b3899d62b899abe0d19b18540f3396f47a9db1618313399eba91c",
+          "python/generativeqc/ks.py": "a204bd88388bd599ab5b4b35a133cbc148cddc80ca641f855f526d199791da2c",
+          "python/generativeqc/resources_ks.py": "5615b8c2ec933c390cc6bf9a382a4cc89c54e59ac936f42df152dc0b79e44777",
+          "python/generativeqc_compiler/dft/ao_cuda.py": "33c7b4c51dc055a61308d88e082ee9a11681164f9c38cc8e8ae199938b4418ad",
+          "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "835ea6419470c581348748d846fe6da80b882366d94ebf02701c02a5a2b794fa",
+          "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "ede279a210e7b6966ec0f40c540f0b9ef41ed2d192673efe7e53bb99ec8845cc",
+          "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "eb7bd00db5ff563e397ba5aa6ff50785c5f625a985b2aeef48488365048eb63c",
+          "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "934e950b44fee5c42c3a8908abb246cd6347adabf82678fef816300a41571b4d",
+          "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+          "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+          "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "02ad7046b358dc8858f657f23f1033711ddf79507f45c6c65a8a5e3597cb0e22",
+          "python/generativeqc_compiler/method/stationary_composite_resources.py": "0430cd9fe4a8177d4588b16b13d62bb38bf7fbb72ade6b1a8c702842b19e928d",
+          "python/generativeqc_compiler/method/stationary_cuda.py": "9f561985cb734b7c5face4bdf845672abae57b66d489f3317a2332f8208410bb",
+          "python/generativeqc_compiler/method/stationary_resources.py": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
+          "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+          "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+          "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+          "src/scf/cuda/direct_bounded_dddd.cu": "e646087d05144c84099d078f825aa17c72e8c561dec7a7e5ed613882097e717a",
+          "src/scf/cuda/direct_bounded_fallback.cu": "0ce4bdd0511476bed1ab89e89793b8869627587c1c8fb7e1aefcd3d5d99142b0",
+          "src/scf/cuda/direct_coulomb.cpp": "5a06dcf334c33d4b51fc53c4a937f2655726a617769afaab4dc7b418a14e9232",
+          "src/scf/cuda/direct_jk.cpp": "d8e97de44ee23f4fc29c28b69c2b218cf7b836b468804f9e8630f420bc3e150a",
+          "src/scf/cuda/direct_jk_kernels.cu": "6f7e1bdf415081d594bc6dd953577b77f62146318dc9ec5ad014bb9faab123ec",
+          "src/scf/cuda/direct_jk_kernels.hpp": "3a96a3d9748ddd9e411f579cd37fc9140a45700eaaa4bbd4c574da9a156653f6",
+          "src/scf/cuda/direct_jk_plan.hpp": "78ef3888ae0a450b915d256f081d2508b599e2241e6befbe59c1479da902cad2",
+          "src/scf/cuda/one_electron_gradient_bridge.cu": "7c1bd6de76d9e3b4be771198c81db36422a4c619a4a1e948df972791a3a87007",
+          "src/scf/cuda/packed_basis.hpp": "b123827dc34d146b8a7329c7327014e24f4128a8d0f7db7ccd3f675da9127c19",
+          "src/scf/cuda/rhf_policy.cpp": "2dce97742f1b31e46970dd60a267e14ee97b6227492372276aed8ef95e25fe36",
+          "src/scf/cuda/rhf_policy.hpp": "2cadb3d41aa3f82ec020fa27ad759ca09cc0a6bbe14597a5128aa489135ac7e8",
+          "tools/generativeqc_gcp/reference.py": "8a637c0798b36f1c8c125d3a07f6393ca3a77bc621bf38c330a5cf2499621512",
+          "tools/parameters/r2scan3c_gcp.json": "24c017481d97d7c0a7aba19c1512c3593e3e751bc5d0ee5f943444f41f1fdc65"
+        }
+      }
+    },
+    "note": "Historical acceptance fields retain their original campaigns. Current totals are acceptance and df_acceptance; incomplete phase timings are not complete-population qualification."
   }
 }

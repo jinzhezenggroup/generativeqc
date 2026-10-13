@@ -69,6 +69,9 @@ jobs:
           echo "active=true" >> "${GITHUB_OUTPUT}"
 
   master-cpu-cache:
+    permissions:
+      contents: read
+      actions: read
     name: Seed shared Linux CPU ccache (GCC, coverage, Clang, Python)
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     # One master producer fills all CPU compiler/flag variants before publishing.
@@ -93,7 +96,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -109,6 +113,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.master_cpu_ccache.outcome == 'success' && steps.master_cpu_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
       - name: Compile GCC, instrumented GCC, and Clang
@@ -196,7 +207,28 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ format('{0}-partial-{1}-{2}', steps.master_cpu_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
 
+      - name: Package bounded CPU compiler snapshot
+        id: cpu_snapshot
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cpu_seed.outcome == 'success' && steps.python_seed.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        run: python3 tools/ci_cpu_ccache_snapshot.py package
+      - name: Publish bounded CPU compiler snapshot
+        if: steps.cpu_snapshot.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cpu-ccache-master-ubuntu24-x86_64-v1-${{ github.run_attempt }}
+          path: ${{ steps.cpu_snapshot.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   cpu:
+    permissions:
+      contents: read
+      actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     # Cold GCC coverage can spend 6.5 minutes compiling and 8 minutes in CTest.
@@ -221,7 +253,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -237,6 +270,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.cpu_ccache.outcome == 'success' && steps.cpu_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Install native CLI dependencies
@@ -358,7 +398,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -460,16 +501,49 @@ jobs:
         id: trusted_cuda_ccache_download
         if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache.outputs.run_id != ''
         continue-on-error: true
+        # The downloader's inactivity timeout does not bound a slow transfer.
+        # Leave the required compile budget available and try actions/cache next.
+        timeout-minutes: 2
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: cuda-ccache-master-12.9-sm120-v3
-          path: ~/.cache/ccache
+          # Extraction precedes digest validation. Never expose partial files to
+          # ccache or overwrite the normal fallback cache on failure/timeout.
+          path: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          digest-mismatch: error
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
+      - name: Activate verified trusted CUDA ccache snapshot
+        id: trusted_cuda_ccache_activate
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_DIR: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          test -d "$TRUSTED_CUDA_CCACHE_DIR"
+          # Select the completed cache without copying several GB a second time.
+          printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_DIR" >> "$GITHUB_ENV"
+      - name: Discard incomplete trusted CUDA cache download
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_DIR: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          # Remove only this attempted download, never the normal/selected cache.
+          expected="${RUNNER_TEMP:?}/trusted-cuda-ccache-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
+          if [[ "${TRUSTED_CUDA_CCACHE_DIR:-}" != "$expected" || "${CCACHE_DIR:-}" == "$expected" ]]; then
+            echo "::warning::Refusing to remove an unexpected or selected cache path."
+            exit 1
+          fi
+          rm -rf -- "$expected"
       - name: Restore shared Linux CUDA ccache
         id: cuda_ccache
-        if: github.event_name != 'merge_group' || steps.trusted_cuda_ccache_download.outcome != 'success'
+        if: github.event_name != 'merge_group' || steps.trusted_cuda_ccache_activate.outcome != 'success'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -708,7 +782,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -904,7 +979,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -969,6 +1045,9 @@ jobs:
           retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
 
   python:
+    permissions:
+      contents: read
+      actions: read
     name: python (${{ matrix.shard }})
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
@@ -1011,7 +1090,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1027,6 +1107,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.python_ccache.outcome == 'success' && steps.python_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Prepare CPU Python test environment
@@ -1304,7 +1391,8 @@ jobs:
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1320,6 +1408,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.benchmark_ccache.outcome == 'success' && steps.benchmark_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
@@ -1656,7 +1751,8 @@ jobs:
         shell: bash
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1726,6 +1822,16 @@ jobs:
           python3 tools/report_ci_ccache.py
           --label "CUDA native CLI fast seed (shared library)"
           --verbose --build-dir build/cuda-release-sm120
+      # A Ninja log has no reliable invocation boundary. Only report a fresh
+      # CLI tree; the master fast seed above owns a different build directory.
+      - name: Record fresh CLI Ninja timing boundary
+        id: cli_ninja_boundary
+        if: steps.cli_scope.outputs.tier != 'skip'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: >-
+          python3 tools/report_ci_ninja_timing.py
+          --check-fresh --build-dir build/cuda-release-cli-sm120
       - name: Build monolithic C++ CUDA CLI (release or fast PR)
         id: native_cli_build
         if: steps.cli_scope.outputs.tier != 'skip'
@@ -1742,6 +1848,15 @@ jobs:
             -DGENERATIVEQC_ENABLE_CXX_PCH=OFF \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
+      - name: Report completed CLI Ninja command timings
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          FRESH_NINJA_LOG: ${{ steps.cli_ninja_boundary.outputs.fresh }}
+        run: >-
+          python3 tools/report_ci_ninja_timing.py
+          --build-dir build/cuda-release-cli-sm120 --fresh-log "$FRESH_NINJA_LOG"
       - name: Show detailed CLI compiler cache statistics
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true

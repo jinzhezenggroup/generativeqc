@@ -159,6 +159,8 @@ class DeviceGridTask:
         ``reset=True`` (or start a new density execution) to discard it; error
         status is fresh for every scatter attempt.
         """
+        if self._owner.plan.features_only:
+            raise RuntimeError("features-only CUDA grids cannot assemble potentials")
         view = self.view
         if type(reset) is not bool or type(download) is not bool:
             raise ValueError("scatter flags must be boolean")
@@ -235,6 +237,8 @@ class DeviceGridTask:
         three scalar integrals and, when requested, the accumulated global
         potential cross back to the host.
         """
+        if self._owner.plan.features_only:
+            raise RuntimeError("features-only CUDA grids cannot assemble potentials")
         view = self.view
         if (
             type(restricted) is not bool
@@ -296,6 +300,10 @@ class CudaGrid:
     explicitly, features download explicitly, and AO jets download only when
     requested by validation or a CPU consumer. No molecular AO grid is retained. Calls on
     one plan are serialized; different plans own independent arenas/streams.
+    ``features_only=True`` removes host potential-scatter staging from admission
+    and rejects potential assembly before packing inputs; native device buffers
+    keep their ordinary bound. Density preparation and feature/jet reads remain
+    available, including indexed and resident-point leases.
     """
 
     _fixed = frozenset(
@@ -355,6 +363,7 @@ class CudaGrid:
         active_ao_capacity: typing.Any = None,
         orbital_capacity: typing.Any = None,
         orbital_tile: typing.Any = 32,
+        features_only: bool = False,
         ingredients: typing.Any = None,
         resource_budget: typing.Any = None,
         basis_generation: typing.Any = 0,
@@ -388,6 +397,7 @@ class CudaGrid:
             active_ao_capacity=active_ao_capacity,
             orbital_capacity=orbital_capacity,
             orbital_tile=orbital_tile,
+            features_only=features_only,
         )
         self.resource_plan = plan_resources(
             (self.plan.resource_request(self.ingredients, device_id),),
@@ -1030,8 +1040,6 @@ class CudaGrid:
         """
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("device task views require a local CUDA plan")
             if set(self.ingredients) != {"rho", "gradient", "sigma", "tau"}:
                 raise ValueError("device task ABI v1 requires the full feature layout")
             with self._task(
@@ -1128,13 +1136,13 @@ class CudaGrid:
 
         This device-only path is deliberately deferred: the downstream same-stream
         consumer propagates the grid error before reading AO/features. The point
-        allocation remains caller-owned and must outlive the lease.
+        allocation remains caller-owned and must outlive the lease. Dense
+        owners expose read-only AO/features with no potential/scatter buffers;
+        explicit AO maps still require a capacity-qualified indexed owner.
         """
         _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
             active, selected = self._selected_ao_map(ao_ids)
@@ -1394,8 +1402,6 @@ class CudaGrid:
         _, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
             with self._task(
@@ -1427,8 +1433,6 @@ class CudaGrid:
         published, required = self._normalize_task_ingredients(ingredients)
         with self._lock:
             self._check_open()
-            if self.plan.active_ao_capacity is None:
-                raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients) or not published.issubset(
                 self.ingredients
             ):

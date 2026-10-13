@@ -224,7 +224,7 @@
     },
     "readme-dft-20261013": {
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
-      "reason": "Retain all reported scalar observations, per-point actual source identities, independent cold/moved reference vectors, work counts and unsuccessful outcomes. Figures connect complete endpoint medians with work variability retained. Native force vectors remain in ignored raw evidence; retained scalar errors are not relabeled as newly recomputed vector comparisons. No storage-budget exemption.",
+      "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     }
   },
@@ -454,22 +454,6 @@
       "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
     },
     {
-      "bytes": 153158,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/384-404.json",
-      "role": "scientific-record",
-      "sha256": "e2f5728f31e23805bbc1f2fd3b3ecc52486eaf68b82abe2c46d385b74f36c1e1"
-    },
-    {
-      "bytes": 226206,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/768-404.json",
-      "role": "scientific-record",
-      "sha256": "1ba17b6d525922968c5af89e5667fdc6ffedac9d54e8e04111d39719ea4444b9"
-    },
-    {
       "bytes": 131267,
       "classification": "required-compact-accepted-evidence",
       "family": "issue404-combined-rys",
@@ -590,28 +574,44 @@
       "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
     },
     {
+      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 185892,
+      "sha256": "61aae72ec1341555f245093c6c69ea2371ec80baa5913cc8c84ca7ef52a13377",
+      "role": "Complete DF endpoint chart"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 139392,
-      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730",
+      "bytes": 330160,
+      "sha256": "a841fb8731cf03c3d6391dac9fee5588fdbae6947c3509698d59a15d79b2f943",
       "classification": "required-compact-accepted-evidence",
-      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+      "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 187516,
-      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada",
+      "bytes": 187647,
+      "sha256": "caaa39a66e88c2ed72dc67999d86178dff8d2ba989a2fe26aa35f70b7e3f8276",
       "classification": "required-compact-accepted-evidence",
-      "role": "Complete endpoint chart"
+      "role": "Complete direct endpoint chart"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 393624,
+      "sha256": "cde02a58a72edf6a60713fe230b11ca68a2bb8e5b054698714e94a7d25810827",
+      "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 250780,
-      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01",
+      "bytes": 397852,
+      "sha256": "93f8fee3dcd6156d960c04d3090a722e6f2ebf5460234f59c6741d74e004002d",
       "classification": "required-compact-accepted-evidence",
-      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+      "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
     {
       "bytes": 230258,

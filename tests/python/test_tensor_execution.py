@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from generativeqc_compiler.common.evidence import GATES, block_error
 from generativeqc_compiler.tensor import (
+    AD_PRIMITIVES,
     PASSES,
     PRIMITIVES,
     Index,
@@ -357,7 +358,8 @@ def test_cse_never_merges_different_spin_symmetry_or_parameter_roles() -> None:
 
 
 def test_primitive_contracts_separate_real_ad_from_boolean_data() -> None:
-    real_ad_contracts = set(PRIMITIVES) - set(COMPARISONS)
+    real_ad_contracts = set(AD_PRIMITIVES)
+    assert set(PRIMITIVES) - real_ad_contracts == COMPARISONS | {"where"}
     assert set(BOOLEAN_VIEWS) <= real_ad_contracts
     assert set(COMPARISONS).isdisjoint(BOOLEAN_VIEWS)
     assert all(

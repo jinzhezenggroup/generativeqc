@@ -34,6 +34,10 @@ from benchmarks.compare_gpu4pyscf_batch import (
     native_build_metadata,
     require_tuned_native_build,
 )
+from benchmarks.readme_accuracy_oracle import (
+    merge_geometry_oracles,
+    read_geometry_oracle,
+)
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_wb97mv import (
     configure_reference_full_fock,
@@ -102,6 +106,7 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc_compiler/method/stationary_composite_resources.py",
         "python/generativeqc/_stationary_composite_cuda.py",
         "benchmarks/readme_omol25.py",
+        "benchmarks/readme_accuracy_oracle.py",
         "benchmarks/ks_preliminary_density.py",
         "benchmarks/readme_pbe0.py",
         "benchmarks/readme_dft.py",
@@ -576,6 +581,13 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--reference", type=Path)
     parser.add_argument(
+        "--accuracy-reference",
+        type=Path,
+        action="append",
+        default=[],
+        help="Accuracy-only independent geometry JSON beside the output; no timing sample",
+    )
+    parser.add_argument(
         "--allow-missing-reference",
         action="store_true",
         help="Measure native completion independently; missing accuracy gates remain unchecked",
@@ -684,7 +696,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             "force_active_ao_cache_bytes": 64 << 20 if args.force_active_ao else None,
             "force_max_device_bytes": args.force_max_device_bytes,
             "force_max_host_bytes": args.force_max_host_bytes,
-            "public_initialization_policy": False,
+            # Without a benchmark seed override, Calculator owns initialization
+            # through its public default (currently automatic Modified Huckel).
+            "public_initialization_policy": args.preliminary_provider == "none",
         },
         "native_schedule_settings": {
             name: value
@@ -722,6 +736,16 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
 
     def retain(row: dict[str, Any], reference: dict[str, Any] | None) -> None:
         retain_endpoint_record(record, row, reference, save)
+
+    accuracy_receipts = []
+    if args.accuracy_reference:
+        if args.engine != "native":
+            parser.error("accuracy-only references apply to native validation")
+        record["accuracy_reference_files"] = []
+        for path in args.accuracy_reference:
+            receipt, binding = read_geometry_oracle(path, directory=args.output.parent)
+            accuracy_receipts.append(receipt)
+            record["accuracy_reference_files"].append(binding)
 
     owner = None
     restore_force = None
@@ -864,6 +888,12 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
 
             baselines = reference_baselines(
                 oracle, scientific, allow_missing=args.allow_missing_reference
+            )
+            baselines = merge_geometry_oracles(
+                baselines,
+                accuracy_receipts,
+                scientific,
+                basis_sha256=record["basis_file_sha256"],
             )
             if force_options:
                 from generativeqc._stationary_composite_cuda import (

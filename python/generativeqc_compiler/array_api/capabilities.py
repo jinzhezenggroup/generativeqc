@@ -9,6 +9,7 @@ FRONTEND_VERSION = 1
 ## The 2025.12 standard is a comparison target, not an implementation claim.
 # Group definitions own the bounded preview inventory and its matrix together.
 _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
+    "real-selection": ("where",),
     "real-elementwise": (
         "add",
         "subtract",
@@ -73,6 +74,7 @@ _OPERATION_GROUPS: dict[str, tuple[str, ...]] = {
 # test_array_api_coverage_matrix verifies this literal against _OPERATION_GROUPS.
 SUPPORTED_FUNCTIONS = frozenset(
     {
+        "where",
         "add",
         "equal",
         "not_equal",
@@ -121,6 +123,7 @@ SUPPORTED_FUNCTIONS = frozenset(
 )
 
 _OPERATION_DTYPES: dict[str, str] = {
+    "real-selection": "bool condition; float32|float64 branches",
     "real-elementwise": "float32|float64",
     "real-comparison": "float32|float64 -> bool",
     "array-creation": "bool|float32|float64 (operation-specific admission)",
@@ -132,6 +135,7 @@ _OPERATION_DTYPES: dict[str, str] = {
 }
 
 _AD_STATUS: dict[str, str] = {
+    "real-selection": "unsupported; forward-reference-only",
     "real-elementwise": "TensorIR-rule-if-explicitly-differentiable",
     "real-comparison": "non-differentiable",
     "array-creation": "constant-no-input-adjoint",
@@ -353,6 +357,7 @@ def capabilities() -> dict[str, object]:
         "dtype_helpers": "bool-identity-or-real-float32-float64; finfo-real-only",
         "boolean_data": "typed-input-constant-comparison-reference-and-bounded-native-cpu",
         "comparison_inputs": "finite-real-float32-float64-only",
+        "where_reference_scope": "finite-generic-real; eager-all-live-operands; explicit-broadcast-and-cast; external-mask-runtime-reference-AD-only; no-generated-public-AD-or-native",
         "boolean_native_lowering": True,
         "boolean_native_scope": "materializing-cpu-only; finite-float64-comparisons-and-typed-views; no-AD-or-where",
         "astype_devices": "device-none-only-cpu-reference",
