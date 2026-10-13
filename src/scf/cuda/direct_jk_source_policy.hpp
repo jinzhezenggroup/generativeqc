@@ -10,7 +10,7 @@ namespace generativeqc::scf::cuda_execution {
 enum class DirectJkSourceSelection { automatic, disabled, forced, invalid };
 
 /** RHF keeps its qualified domain; KS also admits bounded screened SPD sources. */
-enum class DirectJkSourceAutoPolicy { generic_f, screened_cold };
+enum class DirectJkSourceAutoPolicy { generic_f, screened_cold, screened_hybrid_cold };
 
 /** Capture an experimental selection once per phase, never in kernel replay.
  * Callers supply method-specific controls and the incumbent value ceiling.
@@ -61,12 +61,20 @@ constexpr const char* direct_jk_source_auto_refusal(
     DirectJkSourceAutoPolicy policy = DirectJkSourceAutoPolicy::generic_f,
     double screening = 0.0) noexcept {
   if (!cold_phase) return "auto: reused reference bucket";
-  if (policy == DirectJkSourceAutoPolicy::screened_cold && maximum_angular <= 2) {
+  if (policy != DirectJkSourceAutoPolicy::generic_f && maximum_angular <= 2) {
     if (!(screening > 0.0)) return "auto: screened SPD source requires a positive mask";
   } else if (maximum_angular != 3 || !generic_fock) {
     return "auto: retain generated/lower-angular schedule";
   }
-  if (nbf < 64 || direct_nbf < 128) return "auto: source below cold reuse threshold";
+  // Small screened s/p/d KS sources also amortize over a cold SCF. The old
+  // Cartesian floor excluded useful spherical sources (e.g. 96 public AOs)
+  // even though their complete resident inventory was comfortably bounded.
+  const bool screened_spd =
+      policy == DirectJkSourceAutoPolicy::screened_hybrid_cold && maximum_angular <= 2;
+  const auto minimum_aos = screened_spd ? 24U : 64U;
+  const auto minimum_direct_aos = screened_spd ? 24U : 128U;
+  if (nbf < minimum_aos || direct_nbf < minimum_direct_aos)
+    return "auto: source below cold reuse threshold";
   if (maximum_iterations < 8) return "auto: short iteration limit";
   return nullptr;
 }
@@ -76,7 +84,7 @@ constexpr std::size_t direct_jk_source_value_ceiling(DirectJkSourceSelection sel
                                                      DirectJkSourceAutoPolicy policy,
                                                      unsigned maximum_angular) noexcept {
   if (selection == DirectJkSourceSelection::forced ||
-      (policy == DirectJkSourceAutoPolicy::screened_cold && maximum_angular <= 2))
+      (policy != DirectJkSourceAutoPolicy::generic_f && maximum_angular <= 2))
     return 16ULL << 30;
   return 8ULL << 30;
 }
@@ -84,8 +92,12 @@ constexpr std::size_t direct_jk_source_value_ceiling(DirectJkSourceSelection sel
 /** Admit quartic values only after the complete consumer and source overhead. */
 constexpr std::size_t direct_jk_source_allowance(std::size_t nbf, unsigned maximum_iterations,
                                                  std::size_t required, std::size_t overhead,
-                                                 std::size_t budget, std::size_t ceiling) noexcept {
-  if (nbf < 64 || maximum_iterations < 4 || required > budget || overhead > budget - required)
+                                                 std::size_t budget, std::size_t ceiling,
+                                                 DirectJkSourceAutoPolicy policy =
+                                                     DirectJkSourceAutoPolicy::generic_f) noexcept {
+  const auto minimum_aos = policy == DirectJkSourceAutoPolicy::screened_hybrid_cold ? 24U : 64U;
+  if (nbf < minimum_aos || maximum_iterations < 4 || required > budget ||
+      overhead > budget - required)
     return 0;
   const auto remaining = budget - required - overhead;
   return remaining < ceiling ? remaining : ceiling;

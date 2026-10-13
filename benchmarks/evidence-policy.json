@@ -2,6 +2,21 @@
   "benchmark_results_max_bytes": 67108864,
   "change_review_max_bytes": 2097152,
   "exceptions": {
+    "benchmarks/results/pbe0-source-reuse-20261013/complete-gradient-test.log.xz": {
+      "owner": "pbe0-source-reuse-20261013",
+      "reason": "Exact compact passing complete-gradient receipt for the source-matched FP64 policy; independent oracle and binary identity are retained separately, not inferred from this aggregate outcome.",
+      "sha256": "a5a1883dd3fe0a1ab71c6e592795bb05bf5317daae8ca85b368ae2a520db6807"
+    },
+    "benchmarks/results/pbe0-source-reuse-20261013/gpu-tests.log.xz": {
+      "owner": "pbe0-source-reuse-20261013",
+      "reason": "Exact compact four-test GPU acceptance receipt for the final small-hybrid source policy. Coverage, source and Slurm identity remain in the accompanying record; no later-master requalification is claimed.",
+      "sha256": "d1f5001b6e4eb6c6c60a9b113ec50669272056b273ce3696345cf77e5fe1d772"
+    },
+    "benchmarks/results/pbe0-source-reuse-20261013/memcheck.log.xz": {
+      "owner": "pbe0-source-reuse-20261013",
+      "reason": "Exact compact compute-sanitizer zero-error and zero-leak receipt, paired with complete endpoint results. Instrumented timing is excluded from performance claims.",
+      "sha256": "7ba1b9dec25219564ae8c33f6c6ad48b4c90526c33915045fcfb4fc577ccfa82"
+    },
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
       "owner": "array-api-rhf-slurm-20261011",
       "reason": "Small exact compiler/toolkit/profile qualification receipt for the frozen source-matched Release/sm_120 CUDA library. Retains initial/final configuration provenance, distinguishing the measured force-AOT-off build from an unverified prebuilt library; objects and full build logs remain ignored.",
