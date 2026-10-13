@@ -188,6 +188,14 @@ def test_native_global_hybrid_admission_combines_direct_auto_and_strict_df(
 #include <cassert>
 #include "methods/dft_method_preparation.hpp"
 using namespace generativeqc;
+struct Plan {
+  bool range_exchange{}, nonlocal_correlation{};
+  dft::SemilocalFamily semilocal_family;
+  std::uint32_t spin_channels;
+};
+std::uint32_t ks_xc_functional_code(const Plan& plan) {
+  return dft::semilocal_family_code(plan.semilocal_family);
+}
 bool admitted(bool fitted, bool automatic, bool unrestricted, bool b3lyp,
               unsigned excluded = 0) {
   const auto backend = excluded == 1 ? GENERATIVEQC_BACKEND_CPU_REFERENCE

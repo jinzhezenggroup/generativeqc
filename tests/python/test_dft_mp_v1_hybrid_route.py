@@ -8,11 +8,11 @@ import ast
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
+from generativeqc import Calculator, _native
 from generativeqc import _generated_methods as method_manifest
-from generativeqc import _native
 from generativeqc._cpu_force_resources import qualified_direct_semilocal_context
 from generativeqc._model_resolution import snapshot_basis
 from generativeqc.ks import (
@@ -88,6 +88,7 @@ def _promoted(
     include_semilocal: bool = False,
     device: str = "cuda",
     automatic_name: str | None = None,
+    composite: str | None = None,
 ) -> bool:
     _, assignments, promotion = _nodes()
     options = SimpleNamespace(
@@ -132,7 +133,12 @@ def _promoted(
             else _native.DENSITY_FITTING_NONE
         ),
         _automatic_libxc_name=automatic_name,
-        _dispersion_method_ir=None,
+        _dispersion_method_ir=(
+            resolve_method(composite, spin=spin) if composite is not None else None
+        ),
+    )
+    owner._density_fitted_composite_force_eligible = MethodType(
+        Calculator._density_fitted_composite_force_eligible, owner
     )
     scope = {
         "self": owner,
@@ -173,7 +179,7 @@ def _promoted(
     elif blocked == "unsupported-device":
         owner._device_name = "unsupported"
     elif blocked == "dispersion":
-        owner._dispersion_method_ir = object()
+        owner._dispersion_method_ir = resolve_method("R2SCAN-D4(BJ-EEQ-ATM)", spin=spin)
     elif blocked in ("exchange", "nonlocal"):
         options.execution_plan = SimpleNamespace(
             exchange=(SimpleNamespace(operator="short-range"),)
@@ -308,6 +314,24 @@ def test_mixed_df_admission_keeps_unqualified_range_graph_closed(
 ) -> None:
     method = resolve_method("CAM-B3LYP", spin=spin)
     assert not mixed_density_fitted_force_eligible(method, backend=backend)
+
+
+@pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+@pytest.mark.parametrize("composite", ("R2SCAN-3c", "R2SCAN-D4(BJ-EEQ-ATM)"))
+def test_df_composite_force_keeps_its_manifest_and_precision_boundaries(
+    precision: int, spin: str, device: str, composite: str
+) -> None:
+    assert _promoted(
+        precision=precision,
+        spin=spin,
+        method="R2SCAN",
+        density_fitting=True,
+        include_semilocal=True,
+        device=device,
+        composite=composite,
+    ) is (composite == "R2SCAN-3c" and precision == _native.PRECISION_FP64)
 
 
 @pytest.mark.parametrize(

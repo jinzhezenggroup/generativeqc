@@ -74,9 +74,22 @@ int main(int argc,char** argv) {
  f.backend=scf::FockBackend::Cuda;f.spec.derivative_order=0;
  f.spec.spin=spins==1?scf::FockSpin::Restricted:scf::FockSpin::Unrestricted;
  f.spec.exchange.coefficient=spins==1?-0.125:-0.25;
- if(mode=="no-exchange")f.spec.exchange.present=false;
+ // Every PBE hybrid negative starts from the actual PBE0 composition.
+ // Unit-scaled semilocal PBE plus 25% K is a different Hamiltonian.
+ if(functional==1)state.model.semilocal_exchange_scale=0.75;
+ if(mode=="no-exchange") {
+   f.spec.exchange.present=false;state.model.semilocal_exchange_scale=1;
+ }
+ else if(mode=="unscaled-pbe-k" || mode=="unscaled-pbe-df") {
+   state.model.semilocal_exchange_scale=1;
+   if(mode=="unscaled-pbe-df") {
+     f.spec.coulomb.approximation=scf::FockApproximation::DensityFitted;
+     f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
+   }
+ }
  else if(mode=="cpu" || mode=="cpu-scaled") {
    f.backend=scf::FockBackend::Cpu;state.model.device=-1;
+   state.model.semilocal_exchange_scale=1;
    if(mode=="cpu-scaled")state.model.semilocal_exchange_scale=0.75;
  }
  else if(mode=="df-jk") {
@@ -121,6 +134,7 @@ int main(int argc,char** argv) {
  else if(mode=="bad-spins")state.determinant.occupied.clear();
  else if(mode=="wrong-domain")state.model.scf_domain_version=2;
  if(mode.rfind("rsh",0)==0) {
+   state.model.semilocal_exchange_scale=1;
    scf::ResolvedFockBuild correction=f;
    correction.spec.coulomb.present=false;
    correction.spec.exchange.op=scf::FockOperator::LongRange;
@@ -181,11 +195,12 @@ def model_probe(
             for family in (0, 1, 2)
             if (mode, family) != ("exact", 1)
         ),
-        # The common hybrid contract rejects PBE + 25% K with unscaled PBE
-        # exchange. The PBE0 cases below retain positive Direct/DF coverage
-        # with the required 75% semilocal exchange.
-        ("exact", 1, False),
-        ("df-jk", 1, False),
+        # PBE0 starts from 75% semilocal exchange; unit-scaled PBE plus
+        # 25% exact K is separately rejected below as a different Hamiltonian.
+        ("exact", 1, True),
+        ("df-jk", 1, True),
+        ("unscaled-pbe-k", 1, False),
+        ("unscaled-pbe-df", 1, False),
         ("df-jk", 0, False),
         ("df-jk", 2, False),
         *(
