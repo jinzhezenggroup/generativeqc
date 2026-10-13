@@ -43,6 +43,22 @@ created during the build, including inherited parent definitions. Full
 CPU, CUDA, wheel and static CLI builds and numerical regression tests remain
 the repository CI acceptance gate.
 
+## Review evidence
+
+Selective clean component builds exposed missing transitive prerequisites:
+`cc/df_plan.hpp` includes the hoisted DF-CC header, whose core header includes
+the native DF-CC header; `d4_reference.hpp` includes generated method parameters.
+The component dependencies now include all three previously missing generators.
+The Ninja build-plan regression fails for both affected components before the
+repair and passes afterward without running expensive generators in pytest.
+
+All four extracted host components compiled with GCC 14.2 and ccache 4.14.1
+on Linux; Ninja's generated-file dependency audit reported no missing edges.
+Small executable fixtures additionally cover shared/static symbol inclusion,
+installed consumers, optional PCH, inherited direct and transitive definitions,
+compile options, and toolkit include paths. These are bounded host proofs;
+CUDA compilation, GPU runtime, and native Windows execution still require CI.
+
 ## Revisit when
 
 CI measures a significant cold-build or PCH overhead from object boundaries,

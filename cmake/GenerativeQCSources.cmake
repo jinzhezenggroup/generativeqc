@@ -350,6 +350,8 @@ function(generativeqc_add_cpu_component_object_targets target)
       generativeqc_xc_cpu_codegen
       generativeqc_d3_codegen
       generativeqc_d4_derivative_codegen
+      # d4_reference.hpp includes the shared method-parameter constants.
+      generativeqc_method_parameters_codegen
       generativeqc_nonlocal_pair_codegen
       generativeqc_libxc_semilocal_cpu_codegen)
   generativeqc_add_host_object_component(${target} generativeqc_host_posthf_cc
@@ -372,7 +374,10 @@ function(generativeqc_add_cpu_component_object_targets target)
     CODEGEN
       generativeqc_rccsd_cpu_codegen
       generativeqc_uccsd_cpu_codegen
+      # df_plan.hpp -> hoisted -> core -> native generated headers.
+      generativeqc_df_ccsd_native_codegen
       generativeqc_df_ccsd_core_codegen
+      generativeqc_df_ccsd_hoisted_codegen
       generativeqc_triples_fock_cpu_codegen
       generativeqc_df_mo_source_codegen)
 endfunction()
