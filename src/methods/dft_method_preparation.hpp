@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
@@ -38,6 +39,27 @@ struct NativeKsExecutionPlan {
   const dft::SemilocalPointProgram* automatic_program{};
   const dft::RestrictedSemilocalPointProgram* automatic_restricted_program{};
 };
+
+/** Qualify the global-hybrid composition before preparing any scientific owner.
+ * Direct AUTO precision is selected per component by CudaKsPlan. Fitted
+ * hybrids retain their separate FP64 domain; range/nonlocal compositions use
+ * their own admission and cannot enter this full-range-only route.
+ */
+inline bool cuda_global_hybrid_admitted(generativeqc_backend backend,
+                                        const NativeKsExecutionPlan& plan,
+                                        const scf::ScfOptions& options,
+                                        const scf::FockBuildSpec& fock,
+                                        std::uint32_t functional) noexcept {
+  return backend == GENERATIVEQC_BACKEND_CUDA && !plan.range_exchange &&
+         !plan.nonlocal_correlation &&
+         (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+          options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
+         dft::global_hybrid_coefficients_match(fock, functional, plan.spin_channels,
+                                               options.semilocal_exchange_scale,
+                                               options.semilocal_correlation_scale) &&
+         (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+          dft::cuda_global_hybrid_df_admitted(functional));
+}
 
 bool ks_is_unrestricted(const NativeKsExecutionPlan& plan) noexcept;
 std::uint32_t ks_scf_domain_version(const NativeKsExecutionPlan& plan) noexcept;

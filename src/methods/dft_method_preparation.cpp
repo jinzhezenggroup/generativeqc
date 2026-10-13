@@ -362,25 +362,11 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   const bool cuda_nonlocal = backend == GENERATIVEQC_BACKEND_CUDA && complete_cuda_nonlocal;
   const bool scaled_or_hybrid = options.semilocal_exchange_scale != 1.0 ||
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
-  // AUTO is admitted per component by CudaKsPlan: Direct Coulomb J may use
-  // mixed arithmetic while exact exchange K remains strict FP64. Density-fitted
-  // global hybrids retain their separate strict-FP64 admission.
-  const bool cuda_global_hybrid =
-      backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
-      !execution_plan.nonlocal_correlation &&
-      (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
-       options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
-      fock.exchange.present;
   // A single source-derived composition check covers both curated and split
   // global hybrids. XC evaluation differs; full-range J/K does not.
   const auto functional = ks_xc_functional_code(execution_plan);
   const bool cuda_matched_global_hybrid =
-      cuda_global_hybrid &&
-      dft::global_hybrid_coefficients_match(fock, functional, execution_plan.spin_channels,
-                                            options.semilocal_exchange_scale,
-                                            options.semilocal_correlation_scale) &&
-      (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
-       dft::cuda_global_hybrid_df_admitted(functional));
+      cuda_global_hybrid_admitted(backend, execution_plan, options, fock, functional);
   if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
       !cuda_matched_global_hybrid && !cuda_nonlocal)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,

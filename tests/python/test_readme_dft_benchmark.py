@@ -20,8 +20,8 @@ from benchmarks.readme_omol25 import (
     reference_energy_forces,
     retain_endpoint_record,
 )
-from tools.render_omol25_benchmarks import independent_phase_status
 from benchmarks.readme_wb97mv import _bind_reference_mixed_rsh_df
+from tools.render_omol25_benchmarks import independent_phase_status
 from tools.render_readme_dft import collect_point, phase_statistics, timing_cell
 
 

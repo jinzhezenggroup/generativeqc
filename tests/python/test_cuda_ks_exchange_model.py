@@ -26,7 +26,10 @@ PREFIX = r"""
 #include <string>
 #include <vector>
 #include "dft/semilocal_family.hpp"
+#include "dft/global_hybrid_fock.hpp"
 using generativeqc::dft::SemilocalFamily;
+using generativeqc::dft::global_hybrid_composition;
+using generativeqc::dft::cuda_global_hybrid_jk_match;
 using generativeqc::dft::semilocal_family_metadata_from_code;
 using generativeqc::dft::semilocal_family_domain_version;
 using generativeqc::dft::semilocal_family_has_cuda_ks;
@@ -39,31 +42,22 @@ struct AutomaticLibxcEntry {
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t) noexcept { return {}; }
 }
 namespace nlc { enum class Vv10DensityDomain { MolecularV1 }; }
-namespace scf {
-enum class FockBackend {Cpu,Cuda};
-enum class FockSpin {Restricted,Unrestricted};
-enum class FockPrecision {Float64,Float32};
-enum class FockApproximation {Exact,DensityFitted};
-enum class FockOperator {FullRange,LongRange};
-struct Term {bool present=true; double coefficient=1,omega=0; FockOperator op=FockOperator::FullRange;
- FockApproximation approximation=FockApproximation::Exact;};
-struct Spec {FockSpin spin=FockSpin::Restricted; unsigned derivative_order=0;Term coulomb,exchange;};
-struct Fock {FockBackend backend=FockBackend::Cuda;FockPrecision precision=FockPrecision::Float64;
- Spec spec;double screening_tolerance=1e-12;};
+namespace scf = generativeqc::scf;
+namespace generativeqc::scf {
 // Preserve the basic finite-coefficient contract of the independent validator.
-void validate_resolved_fock_build(const Fock& f) {
+void validate_resolved_fock_build(const ResolvedFockBuild& f) {
  if(!std::isfinite(f.spec.exchange.coefficient))throw std::invalid_argument("coefficient");
 }
-void require_wb97mv_composition(const Fock&,const Fock&,int) {throw std::invalid_argument("not this scope");}
+void require_wb97mv_composition(const ResolvedFockBuild&,const ResolvedFockBuild&,int) {throw std::invalid_argument("not this scope");}
 }
 struct Model {unsigned version=1,functional=1,scf_domain_version=1,tile_points=257,owner=1,spins=1;
  int device=0,grid=1;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;
- std::optional<scf::Fock> range_correction;
+ std::optional<scf::ResolvedFockBuild> range_correction;
  std::optional<int> nonlocal_correlation;
  nlc::Vv10DensityDomain nonlocal_density_domain=nlc::Vv10DensityDomain::MolecularV1;};
 struct KsFinalStateIdentity {
  Model model;
- struct {scf::Fock model;std::vector<unsigned> occupied{1};} determinant;
+ struct {scf::ResolvedFockBuild model;std::vector<unsigned> occupied{1};} determinant;
 };
 void validate_grid_spec(int grid) {if(grid!=1)throw std::invalid_argument("grid");}
 """
@@ -77,6 +71,7 @@ int main(int argc,char** argv) {
  state.model.functional=functional;state.model.spins=spins;
  state.determinant.occupied.assign(spins,1);
  auto& f=state.determinant.model;
+ f.backend=scf::FockBackend::Cuda;f.spec.derivative_order=0;
  f.spec.spin=spins==1?scf::FockSpin::Restricted:scf::FockSpin::Unrestricted;
  f.spec.exchange.coefficient=spins==1?-0.125:-0.25;
  if(mode=="no-exchange")f.spec.exchange.present=false;
@@ -91,7 +86,7 @@ int main(int argc,char** argv) {
  else if(mode=="df-j")f.spec.coulomb.approximation=scf::FockApproximation::DensityFitted;
  else if(mode=="df-k")f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
  else if(mode=="range-k")f.spec.exchange.op=scf::FockOperator::LongRange;
- else if(mode=="range-decoration")state.model.range_correction=scf::Fock{};
+ else if(mode=="range-decoration")state.model.range_correction=f;
  else if(mode=="nlc-decoration")state.model.nonlocal_correlation=1;
  else if(mode=="scale-x")state.model.semilocal_exchange_scale=0.73;
  else if(mode=="scale-c")state.model.semilocal_correlation_scale=0.5;
@@ -103,7 +98,7 @@ int main(int argc,char** argv) {
    if(mode=="pbe0-df-wrong-k")f.spec.exchange.coefficient=-0.2;
    else if(mode=="pbe0-df-mixed-j")f.spec.coulomb.approximation=scf::FockApproximation::Exact;
    else if(mode=="pbe0-df-mixed-k")f.spec.exchange.approximation=scf::FockApproximation::Exact;
-   else if(mode=="pbe0-df-range")state.model.range_correction=scf::Fock{};
+   else if(mode=="pbe0-df-range")state.model.range_correction=f;
    else if(mode=="pbe0-df-nlc")state.model.nonlocal_correlation=1;
    else if(mode=="pbe0-df-scale-x")state.model.semilocal_exchange_scale=0.8;
    else if(mode=="pbe0-df-scale-c")state.model.semilocal_correlation_scale=0.9;
@@ -112,21 +107,21 @@ int main(int argc,char** argv) {
    state.model.semilocal_exchange_scale=0.75;f.spec.exchange.coefficient=-0.2;
  }
  else if(mode=="pbe0-range-decoration") {
-   state.model.semilocal_exchange_scale=0.75;state.model.range_correction=scf::Fock{};
+   state.model.semilocal_exchange_scale=0.75;state.model.range_correction=f;
  }
  else if(mode=="pbe0-nlc-decoration") {
    state.model.semilocal_exchange_scale=0.75;state.model.nonlocal_correlation=1;
  }
  else if(mode=="positive-k")f.spec.exchange.coefficient=0.25;
  else if(mode=="nan-k")f.spec.exchange.coefficient=std::nan("");
- else if(mode=="float32")f.precision=scf::FockPrecision::Float32;
+ else if(mode=="float32")f.precision=static_cast<scf::FockPrecision>(1);
  else if(mode=="wrong-device")state.model.device=-1;
  else if(mode=="derivative")f.spec.derivative_order=1;
  else if(mode=="bad-grid")state.model.grid=0;
  else if(mode=="bad-spins")state.determinant.occupied.clear();
  else if(mode=="wrong-domain")state.model.scf_domain_version=2;
  if(mode.rfind("rsh",0)==0) {
-   scf::Fock correction=f;
+   scf::ResolvedFockBuild correction=f;
    correction.spec.coulomb.present=false;
    correction.spec.exchange.op=scf::FockOperator::LongRange;
    correction.spec.exchange.omega=0.33;
@@ -163,7 +158,13 @@ def model_probe(
     native_cxx.build_executable(
         [unit],
         executable,
-        compile_args=("-std=c++20", "-O2", "-fsanitize=undefined", f"-I{ROOT / 'src'}"),
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-fsanitize=undefined",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ),
         link_args=("-fsanitize=undefined",),
         compile_timeout=30,
     )
@@ -178,8 +179,13 @@ def model_probe(
             (mode, family, True)
             for mode in ("exact", "no-exchange")
             for family in (0, 1, 2)
+            if (mode, family) != ("exact", 1)
         ),
-        ("df-jk", 1, True),
+        # The common hybrid contract rejects PBE + 25% K with unscaled PBE
+        # exchange. The PBE0 cases below retain positive Direct/DF coverage
+        # with the required 75% semilocal exchange.
+        ("exact", 1, False),
+        ("df-jk", 1, False),
         ("df-jk", 0, False),
         ("df-jk", 2, False),
         *(

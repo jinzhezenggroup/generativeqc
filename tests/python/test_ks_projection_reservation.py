@@ -112,6 +112,9 @@ DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reserva
   // has separate live-resource coverage in test_df_preparation_budget.py.
   DfResolvedBudget resolved;
   resolved.requested_bytes = resolved.total_bytes = resolved.value_bytes = plan_budget;
+  // These fixtures exercise the occupied hybrid owner, never the rank-zero
+  // Coulomb owner independently covered by the DF budget/response tests.
+  const bool coulomb_only_packing = false;
 """
     unit += definition(prepared, "      const auto plan_values =") + ";\n"
     unit += "return plan_values(n,a,0); }\n"
