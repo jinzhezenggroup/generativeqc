@@ -114,6 +114,7 @@ systems = [
     [("He", (0.0, 0.0, 0.0))],
 ]
 
+calc = Calculator(method="rhf", basis="sto-3g", device="cuda")
 with calc.prepare_batch(systems, warm_start=True) as batch:
     first = batch.execute(strict=True)
     second = batch.execute(strict=True)  # reuses compatible densities
@@ -125,8 +126,8 @@ print(first.energies)
 
 **Complete HF and DFT energy + analytic forces** on an RTX 5090
 (2026-10-13), compared with GPU4PySCF under matched FP64, basis, and grid
-settings. Cold includes preparation and the first calculation (compiler
-caches retained); warm reuses a fixed converged density. Measurements retain
+settings. Cold includes construction, preparation, and the first calculation
+(compiler caches retained); warm reuses a fixed converged density. Measurements retain
 their individually qualified source/build identities.
 
 **Direct J/K**
