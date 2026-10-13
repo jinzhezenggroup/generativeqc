@@ -1907,15 +1907,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
         xc->enqueue(density, elements, next_generation, phase);
         return xc->view(next_generation);
       }
-      xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
-                                   nonlocal_raw_gradient);
+      // Keep AO/semilocal work separate from the quadratic nonlocal pair sweep
+      // in opt-in diagnostics. Disabled tracing adds no events or fences.
+      runtime::cuda_trace::trace_call("semilocal_density_features", stream, [&] {
+        xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
+                                     nonlocal_raw_gradient);
+      });
       const auto quadrature = xc->grid_view();
+      runtime::cuda_trace::TraceRegion domain_trace("nonlocal_density_domain", stream);
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
             stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
             nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
             nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
       });
+      domain_trace.finish();
+      runtime::cuda_trace::TraceRegion pair_trace("nonlocal_pair_features", stream);
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_cuda_device(
             nonlocal_layout, nonlocal_correlation->parameters(), device, stream, quadrature.points,
@@ -1923,9 +1930,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
             nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_workspace, nonlocal_vrho,
             nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error);
       });
-      xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
-                                     nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-                                     nonlocal_workspace);
+      pair_trace.finish();
+      runtime::cuda_trace::trace_call("nonlocal_ao_potential", stream, [&] {
+        xc->enqueue_nonlocal_potential(next_generation, nonlocal_effective_weights,
+                                       nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
+                                       nonlocal_workspace);
+      });
       return xc->view(next_generation);
     }
     const auto bytes = elements * sizeof(double);
