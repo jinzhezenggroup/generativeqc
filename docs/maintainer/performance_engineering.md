@@ -525,3 +525,13 @@ Before promoting a new default or auto-selection policy:
 7. Keep slower/correct fallbacks available where the promoted resource or
    identity preconditions do not hold.
 8. Prefer complete endpoint evidence over isolated kernel speedups.
+
+The authoritative
+[`default_promotion_inventory.json`](../../manifests/maintenance/default_promotion_inventory.json)
+distinguishes measured `negative-evidence`, a final `retained-opt-in` decision,
+and continuing `needs-qualification` research. Public precision defaults to
+FP64 and AUTO remains explicit; TensorIR tuning winners require explicit selection, and
+TensorIR Graph replay remains explicit. These decisions do not change existing
+qualified method defaults or fulfill separate positive product-delivery gates.
+Continuing qualification needs a domain owner beyond the completed policy review
+#1598. See the [decision and evidence boundaries](../../.agents/notes/implemented/performance/2026-10-13-default-promotion-closeout.md).

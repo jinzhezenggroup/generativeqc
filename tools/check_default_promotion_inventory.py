@@ -17,6 +17,9 @@ CLASSIFICATIONS = frozenset(
     {
         "diagnostic-test-only",
         "negative-evidence",
+        # A completed decision to require explicit selection, without asserting
+        # that every eligible workload is slower or still awaiting a default.
+        "retained-opt-in",
         "needs-qualification",
         "scientific-choice",
         "guarded-promotion-candidate",
@@ -811,6 +814,10 @@ def validate_inventory(
         ):
             errors.append(
                 f"{entry_id}: owner_issues must contain positive issue numbers"
+            )
+        elif classification == "needs-qualification" and set(owners) == {1598}:
+            errors.append(
+                f"{entry_id}: needs-qualification requires a narrower owner than #1598"
             )
         for field in ("rationale", "revisit_condition"):
             if not _nonempty_string(entry.get(field)):
