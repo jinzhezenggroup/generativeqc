@@ -142,9 +142,14 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
-@pytest.mark.parametrize("frozen_range", [False, True])
+@pytest.mark.parametrize(
+    "frozen_range,incremental", [(False, False), (True, False), (False, True)]
+)
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
-    monkeypatch: pytest.MonkeyPatch, max_iterations: int, frozen_range: bool
+    monkeypatch: pytest.MonkeyPatch,
+    max_iterations: int,
+    frozen_range: bool,
+    incremental: bool,
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -156,6 +161,8 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     monkeypatch.setenv("GENERATIVEQC_VV10_NATIVE_SEED", "0")
     monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "1")
     monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED", str(int(frozen_range)))
+    monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", str(int(incremental)))
+    monkeypatch.setenv("GENERATIVEQC_VV10_INCREMENTAL_SEED", str(int(incremental)))
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1)),
@@ -196,7 +203,14 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
             assert scopes[-2:] == ("full-target", "full-target")
             assert diagnostic.physical_residual_max < 1e-10
             assert diagnostic.density_change_max < 1e-10
+            if incremental:
+                # The screened lower retains one delta between full refreshes,
+                # and its final force-capable state receives a full-density audit.
+                receipt = result.incremental_direct_jk
+                assert receipt["active"] and receipt["delta_builds"] > 0
+                assert receipt["post_scf_full_builds"] > 0
             monkeypatch.setenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED", "0")
+            monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "0")
             with calculator.prepare_batch([atoms]) as reference:
                 full = reference.execute(properties=("energy",)).items[0]
             assert full.converged and abs(full.energy - result.energy) < 1e-10

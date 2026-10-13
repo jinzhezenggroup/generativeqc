@@ -1141,8 +1141,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const bool cache_requested =
           cache_choice ? std::string_view(cache_choice) == "1" : xc_layout.npoint >= 65536;
       nonlocal_cache_enabled = cache_requested && xc_layout.npoint >= 3 &&
+                               xc_layout.npoint <= (std::uint64_t{1} << 32) &&
                                parameters.variant == nlc::Vv10Variant::vv10 &&
-                               parameters.coefficient <= 0x1p32;
+                               std::fabs(parameters.coefficient) <= 0x1p32;
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
       if (nonlocal_cache_enabled &&
           nonlocal_arena_bytes > nonlocal_correlation->resources().device_workspace_bytes) {
@@ -1396,17 +1397,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto* seed_selection = std::getenv("GENERATIVEQC_VV10_NATIVE_SEED");
     const auto* outer_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED");
     const bool outer_requested = outer_selection && std::string_view(outer_selection) == "1";
+    const auto* range_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED");
+    const bool freeze_range_requested = range_selection && std::string_view(range_selection) == "1";
+    const auto* incremental_seed = std::getenv("GENERATIVEQC_VV10_INCREMENTAL_SEED");
+    // J/K remains density-current during a fixed-VV10 inner solve. Its existing
+    // one-delta/full-refresh policy can therefore compose with this provisional
+    // operator. Freezing range K cannot compose with the delta reconstruction.
+    const bool incremental_seed_requested =
+        incremental_seed && std::string_view(incremental_seed) == "1" && !freeze_range_requested;
     nonlocal_seed_trace = seed_selection && std::string_view(seed_selection) == "1";
     const bool nonlocal_initialization =
         (nonlocal_seed_trace || outer_requested) && device_nonlocal && spins == 1 &&
         nonlocal_correlation &&
         nonlocal_correlation->parameters().variant == nlc::Vv10Variant::vv10 &&
-        !precision_schedule.any_lower_precision() && !incremental_direct_jk && !use_warm &&
+        !precision_schedule.any_lower_precision() &&
+        (!incremental_direct_jk || incremental_seed_requested) && !use_warm &&
         options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
-    const auto* range_selection = std::getenv("GENERATIVEQC_VV10_FROZEN_RANGE_SEED");
-    nonlocal_freeze_range = nonlocal_outer_active && has_range_correction && range_selection &&
-                            std::string_view(range_selection) == "1";
+    nonlocal_freeze_range = nonlocal_outer_active && has_range_correction && freeze_range_requested;
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
@@ -2504,8 +2512,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       stabilize_occupations = true;
     const bool has_energy_history =
         output.iterations > 1 || (output.iterations == 1 && warm_energy_baseline);
-    refine_incremental_energy(physical.density_change, physical.residual,
-                              physical.maximum_residual);
+    // A converged inner operator does not establish target energy stationarity.
+    // Only target observations may switch the ordinary incremental owner to its
+    // consecutive full-density final audit; provisional work remains charged.
+    if (!pending_nonlocal_seed && !pending_nonlocal_frozen)
+      refine_incremental_energy(physical.density_change, physical.residual,
+                                physical.maximum_residual);
     const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
     const bool converged = has_energy_history && full_energy_history && !pending_nonlocal_seed &&
                            !pending_nonlocal_frozen &&
