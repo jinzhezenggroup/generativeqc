@@ -684,7 +684,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             "force_active_ao_cache_bytes": 64 << 20 if args.force_active_ao else None,
             "force_max_device_bytes": args.force_max_device_bytes,
             "force_max_host_bytes": args.force_max_host_bytes,
-            "public_initialization_policy": False,
+            # Without a benchmark seed override, Calculator owns initialization
+            # through its public default (currently automatic Modified Huckel).
+            "public_initialization_policy": args.preliminary_provider == "none",
         },
         "native_schedule_settings": {
             name: value

@@ -127,7 +127,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -137,7 +137,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -224,7 +224,7 @@
     },
     "readme-dft-20261013": {
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
-      "reason": "Retain all reported scalar observations, per-point actual source identities, independent cold/moved reference vectors, work counts and unsuccessful outcomes. Figures connect complete endpoint medians with work variability retained. Native force vectors remain in ignored raw evidence; retained scalar errors are not relabeled as newly recomputed vector comparisons. No storage-budget exemption.",
+      "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
     }
   },
@@ -590,28 +590,44 @@
       "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
     },
     {
+      "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 183917,
+      "sha256": "c19a26b9205ce2d755b2498977b2e52bf8caef557e0eda91f776750653c19d4d",
+      "role": "Complete DF endpoint chart"
+    },
+    {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 139392,
-      "sha256": "504732b62cb11b1e85cd34646c57d83b88ce01b710c9f59f0071c51bbe50a730",
+      "bytes": 295556,
+      "sha256": "67f81cb2475b8a9a9cd8552b56a12e20be400b2e8d324ef16f7d28244411f6c6",
       "classification": "required-compact-accepted-evidence",
-      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+      "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 187516,
-      "sha256": "115a67a017d99bd476dc8d14e28ee0f54a4dbc947140369862a575fbb21a1ada",
+      "bytes": 188062,
+      "sha256": "1db53ae625851527240df00621970162b9a2bf776e1a7ac6ed1b8c603dd83e28",
       "classification": "required-compact-accepted-evidence",
-      "role": "Complete endpoint chart"
+      "role": "Complete direct endpoint chart"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 393624,
+      "sha256": "cde02a58a72edf6a60713fe230b11ca68a2bb8e5b054698714e94a7d25810827",
+      "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 250780,
-      "sha256": "abfa0f05378f34f18f89e29b1d56c7d53963f872b12ccdabc443f2d514cc7e01",
+      "bytes": 308028,
+      "sha256": "fb978f7ddde6e4b1969e7d6c5bf834c1c1e32bec96bebd88b54f43ceb2b00342",
       "classification": "required-compact-accepted-evidence",
-      "role": "Lossless endpoint evidence with work, residuals, independent reference vectors and actual source provenance"
+      "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
     {
       "bytes": 230258,
