@@ -59,7 +59,8 @@ __global__ void bounded_materialized_fock_kernel(DeviceBatch batch,
         }
         const auto first = topology.pair_order[bra_begin + bra];
         const auto second = topology.pair_order[ket_begin + ket];
-        task = {max(first, second), min(first, second), 0U};
+        task = first >= second ? ActiveShellQuartetTile{first, second, 0U}
+                               : ActiveShellQuartetTile{second, first, 0U};
         keep = direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Fock>(
             batch, task.first_pair, task.second_pair, screening_tolerance,
             topology.shell_pair_bounds, density_bounds, nullptr);

@@ -2450,6 +2450,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           bounded_generated_page_range(plan.bounded_stream_pair_class_offsets, plan.batch_size,
                                        high_pair_class, low_pair_class, 0U, page_capacity)
               .candidate_count;
+      if (bounded_fock_class_timing)
+        launch_start_bounded_fock_class_timer_kernel(1, 1, 0, resources.stream_, shell_class,
+                                                     bounded_fock_class_timer_starts);
       for (std::uint64_t page_begin = 0U; page_begin < page_domain; page_begin += page_capacity) {
         const BoundedGeneratedPageRange page_range = bounded_generated_page_range(
             plan.bounded_stream_pair_class_offsets, plan.batch_size, high_pair_class,
@@ -2506,6 +2509,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             {quartet_fock, resources.reference_fock_correction_},
             bounded_direct_generated_task_counts + shell_class,
             bounded_direct_generated_task_heads + shell_class);
+        if (error != cudaSuccess) return error;
+      }
+      // Include the primary pages, not just the usually empty overflow stream.
+      if (bounded_fock_class_timing) {
+        launch_finish_bounded_fock_class_timer_kernel(
+            1, 1, 0, resources.stream_, shell_class, bounded_fock_class_timer_starts,
+            bounded_fock_class_timer_elapsed, bounded_fock_class_timer_launches);
+        const auto error = cudaPeekAtLastError();
         if (error != cudaSuccess) return error;
       }
     }
