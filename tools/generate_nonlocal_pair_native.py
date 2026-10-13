@@ -22,6 +22,7 @@ from generativeqc_compiler.method.nonlocal_pair import (
     build_nonlocal_row_feature_program,
     native_local_scale_cpp,
 )
+from generativeqc_compiler.method.nonlocal_pair_cuda import native_parallel_pair_cuda
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
@@ -101,6 +102,41 @@ def native_header() -> str:
                 "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
             )
         )
+    # Both feature legs share the same admitted denominator and canonical
+    # TensorIR roots. Generated traversal templates keep stream/output ownership
+    # with the CUDA runtime.
+    for geometry in (False, True):
+        bilateral = build_nonlocal_pair_program(
+            "vv10",
+            geometry=geometry,
+            rational_derivatives=True,
+            reciprocal_energy=True,
+            partner_features=True,
+        )
+        output_order = (
+            "phi",
+            "dphi_domega",
+            "dphi_dkappa",
+            "dphi_domega_j",
+            "dphi_dkappa_j",
+        )
+        if geometry:
+            output_order += ("dphi_dr2",)
+        body = emit_scalar_cpp(
+            bilateral,
+            function_name=f"pair_vv10_bilateral_g{int(geometry)}",
+            input_order=PAIR_INPUT_ORDER[:5],
+            output_order=output_order,
+            caller_owned_checks=True,
+            ordered_native_sums=True,
+            output_dependency_order=True,
+        )
+        bodies.append(
+            f"// TensorIR logical hash: {bilateral.logical_hash}\n"
+            + body.replace(
+                "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
+            )
+        )
     row = build_nonlocal_row_feature_program()
     row_body = emit_scalar_cpp(
         row,
@@ -122,6 +158,8 @@ def native_header() -> str:
 #pragma once
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 
 #if defined(__CUDACC__)
 #define GENERATIVEQC_NONLOCAL_PAIR_HD __host__ __device__
@@ -177,6 +215,28 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline PairValues pair_values_vv10_admitted(
   return result;
 }
 
+// Exact scalar pair outputs for two live legs; the caller owns the separately
+// qualified FP64 accumulation schedule and the admitted numerical domain.
+struct BilateralPairValues : PairValues {
+  double dphi_domega_j{};
+  double dphi_dkappa_j{};
+};
+
+template <bool Geometry>
+GENERATIVEQC_NONLOCAL_PAIR_HD inline BilateralPairValues pair_values_vv10_bilateral(
+    double r2, double wi, double wj, double ki, double kj) noexcept {
+  BilateralPairValues result{};
+  if constexpr (Geometry)
+    pair_vv10_bilateral_g1(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
+                          result.dphi_dkappa, result.dphi_domega_j,
+                          result.dphi_dkappa_j, result.dphi_dr2);
+  else
+    pair_vv10_bilateral_g0(r2, wi, wj, ki, kj, result.phi, result.dphi_domega,
+                          result.dphi_dkappa, result.dphi_domega_j,
+                          result.dphi_dkappa_j);
+  return result;
+}
+
 // The general bounded closure keeps the original energy root. Only the
 // prevalidated molecular entry point above selects unit-reciprocal rounding.
 // Positive g_i/g_j and their sums/products stay finite and normal in this
@@ -202,6 +262,9 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline PairValues pair_values_vv10_rational(
       r2, wi, wj, ki, kj, row_inverse_kappa);
 }
 
+"""
+        + native_parallel_pair_cuda()
+        + """
 }  // namespace generativeqc::dft::nlc::generated
 
 #undef GENERATIVEQC_NONLOCAL_PAIR_HD

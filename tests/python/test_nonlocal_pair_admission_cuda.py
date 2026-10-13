@@ -20,11 +20,17 @@ from tools.generate_nonlocal_pair_native import native_header
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture(scope="module")
-def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+@pytest.fixture(scope="module", params=(False, True), ids=("ordered", "parallel"))
+def admission_probe(
+    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+) -> ct.CDLL:
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
         pytest.skip("explicit real-device qualification required")
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    import cupy as cp
+
+    device = cp.cuda.runtime.getDeviceProperties(0)
+    architecture = f"sm_{device['major']}{device['minor']}"
     compiler, cache = shutil.which("nvcc"), shutil.which("ccache")
     assert compiler and cache, "nvcc and ccache are required"
     subprocess.run([cache, "--version"], check=True, capture_output=True)
@@ -51,6 +57,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         + dispatch
         + admission
         + kernel
+        + f"constexpr bool use_parallel = {str(request.param).lower()};\n"
         + r"""
 template<bool Geometry, bool Mask, bool Admit>
 void launch(size_t n, const double* x, const uint64_t* indices,
@@ -65,10 +72,21 @@ void launch(size_t n, const double* x, const uint64_t* indices,
   pair_kernel_ordered<Vv10Variant::vv10,true,Geometry,Mask,false>
     <<<(n+127)/128,128>>>(0,n,0.7,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,
       x+8*n,x+9*n,indices,count,0.03125,out,out+n,out+2*n,out+3*n,out+6*n,error,gate);
-  if constexpr (Mask && Admit)
-    pair_kernel_ordered<Vv10Variant::vv10,true,Geometry,Mask,true>
-      <<<(n+127)/128,128>>>(0,n,0.7,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,
-        x+8*n,x+9*n,indices,count,0.03125,out,out+n,out+2*n,out+3*n,out+6*n,error,gate);
+  if constexpr (Mask && Admit) {
+    if constexpr(use_parallel) {
+      const generated::ParallelPairInputs input{
+        n,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,x+8*n,x+9*n,indices,count,0.7,0.03125,rejected};
+      const generated::ParallelPairOutputs output{out,out+n,out+2*n,out+3*n,out+6*n,error};
+      generated::parallel_pair_initialize<Geometry><<<(n+127)/128,128>>>(input,output);
+      generated::parallel_pair_kernel<Geometry><<<8,128>>>(input,output);
+      generated::parallel_pair_zero_rows<<<8,128>>>(input,output);
+      generated::parallel_pair_finalize<Geometry><<<(n+127)/128,128>>>(input,output);
+    } else {
+      pair_kernel_ordered<Vv10Variant::vv10,true,Geometry,Mask,true>
+        <<<(n+127)/128,128>>>(0,n,0.7,x,x+3*n,x+4*n,x+5*n,x+6*n,x+7*n,
+          x+8*n,x+9*n,indices,count,0.03125,out,out+n,out+2*n,out+3*n,out+6*n,error,gate);
+    }
+  }
 }
 // Keep output canaries on device so padded row stores cannot pass unnoticed.
 extern "C" int run(size_t n, int geometry, int mask, int stage,
@@ -108,23 +126,33 @@ extern "C" int run(size_t n, int geometry, int mask, int stage,
 }
 """
     )
+    # Cache CUDA compilation separately; linking a shared object is not cacheable.
+    obj = directory / "probe.o"
     subprocess.run(
         [
             cache,
             compiler,
             "-std=c++17",
             "-O2",
-            "--shared",
+            f"-arch={architecture}",
+            "-c",
             "-Xcompiler",
             "-fPIC",
             str(cpp),
             "-o",
-            str(library),
+            str(obj),
         ],
         check=True,
         capture_output=True,
         text=True,
         timeout=180,
+    )
+    subprocess.run(
+        [compiler, "--shared", str(obj), "-o", str(library)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     probe = ct.CDLL(str(library))
     probe.run.argtypes = [
@@ -143,7 +171,17 @@ extern "C" int run(size_t n, int geometry, int mask, int stage,
 @pytest.mark.parametrize("geometry", [False, True])
 @pytest.mark.parametrize(
     "domain",
-    ["signed", "sparse", "screened_block", "empty", "translated", "oversized_weight"],
+    [
+        "signed",
+        "sparse",
+        "screened_block",
+        "empty",
+        "translated",
+        "oversized_weight",
+        "nonzero",
+        "masked_nonzero",
+        "positive_zero",
+    ],
 )
 def test_admitted_rows_keep_order_at_partial_tiles(
     admission_probe: ct.CDLL, n: int, geometry: bool, domain: str
@@ -155,7 +193,12 @@ def test_admitted_rows_keep_order_at_partial_tiles(
     weighted[::7] *= -1
     # Positive-zero rows retain their weight derivative; negative-zero rows are
     # screened only when the explicit molecular row-mask contract is selected.
-    weighted[::11] = 0.0
+    if domain not in ("nonzero", "masked_nonzero"):
+        weighted[::11] = 0.0
+    if domain == "positive_zero":
+        weighted[:] = 0.0
+    if domain == "masked_nonzero":
+        weighted[::5] = -0.0
     if domain == "sparse":
         weighted[::3] = -0.0
     elif domain == "screened_block":

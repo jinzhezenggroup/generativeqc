@@ -113,6 +113,7 @@ def build_nonlocal_pair_program(
     geometry: bool = True,
     rational_derivatives: bool = False,
     reciprocal_energy: bool = False,
+    partner_features: bool = False,
 ) -> Program:
     """Select live pair outputs without changing runtime admission semantics.
 
@@ -127,6 +128,8 @@ def build_nonlocal_pair_program(
     ordered closure elsewhere. Energy is unchanged; derivative roots deliberately
     use a separately versioned FP64 operation order. The optional unit-reciprocal
     energy policy changes energy rounding too, under its own lowering identity.
+    Partner features expose the same second-leg derivative nodes used by the
+    radial root, allowing a schedule to consume both ends of an unordered pair.
     """
     if variant not in (VV10, RVV10):
         raise UnsupportedNonlocalCorrelation(f"unsupported pair variant {variant!r}")
@@ -138,11 +141,14 @@ def build_nonlocal_pair_program(
             geometry,
             rational_derivatives,
             reciprocal_energy,
+            partner_features,
         )
     ):
         raise TypeError("pair representation and output demands must be Boolean")
     if rational_derivatives and not (variant == VV10 and features):
         raise ValueError("rational derivatives require VV10 features")
+    if partner_features and not (variant == VV10 and features and rational_derivatives):
+        raise ValueError("partner features require bounded rational VV10 features")
     if reciprocal_energy and not rational_derivatives:
         raise ValueError("reciprocal energy requires bounded rational derivatives")
     scalar = TensorSpec((), role="input", differentiable=True)
@@ -216,14 +222,18 @@ def build_nonlocal_pair_program(
                 )
             outputs["dphi_domega"] = multiply(dphi_dgi, r2)
             outputs["dphi_dkappa"] = dphi_dgi
-        if geometry:
+        if geometry or partner_features:
             if rational_derivatives:
                 # Positive denominator factors avoid cancellation in each
                 # logarithmic partial. This shares dphi/dg_i with SCF features.
                 dphi_dgj = multiply(multiply(denominator_partial, gi), add(gj, gsum))
-                outputs["dphi_dr2"] = add(
-                    multiply(wi, dphi_dgi), multiply(wj, dphi_dgj)
-                )
+                if partner_features:
+                    outputs["dphi_domega_j"] = multiply(dphi_dgj, r2)
+                    outputs["dphi_dkappa_j"] = dphi_dgj
+                if geometry:
+                    outputs["dphi_dr2"] = add(
+                        multiply(wi, dphi_dgi), multiply(wj, dphi_dgj)
+                    )
             else:
                 logarithmic = add(
                     add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
@@ -254,6 +264,7 @@ def build_nonlocal_pair_program(
             ),
             "features": features,
             "geometry": geometry,
+            **({"partner_features": True} if partner_features else {}),
         },
     )
 
