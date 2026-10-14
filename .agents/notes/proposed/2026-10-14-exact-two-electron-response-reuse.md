@@ -6,7 +6,7 @@ Date: 2026-10-14
 The expanded 96-atom range-cache experiment still times out at moved/0 under
 the original 1800-second protocol. Its fixed-density warm endpoints spend about
 10.8 seconds in native integral derivatives. A separate exact-source device
-probe at d4f0ba62a shows repeated density bytes but changing Fock, orbitals and
+probe at d4f0ba62a (n2 Slurm 2975) shows repeated density bytes but changing Fock, orbitals and
 weighted-density bytes. Reusing the whole integral response would therefore be
 incorrect: Pulay response depends on the current W.
 
@@ -16,7 +16,8 @@ current final density and stationary-weight leases, then compares every bit of
 the already exported snapshot density. No new host matrix export, CPU oracle,
 tolerance key, pointer-only key or epoch-only key is introduced. The one-electron
 and Pulay pair runs anew. Geometry rebuild creates another owner; disabling the
-experiment clears retention. A failed or nonfinite response never populates it.
+experiment clears retention. An explicit shell-derivative fallback also bypasses
+retention, preserving that diagnostic route. A failed or nonfinite response never populates it.
 
 The single exactly sized host slab holds all spin density blocks and contracted
 response. It is bounded by 64 MiB, a quarter of the caller allowance and the

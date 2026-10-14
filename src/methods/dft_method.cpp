@@ -1620,7 +1620,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
         const auto publication_bytes = 8 * (candidate.capacity() + value.capacity());
         const auto used_host = work[3] + publication_bytes;
         const auto available = used_host < maximum_bytes ? maximum_bytes - used_host : 0;
-        if (reuse_response)
+        if (reuse_response && value.size() == 3 * nc)
           integral_response_cache_.store(*cached_density, value,
                                          std::min(response_cache_limit, available));
       }
@@ -1630,7 +1630,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       response_trace.finish(hit ? "exact_density_reuse" : "computed");
       candidate.insert(candidate.end(), value.begin(), value.end());
     }
-    work[3] += integral_response_cache_.bytes();
+    // Slot 1 is retained source host preparation, separate from the transient
+    // one-electron peak in slot 3. The prepared owner reports this same slab.
+    work[1] = integral_response_cache_.bytes();
     output = std::move(candidate);
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
