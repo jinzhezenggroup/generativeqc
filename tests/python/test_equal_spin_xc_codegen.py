@@ -277,7 +277,7 @@ def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
             )
         )
     lines.extend(("  }", "}"))
-    semilocal = resolve_method("M06-2X", spin="polarized").primitives[0].functional
+    semilocal = resolve_method("M06-2X", spin="unpolarized").primitives[0].functional
     lines.extend(
         (
             "namespace force_integer_power_point {",

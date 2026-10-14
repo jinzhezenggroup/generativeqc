@@ -67,11 +67,12 @@ def test_split_mgga_components_lower_bounded_integer_powers_only_when_requested(
 
 @pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
 @pytest.mark.parametrize("scalar_type", ("double", "float"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 def test_split_consumers_qualify_integer_power_schedule_separately(
-    identifier: str, scalar_type: str
+    identifier: str, scalar_type: str, spin: str
 ) -> None:
-    """The force-only M06 schedule must not change SCF or float consumers."""
-    semilocal = resolve_method(identifier, spin="polarized").primitives[0].functional
+    """Only the qualified FP64 M06 RKS force consumer enables the schedule."""
+    semilocal = resolve_method(identifier, spin=spin).primitives[0].functional
     code = SPLIT_HYBRIDS[identifier]["functional_code"]
     force_source = _emit_composed_point(code, semilocal, scalar_type=scalar_type)
     point_source, _, _ = emit_split_hybrid_device_body(
@@ -80,7 +81,7 @@ def test_split_consumers_qualify_integer_power_schedule_separately(
     pattern = r"\bpowf?\([^,\n]+,\s*[-+]?(?:2|3|4)(?:\.0)?f?\)"
     assert re.search(pattern, point_source)
     assert bool(re.search(pattern, force_source)) == (
-        identifier != "M06-2X" or scalar_type != "double"
+        identifier != "M06-2X" or scalar_type != "double" or spin != "unpolarized"
     )
 
 

@@ -48,8 +48,9 @@ def _emit_composed_point(
     """Reuse the energy consumer's exact generated graph and boundary policy.
 
     The force consumer never differentiates clipping or substitutes an interior
-    point formula. Its FP64 M06-2X graph lowers bounded integer powers after AD;
-    this schedule does not change the SCF point consumer or the float graph.
+    point formula. Its FP64 M06-2X RKS graph lowers bounded integer powers after
+    AD; unqualified spin/precision consumers retain their original schedule.
+    This force schedule does not change the SCF point consumer.
     """
     polarized = replace(semilocal, spin="polarized")
     curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
@@ -81,7 +82,11 @@ def _emit_composed_point(
         body, _, selected = emit_split_hybrid_device_body(
             identifier,
             scalar_type=scalar_type,
-            lower_integer_powers=identifier == "M06-2X" and scalar_type == "double",
+            lower_integer_powers=(
+                identifier == "M06-2X"
+                and semilocal.spin == "unpolarized"
+                and scalar_type == "double"
+            ),
         )
         # The generated symbol follows the same canonical registry convention.
         import re
