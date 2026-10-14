@@ -190,6 +190,10 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
     source += (
         "}\n"
         + r"""
+extern "C" std::size_t target_tail_state_bytes(std::size_t n, unsigned spins,
+                                               unsigned history, bool range) {
+  return dft::cuda_ks_state_bytes(n,spins,history,true,range,false);
+}
 struct Xc {
   dft::CudaXcLayout layout = dft::cuda_xc_layout_shape(2,6,2,49152,1,false,256);
   dft::CudaXcPointBatchPlan batch;
@@ -429,6 +433,13 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
     probe.active_fleet.restype = None
     probe.md_capacity.argtypes = [ctypes.c_void_p, ctypes.c_bool]
     probe.md_capacity.restype = ctypes.c_size_t
+    probe.target_tail_state_bytes.argtypes = [
+        ctypes.c_size_t,
+        ctypes.c_uint,
+        ctypes.c_uint,
+        ctypes.c_bool,
+    ]
+    probe.target_tail_state_bytes.restype = ctypes.c_size_t
     return probe
 
 
@@ -620,3 +631,30 @@ def test_unbudgeted_default_and_explicit_opt_out(
     result = (ctypes.c_uint64 * 5)()
     native_probe.fleet(None, 2, 1024, 0, result)
     assert list(result) == [2, 2 * expected, 0, 0, 0]
+
+
+@pytest.mark.parametrize(
+    "spins,history,range_correction",
+    [(1, 8, True), (2, 8, True), (1, 1, True), (1, 8, False)],
+)
+def test_target_diis_tail_charges_its_complete_optional_history(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    spins: int,
+    history: int,
+    range_correction: bool,
+) -> None:
+    """The metadata dry run charges both physical matrices only in its domain."""
+    monkeypatch.setenv("GENERATIVEQC_VV10_OUTER_SECANT", "0")
+    monkeypatch.setenv("GENERATIVEQC_VV10_TARGET_DIIS_TAIL", "0")
+    baseline = native_probe.target_tail_state_bytes(
+        24, spins, history, range_correction
+    )
+    monkeypatch.setenv("GENERATIVEQC_VV10_TARGET_DIIS_TAIL", "1")
+    candidate = native_probe.target_tail_state_bytes(
+        24, spins, history, range_correction
+    )
+    expected = (
+        2 * 24 * 24 * 8 if spins == 1 and history >= 2 and range_correction else 0
+    )
+    assert candidate - baseline == expected
