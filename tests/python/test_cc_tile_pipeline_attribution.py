@@ -1,5 +1,7 @@
 """Hand-clock and discrete independent oracles for attribution, not CC math."""
 
+import gzip
+import json
 import random
 import sqlite3
 from copy import deepcopy
@@ -15,6 +17,7 @@ from benchmarks.cc_tile_pipeline_attribution import (
     read_nsys,
     summarize,
 )
+from benchmarks.cc_tile_pipeline_attribution import main as attribution_main
 from benchmarks.cc_tile_pipeline_campaign import WORK, check_science
 
 
@@ -357,3 +360,35 @@ def test_campaign_scientific_gates_preserve_negative_samples(
         result = check_science(record, oracle)
         assert result["status"] == ("PASS" if defect is None else "FAIL")
         assert result["gates"]["total_energy_error"]["limit"] == 1e-8
+
+
+def test_cli_retains_deterministic_bounded_segment_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trace, receipt = fixture()
+    trace["events"] = [event("compute", "kernel", 0, 30, stream=0)]
+    trace_path, receipt_path = tmp_path / "trace.json", tmp_path / "receipt.json"
+    trace_path.write_text(json.dumps(trace))
+    receipt_path.write_text(json.dumps(receipt))
+    output, segments = tmp_path / "report.json", tmp_path / "segments.json.gz"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cc_tile_pipeline_attribution.py",
+            "--trace",
+            str(trace_path),
+            "--receipt",
+            str(receipt_path),
+            "--output",
+            str(output),
+            "--segments-output",
+            str(segments),
+        ],
+    )
+    assert attribution_main() == 0
+    report = json.loads(output.read_text())
+    with gzip.open(segments, "rt") as stream:
+        ledger = json.load(stream)
+    assert ledger == [{"start_ns": 0, "end_ns": 30, "kinds": ["kernel"]}]
+    assert report["segments"]["count"] == 1
+    assert report["segments"]["sha256"] == checksum(segments)

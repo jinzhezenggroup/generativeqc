@@ -25,6 +25,9 @@ explicit process, device, submission threads and complete-process NVTX range.
 Unrecognized columns/copy kinds and duplicate records fail closed. A missing
 table does not prove zero transfers. Supported DMA directions retain actual
 byte counts independently of logical traffic estimates and DRAM counters.
+The CLI keeps the potentially large exclusive interval ledger in a deterministic
+gzip file outside the reviewed result tree and puts its SHA256, size and count
+in the bounded report.
 
 Producer scopes require exact labels from an independently audited capture
 recipe. CUDA synchronization API durations are observed host intervals;

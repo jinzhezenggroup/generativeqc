@@ -10,6 +10,7 @@ not implement a CC algorithm or establish causal critical-path savings.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import re
@@ -480,6 +481,12 @@ def main() -> int:
     source.add_argument("--nsys-sqlite", type=Path)
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--output", type=raw_output_path, required=True)
+    parser.add_argument(
+        "--segments-output",
+        type=raw_output_path,
+        required=True,
+        help="gzip-compressed exclusive interval ledger retained outside benchmarks/results",
+    )
     args = parser.parse_args()
     receipt = json.loads(args.receipt.read_text())
     trace = (
@@ -488,6 +495,21 @@ def main() -> int:
         else json.loads(args.trace.read_text())
     )
     report = summarize(trace, receipt)
+    segments = report.pop("segments")
+    segment_bytes = (json.dumps(segments, separators=(",", ":")) + "\n").encode()
+    args.segments_output.parent.mkdir(parents=True, exist_ok=True)
+    with (
+        args.segments_output.open("wb") as raw_stream,
+        gzip.GzipFile(filename="", mode="wb", fileobj=raw_stream, mtime=0) as stream,
+    ):
+        stream.write(segment_bytes)
+    report["segments"] = {
+        "path": str(args.segments_output),
+        "count": len(segments),
+        "uncompressed_size": len(segment_bytes),
+        "sha256": checksum(args.segments_output),
+        "size": args.segments_output.stat().st_size,
+    }
     report["inputs"] = {
         str(path): {"sha256": checksum(path), "size": path.stat().st_size}
         for path in (args.nsys_sqlite or args.trace, args.receipt)
