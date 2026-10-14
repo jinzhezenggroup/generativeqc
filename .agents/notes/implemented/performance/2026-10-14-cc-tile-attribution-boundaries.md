@@ -44,6 +44,9 @@ input/oracle/binaries and a whitelisted environment; checks the loader choice;
 explicitly selects energy-only strict FP64/Q8/DIIS8; retains each run's native
 output, failure and independent energy/(T)/physical replay gates. Clean runs
 and the separate parent-NVTX diagnostic are distinct experiments.
+`benchmarks/cc_tile_pipeline_campaign_report.py` independently rehashes every
+run artifact, requires exact work and endpoint energy bits across two clean
+runs plus one diagnostic, and excludes diagnostic wall from the clean pair.
 
 ## Rejected alternatives
 

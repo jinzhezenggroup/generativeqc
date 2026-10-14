@@ -19,6 +19,7 @@ from benchmarks.cc_tile_pipeline_attribution import (
 )
 from benchmarks.cc_tile_pipeline_attribution import main as attribution_main
 from benchmarks.cc_tile_pipeline_campaign import WORK, check_science
+from benchmarks.cc_tile_pipeline_campaign_report import compare_runs
 
 
 def fixture() -> tuple[dict, dict]:
@@ -418,3 +419,80 @@ def test_cli_rejects_report_overwriting_segment_ledger(
     )
     with pytest.raises(ValueError, match="distinct"):
         attribution_main()
+
+
+def campaign_run(tmp_path: Path, name: str, *, diagnostic: bool) -> Path:
+    directory = tmp_path / name
+    directory.mkdir()
+    endpoint = {"total_energy": -79.0, "triples_energy": -0.01}
+    (directory / "endpoint.json").write_text(json.dumps(endpoint))
+    (directory / "native.log").write_text("retained\n")
+    artifacts = {
+        path.name: {"sha256": checksum(path), "size": path.stat().st_size}
+        for path in directory.iterdir()
+    }
+    identity = fixture()[0]["identity"]
+    receipt = {
+        "schema": "generativeqc.cc-tile-campaign.v1",
+        "identity": identity,
+        "diagnostic": diagnostic,
+        "outcome": "PASS",
+        "binary_identity_unchanged": True,
+        "process_wall_ns": 100 if diagnostic else 80 + len(name),
+        "science": {
+            "status": "PASS",
+            "gates": {
+                "total_energy_error": {"value": 0.0, "limit": 1e-8, "passed": True}
+            },
+        },
+        "work": {"ccsd_iterations": 20, "ccsd_gemm_calls": 50},
+        "artifacts": artifacts,
+    }
+    (directory / "receipt.json").write_text(json.dumps(receipt))
+    return directory
+
+
+def test_campaign_report_keeps_diagnostic_out_of_clean_timing(tmp_path: Path) -> None:
+    runs = [
+        campaign_run(tmp_path, "clean-a", diagnostic=False),
+        campaign_run(tmp_path, "clean-bb", diagnostic=False),
+        campaign_run(tmp_path, "diagnostic", diagnostic=True),
+    ]
+    result = compare_runs(runs)
+    assert result["status"] == "PASS"
+    assert result["clean_process_wall_ns"] == [87, 88]
+    assert result["clean_process_wall_median_ns"] == 87.5
+    assert result["diagnostic_process_wall_ns"] == 100
+    assert result["diagnostic_wall_used_for_timing"] is False
+
+
+@pytest.mark.parametrize("defect", ["identity", "work", "energy", "artifact", "shape"])
+def test_campaign_report_rejects_mismatched_or_incomplete_runs(
+    tmp_path: Path, defect: str
+) -> None:
+    runs = [
+        campaign_run(tmp_path, "clean-a", diagnostic=False),
+        campaign_run(tmp_path, "clean-b", diagnostic=False),
+        campaign_run(tmp_path, "diagnostic", diagnostic=True),
+    ]
+    receipt = json.loads((runs[1] / "receipt.json").read_text())
+    if defect == "identity":
+        receipt["identity"]["run_id"] = "different"
+    elif defect == "work":
+        receipt["work"]["ccsd_gemm_calls"] += 1
+    elif defect == "artifact":
+        (runs[1] / "native.log").write_text("changed\n")
+    elif defect == "shape":
+        runs[1] = campaign_run(tmp_path, "another-diagnostic", diagnostic=True)
+    else:
+        endpoint = json.loads((runs[1] / "endpoint.json").read_text())
+        endpoint["total_energy"] += 1e-12
+        (runs[1] / "endpoint.json").write_text(json.dumps(endpoint))
+        receipt["artifacts"]["endpoint.json"] = {
+            "sha256": checksum(runs[1] / "endpoint.json"),
+            "size": (runs[1] / "endpoint.json").stat().st_size,
+        }
+    if defect in ("identity", "work", "energy"):
+        (runs[1] / "receipt.json").write_text(json.dumps(receipt))
+    with pytest.raises(ValueError):
+        compare_runs(runs)
