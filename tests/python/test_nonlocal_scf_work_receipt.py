@@ -1,6 +1,8 @@
 """Optional VV10 work receipts preserve unavailable and measured-zero states."""
 
 import os
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -154,16 +156,17 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
 @pytest.mark.parametrize(
-    "frozen_range,incremental,continued_diis,provisional_delta_chain,rebased_diis,inexact_inner,outer_secant",
+    "frozen_range,incremental,continued_diis,provisional_delta_chain,rebased_diis,inexact_inner,outer_secant,target_tail",
     [
-        (False, False, False, False, False, False, False),
-        (True, False, False, False, False, False, False),
-        (False, True, False, False, False, False, False),
-        (False, True, True, False, False, False, False),
-        (False, True, False, True, False, False, False),
-        (False, True, False, False, True, False, False),
-        (False, False, False, False, False, True, False),
-        (False, False, False, False, False, False, True),
+        (False, False, False, False, False, False, False, False),
+        (True, False, False, False, False, False, False, False),
+        (False, True, False, False, False, False, False, False),
+        (False, True, True, False, False, False, False, False),
+        (False, True, False, True, False, False, False, False),
+        (False, True, False, False, True, False, False, False),
+        (False, False, False, False, False, True, False, False),
+        (False, False, False, False, False, False, True, False),
+        (False, False, False, False, False, False, False, True),
     ],
 )
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
@@ -176,6 +179,8 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     rebased_diis: bool,
     inexact_inner: bool,
     outer_secant: bool,
+    target_tail: bool,
+    tmp_path: Path,
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -198,6 +203,11 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     monkeypatch.setenv("GENERATIVEQC_VV10_REBASE_INNER_DIIS", str(int(rebased_diis)))
     monkeypatch.setenv("GENERATIVEQC_VV10_INEXACT_INNER", str(int(inexact_inner)))
     monkeypatch.setenv("GENERATIVEQC_VV10_OUTER_SECANT", str(int(outer_secant)))
+    monkeypatch.setenv("GENERATIVEQC_VV10_TARGET_DIIS_TAIL", str(int(target_tail)))
+    if target_tail:
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_PROGRESS_TRACE", str(tmp_path / "tail.jsonl")
+        )
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1)),
@@ -238,6 +248,24 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
             assert scopes[-2:] == ("full-target", "full-target")
             assert diagnostic.physical_residual_max < 1e-10
             assert diagnostic.density_change_max < 1e-10
+            if target_tail:
+                events = [
+                    json.loads(line)
+                    for line in (tmp_path / "tail.jsonl").read_text().splitlines()
+                ]
+                proposals = [
+                    event
+                    for event in events
+                    if event.get("name") == "cuda_ks_vv10_target_diis_tail"
+                    and event.get("event") == "END"
+                    and event.get("status") == "proposed"
+                ]
+                assert len(proposals) == 1, (
+                    "the authentic-target tail must actually execute once"
+                )
+                warm = owner.execute(properties=("energy",)).items[0]
+                assert warm.converged and warm.iterations == 1
+                assert abs(warm.energy - result.energy) < 1e-10
             if incremental:
                 # Provisional operators cannot replace the full-density audit
                 # of the final force-capable physical target.

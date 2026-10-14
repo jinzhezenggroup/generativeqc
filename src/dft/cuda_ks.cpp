@@ -147,6 +147,11 @@ std::size_t sum(std::size_t a, std::size_t b) {
 /** Numeric arena view shared by allocation and metadata-only planning. */
 struct KsStateStorage {
   double *outer_anchor{}, *outer_previous_delta{}, *outer_previous_fock{}, *outer_coefficient{};
+  double *target_tail_fock{}, *target_tail_residual{};
+  static bool target_tail_requested() noexcept {
+    const char* selection = std::getenv("GENERATIVEQC_VV10_TARGET_DIIS_TAIL");
+    return selection && selection[0] == '1' && selection[1] == '\0';
+  }
   static bool outer_secant_requested() noexcept {
     const char* selection = std::getenv("GENERATIVEQC_VV10_OUTER_SECANT");
     return selection && selection[0] == '1' && selection[1] == '\0';
@@ -171,7 +176,8 @@ struct KsStateStorage {
    * persistent and phase-local numeric buffers are explicitly charged. */
   std::size_t partition(std::size_t n, unsigned spins, unsigned history, bool exact_exchange,
                         bool range_correction, bool incremental_direct_jk,
-                        bool incremental_diis_gram, void* storage, bool outer_secant = false) {
+                        bool incremental_diis_gram, void* storage, bool outer_secant = false,
+                        bool target_tail = false) {
     const auto matrix = product(n, n), elements = product(spins, matrix);
     std::size_t bytes = 0;
     const auto reserve = [&](auto*& pointer, std::size_t count) {
@@ -181,6 +187,12 @@ struct KsStateStorage {
       pointer = storage ? reinterpret_cast<T*>(static_cast<char*>(storage) + bytes) : nullptr;
       bytes = sum(bytes, product(count, sizeof(T)));
     };
+    if (target_tail) {
+      reserve(target_tail_fock, elements);
+      reserve(target_tail_residual, elements);
+    } else {
+      target_tail_fock = target_tail_residual = nullptr;
+    }
     if (outer_secant) {
       reserve(outer_anchor, elements);
       reserve(outer_previous_delta, elements);
@@ -283,7 +295,9 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       layout.partition(
           n, spins, std::max(1U, history), exact_exchange, range_correction, incremental_direct_jk,
           history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(), nullptr,
-          spins == 1 && range_correction && KsStateStorage::outer_secant_requested()),
+          spins == 1 && range_correction && KsStateStorage::outer_secant_requested(),
+          spins == 1 && range_correction && history >= 2 &&
+              KsStateStorage::target_tail_requested()),
       n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
@@ -365,6 +379,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool nonlocal_inexact_inner{};
   bool nonlocal_outer_storage{}, nonlocal_outer_secant{}, nonlocal_outer_previous{},
       nonlocal_outer_attempted{};
+  bool nonlocal_tail_storage{}, nonlocal_tail_enabled{}, nonlocal_tail_previous{},
+      nonlocal_tail_attempted{}, nonlocal_tail_active{};
+  unsigned nonlocal_tail_steps{};
+  double nonlocal_tail_previous_residual{}, nonlocal_tail_entry_residual{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1239,9 +1257,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     nonlocal_outer_storage = spins == 1 && has_range_correction && device_nonlocal &&
                              outer_secant_requested() && !runtime::active_device_resource_ledger;
+    nonlocal_tail_storage = spins == 1 && history >= 2 && has_range_correction && device_nonlocal &&
+                            target_tail_requested() && !runtime::active_device_resource_ledger;
     ks_arena_bytes =
         partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
-                  incremental_diis_gram, nullptr, nonlocal_outer_storage);
+                  incremental_diis_gram, nullptr, nonlocal_outer_storage, nonlocal_tail_storage);
     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
     resource.xc_device_bytes =
         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
@@ -1280,12 +1300,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       bool arena_host_oom = false;
       auto arena_status = runtime::resource_cuda_malloc(&arena, ks_arena_bytes, &arena_host_oom);
-      if (arena_status == cudaErrorMemoryAllocation && !arena_host_oom && nonlocal_outer_storage) {
-        // Three optional matrices cannot make the incumbent owner inadmissible.
+      if (arena_status == cudaErrorMemoryAllocation && !arena_host_oom &&
+          (nonlocal_outer_storage || nonlocal_tail_storage)) {
+        // Optional proposal histories cannot make the incumbent owner inadmissible.
         // Preserve non-allocation errors and publish the actual smaller arena.
         const auto pending = cudaGetLastError();
         if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
         nonlocal_outer_storage = false;
+        nonlocal_tail_storage = false;
         const auto old_bytes = ks_arena_bytes;
         ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
                                    incremental_direct_jk, incremental_diis_gram, nullptr, false);
@@ -1294,7 +1316,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
       check(arena_status);
       partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
-                incremental_diis_gram, arena, nonlocal_outer_storage);
+                incremental_diis_gram, arena, nonlocal_outer_storage, nonlocal_tail_storage);
       if (nonlocal_arena_bytes) {
         bool host_oom = false;
         auto status =
@@ -1550,6 +1572,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
                             !incremental_direct_jk && !nonlocal_continue_inner_diis &&
                             !nonlocal_rebase_inner_diis;
     nonlocal_outer_previous = nonlocal_outer_attempted = false;
+    // Only exact full-target observations may seed this optional ordinary DIIS
+    // tail. Neither inner histories nor another geometry/attempt may contribute.
+    nonlocal_tail_enabled = nonlocal_tail_storage && target_tail_requested() &&
+                            nonlocal_outer_active && !nonlocal_outer_secant &&
+                            !nonlocal_freeze_range && !incremental_direct_jk &&
+                            !nonlocal_continue_inner_diis && !nonlocal_rebase_inner_diis &&
+                            !nonlocal_inexact_inner;
+    nonlocal_tail_previous = nonlocal_tail_attempted = nonlocal_tail_active = false;
+    nonlocal_tail_steps = 0;
+    nonlocal_tail_previous_residual = nonlocal_tail_entry_residual = 0.0;
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
@@ -2636,6 +2668,64 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return true;
   }
 
+  /** Restart ordinary DIIS with two authentic full-target Fock/residual pairs.
+   * Inner solves overwrite their own history, so the preceding target pair has
+   * a separate two-matrix lease. Replaying the normal updater also rebuilds its
+   * Gram cache; no approximate residual rebase or density extrapolation occurs.
+   * The resulting occupied projector is only a proposal. Every subsequent
+   * target Fock, final acceptance gate and total iteration charge remains live.
+   */
+  void propose_target_diis_tail() {
+    runtime::df_progress::Scope trace("cuda_ks_vv10_target_diis_tail", "cuda_completed");
+    check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
+    check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+    const auto append = [&](const double* physical_fock, const double* physical_residual) {
+      if (ordered_diis_gram) {
+        launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, physical_fock,
+                                       physical_residual, enabled, fock_history, residual_history,
+                                       gram, weights, history_count, history_head, effective,
+                                       raw_gram, true);
+      } else {
+        if (incremental_diis_gram)
+          check(launch_diis_pending_gram(stream, 1, n, spins, history, physical_residual,
+                                         residual_history, enabled, history_count, history_head,
+                                         raw_gram));
+        launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, physical_fock,
+                                  physical_residual, enabled, fock_history, residual_history, gram,
+                                  weights, history_count, history_head, effective, true, false,
+                                  nullptr, 0, incremental_diis_gram ? raw_gram : nullptr);
+      }
+      check(cudaGetLastError());
+    };
+    append(target_tail_fock, target_tail_residual);
+    append(fock, residual);
+    multiply_spin(spins, effective, true, false, x, false, enabled, tmp1);
+    multiply_spin(spins, x, false, true, tmp1, true, enabled, tmp2);
+    check(eigensolver->launch(spins, tmp2, effective, eigenvalues, solver_info, spin_enabled),
+          "CUDA KS target DIIS tail eigensolver launch failed");
+    int info = 0;
+    try {
+      check(cudaMemcpyAsync(&info, solver_info, sizeof(info), cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+    } catch (...) {
+      (void)cudaStreamSynchronize(stream);
+      throw;
+    }
+    movement.scalar_d2h_bytes += sizeof(info);
+    ++movement.synchronizations;
+    if (info < 0) throw std::logic_error("CUDA KS target DIIS tail rejected arguments");
+    if (info > 0) {
+      // The incumbent proposal remains intact; the next ordinary target step
+      // still owns numerical failure/convergence and the common finite budget.
+      trace.finish("rejected_eigensolver");
+      return;
+    }
+    multiply_spin(spins, x, false, false, tmp2, true, enabled, tmp1);
+    build_density(tmp1, nullptr, enabled, proposal);
+    check(cudaGetLastError());
+    trace.finish("proposed");
+  }
+
   bool finish_legacy() {
     current_device();
     if (!is_pending) throw std::logic_error("no pending CUDA KS iteration");
@@ -2816,7 +2906,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (physical.maximum_residual < nonlocal_stage_tolerance ||
          (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >= 16 ||
          output.iterations + (nonlocal_outer_active ? 20U : 2U) >= options.max_iterations);
-    bool update_outer_anchor = false, advance_outer_history = false;
+    bool update_outer_anchor = false, advance_outer_history = false, enter_target_tail = false;
+    if (nonlocal_tail_active && !converged) {
+      // A failed accelerator may add at most three target steps before the
+      // incumbent nested policy resumes. It never receives another attempt.
+      ++nonlocal_tail_steps;
+      if (nonlocal_tail_steps >= 3 ||
+          physical.maximum_residual > 4.0 * nonlocal_tail_entry_residual) {
+        nonlocal_tail_active = false;
+        nonlocal_outer_active = true;
+        check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
+        check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+      }
+    }
     if (pending_nonlocal_seed || pending_nonlocal_frozen) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.
@@ -2856,6 +2958,18 @@ struct CudaKsPlan::Impl : KsStateStorage {
           check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
           check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
         }
+      } else if (nonlocal_tail_enabled && !nonlocal_tail_attempted &&
+                 nonlocal_tail_previous && physical.maximum_residual < 1e-5 &&
+                 physical.maximum_residual < 0.05 * nonlocal_tail_previous_residual &&
+                 output.iterations + 4 < options.max_iterations) {
+        // A contracting target pair, unlike an inner DIIS pair, represents
+        // the same nonlinear operator at two densities. Try its ordinary DIIS
+        // proposal once; retained inner entries are completely replaced below.
+        enter_target_tail = true;
+        nonlocal_tail_attempted = nonlocal_tail_active = true;
+        nonlocal_tail_steps = 0;
+        nonlocal_tail_entry_residual = physical.maximum_residual;
+        nonlocal_outer_active = false;
       } else {
         nonlocal_frozen_stage = true;
         update_outer_anchor = nonlocal_outer_secant && !nonlocal_outer_attempted;
@@ -2921,10 +3035,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && refinement_budget;
     }
     try {
+      if (enter_target_tail) propose_target_diis_tail();
+      if (nonlocal_tail_enabled && !nonlocal_tail_attempted && nonlocal_outer_active &&
+          !pending_nonlocal_seed && !pending_nonlocal_frozen && is_active) {
+        check(cudaMemcpyAsync(target_tail_fock, fock, elements * sizeof(double),
+                              cudaMemcpyDeviceToDevice, stream));
+        check(cudaMemcpyAsync(target_tail_residual, residual, elements * sizeof(double),
+                              cudaMemcpyDeviceToDevice, stream));
+        nonlocal_tail_previous_residual = physical.maximum_residual;
+        nonlocal_tail_previous = true;
+      }
       if (update_outer_anchor)
         check(cudaMemcpyAsync(outer_anchor, density, elements * sizeof(double),
                               cudaMemcpyDeviceToDevice, stream));
-      const bool outer_rebuilt_frame = advance_outer_history && propose_outer_secant();
+      const bool outer_rebuilt_frame =
+          enter_target_tail || (advance_outer_history && propose_outer_secant());
       // Final RI-K provenance is independent of whether the caller elects to
       // update the reusable warm density cache.
       if (output.converged) retain_final_fitted_projection();

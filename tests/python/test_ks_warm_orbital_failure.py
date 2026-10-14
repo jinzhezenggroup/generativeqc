@@ -105,11 +105,18 @@ struct Owner {
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
   bool confirm_nonlocal_stationary_density = false;
-  bool update_outer_anchor = false, advance_outer_history = false;
+  bool update_outer_anchor = false, advance_outer_history = false, enter_target_tail = false;
+  bool nonlocal_tail_enabled = false, nonlocal_tail_attempted = false;
+  bool nonlocal_outer_active = false, pending_nonlocal_seed = false;
+  bool pending_nonlocal_frozen = false, nonlocal_tail_previous = false;
+  double nonlocal_tail_previous_residual = 0.0;
+  double target_tail_fock[8]{}, target_tail_residual[8]{}, fock[8]{}, residual[8]{};
+  void propose_target_diis_tail() {}
   bool propose_outer_secant() { return true; }
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
+    double maximum_residual = 0.0;
   } physical;
   std::size_t elements = 8;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
