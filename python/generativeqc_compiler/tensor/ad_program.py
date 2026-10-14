@@ -789,6 +789,20 @@ def _rebuild_node(node: Node, inputs: typing.Any) -> Node:
             tuple(zip(node.attrs["axes"], inputs[1:], strict=True)),
             node.spec.indices,
         )
+    if node.op == "runtime_cartesian_select":
+        return runtime_cartesian_select(
+            inputs[0],
+            tuple(
+                (axis, mapping, node.spec.indices[axis])
+                for axis, mapping in zip(node.attrs["axes"], inputs[1:], strict=True)
+            ),
+        )
+    if node.op == "runtime_cartesian_scatter_add":
+        return runtime_cartesian_scatter_add(
+            inputs[0],
+            tuple(zip(node.attrs["axes"], inputs[1:], strict=True)),
+            node.spec.indices,
+        )
     if node.op == "reduce":
         return reduce_sum(inputs[0], node.attrs["axes"])
     if node.op == "broadcast":

@@ -347,6 +347,54 @@ def test_unreturned_derivative_overflow_remains_live(
             run(candidate, {**feeds, "d_x": direction}, backend, tmp_path)
 
 
+@pytest.mark.parametrize("backend", ["reference", "native"])
+@pytest.mark.parametrize("scatter", [False, True])
+def test_retained_dead_cartesian_definition(
+    tmp_path: Path, backend: str, scatter: bool
+) -> None:
+    from generativeqc_compiler.tensor import Index, IndexSpace, TensorSpec, input_tensor
+    from generativeqc_compiler.tensor.ir import (
+        runtime_cartesian_scatter_add,
+        runtime_cartesian_select,
+    )
+
+    feeds = {"c": np.asarray([True, False]), "x": np.ones(2), "y": np.ones(2)}
+    primal = capture(lambda c, x, y: {"out": xp.where(c, x, y)}, feeds)
+    x = next(
+        node
+        for node in primal.nodes
+        if node.op == "input" and node.attrs["name"] == "x"
+    )
+    local = Index("local", IndexSpace("_array_extent_1", "matrix", 1))
+    ids = input_tensor("ids", TensorSpec((local,), dtype="int64", role="input"))
+    if scatter:
+        value = input_tensor(
+            "local_value", TensorSpec((local,), role="input", differentiable=True)
+        )
+        dead = runtime_cartesian_scatter_add(value, ((0, ids),), x.spec.indices)
+    else:
+        dead = runtime_cartesian_select(x, ((0, ids, local),))
+    retained = Program(primal.outputs, (*primal.definitions, dead), primal.provenance)
+    first = generated(retained, ("x",))
+    for graph in (
+        first.program,
+        optimize(first.program),
+        Program.loads(first.program.dumps()),
+    ):
+        # Retained dead controls are inspection-only and require no runtime feeds.
+        np.testing.assert_array_equal(
+            run(graph, {**feeds, "d_x": np.asarray([0.2, 0.3])}, backend, tmp_path)[
+                "d_out"
+            ],
+            [0.2, 0.0],
+        )
+        with pytest.raises(ValueError, match="tangent input|differentiable input"):
+            generated(Program(graph.outputs, graph.definitions), ("y",))
+    assert x.spec.differentiable
+    with pytest.raises(ValueError, match="generic"):
+        generated(Program({**primal.outputs, "control_result": dead}), ("x",))
+
+
 def test_scientific_annotation_and_generation_budget_reject() -> None:
     from generativeqc_compiler.tensor import Index, IndexSpace, TensorSpec, input_tensor
 

@@ -149,6 +149,36 @@ differentiate the execution artifact. The typed declaration is part of logical
 identity, so new selection identities genuinely change and require their own
 native qualification; the earlier library receipt is not relabeled.
 
+Exact head `dd15b788660fed7dbdb065fc6ae49a805c6dc81f` subsequently executed
+233 Linux native/reference cases with exit zero in its finite, scope-owned
+CPU window. The new selection probe source/library hashes are respectively
+`ef029a06baf51d5ada056d882d2173b25e2c8cd24f517207e121c50cbcfa4fe3` /
+`13fca1033f24b7a79896d10174599861354bbbb93c3237472a8bad245bdd1262`.
+Both one-time non-selection controls retain all prior identities, resources,
+results and actual library bytes. The new receipt archive retains 21 verified
+payloads with exact committed execution inputs, SHA256
+`f75a262891ca51f4e9ea00cfcfafa058c41a1da3fa192dbe022dfb73c0575cf5`.
+
+Delta review identified a separate compatibility omission: canonical rebuilding
+visited retained, unreachable Cartesian definitions but lacked the existing
+select/scatter constructor dispatches. Two reference regressions failed with
+the corresponding `cannot rebuild primitive` errors. Reusing those canonical
+constructors restores inspection-only definitions without admitting any live
+integer-control AD. No runtime control feed is required for unreachable work,
+and the three current probe descriptions remain unchanged.
+The repaired selection suite actually executes 43 Linux reference/native cases
+with exit zero. One xunit2 `record_property` compatibility warning is retained;
+the observed source/library properties are nevertheless present in the XML.
+The native lifecycle probe records source/library SHA256
+`7f5967232584d333287362e386f7469ed0d27665110ce21748b146c9545beccc` /
+`927c79f245686b1bd02a92321109744bc358da4b47c797f968a86161586b1b1f`.
+Its receipt archive SHA256 is
+`20762ac94bc7f732bcaed17354f7d88cd9bbc5829b007dd86e7098e4d45d569f`;
+24 payloads and executed LF inputs were independently checked. The related
+host selection passes 145 cases with 25 deselected, and pinned ty/Ruff plus
+the 539-module compiler audit pass. None of these observations alone completes
+required CI, independent exact-head approval or protected delivery.
+
 ## Consequences and revisit conditions
 
 Explicit selection pays for eager primal and forward validation rather than
