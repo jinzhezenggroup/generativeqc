@@ -1,6 +1,6 @@
 # Experiment: bounded DIIS tail from authentic VV10 target history
 
-Status: proposed (implemented opt-in candidate; no performance claim)
+Status: rejected for default promotion (retained opt-in research source)
 Date: 2026-10-14
 
 The nested frozen-VV10 initializer avoids pair sweeps in its inner solves, but
@@ -32,3 +32,18 @@ It still might cost more pair sweeps than it saves inner Focks. Qualify small
 complete endpoints and independent molecular E/F/energy derivatives first; do
 not promote it merely because its proposal is scientifically admissible. Keep
 negative observations and source/library identities.
+
+## Measured rejection
+
+Exact source `231663cd9533b35e7a14ec7ecfe3f676b9a88fb2`, native library
+`138a6ef8e75cc7342d5fa6119e4645f8c94d515ed3e0e85a2166a8b8f0aa5215`, passes
+24 device cases on n2 Slurm 2965, including six independent molecular E/F and
+reconverged finite differences. n5 Slurm 1549 completes both original-protocol
+3/12-atom populations with all 24 E/F gates passing. At 12 atoms the cold,
+warm, moved and moved-warm times are 32.018/1.718/27.520/1.789 seconds.
+The cold and moved trajectories each require six pair sweeps, against four in
+the incumbent nested solver. The 3-atom first cold call is 41.074 seconds and
+is retained without subtracting setup. Do not call fewer inner Focks a win:
+this replaces linear-cost inner work with more expensive pair work. No 96-atom
+population is launched for this candidate, and no default selector is changed.
+See the frozen target-tail source branch and `vv10-range-followups-20261014`.
