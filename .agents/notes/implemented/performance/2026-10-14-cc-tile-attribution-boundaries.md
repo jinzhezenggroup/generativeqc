@@ -28,10 +28,12 @@ byte counts independently of logical traffic estimates and DRAM counters.
 
 Producer scopes require exact labels from an independently audited capture
 recipe. CUDA synchronization API durations are observed host intervals;
-`cudaStreamWaitEvent` enqueue duration is not a device event wait. The current
-SQLite adapter leaves full device-wait coverage unavailable. The production CC
-owner currently provides work/phase diagnostics without precise producer NVTX
-ranges, so those producer ranges cannot be reconstructed from idle spaces.
+`cudaStreamWaitEvent` enqueue duration is not a device event wait. The SQLite
+adapter separately parses CUPTI synchronization intervals and types when that
+table exists; absence makes wait coverage incomplete rather than zero. The
+production CC owner currently provides work/phase diagnostics without precise
+producer NVTX ranges, so those producer ranges cannot be reconstructed from
+idle spaces.
 
 `benchmarks/cc_tile_pipeline_campaign.py` invokes the existing native molecular
 benchmark rather than building another scientific implementation. It binds

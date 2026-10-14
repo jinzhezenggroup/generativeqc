@@ -232,6 +232,12 @@ def sqlite_fixture(tmp_path: Path) -> tuple[Path, dict]:
             create table CUPTI_ACTIVITY_KIND_RUNTIME(start integer,end integer,globalTid integer,
                 correlationId integer,nameId integer);
             insert into CUPTI_ACTIVITY_KIND_RUNTIME values(24,25,8,3,1);
+            create table ENUM_CUPTI_SYNC_TYPE(id integer,name text,label text);
+            insert into ENUM_CUPTI_SYNC_TYPE values(3,'CUPTI_ACTIVITY_SYNCHRONIZATION_TYPE_STREAM_WAIT_EVENT','Stream wait event');
+            create table CUPTI_ACTIVITY_KIND_SYNCHRONIZATION(start integer,end integer,deviceId integer,
+                streamId integer,correlationId integer,globalPid integer,syncType integer,
+                eventId integer,eventSyncId integer);
+            insert into CUPTI_ACTIVITY_KIND_SYNCHRONIZATION values(23,24,0,2,3,1,3,11,12);
         """)
     receipt["capture"] = trace["capture"]
     receipt["nsys"] = {
@@ -248,18 +254,38 @@ def sqlite_fixture(tmp_path: Path) -> tuple[Path, dict]:
     return path, receipt
 
 
-def test_sqlite_extraction_preserves_async_tail_and_unknown_device_wait(
+def test_sqlite_extraction_preserves_async_tail_and_device_wait(
     tmp_path: Path,
 ) -> None:
     path, receipt = sqlite_fixture(tmp_path)
     trace = read_nsys(path, receipt)
     result = summarize(trace, receipt)
-    assert result["status"] == "INCOMPLETE"  # API enqueue is not device event wait.
-    assert result["union_ns"]["wait"] is None
+    assert result["status"] == "PASS"
+    assert result["union_ns"]["wait"] == 1
     assert result["union_ns"]["copy"] == 12
     assert result["observed_dma_bytes"]["H2D"] == 512
     assert len(trace["events"]) == 4  # Other process is excluded before bounds check.
-    assert trace["events"][2]["api"] == "cudaStreamWaitEvent"
+    assert trace["extraction"]["host_wait_api"] == {
+        "coverage": True,
+        "count": 1,
+        "duration_sum_ns": 1,
+        "union_ns": 1,
+    }
+
+
+def test_missing_device_synchronization_table_is_not_host_wait_zero(
+    tmp_path: Path,
+) -> None:
+    path, receipt = sqlite_fixture(tmp_path)
+    with sqlite3.connect(path) as db:
+        db.execute("drop table CUPTI_ACTIVITY_KIND_SYNCHRONIZATION")
+    receipt["nsys"].update(
+        sqlite_sha256=checksum(path), sqlite_size=path.stat().st_size
+    )
+    result = summarize(read_nsys(path, receipt), receipt)
+    assert result["status"] == "INCOMPLETE"
+    assert result["union_ns"]["wait"] is None
+    assert result["extraction"]["host_wait_api"]["count"] == 1
 
 
 @pytest.mark.parametrize(

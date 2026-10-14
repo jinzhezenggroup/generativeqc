@@ -65,6 +65,7 @@ def read_nsys(database: Path, receipt: dict) -> dict:
         integer(tid, "runtime tid")
     # Field contracts are checked before reads; an unfamiliar export fails.
     events = []
+    host_waits = []
     coverage = dict.fromkeys(KINDS, False)
     rows_read = {}
     with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
@@ -150,7 +151,7 @@ def read_nsys(database: Path, receipt: dict) -> dict:
             "CUPTI_ACTIVITY_KIND_RUNTIME",
             ["start", "end", "globalTid", "correlationId", "nameId"],
         )
-        host_waits = {
+        host_wait_api_names = {
             "cudaDeviceSynchronize",
             "cudaStreamSynchronize",
             "cudaEventSynchronize",
@@ -162,14 +163,59 @@ def read_nsys(database: Path, receipt: dict) -> dict:
                     name = strings.get(row["nameId"])
                     if name is None:
                         raise ValueError("unresolved runtime API name")
-                    if name in host_waits:
-                        add(
-                            "CUPTI_ACTIVITY_KIND_RUNTIME",
-                            row,
-                            "wait",
-                            api=name,
-                            clock_role="host_api",
-                        )
+                    if name in host_wait_api_names:
+                        item = {
+                            "id": f"CUPTI_ACTIVITY_KIND_RUNTIME:{row['attribution_rowid']}",
+                            "kind": "wait",
+                            "start_ns": row["start"],
+                            "end_ns": row["end"],
+                            "api": name,
+                        }
+                        interval(item, start, end)
+                        host_waits.append(item)
+        sync_types_rows = rows("ENUM_CUPTI_SYNC_TYPE", ["id", "name", "label"])
+        sync_types = (
+            {
+                row["id"]: {"name": row["name"], "label": row["label"]}
+                for row in sync_types_rows
+            }
+            if sync_types_rows is not None
+            else {}
+        )
+        records = rows(
+            "CUPTI_ACTIVITY_KIND_SYNCHRONIZATION",
+            [
+                "start",
+                "end",
+                "deviceId",
+                "streamId",
+                "correlationId",
+                "globalPid",
+                "syncType",
+                "eventId",
+                "eventSyncId",
+            ],
+        )
+        if records is not None:
+            coverage["wait"] = True
+            rows_read["CUPTI_ACTIVITY_KIND_SYNCHRONIZATION"] = 0
+            for row in records:
+                if row["globalPid"] != pid or row["deviceId"] != device:
+                    continue
+                sync_type = sync_types.get(row["syncType"])
+                if sync_type is None:
+                    raise ValueError("unresolved Nsight CUDA synchronization type")
+                add(
+                    "CUPTI_ACTIVITY_KIND_SYNCHRONIZATION",
+                    row,
+                    "wait",
+                    stream=row["streamId"],
+                    sync_type=sync_type,
+                    event_id=row["eventId"],
+                    event_sync_id=row["eventSyncId"],
+                    clock_role="CUPTI synchronization interval",
+                )
+                rows_read["CUPTI_ACTIVITY_KIND_SYNCHRONIZATION"] += 1
         producer_labels = bound.get("producer_labels", [])
         records = rows("NVTX_EVENTS", ["start", "end", "globalTid", "text", "textId"])
         if records is not None:
@@ -203,11 +249,32 @@ def read_nsys(database: Path, receipt: dict) -> dict:
         "coverage": coverage,
         "events": events,
     }
+    host_wait_segments = partition(host_waits, start, end)
     trace["extraction"] = {
         "adapter": "nsys-cuda-nvtx-columns-v1",
         "rows": rows_read,
         "sqlite_sha256": checksum(database),
-        "wait_scope": "host API duration only; stream wait enqueue is not device wait time",
+        "wait_scope": "CUPTI synchronization intervals; host API waits remain a separate explanatory view",
+        "host_wait_api": {
+            "coverage": "CUPTI_ACTIVITY_KIND_RUNTIME" in tables,
+            "count": len(host_waits)
+            if "CUPTI_ACTIVITY_KIND_RUNTIME" in tables
+            else None,
+            "duration_sum_ns": (
+                sum(row["end_ns"] - row["start_ns"] for row in host_waits)
+                if "CUPTI_ACTIVITY_KIND_RUNTIME" in tables
+                else None
+            ),
+            "union_ns": (
+                sum(
+                    row["end_ns"] - row["start_ns"]
+                    for row in host_wait_segments
+                    if row["kinds"]
+                )
+                if "CUPTI_ACTIVITY_KIND_RUNTIME" in tables
+                else None
+            ),
+        },
     }
     return trace
 
