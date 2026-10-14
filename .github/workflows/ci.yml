@@ -1985,6 +1985,25 @@ jobs:
         env:
           CLI_CACHE_STAGE: ${{ steps.trusted_cli_ccache.outputs.stage }}
         run: python3 tools/ci_cli_ccache_snapshot.py cleanup
+      # Keep one small immutable miss delta per PR, outside every trusted cache.
+      # No commit/run suffix: repeated updates must not accumulate cache snapshots.
+      - name: Prepare isolated PR CLI compiler delta
+        id: pr_cli_ccache
+        if: github.event_name == 'pull_request' && steps.cli_scope.outputs.tier != 'skip'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_cli_ccache.py prepare
+      - name: Restore only this PR CLI compiler delta
+        id: pr_cli_ccache_restore
+        if: github.event_name == 'pull_request' && steps.pr_cli_ccache.outputs.key != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_cli_ccache.outputs.path }}
+          key: ${{ steps.pr_cli_ccache.outputs.key }}
       - name: Restore this run's master fast CUDA cache delta
         id: master_fast_ccache_download
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip' && env.FAST_CUDA_CACHE_ARTIFACT_ID != '' && env.FAST_CUDA_CACHE_RUN_ATTEMPT == github.run_attempt
@@ -2047,6 +2066,11 @@ jobs:
         shell: bash
         env:
           CLI_FAST_COMPILE: ${{ steps.cli_scope.outputs.tier == 'fast' && 'ON' || 'OFF' }}
+          # A local trusted-cache hit is never copied into this delta. Exact
+          # restored deltas are immutable/read-only; later new misses stay local.
+          # Reject even a primary-key prefix match returned by the cache service.
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'pull_request' && steps.pr_cli_ccache.outputs.key != '' && steps.pr_cli_ccache_restore.outcome == 'success' && (steps.pr_cli_ccache_restore.outputs.cache-hit == 'true' || steps.pr_cli_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_cli_ccache.outputs.path, steps.pr_cli_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
+          CCACHE_NORESHARE: "true"
         run: |
           ccache --zero-stats
           echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
@@ -2070,6 +2094,22 @@ jobs:
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true
         run: ccache --show-stats --verbose
+      - name: Bound successful PR CLI compiler misses
+        id: pr_cli_ccache_bound
+        if: always() && github.event_name == 'pull_request' && steps.native_cli_build.outcome == 'success' && steps.pr_cli_ccache.outputs.key != '' && steps.pr_cli_ccache_restore.outcome == 'success' && steps.pr_cli_ccache_restore.outputs.cache-hit != 'true' && steps.pr_cli_ccache_restore.outputs.cache-matched-key == ''
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_cli_ccache.py bound
+      - name: Save this PR CLI compiler delta once
+        if: always() && github.event_name == 'pull_request' && steps.native_cli_build.outcome == 'success' && steps.pr_cli_ccache_bound.outputs.available == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_cli_ccache.outputs.path }}
+          key: ${{ steps.pr_cli_ccache.outputs.key }}
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
