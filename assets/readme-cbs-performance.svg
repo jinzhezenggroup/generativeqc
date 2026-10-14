@@ -529,7 +529,7 @@ L 709.2 26.88
    <g id="text_20">
     <text style="font-size: 12px; font-family: 'DejaVu Sans'; text-anchor: middle" x="379.601342" y="20.88" transform="rotate(-0 379.601342 20.88)">DF-CCSD(T)/CBS · cc-pV[D,T]Z + DZ correction · RTX 5090</text>
    </g>
-   
+
   </g>
   <g id="text_23">
    <text style="font-size: 9px; font-family: 'DejaVu Sans'" transform="translate(105.274687 328.609969)">Full DF: RI-JK reference/response; shared JKFIT auxiliaries for correlation. One cold call; compiler caches retained.</text>

@@ -293,7 +293,9 @@ def test_primary_cc_counter_is_not_reported_as_companion_scf_work() -> None:
     assert "22/14" not in result
 
 
-def test_readme_chart_hides_accuracy_markers_without_changing_gates(tmp_path: Path) -> None:
+def test_readme_chart_hides_accuracy_markers_without_changing_gates(
+    tmp_path: Path,
+) -> None:
     """README highlights complete times; scientific acceptance stays in the archive."""
     pytest.importorskip("matplotlib")
     protocol, sample, _ = records()

@@ -403,7 +403,8 @@ def main() -> None:
     parser.add_argument("--summary", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
-        "--readme-only", action="store_true",
+        "--readme-only",
+        action="store_true",
         help="Render only a performance-focused README SVG; retain all scientific gates.",
     )
     args = parser.parse_args()
