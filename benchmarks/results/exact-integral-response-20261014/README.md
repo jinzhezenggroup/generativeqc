@@ -24,6 +24,10 @@ exercise real hits without a tolerance-based key.
 The measured source is `b5ca4306e0ae01776b0b5d17b1365db751602201`.
 The compiled source is `78961f12db3482a9e79f409c435237a96c693237`;
 only two test files changed, and all 1731 native identity inputs are identical.
+The native inputs also match historical `0d12d0596a526edd703f8ef5c95192c3e18e0917`.
+Later `11e16d800a87b26d031544c25733addc43bfcf4f` changes one `std::min` template
+argument for Apple integer-type portability; it was not part of these GPU
+measurements.
 Library SHA256: `6e180869daee6a32aa504c700d7ab8cfb83a6b47af8d53d4496436e06e81f5ab`.
 Native identity: `6326a312702b21bf338cdff066511df843da451a50455e96f5a14f117417494c`.
 Measurements use n4 RTX 5090 Slurm jobs 913/914. Each arm explicitly sets
@@ -44,7 +48,17 @@ Qualification receipts retain:
 `evidence.json.xz` losslessly contains every successful timing sample, complete
 force vector, independent cold/moved oracle, trace, JUnit result and relevant
 build/cache/scheduler receipt. `manifest.json` binds stored and decoded hashes.
-Run `python benchmarks/results/exact-integral-response-20261014/verify.py` to
-recompute all 72 E/F gates, six complete populations, medians and qualification
-outcomes. The original partial reference/48 timing stays partial; the separately
-reconverged moved oracle supplies accuracy only.
+With Python 3.10+ and its standard-library LZMA support, run from the repository
+root in an isolated environment:
+
+```bash
+python -m venv .artifacts/exact-response-audit-venv
+.artifacts/exact-response-audit-venv/bin/python -m pip install defusedxml==0.7.1
+.artifacts/exact-response-audit-venv/bin/python benchmarks/results/exact-integral-response-20261014/verify.py
+```
+
+The audit uses hardened XML parsing from `defusedxml` and requires no native
+library, GPU or new measurements. It recomputes all 72 E/F gates, six complete
+populations, medians and qualification outcomes. The original partial
+reference/48 timing stays partial; the separately reconverged moved oracle
+supplies accuracy only.

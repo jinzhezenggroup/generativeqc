@@ -280,28 +280,12 @@
       "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
     },
     {
-      "bytes": 163067,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/raw-source.json",
-      "role": "scientific-record",
-      "sha256": "5c483f8bd0140336c40fd12a09f921c9af76964ffd4d14d55b7c0897cd169183"
-    },
-    {
       "bytes": 270744,
       "classification": "required-compact-accepted-evidence",
       "family": "cuda-ownership",
       "path": "benchmarks/results/cuda-ownership/df/rejected-inventory-run.json.gz",
       "role": "scientific-record",
       "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
-    },
-    {
-      "bytes": 155087,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/validation.json",
-      "role": "decision-or-audit-record",
-      "sha256": "8d78b766ceb1eedf6bfa7338808a2647e89a96b023d3cd7ed19f06f09ee9ded6"
     },
     {
       "bytes": 140958,
