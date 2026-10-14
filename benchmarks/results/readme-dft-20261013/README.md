@@ -6,9 +6,16 @@ native build identity, library hash, consumer hashes and Slurm receipt. The
 current figures combine qualified new points with unchanged older observations;
 they are not a complete remeasurement of one source revision.
 
-![Direct HF/DFT cold and warm endpoints](dft-cold-warm.svg)
+![Direct HF/DFT cold and warm endpoints](https://raw.githubusercontent.com/jinzhezenggroup/generativeqc/8c770b34ccb95accbaeaba4abde2687ba8fef0db/benchmarks/results/readme-dft-20261013/dft-cold-warm.svg)
 
-![Density-fitted HF/DFT cold and warm endpoints](df-cold-warm.svg)
+![Density-fitted HF/DFT cold and warm endpoints](https://raw.githubusercontent.com/jinzhezenggroup/generativeqc/8c770b34ccb95accbaeaba4abde2687ba8fef0db/benchmarks/results/readme-dft-20261013/df-cold-warm.svg)
+
+The historical figures are retained locally as lossless
+[direct](dft-cold-warm.svg.xz) and [DF](df-cold-warm.svg.xz) SVG archives to
+stay within the unchanged repository evidence budget. These previews use the
+existing Git snapshot; `verify.py --rerender` verifies that decompressed SVGs
+retain the exact original figure bytes. No observations or source identities
+change with this storage-only compaction.
 
 The [direct](timings.md) and [DF](df-timings.md) tables retain cold, warm, moved
 and moved-warm timings and SCF work. Warm means the median of all five frozen-seed
