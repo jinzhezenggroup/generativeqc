@@ -1,4 +1,8 @@
-"""Scheduled exact-PBE0 force qualification at an unchanged FP64 SCF state."""
+"""Scheduled typed-force candidates at unchanged independent FP64 SCF states.
+
+Passing these small-system probes is not public all-method Fast admission or
+README endpoint performance qualification.
+"""
 
 from __future__ import annotations
 
@@ -52,31 +56,48 @@ def probe(native_cxx: Any, tmp_path_factory: Any) -> GradientProbe:
 
 
 @pytest.mark.parametrize(
-    ("case_name", "precision_mask"),
+    ("case_name", "precision_mask", "functional"),
     [
-        (case_name, precision_mask)
+        (case_name, precision_mask, "PBE0")
         for case_name in (
             "water-def2-svp-spherical",
             "water-tetramer-def2-svp-spherical",
         )
         for precision_mask in (1, 2, 4, 7)
     ]
-    + [("ammonia-def2-svp-spherical", 7), ("water-def2-svp", 7)],
+    + [("ammonia-def2-svp-spherical", 7, "PBE0"), ("water-def2-svp", 7, "PBE0")]
+    + [
+        (case_name, 7, functional)
+        for functional in ("PBE", "B3LYP", "R2SCAN", "M06-2X")
+        for case_name in (
+            "water-def2-svp-spherical",
+            "water-tetramer-def2-svp-spherical",
+        )
+    ],
 )
 def test_same_state_independent_moving_grid_oracle(
-    probe: GradientProbe, case_name: str, precision_mask: int
+    probe: GradientProbe,
+    case_name: str,
+    precision_mask: int,
+    functional: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pytest.importorskip("pyscf")
     case = benchmark_cases()[case_name]
     grid = GridSpec(48, 16, 32)
-    oracle = reference(case_name, grid, 4)
-    calculator = Calculator(**options(case_name, grid))
+    oracle = reference(case_name, grid, 4, functional=functional)
+    calculator = Calculator(
+        **{**options(case_name, grid), "method": f"{functional.lower()}-rks"}
+    )
     try:
         with calculator.prepare_batch(
             [case.atoms], charges=[case.charge], multiplicities=[case.multiplicity]
         ) as batch:
             result = batch.execute(properties=("energy",), strict=True).items[0]
             strict, _ = probe(batch, len(case.atoms), False)
+            with monkeypatch.context() as selection:
+                selection.setenv("GENERATIVEQC_CUDA_XC_EQUAL_SPIN", "0")
+                general, _ = probe(batch, len(case.atoms), False)
             mixed, work = probe(batch, len(case.atoms), precision_mask, True)
             replay, _ = probe(batch, len(case.atoms), False)
             if precision_mask & 1:
@@ -87,6 +108,7 @@ def test_same_state_independent_moving_grid_oracle(
             assert result.precision["mixed_stage_fock_builds"] == 0
             assert abs(result.energy - oracle["energy"]) < 1e-7
             np.testing.assert_allclose(strict, oracle["forces"], atol=1e-6, rtol=0)
+            np.testing.assert_allclose(strict, general, atol=1e-10, rtol=0)
             np.testing.assert_allclose(mixed, oracle["forces"], atol=1e-5, rtol=0)
             np.testing.assert_allclose(mixed, strict, atol=1e-5, rtol=0)
             np.testing.assert_allclose(replay, strict, atol=1e-10, rtol=0)

@@ -2,8 +2,69 @@
 
 `PrecisionCalculator(policy="fast")` selects FP32 arithmetic from an application
 error budget, without asking users to select kernels. All-electron CUDA
-PBE0/RKS with exact full-range J/K, 24–384 AOs through d shells and 2–48 atoms
-admits mixed stationary gradients at the FP64-converged density. The separate
+RHF and RKS with exact full-range J/K admit mixed stationary gradients at the
+FP64-converged density in the following bounded domains (through d shells,
+2–48 atoms):
+
+| Complete electronic model | AO domain |
+| --- | ---: |
+| PBE0 | 24–384 |
+| PBE, B3LYP, r2SCAN | 24–96 |
+| RHF | 24–96 |
+| M06-2X (2–32 atoms) | 24–96 |
+| Canonical r2SCAN-3c, defining def2-mTZVPP basis | 24–96 |
+
+Canonical r2SCAN-3c retains its existing FP64 D4 and native CPU gCP corrections;
+only its electronic derivative work is narrowed. Both corrections are included
+in the returned energy/forces and endpoint timing. This is not all-GPU 3c.
+
+CUDA density-fitted PBE/PBE0/B3LYP/r2SCAN/M06-2X RKS also select mixed semilocal
+geometry with 24–96 AOs, 2–12 atoms, orbital shells through d, and explicit
+`GridSpec(24, 8, 16)` or `GridSpec(48, 16, 32)` (unit radii, three Becke passes).
+Canonical r2SCAN-3c DF uses the same domain with its defining def2-mTZVPP basis
+and unchanged FP64 D4/native CPU gCP corrections. Its electronic precision
+record identifies r2SCAN DF; complete-model qualification also requires both
+successful correction results at the current geometry.
+This domain requires native DF J and, for hybrids, DF K with the default
+`1e-10` metric threshold. The complete canonical MethodIR is checked, not merely
+the XC name. Changed exchange compositions, arbitrary corrected DF, mixed
+full-range J/K providers, COSX and UKS retain the audit fallback. WB97M-V has
+the separate complete-model domain below.
+In this fitted path **only semilocal geometry arithmetic narrows**: SCF, AO
+generation, one-electron/Pulay sources, DF integrals and metric response, and
+global reductions remain FP64. The direct-path AO/integral narrowing described
+below does not apply to DF. This support does not promise a speedup for every
+system or complete singlepoint.
+DF energy-only requests have no admitted mixed operator and still use the
+observable-audit fallback; they are not accelerated.
+
+CUDA DF RHF has a separate native shell-derivative candidate: 24–96 orbital
+AOs, up to 512 auxiliary AOs, 2–12 atoms, orbital shells through d and auxiliary
+shells through f. It requires the full-rank metric at the default `1e-10`
+threshold and a verified strict final density. Only the ordinary shell schedule
+narrows; the policy does not replace a faster generic schedule merely to report
+FP32 work. Small generic-only, rank-reduced and tighter-budget cases retain the
+audit fallback and can be slower than ordinary FP64. Numerical qualification
+does **not** establish general HF-DF acceleration.
+The cost-selected candidate narrows shell polynomial/Rys algebra and compensated
+local FP32 contraction only when an orbital bra shell has angular momentum at
+least two. Pairs of s/p-only orbital shells retain FP64. SCF, Gaussian/Boys/Rys
+preparation, response weights, metric and
+generic derivatives, one-electron/Pulay terms and global accumulation stay FP64.
+
+Direct and density-fitted canonical WB97M-V RKS select mixed semilocal geometry with 24–96 AOs,
+2–12 atoms, through-d orbital shells and explicit `GridSpec(48, 16, 32)`.
+Its complete range-exchange/VV10 MethodIR and molecular VV10 density policy
+must match. Direct uses exact J/K; DF uses fitted full-range J/K with the
+default `1e-10` metric threshold and **exact long-range exchange**, including
+the matching analytic derivative. SCF, AO production, integral/metric response,
+VV10 pair evaluation, nonlocal geometry and global reductions remain FP64.
+The application facade explicitly selects strict SCF for nonlocal models;
+an accepted AUTO keyword alone is not evidence of mixed SCF execution.
+Coarse grids, modified range/nonlocal compositions and energy-only
+requests retain the audit fallback. No universal endpoint speedup is promised.
+
+The separate
 provisional XC warmup covers local restricted PBE-family calculations with
 24–256 AOs. Outside both domains, the explicit FP64 audit fallback remains.
 This is not a global all-FP32 switch.
@@ -15,7 +76,8 @@ for one strict endpoint when an observable-budget audit is not required; inspect
 `precision_validation.solves` and native precision work rather than inferring
 acceleration from the preset name.
 
-Fast narrows AO evaluation, PBE exchange and correlation point algebra, supported density
+Where local direct SCF warmup is admitted, Fast narrows AO evaluation, PBE
+exchange and correlation point algebra, supported density
 and potential matrix products and local point-total sums. Matrix inner sums
 use FP32, not FP32 inputs multiplied in FP64. Global arrays and inter-tile sums
 stay FP64. Non-admitted point tails and small/non-tiled contractions retain
@@ -23,7 +85,7 @@ FP64. Exact SCF J/K, eigensolution, DIIS, physical residuals and final SCF refin
 remain FP64. Fast does not change the basis, grid,
 screening, initial guess or final convergence criteria.
 
-Admitted gradients use FP32 weighted ERI derivative algebra and primitive sums
+Admitted direct local gradients use FP32 weighted ERI derivative algebra and primitive sums
 for orders 0–5, AO jets, density projection/features, interior PBE X/C, AO
 pullbacks and point-local Becke forward/reverse sums. Global force reductions,
 one-electron/Pulay sources, Boys evaluation, normalization, higher orders and
@@ -31,6 +93,26 @@ unsafe tails retain FP64. Nonfinite weighted tasks retry before scatter; a
 numerical grid/geometry failure retries the complete gradient once in FP64 at
 the same authenticated final density. Optional FP32 grid storage has a bounded
 FP64 fallback. No density clipping or CPU reference work enters production.
+For B3LYP, r2SCAN and M06-2X, the generated interior XC component graphs also use actual
+float parameters, intermediates, elementary functions and outputs. Their shared
+work-input conditioning and Cartesian conversion remain FP64; guarded tails
+and poorly conditioned points execute the strict graph.
+RHF narrows only selected native weighted schedules: generated AOT force
+consumers that do not receive the arithmetic request still execute FP64.
+Positive task counts are not evidence of all-FP32 integral coverage.
+
+The gradient budget is independent of SCF AUTO admission. A method may retain
+entirely FP64 SCF and still execute qualified FP32 derivatives. Ordinary
+`Calculator(precision="fp64")` without an application request remains strict.
+The private versioned transport can carry HF/KS and DF requests, but transport
+availability alone does **not** qualify arithmetic: fitted and nonlocal Fast
+endpoints require complete-model evidence. HF DF outside the shell domain and
+corrected/range-separated DF outside the canonical models above still need
+integration and qualification. Bounded support
+does not cover every size or supported DF row in the README benchmarks.
+M06-2X uses strict SCF for both energy and force requests; its native SCF owner
+does not support AUTO. Budget-admitted derivatives remain independent of that
+SCF restriction.
 
 Automatic initial guesses follow ordinary FP64's native Modified Huckel policy
 (MINAO on older compatible libraries). Explicit MINAO and Huckel retain their
@@ -61,7 +143,7 @@ AUTO: they select FP64 and a measured fallback audit. Fast uses the published
 native FP64 stopping criteria even when the application budget is looser.
 
 An admitted mixed-force result reports `qualified_mixed_gradient` and
-`gradient_admission="pbe0-rks-budget-fp32-v1"`. Warmup-only results and complete
+`gradient_admission="<model>-rks-budget-fp32-v1"` (or `rhf-budget-fp32-v1`). Warmup-only results and complete
 FP64 gradient retries report `qualified_strict_final`. Each includes its requested
 budget, executed precision work, and FP64 final-SCF checks. This is empirical
 qualification plus strict final refinement, **not a measured per-call
@@ -74,8 +156,45 @@ retries in FP64, and all final physical convergence checks use FP64 operators.
 
 `result.precision["gradient"]` distinguishes attempted FP32 grid/geometry points,
 weighted derivative dispatch, complete-gradient retries and returned arithmetic.
-Per-task weighted retry counts are unavailable on clean timing calls, not zero;
-they require separate intrusive qualification. A float64 result array does not
+Version 2 also reports the execution owner's complete-model qualification.
+For canonical 3c, this native record identifies the electronic r2SCAN model;
+`precision_validation.gradient_admission` identifies the qualified full 3c
+composition, and `result.dispersion` retains both correction results. An
+electronic qualification alone does not admit arbitrary corrected methods.
+Version 3 adds an explicit collection flag and per-item weighted task,
+primitive/source and strict-task-retry counts. Direct RHF reports these actual
+counts, without fabricating XC grid work. Its existing weighted order-0..5
+consumers narrow local recurrence/contraction arithmetic; unselected schedules,
+higher orders, integral geometry, density weights, Boys moments, one-electron/Pulay
+terms, global accumulation and final SCF remain FP64. This is not all-FP32 HF.
+
+DF RHF uses the distinct `rhf-df-shell-budget-fp32-v1` qualification and
+`weighted_fp32_consumer="df-shell-polynomial-and-rys"`; its
+`weighted_fp32_orders` is empty because it is not the direct order-0..5 owner.
+Its task census includes complete pre-scatter FP64 replays. Primitive counts
+describe prepared products, not pure-FP32 operations or FLOPs. A corrected
+strict final density can authorize a candidate without reusing SCF factors.
+The cost-selected native dispatch additionally reports
+`df_shell_sp_bra_contractions` in `fp64_components`. Historical all-class
+dispatch records do not receive this label from newer Python readers.
+
+Version 4 is owned by the Python stationary CUDA consumers, not the native SCF
+census. It records complete-model qualification, authenticated state/plan identity,
+actual attempted/returned FP32 geometry points, numerical retries and strict
+components. Geometry points count candidate enqueues; guarded XC tails may
+widen and are not counted as proven float interior graphs. The composite owner
+counts only its semilocal candidate; nonlocal geometry and pair work are not
+relabeled as FP32. No FP32 AO/grid storage is claimed for DF or WB97M-V.
+Missing optional geometry transport uses a separately
+reported strict capability fallback; numerical failures after actual mixed work
+permit one whole-gradient strict retry. Driver, allocation and stale-state
+errors do not become numerical retries. Failed or energy-only batch items never
+inherit a previous force record. Both singlepoints and the public prepared
+precision fleet retain this per-item provenance.
+A verified gradient does not invent a complete SCF operator inventory when
+the SCF schedule does not supply one; those completeness flags remain separate.
+For uninstrumented KS timing calls, per-task weighted retry counts are unavailable,
+not zero; they require separate intrusive qualification. A float64 result array does not
 mean that its intermediate arithmetic was FP64. For a **measured per-call**
 energy/force allowance, supply `target=TargetAccuracy(...)`: the full FP64
 comparison and, if necessary, verified fallback are included in its cost.
@@ -86,7 +205,7 @@ geometry-invariant J/K integrals and reuse them across SCF iterations, within
 the existing memory/lifetime guards. This exact optimization also benefits
 ordinary `Calculator`: FP64 is not faster arithmetic withheld from FP64 users.
 The native force executor and cooperative scheduling also benefit ordinary FP64
-PBE0/RKS through 32 atoms in the qualified shape domain. Larger d-shell strict
+PBE0/PBE/B3LYP/r2SCAN RKS through 32 atoms in each qualified AO domain. Larger d-shell strict
 calculations retain their faster phased executor. Fast comparisons must use this
 already-optimized strict baseline, not withhold scheduling improvements from it.
 It does not imply FP32 execution or promise a speedup for every workload.
@@ -135,6 +254,64 @@ use a target containing just energy. `properties` must include every explicit
 target observable and energy; by default these are requested automatically.
 Without a target, Fast defaults to energy and forces; requesting only energy
 does not create a force-error measurement.
+
+## Prepared fleets and frozen replays
+
+`PrecisionCalculator.prepare_batch(...)` uses a persistent native fleet, not a
+loop over scalar `singlepoint` calls. Its coordinate units, fixed topology,
+input ordering and `properties` selection follow ordinary `PreparedBatch`.
+Preparation selects a candidate capable of the facade's complete observable
+set: if AUTO lacks forces, that prepared plan uses strict SCF, while qualified
+FP32 derivative consumers remain available. This does not change subsequent
+scalar energy-only AUTO selection.
+
+```python
+atoms = [("O", (0, 0, 0)), ("H", (0, 1.43, 1.10)), ("H", (0, -1.43, 1.10))]
+with calculator.prepare_batch([atoms], warm_start=True) as batch:
+    cold = batch.execute(strict=True)
+    batch.set_warm_start_updates(False)
+    warm = batch.execute(strict=True)
+    print(warm.items[0].precision_validation.to_dict())
+    print(warm.precision_validation)
+```
+
+Qualified Fast and untargeted FP64 retain the native plan and its own warm
+densities, without seed exports or extra audits. Audited items trigger bounded
+host staging of **candidate-owned** seeds and release the candidate device plan
+before constructing independent, cold FP64 auditors. The next call lazily
+rebuilds the candidate plan and restores only those seeds. An auditor's density
+never becomes a candidate seed, even when its energy/forces replace a rejected
+candidate. Native restoration validates the source density/overlap and reruns
+SCF at the requested target coordinates. Frozen seeds retain their original
+source coordinates across movement and audits.
+Source-overlap validation can use native host work; its cost is included in
+resume time. This is not a PySCF or reference-oracle production dependency.
+
+An admitted application-XC warmup does not perturb a converged resident seed
+merely to execute FP32 work again. Same-model resident replays begin in FP64 and
+must pass the unchanged physical convergence gates; their stationary gradient
+can still use budget-selected FP32. Cold, external and geometry-rebuilt seeds
+retain the admitted mixed warmup. Arithmetic records describe what ran: a strict
+warm SCF does not claim mixed SCF work or a refinement that did not occur.
+
+`maximum_seed_bytes` (default 256 MiB) caps numeric seed staging. The bound is
+checked conservatively for all prepared slots **before** the native query can
+materialize resident densities. Staging and validation scratch must also fit
+the current `ResourcePlan`'s host headroom; auditors reserve that host storage
+from the same budget, including an explicitly supplied resource plan.
+Unavailable seed transport or insufficient headroom fails the affected audited
+items rather than silently discarding warm history. `warm_start=False` needs no
+seed transport. `clear_warm_starts()` also clears suspended seeds.
+
+Each item carries a schema-2 `PrecisionValidation`. Shared candidate time and
+per-item endpoint time are `None`, not an invented division of fleet latency.
+`BatchResult.precision_validation` owns actual candidate, resume, suspension,
+audit-attempt and complete endpoint timings, candidate precision evidence and
+execution-owned Fock counts. Audit-attempt duration includes its setup and any
+first-audit suspension; the duration breakdowns overlap and must not be summed.
+Complete endpoint time excludes initial facade/batch construction, which must
+be added for cold comparisons. Failed audits retain their attempt/error record;
+unknown work counts remain `None`.
 
 (python-precision-values)=
 ## Allowances, norms and evidence
@@ -200,7 +377,7 @@ qualified error/conditioning evidence; this facade does neither.
 (python-precision-backends)=
 ## Arithmetic and supported endpoints
 
-The facade supports all-electron HF and KS single points within the underlying
+The facade supports all-electron HF and KS single points and prepared fleets within the underlying
 calculator's admitted property domain. CPU is supported; CUDA calls and FP64
 audits remain on the selected CUDA device. Unsupported AUTO constructor domains
 or requested properties fall back to the same model's FP64 calculator. An
@@ -219,12 +396,13 @@ Inspect execution-owned operator records rather than interpreting the AUTO
 name or effective-bits summary as a uniform arithmetic type. The native SCF
 census is not an instruction-level census of the analytic gradient.
 
-Only the bounded PBE0/RKS domain above currently admits application-selected
-FP32 gradients. `gradient_admission` and native work records distinguish it
-from warmup-only and audited FP64 paths. Larger bases, other functionals and
-spin domains do not acquire a gradient route merely from a looser allowance.
+Only the bounded complete models in the table above currently admit
+application-selected FP32 gradients. `gradient_admission` and native work
+records distinguish them from warmup-only and audited FP64 paths. Unqualified DF models, WB97M-V,
+larger bases and other spin domains do not acquire a gradient route merely
+from a looser allowance.
 
-The facade does not expose prepared batches, correlated methods, ECP, Hessians,
+The facade does not expose correlated methods, ECP, Hessians,
 response or an optimizer/MD driver. A successful single-point audit does not
 qualify TS/IRC branches, small-curvature Hessian modes or NVE trajectories.
 NVE admission additionally needs energy-drift, force/energy consistency,
@@ -278,6 +456,32 @@ scientific target; speed ratios are not kernel ratios.
 Historical no-reuse/FP64 facade and audit measurements
 remain bound to their original sources and are not relabeled.
 
+The actual README endpoint runner also accepts `--policy fast`:
+
+```bash
+python -m benchmarks.readme_dft --method pbe0 native --policy fast \
+  --atoms 3 --basis-file path/to/def2-svp.json --grid 48 16 32 --repeats 5 \
+  --reference path/to/independent-reference.json \
+  --output .artifacts/readme-fast/pbe0.json
+```
+
+Run this inside a finite Slurm allocation. Generate the matching reference with
+the same runner's `reference` engine, which remains FP64. Add
+`--density-fitting cuda --auxiliary-basis-file path/to/jkfit.json` to both engines
+for DF. The default native `--policy fp64` still uses ordinary optimized
+`Calculator`, not an audit facade. `--fast-budget ENERGY MAX_FORCE RMS_FORCE`
+sets explicit allowances in Eh and Eh/bohr; all three independent oracle gates
+must pass. Fast records keep the unchanged strict-parity `fp64_gate` separately
+and use a distinct schema; they must not be folded into historical FP64 figures.
+
+Cold includes facade/plan construction; frozen post-cold, moved, and frozen
+post-move calls include all requested work, including audits and seed restoration
+when needed. A successful Fast request outside a qualified FP32 domain can
+still be an expensive audited FP64 call. Its report records this explicitly;
+runner support alone is **not** qualification of all README methods/sizes, proof
+of FP32 arithmetic, or a speedup claim. Private seed/force experiments cannot
+be combined with Fast in this runner.
+
 (python-precision-errors)=
 ## Failure behavior
 
@@ -297,6 +501,14 @@ Extremely small caller solver controls that underflow during tightening are
 rejected. `precision` and `target_accuracy` constructor arguments are rejected
 here: use the policy target to express the application requirement.
 
+Prepared execution with `strict=False` isolates failed candidate/audit items:
+their energy is unusable and their forces are `None`; successful neighbors
+remain available. Failed audited items do not retain usable precision evidence
+from the candidate. `strict=True` raises after processing all peers, without
+rolling back their warm proposals. Whole-fleet preparation, malformed coordinate
+layout, diagnostic-query and resume failures raise in either mode. Coordinate
+updates are snapshotted once so candidates and auditors see the same geometry.
+
 (python-precision-ownership)=
 ## Ownership and concurrency
 
@@ -311,3 +523,9 @@ arrays retain the ordinary `Result` ownership contract and outlive those
 workspaces. `clear_cache()` remains available and serializes with active calls.
 Frozen `Result` fields do not make force arrays or native evidence dictionaries
 recursively immutable.
+
+Prepared plans require context-managed lifetime or explicit `close()`.
+`PrecisionCalculator.clear_cache()` releases scalar caches, not independently
+owned prepared plans. The precision wrapper exposes replay, warm-update control,
+warm clearing and detached metadata/transport; ordinary native checkpoint and
+cross-basis projection APIs are not promoted through this wrapper.

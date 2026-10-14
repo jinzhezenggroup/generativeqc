@@ -302,9 +302,11 @@ std::vector<double> NativeBlockProvider::get(const MOSlots&, bool, int,
             ROOT / "src/molecule/basis.cpp",
         ),
     )
+    measured = dict(field.split("=", 1) for field in output.split())
     assert (
-        "exact_budget=113386440 retained_device_lower_bound=2584 attempts=2" in output
+        int(measured["exact_budget"]) > int(measured["retained_device_lower_bound"]) > 0
     )
+    assert int(measured["attempts"]) == 2
 
 
 H2_ADMISSION_MAIN = r"""
@@ -347,14 +349,17 @@ int main() {
   const auto reference_peak = scf::reference_detail::base_capacity(layout.bytes,host,4,0,budget);
   const auto cache = reference_eri_cache_bytes(16,0,false,reference_peak,budget);
   const auto retained = layout.bytes + cache;
-  assert(budget == 113386440 && layout.bytes == 2456 && cache == 128);
+  // The arena can gain bookkeeping fields without changing retirement. Bind
+  // the retained reservation to its actual layout rather than a historical
+  // byte count; still require this to be the exact MP2 admission boundary.
+  assert(layout.bytes > 0 && cache == 16 * sizeof(double) && budget > retained);
   assert(posthf::rhf_reference_capacity(source.system,8,false) < budget);
   assert(reference_peak + cache < budget);
   const auto original = mp2::conventional_energy(ref,source,budget,1e-12,8,true,0);
   assert(original.numeric_capacity_bytes == budget);
   // Even the device-only lower bound reproduces the regression. Production
   // now also reserves retained host/topology/provider allocations separately.
-  for (const auto reservation : {retained, layout.bytes}) {
+  for (const auto reservation : {std::size_t{1}, retained, layout.bytes}) {
     bool rejected = false;
     try { (void)mp2::conventional_energy(ref,source,budget-reservation,1e-12,8,true,0); }
     catch (const std::length_error&) { rejected = true; }

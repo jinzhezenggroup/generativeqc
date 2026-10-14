@@ -20,6 +20,7 @@ from generativeqc_compiler.common.homogeneous_schedule import (
 from .cooperative_schedule import CooperativeLaneSchedule
 from .cuda import CudaEmitter
 from .df_derivatives import axis_polynomial
+from .df_derivatives_cuda import emit_df_derivatives_cuda
 
 PROTOTYPE_CLASSES = tuple(a for a in product(range(2), repeat=3) if any(a))
 SHELL_CLASSES = tuple(product(range(4), repeat=3))
@@ -144,8 +145,18 @@ def select_shell_classes(classes: typing.Any = None) -> typing.Any:
     return tuple(angular for angular in SHELL_CLASSES if angular in requested)
 
 
-def emit_df_shell_derivatives_cuda(*, classes: typing.Any = None) -> typing.Any:
-    """Emit class-specialized cache construction from the shared polynomial IR."""
+def emit_df_shell_derivatives_cuda(
+    *, classes: typing.Any = None, scalar_type: str = "double"
+) -> str:
+    """Emit the same shell schedule with typed moment and contraction arithmetic.
+
+    Float changes the cache, primitive/component sums and scalar DAG together.
+    Geometry/Boys preparation stays in the strict owner; the completed center
+    channels widen before translation recovery and the global force sink.
+    The ordinary double source remains unchanged.
+    """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
     selected = select_shell_classes(classes)
     lines = [
         r"""// Generated shell-shared weighted DF derivatives.
@@ -286,7 +297,7 @@ struct Moments {
         ]
         for powers, offset in offsets.items():
             graph, roots = axis_polynomial(*powers)
-            emitter = CudaEmitter(graph, {})
+            emitter = CudaEmitter(graph, {}, scalar_type=scalar_type)
             emitter.emit(roots)
             lines += ["    {", *emitter.lines]
             lines += [
@@ -321,4 +332,31 @@ struct Moments {
             ]
         lines += ["}"]
     lines += ["} // namespace generativeqc::scf::generated_df_shell", "#endif", ""]
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if scalar_type == "float":
+        source = (
+            source.replace("double", "float")
+            .replace(
+                "GENERATIVEQC_GENERATED_DF_SHELL_DERIVATIVES",
+                "GENERATIVEQC_GENERATED_DF_FP32_SHELL_DERIVATIVES",
+            )
+            .replace("generated_df_shell", "generated_df_fp32_shell")
+            .replace(
+                "scalar::axis_polynomial",
+                "generated_df_fp32_derivatives::axis_polynomial",
+            )
+            .replace("g.pb[axis]-g.pa[axis]", "float(g.pb[axis])-float(g.pa[axis])")
+            .replace("g.f[i+j+k]", "float(g.f[i+j+k])")
+            .replace("g.prefactor", "float(g.prefactor)")
+            .replace(":0.0)", ":0.0f)")
+            .replace(
+                "struct Contracted { float gradient",
+                "struct Contracted { double gradient",
+            )
+            .replace(
+                "result.gradient[2][axis]=-independent[axis]-independent[3+axis];",
+                "result.gradient[2][axis]=-result.gradient[0][axis]-result.gradient[1][axis];",
+            )
+        )
+        source = emit_df_derivatives_cuda(scalar_type="float") + "\n" + source
+    return source

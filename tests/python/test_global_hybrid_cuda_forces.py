@@ -154,20 +154,20 @@ def test_pbe0_auto_force_uses_strict_final_state() -> None:
 
 @pytest.mark.parametrize("name", ("M06-2X", "MN15"))
 @pytest.mark.parametrize("spin", ("rks", "uks"))
-def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> None:
-    """Generated split hybrids may use AUTO energy, but force AUTO is not qualified."""
+def test_split_hybrid_auto_scf_remains_fail_closed(name: str, spin: str) -> None:
+    """Reject the unsupported SCF route before either energy or force execution."""
     from generativeqc import Calculator, GridSpec, KsOptions
 
-    calc = Calculator(
-        method=f"{name.lower()}-{spin}",
-        device="cuda",
-        basis="sto-3g",
-        precision="auto",
-        ks_options=KsOptions(
-            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
-        ),
-    )
-    assert "forces" not in calc.capabilities.supported_properties
+    with pytest.raises(NotImplementedError, match="split-global-hybrid SCF"):
+        Calculator(
+            method=f"{name.lower()}-{spin}",
+            device="cuda",
+            basis="sto-3g",
+            precision="auto",
+            ks_options=KsOptions(
+                grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+            ),
+        )
 
 
 @pytest.mark.parametrize(

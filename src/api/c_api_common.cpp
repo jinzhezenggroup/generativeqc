@@ -14,6 +14,9 @@ uint32_t generativeqc_ks_options_version(void) { return 1; }
  * precision extension from the unchanged scientific KS descriptor version. */
 GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v1(void) { return 1; }
 
+/** Method-family-neutral budget transport, independent of SCF arithmetic. */
+GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v2(void) { return 2; }
+
 /** Optional Python provenance transport, independent of the stable SCF ABI.
  * A missing/computation-only result must not inherit a previous force record. */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision_v1(
@@ -22,6 +25,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision
   std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
   if (!calculation->precision_work || !calculation->precision_work->gradient[0])
     return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  if (calculation->precision_work->gradient_qualification > 1)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   std::copy_n(calculation->precision_work->gradient.begin(), count, output);
   return GENERATIVEQC_STATUS_SUCCESS;
 }
@@ -33,7 +38,63 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_gradient_precision_v1(
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   if (!batch->precision_work[index] || !batch->precision_work[index]->gradient[0])
     return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  if (batch->precision_work[index]->gradient_qualification > 1)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   std::copy_n(batch->precision_work[index]->gradient.begin(), count, output);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** V2 appends the model qualification ID. The v1 getter cannot misidentify a
+ * newer model as its historical PBE0 qualification. */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision_v2(
+    const generativeqc_calculation* calculation, uint64_t* output, size_t count) {
+  if (!calculation || !output || count != 6) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  if (!calculation->precision_work || !calculation->precision_work->gradient[0] ||
+      !calculation->precision_work->gradient_qualification)
+    return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  std::copy_n(calculation->precision_work->gradient.begin(), 5, output);
+  output[5] = calculation->precision_work->gradient_qualification;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+GENERATIVEQC_API generativeqc_status generativeqc_batch_gradient_precision_v2(
+    const generativeqc_batch* batch, uint32_t index, uint64_t* output, size_t count) {
+  if (!batch || index >= batch->precision_work.size() || !output || count != 6)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  if (!batch->precision_work[index] || !batch->precision_work[index]->gradient[0] ||
+      !batch->precision_work[index]->gradient_qualification)
+    return GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE;
+  std::copy_n(batch->precision_work[index]->gradient.begin(), 5, output);
+  output[5] = batch->precision_work[index]->gradient_qualification;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** V3 adds a collection bit and per-item weighted task/source/retry counts.
+ * Legacy model IDs retain their meaning; zero counts without the collection
+ * bit are unavailable evidence, not proof that no weighted work executed. */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision_v3(
+    const generativeqc_calculation* calculation, uint64_t* output, size_t count) {
+  if (!calculation || !output || count != 10) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
+  const auto status = generativeqc_calculation_gradient_precision_v2(calculation, output, 6);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto& work = *calculation->precision_work;
+  output[6] = work.gradient_weighted_work_collected;
+  std::copy(work.gradient_weighted_work.begin(), work.gradient_weighted_work.end(), output + 7);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+GENERATIVEQC_API generativeqc_status generativeqc_batch_gradient_precision_v3(
+    const generativeqc_batch* batch, uint32_t index, uint64_t* output, size_t count) {
+  if (!batch || !output || count != 10) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
+  const auto status = generativeqc_batch_gradient_precision_v2(batch, index, output, 6);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto& work = *batch->precision_work[index];
+  output[6] = work.gradient_weighted_work_collected;
+  std::copy(work.gradient_weighted_work.begin(), work.gradient_weighted_work.end(), output + 7);
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 

@@ -169,9 +169,9 @@ def supports_automatic_huckel(
 
 
 def _initial_guess_precision(calculator: typing.Any) -> int:
-    """Keep native MINAO/Huckel preparation strict for budget-selected XC warmup.
+    """Keep native MINAO/Huckel preparation strict for application-selected work.
 
-    The application extension changes provisional XC arithmetic, not the seed
+    The application extension changes target arithmetic, not the seed
     provider. Ordinary AUTO retains its existing admission. This value is only
     for preparation policy queries; the target still receives AUTO controls.
     """
@@ -179,8 +179,10 @@ def _initial_guess_precision(calculator: typing.Any) -> int:
     if (
         calculator._precision_mode == _native.PRECISION_AUTO
         and calculator._device_name == "cuda"
-        and options is not None
-        and options._precision_budget is not None
+        and (
+            getattr(calculator, "_application_precision_budget", None) is not None
+            or (options is not None and options._precision_budget is not None)
+        )
     ):
         return _native.PRECISION_FP64
     return calculator._precision_mode

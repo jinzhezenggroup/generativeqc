@@ -32,7 +32,7 @@ class StationaryOwnerKernelTests(unittest.TestCase):
             return [" ".join(item.split()) for item in match.group(1).split(",")]
 
         self.assertEqual(arguments(prototype), arguments(definition))
-        self.assertEqual(len(arguments(definition)), 18)
+        self.assertEqual(len(arguments(definition)), 19)
 
     def test_cooperative_kernel_declaration_matches_definition(self) -> None:
         signatures = []
@@ -52,7 +52,7 @@ class StationaryOwnerKernelTests(unittest.TestCase):
                 ]
             )
         self.assertEqual(signatures[0], signatures[1])
-        self.assertEqual(len(signatures[0]), 19)
+        self.assertEqual(len(signatures[0]), 20)
 
     def test_point_producer_declaration_matches_definition(self) -> None:
         """Keep the bulk point producer's borrowed-scratch launch ABI exact."""

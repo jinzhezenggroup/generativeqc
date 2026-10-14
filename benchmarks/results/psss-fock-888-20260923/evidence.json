@@ -202,18 +202,18 @@
   "solver_trace_reason": "Every measured iteration count is retained in the workload companion records.",
   "attachments": [
     {
-      "path": "ragged-final-sto3g-b1-0.json",
-      "sha256": "043b4c1ad17cc2585a920d18c982b0d7951cf3c839c28562ea74c12cba066cec",
+      "path": "ragged-final-sto3g-b1-0.json.gz",
+      "sha256": "50f4c32d62b5818bd7360657210f04f03b3d109a0f057239c0ab852f6fbd8203",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-sto3g-b1-1.json",
-      "sha256": "c27b8eda451db496b7521a4c0b62272acf457e5d3abd4d2ffa2e26cc16d25390",
+      "path": "ragged-final-sto3g-b1-1.json.gz",
+      "sha256": "0aac83809c6783ddd53b148de4059ccde549b992b24aaeead30a7665c4dc73d3",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-sto3g-b1-2.json",
-      "sha256": "2a7a87cf637407ee5e9bd4026d87b5483c2711187c6fff8eb18c91fed6820b63",
+      "path": "ragged-final-sto3g-b1-2.json.gz",
+      "sha256": "77b2cf8cf0e1c583ce126f536ce000965b902a32860369a4ce3a63214832a9ed",
       "kind": "complete-endpoint-samples"
     },
     {
@@ -232,18 +232,18 @@
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-svp-b1-0.json",
-      "sha256": "224f8499782127e63367469ffe1b7681e67a9a2a97447e01c1040ff0071f16b0",
+      "path": "ragged-final-svp-b1-0.json.gz",
+      "sha256": "420954a032e15440fcd027b0ff245d317cf7c6ab22bd3d2ec147b1a1bc5aa032",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-svp-b1-1.json",
-      "sha256": "3fddaacddfcb3d63b180f18935499ff08c4cd8b209573b6455ae7e060761c53c",
+      "path": "ragged-final-svp-b1-1.json.gz",
+      "sha256": "ff2805310bbef68fb6475f99956f3bdc46608f303ceca366a49106b9c97a9478",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-svp-b1-2.json",
-      "sha256": "c9cd49f5c600dc79b5d351cec374cc7b1eb4dd57673789e7677479a46665fd26",
+      "path": "ragged-final-svp-b1-2.json.gz",
+      "sha256": "cbed554d43926bd963ea26f8c00db601e74dce21562bd980e613bcc386f1d2d6",
       "kind": "complete-endpoint-samples"
     },
     {

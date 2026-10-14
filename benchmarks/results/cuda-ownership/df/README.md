@@ -51,7 +51,7 @@ The candidate's original optimized native library and objects were built at
 `635dc2c6e0314dd45656e5503754159dd8bd1794`. The measured child `3afbd95` changes
 only benchmark/publication tools and their tests. All native compilation inputs,
 the library checksum and retained object hashes are identical across these two
-revisions. `validation.json` records this original-build identity explicitly.
+revisions. `validation.json.xz` records this original-build identity explicitly.
 These objects are original timing artifacts, not reconstructions. CPU integration
 checks at `635dc2c` are reused only within that identical native-input scope.
 
@@ -82,12 +82,14 @@ estimates; separately budgeted force staging and opaque allocations are outside
 those diagnostics. Per-case whole-HF ledger limits and scope exceptions remain
 in the samples. Cases beyond the public AO inventory have no total-budget claim.
 
-`validation.json` retains exact CPU/GPU test logs and XML as text with their
+`validation.json.xz` retains exact CPU/GPU test logs and XML as text with their
 original checksums, suite totals, sanitizer conclusions and source identities.
-`raw-source.json` retains all 24 independent libcint/NumPy raw/source comparisons,
-including coordinate derivatives and public transforms. Physical input files
-are retained in `fixtures/`; the exact measured source regenerates the
-independent references. These checks use the same final library as the endpoint
+`raw-source.json.xz` retains all 24 independent libcint/NumPy raw/source comparisons,
+including coordinate derivatives and public transforms. These two XZ companions
+decode to the exact original JSON bytes, bound by stored and decoded sizes and
+SHA-256 in `validation-files.json`; use `xz -dc FILE.json.xz` to inspect them.
+Physical input files are retained in `fixtures/`; the exact measured source
+regenerates the independent references. These checks use the same final library as the endpoint
 workers. Historical opt-in derivative evidence remains in its original archive.
 
 ## Complete integration and checkpoint validation
@@ -114,8 +116,9 @@ changes. This test source is retained at `evidence/issue-231-df-validation`.
 Slurm 9238 reruns all 18 native CUDA tests and all 143 Python integration cases
 across the six complete modules. The collected and executed node inventories
 match exactly. Slurm 9239 completes the 24 independent raw/source cases and both
-sanitizer runs; stage-specific provenance retains both jobs. `validation.json` records its distinct test revision
-and the identical native source/library binding to the endpoint matrix.
+sanitizer runs; stage-specific provenance retains both jobs. `validation.json.xz`
+records its distinct test revision and the identical native source/library
+binding to the endpoint matrix.
 `checkpoint-validation-diagnostics.json` and its lossless compressed companion
 retain the earlier failed validations, memory samples and all 80 diagnostic
 bitwise trials. The diagnostic failures are not accepted integration evidence.

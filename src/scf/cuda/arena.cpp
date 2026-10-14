@@ -38,6 +38,7 @@ bool make_layout(
   std::size_t ppps_signature_elements = 0;
   std::size_t nbf_plus_one = 0;
   std::size_t pair_product = 0;
+  std::size_t gradient_work_elements = 0;
   if (!generativeqc::runtime::checked_multiply(nbf, nbf, matrix_size) ||
       !generativeqc::runtime::checked_multiply(matrix_size, matrix_size, eri_size) ||
       !generativeqc::runtime::checked_multiply(batch_size, matrix_size, matrices) ||
@@ -54,7 +55,8 @@ bool make_layout(
           ppps_resident_ket_task_capacity == 0 ? 0 : shell_pair_count, kPppsSignatureBucketCount,
           ppps_signature_elements) ||
       !generativeqc::runtime::checked_add(nbf, 1, nbf_plus_one) ||
-      !generativeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product))
+      !generativeqc::runtime::checked_multiply(nbf, nbf_plus_one, pair_product) ||
+      !generativeqc::runtime::checked_multiply(batch_size, 3, gradient_work_elements))
     return false;
   const std::size_t pair_count = pair_product / 2;
   if (persistent_eri && !generativeqc::runtime::checked_multiply(batch_size, eri_size, eris)) {
@@ -336,6 +338,7 @@ bool make_layout(
       !workspace.append<double>(batch_size, made.energy_change) ||
       !workspace.append<double>(batch_size, made.density_rms) ||
       !workspace.append<double>(atoms * 3, made.forces) ||
+      !workspace.append<unsigned long long>(gradient_work_elements, made.gradient_precision_work) ||
       !workspace.append<std::uint8_t>(batch_size, made.active) ||
       !workspace.append<std::uint8_t>(batch_size, made.converged) ||
       !workspace.append<std::uint8_t>(batch_size, made.failed) ||

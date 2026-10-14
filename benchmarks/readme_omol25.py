@@ -99,12 +99,18 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_force_active_ao.py",
         "python/generativeqc/batch.py",
+        "python/generativeqc/precision_policy.py",
+        "python/generativeqc/_precision_batch.py",
+        "python/generativeqc/_precision_work.py",
+        "python/generativeqc/_df_precision.py",
+        "python/generativeqc/_composite_precision.py",
         "python/generativeqc_compiler/dft/ao_cuda.py",
         "python/generativeqc_compiler/dft/xc_contraction_cuda.py",
         "python/generativeqc_compiler/method/stationary_cuda.py",
         "python/generativeqc_compiler/method/stationary_resources.py",
         "python/generativeqc_compiler/method/stationary_composite_resources.py",
         "python/generativeqc/_stationary_composite_cuda.py",
+        "python/generativeqc/_geometry_response_cache.py",
         "benchmarks/readme_omol25.py",
         "benchmarks/readme_accuracy_oracle.py",
         "benchmarks/ks_preliminary_density.py",
@@ -128,6 +134,18 @@ def source_hashes() -> dict[str, str]:
         "src/scf/cuda/packed_basis.hpp",
         "src/scf/cuda/rhf_policy.cpp",
         "src/scf/cuda/rhf_policy.hpp",
+        "src/scf/rhf.cpp",
+        "src/scf/application_precision.hpp",
+        "src/scf/cuda/df_force_response.cpp",
+        "src/scf/cuda/df_gradient_bridge.cu",
+        "src/scf/cuda/df_shell_kernel.cuh",
+        "src/scf/cuda/df_shell_launch.cuh",
+        "src/scf/cuda/df_shell_dispatch.cuh",
+        "src/scf/cuda/df_shell_derivatives.cu",
+        "python/generativeqc_compiler/integral/df_shell_derivatives.py",
+        "python/generativeqc_compiler/integral/df_rys_shell.py",
+        "python/generativeqc_compiler/integral/df_shell_units.py",
+        "tools/generate_df_kernels.py",
         "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py",
         "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py",
         "python/generativeqc_compiler/integral/direct_pair_support_cuda.py",
@@ -267,9 +285,11 @@ def protocol(
     )
 
 
-def check_record(row: dict[str, Any], oracle: dict[str, Any]) -> dict[str, Any]:
+def check_record(
+    row: dict[str, Any], oracle: dict[str, Any], *, budget: dict | None = None
+) -> dict[str, Any]:
     """Reuse HF's finite-value, shape, convergence and complete-force gates."""
-    return check_endpoint(
+    checked = check_endpoint(
         SimpleNamespace(
             energy=row["energy"],
             forces=np.asarray(row["forces"]),
@@ -278,6 +298,31 @@ def check_record(row: dict[str, Any], oracle: dict[str, Any]) -> dict[str, Any]:
         ),
         oracle,
     )
+    if budget is not None:
+        valid = checked["energy_error"] is not None
+        rms_error = (
+            float(
+                np.sqrt(
+                    np.mean(
+                        (np.asarray(row["forces"]) - np.asarray(oracle["forces"])) ** 2
+                    )
+                )
+            )
+            if valid
+            else None
+        )
+        checked.update(
+            fp64_gate=checked["gate"],
+            force_rms_error=rms_error,
+            gate=bool(
+                valid
+                and checked["energy_error"] <= budget["energy_abs"]
+                and checked["force_error"] <= budget["force_max_abs"]
+                and (budget["force_rms"] is None or rms_error <= budget["force_rms"])
+            ),
+            acceptance_scope="explicit-application-budget-not-fp64-parity",
+        )
+    return checked
 
 
 def complete_execution(row: dict[str, Any], atoms: int) -> bool:
@@ -417,7 +462,7 @@ def native_endpoint_record(
         "phase": phase,
         "geometry": geometry_index,
         "repeat": max(0, repeat - 1),
-        "energy": item.energy,
+        "energy": item.energy if np.isfinite(item.energy) else None,
         "forces": item.forces.tolist() if item.forces is not None else None,
         "converged": item.converged,
         "status": item.status,
@@ -441,7 +486,7 @@ def native_endpoint_record(
         "complete_seconds": seconds + prepare,
         "native_scf_ao_work": (
             read_ao_work(owner)
-            if has_xc and item.status == 0 and item.converged
+            if owner is not None and has_xc and item.status == 0 and item.converged
             else None
         ),
         "native_force_components": (
@@ -479,7 +524,9 @@ def retain_endpoint_record(
             accuracy_status="reference_unavailable",
         )
     else:
-        row.update(check_record(row, reference))
+        row.update(
+            check_record(row, reference, budget=record.get("application_budget"))
+        )
     record["records"].append(row)
     save(record["stage"])
     if row["gate"] is False:
@@ -573,6 +620,19 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     """Journal complete independent endpoints, including experimental cold seeds."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("engine", choices=("reference", "native"))
+    parser.add_argument(
+        "--policy",
+        choices=("fp64", "fast"),
+        default="fp64",
+        help="Native application arithmetic; fp64 remains the ordinary optimized Calculator",
+    )
+    parser.add_argument(
+        "--fast-budget",
+        type=float,
+        nargs=3,
+        metavar=("ENERGY", "MAX_FORCE", "RMS_FORCE"),
+        help="Fast allowance in Eh, Eh/bohr, Eh/bohr; every independent norm must pass",
+    )
     parser.add_argument("--atoms", type=int, choices=SIZES, required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
     parser.add_argument("--density-fitting", choices=("none", "cuda"), default="none")
@@ -616,6 +676,19 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     )
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args(argv)
+    if args.engine == "reference" and args.policy != "fp64":
+        parser.error("the independent reference must remain FP64")
+    if args.fast_budget is not None and args.policy != "fast":
+        parser.error("--fast-budget requires --policy fast")
+    if args.policy == "fast" and (
+        args.preliminary_provider != "none"
+        or args.force_active_ao
+        or args.force_max_device_bytes is not None
+        or args.force_max_host_bytes is not None
+    ):
+        parser.error(
+            "Fast qualification cannot be combined with private seed/force experiments"
+        )
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("GPU work requires finite srun on main with --gres=gpu:5090:1")
     if args.repeats < 1 or min(args.grid) < 1:
@@ -649,7 +722,28 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
         benchmark = replace(benchmark, reference_full_fock=True)
 
     import cupy as cp
-    from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc import (
+        Calculator,
+        GridSpec,
+        KsOptions,
+        PrecisionCalculator,
+        PrecisionPolicy,
+        TargetErrorBudget,
+    )
+
+    try:
+        precision_policy = (
+            PrecisionPolicy(
+                "fast",
+                budget=TargetErrorBudget(*args.fast_budget)
+                if args.fast_budget
+                else None,
+            )
+            if args.policy == "fast"
+            else None
+        )
+    except (TypeError, ValueError) as error:
+        parser.error(str(error))
 
     from benchmarks._support import cuda_accelerator_metadata
     from benchmarks.dft_force_components import normalize_force_work
@@ -684,13 +778,19 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
     if args.engine == "native" and args.reference and args.reference.exists():
         oracle = json.loads(args.reference.read_text())
     record: dict[str, Any] = {
-        "schema": benchmark.schema,
+        "schema": benchmark.schema
+        if precision_policy is None
+        else f"{benchmark.schema}.fast.v1",
         "engine": args.engine,
         "status": "running",
         "protocol": scientific,
         "records": [],
         "source_file_sha256": source_hashes(),
+        "application_budget": None
+        if precision_policy is None
+        else asdict(precision_policy.budget),
         "native_experiment": {
+            "precision_policy": args.policy,
             "preliminary_provider": args.preliminary_provider,
             "force_active_ao_cutoff": 1e-16 if args.force_active_ao else None,
             "force_active_ao_cache_bytes": 64 << 20 if args.force_active_ao else None,
@@ -912,7 +1012,13 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             save("native/calculator")
             cp.cuda.Stream.null.synchronize()
             started = perf_counter()
-            calc = Calculator(
+            calculator_type = (
+                Calculator if precision_policy is None else PrecisionCalculator
+            )
+            precision_options = (
+                {} if precision_policy is None else {"policy": precision_policy}
+            )
+            calc = calculator_type(
                 method=benchmark.native_method,
                 basis=basis,
                 device="cuda",
@@ -926,11 +1032,14 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 density_tolerance=1e-10,
                 screening_tolerance=1e-12,
                 max_iterations=100,
+                **precision_options,
             )
             cp.cuda.Stream.null.synchronize()
             calculator_seconds = perf_counter() - started
             record["native_calculator_seconds"] = calculator_seconds
-            record["native_build"] = native_build_metadata(calc)
+            record["native_build"] = native_build_metadata(
+                calc if precision_policy is None else calc._candidate
+            )
             require_tuned_native_build(record["native_build"])
             record["native_capabilities"] = {
                 "supported_properties": sorted(calc.capabilities.supported_properties),
@@ -947,7 +1056,9 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
             started = perf_counter()
             owner = calc.prepare_batch([geometries[0]], warm_start=True)
             force_work = None
-            original_force = owner._public_dft_cuda_force
+            original_force = (
+                owner._public_dft_cuda_force if precision_policy is None else None
+            )
 
             def observed_force(*values: Any) -> Any:
                 """Retain already-produced work; default owners have no resource ledger."""
@@ -956,14 +1067,17 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                 force_work = result[1]
                 return result
 
-            owner._public_dft_cuda_force = observed_force
+            if original_force is not None:
+                owner._public_dft_cuda_force = observed_force
             cp.cuda.Stream.null.synchronize()
             prepare_seconds = calculator_seconds + perf_counter() - started
             save("cold/preliminary-density")
             cp.cuda.Stream.null.synchronize()
             started = perf_counter()
             record["preliminary_density"] = prepare_seed(
-                owner, geometries[0], args.preliminary_provider
+                owner if precision_policy is None else owner._owner,
+                geometries[0],
+                args.preliminary_provider,
             )
             cp.cuda.Stream.null.synchronize()
             seed_seconds = perf_counter() - started
@@ -988,9 +1102,10 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                     cp.cuda.Stream.null.synchronize()
                     started = perf_counter()
                     force_work = None
-                    item = owner.execute(
+                    batch_result = owner.execute(
                         coords, strict=False, properties=("energy", "forces")
-                    ).items[0]
+                    )
+                    item = batch_result.items[0]
                     cp.cuda.Stream.null.synchronize()
                     seconds = perf_counter() - started
                     prepare = prepare_seconds if phase == "cold" else 0
@@ -1001,19 +1116,40 @@ def main(benchmark: EndpointSpec = OMOL25, argv: list[str] | None = None) -> Non
                         repeat=repeat,
                         seconds=seconds,
                         prepare=prepare,
-                        owner=owner,
+                        owner=owner if precision_policy is None else owner._owner,
                         force_work=force_work,
                         has_xc=benchmark.method != "hf",
                     )
+                    if precision_policy is not None:
+                        # Never dereference a suspended candidate or relabel its
+                        # counters as work performed by a returned FP64 auditor.
+                        row.update(
+                            precision=item.precision,
+                            precision_validation=item.precision_validation.to_dict()
+                            if item.precision_validation is not None
+                            else None,
+                            batch_precision_validation=batch_result.precision_validation,
+                            native_diagnostics_scope="candidate"
+                            if owner._owner is not None
+                            else "unavailable-after-audit-suspension",
+                        )
                     if benchmark.density_fitting:
-                        row["density_fitting_metric"] = [
-                            diagnostic.to_dict()
-                            for diagnostic in owner.last_density_fitting_metric_diagnostics()
-                        ]
+                        diagnostic_owner = (
+                            owner if precision_policy is None else owner._owner
+                        )
+                        row["density_fitting_metric"] = (
+                            None
+                            if diagnostic_owner is None
+                            else [
+                                diagnostic.to_dict()
+                                for diagnostic in diagnostic_owner.last_density_fitting_metric_diagnostics()
+                            ]
+                        )
                     retain(row, baseline)
                     if repeat == 0:
                         owner.set_warm_start_updates(False)
-            owner._public_dft_cuda_force = original_force
+            if original_force is not None:
+                owner._public_dft_cuda_force = original_force
             record["native_force_components"] = (
                 normalize_force_work(force_work) if force_work is not None else None
             )

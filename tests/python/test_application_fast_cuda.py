@@ -338,7 +338,13 @@ def test_native_rejects_malformed_private_transport(
             descriptor._extension_owner.application_energy_budget = 0.0
         return descriptor
 
-    calculator = PrecisionCalculator(policy="fast", **_options(initial_guess=None))
+    calculator = Calculator(
+        precision="auto",
+        **_options(
+            initial_guess=None,
+            ks_options=KsOptions(grid=GRID, _precision_budget=(1e-5, 1e-4, 3e-5)),
+        ),
+    )
     monkeypatch.setattr(ks_implementation, "native_ks_options", malformed)
     try:
         with pytest.raises(RuntimeError, match=detail):

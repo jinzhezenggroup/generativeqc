@@ -52,6 +52,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         live=None,
         block_auto=False,
         auto_properties=None,
+        transport_v2=False,
     )
 
     class Backend:
@@ -62,6 +63,13 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             self._basis = options.get("basis", ())
             self._auxiliary_basis = options.get("auxiliary_basis")
             self._ks_options = options.get("ks_options")
+            self._application_precision_budget = options.get(
+                "_application_precision_budget"
+            )
+            if state.transport_v2:
+                self._library = SimpleNamespace(
+                    generativeqc_application_precision_version_v2=lambda: 2
+                )
             if options.get("method") == "pbe0-rks" and self._ks_options is None:
                 from generativeqc import KsOptions
 
@@ -367,7 +375,7 @@ def test_success_accounts_for_both_endpoints_and_owned_inputs(
     assert report.endpoint_seconds >= sum(stage.seconds for stage in report.solves)
     assert backend.calls[0][1:] == backend.calls[1][1:]
     assert backend.live is None
-    assert not calculator.capabilities.supports_batch
+    assert calculator.capabilities.supports_batch
     assert not calculator.capabilities.supported_second_order
     assert json.loads(json.dumps(report.to_dict(), allow_nan=False))["solve_count"] == 2
 
@@ -607,7 +615,7 @@ def cuda_constructor(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize("method", ("m06-2x-rks", "mn15-rks"))
 @pytest.mark.parametrize("profile", ("fast", "audit_auto"))
-def test_split_hybrid_fp64_force_capability_survives_auto_selection(
+def test_split_hybrid_policy_retains_strict_scf_when_auto_is_unavailable(
     cuda_constructor: None, method: str, profile: str
 ) -> None:
     calculator = PrecisionCalculator(
@@ -617,9 +625,20 @@ def test_split_hybrid_fp64_force_capability_survives_auto_selection(
         ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
         policy=profile,
     )
-    assert calculator._candidate_precision == "auto"
-    assert calculator._candidate.capabilities.supported_properties == {"energy"}
+    assert calculator._candidate_precision == "fp64"
+    assert calculator._candidate.capabilities.supported_properties == {
+        "energy",
+        "forces",
+    }
     assert calculator.capabilities.supported_properties == {"energy", "forces"}
+    with pytest.raises(NotImplementedError, match="split-global-hybrid SCF"):
+        Calculator(
+            method=method,
+            device="cuda",
+            precision="auto",
+            initial_guess=None,
+            ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
+        )
 
 
 @pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks", "m06-2x-rks"))
@@ -686,3 +705,289 @@ def test_fast_property_fallback_audits_the_implicit_force_budget(
         ("forces", "max_abs"),
         ("forces", "rms"),
     }
+
+
+def test_strict_property_fallback_keeps_v2_budget_only_on_candidate(
+    backend: SimpleNamespace,
+) -> None:
+    """A strict SCF force consumer receives the request, never the audit owner."""
+    backend.transport_v2 = True
+    backend.auto_properties = frozenset({"energy"})
+    backend.outputs = [result(executed_backend="cuda")] * 2
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    output = calculator.singlepoint(ATOMS)
+    candidate, reference = (entry[0] for entry in backend.calls)
+    assert candidate._application_precision_budget == calculator.policy.budget
+    assert candidate.options["precision"] == "fp64"
+    assert reference._application_precision_budget is None
+    assert reference.options["precision"] == "fp64"
+    assert calculator._candidate_precision == "auto"
+    assert output.precision_validation.status == "observed_met"
+    assert output.precision_validation.solve_count == 2
+
+
+@pytest.mark.parametrize(
+    "qualification",
+    ("b3lyp-rks-budget-fp32-v1", "m06-2x-rks-budget-fp32-v1", "unknown", None),
+)
+def test_v2_gradient_evidence_does_not_invent_a_complete_scf_inventory(
+    backend: SimpleNamespace, qualification: str | None
+) -> None:
+    backend.transport_v2 = True
+    work = {
+        "complete": False,
+        "operator_inventory_complete": False,
+        "gradient": {
+            "schema_version": 2,
+            "complete": True,
+            "qualification": qualification,
+            "attempted_fp32_geometry_points": 800,
+            "attempted_fp32_grid_points": 800,
+            "fp64_gradient_retries": 0,
+            "returned_mode": "mixed",
+        },
+    }
+    backend.outputs = [
+        result(executed_backend="cuda", precision=work),
+        result(executed_backend="cuda"),
+    ]
+    output = PrecisionCalculator(
+        method="pbe0-rks", device="cuda", policy="fast"
+    ).singlepoint(ATOMS)
+    qualified = qualification in (
+        "b3lyp-rks-budget-fp32-v1",
+        "m06-2x-rks-budget-fp32-v1",
+    )
+    assert output.precision_validation.solve_count == (1 if qualified else 2)
+    assert output.precision_validation.status == (
+        "qualified_mixed_gradient" if qualified else "observed_met"
+    )
+    assert output.precision["operator_inventory_complete"] is False
+
+
+@pytest.mark.parametrize("points", (0, 9216))
+@pytest.mark.parametrize("schema", (2, 4))
+@pytest.mark.parametrize(
+    "method,owner,qualification,recognized",
+    (
+        ("pbe0-rks", "python-stationary-cuda", "pbe0-df-rks-budget-fp32-v1", True),
+        (
+            "wb97m-v-rks",
+            "python-composite-stationary-cuda",
+            "wb97m-v-rks-budget-fp32-v1",
+            True,
+        ),
+        (
+            "wb97m-v-rks",
+            "python-composite-stationary-cuda",
+            "wb97m-v-df-rks-budget-fp32-v1",
+            True,
+        ),
+        ("wb97m-v-rks", "python-stationary-cuda", "wb97m-v-rks-budget-fp32-v1", False),
+        (
+            "pbe0-rks",
+            "python-composite-stationary-cuda",
+            "pbe0-df-rks-budget-fp32-v1",
+            False,
+        ),
+    ),
+)
+def test_consumer_gradient_evidence_is_not_a_native_scf_census(
+    backend: SimpleNamespace,
+    points: int,
+    schema: int,
+    method: str,
+    owner: str,
+    qualification: str,
+    recognized: bool,
+) -> None:
+    backend.transport_v2 = True
+    backend.block_auto = True
+    work = {
+        "complete": False,
+        "operator_inventory_complete": False,
+        "gradient": {
+            "schema_version": schema,
+            "owner": owner,
+            "complete": True,
+            "qualification": qualification,
+            "capability_fallback": "missing optional work counters"
+            if not points
+            else None,
+            "attempted_fp32_geometry_points": points,
+            "attempted_fp32_grid_points": 0,
+            "fp64_gradient_retries": 0,
+            "returned_mode": "mixed" if points else "fp64",
+        },
+    }
+    backend.outputs = [
+        result(executed_backend="cuda", precision=work),
+        result(executed_backend="cuda"),
+    ]
+    output = PrecisionCalculator(
+        method=method, device="cuda", policy="fast"
+    ).singlepoint(ATOMS)
+    report = output.precision_validation
+    assert report.solve_count == (1 if points and schema == 4 and recognized else 2)
+    assert output.precision["operator_inventory_complete"] is False
+    assert "fp32_grid_storage_unavailable" not in report.fallback_reasons
+    assert ("fp32_geometry_capability_unavailable" in report.fallback_reasons) == (
+        schema == 4 and recognized and not points
+    )
+
+
+def test_nonlocal_fast_uses_real_strict_scf_policy(backend: SimpleNamespace) -> None:
+    """An accepted AUTO keyword cannot be mistaken for admitted mixed SCF work."""
+    from generativeqc.ks import resolve_ks_options
+
+    backend.transport_v2 = True
+    options = resolve_ks_options("wb97m-v-rks", KsOptions(grid=GridSpec(48, 16, 32)))
+    calculator = PrecisionCalculator(
+        method="wb97m-v-rks", ks_options=options, device="cuda", policy="fast"
+    )
+    assert calculator._candidate_precision == "fp64"
+    assert (
+        calculator._candidate._application_precision_budget == calculator.policy.budget
+    )
+    assert all(
+        instance.options["precision"] == "fp64" for instance in backend.instances
+    )
+
+
+@pytest.mark.parametrize("fitted", (False, True))
+def test_composite_gradient_admission_requires_all_canonical_correction_sources(
+    fitted: bool,
+) -> None:
+    """A complete electronic record alone cannot certify another corrected graph."""
+    from generativeqc.dispersion import (
+        D4CorrectionResult,
+        GCPCorrectionResult,
+        R2SCAN3CCorrectionResult,
+    )
+    from generativeqc_compiler.method import resolve_method
+
+    gradient = np.zeros((2, 3))
+    d4 = D4CorrectionResult(0, 0.0, 0.0, 0.0, gradient, None, "cuda", "")
+    gcp = GCPCorrectionResult(0, 0.0, gradient, "cpu", "", "native", "graph")
+    correction = R2SCAN3CCorrectionResult(0, 0.0, gradient, "cuda+cpu", "", d4, gcp)
+    calculator = SimpleNamespace(_dispersion_method_ir=resolve_method("R2SCAN-3c"))
+    electronic = (
+        "r2scan-df-rks-budget-fp32-v1" if fitted else "r2scan-rks-budget-fp32-v1"
+    )
+    assert implementation._complete_gradient_admission(
+        calculator, result(dispersion=correction), electronic
+    ) == electronic.replace("r2scan-", "r2scan-3c-", 1)
+    for invalid in (
+        None,
+        replace(correction, status=1),
+        replace(correction, gradient=None),
+        replace(correction, backend="cpu"),
+        replace(correction, d4=replace(d4, status=1)),
+        replace(correction, gcp=replace(gcp, status=1)),
+    ):
+        assert (
+            implementation._complete_gradient_admission(
+                calculator, result(dispersion=invalid), electronic
+            )
+            is None
+        )
+    assert (
+        implementation._complete_gradient_admission(
+            calculator, result(dispersion=correction), "pbe0-rks-budget-fp32-v1"
+        )
+        is None
+    )
+    calculator._dispersion_method_ir = resolve_method("PBE0")
+    assert (
+        implementation._complete_gradient_admission(
+            calculator, result(dispersion=correction), electronic
+        )
+        is None
+    )
+
+
+def test_uncertified_correction_cannot_bypass_audit_via_qualified_xc_warmup(
+    backend: SimpleNamespace,
+) -> None:
+    from generativeqc_compiler.method import resolve_method
+
+    backend.transport_v2 = True
+    work = {
+        "complete": True,
+        "operator_inventory_complete": True,
+        "operator_work_counters_valid": True,
+        "mixed_stage_fock_builds": 2,
+        "strict_stage_fock_builds": 2,
+        "post_scf_fock_builds": 0,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": "xc",
+                "compute": "fp32",
+                "accumulation": "fp32",
+                "arithmetic_mode": "mixed",
+                "count": 2,
+            }
+        ],
+        "gradient": {
+            "schema_version": 2,
+            "complete": True,
+            "qualification": "r2scan-rks-budget-fp32-v1",
+            "attempted_fp32_geometry_points": 800,
+            "attempted_fp32_grid_points": 800,
+            "fp64_gradient_retries": 0,
+            "returned_mode": "mixed",
+        },
+    }
+    backend.outputs = [
+        result(executed_backend="cuda", precision=work),
+        result(executed_backend="cuda"),
+    ]
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    calculator._candidate._dispersion_method_ir = resolve_method("PBE-D4(BJ-EEQ-ATM)")
+    report = calculator.singlepoint(ATOMS).precision_validation
+    assert report.solve_count == 2
+    assert report.status == "observed_met"
+    assert "geometry_correction_not_qualified" in report.fallback_reasons
+
+
+@pytest.mark.parametrize("collected,tasks", ((True, 17), (False, 17), (True, 0)))
+@pytest.mark.parametrize(
+    "qualification", ("rhf-budget-fp32-v1", "rhf-df-shell-budget-fp32-v1")
+)
+def test_hf_v3_needs_actual_weighted_work_not_a_fictitious_xc_census(
+    backend: SimpleNamespace, collected: bool, tasks: int, qualification: str
+) -> None:
+    backend.transport_v2 = True
+    work = {
+        "complete": False,
+        "operator_inventory_complete": False,
+        "gradient": {
+            "schema_version": 3,
+            "complete": True,
+            "qualification": qualification,
+            "attempted_fp32_geometry_points": 0,
+            "attempted_fp32_grid_points": 0,
+            "weighted_task_counters_collected": collected,
+            "attempted_fp32_weighted_tasks": tasks,
+            "attempted_fp32_primitive_sources": tasks * 4,
+            "returned_mode": "mixed",
+        },
+    }
+    backend.outputs = [
+        result(executed_backend="cuda", precision=work),
+        result(executed_backend="cuda"),
+    ]
+    output = PrecisionCalculator(
+        method="rhf", device="cuda", policy="fast"
+    ).singlepoint(ATOMS)
+    accepted = collected and tasks > 0
+    assert output.precision_validation.solve_count == (1 if accepted else 2)
+    assert output.precision_validation.status == (
+        "qualified_mixed_gradient" if accepted else "observed_met"
+    )
+    assert (
+        "fp32_grid_storage_unavailable"
+        not in output.precision_validation.fallback_reasons
+    )

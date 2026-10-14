@@ -76,7 +76,7 @@ extern "C" int geometry(bool mixed, bool cached, size_t atoms, size_t points, si
   int error=0;
   const auto execute=[&](auto arithmetic) {
     geometry_kernel<decltype(arithmetic)>(view,work,ao_atoms,owners,0,0,centers,atoms,
-        weights,raw,nullptr,0,0,1,partial.data(),scratch.data(),cached?pairs.data():nullptr,&error);
+        weights,raw,nullptr,0,0,1,partial.data(),scratch.data(),cached?pairs.data():nullptr,&error,false);
   };
   if (mixed) execute(float{}); else execute(double{});
   if (!error) std::copy(partial.begin(),partial.end(),output);

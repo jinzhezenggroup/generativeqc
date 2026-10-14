@@ -118,8 +118,10 @@ struct DeviceBatch {
   /** Per-launch qualification candidate, never a process-global precision mode.
    * Only full-range weighted order-0..5 sources consume it. Geometry, density
    * weights and radial moments stay double; all other derivative owners stay
-   * strict. Optional counters contain mixed tasks, primitive/source evaluations
-   * and nonfinite strict retries, in that order. */
+   * strict. Optional counters contain three entries per physical system:
+   * mixed tasks, primitive/source evaluations and nonfinite strict retries.
+   * A standalone Coulomb consumer has one system; fused HF must not attribute
+   * the bucket total to each result. */
   bool direct_force_fp32{};
   unsigned long long* direct_force_precision_work{};
 };

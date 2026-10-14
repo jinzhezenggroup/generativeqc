@@ -236,11 +236,15 @@ template<class... Args> void profile_elapsed(Args...) {}
 template<class Arithmetic,class... Args> void geometry_kernel(Args... args) {
   ++consumers; selected_float=std::is_same_v<Arithmetic,float>; selected_cooperative=false;
   selected_precomputed=false;
+  if constexpr(std::is_same_v<Arithmetic,double>)
+    selected_bound=std::get<sizeof...(Args)-1>(std::tuple(args...));
   assert(std::get<15>(std::tuple(args...))==expected_scratch);
 }
 template<bool Precomputed,class Arithmetic,class... Args> void geometry_cooperative_kernel(Args... args) {
   ++consumers; selected_float=std::is_same_v<Arithmetic,float>; selected_cooperative=true;
   selected_precomputed=Precomputed;
+  if constexpr(!Precomputed && std::is_same_v<Arithmetic,double>)
+    selected_bound=std::get<sizeof...(Args)-1>(std::tuple(args...));
   assert(std::get<15>(std::tuple(args...))==expected_scratch);
 }
 template<bool Bound,class... Args> void geometry_point_kernel(Args... args) {
@@ -284,8 +288,11 @@ int main() {
     assert(selected_precomputed==precomputed && producers==int(precomputed));
     assert(normalizations==int(!mixed && phased));
     assert(owner.launches==(mixed?0U:7U*phased+precomputed));
-    if(precomputed) assert(selected_bound==(!seeded && requested && capable));
-    assert(owner.restricted_point_batches==size_t(precomputed && !seeded && requested && capable));
+    if(!mixed) assert(selected_bound==(!seeded && requested && capable));
+    const bool bound=!mixed && !seeded && requested && capable;
+    assert(owner.restricted_point_batches==size_t(bound));
+    assert(owner.restricted_point_count==view.npoint*size_t(bound));
+    assert(owner.general_point_count==view.npoint*size_t(!mixed && !bound));
   }
   // An incoming/producer error must not consume borrowed scratch or disappear.
   for(bool before:{false,true}) {

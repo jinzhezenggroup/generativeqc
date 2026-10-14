@@ -1139,14 +1139,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
       unsigned maximum_angular = 0;
       for (const auto& shell : provider.system().shells)
         maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-      experimental_mixed_point = admit_application_xc_warmup(
-          options.application_precision_budget, molecule::ao_count(provider.system()),
-          maximum_angular,
-          spins == 1 && functional == static_cast<std::uint32_t>(SemilocalFamily::Pbe) &&
-              options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-              !nonlocal_correlation,
-          provider.system().ecp_terms.empty(),
-          !fitted_coulomb && !fitted_exchange && !has_range_correction);
+      experimental_mixed_point =
+          options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+          admit_application_xc_warmup(
+              options.application_precision_budget, molecule::ao_count(provider.system()),
+              maximum_angular,
+              spins == 1 && functional == static_cast<std::uint32_t>(SemilocalFamily::Pbe) &&
+                  options.xc_execution_schedule ==
+                      scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
+                  !nonlocal_correlation,
+              provider.system().ecp_terms.empty(),
+              !fitted_coulomb && !fitted_exchange && !has_range_correction);
       experimental_mixed_ao = experimental_mixed_point;
       experimental_mixed_contractions = experimental_mixed_point;
       experimental_mixed_history = experimental_mixed_point;
@@ -1588,7 +1591,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_failed = false;
     stabilize_occupations = false;
     final_closure = false;
-    strict_refinement = false;
+    // A resident, same-model warm proposal already passed the strict physical
+    // gates. Re-evaluate it in FP64 before perturbing it with approximate XC:
+    // a converged frozen replay should not manufacture another mixed SCF.
+    // This selects arithmetic, not convergence: every ordinary energy,
+    // density and residual gate still runs. Cold/external/moved seeds retain
+    // the admitted warmup, and ordinary AUTO keeps its incumbent contract.
+    strict_refinement =
+        use_warm && options.application_precision_budget[0] > 0.0 && experimental_mixed_point;
     pending_mixed_coulomb = false;
     pending_mixed_density = false;
     pending_mixed_point = false;
@@ -2795,7 +2805,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && final_corrections < kMaximumFinalCorrections;
     } else {
       output.converged = converged;
-      const bool refinement_budget = strict_refinement && precision_schedule.any_lower_precision()
+      const bool refinement_budget = strict_refinement && mixed_precision_executed
                                          ? refinement_iterations < options.max_iterations
                                          : output.iterations < options.max_iterations;
       is_active = !output.converged && refinement_budget;

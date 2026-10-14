@@ -288,9 +288,12 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
     }
   }
   if constexpr (Mixed) {
-    if (batch.direct_force_precision_work) {
-      atomicAdd(batch.direct_force_precision_work, 1ULL);
-      atomicAdd(batch.direct_force_precision_work + 1, primitive_sources);
+    auto* work = batch.direct_force_precision_work
+                     ? batch.direct_force_precision_work + 3 * static_cast<std::size_t>(system)
+                     : nullptr;
+    if (work) {
+      atomicAdd(work, 1ULL);
+      atomicAdd(work + 1, primitive_sources);
     }
     bool finite = true;
     for (unsigned source = 0; source < source_count; ++source)
@@ -300,7 +303,7 @@ __device__ inline __noinline__ bool contract_two_electron_force_low_order_source
     if (!finite) {
       // Nothing has reached the atom arrays yet. Retry exactly this task once
       // in FP64; do not clip inputs, omit sources or publish a partial force.
-      if (batch.direct_force_precision_work) atomicAdd(batch.direct_force_precision_work + 2, 1ULL);
+      if (work) atomicAdd(work + 2, 1ULL);
       return false;
     }
   }
