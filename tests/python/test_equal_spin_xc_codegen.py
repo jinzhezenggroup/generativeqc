@@ -19,12 +19,17 @@ from generativeqc_compiler.dft.ao_cuda import (
 )
 from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.equal_spin import equal_spin_roots
+from generativeqc_compiler.xc.geometry_cuda import _emit_composed_point
 from generativeqc_compiler.xc.semilocal_codegen import build_roots
 
 from tools.generate_xc_b3lyp_cuda import emit_b3lyp_device
 from tools.generate_xc_r2scan_cuda import emit_r2scan_device
-from tools.generate_xc_split_hybrid_cuda import emit_split_hybrid_device
+from tools.generate_xc_split_hybrid_cuda import (
+    emit_split_hybrid_device,
+    emit_split_hybrid_device_body,
+)
 from tools.generate_xc_wb97mv_cuda import emit_wb97mv_device
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -212,6 +217,14 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=30)
 
 
+def _m06_integer_power_point_header() -> str:
+    """Exercise the explicit experiment without replacing default qualification."""
+    body, _, _ = emit_split_hybrid_device_body("M06-2X", lower_integer_powers=True)
+    return (
+        "namespace generativeqc::dft::generated::integer_power_point {\n" + body + "}\n"
+    )
+
+
 @pytest.fixture(scope="module")
 def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     """Compile the actual CUDA scalar bodies as strict host C++ for parity."""
@@ -226,8 +239,15 @@ def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
         emit_r2scan_device,
         emit_wb97mv_device,
         lambda: emit_split_hybrid_device("M06-2X"),
+        _m06_integer_power_point_header,
     )
-    symbols = ("b3lyp_device", "r2scan_device", "wb97mv_device", "m06_2x_device")
+    symbols = (
+        "b3lyp_device",
+        "r2scan_device",
+        "wb97mv_device",
+        "m06_2x_device",
+        "integer_power_point::m06_2x_device",
+    )
     lines = ["#define __device__", "#include <cmath>"]
     for index, generator in enumerate(generators):
         header = directory / f"point_{index}.hpp"
@@ -257,6 +277,28 @@ def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
             )
         )
     lines.extend(("  }", "}"))
+    semilocal = resolve_method("M06-2X", spin="unpolarized").primitives[0].functional
+    lines.extend(
+        (
+            "namespace force_integer_power_point {",
+            "using std::isfinite;",
+            _emit_composed_point(SPLIT_HYBRIDS["M06-2X"]["functional_code"], semilocal),
+            "}",
+            'extern "C" void evaluate_force(bool restricted, const double* input, double* output) {',
+            "  const double gradient[2][3] = {{input[2],input[3],input[4]}, {input[5],input[6],input[7]}};",
+            "  const auto value = restricted",
+            "      ? force_integer_power_point::stationary_evaluate_point<true>(input,gradient,input+8)",
+            "      : force_integer_power_point::stationary_evaluate_point<false>(input,gradient,input+8);",
+            "  output[0] = value.energy;",
+            "  for (unsigned spin=0; spin<2; ++spin) {",
+            "    output[spin+1] = value.rho[spin];",
+            "    for (unsigned coordinate=0; coordinate<3; ++coordinate)",
+            "      output[3+3*spin+coordinate] = value.gradient[spin][coordinate];",
+            "    output[9+spin] = value.kinetic[spin];",
+            "  }",
+            "}",
+        )
+    )
     source = directory / "probe.cpp"
     source.write_text("\n".join(lines), encoding="utf-8")
     library = directory / "probe.so"
@@ -283,6 +325,8 @@ def compiled_points(tmp_path_factory: pytest.TempPathFactory) -> ctypes.CDLL:
     pointer = ctypes.POINTER(ctypes.c_double)
     loaded.evaluate.argtypes = (ctypes.c_int, ctypes.c_bool, pointer, pointer)
     loaded.evaluate.restype = None
+    loaded.evaluate_force.argtypes = (ctypes.c_bool, pointer, pointer)
+    loaded.evaluate_force.restype = None
     return loaded
 
 
@@ -311,7 +355,7 @@ def physical_equal_spin_points() -> np.ndarray:
     return np.column_stack((density, density, sigma, sigma, sigma, kinetic, kinetic))
 
 
-@pytest.mark.parametrize("method", range(4))
+@pytest.mark.parametrize("method", range(5))
 def test_emitted_equal_spin_points_preserve_every_polarized_partial(
     compiled_points: ctypes.CDLL, method: int
 ) -> None:
@@ -319,7 +363,7 @@ def test_emitted_equal_spin_points_preserve_every_polarized_partial(
     cross_inputs = inputs.copy()
     cross_inputs[:, 3] = 0
     inputs = np.concatenate((inputs, cross_inputs))
-    if method in (1, 3):
+    if method in (1, 3, 4):
         boundaries = np.asarray(
             [
                 (density, density, sigma, 0, sigma, kinetic, kinetic)
@@ -337,7 +381,7 @@ def test_emitted_equal_spin_points_preserve_every_polarized_partial(
 
 @pytest.mark.parametrize(
     ("method", "libxc_code"),
-    ((0, "B3LYP"), (1, "R2SCAN"), (2, "WB97M_V"), (3, "450,236")),
+    ((0, "B3LYP"), (1, "R2SCAN"), (2, "WB97M_V"), (3, "450,236"), (4, "450,236")),
 )
 def test_equal_spin_points_match_independent_libxc(
     compiled_points: ctypes.CDLL, method: int, libxc_code: str
@@ -360,3 +404,82 @@ def test_equal_spin_points_match_independent_libxc(
     assert np.all(np.isfinite(values)) and np.all(np.isfinite(reference))
     np.testing.assert_allclose(values[:, 0], reference[:, 0], rtol=0, atol=1e-12)
     np.testing.assert_allclose(values[:, 1:], reference[:, 1:], rtol=2e-10, atol=2e-10)
+
+
+@pytest.mark.parametrize("restricted", (False, True))
+def test_integer_power_force_point_matches_independent_libxc_and_finite_difference(
+    compiled_points: ctypes.CDLL, restricted: bool
+) -> None:
+    """Exercise the production force emitter, including Cartesian and tau ABIs."""
+    pytest.importorskip("pyscf")
+    from pyscf.dft import libxc
+
+    from tools.validate_split_hybrid_cuda import libxc_density
+
+    rng = np.random.default_rng(20261014)
+    density = 10.0 ** rng.uniform(-2, 0, (32, 2))
+    gradient = rng.normal(size=(32, 2, 3)) * density[..., None] ** (4 / 3) * 0.1
+    kinetic = density ** (5 / 3) * rng.uniform(0.5, 2, (32, 2))
+    if restricted:
+        density[:, 1] = density[:, 0]
+        gradient[:, 1] = gradient[:, 0]
+        kinetic[:, 1] = kinetic[:, 0]
+    inputs = np.column_stack((density, gradient.reshape(32, 6), kinetic))
+    sigma = np.column_stack(
+        (
+            np.sum(gradient[:, 0] ** 2, axis=1),
+            np.sum(gradient[:, 0] * gradient[:, 1], axis=1),
+            np.sum(gradient[:, 1] ** 2, axis=1),
+        )
+    )
+    features = np.column_stack((density, sigma, kinetic))
+    exc, derivatives, _, _ = libxc.eval_xc(
+        "450,236", libxc_density(features), spin=1, deriv=1
+    )
+    reference_gradient = np.empty_like(gradient)
+    reference_gradient[:, 0] = (
+        2 * derivatives[1][:, 0, None] * gradient[:, 0]
+        + derivatives[1][:, 1, None] * gradient[:, 1]
+    )
+    reference_gradient[:, 1] = (
+        2 * derivatives[1][:, 2, None] * gradient[:, 1]
+        + derivatives[1][:, 1, None] * gradient[:, 0]
+    )
+    reference = np.column_stack(
+        (
+            exc * density.sum(axis=1),
+            derivatives[0],
+            reference_gradient.reshape(32, 6),
+            0.5 * derivatives[3],
+        )
+    )
+    pointer = ctypes.POINTER(ctypes.c_double)
+
+    def evaluate(values: np.ndarray) -> np.ndarray:
+        output = np.empty((len(values), 11))
+        for point, result in zip(values, output, strict=True):
+            compiled_points.evaluate_force(
+                restricted,
+                point.ctypes.data_as(pointer),
+                result.ctypes.data_as(pointer),
+            )
+        return output
+
+    actual = evaluate(inputs)
+    assert np.all(np.isfinite(actual))
+    np.testing.assert_allclose(actual[:, 0], reference[:, 0], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(actual[:, 1:], reference[:, 1:], rtol=2e-10, atol=2e-10)
+    displacement = inputs * rng.uniform(-0.1, 0.1, inputs.shape)
+    if restricted:
+        displacement[:, 1] = displacement[:, 0]
+        displacement[:, 5:8] = displacement[:, 2:5]
+        displacement[:, 9] = displacement[:, 8]
+    step = 1e-5
+    finite_difference = (
+        evaluate(inputs + step * displacement)[:, 0]
+        - evaluate(inputs - step * displacement)[:, 0]
+    ) / (2 * step)
+    partials = actual[:, 1:].copy()
+    partials[:, -2:] *= 2
+    predicted = np.sum(partials * displacement, axis=1)
+    np.testing.assert_allclose(predicted, finite_difference, rtol=2e-5, atol=2e-8)
