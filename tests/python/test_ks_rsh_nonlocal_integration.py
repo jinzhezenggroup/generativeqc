@@ -6,16 +6,21 @@ failure propagation, not CUDA numerics or performance.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -65,6 +70,9 @@ namespace generated { constexpr double kMolecularVv10DensityThreshold = 1e-12; }
 namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T&&...) { event("domain"); }
 template<class... T> void enqueue_vv10_cuda_device(T&&...) { event("pairs"); }
+template<class... T> void enqueue_vv10_force_key_compare_cuda(T&&...) { event("compare"); }
+template<class... T> void enqueue_vv10_cache_work_cuda(T&&...) { event("work"); }
+template<class... T> void enqueue_vv10_store_force_key_cuda(T&&...) { event("store"); }
 }
 namespace cuda_ks_detail {
 void assemble_fock(void*, std::size_t, unsigned, double*, double*, double*, double,
@@ -85,6 +93,11 @@ struct Owner {
   double *nonlocal_effective_weights = &buffer, *nonlocal_effective_density = &buffer;
   double *nonlocal_effective_gradient = &buffer, *nonlocal_workspace = &buffer;
   double *nonlocal_vrho = &buffer, *nonlocal_vsigma = &buffer;
+  double *nonlocal_energy = &buffer;
+  bool nonlocal_cache_enabled = false, nonlocal_cache_ready = false;
+  std::string nonlocal_cache_schedule;
+  int *nonlocal_cache_mismatch = nullptr;
+  std::uint64_t *nonlocal_cache_counters = nullptr;
   int error = 0, *jk_error = &error, *range_jk_error = &error, *enabled = &error;
   int *nonlocal_domain_error = &error, *nonlocal_pair_error = &error;
   int device = 0;
@@ -130,37 +143,35 @@ int main(int argc, char** argv) {
 
 
 @pytest.fixture(scope="module")
-def submission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def submission_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("  void enqueue_one(unsigned slot)")
     end = source.index("    const auto blocks =", start)
     body = source[start:end] + "  }\n"
+    # Execute the production delegation as well, so pair failures still cross
+    # the same submission boundary after the cache helper was introduced.
+    pair_start = source.index("  void enqueue_nonlocal_pairs(")
+    pair_end = source.index("\n  CudaXcView stage_xc(", pair_start)
+    pairs = source[pair_start:pair_end]
     folder = tmp_path_factory.mktemp("ks-rsh-nonlocal-join")
     unit, binary = folder / "probe.cpp", folder / "probe"
-    unit.write_text(PREFIX + body + DRIVER)
-    result = subprocess.run(
-        [
-            compiler,
+    unit.write_text(PREFIX + pairs + body + DRIVER)
+    return native_cxx.build_executable(
+        [unit],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I",
             str(ROOT / "include"),
-            str(unit),
-            "-o",
-            str(binary),
         ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+        compile_timeout=45,
+        link_timeout=45,
     )
-    assert result.returncode == 0, result.stderr
-    return binary
 
 
 def _run(probe: Path, route: str, nonlocal_body: bool, failure: str = "") -> str:

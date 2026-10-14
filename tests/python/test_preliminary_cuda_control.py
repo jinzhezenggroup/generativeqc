@@ -31,6 +31,7 @@ HARNESS = r"""
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <limits>
@@ -40,6 +41,7 @@ HARNESS = r"""
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include "generativeqc/generativeqc.hpp"
@@ -68,6 +70,10 @@ struct Diagnostic {
 };
 }
 using dft::CudaKsSeedOrigin;
+namespace nlc {
+enum class Vv10Variant { vv10, rvv10 };
+struct Parameters { Vv10Variant variant{Vv10Variant::vv10}; };
+}
 struct MethodError : generativeqc::Error { using Error::Error; };
 namespace generativeqc::scf {
 struct ScfResult {
@@ -114,6 +120,19 @@ struct Call { unsigned seed; bool reuse, warm, updates, export_density;
   bool phase_source_cold{};
 };
 struct CudaKsPlan {
+  // The real begin() admission also resets optional nonlocal initialization.
+  // These controls stay disabled for this scheduler/lifecycle fixture.
+  bool device_nonlocal{}, incremental_direct_jk{};
+  unsigned spins{1};
+  struct { unsigned max_iterations{100}; } options;
+  struct { bool any_lower_precision() const { return false; } } precision_schedule;
+  struct Nonlocal { nlc::Parameters parameters() const { return {}; } };
+  Nonlocal* nonlocal_correlation{};
+  bool nonlocal_seed_trace{}, nonlocal_outer_active{}, nonlocal_seed_stage{};
+  bool nonlocal_frozen_stage{}, pending_nonlocal_frozen{}, pending_nonlocal_seed{};
+  double nonlocal_inner_residual_tolerance{};
+  unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
+  unsigned nonlocal_seed_iterations{}, nonlocal_exact_iterations{};
   struct Impl {
     bool is_active{}, is_failed{}, warm_ready{}, warm_updates{true};
     bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
