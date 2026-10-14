@@ -2,6 +2,7 @@
 
 import copy
 import json
+import lzma
 import typing
 from pathlib import Path
 
@@ -157,6 +158,32 @@ def test_stale_generated_owner_and_evidence_paths_are_rejected(
     ledger["subsystems"]["sample"]["evidence"] = ["missing_evidence.json"]
     with pytest.raises(ValueError, match="stale evidence"):
         ownership_report(tmp_path, ledger)
+
+
+@pytest.mark.parametrize("stale_member", [0, 1])
+def test_lossless_evidence_migration_requires_every_ledger_path_update(
+    tmp_path: Path, stale_member: int
+) -> None:
+    """A valid compressed payload cannot excuse a dangling ownership pointer."""
+    ledger = ledger_for(tmp_path)
+    paths = ["source.json", "validation.json"]
+    evidence = ledger["subsystems"]["sample"]["evidence"] = paths.copy()
+    original = b'{"samples": [0.12345678901234567, 1e-14]}\n'
+    for name in paths:
+        (tmp_path / name).write_bytes(original)
+    before = ownership_report(tmp_path, ledger)
+    for index, name in enumerate(paths):
+        packed = lzma.compress(original)
+        assert lzma.decompress(packed) == original
+        (tmp_path / (name + ".xz")).write_bytes(packed)
+        (tmp_path / name).unlink()
+        if index != stale_member:
+            evidence[index] = name + ".xz"
+    with pytest.raises(ValueError, match="subsystem sample has stale evidence paths"):
+        ownership_report(tmp_path, ledger)
+    evidence[stale_member] += ".xz"
+    after = ownership_report(tmp_path, ledger)
+    assert after["maintained_code_lines"] == before["maintained_code_lines"]
 
 
 def test_edited_baseline_aggregate_cannot_claim_retirement(
