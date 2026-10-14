@@ -162,9 +162,13 @@ def scan_legacy_consumers(root: Path) -> list[LegacyConsumer]:
 def unexpected_consumers(root: Path) -> list[LegacyConsumer]:
     """Return consumer edges added beyond the migration-time ceiling."""
 
+    return _unexpected_consumers(scan_legacy_consumers(root))
+
+
+def _unexpected_consumers(consumers: list[LegacyConsumer]) -> list[LegacyConsumer]:
     return [
         consumer
-        for consumer in scan_legacy_consumers(root)
+        for consumer in consumers
         if consumer.key not in LEGACY_CONSUMER_CEILING
     ]
 
@@ -206,13 +210,16 @@ def unexpected_expression_modules(root: Path) -> list[str]:
 def inventory(root: Path) -> dict[str, object]:
     """Return deterministic retirement status suitable for CI or issue evidence."""
 
-    consumers = scan_legacy_consumers(root)
+    return _inventory(root, scan_legacy_consumers(root))
+
+
+def _inventory(root: Path, consumers: list[LegacyConsumer]) -> dict[str, object]:
     return {
         "schema": "generativeqc.xc-retirement-inventory.v1",
         "legacy_sources": legacy_sources(root),
         "consumers": [asdict(consumer) for consumer in consumers],
         "unexpected_consumers": [
-            asdict(consumer) for consumer in unexpected_consumers(root)
+            asdict(consumer) for consumer in _unexpected_consumers(consumers)
         ],
         "unexpected_expression_modules": unexpected_expression_modules(root),
     }
@@ -221,8 +228,19 @@ def inventory(root: Path) -> dict[str, object]:
 def errors(root: Path, *, require_no_consumers: bool = False) -> list[str]:
     """Return structural violations without running numerical code."""
 
+    return _errors(
+        root, scan_legacy_consumers(root), require_no_consumers=require_no_consumers
+    )
+
+
+def _errors(
+    root: Path,
+    consumers: list[LegacyConsumer],
+    *,
+    require_no_consumers: bool,
+) -> list[str]:
     result = []
-    for consumer in unexpected_consumers(root):
+    for consumer in _unexpected_consumers(consumers):
         result.append(
             f"{consumer.path}:{consumer.line}: new legacy XC consumer "
             f"{consumer.module} ({consumer.kind})"
@@ -230,7 +248,7 @@ def errors(root: Path, *, require_no_consumers: bool = False) -> list[str]:
     for path in unexpected_expression_modules(root):
         result.append(f"{path}: untracked handwritten-looking XC expression module")
     if require_no_consumers:
-        for consumer in scan_legacy_consumers(root):
+        for consumer in consumers:
             result.append(
                 f"{consumer.path}:{consumer.line}: legacy XC consumer remains "
                 f"{consumer.module}"
@@ -249,9 +267,12 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="print inventory JSON")
     args = parser.parse_args()
     root = args.root.resolve()
+    # Reuse this invocation's full scan for the report and gate. Separate calls
+    # still scan current files, including edits with unchanged size and mtime.
+    consumers = scan_legacy_consumers(root)
     if args.json:
-        print(json.dumps(inventory(root), indent=2, sort_keys=True))
-    failures = errors(root, require_no_consumers=args.require_no_consumers)
+        print(json.dumps(_inventory(root, consumers), indent=2, sort_keys=True))
+    failures = _errors(root, consumers, require_no_consumers=args.require_no_consumers)
     for failure in failures:
         print(failure)
     return int(bool(failures))
