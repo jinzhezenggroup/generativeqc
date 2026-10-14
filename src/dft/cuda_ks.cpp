@@ -348,6 +348,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool nonlocal_freeze_range{}, nonlocal_continue_inner_diis{};
   bool nonlocal_provisional_delta_chain{};
   bool nonlocal_rebase_inner_diis{}, nonlocal_rebase_pending{};
+  bool nonlocal_inexact_inner{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1482,6 +1483,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (!incremental_direct_jk || incremental_seed_requested) && !use_warm &&
         options.max_iterations > 2;
     nonlocal_outer_active = outer_requested && nonlocal_initialization;
+    const auto* inexact_inner = std::getenv("GENERATIVEQC_VV10_INEXACT_INNER");
+    nonlocal_inexact_inner =
+        nonlocal_outer_active && inexact_inner && std::string_view(inexact_inner) == "1";
     const auto* provisional_delta = std::getenv("GENERATIVEQC_VV10_PROVISIONAL_DELTA_CHAIN");
     nonlocal_provisional_delta_chain = nonlocal_outer_active && incremental_direct_jk &&
                                        provisional_delta &&
@@ -2727,6 +2731,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_inner_iterations = 0;
         nonlocal_inner_residual_tolerance = std::clamp(
             physical.maximum_residual * 1e-3, std::min(1e-12, target_residual_gate * 0.1), 1e-7);
+        if (nonlocal_inexact_inner) {
+          // Inexact fixed-point solves need only reduce the current anchor's
+          // error. Avoid solving a stale potential far below the physical
+          // target gate; refreshing VV10 still starts a new energy epoch and
+          // the unchanged full-target maximum residual decides acceptance.
+          nonlocal_inner_residual_tolerance =
+              std::clamp(physical.maximum_residual * 1e-2, target_residual_gate * 0.1,
+                         std::max(1e-6, target_residual_gate * 0.1));
+        }
         // The just-computed target Fock is also the first exact Fock of this
         // fixed-potential inner problem. Retain that one valid DIIS entry.
       }

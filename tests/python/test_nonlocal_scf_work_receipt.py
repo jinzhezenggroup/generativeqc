@@ -154,14 +154,15 @@ def test_native_scf_exact_pair_reuse_and_geometry_rebuild(
 
 @pytest.mark.parametrize("max_iterations", [4, 100])
 @pytest.mark.parametrize(
-    "frozen_range,incremental,continued_diis,provisional_delta_chain,rebased_diis",
+    "frozen_range,incremental,continued_diis,provisional_delta_chain,rebased_diis,inexact_inner",
     [
-        (False, False, False, False, False),
-        (True, False, False, False, False),
-        (False, True, False, False, False),
-        (False, True, True, False, False),
-        (False, True, False, True, False),
-        (False, True, False, False, True),
+        (False, False, False, False, False, False),
+        (True, False, False, False, False, False),
+        (False, True, False, False, False, False),
+        (False, True, True, False, False, False),
+        (False, True, False, True, False, False),
+        (False, True, False, False, True, False),
+        (False, False, False, False, False, True),
     ],
 )
 def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget(
@@ -172,6 +173,7 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
     continued_diis: bool,
     provisional_delta_chain: bool,
     rebased_diis: bool,
+    inexact_inner: bool,
 ) -> None:
     """Exercise actual inner anchors and reject a finite-budget unfinished seed."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -192,6 +194,7 @@ def test_frozen_nonlocal_inner_solver_keeps_physical_acceptance_and_total_budget
         "GENERATIVEQC_VV10_PROVISIONAL_DELTA_CHAIN", str(int(provisional_delta_chain))
     )
     monkeypatch.setenv("GENERATIVEQC_VV10_REBASE_INNER_DIIS", str(int(rebased_diis)))
+    monkeypatch.setenv("GENERATIVEQC_VV10_INEXACT_INNER", str(int(inexact_inner)))
     atoms = [
         ("O", (0.02, -0.03, 0.04)),
         ("H", (0.1, 1.43, 1.1)),
