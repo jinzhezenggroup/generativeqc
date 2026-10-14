@@ -533,19 +533,25 @@ void verify_density_receipts(const Molecule& water, bool device_input) {
 }
 #endif
 
+#include "gfn2_mixer_endpoint_probe.hpp"
+
 int main(int argc, char** argv) {
   try {
-    require(argc == 2, "expected independent fixture path");
+    const bool mixer_probe = argc == 5 && std::string(argv[2]) == "--mixer-endpoint-probe";
+    require(argc == 2 || mixer_probe,
+            "expected fixture or fixture --mixer-endpoint-probe journal repetitions");
     std::ifstream stream(argv[1]);
     int cases = 0;
     stream >> cases;
     require(cases > 0, "empty oracle fixture");
+    if (mixer_probe) require(cases <= 32, "too many mixer probe fixtures");
     std::vector<Molecule> molecules;
     for (int i = 0; i < cases; ++i) {
       Molecule molecule;
       int atoms = 0;
       stream >> molecule.name >> atoms >> molecule.energy;
       require(atoms > 0, "invalid oracle atom count");
+      if (mixer_probe) require(atoms <= 384, "mixer probe atom capacity exceeded");
       molecule.numbers.resize(atoms);
       molecule.positions.resize(3 * atoms);
       molecule.forces.resize(3 * atoms);
@@ -558,6 +564,7 @@ int main(int argc, char** argv) {
       molecules.push_back(std::move(molecule));
     }
     check(cudaSetDevice(0));
+    if (mixer_probe) return mixer_endpoint_probe(molecules, argv[3], argv[4]);
     for (bool device_input : {false, true}) {
       for (const auto& molecule : molecules) verify_mixer_receipts(molecule, device_input);
       Gfn2CudaExecutionCache reused(0, nullptr);

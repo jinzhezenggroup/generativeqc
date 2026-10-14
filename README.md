@@ -145,16 +145,14 @@ and [protocol, accuracy, and provenance](benchmarks/results/readme-dft-20261013/
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 
-![Complete GPU full-DF CCSD(T)/CBS energy-plus-force timings](benchmarks/results/readme-cbs-full-20261014/df-cbs.svg)
+![Complete GPU full-DF CCSD(T)/CBS energy-plus-force timings](assets/readme-cbs-performance.svg)
 
 MP2 correlation is extrapolated with cc-pVDZ/cc-pVTZ; the
 DF-CCSD(T)−DF-MP2 correction uses cc-pVDZ. **DF-HF/RI-JK, analytic response and
 gradients are fitted consistently**, using JKFIT auxiliaries for both JK and
 correlation within each basis group. Timings cover the
 complete two-group E+F endpoint, not just SCF or summed component timings.
-Filled markers pass independent constituent/composite energy and two-step
-directional-force checks; open markers are unchecked. Incomplete or failed
-E+F has no plotted time. See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-full-20261014/timings.md)
+See the [C1–C7 timing/work table](benchmarks/results/readme-cbs-full-20261014/timings.md)
 and [inputs, protocol and limitations](benchmarks/results/readme-cbs-full-20261014/README.md).
 The [earlier exact-HF/correlation-only DF series](benchmarks/results/readme-cbs-20261013/README.md)
 is retained separately: its fitting model differs, so the two series are not
