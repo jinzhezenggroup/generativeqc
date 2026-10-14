@@ -12,7 +12,11 @@ from xml.etree import ElementTree
 import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
-from tools.generativeqc_validation.record import decode_json, load_publication_record
+from tools.generativeqc_validation.record import (
+    decode_json,
+    load_json,
+    load_publication_record,
+)
 from tools.publish_cuda_ownership import compact_comparison, validate_resources, write
 
 BUNDLE = (
@@ -179,7 +183,12 @@ def test_final_df_validation_is_bound_to_the_endpoint_library() -> None:
         data = (bundle / row["path"]).read_bytes()
         assert len(data) == row["bytes"]
         assert hashlib.sha256(data).hexdigest() == row["sha256"]
-    validation = json.loads((bundle / "validation.json").read_text())
+        if "decoded_sha256" in row:
+            decoded = lzma.decompress(data)
+            assert len(decoded) == row["decoded_bytes"]
+            assert hashlib.sha256(decoded).hexdigest() == row["decoded_sha256"]
+            assert load_json(bundle / row["path"]) == json.loads(decoded)
+    validation = load_json(bundle / "validation.json.xz")
     compact = load_publication_record(bundle, role="samples", name="samples.json")
     for run in compact["runs"]:
         if run["selection"] == "candidate":
@@ -198,7 +207,7 @@ def test_final_df_validation_is_bound_to_the_endpoint_library() -> None:
     for stage in validation["gpu_stage_sources"].values():
         for key in ("revision", "native_source_identity", "library_sha256"):
             assert stage[key] == validation["source"][key]
-    raw = json.loads((bundle / "raw-source.json").read_text())
+    raw = load_json(bundle / "raw-source.json.xz")
     assert raw["library_hash"] == validation["source"]["library_sha256"]
     assert len(raw["runs"]) == 24
     assert all(row["passed"] and row["ranks_match"] for row in raw["runs"])
@@ -356,7 +365,7 @@ def test_checkpoint_diagnosis_retains_failed_trials_and_exact_assertions() -> No
     old = body(originals["original-checkpoint-test.py"]["text"])
     validated = originals["validated-checkpoint-test.py"]
     current = body(validated["text"])
-    validation = json.loads((bundle / "validation.json").read_text())
+    validation = load_json(bundle / "validation.json.xz")
     driver = next(
         row
         for row in validation["gpu_suite_drivers"]

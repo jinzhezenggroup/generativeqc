@@ -495,3 +495,12 @@ A force-memory eviction restores the incumbent provider; separate energy
 baselines preserve the original convergence checks in both cases. Every call
 still evaluates the physical Fock, convergence gates, derivatives and force
 assembly.
+
+`GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE=1` is a default-off Direct RSH force
+experiment. A token-authenticated host snapshot may reuse only the two-electron
+response when every density bit agrees within the same immutable prepared owner.
+It adds no host density export. The one-electron and Pulay responses still run
+with the current resident D/W. Optional key/result storage is capped at 64 MiB
+and one quarter of the caller allowance; budget refusal, allocation failure and
+explicit disable preserve the ordinary derivative path. This control is not
+qualified for default selection.

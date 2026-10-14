@@ -682,7 +682,15 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     names = re.findall(
         r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
     )
-    return {f"ks-runtime:{name}": relative.as_posix() for name in names}
+    controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
+    method = Path("src/methods/dft_method.cpp")
+    if (root / method).is_file():
+        owner = re.sub(
+            r"//[^\n]*|/\*.*?\*/", " ", _read(root / method), flags=re.DOTALL
+        )
+        for name in re.findall(r'"(GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE)"', owner):
+            controls[f"ks-runtime:{name}"] = method.as_posix()
+    return controls
 
 
 def _discover_partial_phase_values(root: Path) -> dict[str, str]:
