@@ -288,7 +288,7 @@ def table(summary: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render(summary: dict, destination: Path) -> None:
+def render(summary: dict, destination: Path, *, readme_style: bool = False) -> None:
     """Plot only measured complete calls; gaps retain an explicit outcome label."""
     import matplotlib
 
@@ -311,15 +311,18 @@ def render(summary: dict, destination: Path) -> None:
         carbon = point["carbon"]
         if times:
             checked = point["checks"][0]["accuracy_gate"]
+            label = f"{times[0]:.1f} s"
+            if not readme_style and not checked:
+                label += " ‡"
             axes.plot(
                 carbon,
                 times[0],
                 marker="o",
                 color="#087e8b",
-                markerfacecolor="#087e8b" if checked else "white",
+                markerfacecolor="#087e8b" if (readme_style or checked) else "white",
             )
             axes.annotate(
-                f"{times[0]:.1f} s" + ("" if checked else " ‡"),
+                label,
                 (carbon, times[0]),
                 xytext=(0, 10),
                 textcoords="offset points",
@@ -349,34 +352,40 @@ def render(summary: dict, destination: Path) -> None:
         title="DF-CCSD(T)/CBS · cc-pV[D,T]Z + DZ correction · RTX 5090",
     )
     axes.grid(axis="y", alpha=0.2)
-    axes.legend(
-        handles=[
-            Line2D(
-                [],
-                [],
-                marker="o",
-                color="#087e8b",
-                linestyle="none",
-                label="Independent energy + directional-force checks",
-            ),
-            Line2D(
-                [],
-                [],
-                marker="o",
-                color="#087e8b",
-                markerfacecolor="white",
-                linestyle="none",
-                label="Complete, accuracy unchecked (‡)",
-            ),
-        ],
-        fontsize=8,
-        loc="upper left",
-    )
+    if not readme_style:
+        axes.legend(
+            handles=[
+                Line2D(
+                    [],
+                    [],
+                    marker="o",
+                    color="#087e8b",
+                    linestyle="none",
+                    label="Independent energy + directional-force checks",
+                ),
+                Line2D(
+                    [],
+                    [],
+                    marker="o",
+                    color="#087e8b",
+                    markerfacecolor="white",
+                    linestyle="none",
+                    label="Complete, accuracy unchecked (‡)",
+                ),
+            ],
+            fontsize=8,
+            loc="upper left",
+        )
+    footer = reference_label(summary) + " One cold call; compiler caches retained."
+    if not readme_style:
+        footer += (
+            "\nIncomplete/failed E+F has no plotted time. "
+            "No full-vector or CBS basis-limit accuracy claim."
+        )
     figure.text(
         0.5,
         0.02,
-        reference_label(summary) + " One cold call; compiler caches retained.\n"
-        "Incomplete/failed E+F has no plotted time. No full-vector or CBS basis-limit accuracy claim.",
+        footer,
         ha="center",
         fontsize=9,
     )
@@ -393,6 +402,10 @@ def main() -> None:
     parser.add_argument("--runs", type=Path)
     parser.add_argument("--summary", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--readme-only", action="store_true",
+        help="Render only a performance-focused README SVG; retain all scientific gates.",
+    )
     args = parser.parse_args()
     if bool(args.runs) == bool(args.summary):
         parser.error("choose --runs or --summary")
@@ -409,6 +422,9 @@ def main() -> None:
     else:
         summary = json.loads(lzma.decompress(args.summary.read_bytes()))
     args.output.mkdir(parents=True, exist_ok=True)
+    if args.readme_only:
+        render(summary, args.output / "readme-cbs-performance.svg", readme_style=True)
+        return
     (args.output / "summary.json.xz").write_bytes(
         lzma.compress(json.dumps(summary, allow_nan=False).encode())
     )
