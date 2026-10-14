@@ -484,3 +484,11 @@ separately covered by `tests/python/test_ks_resources.py`; the full workload
 evidence required by #162 remains a separate acceptance gate.
 The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
+
+For the explicit radial-source experiment,
+`GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY=1` also permits fixed-geometry warm calls
+to retain an audited cache. Changing the range selection, bucket mask or byte
+ceiling retires it. A force-memory eviction also restores the incumbent provider;
+separate energy baselines preserve the original convergence checks in both cases.
+This switch does not cache a complete energy/force result or enable automatic
+radial residency.

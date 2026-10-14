@@ -104,6 +104,28 @@
       ]
     },
     {
+      "id": "scf.radial-value-warm-replay",
+      "classification": "needs-qualification",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Explicit 1 permits an admitted radial value lease to survive fixed-geometry warm replay only with a finite source-schedule baseline and unchanged range, bucket and capacity selections. The incumbent warm baseline remains separate for force-memory eviction and policy changes. Every replay still executes physical Fock/convergence/force work. No new quartic allocation is made on a warm call, and default range/replay selection is unchanged.",
+      "revisit_condition": "Require original complete 48/96 whole-point populations with real source-reuse and derivative work, independent energy/force gates, force-memory retirement and bounded fallback before selecting this automatically. Preserve explicit off and failure cleanup.",
+      "evidence": [
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/proposed/2026-10-14-range-warm-source-replay.md",
+        "tests/python/test_range_resident_ks_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        "issue:#2426"
+      ]
+    },
+    {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
       "controls": [

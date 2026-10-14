@@ -111,6 +111,7 @@ struct Owner {
   std::size_t elements = 1;
   struct { std::size_t density_h2d_bytes{}, synchronizations{}; } movement;
   bool warm_energy_baseline{};
+  double range_warm_energy{}, range_warm_energy_correction{};
   double warm_energy{}, warm_energy_correction{}, previous_energy{}, previous_energy_correction{};
   std::unique_ptr<int> phase_source;
   int scenario{}, retired{};
@@ -123,7 +124,7 @@ struct Owner {
   void begin() {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;
-    const bool use_warm = false;
+    const bool use_warm = false, retain_range_source = false;
     // This probe exercises optional source-admission failures; its ordinary
     // begin transaction has no provisional nonlocal initializer.
     const bool nonlocal_initialization = false;

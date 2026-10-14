@@ -185,6 +185,7 @@ struct CudaKsPlan {
     calls.push_back({seed ? static_cast<unsigned>(seed->at(0)) : 0U,
                      reuse, use_warm, impl_->warm_updates, false, origin});
     bool phase_source_cold{};
+    const bool retain_range_source = false;
     // CUDA_PHASE_SOURCE_ADMISSION
     impl_->is_failed = true;
     impl_->is_active = false;

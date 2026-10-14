@@ -101,3 +101,100 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
     for ordinary, cached in zip(*populations, strict=True):
         assert abs(ordinary.energy - cached.energy) < 1e-8
         np.testing.assert_allclose(ordinary.forces, cached.forces, atol=1e-7, rtol=0)
+
+
+@pytest.mark.parametrize("policy", ["full", "partial"])
+@pytest.mark.parametrize("invalidate", ["selection", "capacity", "buckets", "replay"])
+def test_range_replay_reuses_values_and_falls_back_after_policy_change(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, invalidate: str
+) -> None:
+    """Retained and retired sources must both certify the same warm density.
+
+    Per-call work receipts distinguish actual cache consumption from numerical
+    parity obtained by silently using the ordinary provider throughout.
+    """
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("requires an explicitly Slurm-allocated GPU")
+    assert os.environ.get("SLURM_JOB_ID")
+    import numpy as np
+    from generativeqc import (
+        BatchItemResult,
+        Calculator,
+        GridSpec,
+        KsOptions,
+        PreparedBatch,
+    )
+
+    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "1")
+    monkeypatch.setenv("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY", "1")
+    monkeypatch.setenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK", "0")
+    monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CHUNK", "1")
+    monkeypatch.setenv(
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
+        "0x1555" if policy == "partial" else "0xfffffff",
+    )
+    monkeypatch.setenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", str(8 << 30))
+    journal = tmp_path / "replay.jsonl"
+    monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
+    atoms = [
+        ("O", (0.02, -0.03, 0.04)),
+        ("H", (0.1, 1.43, 1.1)),
+        ("H", (-0.15, -1.45, 1.12)),
+    ]
+    calculator = Calculator(
+        method="wb97m-v",
+        basis="def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        precision="fp64",
+        max_iterations=100,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-14,
+        ks_options=KsOptions(grid=GridSpec(12, 4, 8)),
+    )
+    evidence = []
+    offset = 0
+
+    def execute(owner: PreparedBatch) -> tuple[BatchItemResult, int, int]:
+        nonlocal offset
+        result = owner.execute(strict=True).items[0]
+        lines = journal.read_text().splitlines()
+        rows = [json.loads(line) for line in lines[offset:]]
+        offset = len(lines)
+        built = sum(r["value"] for r in rows if r.get("key") == "source_values_built")
+        actions = sum(
+            r["value"] for r in rows if r.get("key") == "phase_resident_fock_actions"
+        )
+        evidence.append(
+            {
+                "built": built,
+                "actions": actions,
+                "energy": result.energy,
+                "iterations": result.iterations,
+            }
+        )
+        assert result.converged
+        return result, built, actions
+
+    with calculator.prepare_batch([atoms], warm_start=True) as owner:
+        cold, built, actions = execute(owner)
+        assert built > 0 and actions > 0
+        owner.set_warm_start_updates(False)
+        for _ in range(2):
+            warm, built, actions = execute(owner)
+            assert built == 0 and actions > 0
+            assert warm.iterations == 1 and abs(warm.energy - cold.energy) < 1e-10
+            np.testing.assert_allclose(warm.forces, cold.forces, atol=1e-7, rtol=0)
+        key, value = {
+            "selection": ("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES", "0"),
+            "capacity": ("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", "1"),
+            "buckets": ("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK", "0x1"),
+            "replay": ("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY", "0"),
+        }[invalidate]
+        monkeypatch.setenv(key, value)
+        fallback, built, actions = execute(owner)
+        assert built == 0 and actions == 0
+        assert fallback.iterations == 1 and abs(fallback.energy - cold.energy) < 1e-10
+        np.testing.assert_allclose(fallback.forces, cold.forces, atol=1e-7, rtol=0)
+    (tmp_path / "results.json").write_text(json.dumps(evidence, indent=2) + "\n")
