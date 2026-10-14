@@ -91,6 +91,20 @@ def test_legacy_cuda_fitting_selector_is_not_reinterpreted() -> None:
 
 @pytest.mark.usefixtures("available_mp2")
 @pytest.mark.parametrize("method", ("mp2", "df-ccsd(t)"))
+def test_full_df_selector_is_a_distinct_scientific_model(method: str) -> None:
+    owner = Calculator(
+        method=method,
+        device="cuda",
+        auxiliary_basis="def2-svp",
+        density_fitting="full_cuda",
+    )
+    descriptor = owner._method_descriptor(auxiliary_basis=ctypes.c_void_p(1234))
+    assert descriptor.density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA
+    assert descriptor.density_fitting_auxiliary_basis == 1234
+
+
+@pytest.mark.usefixtures("available_mp2")
+@pytest.mark.parametrize("method", ("mp2", "df-ccsd(t)"))
 @pytest.mark.parametrize("operator", ("df_metric", "df_three_center"))
 @pytest.mark.parametrize("derivative_order", (0, 1))
 def test_auxiliary_g_admission_is_scoped_to_the_correlation_consumer(

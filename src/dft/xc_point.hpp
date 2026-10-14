@@ -5,6 +5,7 @@
 
 #include <cfloat>
 #include <cmath>
+#include <type_traits>
 
 // The CPU and ordinary-stream CUDA consumers use this same point contract.
 // Parameters/composition follow xc/expressions.py and the vendored Libxc 7
@@ -41,11 +42,11 @@ GENERATIVEQC_XC_HD inline bool valid_gradient_component(double rho, double gradi
 /** Forward differentiation in locally scaled physical coordinates. The scale
  * is fixed during differentiation, so these are physical partial derivatives,
  * including at equal spin densities; it is not a density regularization. */
-template <unsigned DerivativeCount>
+template <unsigned DerivativeCount, class Arithmetic = double>
 struct PointJet {
   static constexpr bool second_order = false;
-  double v{};
-  double d[DerivativeCount]{};
+  Arithmetic v{};
+  Arithmetic d[DerivativeCount ? DerivativeCount : 1]{};
   GENERATIVEQC_XC_HD PointJet() {}
   GENERATIVEQC_XC_HD PointJet(double value) : v(value) {}
   GENERATIVEQC_XC_HD static PointJet variable(double value, unsigned index) {
@@ -84,27 +85,49 @@ struct PointJet {
 };
 using Jet = PointJet<8>;
 
-template <unsigned DerivativeCount>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount> power(const PointJet<DerivativeCount>& value,
-                                                          double exponent) {
-  PointJet<DerivativeCount> out(::pow(value.v, exponent));
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> power(
+    const PointJet<DerivativeCount, Arithmetic>& value, double exponent) {
+  const auto raised = [](Arithmetic base, double power) {
+    if constexpr (std::is_same_v<Arithmetic, float>)
+      return ::powf(base, static_cast<float>(power));
+    else
+      return ::pow(base, power);
+  };
+  PointJet<DerivativeCount, Arithmetic> out(raised(value.v, exponent));
   // All powers evaluated at zero here have p>1 and a zero first derivative.
-  const double slope = value.v == 0.0 ? 0.0 : exponent * ::pow(value.v, exponent - 1.0);
+  const Arithmetic slope =
+      value.v == 0.0 ? Arithmetic{0}
+                     : static_cast<Arithmetic>(exponent) * raised(value.v, exponent - 1.0);
   for (unsigned index = 0; index < DerivativeCount; ++index) out.d[index] = slope * value.d[index];
   return out;
 }
-template <unsigned DerivativeCount>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount> log1p(const PointJet<DerivativeCount>& value) {
-  PointJet<DerivativeCount> out(::log1p(value.v));
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> log1p(
+    const PointJet<DerivativeCount, Arithmetic>& value) {
+  const auto logarithm = [](Arithmetic input) {
+    if constexpr (std::is_same_v<Arithmetic, float>)
+      return ::log1pf(input);
+    else
+      return ::log1p(input);
+  };
+  PointJet<DerivativeCount, Arithmetic> out(logarithm(value.v));
   for (unsigned index = 0; index < DerivativeCount; ++index)
-    out.d[index] = value.d[index] / (1.0 + value.v);
+    out.d[index] = value.d[index] / (Arithmetic{1} + value.v);
   return out;
 }
-template <unsigned DerivativeCount>
-GENERATIVEQC_XC_HD inline PointJet<DerivativeCount> expm1(const PointJet<DerivativeCount>& value) {
-  PointJet<DerivativeCount> out(::expm1(value.v));
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> expm1(
+    const PointJet<DerivativeCount, Arithmetic>& value) {
+  const auto exponential = [](Arithmetic input, bool subtract_one) {
+    if constexpr (std::is_same_v<Arithmetic, float>)
+      return subtract_one ? ::expm1f(input) : ::expf(input);
+    else
+      return subtract_one ? ::expm1(input) : ::exp(input);
+  };
+  PointJet<DerivativeCount, Arithmetic> out(exponential(value.v, true));
   for (unsigned index = 0; index < DerivativeCount; ++index)
-    out.d[index] = ::exp(value.v) * value.d[index];
+    out.d[index] = exponential(value.v, false) * value.d[index];
   return out;
 }
 template <class Scalar>
@@ -147,6 +170,10 @@ GENERATIVEQC_XC_HD inline Scalar pw_channel(const Scalar& x, double a, double al
 // Jet directions through these same potential formulas, including grad=0.
 GENERATIVEQC_XC_HD inline double primal(double x) { return x; }
 GENERATIVEQC_XC_HD inline double primal(const Jet& x) { return x.v; }
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline double primal(const PointJet<DerivativeCount, Arithmetic>& value) {
+  return value.v;
+}
 GENERATIVEQC_XC_HD inline double cube_root(double x) { return ::cbrt(x); }
 GENERATIVEQC_XC_HD inline Jet cube_root(const Jet& x) {
   Jet out(::cbrt(x.v));
@@ -155,23 +182,41 @@ GENERATIVEQC_XC_HD inline Jet cube_root(const Jet& x) {
 }
 GENERATIVEQC_XC_HD inline double square_root(double x) { return ::sqrt(x); }
 GENERATIVEQC_XC_HD inline Jet square_root(const Jet& x) { return power(x, 0.5); }
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> cube_root(
+    const PointJet<DerivativeCount, Arithmetic>& value) {
+  PointJet<DerivativeCount, Arithmetic> result;
+  if constexpr (std::is_same_v<Arithmetic, float>)
+    result.v = ::cbrtf(value.v);
+  else
+    result.v = ::cbrt(value.v);
+  for (unsigned index = 0; index < DerivativeCount; ++index)
+    result.d[index] = result.v * (value.d[index] / value.v) / Arithmetic{3};
+  return result;
+}
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> square_root(
+    const PointJet<DerivativeCount, Arithmetic>& value) {
+  return power(value, 0.5);
+}
 
 GENERATIVEQC_XC_HD inline double subnormal_reduced_gradient(double gradient, double rho,
                                                             double rho13) {
   return (gradient / rho) / rho13;
 }
-template <unsigned N>
-GENERATIVEQC_XC_HD inline PointJet<N> subnormal_reduced_gradient(const PointJet<N>& gradient,
-                                                                 const PointJet<N>& rho,
-                                                                 const PointJet<N>& rho13) {
-  const double ratio = gradient.v / rho.v;
-  PointJet<N> out(ratio / rho13.v);
+template <unsigned DerivativeCount, class Arithmetic>
+GENERATIVEQC_XC_HD inline PointJet<DerivativeCount, Arithmetic> subnormal_reduced_gradient(
+    const PointJet<DerivativeCount, Arithmetic>& gradient,
+    const PointJet<DerivativeCount, Arithmetic>& rho,
+    const PointJet<DerivativeCount, Arithmetic>& rho13) {
+  const Arithmetic ratio = gradient.v / rho.v;
+  PointJet<DerivativeCount, Arithmetic> out(ratio / rho13.v);
   // Divide each directional term before subtraction: the usual quotient
   // numerator can itself be subnormal, losing a representable response.
-  for (unsigned i = 0; i < N; ++i)
-    out.d[i] =
-        (gradient.d[i] / rho.v - ratio * (rho.d[i] / rho.v) - ratio * (rho13.d[i] / rho13.v)) /
-        rho13.v;
+  for (unsigned channel = 0; channel < DerivativeCount; ++channel)
+    out.d[channel] = (gradient.d[channel] / rho.v - ratio * (rho.d[channel] / rho.v) -
+                      ratio * (rho13.d[channel] / rho13.v)) /
+                     rho13.v;
   return out;
 }
 
@@ -305,7 +350,8 @@ GENERATIVEQC_XC_HD inline Scalar correlation_per_scale(bool pbe, const Scalar& a
 /** Evaluate full-spin LDA_XC_PW or PBE energy and AO-potential coefficients.
  * Invalid inputs return valid=false on both CPU and CUDA (no device throw).
  * At zero spin density, reference gradient components must be zero or subnormal. */
-template <unsigned DerivativeCount, bool Restricted = false>
+template <unsigned DerivativeCount, bool Restricted = false, class CorrelationArithmetic = double,
+          class ExchangeArithmetic = double>
 GENERATIVEQC_XC_HD inline Value evaluate_with_channels(bool pbe, const double rho[2],
                                                        const double gradient[2][3],
                                                        double exchange_scale = 1.0,
@@ -329,7 +375,7 @@ GENERATIVEQC_XC_HD inline Value evaluate_with_channels(bool pbe, const double rh
   // independent spin directions, hence equals each spin potential. Its
   // antisymmetric derivative vanishes by spin symmetry, not by screening.
   // General SCF/response keep their original eight independent directions.
-  using Jet = detail::PointJet<DerivativeCount>;
+  using Jet = detail::PointJet<DerivativeCount, CorrelationArithmetic>;
   const Jet a = Restricted ? 0.5 * Jet::variable(1.0, 0) : Jet::variable(rho[0] / scale, 0);
   const Jet b = Restricted ? a : Jet::variable(rho[1] / scale, 1);
   // Correlation depends only on the total gradient. Sum before normalizing
@@ -353,10 +399,25 @@ GENERATIVEQC_XC_HD inline Value evaluate_with_channels(bool pbe, const double rh
   const Jet energy = detail::correlation_per_scale(pbe, a, b, g, scale, gradient_ratio);
   out.energy = correlation_scale * (scale * energy.v);
   out.valid = detail::finite(out.energy);
-  const auto first_exchange = detail::exchange(pbe, rho[0], gradient[0]);
+  // A zero-direction jet narrows every scalar operand before the common
+  // exchange algebra, including literals, without duplicating its branches.
+  const auto evaluate_exchange = [&](unsigned spin) {
+    if constexpr (std::is_same_v<ExchangeArithmetic, double>) {
+      return detail::exchange(pbe, rho[spin], gradient[spin]);
+    } else {
+      using Scalar = detail::PointJet<0, ExchangeArithmetic>;
+      const Scalar local_gradient[3]{gradient[spin][0], gradient[spin][1], gradient[spin][2]};
+      const auto narrowed = detail::exchange_value<Scalar>(pbe, Scalar{rho[spin]}, local_gradient);
+      detail::Exchange result;
+      result.energy = narrowed.energy.v;
+      result.rho = narrowed.rho.v;
+      for (unsigned axis = 0; axis < 3; ++axis) result.gradient[axis] = narrowed.gradient[axis].v;
+      return result;
+    }
+  };
+  const auto first_exchange = evaluate_exchange(0);
   for (unsigned s = 0; s < 2; ++s) {
-    const auto x =
-        Restricted || s == 0 ? first_exchange : detail::exchange(pbe, rho[s], gradient[s]);
+    const auto x = Restricted || s == 0 ? first_exchange : evaluate_exchange(s);
     out.energy += exchange_scale * x.energy;
     out.rho[s] = correlation_scale * energy.d[Restricted ? 0 : s] + exchange_scale * x.rho;
     out.valid = out.valid && detail::finite(out.rho[s]);

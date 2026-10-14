@@ -17,6 +17,7 @@
 
 #include "dft/cuda_xc_point_program.hpp"
 #include "dft/semilocal_family.hpp"
+#include "dft/xc_point_mixed.hpp"
 #include "dft/xc_point_response.hpp"
 
 #define __device__
@@ -33,10 +34,15 @@ bool execute_kernels = true;
 std::vector<std::uint32_t> probe_split_codes, probe_split_mgga;
 template <class Fn>
 auto host_launch(Fn kernel, std::size_t grid, std::size_t threads, std::size_t, cudaStream_t) {
-  observed_kernel = kernel;
+  if constexpr (std::is_same_v<Fn, Kernel>)
+    observed_kernel = kernel;
+  else
+    observed_kernel = nullptr;
   observed_threads = threads;
   return [=](auto... args) {
     if (!execute_kernels) return;  // Geometry-only probes do not claim point arithmetic.
+    if constexpr (!std::is_same_v<Fn, Kernel>)
+      throw std::logic_error("FP64 family contract entered an unrelated point kernel ABI");
     blockDim.x = threads;
     gridDim.x = grid;
     for (std::size_t block = 0; block < grid; ++block) {
@@ -112,6 +118,9 @@ bool split_hybrid_registered(std::uint32_t code) {
 bool split_hybrid_is_mgga(std::uint32_t code) {
   return std::find(probe_split_mgga.begin(), probe_split_mgga.end(), code) !=
          probe_split_mgga.end();
+}
+bool split_hybrid_fp64_local_ao(std::uint32_t) {
+  throw std::logic_error("FP64 family contract entered unrelated provider admission");
 }
 const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
 }  // namespace generativeqc::dft::generated
@@ -217,9 +226,8 @@ void fixtures(const char* filename, bool restricted) {
       require(rho[0] == rho[1], "restricted fixture lacks paired density");
       for (unsigned axis = 0; axis < 3; ++axis)
         require(gradient[0][axis] == gradient[1][axis], "restricted fixture lacks paired gradient");
-      // This wider corpus qualifies the separately bound stable-subnormal
-      // lowering. Ordinary/family/equal-spin entries keep their original
-      // arithmetic, including retained independent tail failures.
+      // This wider corpus independently qualifies bound and ordinary tails.
+      // Keep every component/error row observable at the original tolerance.
       const auto bound = point::evaluate_pbe0_restricted_bound(rho[0], gradient[0]);
       require(bound.valid, "qualified bound fixture domain was rejected");
       const double bound_values[]{bound.energy,         bound.rho[0],         bound.rho[1],

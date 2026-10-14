@@ -229,7 +229,7 @@ def _active_scopes(
         density_parts.extend(
             _matching(
                 resources,
-                lambda name: name.startswith("tiled_density_product<false>"),
+                lambda name: name == "tiled_density_product<false,double>",
                 "strict-FP64 tiled density-product kernel",
             )
         )
@@ -278,7 +278,7 @@ def _active_scopes(
         potential_parts.extend(
             _matching(
                 resources,
-                lambda name: name.startswith("tiled_potential"),
+                lambda name: name == "tiled_potential<double>",
                 "tiled Vxc contraction kernel",
             )
         )
@@ -304,7 +304,7 @@ def _active_scopes(
         # incumbent. Keep both arms, and fail closed on missing batch evidence.
         density += _matching(
             resources,
-            lambda name: name.startswith("batch_density_products"),
+            lambda name: name == "batch_density_products<double>",
             "batched mapped density-product kernel",
         )
         features += _matching(
@@ -312,14 +312,18 @@ def _active_scopes(
             lambda name: name.startswith("batch_density_features"),
             "batched mapped density-feature kernel",
         )
-        for token in (
-            "batch_potential_panels",
-            "batch_local_potentials",
-            "batch_ordered_scatter",
+        for token, pattern in (
+            ("batch_potential_panels", "batch_potential_panels"),
+            ("batch_local_potentials", "batch_local_potentials<double>"),
+            (
+                "batch_ordered_scatter unsegmented",
+                "batch_ordered_scatter<false,double>",
+            ),
+            ("batch_ordered_scatter segmented", "batch_ordered_scatter<true,double>"),
         ):
             potential += _matching(
                 resources,
-                lambda name, token=token: name.startswith(token),
+                lambda name, pattern=pattern: re.fullmatch(pattern, name) is not None,
                 f"{token} kernel",
             )
 

@@ -27,7 +27,7 @@
       "primitive_components": 2261946
     }
   },
-  "design_estimate_only": "Original coulomb-static-audit.json baseline_ops/candidate_ops are hypothetical DAG design estimates, not measured runtime operations or exact emitted-schedule operation counts. Full original retained in supporting-evidence.json.gz.",
+  "design_estimate_only": "Original coulomb-static-audit.json baseline_ops/candidate_ops are hypothetical DAG design estimates, not measured runtime operations or exact emitted-schedule operation counts. Full original retained in supporting-evidence.json.xz.",
   "scratch": {
     "doubles": 165,
     "maximum_order": 8,

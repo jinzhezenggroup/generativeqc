@@ -5,8 +5,19 @@ project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 export CCACHE_DIR="${CCACHE_DIR:-$project_dir/build/ccache}"
 bash "$project_dir/python/ci/install-ccache.sh"
 
+# Optional trusted snapshot provenance. Record the tools actually selected by
+# the container; an incompatible/missing receipt only disables publication.
+if [[ -n "${GQC_WHEEL_SNAPSHOT_ID:-}" ]]; then
+  python "$project_dir/tools/ci_cpu_ccache_snapshot.py" record_wheel_toolchain \
+    --profile wheel || echo "::notice::Wheel snapshot toolchain receipt unavailable"
+fi
+
 # ZIP validation/hashing is native runtime work; wheel repair retains its DSOs.
-dnf install -y openssl-devel libarchive-devel
+# These host libraries come from AlmaLinux. CUDA is already in the pinned
+# manylinux image; refreshing its separate repository can fail on stale NVIDIA
+# metadata even though this transaction needs no CUDA packages. Keep this
+# exclusion local to the install so subsequent toolkit operations are unchanged.
+dnf --disablerepo='cuda*' install -y openssl-devel libarchive-devel
 
 # Keep the reviewed LP64 provider alive beyond PEP 517's temporary build
 # environment. auditwheel must resolve the shim's DT_NEEDED edge during repair.

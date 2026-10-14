@@ -145,26 +145,17 @@ def test_rhf_phase_value_default_domain_is_audited(
     )
 
 
-@pytest.mark.parametrize(
-    "before,after",
-    [
-        ("guess.work_amortization_ratio < 1.0", "guess.work_amortization_ratio < 0.1"),
-        ("preliminary_iterations = 32", "preliminary_iterations = 50"),
-        ("guess.preparation_peak_bytes > guess.value_budget_bytes", "false"),
-    ],
-)
-def test_df_rhf_guess_default_domain_is_audited(
-    tmp_path: Path, before: str, after: str
-) -> None:
-    """A broader workload or additional provisional work needs a promotion decision."""
+def test_df_rhf_guess_rollback_selector_is_discovered(tmp_path: Path) -> None:
+    """Register the public rollback; executable policy tests protect admission."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "src/methods/df_hf_guess.cpp"
     original = source.read_text()
-    assert before in original
-    source.write_text(original.replace(before, after))
+    source.write_text(
+        original.replace("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS", "REMOVED_SELECTOR")
+    )
     assert any(
-        "DF-RHF preconvergence default or admission domain drifted" in error
+        "DF-RHF preconvergence rollback selector drifted" in error
         for error in validate_inventory(payload, root=tmp_path)
     )
 
@@ -918,3 +909,44 @@ def test_md_j_default_domain_and_optional_capacity_are_audited(
     assert any(
         "MD-J default" in error for error in validate_inventory(payload, root=tmp_path)
     )
+
+
+@pytest.mark.parametrize(
+    "expression,controls",
+    [
+        (
+            'std::getenv("GENERATIVEQC_KS_RESIDENT_VALUES")',
+            {"GENERATIVEQC_KS_RESIDENT_VALUES"},
+        ),
+        (
+            (
+                'std::getenv(range ? "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES" : '
+                '"GENERATIVEQC_KS_RESIDENT_VALUES")'
+            ),
+            {
+                "GENERATIVEQC_KS_RESIDENT_VALUES",
+                "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES",
+            },
+        ),
+        (
+            'policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY")',
+            {"GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY"},
+        ),
+        (
+            '// "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"\n/* "GENERATIVEQC_KS_RESIDENT_VALUES" */',
+            set(),
+        ),
+    ],
+)
+def test_phase_value_inventory_tracks_control_names_across_call_forms(
+    tmp_path: Path, expression: str, controls: set[str]
+) -> None:
+    """Call-site refactors retain ownership; comments do not declare controls."""
+    from tools.check_default_promotion_inventory import _discover_ks_phase_values
+
+    source = tmp_path / "src/dft/cuda_ks.cpp"
+    source.parent.mkdir(parents=True)
+    source.write_text(expression)
+    assert set(_discover_ks_phase_values(tmp_path)) == {
+        f"ks-runtime:{name}" for name in controls
+    }

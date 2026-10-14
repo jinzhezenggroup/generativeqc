@@ -57,6 +57,8 @@ jobs:
     name: CUDA runtime tests (CuMetal / Apple GPU)
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false'
+    outputs:
+      test_scope: ${{ steps.prose_scope.outcome == 'success' && steps.prose_scope.outputs.scope == 'prose' && 'prose' || 'full' }}
     runs-on: macos-26
     # Keep the 40-minute qualification budget inside a separate finite job budget.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
@@ -80,10 +82,88 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          # Build/codegen consume the event's complete tree, not its history.
+          # Keep the default event ref (including PR/queue merge commits).
+          fetch-depth: 1
           persist-credentials: false
 
+      - name: Select README-only CuMetal scope
+        id: prose_scope
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        env:
+          PROSE_BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          PROSE_TARGET_REF: ${{ github.event.merge_group.base_ref }}
+          PROSE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PROSE_PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import re
+          import signal
+          import subprocess
+          import time
+
+          # macOS does not promise GNU timeout. Own each subprocess group and bound
+          # fetch plus classification together without leaving child Git processes.
+          deadline = time.monotonic() + 75
+
+          def bounded(command):
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise TimeoutError("README scope budget exhausted")
+              process = subprocess.Popen(
+                  command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                  text=True, start_new_session=True,
+              )
+              try:
+                  output, error = process.communicate(timeout=remaining)
+              except subprocess.TimeoutExpired:
+                  try:
+                      os.killpg(process.pid, signal.SIGKILL)
+                  except ProcessLookupError:
+                      pass
+                  process.communicate(timeout=5)
+                  raise
+              if process.returncode:
+                  raise subprocess.CalledProcessError(process.returncode, command, output, error)
+              return output
+
+          scope = "full"
+          event = os.environ.get("GITHUB_EVENT_NAME", "")
+          head = os.environ.get("GITHUB_SHA", "")
+          # Metadata only rejects work. It can never grant the prose tier.
+          candidate = event == "merge_group" or (
+              event == "pull_request" and os.environ.get("PROSE_PR_CHANGED_FILES") == "1"
+          )
+          if candidate and re.fullmatch(r"[0-9a-f]{40}", head):
+              try:
+                  # Preserve depth-one checkout/source identity. This consumer alone
+                  # obtains the exact event's parents; insufficient queue history fails full.
+                  bounded([
+                      "git", "fetch", "--quiet", "--depth=2", "--no-tags",
+                      "--no-recurse-submodules", "--no-write-fetch-head", "origin",
+                      "+" + head + ":refs/ci/prose-event",
+                  ])
+                  result = bounded([
+                      "python3", "tools/ci_prose_scope.py", "--event", event,
+                      "--base-sha", os.environ.get("PROSE_BASE_SHA", ""),
+                      "--head-sha", head,
+                      "--target-ref=" + os.environ.get("PROSE_TARGET_REF", ""),
+                      "--pr-head-sha", os.environ.get("PROSE_PR_HEAD_SHA", ""),
+                  ])
+                  if result == "prose\n":
+                      scope = "prose"
+              except (OSError, subprocess.SubprocessError, TimeoutError, UnicodeError):
+                  print("README ancestry proof unavailable; retaining full CuMetal work")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("scope=" + scope + "\n")
+          print("README-only CuMetal CI scope: " + scope)
+          PYTHON
+
       - name: Verify Apple Silicon and CuMetal toolchain
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           test "$(uname -m)" = arm64
           test "$(sw_vers -productVersion | cut -d. -f1)" = 26
@@ -99,6 +179,7 @@ jobs:
           xcrun metal --version
 
       - name: Install uv
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.10.7"
@@ -106,14 +187,17 @@ jobs:
           enable-cache: true
 
       - name: Prepare Python codegen environment
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           uv venv --python 3.11
           uv pip install --python .venv/bin/python numpy
 
       - name: Install CuMetal build prerequisites and ccache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: brew install llvm z3 ninja ccache nlohmann-json openssl@3 libarchive
 
       - name: Restore CuMetal toolchain
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: cache-cumetal
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -124,7 +208,7 @@ jobs:
 
       - name: Restore CuMetal ccache
         id: cumetal_ccache
-        if: steps.cache-cumetal.outputs.cache-hit != 'true'
+        if: (steps.cache-cumetal.outputs.cache-hit != 'true') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CUMETAL_CCACHE_DIR }}
@@ -133,6 +217,7 @@ jobs:
             ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore GenerativeQC ccache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: generativeqc_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -149,6 +234,7 @@ jobs:
             ccache-cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
 
       - name: Restore CuMetal QC JIT cache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: cumetal_qc_jit_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -160,7 +246,7 @@ jobs:
             cumetal-qc-jit-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-cumetal-ir-fast48-
 
       - name: Build pinned CuMetal
-        if: steps.cache-cumetal.outputs.cache-hit != 'true'
+        if: (steps.cache-cumetal.outputs.cache-hit != 'true') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CCACHE_DIR: ${{ env.CUMETAL_CCACHE_DIR }}
           CCACHE_COMPILERCHECK: content
@@ -183,24 +269,20 @@ jobs:
           ccache --show-stats
 
       - name: Save CuMetal compiler cache
-        if: github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true' && steps.cumetal_ccache.outputs.cache-hit != 'true'
+        if: (github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true' && steps.cumetal_ccache.outputs.cache-hit != 'true') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CUMETAL_CCACHE_DIR }}
           key: ${{ steps.cumetal_ccache.outputs.cache-primary-key }}
 
       - name: Verify CuMetal
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: CUMETAL_ROOT="$CUMETAL_PREFIX" "$CUMETAL_PREFIX/bin/cumetal" doctor
 
       - name: Compare exact retained CuMetal PTX
         id: retained_ptx
         # A compiler result cannot replace the real QC endpoint gate below.
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1997 &&
-          github.event.action == 'synchronize' &&
-          github.event.before == '48e7afd1cb8e52f0abb85af08727e7684b969631' &&
-          github.run_attempt == 1
+        if: (github.event_name == 'pull_request' && github.event.pull_request.number == 1997 && github.event.action == 'synchronize' && github.event.before == '48e7afd1cb8e52f0abb85af08727e7684b969631' && github.run_attempt == 1) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -210,7 +292,7 @@ jobs:
         run: .venv/bin/python .github/scripts/compare_cumetal_ptx.py
 
       - name: Preserve exact-input CuMetal compiler comparison
-        if: always() && steps.retained_ptx.outcome != 'skipped' && steps.retained_ptx.outcome != ''
+        if: (always() && steps.retained_ptx.outcome != 'skipped' && steps.retained_ptx.outcome != '') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cumetal-retained-ptx-comparison
@@ -219,6 +301,7 @@ jobs:
           retention-days: 1
 
       - name: Generate a CMake CUDA toolkit backed by CuMetal
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           FAKE_CUDA="$CUMETAL_SOURCE/build/cumetal-cuda-toolkit"
           if [[ ! -x "$FAKE_CUDA/bin/nvcc" ]]; then
@@ -251,7 +334,7 @@ jobs:
           "$FAKE_CUDA/bin/nvcc" --version
 
       - name: Save CuMetal toolchain
-        if: github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true'
+        if: (github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -260,9 +343,11 @@ jobs:
           key: ${{ steps.cache-cumetal.outputs.cache-primary-key }}
 
       - name: Reset ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
 
       - name: Configure GenerativeQC with CUDA tests enabled
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           FAKE_CUDA="$CUMETAL_SOURCE/build/cumetal-cuda-toolkit"
           PATH="$FAKE_CUDA/bin:$PATH" cmake -S . -B "$GENERATIVEQC_BUILD" -G Ninja \
@@ -283,19 +368,21 @@ jobs:
             -DGENERATIVEQC_COMPILER_CACHE=ccache
 
       - name: Build CUDA runtime test target
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: cmake --build "$GENERATIVEQC_BUILD" --target generativeqc_cuda_runtime_tests --parallel 3
 
       - name: Save GenerativeQC ccache
-        if: github.event_name != 'merge_group' && steps.generativeqc_ccache.outputs.cache-hit != 'true'
+        if: (github.event_name != 'merge_group' && steps.generativeqc_ccache.outputs.cache-hit != 'true') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ steps.generativeqc_ccache.outputs.cache-primary-key }}
 
       - name: Show ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats
       - name: Summarize compiler cache
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: python3 tools/report_ci_ccache.py --label "CuMetal native C++/CUDA"
 
       # CuMetal's fake-nvcc CMake path currently links a normal CUDA executable
@@ -303,6 +390,7 @@ jobs:
       # CuMetal's source-first compiler for the execution image while retaining
       # the same source file, CMake target and CTest registration used by nvcc.
       - name: Prepare CuMetal execution image for the normal CTest
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           CUMETAL_ROOT="$CUMETAL_PREFIX" \
             "$CUMETAL_PREFIX/bin/cumetalc" tests/native/test_cuda_runtime.cu \
@@ -317,6 +405,7 @@ jobs:
              "$GENERATIVEQC_BUILD/generativeqc_cuda_runtime_tests"
 
       - name: Run CUDA runtime CTest on the Apple GPU
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 2
         run: |
           set -o pipefail
@@ -333,7 +422,7 @@ jobs:
           grep -q 'PASS: CUDA runtime contracts' /tmp/generativeqc-cuda-runtime.log
 
       - name: Install bounded CuMetal QC test dependency
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        if: (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: uv pip install --python .venv/bin/python pytest
 
       # Quarantine the exact pinned shared-owner QC lane for upstream failures.
@@ -341,7 +430,7 @@ jobs:
       # retain strict acceptance. Native build/CTest above remain required.
       - name: Run bounded CuMetal QC endpoint gate
         id: qc_gate
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        if: (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 6
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
@@ -365,13 +454,7 @@ jobs:
         id: qc_timeout_diagnostic
         # Observe one timed-out strict gate with its partially warmed JIT cache.
         # This result can never replace the required endpoint acceptance result.
-        if: >-
-          failure() && github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1997 &&
-          github.event.action == 'synchronize' &&
-          github.event.before == 'de9eebb88be4d7ded840a35541daff2ce43a7a44' &&
-          github.run_attempt == 1 && steps.qc_gate.outcome == 'failure' &&
-          steps.qc_gate.outputs.rhf_timed_out == 'true'
+        if: (failure() && github.event_name == 'pull_request' && github.event.pull_request.number == 1997 && github.event.action == 'synchronize' && github.event.before == 'de9eebb88be4d7ded840a35541daff2ce43a7a44' && github.run_attempt == 1 && steps.qc_gate.outcome == 'failure' && steps.qc_gate.outputs.rhf_timed_out == 'true') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 4
         env:
@@ -387,7 +470,7 @@ jobs:
         run: .venv/bin/python .github/scripts/diagnose_cumetal_timeout.py
 
       - name: Preserve one-shot CuMetal timeout diagnostic
-        if: always() && steps.qc_timeout_diagnostic.outcome != 'skipped' && steps.qc_timeout_diagnostic.outcome != ''
+        if: (always() && steps.qc_timeout_diagnostic.outcome != 'skipped' && steps.qc_timeout_diagnostic.outcome != '') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cumetal-timeout-diagnostic-only
@@ -399,12 +482,7 @@ jobs:
         # One authorized capture only: the first CI attempt for the next update
         # from this exact PR head. This never substitutes for the failed gate.
         id: qc_ptx_diagnostic
-        if: >-
-          failure() && github.event_name == 'pull_request' &&
-          github.event.pull_request.number == 1997 &&
-          github.event.action == 'synchronize' &&
-          github.event.before == '0f67b413da60fa3d146eead32360901adeda4698' &&
-          github.run_attempt == 1 && steps.qc_gate.outcome == 'failure'
+        if: (failure() && github.event_name == 'pull_request' && github.event.pull_request.number == 1997 && github.event.action == 'synchronize' && github.event.before == '0f67b413da60fa3d146eead32360901adeda4698' && github.run_attempt == 1 && steps.qc_gate.outcome == 'failure') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 4
         env:
@@ -417,7 +495,7 @@ jobs:
         run: .venv/bin/python .github/scripts/diagnose_cumetal_ptx.py
 
       - name: Preserve one-shot CuMetal compiler diagnostic
-        if: always() && steps.qc_ptx_diagnostic.outcome != 'skipped' && steps.qc_ptx_diagnostic.outcome != ''
+        if: (always() && steps.qc_ptx_diagnostic.outcome != 'skipped' && steps.qc_ptx_diagnostic.outcome != '') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cumetal-ptx-diagnostic-only
@@ -431,7 +509,7 @@ jobs:
           retention-days: 1
 
       - name: Preserve CUDA test results
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: test-results-cuda-runtime
@@ -440,7 +518,7 @@ jobs:
           retention-days: 1
 
       - name: Install Python test dependencies
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # The CuMetal lane already built the native library above. Installing the
         # project itself would start a second ordinary macOS wheel build, whose
         # scoped GFN2 wheel provider is intentionally Linux-only.
@@ -448,7 +526,7 @@ jobs:
 
       - name: Run bounded CuMetal QC qualification on the Apple GPU
         id: qc_qualification
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 45
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
@@ -469,17 +547,14 @@ jobs:
         run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
 
       - name: Save CuMetal QC JIT cache
-        if: >-
-          always() && github.event_name != 'merge_group' &&
-          steps.cumetal_qc_jit_cache.outputs.cache-hit != 'true' &&
-          (steps.qc_gate.outcome == 'success' || steps.qc_qualification.outcome == 'success')
+        if: (always() && github.event_name != 'merge_group' && steps.cumetal_qc_jit_cache.outputs.cache-hit != 'true' && (steps.qc_gate.outcome == 'success' || steps.qc_qualification.outcome == 'success')) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}
           key: ${{ steps.cumetal_qc_jit_cache.outputs.cache-primary-key }}
 
       - name: Preserve CuMetal QC endpoint diagnostics
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: test-results-cumetal-qc
@@ -492,7 +567,7 @@ jobs:
     name: Upload CUDA test results
     timeout-minutes: 8
     needs: cuda-tests
-    if: ${{ !cancelled() && (needs.cuda-tests.result == 'success' || needs.cuda-tests.result == 'failure') }}
+    if: ${{ !cancelled() && (needs.cuda-tests.result == 'success' || needs.cuda-tests.result == 'failure') && (needs.cuda-tests.outputs.test_scope != 'prose' || needs.cuda-tests.result != 'success') }}
     continue-on-error: true
     runs-on: ubuntu-24.04
     permissions:

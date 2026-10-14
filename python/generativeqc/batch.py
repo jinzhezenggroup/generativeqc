@@ -52,6 +52,7 @@ if typing.TYPE_CHECKING:
     from ._api_types import CcPerformanceResult, CorrelationResult
     from .accuracy import AccuracyAssessment
     from .calculator import Calculator
+    from .precision_policy import PrecisionValidation
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ class BatchItemResult:
     cc_performance: CcPerformanceResult | None = None
     dispersion: object | None = None
     initial_guess: dict | None = None
+    precision_validation: PrecisionValidation | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -104,6 +106,7 @@ class BatchResult:
     See :ref:`python-results-values` and :ref:`python-results-ownership`."""
 
     items: tuple[BatchItemResult, ...]
+    precision_validation: dict | None = None
 
     @property
     def energies(self) -> np.ndarray:
@@ -731,6 +734,14 @@ class PreparedBatch:
                 decision = resolve_force_active_ao_policy(workload)
 
                 if composite_force:
+                    from ._composite_precision import (
+                        composite_gradient_admission,
+                        composite_gradient_precision,
+                    )
+
+                    qualification = composite_gradient_admission(
+                        calculator, state, basis
+                    )
                     prepared = self._stationary_cuda_execution
                     if not isinstance(
                         prepared, PreparedCompositeStationaryCudaGradient
@@ -756,8 +767,17 @@ class PreparedBatch:
                         active_ao_cache_bytes=decision.cache_bytes,
                         active_ao_producer=decision.producer,
                         active_ao_max_active_fraction=decision.max_active_fraction,
+                        **(
+                            {"fp32_semilocal_geometry": True}
+                            if qualification is not None
+                            else {}
+                        ),
                     )
                     work = dict(work)
+                    if qualification is not None:
+                        work["gradient_precision"] = composite_gradient_precision(
+                            qualification, state.identity, work
+                        )
                     work["force_active_ao_policy"] = force_active_ao_policy_record(
                         decision, work.get("active_ao_maps")
                     )
@@ -807,6 +827,14 @@ class PreparedBatch:
                     "max_grid_points": None,
                     "max_grid_pair_visits": None,
                 }
+                from ._df_precision import (
+                    fitted_gradient_admission,
+                    fitted_gradient_precision,
+                )
+
+                qualification = fitted_gradient_admission(calculator, state, basis)
+                if qualification is not None:
+                    kwargs["fp32_semilocal_geometry"] = True
                 try:
                     result = complete_rks_cuda_gradient_diagnostic(
                         state, basis, prepared=prepared, **kwargs
@@ -819,6 +847,10 @@ class PreparedBatch:
                         state, basis, prepared=prepared, **kwargs
                     )
                 work = dict(result.work)
+                if qualification is not None:
+                    work["gradient_precision"] = fitted_gradient_precision(
+                        qualification, result
+                    )
                 selection = work.get("resident_ao_selection")
                 map_work = (
                     selection.get("work") if isinstance(selection, dict) else None
@@ -985,13 +1017,15 @@ class PreparedBatch:
             finally:
                 state._source.close()
 
-    def _native_dft_force_eligible(self) -> bool:
+    def _native_dft_force_eligible(self, index: int | None = None) -> bool:
         """Use only the native *prepared* item capability for force routing.
 
         This deliberately does not duplicate PBE/PBE0, CPU/DF, spin, ECP, or
         MethodIR admission predicates in Python. Older libraries and native
         contexts without the full force provider keep the existing Python
         force path; an actual query error is never silently downgraded.
+        ``index=None`` queries the complete fleet; a slot queries only that
+        immutable prepared system, without repeating qualification in Python.
         """
         query = getattr(
             self._library, "generativeqc_ks_batch_supported_properties_v1", None
@@ -1004,9 +1038,10 @@ class PreparedBatch:
             ctypes.POINTER(ctypes.c_uint32),
         ]
         query.restype = ctypes.c_int
-        for index in range(len(self._systems)):
+        indices = range(len(self._systems)) if index is None else (index,)
+        for slot in indices:
             properties = ctypes.c_uint32()
-            status = query(self._batch, index, ctypes.byref(properties))
+            status = query(self._batch, slot, ctypes.byref(properties))
             if status == _native.STATUS_NOT_IMPLEMENTED:
                 return False
             _native.check(self._library, status, context=self._context)
@@ -1084,6 +1119,10 @@ class PreparedBatch:
         other owners retain their conservative force capacity allowance.
         Generated force failures retain the original exception type and detail
         in the failed item's ``status_message``, including in strict mode.
+        DFT force routing uses each native prepared item's capability. With a
+        current library, qualified items keep native force execution even when
+        a neighbor needs the compatibility consumer. Older libraries without
+        selective execution retain their whole-fleet compatibility behavior.
 
         Coordinates use Bohr. This call is synchronous and must not race another
         operation on this plan. ``strict=False`` preserves input-ordered item
@@ -1128,9 +1167,33 @@ class PreparedBatch:
             raise RuntimeError(
                 "prepared basis/model identity changed; prepare a new batch before reusing densities or Fock/DIIS state"
             )
-        native_dft_forces = public_dft_forces and self._native_dft_force_eligible()
-        public_dft_forces = public_dft_forces and not native_dft_forces
-        native_compute_forces = compute_forces and not public_dft_forces
+        count = len(self._systems)
+        native_dft_forces = tuple(
+            public_dft_forces and self._native_dft_force_eligible(index)
+            for index in range(count)
+        )
+        selected_execute = getattr(
+            self._library, "generativeqc_ks_batch_execute_selected_forces_v1", None
+        )
+        mixed_native_forces = any(native_dft_forces) and not all(native_dft_forces)
+        if mixed_native_forces and selected_execute is None:
+            # Older libraries interpret any force buffer as a whole-fleet
+            # request. Preserve their compatibility route; never pass a mixed
+            # request that could force an unqualified neighbor into native work.
+            native_dft_forces = (False,) * count
+            mixed_native_forces = False
+        compatibility_forces = tuple(
+            public_dft_forces and not native for native in native_dft_forces
+        )
+        native_compute_forces = tuple(
+            compute_forces and not compatibility
+            for compatibility in compatibility_forces
+        )
+        execute_native = (
+            selected_execute
+            if mixed_native_forces
+            else self._library.generativeqc_batch_execute
+        )
         if compute_forces and self._output_aware_cpu_forces:
             # Energy-default preparation admits only value operators. Recheck
             # derivative support before a later explicit force replay; never
@@ -1140,7 +1203,6 @@ class PreparedBatch:
         from .checkpoint import _controls
 
         controls = _controls(self._calculator)
-        count = len(self._systems)
         coordinate_storage: list[np.ndarray] = []
         replay_systems = list(self._systems)
         inputs_pointer = None
@@ -1219,8 +1281,10 @@ class PreparedBatch:
                 )
 
         force_storage = [
-            (ctypes.c_double * (3 * atom_count))() if native_compute_forces else None
-            for atom_count in self._atom_counts
+            (ctypes.c_double * (3 * atom_count))()
+            if native_compute_forces[index]
+            else None
+            for index, atom_count in enumerate(self._atom_counts)
         ]
         output_array = (_native.BatchItemResultDescriptor * count)(
             *(
@@ -1230,7 +1294,7 @@ class PreparedBatch:
                     _native.STATUS_INVALID_ARGUMENT,
                     0.0,
                     force_storage[index],
-                    len(force_storage[index]) if native_compute_forces else 0,
+                    len(force_storage[index]) if native_compute_forces[index] else 0,
                     0,
                     0.0,
                     0.0,
@@ -1245,7 +1309,7 @@ class PreparedBatch:
         )
         execution_plan = self.resource_plan
         if execution_plan is None:
-            status = self._library.generativeqc_batch_execute(
+            status = execute_native(
                 self._batch,
                 inputs_pointer,
                 input_count,
@@ -1260,7 +1324,7 @@ class PreparedBatch:
                 self._library,
                 execution_plan,
                 self._resource_ledger,
-                lambda: self._library.generativeqc_batch_execute(
+                lambda: execute_native(
                     self._batch, inputs_pointer, input_count, output_array, count
                 ),
                 owner=current.name,
@@ -1349,8 +1413,9 @@ class PreparedBatch:
                 succeeded = False
                 dispersion_failure_message = f"external correction failed ({dispersion.status}): {dispersion.message}"
             public_force = None
+            force_work = None
             force_failure_message = None
-            if succeeded and public_dft_forces:
+            if succeeded and compatibility_forces[index]:
                 atoms = self._systems[index]
                 if coordinates is not None and coordinates[index] is not None:
                     xyz = np.asarray(coordinates[index], dtype=np.float64).reshape(
@@ -1411,9 +1476,9 @@ class PreparedBatch:
                     physical_residual_rms = diagnostic.physical_residual_rms
             forces = (
                 public_force
-                if succeeded and public_dft_forces
+                if succeeded and compatibility_forces[index]
                 else copy_force_array(force_storage[index], self._atom_counts[index])
-                if succeeded and native_compute_forces
+                if succeeded and native_compute_forces[index]
                 else None
             )
             if succeeded and dispersion is not None and compute_forces:
@@ -1481,6 +1546,15 @@ class PreparedBatch:
                     self._multiplicities[index],
                     bool(output.converged),
                 )
+            precision = self._calculator._precision_report(self._batch, index)
+            if precision is not None:
+                precision = dict(precision)
+                if not succeeded or forces is None:
+                    precision.pop("gradient", None)
+            if succeeded and forces is not None and force_work is not None:
+                gradient_precision = force_work.get("gradient_precision")
+                if gradient_precision is not None:
+                    precision = {**(precision or {}), "gradient": gradient_precision}
             items.append(
                 BatchItemResult(
                     index=index,
@@ -1515,7 +1589,7 @@ class PreparedBatch:
                     warm_start_used=bool(output.warm_start_used),
                     warm_start_fallback=bool(output.warm_start_fallback),
                     basis_metadata=deepcopy(self._basis_metadata[index]),
-                    precision=self._calculator._precision_report(self._batch, index),
+                    precision=precision,
                     incremental_direct_jk=self._calculator._incremental_direct_jk_diagnostic(
                         self._batch, index
                     ),

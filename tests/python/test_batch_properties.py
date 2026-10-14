@@ -203,7 +203,9 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
         monkeypatch.setattr(
             native_batch, "_public_dft_cpu_force", forbidden_python_force
         )
-        monkeypatch.setattr(python_batch, "_native_dft_force_eligible", lambda: False)
+        monkeypatch.setattr(
+            python_batch, "_native_dft_force_eligible", lambda index=None: False
+        )
         moved = [[(0.0, 0.0, -0.71), (0.0, 0.0, 0.72)]]
         for coordinates in (None, None, moved):
             native = native_batch.execute(

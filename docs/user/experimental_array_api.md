@@ -107,6 +107,15 @@ control artifacts, resources and finite compiler lifetime. Forward and
 derivative programs pass the same backend admission. Native CPU supports float64
 contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
 `sqrt` and exact `pow`; CUDA admits float32 and float64 for these scalar functions.
+The materializing CPU backend also accepts one-byte Boolean inputs, constants,
+shape/static-index views and six comparisons of finite float64 operands.
+It also executes forward `where` on genuine Boolean selectors and finite generic
+float64 branches, with explicit broadcasting and detached outputs.
+Programs containing Boolean data use a separate checked byte ABI; pure float64
+programs retain their existing ABI. FP32 comparison operands, Boolean AD,
+float32/mixed selection branches, nonfinite comparison semantics and native CUDA
+Boolean data remain
+unsupported. This subset does not establish complete Array API conformance.
 Other operations fail closed; full eager conformance does
 not imply full compiler coverage. Higher-order public transforms are unsupported.
 
@@ -449,6 +458,33 @@ domains. Exact rational constants cannot represent negative zero. Integer/comple
 compilation, dynamic indexing/shapes and arbitrary Python control flow are not
 implied by eager support. Unsupported capture functions, including linalg/fft,
 raise instead of evaluating a NumPy fallback during tracing.
+
+Captured `where(condition, x1, x2)` supports a genuine Boolean condition and
+finite generic float32/float64 branches. The branches use explicit casts for
+float promotion; condition and values each broadcast explicitly, including
+scalars and empty axes. Python real branch scalars follow the existing exact
+scalar contract (negative-zero literals are rejected; array signed zeros are
+preserved). Reference outputs are detached and never mutate inputs. The reference
+precision transform preserves the Boolean condition and casts only the real
+branches; generated precision variants remain unqualified reference candidates.
+The reference interpreter counts all live operands, selection results and published copies
+against its retained-byte budget; selection costs one unit of logical work per
+result element. All live operands are evaluated and finite-checked, so an invalid
+or nonfinite unselected branch still raises, even under a constant condition.
+Scientific index domains, representations and symmetry annotations are not
+admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
+tests support only external fixed Boolean masks in finite generic real graphs;
+see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
+The public compiled AD wrappers, generated derivative programs and HVP remain
+unsupported for `where`. The materializing native CPU forward path admits only
+float64 branches with the same generic-domain restrictions and explicit broadcasts.
+Its byte ABI stores each Boolean in one byte and aligns FP64 fields. Every live
+input and branch is materialized and validated before selection; unselected
+invalid branches fail without publishing outputs. Byte, work and node budgets
+include the selector and both branches. Native CUDA/portable/scalar/bundle paths
+and float32/mixed CPU branches reject before compiler discovery or device execution.
+This captured contract does not change
+the broader standard eager namespace or promise full IEEE conformance.
 
 `einsum` and `slice` remain bounded GenerativeQC extensions, not standard API
 functions. They preserve explicit-output/no-ellipsis contraction notation and

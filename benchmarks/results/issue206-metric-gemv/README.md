@@ -110,3 +110,9 @@ records original/stored sizes and hashes plus the original Git blob. Decompressi
 all timings, forces, settings and ordering; historical summary hashes continue
 to identify those restored bytes. The live response-timeline reader accepts the
 compressed reference. No benchmark was rerun or acceptance gate changed.
+
+The 192-AO batch-four serial-dot comparison is likewise retained losslessly in
+`measurements/192ao-b4-forces-serial.json.gz`, authenticated by the adjacent
+`.storage.json`. The stored payload restores all 166,398 original JSON bytes;
+historical command paths and decoded-file hashes remain unchanged. Read the
+record with the shared `load_record` reader or `gzip -dc`.

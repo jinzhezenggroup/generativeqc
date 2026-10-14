@@ -155,6 +155,12 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
       } else {
+        // This site executes one complete primitive product per surviving AO
+        // component. Count after AO/source admission, not from shell capacity.
+        if (auto* diagnostic = direct_force_class_work(batch, shell_class)) {
+          atomicAdd(&diagnostic->executed_components, 1ULL);
+          profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+        }
         explicit_gradient = contracted_eri_cartesian_source_order6_gradient<false, SpatialReuse>(
             batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
             static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));

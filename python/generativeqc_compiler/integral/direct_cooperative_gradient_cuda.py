@@ -224,6 +224,18 @@ __device__ inline void contract_cooperative_direct_pair_force(
     any_admitted |= admitted[slot];
   }
   if (!__syncthreads_or(any_admitted)) return;
+  auto* diagnostic = direct_force_task_work(batch, task);
+  if (diagnostic) {
+    if (threadIdx.x == 0U) {
+      atomicAdd(&diagnostic->executed_shells, 1ULL);
+      profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+    }
+    unsigned components = 0;
+    for (unsigned slot = 0; slot < Slots; ++slot) components += admitted[slot];
+    if (components) atomicAdd(&diagnostic->executed_components,
+                               static_cast<unsigned long long>(components));
+    if (!work) work = &diagnostic->recurrence;
+  }
   auto& recurrence = shared.recurrence;
   const auto bra_begin = batch.shell_pair_primitive_offsets[first_pair];
   const auto ket_begin = batch.shell_pair_primitive_offsets[second_pair];

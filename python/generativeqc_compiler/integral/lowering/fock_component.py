@@ -15,7 +15,11 @@ from ..rys import (
     emit_rys5_roots_cuda,
     emit_rys_hrr_state_cuda,
 )
-from .common import _emitted_component_names, _generic_task_component_setup
+from .common import (
+    _component_axis_expression,
+    _emitted_component_names,
+    _generic_task_component_setup,
+)
 
 if TYPE_CHECKING:
     from ..fused_schedule import (
@@ -127,10 +131,10 @@ def _emit_rys_component_lane_fock_consumer_cuda(
         )
     if nroots not in ((3, 4) if force_support else (2, 3, 4, 5)):
         raise ValueError("component-lane Rys Fock has no support for this root count")
-    if max(spec.angular) > 2 or spec.angular[3] > 1:
+    if max(spec.angular) > (2 if force_support else 3) or spec.angular[3] > 1:
         raise ValueError(
-            "component-lane Rys Fock currently supports s/p/d shells with "
-            "at most p angular momentum on the fourth center"
+            "component-lane Rys Fock requires s/p/d force support or s/p/d/f "
+            "value support, with at most p angular momentum on the fourth center"
         )
 
     task_component_setup = _generic_task_component_setup(spec)
@@ -159,6 +163,11 @@ def _emit_rys_component_lane_fock_consumer_cuda(
             return "0U"
         if order == 1:
             return f"({component_name} == {axis}U)"
+        if order == 3:
+            return " + ".join(
+                f"({_component_axis_expression(spec, center, quantum, component_name)} == {axis}U)"
+                for quantum in range(order)
+            )
         return (
             f"(generated_dppp_d_axes[{component_name}][0] == {axis}U) + "
             f"(generated_dppp_d_axes[{component_name}][1] == {axis}U)"

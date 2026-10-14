@@ -69,6 +69,9 @@ jobs:
           echo "active=true" >> "${GITHUB_OUTPUT}"
 
   master-cpu-cache:
+    permissions:
+      contents: read
+      actions: read
     name: Seed shared Linux CPU ccache (GCC, coverage, Clang, Python)
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     # One master producer fills all CPU compiler/flag variants before publishing.
@@ -93,7 +96,8 @@ jobs:
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -109,6 +113,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.master_cpu_ccache.outcome == 'success' && steps.master_cpu_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
       - name: Compile GCC, instrumented GCC, and Clang
@@ -196,7 +207,28 @@ jobs:
           path: ~/.cache/ccache
           key: ${{ format('{0}-partial-{1}-{2}', steps.master_cpu_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
 
+      - name: Package bounded CPU compiler snapshot
+        id: cpu_snapshot
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cpu_seed.outcome == 'success' && steps.python_seed.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        run: python3 tools/ci_cpu_ccache_snapshot.py package
+      - name: Publish bounded CPU compiler snapshot
+        if: steps.cpu_snapshot.outcome == 'success'
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cpu-ccache-master-ubuntu24-x86_64-v1-${{ github.run_attempt }}
+          path: ${{ steps.cpu_snapshot.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   cpu:
+    permissions:
+      contents: read
+      actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     # Cold GCC coverage can spend 6.5 minutes compiling and 8 minutes in CTest.
@@ -216,12 +248,37 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Select README-only CI scope
+        id: prose_scope
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        env:
+          PROSE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          PROSE_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
+          PROSE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          # Missing/failed classification retains normal coverage. Only a verified
+          # README-only PR or complete unmerged queue can omit expensive steps.
+          set -euo pipefail
+          scope=full
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]] && \
+            candidate="$(timeout 75s python3 tools/ci_prose_scope.py \
+              --event "$GITHUB_EVENT_NAME" --base-sha "$PROSE_BASE_SHA" \
+              --head-sha "$GITHUB_SHA" --target-ref="$PROSE_TARGET_REF" \
+              --pr-head-sha="$PROSE_PR_HEAD_SHA")" && [[ "$candidate" == "prose" ]]; then
+            scope=prose
+          fi
+          printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
+          printf 'README-only CI scope: %s\n' "$scope"
       - name: Audit generated CUDA ABI call coverage
         run: python3 tools/generate_nvidia_host_api.py --check-usage
       - name: Install ccache 4.14
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -230,6 +287,7 @@ jobs:
             /usr/local/bin/ccache
           ccache --version
       - name: Restore shared Linux CPU ccache (CPU CTest)
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: cpu_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -237,16 +295,28 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.cpu_ccache.outcome == 'success' && steps.cpu_ccache.outputs.cache-matched-key == '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
       - name: Install native CLI dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
       - name: Test native CLI archive/metadata contracts
         if: matrix.compiler == 'gcc'
         run: |
           python3 -m unittest discover -s tests/python -p test_native_cli_package.py
           python3 -m unittest discover -s tests/python -p test_native_cli_ci_scope.py
+          python3 -m unittest discover -s tests/python -p test_ci_prose_scope.py
+          python3 -m unittest discover -s tests/python -p test_ci_prose_workflow.py
       - name: Configure
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
           # Instrument only the GCC leg so the existing compiler matrix still
@@ -262,13 +332,16 @@ jobs:
           -DCMAKE_EXE_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
           -DCMAKE_SHARED_LINKER_FLAGS="${COVERAGE_LINK_FLAGS}"
       - name: Build
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: cmake --build build --parallel
       - name: Show ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats
       - name: Summarize compiler cache
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: python3 tools/report_ci_ccache.py --label "CPU CTest ${{ matrix.compiler }}"
       - name: Test
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ctest --test-dir build --output-on-failure
       - name: Generate current CUDA ownership report
         if: matrix.compiler == 'gcc'
@@ -284,14 +357,14 @@ jobs:
           path: .artifacts/cuda-ownership-current.json
           retention-days: 14
       - name: Collect C++ coverage
-        if: matrix.compiler == 'gcc' && github.event_name != 'merge_group'
+        if: matrix.compiler == 'gcc' && github.event_name != 'merge_group' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           sudo apt-get install --yes lcov
           lcov --capture --directory build --output-file coverage-cpp.info \
             --exclude '/usr/*' --exclude '*/tests/*' \
             --ignore-errors mismatch,unused
       - name: Preserve C++ coverage for the upload-only job
-        if: matrix.compiler == 'gcc' && github.event_name != 'merge_group'
+        if: matrix.compiler == 'gcc' && github.event_name != 'merge_group' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -327,7 +400,31 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Select README-only CI scope
+        id: prose_scope
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        env:
+          PROSE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          PROSE_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
+          PROSE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          # Missing/failed classification retains normal coverage. Only a verified
+          # README-only PR or complete unmerged queue can omit expensive steps.
+          set -euo pipefail
+          scope=full
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]] && \
+            candidate="$(timeout 75s python3 tools/ci_prose_scope.py \
+              --event "$GITHUB_EVENT_NAME" --base-sha "$PROSE_BASE_SHA" \
+              --head-sha "$GITHUB_SHA" --target-ref="$PROSE_TARGET_REF" \
+              --pr-head-sha="$PROSE_PR_HEAD_SHA")" && [[ "$candidate" == "prose" ]]; then
+            scope=prose
+          fi
+          printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
+          printf 'README-only CI scope: %s\n' "$scope"
       - name: Add NVIDIA CUDA repository
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           curl --fail --silent --show-error --location --output cuda-keyring.deb \
             https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
@@ -342,6 +439,7 @@ jobs:
             sleep $((attempt * 2))
           done
       - name: Install CUDA 12.9 build dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           sudo apt-get install --yes \
             cuda-nvcc-12-9 \
@@ -356,9 +454,11 @@ jobs:
             python3-pytest
           "$CUDACXX" --version
       - name: Install ccache 4.14
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -372,7 +472,7 @@ jobs:
       # cross-run here; keep actions/cache as a fallback for rollout/reruns.
       - name: Locate trusted master CUDA ccache snapshot
         id: trusted_cuda_ccache
-        if: github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+        if: (github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -458,18 +558,51 @@ jobs:
           echo "publish=${publish}" >> "$GITHUB_OUTPUT"
       - name: Restore trusted master CUDA ccache snapshot
         id: trusted_cuda_ccache_download
-        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache.outputs.run_id != ''
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache.outputs.run_id != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
+        # The downloader's inactivity timeout does not bound a slow transfer.
+        # Leave the required compile budget available and try actions/cache next.
+        timeout-minutes: 2
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: cuda-ccache-master-12.9-sm120-v3
-          path: ~/.cache/ccache
+          # Extraction precedes digest validation. Never expose partial files to
+          # ccache or overwrite the normal fallback cache on failure/timeout.
+          path: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+          digest-mismatch: error
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.trusted_cuda_ccache.outputs.run_id }}
+      - name: Activate verified trusted CUDA ccache snapshot
+        id: trusted_cuda_ccache_activate
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome == 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_DIR: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          test -d "$TRUSTED_CUDA_CCACHE_DIR"
+          # Select the completed cache without copying several GB a second time.
+          printf 'CCACHE_DIR=%s\n' "$TRUSTED_CUDA_CCACHE_DIR" >> "$GITHUB_ENV"
+      - name: Discard incomplete trusted CUDA cache download
+        if: github.event_name == 'merge_group' && steps.trusted_cuda_ccache_download.outcome != '' && steps.trusted_cuda_ccache_download.outcome != 'skipped' && steps.trusted_cuda_ccache_activate.outcome != 'success' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          TRUSTED_CUDA_CCACHE_DIR: ${{ runner.temp }}/trusted-cuda-ccache-${{ github.run_id }}-${{ github.run_attempt }}
+        shell: bash
+        run: |
+          # Remove only this attempted download, never the normal/selected cache.
+          expected="${RUNNER_TEMP:?}/trusted-cuda-ccache-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
+          if [[ "${TRUSTED_CUDA_CCACHE_DIR:-}" != "$expected" || "${CCACHE_DIR:-}" == "$expected" ]]; then
+            echo "::warning::Refusing to remove an unexpected or selected cache path."
+            exit 1
+          fi
+          rm -rf -- "$expected"
       - name: Restore shared Linux CUDA ccache
         id: cuda_ccache
-        if: github.event_name != 'merge_group' || steps.trusted_cuda_ccache_download.outcome != 'success'
+        if: (github.event_name != 'merge_group' || steps.trusted_cuda_ccache_activate.outcome != 'success') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -479,10 +612,13 @@ jobs:
             ccache-cuda-v2-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
       - name: Reset ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
       - name: Install native CLI dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
       - name: Configure production CUDA compile check
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           cmake --preset cuda-release-sm120
           -DGENERATIVEQC_BUILD_TESTS=ON
@@ -490,6 +626,7 @@ jobs:
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
       - name: Compile production CUDA and runtime CTest
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 30
         # This target links the full generativeqc shared library. Native GFN2 CUDA is
         # therefore compiled, device-linked, and consumed through the public
@@ -503,6 +640,7 @@ jobs:
           CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && format('file://{0}/cuda-ccache-handoff', runner.temp) || '' }}
           CCACHE_NORESHARE: "true"
       - name: Compile opted-in AO radial kernels with release resources
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Default native emission intentionally omits this experimental schedule.
         # Exercise its exact six kernel resource records without running a GPU.
         env:
@@ -529,6 +667,7 @@ jobs:
       # PR/queue consumers never publish compiler snapshots. The master-only
       # miss handoff is not a full cache; CLI still owns final publication.
       - name: Check Fock and proposal preflight without a GPU
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CUDA_VISIBLE_DEVICES: ""
         run: |
@@ -536,9 +675,10 @@ jobs:
           ctest --test-dir build/cuda-release-sm120 \
             -R '^generativeqc_(fock_build|scf_proposal)_tests$' --output-on-failure
       - name: Show CUDA ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats
       - name: Summarize compiler cache
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 1
         shell: bash
         run: |
@@ -547,7 +687,7 @@ jobs:
             --verbose --build-dir build/cuda-release-sm120 \
             | tee build/cuda-fast-compile-cache.txt
       - name: Preserve failed fast CUDA build diagnostics
-        if: ${{ failure() || cancelled() }}
+        if: ${{ (failure() || cancelled()) && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
         continue-on-error: true
         timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -562,7 +702,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Preserve opted-in AO radial resource reports
-        if: ${{ always() && github.event_name != 'push' }}
+        if: ${{ always() && github.event_name != 'push' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ao-radial-release-compile
@@ -574,7 +714,7 @@ jobs:
           retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
       - name: Bound the master fast CUDA cache handoff
         id: master_fast_ccache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 1
         shell: bash
@@ -588,7 +728,7 @@ jobs:
           fi
       - name: Hand fast CUDA cache misses to the master CLI
         id: master_fast_ccache_upload
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.master_fast_ccache.outputs.available == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.master_fast_ccache.outputs.available == 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         timeout-minutes: 2
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -677,7 +817,31 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Select README-only CI scope
+        id: prose_scope
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        env:
+          PROSE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          PROSE_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
+          PROSE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          # Missing/failed classification retains normal coverage. Only a verified
+          # README-only PR or complete unmerged queue can omit expensive steps.
+          set -euo pipefail
+          scope=full
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]] && \
+            candidate="$(timeout 75s python3 tools/ci_prose_scope.py \
+              --event "$GITHUB_EVENT_NAME" --base-sha "$PROSE_BASE_SHA" \
+              --head-sha "$GITHUB_SHA" --target-ref="$PROSE_TARGET_REF" \
+              --pr-head-sha="$PROSE_PR_HEAD_SHA")" && [[ "$candidate" == "prose" ]]; then
+            scope=prose
+          fi
+          printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
+          printf 'README-only CI scope: %s\n' "$scope"
       - name: Add NVIDIA CUDA repository
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           curl --fail --silent --show-error --location --output cuda-keyring.deb \
             https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
@@ -692,6 +856,7 @@ jobs:
             sleep $((attempt * 2))
           done
       - name: Install CUDA 12.9 build dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           sudo apt-get install --yes \
             cuda-nvcc-12-9 \
@@ -706,9 +871,11 @@ jobs:
             python3-pytest
           "$CUDACXX" --version
       - name: Install ccache 4.14
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -717,8 +884,10 @@ jobs:
             /usr/local/bin/ccache
           ccache --version
       - name: Install native CLI dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
       - name: Configure native grid source generation
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           cmake --preset cuda-release-sm120
           -DGENERATIVEQC_BUILD_TESTS=ON
@@ -726,6 +895,7 @@ jobs:
           -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
           -DGENERATIVEQC_COMPILER_CACHE=ccache
       - name: Generate exact native grid source and prerequisite headers
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Build only this generated-file target, never the library again.
         # The validator below checks these bytes against compiler emission and
         # still uses release flags, independently of the fast compile preset.
@@ -735,6 +905,7 @@ jobs:
       # This is release resource evidence. The separate production compile-only
       # job uses fast compilation and cannot supply acceptance resources.
       - name: Restore f-shell release objects
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: f_shell_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -751,17 +922,19 @@ jobs:
             f-shell-cuda-v2-12.9-sm120-
             f-shell-cuda-12.9-sm120-
       - name: Compile five representative f classes with release resources
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           python3 tools/validate_f_shells.py --tier compile --smoke
           --nvcc "$CUDACXX" --compile-jobs 2 --compile-timeout 900
           --output build/f-shell-smoke.json
       - name: Save f-shell release objects
-        if: github.event_name != 'merge_group' && steps.f_shell_cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'merge_group' && steps.f_shell_cache.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/f-shell-cache
           key: ${{ steps.f_shell_cache.outputs.cache-primary-key }}
       - name: Restore generated XC compile cache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: xc_compile_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -770,17 +943,19 @@ jobs:
           restore-keys: |
             xc-cuda-12.9-sm120-
       - name: Compile generated XC derivative consumers
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           python3 tools/validate_xc.py --tier cuda-compile
           --functionals PBE --nvcc "$CUDACXX" --target sm_120
           --cache build/xc-cache --output build/xc-compile
       - name: Save generated XC compile cache
-        if: github.event_name != 'merge_group' && steps.xc_compile_cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'merge_group' && steps.xc_compile_cache.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/xc-cache
           key: ${{ steps.xc_compile_cache.outputs.cache-primary-key }}
       - name: Compile native grid/XC region resources
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           python3 tools/validate_native_xc_resources.py
           --nvcc "$CUDACXX" --architecture sm_120
@@ -790,6 +965,7 @@ jobs:
           --output build/native-xc-resource
           --functional PBE --npoint 4096 --tile-points 256 --nao 96 --spins 2
       - name: Restore stationary CUDA compile cache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: stationary_cuda_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -798,17 +974,19 @@ jobs:
           restore-keys: |
             stationary-cuda-12.9-sm120-
       - name: Compile generated r2SCAN stationary CUDA consumer
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           python3 tools/validate_stationary_cuda_compile.py
           --nvcc "$CUDACXX" --cache build/stationary-cuda-compile
           --architecture sm_120
       - name: Save stationary CUDA compile cache
-        if: github.event_name != 'merge_group' && steps.stationary_cuda_cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'merge_group' && steps.stationary_cuda_cache.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/stationary-cuda-compile
           key: ${{ steps.stationary_cuda_cache.outputs.cache-primary-key }}
       - name: Restore TensorIR CUDA compile cache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: tensor_static_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -817,18 +995,19 @@ jobs:
           restore-keys: |
             tensor-static-cuda-12.9-sm120-
       - name: Compile generated TensorIR static-data artifacts
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           PYTHONPATH=python python3 tools/validate_tensor_cuda_compile.py
           --nvcc "$CUDACXX" --architecture sm_120
           --cache build/tensor-static-cuda-compile
       - name: Save TensorIR CUDA compile cache
-        if: github.event_name != 'merge_group' && steps.tensor_static_cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'merge_group' && steps.tensor_static_cache.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/tensor-static-cuda-compile
           key: ${{ steps.tensor_static_cache.outputs.cache-primary-key }}
       - name: Preserve generated XC resource reports
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: xc-release-compile
@@ -842,7 +1021,7 @@ jobs:
             build/native-xc-resource/report.json
           retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
       - name: Preserve f-shell release resource report
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: f-shell-release-smoke
@@ -873,7 +1052,31 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Select README-only CI scope
+        id: prose_scope
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        env:
+          PROSE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          PROSE_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
+          PROSE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          # Missing/failed classification retains normal coverage. Only a verified
+          # README-only PR or complete unmerged queue can omit expensive steps.
+          set -euo pipefail
+          scope=full
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]] && \
+            candidate="$(timeout 75s python3 tools/ci_prose_scope.py \
+              --event "$GITHUB_EVENT_NAME" --base-sha "$PROSE_BASE_SHA" \
+              --head-sha "$GITHUB_SHA" --target-ref="$PROSE_TARGET_REF" \
+              --pr-head-sha="$PROSE_PR_HEAD_SHA")" && [[ "$candidate" == "prose" ]]; then
+            scope=prose
+          fi
+          printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
+          printf 'README-only CI scope: %s\n' "$scope"
       - name: Add NVIDIA CUDA repository
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           curl --fail --silent --show-error --location --output cuda-keyring.deb \
             https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
@@ -888,6 +1091,7 @@ jobs:
             sleep $((attempt * 2))
           done
       - name: Install CUDA 12.9 build dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           sudo apt-get install --yes \
             cuda-nvcc-12-9 \
@@ -902,9 +1106,11 @@ jobs:
             python3-pytest
           "$CUDACXX" --version
       - name: Install ccache 4.14
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -913,8 +1119,10 @@ jobs:
             /usr/local/bin/ccache
           ccache --version
       - name: Install native CLI dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
       - name: Configure direct J/K AOT release context
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: >-
           cmake --preset cuda-release-sm120
           -DGENERATIVEQC_BUILD_TESTS=ON
@@ -923,6 +1131,7 @@ jobs:
           -DGENERATIVEQC_COMPILER_CACHE=ccache
           -DCMAKE_CUDA_COMPILER="$CUDACXX"
       - name: Restore direct J/K AOT resource cache
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: direct_jk_aot_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -939,6 +1148,7 @@ jobs:
           restore-keys: |
             direct-jk-aot-12.9-sm120-
       - name: Qualify direct J/K AOT static resources (shard 6)
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         # Let the compiler stop its process group and write failure receipts
         # before the step/job deadline; leave time to retain those diagnostics.
         timeout-minutes: 22
@@ -950,13 +1160,13 @@ jobs:
           --generated-dir build/cuda-release-sm120/generated/production_shell_kernels
           --compile-timeout 1200
       - name: Save direct J/K AOT resource cache
-        if: github.event_name != 'merge_group' && steps.direct_jk_aot_cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'merge_group' && steps.direct_jk_aot_cache.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/direct-jk-aot-cache
           key: ${{ steps.direct_jk_aot_cache.outputs.cache-primary-key }}
       - name: Preserve direct J/K AOT resource qualification report
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: direct-jk-aot-resources
@@ -969,6 +1179,9 @@ jobs:
           retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
 
   python:
+    permissions:
+      contents: read
+      actions: read
     name: python (${{ matrix.shard }})
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
@@ -1000,7 +1213,31 @@ jobs:
           # Offline retention tests recover real artifacts from historical commits.
           fetch-depth: 0
           persist-credentials: false
+      - name: Select README-only CI scope
+        id: prose_scope
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        env:
+          PROSE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          PROSE_TARGET_REF: ${{ github.event.merge_group.base_ref || '' }}
+          PROSE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+        run: |
+          # Missing/failed classification retains normal coverage. Only a verified
+          # README-only PR or complete unmerged queue can omit expensive steps.
+          set -euo pipefail
+          scope=full
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "merge_group" ]] && \
+            candidate="$(timeout 75s python3 tools/ci_prose_scope.py \
+              --event "$GITHUB_EVENT_NAME" --base-sha "$PROSE_BASE_SHA" \
+              --head-sha "$GITHUB_SHA" --target-ref="$PROSE_TARGET_REF" \
+              --pr-head-sha="$PROSE_PR_HEAD_SHA")" && [[ "$candidate" == "prose" ]]; then
+            scope=prose
+          fi
+          printf 'scope=%s\n' "$scope" >> "$GITHUB_OUTPUT"
+          printf 'README-only CI scope: %s\n' "$scope"
       - name: Install uv and Python 3.11
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.10.7"
@@ -1009,9 +1246,11 @@ jobs:
           cache-suffix: "python-cpu-v1"
           prune-cache: true
       - name: Install ccache 4.14
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1020,6 +1259,7 @@ jobs:
             /usr/local/bin/ccache
           ccache --version
       - name: Restore shared Linux CPU ccache (Python native)
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1027,9 +1267,18 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.python_ccache.outcome == 'success' && steps.python_ccache.outputs.cache-matched-key == '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --zero-stats
       - name: Prepare CPU Python test environment
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           uv venv --python 3.11
           mapfile -t ci_requirements < <(
@@ -1069,7 +1318,7 @@ jobs:
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
       - name: Qualify owned sccache compiler lifetimes
-        if: matrix.shard == 'compiler-heavy'
+        if: matrix.shard == 'compiler-heavy' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           GENERATIVEQC_REQUIRE_SCCACHE_TEST: "1"
         run: |
@@ -1080,8 +1329,10 @@ jobs:
               tests/python/test_compiler_cache_lifecycle.py \
               tests/python/test_sccache_lifecycle_integration.py
       - name: Install native CLI dependencies
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: ./.github/actions/install-native-cli-deps
       - name: Build the CPU native library
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           cmake -S . -B build -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
@@ -1096,6 +1347,7 @@ jobs:
       # All eight Python shards consume the same master CPU compiler cache;
       # no test shard races to publish an immutable partial snapshot.
       - name: Install GenerativeQC editable package
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           # Dependencies and build requirements are already present. Reuse the
           # native tree above so editable installation does not repeat codegen,
@@ -1105,7 +1357,7 @@ jobs:
       # Core and compiler-heavy reference tests need the external oracle inputs.
       # Builds and installed production paths above remain completely offline.
       - name: Restore pinned GFN1 and D3 reference inputs
-        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy'
+        if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: gfn1_reference_sources
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1114,12 +1366,12 @@ jobs:
             .cache/generativeqc-sources/xtbloom-gfn1-d3
           key: gfn1-reference-inputs-v1-${{ hashFiles('upstream/manifest.json', 'tools/source_registry.py') }}
       - name: Prepare pinned GFN1 and D3 reference inputs
-        if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && steps.gfn1_reference_sources.outputs.cache-hit != 'true'
+        if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy') && steps.gfn1_reference_sources.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-parameters
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-d3
       - name: Save pinned GFN1 and D3 reference inputs
-        if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.gfn1_reference_sources.outputs.cache-hit != 'true'
+        if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.gfn1_reference_sources.outputs.cache-hit != 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -1127,15 +1379,17 @@ jobs:
             .cache/generativeqc-sources/xtbloom-gfn1-d3
           key: ${{ steps.gfn1_reference_sources.outputs.cache-primary-key }}
       - name: Show ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: ccache --show-stats
       - name: Summarize compiler cache
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: python3 tools/report_ci_ccache.py --label "Python native ${{ matrix.shard }}"
       # Test-only probe and scientific CPU JIT objects are not produced by the
       # master CMake seed. Every Python shard can compile these test objects.
       # Retain their small ref-scoped overlay; never import it into shared caches.
       # Merge-group refs are ephemeral, so they restore but never publish caches.
       - name: Restore native Python probes
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_probe_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1144,11 +1398,12 @@ jobs:
           restore-keys: |
             ccache-python-probes-v2-${{ matrix.shard }}-
       - name: Reset native probe ccache statistics
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
       - name: Prepare bounded native diagnostics
-        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c'
+        if: (matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'core-c') && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
@@ -1160,6 +1415,7 @@ jobs:
             -o "$RUNNER_TEMP/libnative-fault-record.so"
           .venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q
       - name: Run Python tests with coverage
+        if: (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         id: python_tests
         timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
         env:
@@ -1195,7 +1451,7 @@ jobs:
       - name: Inspect native Python probe cache
         id: python_probe_contents
         shell: bash
-        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != ''
+        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != '' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 1
         continue-on-error: true
         env:
@@ -1210,7 +1466,7 @@ jobs:
           print("has-entries=" + str(count > 0).lower())
           ' >> "$GITHUB_OUTPUT"
       - name: Save native Python probes
-        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != '' && steps.python_probe_contents.outcome == 'success' && steps.python_probe_contents.outputs.has-entries == 'true'
+        if: always() && github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key != '' && steps.python_probe_ccache.outputs.cache-hit != 'true' && steps.python_tests.outcome != 'skipped' && steps.python_tests.outcome != '' && steps.python_probe_contents.outcome == 'success' && steps.python_probe_contents.outputs.has-entries == 'true' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         timeout-minutes: 2
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1218,13 +1474,13 @@ jobs:
           path: ${{ runner.temp }}/ccache-python-probes
           key: ${{ steps.python_tests.outcome == 'success' && steps.python_probe_ccache.outputs.cache-primary-key || format('{0}-partial-{1}-{2}', steps.python_probe_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
       - name: Show post-test ccache statistics
-        if: always()
+        if: always() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
         run: ccache --show-stats
       - name: Preserve transient benchmark/debug artifacts on failure
-        if: failure()
+        if: failure() && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}
@@ -1233,7 +1489,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
       - name: Preserve Python coverage for the upload-only job
-        if: github.event_name != 'merge_group'
+        if: github.event_name != 'merge_group' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -1305,7 +1561,8 @@ jobs:
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1321,6 +1578,13 @@ jobs:
           key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
+      - name: Restore trusted CPU snapshot after primary miss
+        if: steps.benchmark_ccache.outcome == 'success' && steps.benchmark_ccache.outputs.cache-matched-key == ''
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: ./.github/actions/restore-cpu-ccache
+        with:
+          github-token: ${{ github.token }}
       - name: Reset CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
@@ -1657,7 +1921,8 @@ jobs:
         shell: bash
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 \
+            --retry-delay 2 --retry-max-time 60 --connect-timeout 15 --max-time 60 \
             --output "/tmp/${archive}" \
             "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
           tar -xJf "/tmp/${archive}" -C /tmp
@@ -1681,6 +1946,65 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
+      # Recover an evicted/missing cache from trusted master. Prefix hits remain
+      # usable: an older artifact must never replace a successfully restored cache.
+      - name: Locate trusted master CLI ccache snapshot
+        id: trusted_cli_ccache
+        if: steps.cli_scope.outputs.tier != 'skip' && steps.cli_ccache.outcome == 'success' && steps.cli_ccache.outputs.cache-matched-key == '' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: timeout --kill-after=2s 25s python3 tools/ci_cli_ccache_snapshot.py discover
+      - name: Restore trusted master CLI ccache snapshot
+        id: trusted_cli_ccache_download
+        if: steps.trusted_cli_ccache.outcome == 'success' && steps.trusted_cli_ccache.outputs.artifact_id != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ steps.trusted_cli_ccache.outputs.artifact_id }}
+          run-id: ${{ steps.trusted_cli_ccache.outputs.run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          path: ${{ steps.trusted_cli_ccache.outputs.stage }}
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Activate verified trusted CLI ccache snapshot
+        id: trusted_cli_ccache_activate
+        if: steps.trusted_cli_ccache_download.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          CLI_CACHE_STAGE: ${{ steps.trusted_cli_ccache.outputs.stage }}
+        run: python3 tools/ci_cli_ccache_snapshot.py activate
+      - name: Discard incomplete trusted CLI cache download
+        if: always() && steps.trusted_cli_ccache.outputs.stage != '' && steps.trusted_cli_ccache_activate.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          CLI_CACHE_STAGE: ${{ steps.trusted_cli_ccache.outputs.stage }}
+        run: python3 tools/ci_cli_ccache_snapshot.py cleanup
+      # Keep one small immutable miss delta per PR, outside every trusted cache.
+      # No commit/run suffix: repeated updates must not accumulate cache snapshots.
+      - name: Prepare isolated PR CLI compiler delta
+        id: pr_cli_ccache
+        if: github.event_name == 'pull_request' && steps.cli_scope.outputs.tier != 'skip'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_cli_ccache.py prepare
+      - name: Restore only this PR CLI compiler delta
+        id: pr_cli_ccache_restore
+        if: github.event_name == 'pull_request' && steps.pr_cli_ccache.outputs.key != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_cli_ccache.outputs.path }}
+          key: ${{ steps.pr_cli_ccache.outputs.key }}
       - name: Restore this run's master fast CUDA cache delta
         id: master_fast_ccache_download
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip' && env.FAST_CUDA_CACHE_ARTIFACT_ID != '' && env.FAST_CUDA_CACHE_RUN_ATTEMPT == github.run_attempt
@@ -1727,12 +2051,27 @@ jobs:
           python3 tools/report_ci_ccache.py
           --label "CUDA native CLI fast seed (shared library)"
           --verbose --build-dir build/cuda-release-sm120
+      # A Ninja log has no reliable invocation boundary. Only report a fresh
+      # CLI tree; the master fast seed above owns a different build directory.
+      - name: Record fresh CLI Ninja timing boundary
+        id: cli_ninja_boundary
+        if: steps.cli_scope.outputs.tier != 'skip'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: >-
+          python3 tools/report_ci_ninja_timing.py
+          --check-fresh --build-dir build/cuda-release-cli-sm120
       - name: Build monolithic C++ CUDA CLI (release or fast PR)
         id: native_cli_build
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
         env:
           CLI_FAST_COMPILE: ${{ steps.cli_scope.outputs.tier == 'fast' && 'ON' || 'OFF' }}
+          # A local trusted-cache hit is never copied into this delta. Exact
+          # restored deltas are immutable/read-only; later new misses stay local.
+          # Reject even a primary-key prefix match returned by the cache service.
+          CCACHE_REMOTE_STORAGE: ${{ github.event_name == 'pull_request' && steps.pr_cli_ccache.outputs.key != '' && steps.pr_cli_ccache_restore.outcome == 'success' && (steps.pr_cli_ccache_restore.outputs.cache-hit == 'true' || steps.pr_cli_ccache_restore.outputs.cache-matched-key == '') && format('file://{0}{1}', steps.pr_cli_ccache.outputs.path, steps.pr_cli_ccache_restore.outputs.cache-hit == 'true' && ' read-only' || '') || '' }}
+          CCACHE_NORESHARE: "true"
         run: |
           ccache --zero-stats
           echo "cache_stats_reset=true" >> "$GITHUB_OUTPUT" || \
@@ -1743,10 +2082,35 @@ jobs:
             -DGENERATIVEQC_ENABLE_CXX_PCH=OFF \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
+      - name: Report completed CLI Ninja command timings
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          FRESH_NINJA_LOG: ${{ steps.cli_ninja_boundary.outputs.fresh }}
+        run: >-
+          python3 tools/report_ci_ninja_timing.py
+          --build-dir build/cuda-release-cli-sm120 --fresh-log "$FRESH_NINJA_LOG"
       - name: Show detailed CLI compiler cache statistics
         if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
         continue-on-error: true
         run: ccache --show-stats --verbose
+      - name: Bound successful PR CLI compiler misses
+        id: pr_cli_ccache_bound
+        if: always() && github.event_name == 'pull_request' && steps.native_cli_build.outcome == 'success' && steps.pr_cli_ccache.outputs.key != '' && steps.pr_cli_ccache_restore.outcome == 'success' && steps.pr_cli_ccache_restore.outputs.cache-hit != 'true' && steps.pr_cli_ccache_restore.outputs.cache-matched-key == ''
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 tools/ci_pr_cli_ccache.py bound
+      - name: Save this PR CLI compiler delta once
+        if: always() && github.event_name == 'pull_request' && steps.native_cli_build.outcome == 'success' && steps.pr_cli_ccache_bound.outputs.available == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pr_cli_ccache.outputs.path }}
+          key: ${{ steps.pr_cli_ccache.outputs.key }}
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash

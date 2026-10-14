@@ -1,0 +1,84 @@
+# Decision: retain the occupied projection across the HF-DF capacity crossover
+
+Status: implemented and qualified
+Date: 2026-10-13
+
+## Problem
+
+Issue #2421 reports a 96-atom warm HF-DF endpoint of 59.318 s, versus
+0.673 s at 48 atoms. The default value allowance retains packed B but drops
+the complete occupied projection. Increasing only the value allowance enables
+occupied SCF, while the force still repeats dense fitted-panel projections.
+
+## Decision
+
+Reuse the method-owned resident budget policy for singleton restricted HF,
+only when automatic storage/exchange and the actual RHF planner admit both B
+and the complete occupied U. Charge DIIS and factor state in that final check.
+Update the DF and one-electron response owners with the same resolved cap.
+Explicit public/response budgets, UHF, batches and insufficient capacity retain
+their previous bounded plans.
+
+Select the existing fitted occupied force consumer automatically only for a
+current full-rank metric and exact final-projection token. Revalidate the model,
+geometry/solve/density generations and actual canonical density before borrowing
+U. Stale/corrected states retain bounded fitted-panel response. A force attempt
+still consumes the exclusive projection lease; another SCF must publish a new one.
+
+## Evidence and rejected alternative
+
+Diagnostic-only n1 RTX 5090 runs used library SHA256
+`622722de6277147d512fe045f969b80c10b5db76d9aac0fbabd4f70326c5aac9`.
+The default trace selected dense SCF, spent 115.008 s in 30 K builds, and
+40.929 s in force response. A 4-GiB response-cap ablation enabled occupied SCF
+but increased the generic force-response cost to about 76 s. Memory rebalancing
+alone is therefore not a complete fix.
+
+Slurm 8054 combined that cap with the existing explicit fitted occupied
+consumer. Its four diagnostic calls took 36.039 / 3.447 / 28.622 / 3.422 s
+(cold / warm / moved / moved-warm); force response took about 2.09 s and borrowed
+the 3,649,044,480-byte final projection. These traced, single-repeat calls are
+mechanism evidence, not the plotted population or an independent accuracy gate.
+Formal default-route 12-call energy/force qualification remains required.
+
+## Invariants and revisit conditions
+
+Keep the independent 1e-8 Eh / 1e-7 Eh/Bohr endpoint gates, finite memory ownership,
+explicit diagnostic overrides, and exact fallback. Revisit the response floor if
+its live allocations or occupied response algebra change. Do not replace the
+final actual-plan check with the shared resolver's weaker packed-B capacity test.
+
+## Complete endpoint qualification
+
+Source `61b9387f3` with native library SHA256
+`1c29356c9bdb1075020a25c52b5fe24965ea5b73e357d02bc2117f844e072cfa`
+passes every cold, five frozen warm, moved and five moved-warm energy/force gate
+at 3/12/48/96 atoms under public defaults. At 96 atoms the complete times are
+32.994 / 3.201 / 28.670 / 3.202 s (warm values are five-call medians), compared
+with the historical 59.318-s warm endpoint. No explicit response cap or occupied
+consumer override is used. The independent 1e-8 Eh / 1e-7 Eh/Bohr gates are
+unchanged. The source-bound records and SCF counts are in the README DF summary.
+
+Five real-device regression cases cover automatic final projection reuse,
+explicit RHF/UHF controls and independent M06-2X DF endpoints; the native DF
+regression also passes its 48 weighted finite-difference force gates. The
+capacity crossover retains the explicit-cap and unsupported-state fallbacks.
+
+## Automatic resource fallback hardening
+
+The fitted occupied bridge retains all-Q rank-squared workspaces and can exhaust
+an allowance that still admits bounded fitted panels. Review found that its
+existing retry covered a borrowed DFT lease but omitted the new automatic RHF
+route. Both now retry once on allocation failure after consuming the lease;
+explicit occupied diagnostics and non-allocation errors still surface. Optional
+canonical-provenance staging allocation failure declines reuse directly. A
+pending CUDA allocation error is consumed before fallback, while any other
+pending device error remains visible. Once provenance has declined into panels,
+a panel allocation failure is terminal rather than a second panel attempt.
+
+A cached host compilation of the complete production dispatcher, using real
+public token/response contracts and device/bridge boundary doubles, covers 19
+success, stale/corrected state, lease-consumption, allocation and non-allocation
+failure cases. The unchanged head fails the new fallback controls; the repaired
+source passes. This is executable ownership/error-path coverage, not additional
+GPU numerical or endpoint performance evidence.

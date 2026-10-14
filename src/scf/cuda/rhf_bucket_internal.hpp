@@ -194,9 +194,12 @@ inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfO
          first.energy_tolerance == second.energy_tolerance &&
          first.density_tolerance == second.density_tolerance &&
          first.screening_tolerance == second.screening_tolerance &&
+         first.reference_iteration_screening_tolerance ==
+             second.reference_iteration_screening_tolerance &&
          first.compute_forces == second.compute_forces &&
          first.export_physical_reference == second.export_physical_reference &&
          first.precision_mode == second.precision_mode &&
+         first.application_precision_budget == second.application_precision_budget &&
          first.incremental_direct_jk == second.incremental_direct_jk &&
          first.incremental_direct_jk_rebuild_interval ==
              second.incremental_direct_jk_rebuild_interval &&

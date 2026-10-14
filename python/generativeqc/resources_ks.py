@@ -426,13 +426,19 @@ def _cuda_stationary_descriptor(
     energy_tolerance: float,
     density_tolerance: float,
     screening_tolerance: float,
+    application_precision_budget: typing.Any = None,
 ) -> typing.Any:
     """Serialize the resolved model; native admission owns scientific predicates."""
     from . import _generated_methods, _native
     from .ks import native_dft_carrier_for_ir, native_ks_options
 
-    descriptor = _native.MethodDescriptor(
-        struct_size=ctypes.sizeof(_native.MethodDescriptor),
+    descriptor_type = (
+        _native.ApplicationPrecisionMethodDescriptor
+        if application_precision_budget is not None
+        else _native.MethodDescriptor
+    )
+    descriptor = descriptor_type(
+        struct_size=ctypes.sizeof(descriptor_type),
         abi_version=_native.ABI_VERSION,
         method=_generated_methods.METHOD_NAME_TO_ID[
             native_dft_carrier_for_ir(model.method_ir)
@@ -448,6 +454,14 @@ def _cuda_stationary_descriptor(
         else _native.PRECISION_AUTO,
     )
     descriptor.ks_options = ctypes.pointer(native_ks_options(model))
+    if application_precision_budget is not None:
+        descriptor.application_energy_budget = application_precision_budget.energy_abs
+        descriptor.application_max_force_budget = (
+            application_precision_budget.force_max_abs
+        )
+        descriptor.application_rms_force_budget = (
+            application_precision_budget.force_rms or 0.0
+        )
     return descriptor
 
 
@@ -581,12 +595,26 @@ def ks_resource_request(
     name: typing.Any = "ks",
     first_phase: typing.Any = 0,
     last_phase: typing.Any = 0,
+    _application_precision_budget: typing.Any = None,
 ) -> typing.Any:
     """Resolve one complete KS request for the shared global planner."""
     if type(include_forces) is not bool:
         raise TypeError("include_forces must be boolean")
     if backend not in ("cpu", "cuda"):
         raise NotImplementedError("KS planning requires a native CPU or CUDA backend")
+    if _application_precision_budget is not None:
+        from .force_aware_numerics import TargetErrorBudget
+
+        if not isinstance(_application_precision_budget, TargetErrorBudget):
+            raise TypeError(
+                "application precision requires an immutable TargetErrorBudget"
+            )
+        if backend != "cuda":
+            raise NotImplementedError("application precision requires CUDA")
+        if getattr(ks_options, "_precision_budget", None) is not None:
+            raise ValueError(
+                "application precision must have one method/KS transport owner"
+            )
     try:
         model = resolve_ks_options(method, ks_options)
     except (TypeError, ValueError, NotImplementedError) as error:
@@ -715,6 +743,8 @@ def ks_resource_request(
         if backend == "cuda"
         else "serialized-native",
     }
+    if _application_precision_budget is not None:
+        controls["application_precision_budget"] = asdict(_application_precision_budget)
     if backend == "cpu":
         controls["ao_grid_cache_cap"] = _CPU_AO_GRID_CACHE_CAP
         controls["host_inventory"] = (
@@ -876,6 +906,16 @@ def ks_resource_request(
                     "native library does not implement KS allocation inventory v1"
                 )
         if backend == "cuda":
+            if _application_precision_budget is not None:
+                transport = getattr(
+                    library, "generativeqc_application_precision_version_v2", None
+                )
+                if transport is not None:
+                    transport.argtypes, transport.restype = [], ctypes.c_uint32
+                if transport is None or transport() != 2:
+                    raise NotImplementedError(
+                        "native library lacks method precision transport"
+                    )
             descriptor = _cuda_stationary_descriptor(
                 model,
                 precision=precision,
@@ -884,6 +924,7 @@ def ks_resource_request(
                 energy_tolerance=energy_tolerance,
                 density_tolerance=density_tolerance,
                 screening_tolerance=screening_tolerance,
+                application_precision_budget=_application_precision_budget,
             )
             stationary = [
                 _native_cuda_stationary_inventory(library, item, descriptor)

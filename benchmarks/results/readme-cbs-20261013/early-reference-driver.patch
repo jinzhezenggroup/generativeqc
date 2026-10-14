@@ -1,0 +1,15 @@
+--- benchmarks/readme_cbs.py
++++ benchmarks/readme_cbs.py
+@@ -36,11 +36,8 @@
+ 
+ def digest(path: Path) -> str:
+     """Hash the actual dataset, executable or receipt bytes."""
+-    checksum = hashlib.sha256()
+     with path.open("rb") as stream:
+-        for chunk in iter(lambda: stream.read(1 << 20), b""):
+-            checksum.update(chunk)
+-    return checksum.hexdigest()
++        return hashlib.file_digest(stream, "sha256").hexdigest()
+ 
+ 
+ def checkpoint(path: Path, payload: dict) -> None:

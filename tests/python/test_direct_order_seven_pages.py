@@ -29,19 +29,8 @@ def test_order_seven_physical_pair_ids_remain_unsigned(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     """Compile actual canonicalization with the signed-only CuMetal overloads."""
-    source = (ROOT / "src/scf/cuda/direct_order_seven_force.cu").read_text()
-    begin = source.index("const auto bra = topology.pair_order[page.bra];")
-    end = source.index("if (direct_shell_quartet_survives_screening", begin)
-    canonicalize = source[begin:end]
-    task = source.split("const ActiveShellQuartetTile task", 1)[1].split(";", 1)[0]
-    metadata = (ROOT / "src/scf/cuda/direct_metadata.hpp").read_text()
-    tile = metadata.split("struct ActiveShellQuartetTile {", 1)[1].split("};", 1)[0]
     probe = tmp_path / "pair_ids.cpp"
-    probe.write_text(
-        PAIR_ID_DRIVER.replace("// PRODUCTION_TILE_FIELDS", tile)
-        .replace("// PRODUCTION_CANONICALIZATION", canonicalize)
-        .replace("// PRODUCTION_TASK", "const ActiveShellQuartetTile task" + task + ";")
-    )
+    probe.write_text(PAIR_ID_DRIVER)
     executable = native_cxx.build_executable(
         [probe],
         tmp_path / "pair_ids",
@@ -66,25 +55,15 @@ using namespace generativeqc::scf::cuda_execution;
 // round trip must not define physical shell-pair ordering.
 int max(int a, int b) { return a > b ? a : b; }
 int min(int a, int b) { return a < b ? a : b; }
-struct ActiveShellQuartetTile {
-// PRODUCTION_TILE_FIELDS
-};
 int main() {
   const std::uint32_t values[]{0U, 1U, 2147483647U, 2147483648U,
                              std::numeric_limits<std::uint32_t>::max()};
   for (auto first : values) for (auto second : values) {
-    const std::uint32_t order[]{first, second};
-    generativeqc::scf::detail::GeneratedShellPairStream topology{};
-    topology.pair_order = order;
-    const DirectOrderSevenPairPage page{0U, 0U, 1U, 2U};
-    const struct { std::uint32_t x; } threadIdx{0U};
-    // PRODUCTION_CANONICALIZATION
-    static_assert(std::is_same_v<decltype(first_pair), const std::uint32_t>);
-    static_assert(std::is_same_v<decltype(second_pair), const std::uint32_t>);
-    // PRODUCTION_TASK
-    assert(task.first_pair == std::max(first, second));
-    assert(task.second_pair == std::min(first, second));
-    assert(task.tile == 0U);
+    const auto pairs = canonical_direct_shell_pairs(first, second);
+    static_assert(std::is_same_v<decltype(pairs.first), std::uint32_t>);
+    static_assert(std::is_same_v<decltype(pairs.second), std::uint32_t>);
+    assert(pairs.first == std::max(first, second));
+    assert(pairs.second == std::min(first, second));
   }
 }
 """
@@ -106,7 +85,7 @@ using namespace generativeqc::scf::cuda_execution;
 using Pair = std::pair<std::uint32_t, std::uint32_t>;
 
 void check(const std::vector<std::uint32_t>& bra_counts,
-           const std::vector<std::uint32_t>& ket_counts, std::mt19937& random) {
+           const std::vector<std::uint32_t>& ket_counts, std::mt19937& random, unsigned page_size) {
   const auto systems = static_cast<std::uint32_t>(bra_counts.size());
   const auto stride = systems + 1U;
   std::vector<std::uint32_t> offsets(10U * stride);
@@ -124,7 +103,7 @@ void check(const std::vector<std::uint32_t>& bra_counts,
   std::set<Pair> expected;
   std::uint64_t expected_pages = 0;
   for (unsigned system = 0; system < systems; ++system) {
-    expected_pages += std::uint64_t{bra_counts[system]} * ((ket_counts[system] + 31U) / 32U);
+    expected_pages += std::uint64_t{bra_counts[system]} * ((ket_counts[system] + page_size - 1U) / page_size);
     for (auto bra = offsets[5U * stride + system]; bra < offsets[5U * stride + system + 1U]; ++bra)
       for (auto ket = offsets[4U * stride + system]; ket < offsets[4U * stride + system + 1U]; ++ket)
         expected.emplace(std::max(pairs[bra], pairs[ket]), std::min(pairs[bra], pairs[ket]));
@@ -136,7 +115,7 @@ void check(const std::vector<std::uint32_t>& bra_counts,
       DirectOrderSevenPagePosition position{};
       DirectOrderSevenPairPage page{};
       for (std::uint64_t claim = worker;
-           direct_order_seven_pair_page(offsets.data(), systems, claim, position, page);
+           direct_order_seven_pair_page(offsets.data(), systems, claim, position, page, page_size);
            claim += workers) {
         ++pages;
         assert(page.system < systems);
@@ -144,13 +123,13 @@ void check(const std::vector<std::uint32_t>& bra_counts,
         assert(page.bra < offsets[5U * stride + page.system + 1U]);
         assert(page.ket_begin >= offsets[4U * stride + page.system]);
         assert(page.ket_end <= offsets[4U * stride + page.system + 1U]);
-        assert(page.ket_begin < page.ket_end && page.ket_end - page.ket_begin <= 32U);
+        assert(page.ket_begin < page.ket_end && page.ket_end - page.ket_begin <= page_size);
         for (auto ket = page.ket_begin; ket < page.ket_end; ++ket)
           assert(actual.emplace(std::max(pairs[page.bra], pairs[ket]),
                                 std::min(pairs[page.bra], pairs[ket])).second);
       }
       assert(!direct_order_seven_pair_page(offsets.data(), systems, expected_pages + 32U,
-                                          position, page));
+                                          position, page, page_size));
     }
     assert(pages == expected_pages && actual == expected);
   }
@@ -158,10 +137,11 @@ void check(const std::vector<std::uint32_t>& bra_counts,
 
 int main() {
   std::mt19937 random(4917);
-  check({}, {}, random);
-  check({0, 3, 0, 2, 0}, {7, 0, 0, 65, 0}, random);
+  for (unsigned page_size : {8U,16U,32U}) {
+  check({}, {}, random, page_size);
+  check({0, 3, 0, 2, 0}, {7, 0, 0, 65, 0}, random, page_size);
   for (unsigned ket : {0U, 1U, 31U, 32U, 33U, 63U, 64U, 65U})
-    check({2}, {ket}, random);
+    check({2}, {ket}, random, page_size);
   for (unsigned trial = 0; trial < 100; ++trial) {
     const auto systems = 1U + random() % 8U;
     std::vector<std::uint32_t> bra(systems), ket(systems);
@@ -169,7 +149,8 @@ int main() {
       bra[system] = random() % 11U;
       ket[system] = random() % 100U;
     }
-    check(bra, ket, random);
+    check(bra, ket, random, page_size);
+  }
   }
   const auto maximum = std::numeric_limits<std::uint32_t>::max();
   for (auto counts : {Pair{1000000U,1000000U}, Pair{1U,maximum-1U}}) {

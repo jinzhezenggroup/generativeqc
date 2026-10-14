@@ -39,7 +39,8 @@ generativeqc_status generativeqc_initial_guess_auto_kind_v1(
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA &&
        request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_AUTO &&
-       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA) ||
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA &&
+       request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_FULL_CUDA) ||
       request->restricted > 1 || request->has_ecp > 1 ||
       (request->atomic_numbers == nullptr) != (request->atom_count == 0))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

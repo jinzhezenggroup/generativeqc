@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_SCF_TYPES_HPP
 #define GENERATIVEQC_SCF_TYPES_HPP
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -76,7 +77,7 @@ struct PrecisionProvenance {
   bool strict_refinement_applied{false};
   /** Accumulated FP32 Fock rounding the admission budget certified; 0 if none. */
   double mixed_precision_reserved_error{0.0};
-  /** FP64 target-precision iterations run after the mixed iterative stage. */
+  /** Strict target iterations after a mixed or screened preliminary stage. */
   uint32_t refinement_iterations{0};
   /** Complete mixed-stage Fock/operator applications for this item. */
   uint64_t mixed_stage_fock_builds{0};
@@ -105,6 +106,11 @@ struct ScfOptions {
   double energy_tolerance{1.0e-10};
   double density_tolerance{1.0e-8};
   double screening_tolerance{1.0e-12};
+  /** Optional screened FP64 iteration stage for a nonresident CUDA physical
+   * reference. Schwarz and density-weighted J/K gates share this cutoff;
+   * final reference publication requires a fresh unscreened SCF refinement.
+   * Zero disables the preliminary stage without changing the target operator. */
+  double reference_iteration_screening_tolerance{1.0e-12};
   /** Experimental #990 exact incremental Direct-J/K controller. Off by
    * default. It is admitted only when every requested J/K term is Exact.
    * The final physical state still uses ordinary full provider builds. */
@@ -166,6 +172,9 @@ struct ScfOptions {
   enum class XcExecutionSchedule : std::uint32_t { DeviceFused = 0, HostUnfused = 1 };
   /** Placement-only semilocal XC schedule; scientific identity is unchanged. */
   XcExecutionSchedule xc_execution_schedule{XcExecutionSchedule::DeviceFused};
+  /** Requested energy, maximum force-component and RMS force-component
+   * allowances. The method owns admission; zeros preserve incumbent behavior. */
+  std::array<double, 3> application_precision_budget{};
   /** Resolved semilocal component scales; exact exchange lives only in the
    * common FockBuildSpec. Unit defaults preserve legacy LDA/PBE callers. */
   double semilocal_exchange_scale{1.0};

@@ -48,6 +48,8 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "  bool local_ao_selection{}, mixed_density_contraction{};\n"
         "};\n"
         "unsigned selected_functional; bool selected_response, selected_specialized;\n"
+        "void launch_mixed_pbe_points() { selected_functional=17; }\n"
+        "void launch_mixed_pbe_point_batches() { selected_functional=18; }\n"
         "template <unsigned F, bool R, bool S = false> void launch_points() {\n"
         "  selected_functional = F; selected_response = R; selected_specialized = S;\n}\n"
         "template <unsigned Mask> void launch_split_hybrid_points() {\n"
@@ -58,6 +60,10 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         + batch_dispatch
         + r"""
 int main() {
+  mixed_pbe_point_launcher()();
+  if(selected_functional != 17) return 13;
+  mixed_pbe_point_batch_launcher()();
+  if(selected_functional != 18) return 14;
   CudaXcPointLauncher entries[7]{};
   unsigned count = 0;
   for (unsigned f = 0; f < 6; ++f) {
@@ -97,7 +103,8 @@ int main() {
     auto launch = resolve_point_launcher(code, false);
     if (launch != &launch_split_hybrid_points<5>) return 7;
     const auto capability = resolve_point_capabilities(code, false);
-    if (capability.local_ao_selection || capability.mixed_density_contraction) return 12;
+    if (capability.local_ao_selection != (code == generated::kM062XFunctionalCode) ||
+        capability.mixed_density_contraction) return 12;
     launch();
     if (selected_functional != 5 || selected_response) return 8;
     try {

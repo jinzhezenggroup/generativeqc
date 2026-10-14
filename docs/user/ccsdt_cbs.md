@@ -48,6 +48,14 @@ only a closed-shell singlet is currently admitted.
 Supply `auxiliary_bases=(low_fit, high_fit)` to select **DF-MP2 correlation**
 extrapolation and a **DF-CCSD(T)−DF-MP2** correction. The reference is still
 conventional exact RHF in every orbital basis; this is not a DF-HF composite.
+When the CUDA reference uses nonresident direct integrals, preliminary FP64
+iterations use Schwarz and density-weighted J/K screening. The same plan then
+clears its operator-dependent DIIS history and reconverges with unscreened FP64
+integrals before publishing the reference. Final convergence and physical-frame
+checks are unchanged; this does not introduce a screened reference into the
+correlation energy or analytic forces. Resident-integral routes retain their
+existing execution policy.
+
 For a distinct correction orbital basis, also supply
 `correction_auxiliary_basis`. For example, with checked local records:
 
@@ -95,6 +103,43 @@ keeps its DF-HF reference and energy-only CUDA contract; it is not silently
 reinterpreted. Correlation-only DF-MP2 currently supports single-point/groups,
 not prepared batches or CPU fallback.
 
+## Full DF-HF/RI-JK CBS on CUDA
+
+Add `hf_reference="df"` to the workflow with explicit `auxiliary_bases` to
+use a stationary RI-JK reference throughout, not merely a DF initial guess.
+The same RI operator supplies the orbital-response actions and final residual;
+analytic forces include the three-center, auxiliary-metric, nuclear-center,
+orbital and Pulay derivatives. No four-center RHF audit is substituted into
+this different Hamiltonian. Allocation failures do not silently change it.
+
+Each supplied auxiliary record currently serves **both JK and correlation**.
+Choose and validate a fitting basis suitable for both purposes; using an
+MP2-RI basis for HF is a separate fitting approximation, not automatically
+equivalent to a JK-fit basis. Separate JK-fit and correlation-fit records
+within one orbital-basis group are not yet supported. The old default
+`hf_reference="exact"` preserves the correlation-only model and its results.
+The returned `basis_metadata["hf_reference"]` distinguishes the models.
+
+The native SCF RI-JK plan, its metric and factors stay alive through all
+same-basis HF/MP2/CCSD(T) companion responses. Correlation retains its own
+MO-source owner shared by the correlation consumers. Its construction does
+not yet borrow SCF's AO factors; this is not a claim of a single factor build
+across SCF and correlation. Different orbital-basis groups remain sequential.
+
+Standalone full-DF analytic E+F uses
+`Calculator(method="mp2", density_fitting="full_cuda", device="cuda",
+auxiliary_basis=..., correlation_memory_budget_bytes=2 << 30)`;
+`method="df-ccsd(t)"` accepts the same selector. This is distinct from legacy
+`density_fitting="cuda"` RI-MP2. Full DF currently supports single points and
+same-basis groups, not prepared batches, CPU fallback, or open-shell variants.
+
+The positive `correlation_memory_budget_bytes` bounds complete numeric
+capacity, including simultaneous host/device owners and a conservative retained
+RI-JK allowance. It is not a measured GPU-memory peak. A budget refusal does
+not authorize switching to exact RHF, omitting Lambda/response, or publishing
+energy-only work as complete E+F. Choose an explicit allowance appropriate to
+both the endpoint and available device memory.
+
 (python-cbs-values)=
 ## Scientific model and values
 
@@ -127,8 +172,9 @@ see Helgaker et al., *J. Chem. Phys.* **106**, 9639 (1997), and the
 
 Every component uses the same geometry, charge, spin, nonrelativistic
 all-electron reference and full correlated occupied space. The default uses
-exact correlation integrals; explicit auxiliaries select the correlation-only
-DF model described above. The workflow is FP64. Frozen-core, ECP and unrestricted
+exact correlation integrals; explicit auxiliaries select correlation DF, while
+`hf_reference` selects exact or RI-JK reference response. The workflow is FP64.
+Frozen-core, ECP and unrestricted
 variants are not admitted. Cardinals must be increasing integers, the larger
 bases must have distinct identities, and all bases must have the same AO
 representation. Cardinal numbers are explicit declarations; an arbitrary
@@ -192,7 +238,7 @@ density tolerances to `1e-12`/`1e-10`, CC energy/residual tolerances to
 `1e-12`/`1e-10`, with 200 SCF and 150 CC iterations. It cannot override component
 methods/bases, precision, frozen core or density fitting. Native admissibility
 checks still apply to these controls. `Calculator.singlepoint_components` also
-exposes same-reference groups directly for conventional and correlation-only
+exposes same-reference groups directly for conventional, full and correlation-only
 DF MP2/CCSD(T).
 
 (python-cbs-ownership)=

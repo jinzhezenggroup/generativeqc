@@ -12,6 +12,8 @@
 #include <string_view>
 
 #include "core/types.hpp"
+#include "dft/application_precision.hpp"
+#include "dft/global_hybrid_fock.hpp"
 #include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
@@ -209,6 +211,31 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     if (ks_input->struct_size < sizeof(generativeqc_ks_options) ||
         ks_input->abi_version != GENERATIVEQC_ABI_VERSION)
       throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
+    if (ks_input->struct_size > sizeof(generativeqc_ks_options) &&
+        ks_input->struct_size < sizeof(dft::ApplicationPrecisionKsOptions))
+      throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
+                        "incomplete application precision extension");
+    if (ks_input->struct_size >= sizeof(dft::ApplicationPrecisionKsOptions)) {
+      const auto& application =
+          *reinterpret_cast<const dft::ApplicationPrecisionKsOptions*>(ks_input);
+      const std::array<double, 3> legacy_budget{application.energy, application.maximum_force,
+                                                application.rms_force};
+      bool requested = false;
+      for (const auto allowance : legacy_budget) {
+        if (!std::isfinite(allowance) || allowance < 0.0)
+          throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                            "application precision allowances must be finite and nonnegative");
+        requested = requested || allowance != 0.0;
+      }
+      if (requested && options.application_precision_budget != std::array<double, 3>{})
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "application precision must have one method/KS transport owner");
+      if (requested && (legacy_budget[0] == 0.0 ||
+                        checked_precision_mode(descriptor) != GENERATIVEQC_PRECISION_AUTO))
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "application precision requires AUTO and an energy allowance");
+      if (requested) options.application_precision_budget = legacy_budget;
+    }
     if ((ks_input->spin_channels != 1 && ks_input->spin_channels != 2) ||
         (ks_input->exchange_terms == nullptr) != (ks_input->exchange_term_count == 0))
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "invalid compiler KS execution plan");
@@ -370,33 +397,18 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
        options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
       fock.exchange.present;
-  const double qualified_exact_exchange = semilocal_metadata.cuda_global_hybrid_exact_exchange;
-  const double expected_semilocal_exchange =
-      semilocal_metadata.component_coefficients_are_native_scales && qualified_exact_exchange > 0.0
-          ? 1.0 - qualified_exact_exchange
-          : 1.0;
-  const double spin_divisor = fock.spin == scf::FockSpin::Restricted ? 2.0 : 1.0;
-  const bool cuda_curated_global_hybrid =
-      cuda_global_hybrid && qualified_exact_exchange > 0.0 &&
-      options.semilocal_exchange_scale == expected_semilocal_exchange &&
-      options.semilocal_correlation_scale == 1.0 &&
-      fock.exchange.coefficient == -qualified_exact_exchange / spin_divisor;
-  bool cuda_split_hybrid = false;
-#if GENERATIVEQC_HAS_CUDA
-  if (cuda_global_hybrid && execution_plan.generated_split_hybrid &&
-      options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0) {
-    const auto composition =
-        dft::generated::split_hybrid_composition(ks_xc_functional_code(execution_plan));
-    if (composition.matched && composition.exact_exchange_denominator) {
-      const double exact_exchange = static_cast<double>(composition.exact_exchange_numerator) /
-                                    static_cast<double>(composition.exact_exchange_denominator);
-      const double divisor = ks_is_unrestricted(execution_plan) ? 1.0 : 2.0;
-      cuda_split_hybrid = fock.exchange.coefficient == -exact_exchange / divisor;
-    }
-  }
-#endif
+  // A single source-derived composition check covers both curated and split
+  // global hybrids. XC evaluation differs; full-range J/K does not.
+  const auto functional = ks_xc_functional_code(execution_plan);
+  const bool cuda_matched_global_hybrid =
+      cuda_global_hybrid &&
+      dft::global_hybrid_coefficients_match(fock, functional, execution_plan.spin_channels,
+                                            options.semilocal_exchange_scale,
+                                            options.semilocal_correlation_scale) &&
+      (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+       dft::cuda_global_hybrid_df_admitted(functional));
   if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
-      !cuda_curated_global_hybrid && !cuda_split_hybrid && !cuda_nonlocal)
+      !cuda_matched_global_hybrid && !cuda_nonlocal)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA scaled/global-hybrid KS composition is not qualified");
   if (execution_plan.nonlocal_correlation && !semilocal_metadata.native_nonlocal_correlation)
@@ -437,7 +449,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                         "exact-direct CUDA KS");
     if (legacy_pbe0_incremental_direct_jk) {
       const bool strict_exact_pbe0_rks =
-          cuda_curated_global_hybrid && fock.spin == scf::FockSpin::Restricted &&
+          cuda_matched_global_hybrid && fock.spin == scf::FockSpin::Restricted &&
           execution_plan.semilocal_family == dft::SemilocalFamily::Pbe;
       if (!strict_exact_pbe0_rks)
         throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,

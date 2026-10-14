@@ -24,7 +24,12 @@ PREFIX = r"""
 #include <stdexcept>
 #include <string>
 #include <utility>
-int plan_live=0, view_live=0, raw_live=0;
+int plan_live=0, view_live=0, raw_live=0, fitted_live=0;
+struct FittedReference {
+  FittedReference() { ++fitted_live; }
+  ~FittedReference() { --fitted_live; }
+  std::size_t storage_bytes() const { return 32; }
+};
 int source_failure=0;
 bool observed_df_mp2_mode=false;
 std::size_t plan_bytes=64;
@@ -83,11 +88,13 @@ struct DetachedSource : integrals::ElectronInteractionSource {
 };
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(int system, const integrals::ElectronInteractionSource* source,
-                      int,SolverOptions,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
+                      int,SolverOptions options,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
                       int* retained_df_response,
                       const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy,
                       bool df_mp2_mode) {
   observed_df_mp2_mode=df_mp2_mode;
+  if (options.max_bytes != 4096u - (fitted_live ? 32u : 0u))
+    throw std::logic_error("fitted owner missing from provider admission");
   if (df_mp2_mode && !correlation_auxiliary)
     throw std::logic_error("DF-MP2 requires its correlation auxiliary");
   if (correlation_auxiliary) {
@@ -175,7 +182,7 @@ int mp2_case(bool prepared,bool compute_forces) {
   return 0;
 }
 int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=false,bool df=false,
-            bool df_mp2_mode=false) {
+            bool df_mp2_mode=false, bool fitted=false) {
   std::unique_ptr<scf::PreparedFockPlan> owner;
   if (prepared && !optional_cuda) owner=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=owner.get();
@@ -195,6 +202,9 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=f
   const auto* reference=&reference_value;
   const int* correlation_auxiliary=df ? &system : nullptr;
   const bool retain_df_response=false;
+  if (fitted && !df) throw std::logic_error("fitted fixture needs an auxiliary");
+  auto fitted_reference=fitted ? std::make_shared<FittedReference>() : nullptr;
+  const auto fitted_bytes=fitted ? 32u : 0u;
   const scf::cuda_execution::CudaDfSourcePolicy policy;
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy=df ? &policy : nullptr;
   const bool cuda=optional_cuda || !prepared;
@@ -206,8 +216,8 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=f
         + cc_handoff
         + r"""
   const bool kept=prepared && !failure;
-  if (state.problem.reference_retained_bytes != (kept ? 164u : 100u)) return 5;
-  if (state.problem.provider_peak_bytes != (kept ? 174u : df ? 110u : 126u)) return 6;
+  if (state.problem.reference_retained_bytes != (kept ? 164u : 100u) + fitted_bytes) return 5;
+  if (state.problem.provider_peak_bytes != (kept ? 174u : df ? 110u : 126u) + fitted_bytes) return 6;
   if (raw_live || view_live || plan_live != int(kept)) return 7;
   if (provider_work != (failure ? 2 : 1) || provider_metrics != provider_work) return 11;
   if (observed_df_mp2_mode != df_mp2_mode) return 14;
@@ -234,8 +244,9 @@ int main(int argc,char** argv) {
       if (std::string(error.what())!="provider numerical failure") return 13;
     }
   }
-  else result=cc_case(false,true,0,false,true,true);
-  if (plan_live || view_live || raw_live) return 10;
+  else if (mode==16) result=cc_case(false,true,0,false,true,true);
+  else result=cc_case(false,true,0,false,true,mode==18,true);
+  if (plan_live || view_live || raw_live || fitted_live) return 10;
   return result;
 }
 """
@@ -263,7 +274,7 @@ int main(int argc,char** argv) {
 
 
 def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
-    for mode in range(17):
+    for mode in range(19):
         process = subprocess.run(
             [str(source_probe), str(mode)],
             capture_output=True,

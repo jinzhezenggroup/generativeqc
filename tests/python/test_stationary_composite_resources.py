@@ -133,6 +133,35 @@ def test_primitive_reservation_charges_both_composite_owners(spins: int) -> None
     assert bounded.sources.geometry_lanes == baseline.sources.geometry_lanes
 
 
+@pytest.mark.parametrize("spins", [1, 2])
+def test_phased_reservation_admits_both_ordinary_owners_with_bounded_fallback(
+    spins: int,
+) -> None:
+    """Ordinary phased storage is independent of experimental primitive modes."""
+    basis = SimpleNamespace(
+        **{**vars(BASIS), "natom": 96, "nao": 768, "nprimitive": 704}
+    )
+    baseline = _plan(basis, tile_points=256, spins=spins)
+    phased = _plan(basis, tile_points=256, spins=spins, phased_becke=True)
+    assert phased.sources.phased_becke_bytes > 0
+    assert not phased.sources.becke_primitive
+    assert phased.grid == baseline.grid
+    assert phased.sources.geometry_lanes == baseline.sources.geometry_lanes
+    assert (
+        phased.device_bound - baseline.device_bound
+        == 2 * phased.sources.phased_becke_bytes
+    )
+    bounded = _plan(
+        basis,
+        tile_points=256,
+        spins=spins,
+        phased_becke=True,
+        max_device_bytes=phased.device_bound - 1,
+    )
+    assert bounded.sources.phased_becke_bytes == 0
+    assert bounded.sources.geometry_lanes == baseline.sources.geometry_lanes
+
+
 def test_full_tzvpd_96_requires_explicit_complete_capacity() -> None:
     """Metadata from the unmodified offline H/O snapshot, not padded SVP.
 

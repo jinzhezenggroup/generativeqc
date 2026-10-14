@@ -22,19 +22,25 @@ from generativeqc_compiler.tensor import execute
 
 
 @pytest.mark.parametrize("shape", [(1, 1, 1, 1), (3, 7, 5, 2), (4, 31, 17, 9)])
+@pytest.mark.parametrize("dtype", ("float64", "float32"))
 def test_canonical_panel_matches_independent_jet_products(
     shape: tuple[int, ...],
+    dtype: str,
 ) -> None:
     jets, points, active, width = shape
     rng = np.random.default_rng(182)
-    ao = rng.normal(size=(jets, points, active))
-    coefficients = rng.normal(size=(active, width))
+    ao = rng.normal(size=(jets, points, active)).astype(dtype)
+    coefficients = rng.normal(size=(active, width)).astype(dtype)
     actual = execute(
-        grid_panel_program(*shape), {"ao_jets": ao, "coefficients": coefficients}
+        grid_panel_program(*shape, dtype=dtype),
+        {"ao_jets": ao, "coefficients": coefficients},
     )
     expected = np.stack([panel @ coefficients for panel in ao])
     np.testing.assert_allclose(
-        actual.outputs["projected"], expected, atol=1e-12, rtol=1e-12
+        actual.outputs["projected"],
+        expected,
+        atol=1e-12 if dtype == "float64" else 3e-6,
+        rtol=1e-12 if dtype == "float64" else 3e-6,
     )
 
 

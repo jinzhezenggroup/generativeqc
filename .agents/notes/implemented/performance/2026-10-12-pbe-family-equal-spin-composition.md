@@ -105,6 +105,27 @@ negative labels are not deleted or relabeled; positive joint-source results
 require a fresh source/build/CI identity. Host repair qualification does not
 close NVIDIA dynamic traffic, production sm90 derivatives or complete 48/96 E+F.
 
+## Composition with the explicit mixed-PBE entry
+
+The later upstream mixed-PBE consumer has separate physical serial/batch
+launchers and arithmetic. Integration retains those entries alongside the
+default-off FP64 family switch. The ordinary traversal still carries the fourth
+`static_family` template parameter through canonical physical and signed
+response evaluation; mixed-PBE selection does not become the implementation of
+that policy. Admission and consumer host probes keep both callable identities,
+the family state, response weights and prepared batch behavior observable.
+The family fixture includes the real mixed-point header but rejects that
+different kernel ABI if reached during its canonical FP64 route checks. Its
+unrelated provider-admission stub also rejects execution; compilation support
+does not grant another consumer numerical qualification.
+
+The three-file integration resolves four textual conflicts without changing
+either mathematical implementation or precision admission. The independently
+referenced family contract and the upstream mixed-point tests must both run on
+the composed source. Historical source/build/device failures remain scoped to
+their original inputs; neither prior CI nor partial sm90 objects qualify the
+new complete library or its endpoint.
+
 ## References
 
 - Supersedes the shared-traversal composition discussion in

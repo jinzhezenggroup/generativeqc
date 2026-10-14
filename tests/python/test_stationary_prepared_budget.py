@@ -108,7 +108,9 @@ def test_prepared_artifact_resources_close_when_publication_fails(
             ecp=False,
             device=0,
             spec=SimpleNamespace(partition_iterations=1),
-            grid_plan=SimpleNamespace(peak_bytes=1, allocation_bytes=1),
+            grid_plan=SimpleNamespace(
+                peak_bytes=1, allocation_bytes=1, active_ao_capacity=None
+            ),
             source_bytes=1,
             tile_points=8,
             primitive_tile=16,
@@ -178,7 +180,9 @@ def test_retained_host_budget_is_rechecked_before_rebind(
         "ecp": False,
         "device": 0,
         "spec": spec,
-        "grid_plan": SimpleNamespace(allocation_bytes=10, peak_bytes=10),
+        "grid_plan": SimpleNamespace(
+            allocation_bytes=10, peak_bytes=10, active_ao_capacity=None
+        ),
         "source_bytes": 20,
         "tile_points": 4,
         "primitive_tile": 5,
@@ -220,6 +224,19 @@ def test_retained_host_budget_is_rechecked_before_rebind(
     )
     assert pruned_request.scientific_identity == request.scientific_identity
     assert pruned_request.schedule_identity != request.schedule_identity
+    mixed_request = owner._request(
+        **{
+            name: value
+            for name, value in kwargs.items()
+            if name in inspect.signature(owner._request).parameters
+        },
+        target=target,
+        aot_directory=None,
+        native_grid_library=None,
+        fp32_semilocal_geometry=True,
+    )
+    assert mixed_request.scientific_identity == request.scientific_identity
+    assert mixed_request.schedule_identity != request.schedule_identity
     owner._lease.install(
         request,
         (

@@ -95,8 +95,10 @@ def test_prepared_admission_retains_graph_and_capacity(
     source.write_text(
         '#include "scf/types.hpp"\n'
         '#include "dft/grid.hpp"\n'
+        '#include "dft/application_precision.hpp"\n'
+        '#include "dft/semilocal_family.hpp"\n'
         '#include "dft/cuda_stationary_capacity.hpp"\n'
-        + emit_native_stationary_registry_cpp(("pbe_rks", "pbe_uks"))
+        + emit_native_stationary_registry_cpp(("pbe_rks", "pbe_uks", "m06_2x_rks"))
         + r"""
 namespace generativeqc::dft {
 std::size_t numeric(std::size_t, std::size_t, std::size_t, std::size_t,
@@ -111,6 +113,9 @@ CudaStationaryBinding make_binding(unsigned spin) {
   value.geometry_max_scratch_bytes = 4096;
   value.ao_jets = 4;
   value.numeric_bytes = numeric;
+  value.geometry_fp32 = +[](void*, const GridTaskView*, const double*, std::size_t,
+                            std::size_t, const double*, const double*, std::uint64_t,
+                            std::uint64_t, char*, std::size_t) { return 0; };
   value.model = {1, 4, spin, 3, 0.75, 1.0, 0.25};
   return value;
 }
@@ -122,11 +127,19 @@ const CudaStationaryBinding& native_stationary_profile_pbe_uks() {
   static const auto binding = make_binding(2);
   return binding;
 }
+const CudaStationaryBinding& native_stationary_profile_m06_2x_rks() {
+  static const auto binding = [] {
+    auto value = make_binding(1);
+    value.model = {131522, 4, 1, 3, 1.0, 1.0, 0.54};
+    return value;
+  }();
+  return binding;
+}
 }
 namespace generativeqc::methods::detail {
 struct NativeKsExecutionPlan {
   unsigned spin_channels{1}, functional{1}, domain{4};
-  bool range_exchange{}, nonlocal_correlation{}, d4_correction{};
+  bool range_exchange{}, nonlocal_correlation{}, d4_correction{}, generated_split_hybrid{};
 };
 unsigned ks_xc_functional_code(const NativeKsExecutionPlan& plan) { return plan.functional; }
 unsigned ks_scf_domain_version(const NativeKsExecutionPlan& plan) { return plan.domain; }
@@ -150,7 +163,7 @@ int main() {
     provider.spec.spin = spin == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted;
     provider.spec.exchange.coefficient = spin == 1 ? -0.125 : -0.25;
     dft::GridSpec grid;
-    const auto select = [&] { return native_cuda_stationary_binding(plan, options, grid, true, 1); };
+    const auto select = [&] { return native_cuda_stationary_binding(plan, options, grid, true, 1, 96, 12); };
     const auto* selected = select();
     const auto* expected = spin == 1 ? &dft::native_stationary_profile_pbe_rks()
                                      : &dft::native_stationary_profile_pbe_uks();
@@ -158,8 +171,19 @@ int main() {
     const auto capacity = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2);
     if (capacity.stationary_minimum_bytes != 1000 + 10 * spin ||
         capacity.stationary_cached_bytes != 2000 + 10 * spin) return 2;
-    if (native_cuda_stationary_binding(plan, options, grid, false, 1) ||
-        native_cuda_stationary_binding(plan, options, grid, true, 2)) return 3;
+    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12) ||
+        bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12)) != (spin == 1)) return 3;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 768, 96)) return 14;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) return 15;
+    const auto mixed = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2, true);
+    const auto extra = 4 * (8 * 2 * 2 + 2 * 2) + dft::CudaGridStorage::provider_allowance;
+    if (mixed.minimum_device_bytes != capacity.minimum_device_bytes ||
+        mixed.stationary_cached_bytes != capacity.stationary_cached_bytes ||
+        mixed.cached_grid_extra_bytes != extra ||
+        mixed.cached_device_bytes != capacity.cached_device_bytes + extra) return 10;
+    const auto receipt = dft::cuda_stationary_capacity_values(mixed);
+    if(receipt[4] != receipt[0]+receipt[1]+receipt[2] ||
+       receipt[5] != receipt[0]+receipt[1]+receipt[3]) return 11;
     ++plan.domain;
     if (select()) return 4;
     --plan.domain;
@@ -176,7 +200,46 @@ int main() {
     if (select()) return 8;
     provider.backend = scf::FockBackend::Cuda;
     if (select() != expected) return 9;
+    options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+    options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+    if (bool(select()) != (spin == 1)) return 12;
+    if (bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) != (spin == 1)) return 16;
+    options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+    if (select() != expected) return 17;
+    options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+    options.application_precision_budget[1] = 1e-7;
+    if (select()) return 13;
   }
+  NativeKsExecutionPlan split;
+  split.generated_split_hybrid = true;
+  split.functional = 131522;
+  scf::ScfOptions options;
+  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  options.resolved_fock_build.emplace();
+  auto& provider = *options.resolved_fock_build;
+  provider.backend = scf::FockBackend::Cuda;
+  provider.spec.derivative_order = 0;
+  provider.spec.spin = scf::FockSpin::Restricted;
+  provider.spec.exchange.coefficient = -0.27;
+  dft::GridSpec grid;
+  const auto select = [&](std::size_t aos, std::size_t atoms, std::size_t angular) {
+    return native_cuda_stationary_binding(split, options, grid, true, angular, aos, atoms);
+  };
+  const auto* expected = &dft::native_stationary_profile_m06_2x_rks();
+  if (select(24, 3, 2) != expected || select(96, 12, 2) != expected) return 18;
+  if (select(23, 3, 1) || select(97, 12, 1) || select(24, 1, 1) ||
+      select(96, 33, 1) || select(96, 12, 3)) return 19;
+  split.spin_channels = 2;
+  provider.spec.spin = scf::FockSpin::Unrestricted;
+  provider.spec.exchange.coefficient = -0.54;
+  if (select(24, 3, 1)) return 20;
+  split.spin_channels = 1;
+  provider.spec.spin = scf::FockSpin::Restricted;
+  provider.spec.exchange.coefficient = -0.27;
+  options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  if (select(24, 3, 2)) return 21;
+  options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+  if (select(24, 3, 2) != expected) return 22;
 }
 """
     )

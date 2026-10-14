@@ -141,6 +141,30 @@ def test_public_ecp_force_analytic_and_reconverged_fd(
         )
 
 
+def assert_ecp_force_work(
+    batch: typing.Any, successful_indices: tuple[int, ...] = (0, 1)
+) -> list[dict[str, typing.Any]]:
+    """Only successful compatibility consumers publish generated-force work."""
+    assert not batch._native_dft_force_eligible(0)
+    native_fragment = batch._native_dft_force_eligible(1)
+    if batch._calculator._device_name == "cpu":
+        assert native_fragment, "the all-electron fragment lost native force admission"
+    selected = getattr(
+        batch._library, "generativeqc_ks_batch_execute_selected_forces_v1", None
+    )
+    # A library without the additive bridge still routes the whole mixed fleet
+    # through compatibility consumers. Native work belongs to the native ledger.
+    compatibility_indices = (0,) if native_fragment and selected else (0, 1)
+    work = batch.resource_diagnostics["generated_force"]
+    assert [item["index"] for item in work] == [
+        index for index in compatibility_indices if index in successful_indices
+    ]
+    for item in work:
+        samples = item["work"]["ecp_quadrature_pair_samples"]
+        assert samples > 0 if item["index"] == 0 else samples == 0
+    return work
+
+
 @pytest.mark.parametrize("method", ["pbe-rks", "pbe-uks"])
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
@@ -187,9 +211,11 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         started = perf_counter()
         cold = batch.execute(strict=True)
         record_property("batch_cold_seconds", perf_counter() - started)
+        assert_ecp_force_work(batch)
         started = perf_counter()
         warm = batch.execute(strict=True)
         record_property("batch_warm_seconds", perf_counter() - started)
+        assert_ecp_force_work(batch)
         assert all(item.warm_start_used for item in warm.items)
         for a, b in zip(cold.items, warm.items, strict=True):
             np.testing.assert_allclose(a.forces, b.forces, atol=1e-9, rtol=0)
@@ -199,6 +225,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         started = perf_counter()
         replay = batch.execute(coordinates=[moved, None], strict=True)
         record_property("batch_changed_geometry_seconds", perf_counter() - started)
+        assert_ecp_force_work(batch)
         fresh_atoms = [(a, r) for (a, _), r in zip(atoms, moved, strict=True)]
         fresh = calc.singlepoint(fresh_atoms, charge=charge, multiplicity=multiplicity)
         np.testing.assert_allclose(
@@ -206,6 +233,7 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
         )
         assert np.max(np.abs(replay.items[0].forces - cold.items[0].forces)) > 1e-5
         failed = batch.execute(coordinates=[[0.0], None])
+        assert_ecp_force_work(batch, successful_indices=(1,))
         assert not failed.items[0].succeeded and failed.items[0].forces is None
         assert failed.items[1].succeeded
         np.testing.assert_allclose(
@@ -216,11 +244,9 @@ def test_public_ecp_budgeted_ragged_replay_and_failure_recovery(
             restored.items[0].forces, cold.items[0].forces, atol=1e-9, rtol=0
         )
         record_property("planned_peaks", dict(plan.peak_bytes))
-        work = batch.resource_diagnostics["generated_force"]
-        assert [item["index"] for item in work] == [0, 1]
-        assert work[0]["work"]["ecp_quadrature_pair_samples"] > 0
-        assert work[1]["work"]["ecp_quadrature_pair_samples"] == 0
-        for index, item in enumerate(work):
+        work = assert_ecp_force_work(batch)
+        for item in work:
+            index = item["index"]
             generated = item["work"]
             if component_execution == "python" and index == 1:
                 # The s-only fragment deliberately uses the legacy primitive baseline.
@@ -447,6 +473,16 @@ def check_spd_arbitrary_ordered_weights_against_libcint_energy_differences(
             assert candidate.records == before
             _, zero = candidate.integral("four_center_eri", (8, 8, n - 1, n - 1), 0.0)
             np.testing.assert_array_equal(zero, 0)
+
+
+def test_legacy_library_retains_ecp_and_fragment_work(
+    monkeypatch: typing.Any, record_property: typing.Any
+) -> None:
+    """Preserve whole-fleet work and Python/native component parity without v1."""
+    monkeypatch.setattr(
+        _native.load_library(), "generativeqc_ks_batch_execute_selected_forces_v1", None
+    )
+    check_spd_paired_endpoint("spherical", monkeypatch, record_property)
 
 
 def check_spd_paired_endpoint(

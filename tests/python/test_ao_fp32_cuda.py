@@ -38,7 +38,9 @@ def fp32_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     end = policy.index(";", policy.index("__constant__ int derivatives")) + 1
     kernels = emit_grid_scientific_kernels(ao_radial_reuse=True)
     begin = kernels.index("__global__ void ao_kernel(")
-    end_kernels = kernels.index("__global__ void feature_kernel(")
+    end_kernels = kernels.rfind(
+        "template <", 0, kernels.index("__global__ void feature_kernel(")
+    )
     source = directory / "probe.cu"
     source.write_text(
         "#include <cuda_runtime.h>\n#include <cmath>\n#include <cstddef>\n"

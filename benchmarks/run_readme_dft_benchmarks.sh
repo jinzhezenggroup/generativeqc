@@ -49,6 +49,11 @@ for method in ${README_BENCHMARK_METHODS:-hf pbe pbe0 b3lyp r2scan r2scan-3c m06
                 # produce explicit unchecked timings, never passing accuracy.
                 extra+=(--allow-missing-reference)
                 extra+=(--reference "$directory/reference.json")
+                # Accuracy-only reconverged geometries do not replace the
+                # original partial/failed reference timing population.
+                for oracle in "$directory"/accuracy-reference-*.json; do
+                    [[ ! -f "$oracle" ]] || extra+=(--accuracy-reference "$oracle")
+                done
             fi
             result=0
             timeout --kill-after=10 "$readme_timeout" "$readme_python" -m benchmarks.readme_dft \

@@ -402,7 +402,12 @@ and performance qualification of a common CUDA geometry executor.
 A method listing alone never certifies forces: exact preparation and available
 resource capacity remain authoritative.
 
-CUDA DF DFT forces, ECP, d/f-shell force contexts, ωB97M-V and correction-bearing
+Strict PBE0/RKS also admits the native d-shell force consumer for 24–384 AOs
+and 2–32 atoms. This exact executor improvement is shared with ordinary FP64;
+the Python [application precision policy](application_precision.md) separately
+selects budget-qualified FP32 arithmetic.
+
+CUDA DF DFT forces, ECP, remaining d/f-shell force contexts, ωB97M-V and correction-bearing
 MethodIR forces are **not** enabled by this native CUDA path. CPU B3LYP UKS
 also remains unqualified. Unsupported `--forces` requests fail before execution
 rather than publishing incomplete gradients. Run

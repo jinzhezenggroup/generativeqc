@@ -15,7 +15,7 @@ import os
 import threading
 import typing
 from contextlib import ExitStack, contextmanager, nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
@@ -569,6 +569,10 @@ def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.A
     return primitives, aos, expansions, requests
 
 
+class _Fp32GeometryUnavailable(NotImplementedError):
+    """Optional mixed transport/proof absent; not a numerical or driver failure."""
+
+
 class _CudaSources:
     """Serialized finite owner; bounded AO tasks expand primitives only on CUDA.
 
@@ -598,9 +602,17 @@ class _CudaSources:
         becke_primitive: bool | int | None = None,
         becke_normalize: bool | None = None,
         restricted_point: bool | None = None,
+        fp32_geometry: bool = False,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
+        if type(fp32_geometry) is not bool:
+            raise TypeError("FP32 geometry selection must be boolean")
+        if fp32_geometry and profile_device:
+            raise ValueError(
+                "FP32 geometry requires the unprofiled resident-weight consumer"
+            )
+        self.fp32_geometry_requested = fp32_geometry
         if becke_normalize is not None and type(becke_normalize) is not bool:
             raise TypeError("Becke normalization selection must be boolean or None")
         zero_seed = _resolve_becke_zero_seed_policy()
@@ -796,6 +808,23 @@ class _CudaSources:
                 ct.c_uint64,
                 *tail,
             ]
+        mixed_enqueue = getattr(
+            lib, "stationary_geometry_molecular_resident_weights_fp32_enqueue_v1", None
+        )
+        if fp32_geometry and (
+            mixed_enqueue is None
+            or not hasattr(lib, "stationary_geometry_precision_metrics_v1")
+        ):
+            raise _Fp32GeometryUnavailable(
+                "stationary artifact lacks FP32 geometry transport or work counters"
+            )
+        if mixed_enqueue is not None:
+            mixed_enqueue.argtypes = [
+                *molecular_resident_weight_args[:-2],
+                ct.c_uint64,
+                ct.c_uint64,
+                *tail,
+            ]
         resident_molecular_resident_weight_args = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -941,7 +970,16 @@ class _CudaSources:
         )
 
     def _call(self, name: typing.Any, *args: typing.Any) -> None:
-        checked_native_call(getattr(self.library, name), *args)
+        checked_native_call(
+            getattr(self.library, name),
+            *args,
+            status_error_types={
+                2: MemoryError,
+                3: MemoryError,
+                4: OSError,
+                5: ArithmeticError,
+            },
+        )
 
     def enable_profile(self) -> None:
         if self.profile_device:
@@ -1526,7 +1564,12 @@ class _CudaSources:
         functional: typing.Any = None,
         pbe: typing.Any = None,
     ) -> None:
-        """Consume resident partition weights and implicit molecular-grid owners."""
+        """Consume resident weights; experimental FP32 requires a live density proof.
+
+        The explicit candidate does not silently widen if the transport or
+        producer is missing. Its caller owns complete-endpoint qualification
+        and any bounded strict retry; external nonlocal seeds stay strict.
+        """
         view = task.view
         if task._owner.device_id != self.device:
             raise ValueError("stationary/grid current owner device mismatch")
@@ -1569,6 +1612,25 @@ class _CudaSources:
             return
         jets = _stationary_density_jet_count(functional)
         binding = getattr(task, "density_jets_binding", None)
+        if getattr(self, "fp32_geometry_requested", False):
+            if binding is None:
+                raise _Fp32GeometryUnavailable(
+                    "FP32 geometry requires a current density binding"
+                )
+            work, flags = binding(jets)
+            self._call(
+                "stationary_geometry_molecular_resident_weights_fp32_enqueue_v1",
+                self.handle,
+                ct.byref(view),
+                work,
+                owner_offset,
+                points_per_atom,
+                device_weights,
+                ct.cast(device_raw, _DOUBLE),
+                view.generation,
+                flags,
+            )
+            return
         restricted_enqueue = getattr(
             self.library,
             "stationary_geometry_molecular_resident_weights_enqueue_v2",
@@ -1921,6 +1983,29 @@ class _CudaSources:
         metrics["restricted_point_requested"] = int(
             getattr(self, "restricted_point_requested", False)
         )
+        precision_metrics = getattr(
+            self.library, "stationary_geometry_precision_metrics_v1", None
+        )
+        if precision_metrics is not None:
+            precision_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            precision_values = (ct.c_uint64 * 3)()
+            if precision_metrics(self.handle, precision_values, 3):
+                raise RuntimeError("stationary geometry precision metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "fp32_geometry_capable",
+                        "fp32_geometry_batches",
+                        "fp32_geometry_points",
+                    ),
+                    precision_values,
+                    strict=True,
+                )
+            )
         if point_metrics is not None:
             metrics["restricted_point_capable"] = int(point_values[0])
             metrics.update(
@@ -2180,6 +2265,7 @@ class PreparedStationaryCudaExecution:
         self.preparation_seconds = 0.0
         self._resident_ao_maps = None
         self._resident_ao_map_key = None
+        self._attempt_source_metrics = None
 
     @property
     def identity(self) -> str | None:
@@ -2220,6 +2306,7 @@ class PreparedStationaryCudaExecution:
         resident_ao_producer: str = "sampled-jets",
         resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
+        fp32_semilocal_geometry: bool = False,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
         scientific_identity = canonical_hash(
@@ -2249,8 +2336,10 @@ class PreparedStationaryCudaExecution:
                 "integral_terms": integral_terms,
                 "primitive_page_work_budget": page_work_budget,
                 "primitive_integral_derivatives": integral_derivatives,
+                "fp32_semilocal_geometry": fp32_semilocal_geometry,
                 "pbe0_restricted_point": _resolve_restricted_point_policy(),
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
+                "grid_features_only": getattr(grid_plan, "features_only", False),
                 "resident_ao_cutoff": resident_ao_cutoff,
                 "resident_ao_cache_bytes": resident_ao_cache_bytes,
                 "resident_ao_producer": resident_ao_producer,
@@ -2323,6 +2412,7 @@ class PreparedStationaryCudaExecution:
         resident_ao_producer: str = "sampled-jets",
         resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
+        fp32_semilocal_geometry: bool = False,
     ) -> None:
         if self._lease.closed:
             raise RuntimeError("prepared stationary CUDA execution is closed")
@@ -2363,6 +2453,7 @@ class PreparedStationaryCudaExecution:
             resident_ao_producer=resident_ao_producer,
             resident_ao_max_active_fraction=resident_ao_max_active_fraction,
             integral_derivatives=integral_derivatives,
+            fp32_semilocal_geometry=fp32_semilocal_geometry,
         )
         if self._lease.contract is not None:
             try:
@@ -2480,7 +2571,8 @@ class PreparedStationaryCudaExecution:
                     tile_points=tile_points,
                     budget_bytes=grid_plan.peak_bytes,
                     device_id=device,
-                    active_ao_capacity=basis.nao,
+                    active_ao_capacity=grid_plan.active_ao_capacity,
+                    features_only=getattr(grid_plan, "features_only", False),
                     ingredients=(
                         ("rho", "gradient", "tau") if needs_first else ("rho",)
                     ),
@@ -2501,6 +2593,7 @@ class PreparedStationaryCudaExecution:
                     page_work_budget=page_work_budget,
                     profile_device=profile_device,
                     integral_derivatives=integral_derivatives,
+                    fp32_geometry=fp32_semilocal_geometry,
                 )
             )
             tensors = {
@@ -2582,14 +2675,28 @@ class PreparedStationaryCudaExecution:
             },
         )
 
+    def _discard_resources(self) -> None:
+        """Drain borrowed streams before invalidating a rejected execution.
+
+        Unlike close(), this keeps the public owner reusable for a bounded
+        strict retry. Its next ensure() must re-admit and rebuild all resources.
+        The caller holds the execution lock and no source may escape this drain.
+        """
+        self._resident_ao_maps = None
+        self._resident_ao_map_key = None
+        if self._stack is not None:
+            self._stack.close()
+            self._stack = None
+        self._lease.invalidate()
+        self._attempt_source_metrics = None
+
     def close(self) -> None:
         with self._lock:
-            self._lease.close()
-            self._resident_ao_maps = None
-            self._resident_ao_map_key = None
-            if self._stack is not None:
-                self._stack.close()
-                self._stack = None
+            if not self._lease.closed:
+                try:
+                    self._discard_resources()
+                finally:
+                    self._lease.close()
 
     def __enter__(self) -> typing.Any:
         return self
@@ -2663,6 +2770,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "restricted_point_count",
         "general_point_batches",
         "general_point_count",
+        "fp32_geometry_batches",
+        "fp32_geometry_points",
         *_BECKE_PHASE_COUNTER_NAMES,
     ):
         if name in after and name in before:
@@ -2728,6 +2837,8 @@ def _plan_stationary_cuda_tile(
     max_device_bytes: int,
     max_host_bytes: int,
     max_ecp_pair_samples: int,
+    reserve_active_ao: bool = True,
+    features_only: bool = False,
 ) -> _StationaryCudaTileLayout:
     """Retain the ordinary force owner inventory for each candidate tile.
 
@@ -2741,7 +2852,11 @@ def _plan_stationary_cuda_tile(
         backend="cuda",
         order=2 if needs_first else 1,
         tile_points=tile_points,
-        active_ao_capacity=n,
+        # Indexed density preparation owns additional dense packing/validation
+        # buffers. A consumer without AO maps must use the dense contract, so
+        # unused optional storage cannot exclude an otherwise bounded force.
+        active_ao_capacity=n if reserve_active_ao else None,
+        features_only=features_only,
         budget_bytes=max_device_bytes,
     )
     # Admit the bounded fallback first. Optional lane expansion uses only the
@@ -2926,6 +3041,40 @@ def _plan_stationary_cuda_tile(
     )
 
 
+def _plan_stationary_optional_ao_schedule(
+    *,
+    grid_points: int,
+    tile_points: int | None,
+    preferred_tile_points: int,
+    requested_maps: bool,
+    admit: typing.Callable[[int, bool], tuple[_StationaryCudaTileLayout, typing.Any]],
+) -> tuple[_StationaryCudaTileLayout, typing.Any, str | None]:
+    """Admit optional indexed storage, retaining the complete dense fallback.
+
+    Both searches are dry and include every concurrent owner's original caps.
+    Retrying cannot bypass a grid/work/explicit-tile rejection: dense admission
+    rechecks those same constraints. No native allocation or execution is retried.
+    """
+
+    def choose(indexed: bool) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+        return plan_stationary_cuda_grid_schedule(
+            grid_points=grid_points,
+            tile_points=tile_points,
+            admit=lambda points: admit(points, indexed),
+            preferred_tile_points=preferred_tile_points,
+        )
+
+    try:
+        layout, work = choose(requested_maps)
+        return layout, work, None
+    except ValueError as error:
+        if not requested_maps:
+            raise
+        indexed_rejection = str(error)
+    layout, work = choose(False)
+    return layout, work, indexed_rejection
+
+
 def _stationary_ao_map_reserve(
     cutoff: float | None, requested_bytes: int, host_bound: int, max_host_bytes: int
 ) -> int:
@@ -3067,6 +3216,7 @@ def _complete_rks_cuda_gradient_diagnostic(
     resident_ao_cache_bytes: int = 16 << 20,
     resident_ao_producer: str = "sampled-jets",
     resident_ao_max_active_fraction: float = 1.0,
+    fp32_semilocal_geometry: bool = False,
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
@@ -3086,7 +3236,17 @@ def _complete_rks_cuda_gradient_diagnostic(
     charges (nine sources). Its small dense export is separately budgeted and
     preserves the checked native two-grid gate. The public wrapper restricts ECP
     force capability to Cartesian/real-spherical s/p records.
+
+    The private FP32 geometry candidate changes only its typed semilocal
+    consumer, never the fitted metric/three-center response or final SCF state.
+    It requires a current producer proof and reports actual candidate launches.
+    It does not itself grant Fast admission. The public policy validates the
+    complete fitted model separately; the wrapper owns bounded retry.
     """
+    if type(fp32_semilocal_geometry) is not bool:
+        raise TypeError("FP32 semilocal geometry selection must be boolean")
+    if prepared is not None:
+        prepared._attempt_source_metrics = None
     timeline = _ExclusiveWallTimeline()
     contract = StationaryDerivativeContract(state.identity)
     contract.validate(state)
@@ -3213,7 +3373,16 @@ def _complete_rks_cuda_gradient_diagnostic(
     needs_first = "sigma" in ingredients
     device = int(state._source.metadata[12])
 
-    def admit_tile(points: int) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+    # Validate the requested optional policy even if indexed capacity is later
+    # declined, so fallback cannot conceal a malformed cutoff or cache budget.
+    _stationary_ao_map_reserve(
+        resident_ao_cutoff, resident_ao_cache_bytes, 0, max_host_bytes
+    )
+    requested_resident_ao_cutoff = resident_ao_cutoff
+
+    def admit_tile(
+        points: int, reserve_active_ao: bool
+    ) -> tuple[_StationaryCudaTileLayout, typing.Any]:
         work = plan_stationary_cuda_grid_work(
             atoms=na,
             grid_points=len(state.grid.points),
@@ -3237,6 +3406,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             max_device_bytes=max_device_bytes,
             max_host_bytes=max_host_bytes,
             max_ecp_pair_samples=max_ecp_pair_samples,
+            reserve_active_ao=reserve_active_ao,
+            features_only=True,
         )
         # Prepared ECP retains all tensor owners simultaneously. Its later lease
         # admission charges their host storage in addition to the ordinary bound;
@@ -3262,12 +3433,15 @@ def _complete_rks_cuda_gradient_diagnostic(
         and callable(getattr(state._source, "stationary_integral_device_reserve", None))
         else 512
     )
-    layout, grid_work = plan_stationary_cuda_grid_schedule(
+    layout, grid_work, ao_capacity_fallback = _plan_stationary_optional_ao_schedule(
         grid_points=len(state.grid.points),
         tile_points=tile_points,
         admit=admit_tile,
         preferred_tile_points=preferred_tile_points,
+        requested_maps=resident_ao_cutoff is not None,
     )
+    if ao_capacity_fallback is not None:
+        resident_ao_cutoff = None
     grid_plan = layout.grid_plan
     tensor_plans = layout.tensor_plans
     host_bound = layout.host_bound
@@ -3392,6 +3566,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 resident_ao_producer=resident_ao_producer,
                 resident_ao_max_active_fraction=resident_ao_max_active_fraction,
                 integral_derivatives=primitive_demand.integral_derivatives,
+                fp32_semilocal_geometry=fp32_semilocal_geometry,
             )
         artifact = prepared.stationary_artifact
         grid_artifact = prepared.grid_artifact
@@ -3448,7 +3623,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                         tile_points=tile_points,
                         budget_bytes=grid_plan.peak_bytes,
                         device_id=device,
-                        active_ao_capacity=n,
+                        active_ao_capacity=grid_plan.active_ao_capacity,
+                        features_only=getattr(grid_plan, "features_only", False),
                         # GGA/meta-GGA geometry needs all four D*jet panels; r2SCAN
                         # additionally consumes tau from the same current density.
                         ingredients=("rho", "gradient", "tau")
@@ -3472,6 +3648,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         timeline=timeline,
                         profile_device=profile_device,
                         integral_derivatives=primitive_demand.integral_derivatives,
+                        fp32_geometry=fp32_semilocal_geometry,
                     )
                 )
             source_before = grid_before = None
@@ -3480,6 +3657,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             sources.timeline = timeline
             with timeline.phase("metrics_collection"):
                 source_before, grid_before = sources.metrics(), ao.metrics()
+            prepared._attempt_source_metrics = source_before
         if profile_device:
             ao.profile_stages()
         native_integral_components = None
@@ -3967,6 +4145,8 @@ def _complete_rks_cuda_gradient_diagnostic(
     )
     timeline.switch("publication_metadata")
     work.update(
+        fp32_semilocal_geometry_requested=fp32_semilocal_geometry,
+        fp64_geometry_retries=0,
         ecp_provider="generated-cuda/two-grid/dense-host-export" if ecp else None,
         ecp_provider_workspace_bound=ecp_workspace,
         ecp_state_export=(
@@ -3984,7 +4164,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         },
         resident_ao_selection={
             "schema": "generativeqc.stationary-resident-ao-selection.v1",
-            "mode": "disabled"
+            "requested_cutoff": requested_resident_ao_cutoff,
+            "capacity_fallback": ao_capacity_fallback,
+            "mode": "dense-capacity-fallback"
+            if ao_capacity_fallback is not None
+            else "disabled"
             if resident_ao_cutoff is None
             else (
                 "dense-no-resident-grid" if ao_maps is None else resident_ao_producer
@@ -4244,8 +4428,18 @@ def complete_rks_cuda_gradient_diagnostic(
     resident_ao_cache_bytes: int = 16 << 20,
     resident_ao_producer: str = "sampled-jets",
     resident_ao_max_active_fraction: float = 1.0,
+    fp32_semilocal_geometry: bool = False,
 ) -> typing.Any:
-    """Execute once, optionally retaining validated CUDA owners for later replay."""
+    """Execute complete sources, optionally retaining owners for later replay.
+
+    Only an explicit candidate with positive mixed work and a typed numerical
+    failure can retry. Drain and discard all sources first, then execute once
+    in strict arithmetic at the same authenticated state. Allocation, driver,
+    identity failures never authorize a retry. Missing optional mixed transport
+    has a separate strict replay, recorded as capability fallback, not numerical
+    recovery. Neither replay recursively retries a failed strict execution.
+    """
+    started = perf_counter()
     kwargs = {
         "compiler": compiler,
         "cache": cache,
@@ -4269,9 +4463,14 @@ def complete_rks_cuda_gradient_diagnostic(
         "resident_ao_cache_bytes": resident_ao_cache_bytes,
         "resident_ao_producer": resident_ao_producer,
         "resident_ao_max_active_fraction": resident_ao_max_active_fraction,
+        "fp32_semilocal_geometry": fp32_semilocal_geometry,
     }
     if prepared is None:
-        return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+        if not fp32_semilocal_geometry:
+            return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+        with PreparedStationaryCudaExecution() as temporary:
+            kwargs["prepared"] = temporary
+            return complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
     if not isinstance(prepared, PreparedStationaryCudaExecution):
         raise TypeError("prepared CUDA execution has the wrong owner type")
     with prepared._lock:
@@ -4280,9 +4479,60 @@ def complete_rks_cuda_gradient_diagnostic(
         if prepared._lease.running:
             raise RuntimeError("prepared stationary CUDA execution is running")
         try:
-            result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+            try:
+                result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+            except _Fp32GeometryUnavailable as error:
+                if not fp32_semilocal_geometry:
+                    raise
+                baseline = prepared._attempt_source_metrics
+                attempts = (
+                    {}
+                    if baseline is None
+                    else _metric_delta(prepared.sources.metrics(), baseline)
+                )
+                prepared._lease.mark_failure()
+                prepared._discard_resources()
+                kwargs["fp32_semilocal_geometry"] = False
+                result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+                result = replace(
+                    result,
+                    work=MappingProxyType(
+                        {
+                            **result.work,
+                            "fp32_semilocal_geometry_requested": True,
+                            "fp32_geometry_unavailable": str(error),
+                            "rejected_semilocal_work": attempts,
+                            "endpoint_seconds": perf_counter() - started,
+                        }
+                    ),
+                )
+            except ArithmeticError:
+                baseline = prepared._attempt_source_metrics
+                if not fp32_semilocal_geometry or baseline is None:
+                    raise
+                attempts = _metric_delta(prepared.sources.metrics(), baseline)
+                if not attempts.get("fp32_geometry_points", 0):
+                    raise
+                prepared._lease.mark_failure()
+                prepared._discard_resources()
+                kwargs["fp32_semilocal_geometry"] = False
+                result = _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+                result = replace(
+                    result,
+                    work=MappingProxyType(
+                        {
+                            **result.work,
+                            "fp32_semilocal_geometry_requested": True,
+                            "fp64_geometry_retries": 1,
+                            "rejected_semilocal_work": attempts,
+                            "endpoint_seconds": perf_counter() - started,
+                        }
+                    ),
+                )
         except BaseException:
             prepared._lease.mark_failure()
+            if fp32_semilocal_geometry:
+                prepared._discard_resources()
             raise
         prepared._lease.mark_success()
         return result

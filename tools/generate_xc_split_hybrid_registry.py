@@ -65,6 +65,43 @@ def _manifest_methods(path: Path = MANIFEST) -> tuple[str, ...]:
     return tuple(methods)
 
 
+def _manifest_cuda_df_energy_force(path: Path = MANIFEST) -> frozenset[str]:
+    """Qualify CUDA fitted J/K and complete stationary-force composition."""
+    methods = _manifest_methods(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    selected = payload.get("cuda_df_energy_force", [])
+    if (
+        not isinstance(selected, list)
+        or any(not isinstance(name, str) or name not in methods for name in selected)
+        or len(set(selected)) != len(selected)
+    ):
+        raise MapleImportError(
+            "CUDA DF split-hybrid qualification requires unique registered methods"
+        )
+    return frozenset(selected)
+
+
+def _manifest_cuda_fp64_local_ao(path: Path = MANIFEST) -> frozenset[str]:
+    """Select independently qualified FP64 indexed density/potential consumers.
+
+    AO truncation qualification is separate from fitted J/K, mixed precision,
+    response, and graph replay: none of those capabilities implies another.
+    """
+    methods = _manifest_methods(path)
+    selected = json.loads(path.read_text(encoding="utf-8")).get(
+        "cuda_fp64_local_ao", []
+    )
+    if (
+        not isinstance(selected, list)
+        or any(not isinstance(name, str) or name not in methods for name in selected)
+        or len(set(selected)) != len(selected)
+    ):
+        raise MapleImportError(
+            "CUDA FP64 local-AO qualification requires unique registered methods"
+        )
+    return frozenset(selected)
+
+
 def _records() -> dict[str, dict]:
     return {
         record["name"]: record for record in libxc_bulk.read_catalog()["registrations"]
@@ -87,6 +124,8 @@ def _method_code(identifier: str, family: str, exchange_registration: str) -> in
 
 
 def registry_entries(path: Path = MANIFEST) -> tuple[dict[str, object], ...]:
+    qualified_df = _manifest_cuda_df_energy_force(path)
+    qualified_local_ao = _manifest_cuda_fp64_local_ao(path)
     entries = []
     codes = set()
     for identifier in _manifest_methods(path):
@@ -114,6 +153,8 @@ def registry_entries(path: Path = MANIFEST) -> tuple[dict[str, object], ...]:
                 "correlation_registration": method.correlation_registration,
                 "exact_exchange_numerator": method.exact_exchange.numerator,
                 "exact_exchange_denominator": method.exact_exchange.denominator,
+                "cuda_df_energy_force": identifier in qualified_df,
+                "cuda_fp64_local_ao": identifier in qualified_local_ao,
             }
         )
     return tuple(entries)
@@ -145,6 +186,16 @@ def emit_registry(path: Path = MANIFEST) -> str:
     )
     registration_cases = "\n".join(
         f"    case 0x{entry['code']:x}U:" for entry in entries
+    )
+    df_cases = "\n".join(
+        f"    case 0x{entry['code']:x}U:"
+        for entry in entries
+        if entry["cuda_df_energy_force"]
+    )
+    local_ao_cases = "\n".join(
+        f"    case 0x{entry['code']:x}U: return true;"
+        for entry in entries
+        if entry["cuda_fp64_local_ao"]
     )
     mgga_cases = "\n".join(
         f"    case 0x{entry['code']:x}U:"
@@ -238,6 +289,15 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "      return false;",
             "  }",
             "}",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_cuda_df_energy_force(",
+            "    std::uint32_t functional) noexcept {",
+            "  switch (functional) {",
+            df_cases,
+            "      return true;",
+            "    default:",
+            "      return false;",
+            "  }",
+            "}",
             "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_is_mgga(",
             "    std::uint32_t functional) noexcept {",
             "  switch (functional) {",
@@ -245,6 +305,14 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "      return true;",
             "    default:",
             "      return false;",
+            "  }",
+            "}",
+            "// Qualification applies to FP64 physical density/potential only.",
+            "GENERATIVEQC_SPLIT_HYBRID_HD inline constexpr bool split_hybrid_fp64_local_ao(",
+            "    std::uint32_t functional) noexcept {",
+            "  switch (functional) {",
+            local_ao_cases,
+            "    default: return false;",
             "  }",
             "}",
             "inline constexpr CudaXcFastPathCapabilities split_hybrid_fast_path_capabilities(",
@@ -307,6 +375,8 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
                 f'            ({json.dumps(entry["correlation_registration"])}, "1"),',
                 "        ),",
                 f'        "exact_exchange": "{entry["exact_exchange_numerator"]}/{entry["exact_exchange_denominator"]}",',
+                f'        "cuda_df_energy_force": {entry["cuda_df_energy_force"]},',
+                f'        "cuda_fp64_local_ao": {entry["cuda_fp64_local_ao"]},',
                 "    })),",
             ]
         )
@@ -325,6 +395,8 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
             "    functional_code: int",
             "    components: tuple[tuple[str, str], ...]",
             "    exact_exchange: str",
+            "    cuda_df_energy_force: bool",
+            "    cuda_fp64_local_ao: bool",
             "",
             "",
             "SPLIT_HYBRIDS: Mapping[str, SplitHybridRecord] = MappingProxyType({",

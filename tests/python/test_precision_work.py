@@ -6,8 +6,115 @@ import ctypes
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from generativeqc import _native
-from generativeqc._precision_work import merge_precision_work, query_precision_work
+from generativeqc._precision_work import (
+    merge_precision_work,
+    query_gradient_precision,
+    query_precision_work,
+)
+
+
+def test_gradient_decoder_reports_attempts_and_retry_without_fabricating_counts() -> (
+    None
+):
+    observed = []
+
+    def getter(handle: object, index: int, output: Any, count: int) -> int:
+        observed.append(index)
+        assert count == 5
+        output[:] = [1, 1, 500, 400, 1]
+        return _native.STATUS_SUCCESS
+
+    library = SimpleNamespace(generativeqc_batch_gradient_precision_v1=getter)
+    record = query_gradient_precision(library, None, 3)
+    assert observed == [3]
+    assert record["returned_mode"] == "fp64"
+    assert record["fp64_gradient_retries"] == 1
+    assert record["attempted_fp32_geometry_points"] == 500
+    assert record["attempted_fp32_grid_points"] == 400
+    assert record["weighted_task_retries"] is None
+    assert not record["weighted_task_counters_collected"]
+    assert query_gradient_precision(SimpleNamespace(), None) is None
+
+
+@pytest.mark.parametrize(
+    "qualification,expected",
+    ((1, "pbe0"), (2, "pbe"), (3, "b3lyp"), (4, "r2scan"), (6, "m06-2x"), (99, None)),
+)
+def test_gradient_v2_does_not_infer_a_model_from_scf(
+    qualification: int, expected: str | None
+) -> None:
+    def getter(handle: object, output: Any, count: int) -> int:
+        assert count == 6
+        output[:] = [1, 1, 700, 600, 0, qualification]
+        return _native.STATUS_SUCCESS
+
+    record = query_gradient_precision(
+        SimpleNamespace(generativeqc_calculation_gradient_precision_v2=getter), None
+    )
+    assert record["schema_version"] == 2
+    assert record["qualification"] == (
+        f"{expected}-rks-budget-fp32-v1" if expected else "unknown"
+    )
+    assert record["returned_mode"] == "mixed"
+    assert record["attempted_fp32_geometry_points"] == 700
+    assert ("xc_cartesian_conversion" in record["fp64_components"]) == (
+        qualification in (3, 4, 6)
+    )
+
+
+@pytest.mark.parametrize("collected,retries", ((False, 0), (True, 2), (True, 12)))
+def test_gradient_v3_distinguishes_per_item_counts_from_unavailable(
+    collected: bool, retries: int
+) -> None:
+    def getter(handle: object, index: int, output: Any, count: int) -> int:
+        assert index == 2 and count == 10
+        output[:] = [1, 1, 0, 0, 0, 5, int(collected), 12, 96, retries]
+        return _native.STATUS_SUCCESS
+
+    record = query_gradient_precision(
+        SimpleNamespace(generativeqc_batch_gradient_precision_v3=getter), None, 2
+    )
+    assert record["qualification"] == "rhf-budget-fp32-v1"
+    assert record["weighted_task_counters_collected"] is collected
+    assert record["weighted_task_retries"] == (retries if collected else None)
+    assert record["attempted_fp32_weighted_tasks"] == (12 if collected else None)
+    assert record["attempted_fp32_primitive_sources"] == (96 if collected else None)
+    assert record["returned_mode"] == (
+        "fp64" if collected and retries == 12 else "mixed"
+    )
+    assert record["attempted_fp32_geometry_points"] == 0
+    assert record["attempted_fp32_grid_points"] == 0
+
+
+@pytest.mark.parametrize("retries", (0, 4, 12))
+@pytest.mark.parametrize("dispatch", (1, 2))
+def test_df_shell_work_is_not_direct_hf_or_an_xc_census(
+    retries: int, dispatch: int
+) -> None:
+    """DF has its own consumer identity and can return a wholly strict replay."""
+
+    def getter(handle: object, output: Any, count: int) -> int:
+        assert count == 10
+        output[:] = [1, dispatch, 0, 0, 0, 7, 1, 12, 96, retries]
+        return _native.STATUS_SUCCESS
+
+    record = query_gradient_precision(
+        SimpleNamespace(generativeqc_calculation_gradient_precision_v3=getter), None
+    )
+    assert record["qualification"] == "rhf-df-shell-budget-fp32-v1"
+    assert record["weighted_fp32_orders"] == []
+    assert record["weighted_fp32_consumer"] == "df-shell-polynomial-and-rys"
+    assert record["returned_mode"] == ("fp64" if retries == 12 else "mixed")
+    assert record["attempted_fp32_primitive_sources"] == 96
+    assert record["weighted_task_retries"] == retries
+    assert "df_metric_and_response_weights" in record["fp64_components"]
+    assert "generic_df_derivatives" in record["fp64_components"]
+    assert ("df_shell_sp_bra_contractions" in record["fp64_components"]) == (
+        dispatch == 2
+    )
+    assert "weighted_orders_above_5" not in record["fp64_components"]
 
 
 def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNamespace:

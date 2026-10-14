@@ -34,9 +34,17 @@ bool preliminary_target_common_eligible(const core::System& system,
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || term.approximation == FockApproximation::Exact;
   };
+  // Application XC warmup must not silently replace the strict native seed by
+  // Hcore. Projection/admission remain FP64; ordinary AUTO and HF/LDA
+  // preliminary solves keep their existing precision boundary.
+  const auto precision = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+  const bool application_seed =
+      precision == GENERATIVEQC_PRECISION_AUTO && strategy.backend == FockBackend::Cuda &&
+      options.application_precision_budget[0] > 0.0 && options.preliminary_guess &&
+      (options.preliminary_guess->kind == PreliminaryKind::Minao ||
+       options.preliminary_guess->kind == PreliminaryKind::Huckel);
   return strategy.spec.spin == FockSpin::Restricted &&
-         options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) ==
-             GENERATIVEQC_PRECISION_FP64 &&
+         (precision == GENERATIVEQC_PRECISION_FP64 || application_seed) &&
          (options.preliminary_guess->kind == PreliminaryKind::Huckel ||
           (exact(strategy.spec.coulomb) && exact(strategy.spec.exchange))) &&
          system.ecp_terms.empty() &&

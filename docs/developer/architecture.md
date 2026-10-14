@@ -55,6 +55,15 @@ skip force work. This shared entry does not expand qualified force domains:
 Python compatibility consumers remain for properties the native owner does not
 admit, and native CLI/SDK calls continue rejecting those requests.
 
+Python DFT force routing queries each prepared item's capability. When a batch
+mixes native and compatibility consumers, an additive private bridge submits
+force work only for the qualified slots under the same C++ transaction and
+SCF schedule. Other slots retain native energy/final-state production for their
+existing compatibility consumers. Failures remain input-indexed and native
+execution errors never trigger a compatibility retry. Older libraries lacking
+the selective bridge retain the previous whole-fleet compatibility behavior.
+The public C batch ABI retains its existing mixed-buffer execution semantics.
+
 Batch features beyond execution, lifecycle and resource high waters are opt-in
 interfaces in `src/methods/batch_capabilities.hpp`: warm checkpointing,
 direct-J/K queues, CUDA eigensolver and inactive-lane profiles, DF metric

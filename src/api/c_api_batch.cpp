@@ -200,6 +200,33 @@ generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1(
   return generativeqc::api::copy_ks_coulomb_exchange_work(batch->ks_diagnostics[index], out);
 }
 
+/** Copy the optional VV10 work receipt without another device read or fence. */
+extern "C" GENERATIVEQC_API generativeqc_status generativeqc_internal_batch_get_nonlocal_work_v1(
+    const generativeqc_batch* batch, uint32_t index, uint64_t* values, size_t count) {
+  if (!batch || !values || count != 6 || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto& diagnostic = batch->ks_diagnostics[index];
+  if (!diagnostic || !diagnostic->nonlocal_work[0]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  std::copy(diagnostic->nonlocal_work.begin(), diagnostic->nonlocal_work.end(), values);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Preserve interleaved provisional/physical history without changing public ABI. */
+extern "C" GENERATIVEQC_API generativeqc_status
+generativeqc_internal_batch_get_nonlocal_history_scopes_v1(const generativeqc_batch* batch,
+                                                           uint32_t index, uint64_t* values,
+                                                           size_t count) {
+  if (!batch || !values || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto& diagnostic = batch->ks_diagnostics[index];
+  if (!diagnostic || !diagnostic->nonlocal_work[0]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (count != diagnostic->history.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  for (size_t i = 0; i < count; ++i) values[i] = diagnostic->history[i].nonlocal_operator_scope;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_ks_ao_selection_diagnostic_v1* out) {
@@ -589,11 +616,11 @@ generativeqc_status generativeqc_batch_restore_hf_warm_states(
   }
 }
 
-generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
-                                               const generativeqc_batch_input_descriptor* inputs,
-                                               uint32_t input_count,
-                                               generativeqc_batch_item_result_descriptor* results,
-                                               uint32_t result_count) {
+static generativeqc_status execute_batch(generativeqc_batch* batch,
+                                         const generativeqc_batch_input_descriptor* inputs,
+                                         uint32_t input_count,
+                                         generativeqc_batch_item_result_descriptor* results,
+                                         uint32_t result_count, bool selective_forces) {
   generativeqc::runtime::host_trace::Region trace("batch_execute");
   if (batch == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -656,14 +683,23 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
       }
     }
 
-    // All omitted force buffers request a true energy-only replay. Mixed
-    // outputs keep the existing whole-fleet force schedule and per-item buffer
-    // validation below; no requested force can be silently dropped.
+    // All omitted force buffers request a true energy-only replay. The legacy
+    // entry retains its whole-fleet schedule for mixed outputs; the selective
+    // bridge requests only the indicated slots. Both validate buffers below.
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
-    std::vector<generativeqc::methods::BatchItemResult> native =
-        batch->plan->execute(coordinates, compute_forces);
+    std::vector<generativeqc::methods::BatchItemResult> native;
+    if (selective_forces) {
+      // The additive bridge uses the existing output descriptors as per-item
+      // work requests. Keep the legacy whole-fleet ABI schedule unchanged.
+      std::vector<std::uint8_t> requests(system_count);
+      for (std::uint32_t i = 0; i < system_count; ++i)
+        requests[i] = results[i].forces != nullptr || results[i].force_count != 0;
+      native = batch->plan->execute_selected_forces(coordinates, requests);
+    } else {
+      native = batch->plan->execute(coordinates, compute_forces);
+    }
     if (native.size() != system_count) {
       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
     }
@@ -730,6 +766,25 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
+                                               const generativeqc_batch_input_descriptor* inputs,
+                                               uint32_t input_count,
+                                               generativeqc_batch_item_result_descriptor* results,
+                                               uint32_t result_count) {
+  return execute_batch(batch, inputs, input_count, results, result_count, false);
+}
+
+/** Private additive bridge for Python/native KS mixed force consumers. NULL/0
+ * force storage requests only energy for that slot; requested forces remain
+ * subject to the prepared native capability. Uses the same invalidation,
+ * diagnostics and publication transaction as the legacy batch entry point. */
+generativeqc_status generativeqc_ks_batch_execute_selected_forces_v1(
+    generativeqc_batch* batch, const generativeqc_batch_input_descriptor* inputs,
+    uint32_t input_count, generativeqc_batch_item_result_descriptor* results,
+    uint32_t result_count) {
+  return execute_batch(batch, inputs, input_count, results, result_count, true);
 }
 
 generativeqc_status generativeqc_batch_get_precision_provenance(

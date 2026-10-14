@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -88,10 +89,16 @@ def test_audit_schema_keeps_radial_identity_and_provenance(
 
 def test_repository_audit_reports_cuda_shell_package_inventory() -> None:
     root = Path(__file__).resolve().parents[2]
+    build_directory = os.environ.get("GENERATIVEQC_BUILD_DIR")
     result = audit.audit(
         radial_manifest=root / "manifests/derivative_aot_radials.json",
         production_manifest=(
             root / "python/generativeqc_compiler/integral/production_shell_classes.json"
+        ),
+        cpu_source_directory=(
+            Path(build_directory) / "generated/stationary_cpu_derivatives"
+            if build_directory
+            else None
         ),
     )
     cuda = result["cuda_shell"]

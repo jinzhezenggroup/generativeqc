@@ -1,6 +1,6 @@
 # DF density preconvergence for an exact RHF reference
 
-The native `df-ccsd(t)` owner automatically prepares a CUDA DF-JK density
+The shared native DF-MP2/`df-ccsd(t)` owner automatically prepares a CUDA DF-JK density
 guess behind compatibility, source-path, work and resource guards. The **accepted reference remains
 conventional, unscreened FP64 RHF**, with correlation-only density fitting.
 This does not select RI-HF, change the final Hamiltonian, or alter response
@@ -35,14 +35,18 @@ The preliminary solve uses FP64, one compact CUDA SCF attempt with at most
 solver's additional host-orchestrated SCF retry is disabled for this guess;
 nonconvergence returns to cold Direct RHF. Physical final-state validation
 after convergence remains required and is separate from the SCF cycle count.
-Its numeric budget is capped at 512 MiB, after
+Its numeric allowance starts at 512 MiB, after
 charging live correlation auxiliary metadata and any retained response cache;
 less than 256 MiB available skips preparation. The shared DF preparation
 storage estimator must also admit the actual Cartesian/public matrices,
-primitive/shell metadata and JK auxiliary metadata under that cap. The native
+primitive/shell metadata and JK auxiliary metadata under that allowance. The native
 source-backed dense/packed tile planner must first select full retained
 three-center storage under the same metadata and lazy-DIIS reservations as
-native SCF. A streamed proposal is skipped before factor generation: bounded
+native SCF. On preparation or resident-plan refusal, allocation-free previews
+double the allowance up to the smaller of 4 GiB and the remaining caller budget.
+An already-admitted small case keeps its original allowance. This never increases
+the caller's budget or performs extra preliminary SCF attempts. A proposal still
+requiring streaming at the cap is skipped before factor generation: bounded
 memory alone does not imply bounded work or profitable initialization. The native
 DF tile/SCF planner remains authoritative for subsequent reservations and may
 refuse the guess; preflight does not replace its complete
@@ -74,7 +78,7 @@ Use the Direct opt-out for explicit root-continuity controls near degeneracies.
 JK-fit auxiliary basis and transfers **only its detached AO density** into a
 fresh native Direct RHF solve. DF Focks, orbitals, orbital energies and DIIS
 history are not transferred. The Direct solver retains energy tolerance
-`1e-12 Eh`, density RMS tolerance `1e-11`, zero screening and FP64 precision.
+`1e-12 Eh`, density RMS tolerance `1e-11`, final zero screening and FP64 precision.
 It must converge normally and export its validated physical reference before
 CCSD, triples, Lambda, Z-vector or nuclear response can execute.
 
@@ -206,6 +210,8 @@ Performance evidence and promotion limits are retained in the
 [work/resource decision](../../.agents/notes/implemented/performance/2026-10-09-df-rhf-work-admission.md)
 and the historical
 [initial default-policy decision](../../.agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md).
+The bounded allowance-growth rationale and its scope are in the
+[resident-guess budget decision](../../.agents/notes/implemented/performance/2026-10-13-resident-df-guess-budget.md).
 Do not extrapolate this guarded policy to all bases/elements/backends or to
 full-DF-HF gradients. Expand admission only with fresh independent gates and
 paired complete endpoint evidence.
