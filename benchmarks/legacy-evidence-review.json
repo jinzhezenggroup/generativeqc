@@ -413,14 +413,6 @@
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
     },
     {
-      "bytes": 166398,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
-    },
-    {
       "bytes": 143684,
       "classification": "required-compact-accepted-evidence",
       "family": "issue283-host-response",
