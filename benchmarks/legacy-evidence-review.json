@@ -241,6 +241,11 @@
       "owner": "bounded exact-density XC geometry response qualification",
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
       "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
+    },
+    "vv10-wide-pair-20261014": {
+      "owner": "experimental large-domain VV10 pair schedule",
+      "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
+      "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
     }
   },
   "files": [
@@ -387,14 +392,6 @@
       "path": "benchmarks/results/issue206-metric-gemv/direct-gate/water-octamer-s4-def2-svp-spherical-b4-none.json",
       "role": "scientific-record",
       "sha256": "257b3a976fc8f73675bd0cb25c6be79913b25c85fb0abf3dd5ccf73ed53fd134"
-    },
-    {
-      "bytes": 166398,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/measurements/192ao-b4-forces-serial.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "61b865a38908cbcfcc224f8bfb7870fc8b2296c746a489deed6c9d08bed0a59e"
     },
     {
       "bytes": 143684,
@@ -611,6 +608,14 @@
       "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
+    },
+    {
+      "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",
+      "family": "vv10-wide-pair-20261014",
+      "bytes": 183856,
+      "sha256": "8bfb0f536590e1491a8e0c0f3cf6a4cdd54d6177683e0ce9800a55cf8e4801d2",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Opt-in schedule qualification and user-cancelled endpoint receipts"
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

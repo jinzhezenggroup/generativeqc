@@ -4,7 +4,7 @@ Native owners admit the numerical domain, exclusive output leases and stream.
 The CUDA templates only schedule/reduce those already generated pair outputs.
 """
 
-VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-zero-warp-fp64-v2"
+VV10_PARALLEL_PAIR_SCHEDULE_VERSION = "vv10-parallel-bilateral-adaptive-row-fp64-v3"
 
 
 def native_parallel_pair_cuda() -> str:
@@ -50,19 +50,25 @@ __global__ void parallel_pair_initialize(ParallelPairInputs input, ParallelPairO
     output.weight_derivative[row] = 0.0;
   }
 }
-// Each persistent warp owns an unordered pair of 128-row tiles. Four rows
-// per lane amortize the partner reductions; diagonal tiles retain all ordered
+// Each persistent warp owns an unordered pair of 128- or 256-row tiles.
+// Four or eight rows per lane amortize the partner reductions; diagonal tiles retain all ordered
 // pairs. Cross-tile contributions reduce in FP64 then atomically accumulate
 // both legs. This changes summation order, not pair formulas or active domain.
 __device__ inline double parallel_pair_warp_sum(double value) {
   for (int shift = 16; shift; shift /= 2) value += __shfl_down_sync(0xffffffffU, value, shift);
   return value;
 }
-template <bool Geometry>
+template <bool Geometry, unsigned RowsPerLane = 4, bool HoistRows = false, bool Adaptive = false>
 __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutputs output) {
   if (*input.rejected != 0) return;
   const auto nactive = *input.active_count;
-  constexpr unsigned rows_per_lane = 4, tile = 32 * rows_per_lane;
+  static_assert(RowsPerLane == 4 || RowsPerLane == 8);
+  // Each branch reads the device-owned count. The two adaptive launches are
+  // mutually exclusive, avoiding a host synchronization or retained selector.
+  if constexpr (Adaptive) {
+    if ((nactive >= 65536) != (RowsPerLane == 8)) return;
+  }
+  constexpr unsigned rows_per_lane = RowsPerLane, tile = 32 * rows_per_lane;
   const unsigned lane = threadIdx.x % 32;
   const size_t warp = (size_t(blockIdx.x) * blockDim.x + threadIdx.x) / 32;
   const size_t stride = size_t(gridDim.x) * blockDim.x / 32;
@@ -73,6 +79,24 @@ __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutpu
     while (a * (a + 1) / 2 > ordinal) --a;
     const size_t b = ordinal - a * (a + 1) / 2;
     double sum[rows_per_lane][6]{};
+    // Large admitted domains amortize these immutable row inputs over every
+    // partner. Small domains retain the lower-register four-row schedule.
+    bool row_live[rows_per_lane];
+    double row_f[rows_per_lane], row_w[rows_per_lane], row_k[rows_per_lane];
+    double row_x[rows_per_lane], row_y[rows_per_lane], row_z[rows_per_lane];
+    if constexpr (HoistRows) {
+#pragma unroll
+      for (unsigned row = 0; row < rows_per_lane; ++row) {
+        const size_t slot = tile * a + 32 * row + lane;
+        const size_t i = slot < nactive ? input.indices[slot] : 0;
+        row_live[row] = slot < nactive && !(input.weighted_density[i] == 0.0 &&
+                                            signbit(input.weighted_density[i]));
+        row_f[row] = input.weighted_density[i];
+        row_w[row] = input.omega[i]; row_k[row] = input.kappa[i];
+        row_x[row] = input.points[3*i]; row_y[row] = input.points[3*i+1];
+        row_z[row] = input.points[3*i+2];
+      }
+    }
     for (unsigned k = 0; k < tile && tile * b + k < nactive; ++k) {
       const size_t j = input.indices[tile * b + k];
       const bool live_j = !(input.weighted_density[j] == 0.0 && signbit(input.weighted_density[j]));
@@ -81,16 +105,18 @@ __global__ void parallel_pair_kernel(ParallelPairInputs input, ParallelPairOutpu
       for (unsigned row = 0; row < rows_per_lane; ++row) {
         const size_t row_slot = tile * a + 32 * row + lane;
         const size_t i = row_slot < nactive ? input.indices[row_slot] : 0;
-        const bool live_i = row_slot < nactive && !(input.weighted_density[i] == 0.0 &&
-                                                    signbit(input.weighted_density[i]));
+        const bool live_i = HoistRows ? row_live[row] :
+            row_slot < nactive && !(input.weighted_density[i] == 0.0 &&
+                                    signbit(input.weighted_density[i]));
         if (live_i && live_j) {
-          const double fi = input.weighted_density[i], fj = input.weighted_density[j];
-          const double dx = input.points[3 * j] - input.points[3 * i],
-                       dy = input.points[3 * j + 1] - input.points[3 * i + 1],
-                       dz = input.points[3 * j + 2] - input.points[3 * i + 2];
+          const double fi = HoistRows ? row_f[row] : input.weighted_density[i];
+          const double fj = input.weighted_density[j];
+          const double dx = input.points[3 * j] - (HoistRows ? row_x[row] : input.points[3 * i]),
+                       dy = input.points[3 * j + 1] - (HoistRows ? row_y[row] : input.points[3 * i + 1]),
+                       dz = input.points[3 * j + 2] - (HoistRows ? row_z[row] : input.points[3 * i + 2]);
           const double r2 = dx * dx + dy * dy + dz * dz;
-          const auto pair = pair_values_vv10_bilateral<Geometry>(r2, input.omega[i], input.omega[j],
-                                                                 input.kappa[i], input.kappa[j]);
+          const auto pair = pair_values_vv10_bilateral<Geometry>(r2, HoistRows ? row_w[row] : input.omega[i], input.omega[j],
+                                                                 HoistRows ? row_k[row] : input.kappa[i], input.kappa[j]);
           const double phi = pair.phi, wi = pair.dphi_domega, ki = pair.dphi_dkappa;
           const double wj = pair.dphi_domega_j, kj = pair.dphi_dkappa_j, radial = pair.dphi_dr2;
           sum[row][0] += fj * phi;

@@ -517,3 +517,10 @@ Its host allowance includes
 comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
 uses only remaining admitted capacity. Hits report zero executed geometry and
 pair work. This control is also default-off pending endpoint qualification.
+
+The explicit `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-wide` experiment uses
+eight rows per lane and retains row inputs for admitted VV10 domains with at
+least 65,536 active points. Smaller domains use the existing four-row schedule.
+Both branches select using the device count without a host synchronization;
+numerical admission, output ownership, ordered fallback and FP64 roots are
+unchanged. This experiment requires separate complete-endpoint qualification.
