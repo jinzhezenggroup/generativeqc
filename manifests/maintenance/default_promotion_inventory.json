@@ -80,6 +80,30 @@
       ]
     },
     {
+      "id": "scf.phase-local-radial-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
+        "src/scf/cuda/direct_jk.cpp"
+      ],
+      "rationale": "Explicit 1 selects immutable radial ERIs only for strict-FP64 resident direct RKS VV10. Unset/auto remains off. Matching operator/omega, original screening, full/partial bucket accounting, complete host/device admission and incumbent capacity fallback remain mandatory. The range source cannot provide full Coulomb or derivatives. Exact-source independent matrices and complete molecular energy/forces qualify correctness, while original 96-atom populations still exceed the whole-point deadline; no default promotion or issue closure is claimed.",
+      "revisit_condition": "Require complete source-matched 3/12/48/96 original-protocol populations, independent energy/force gates, actual selected source work, failure/retirement and memory-cliff evidence before automatic selection. Preserve explicit off and bounded fallback.",
+      "evidence": [
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
+        "tests/python/test_range_resident_values_cuda.py",
+        "tests/python/test_range_resident_ks_cuda.py",
+        "issue:#2426"
+      ]
+    },
+    {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
       "controls": [

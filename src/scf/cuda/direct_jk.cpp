@@ -265,6 +265,15 @@ DirectCoulombRange direct_exchange_range(const FockTermSpec& term) {
   if (term.op == FockOperator::LongRange) return DirectCoulombRange::Long;
   throw std::invalid_argument("unknown exact-exchange radial operator");
 }
+/** A range lease cannot stand in for full Coulomb or another radial source. */
+bool direct_jk_resident_matches(const CudaDirectJkPlan* plan, FockBuildSpec spec) noexcept {
+  if (!plan || !plan->resident_values) return false;
+  if (plan->resident_operator == FockOperator::FullRange)
+    return !spec.exchange.present || spec.exchange.op == FockOperator::FullRange;
+  return !spec.coulomb.present && spec.exchange.present &&
+         spec.exchange.op == plan->resident_operator && spec.exchange.omega == plan->resident_omega;
+}
+
 FockBuildSpec direct_jk_strategy(const CudaDirectJkPlan* plan, FockBuildSpec spec,
                                  std::size_t begin, std::size_t count) {
   direct_jk_require(plan != nullptr, "null direct J/K plan");
@@ -1506,9 +1515,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                          : generated_coulomb != nullptr && generated_coulomb->value_capability);
     const bool generated_exchange_available =
         direct_jk_generated_exchange_value_available(*plan, spec);
-    const bool resident = allow_resident && plan->resident_values && (!fixed || correction) &&
-                          !mixed_j &&
-                          (!spec.exchange.present || spec.exchange.op == FockOperator::FullRange);
+    const bool resident = allow_resident && (!fixed || correction) && !mixed_j &&
+                          direct_jk_resident_matches(plan, spec);
     const bool md_coulomb = plan->md_j.minimum_bounds && spec.coulomb.present && !fixed &&
                             !mixed_j && !census && spec.derivative_order == 0;
     const auto dispatch = direct_jk_value_dispatch(
@@ -1860,9 +1868,7 @@ bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,
   if (!plan || !plan->canonical_pairs ||
       (spec.coulomb.present && spec.coulomb.op != FockOperator::FullRange))
     return false;
-  if (plan->resident_values &&
-      (!spec.exchange.present || spec.exchange.op == FockOperator::FullRange))
-    return true;
+  if (direct_jk_resident_matches(plan, spec)) return true;
   const bool generated_j = direct_jk_generated_full_range_value_available(*plan) ||
                            (!plan->generated_exchange && plan->generated_coulomb &&
                             plan->generated_coulomb->value_capability);
@@ -1935,7 +1941,8 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
     direct_jk_check(cudaGetDevice(&current));
     direct_jk_require(current == plan->device_id, "resident Direct source device mismatch");
     if (plan->resident_values) {
-      direct_jk_require(plan->resident_bucket_mask == (1U << 28) - 1,
+      direct_jk_require(plan->resident_bucket_mask == (1U << 28) - 1 &&
+                            plan->resident_operator == FockOperator::FullRange,
                         "resident Direct selection is immutable");
       return;
     }
@@ -2025,15 +2032,21 @@ std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan*
   return direct_jk_product(count, sizeof(double));
 }
 
-generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJkPlan* plan,
-                                                                    std::size_t maximum_bytes,
-                                                                    std::uint32_t bucket_mask,
-                                                                    std::string& detail) {
+generativeqc_status prepare_cuda_direct_jk_range_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::uint32_t bucket_mask,
+    FockOperator source_operator, double omega, std::string& detail) {
+  if ((source_operator != FockOperator::FullRange && source_operator != FockOperator::ShortRange &&
+       source_operator != FockOperator::LongRange) ||
+      !std::isfinite(omega) || omega < 0.0 ||
+      (source_operator == FockOperator::FullRange && omega != 0.0)) {
+    detail = "invalid resident radial operator";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   if (bucket_mask >= (1U << 28)) {
     detail = "invalid resident Direct bucket mask";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  if (bucket_mask == (1U << 28) - 1)
+  if (bucket_mask == (1U << 28) - 1 && source_operator == FockOperator::FullRange)
     return prepare_cuda_direct_jk_resident_values(plan, maximum_bytes, detail);
   const auto preparation = prepare_cuda_direct_jk_resident_layout(plan, detail);
   if (preparation != GENERATIVEQC_STATUS_SUCCESS) return preparation;
@@ -2042,7 +2055,9 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
     direct_jk_check(cudaGetDevice(&current));
     direct_jk_require(current == plan->device_id, "resident Direct source device mismatch");
     if (plan->resident_values) {
-      direct_jk_require(plan->resident_bucket_mask == bucket_mask,
+      direct_jk_require(plan->resident_bucket_mask == bucket_mask &&
+                            plan->resident_operator == source_operator &&
+                            plan->resident_omega == omega,
                         "resident Direct selection is immutable");
       if (plan->diagnostic.resident_value_bytes > maximum_bytes) throw std::bad_alloc();
       return;
@@ -2092,9 +2107,11 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
               direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
               offsets[first + 1U] - offsets[first], offsets[second],
               offsets[second + 1U] - offsets[second], first == second, false, true, false,
-              DirectCoulombRange::Full, 0.0, plan->screening_tolerance, plan->canonical_bounds,
-              nullptr, nullptr, nullptr, nullptr, lease.values + value_offset, nullptr, nullptr,
-              count);
+              source_operator == FockOperator::FullRange   ? DirectCoulombRange::Full
+              : source_operator == FockOperator::LongRange ? DirectCoulombRange::Long
+                                                           : DirectCoulombRange::Short,
+              omega, plan->screening_tolerance, plan->canonical_bounds, nullptr, nullptr, nullptr,
+              nullptr, lease.values + value_offset, nullptr, nullptr, count);
           direct_jk_check(cudaGetLastError());
           value_offset += count;
           plan->diagnostic.resident_values_submitted = value_offset;
@@ -2118,6 +2135,8 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
     plan->resident_bucket_offsets = std::move(layout);
     plan->resident_bucket_mask = bucket_mask;
     plan->resident_values = lease.values;
+    plan->resident_operator = source_operator;
+    plan->resident_omega = omega;
     plan->resident_value_count = value_offset;
     lease.values = nullptr;
     plan->device_bytes = total;
@@ -2129,6 +2148,14 @@ generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJk
     plan->diagnostic.host_bytes += host_growth;
     plan->diagnostic.host_preparation_bytes += host_growth;
   });
+}
+
+generativeqc_status prepare_cuda_direct_jk_selected_resident_values(CudaDirectJkPlan* plan,
+                                                                    std::size_t maximum_bytes,
+                                                                    std::uint32_t bucket_mask,
+                                                                    std::string& detail) {
+  return prepare_cuda_direct_jk_range_resident_values(plan, maximum_bytes, bucket_mask,
+                                                      FockOperator::FullRange, 0.0, detail);
 }
 
 bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept {
@@ -2293,8 +2320,8 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     bool allow_resident, const double* beta, double* beta_exchange, bool allow_materialized) {
   if (!std::isfinite(threshold) || threshold < 0 || !correction ||
       (spec.spin != FockSpin::Restricted && spec.spin != FockSpin::Unrestricted) ||
-      (spec.exchange.present && direct_exchange_range(spec.exchange) != DirectCoulombRange::Full)) {
-    detail = "invalid compensated full-range J/K request";
+      (spec.coulomb.present && spec.coulomb.op != FockOperator::FullRange)) {
+    detail = "invalid compensated J/K request";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (!cuda_direct_jk_linear_available(plan)) {

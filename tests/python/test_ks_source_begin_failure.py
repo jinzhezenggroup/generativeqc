@@ -114,7 +114,7 @@ struct Owner {
   double warm_energy{}, warm_energy_correction{}, previous_energy{}, previous_energy_correction{};
   std::unique_ptr<int> phase_source;
   int scenario{}, retired{};
-  void prepare_phase_source(bool) {
+  void prepare_phase_source(bool, bool) {
     if (scenario == 1) throw std::runtime_error("source CUDA failure");
     phase_source = std::make_unique<int>(1);
     if (scenario == 2) throw std::bad_alloc();

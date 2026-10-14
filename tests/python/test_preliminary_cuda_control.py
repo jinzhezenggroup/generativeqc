@@ -173,7 +173,7 @@ struct CudaKsPlan {
     if (error == "overflow") throw std::overflow_error("epoch exhausted");
     if (error == "logic") throw std::logic_error("pending iteration");
   }
-  void prepare_phase_source(bool cold) { calls.back().phase_source_cold = cold; }
+  void prepare_phase_source(bool cold, bool = false) { calls.back().phase_source_cold = cold; }
   void begin(const std::vector<double>* seed, bool reuse, CudaKsSeedOrigin origin) {
     stale_state_at_begin |= impl_->final_state_ready;
     invalidate_final_state();

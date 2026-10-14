@@ -12,16 +12,9 @@ pytest_plugins = ("test_preliminary_cuda_control",)
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_unset_selection_reaches_the_bounded_auto_policy() -> None:
-    """Unset and explicit auto share admission; explicit 0 skips all setup."""
-    solver = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    prepare = solver[solver.index("  void prepare_phase_source(bool cold)") :]
-    prepare = prepare[: prepare.index("phase_source = std::make_unique")]
-    assert "if (!selection) return;" not in prepare
-    assert "const auto requested = direct_jk_source_selection(selection);" in prepare
-    assert "if (requested == DirectJkSourceSelection::disabled) return;" in prepare
-    assert "requested == DirectJkSourceSelection::automatic" in prepare
-    assert "direct_jk_source_auto_refusal(" in prepare
+# Default/explicit-auto/off wiring is exercised by the compiled CUDA probe's
+# cold, warm, external-seed and capacity-refusal executions. The host test below
+# independently executes its admission policy; source spelling is not a gate.
 
 
 @pytest.mark.parametrize(

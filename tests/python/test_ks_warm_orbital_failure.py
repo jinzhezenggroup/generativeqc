@@ -85,6 +85,7 @@ struct Owner {
     void observe_completed(std::uint64_t actions) { completed += actions; }
   };
   std::unique_ptr<Source> phase_source;
+  bool phase_source_range{};
   struct Region {
     bool bound = true;
     void invalidate() { bound = false; }
