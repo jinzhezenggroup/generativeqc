@@ -13,6 +13,9 @@ int grid_cuda_create_v3(int, int, int, const std::size_t*, const double*, std::s
                         std::size_t, std::size_t, const std::size_t*, std::size_t, unsigned, void**,
                         char*, std::size_t);
 void grid_cuda_destroy_v1(void*);
+int grid_cuda_prepare_fp32_v1(void*, std::size_t, std::size_t*, char*, std::size_t);
+int grid_cuda_run_fp32_device_deferred_v1(void*, const double*, std::size_t, std::size_t, char*,
+                                          std::size_t);
 int grid_cuda_density_device_v1(void*, const double*, const double*, std::size_t, unsigned, void*,
                                 char*, std::size_t);
 int grid_cuda_run_selected_device_deferred_v1(void*, const double*, std::size_t, int,

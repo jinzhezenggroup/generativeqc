@@ -60,7 +60,11 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
     ]
     begin = owner.index("    if (resident_budget) {")
     end = owner.index("    state.o = o;", begin)
-    allocation = owner[begin:end]
+    # The source-selection outer else now encloses exact residency. Keep its
+    # real allocation body and following common setup, excluding only that
+    # surrounding brace from this deliberately exact-only probe.
+    exact_end = owner.index("\n    }\n    stats.applied_screening", begin)
+    allocation = owner[begin:exact_end] + owner[exact_end + len("\n    }") : end]
     policy = _definition(header, "std::size_t resident_jk_allowance(")
     wrapper = _definition(owner, "RHFFrameResponseResult rhf_frame_response_cuda(\n")
     probe = tmp_path / "resident_retry.cpp"
@@ -353,6 +357,7 @@ RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   std::string detail;
   int device = 0;
   bool profile = false;
+  const bool fitted = false;
   auto stream = direct->stream;
   size_t nn = 64 * 64, arena_elements = 0;
   Buffer<double> storage, compensation;

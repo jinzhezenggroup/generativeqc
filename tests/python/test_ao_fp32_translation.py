@@ -29,7 +29,9 @@ def test_emitted_fp32_ao_preserves_local_coordinates(tmp_path: Path) -> None:
     policy = policy[:end] + "\n}\n"
     kernels = emit_grid_scientific_kernels()
     begin = kernels.index("__global__ void ao_kernel(")
-    end = kernels.index("__global__ void feature_kernel(")
+    end = kernels.rfind(
+        "template <", 0, kernels.index("__global__ void feature_kernel(")
+    )
     driver = tmp_path / "ao_translation.cpp"
     driver.write_text(
         """

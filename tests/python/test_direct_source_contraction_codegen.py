@@ -1,7 +1,10 @@
 """Retirement guards for compiler-owned Direct source contraction."""
 
+import subprocess
 from pathlib import Path
 
+from _cpp_source_support import cpp_function_definition
+from conftest import NativeCxx
 from generativeqc_compiler.integral.direct_source_contraction_cuda import (
     emit_direct_source_contraction_header,
 )
@@ -81,17 +84,44 @@ def test_materialized_canonical_sources_reuse_range_and_scatter_owners() -> None
     assert "range, omega, shared.coulomb" in source
 
 
-def test_materialized_recurrence_retains_qualified_order_bounds() -> None:
-    """Multi-packet canonical reuse retains the established scientific owner."""
+def test_materialized_recurrence_covers_all_spdf_shells(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Every Cartesian component fits in one whole-shell owner through ffff."""
     source = emit_direct_source_contraction_header()
-    assert "AngularOrder <= kMaximumCoulombOrder" in source
-    assert "template <unsigned AngularOrder, typename Scalar = double>" in source
-    assert "sizeof(MaterializedDirectPairRecurrence<12>) <= (48U << 10)" in source
-    native = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text(encoding="utf-8")
-    assert (
-        "MixedJ ? AngularOrder <= 12 : (AngularOrder >= 3 && AngularOrder <= 9)"
-        in native
+    helpers = "\n".join(
+        cpp_function_definition(source, name)
+        for name in (
+            "canonical_materialized_component_lanes",
+            "canonical_materialized_component_slots",
+        )
     )
+    driver = tmp_path / "coverage.cpp"
+    driver.write_text(
+        "#include <cassert>\n#define __host__\n#define __device__\n"
+        + helpers
+        + r"""
+int main() {
+  for (unsigned first=0; first<=3; ++first)
+  for (unsigned second=0; second<=3; ++second)
+  for (unsigned third=0; third<=3; ++third)
+  for (unsigned fourth=0; fourth<=3; ++fourth) {
+    auto components=[](unsigned angular) { return (angular+1)*(angular+2)/2; };
+    const auto order=first+second+third+fourth;
+    const auto lanes=canonical_materialized_component_lanes(order);
+    const auto slots=canonical_materialized_component_slots(order);
+    const auto count=components(first)*components(second)*components(third)*components(fourth);
+    assert(lanes > 0 && lanes <= 1024 && lanes%32 == 0);
+    assert(slots*lanes >= count);
+    for (unsigned component=0; component<count; ++component)
+      assert(component/lanes < slots);
+  }
+}
+"""
+    )
+    executable = tmp_path / "coverage"
+    native_cxx.build_executable([driver], executable, compile_args=["-std=c++20"])
+    subprocess.run([str(executable)], check=True, timeout=15)
 
 
 def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> None:

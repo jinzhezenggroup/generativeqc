@@ -148,7 +148,9 @@ def test_contract_asset_changes_regenerate_aot_identity(
     assert runs.read_text() == "run\nrun\n"
 
 
-@pytest.mark.parametrize("changed_scope", ["common", "stationary_resources"])
+@pytest.mark.parametrize(
+    "changed_scope", ["common", "stationary_resources", "mixed_point"]
+)
 @pytest.mark.parametrize("functional", [0, 1, 2])
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
 def test_shared_compiler_source_changes_invalidate_aot_contract(
@@ -163,7 +165,12 @@ def test_shared_compiler_source_changes_invalidate_aot_contract(
         selected = (
             path.is_relative_to(common_paths.PACKAGE / "common")
             if changed_scope == "common"
-            else path.name == "stationary_resources.py"
+            else path.name
+            == (
+                "xc_point_mixed.hpp"
+                if changed_scope == "mixed_point"
+                else "stationary_resources.py"
+            )
         )
         if revision["changed"] and selected:
             return "0" * 64

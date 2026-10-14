@@ -11,8 +11,10 @@ namespace generativeqc::dft {
 /** An approximate SCF handoff, never a physical convergence certificate.
  * Zero controls preserve the incumbent approximate-stage termination criteria.
  * Positive controls bound approximate work or switch on the current physical
- * pre-DIIS maximum residual. The consuming owner must clear nonlinear history
- * and certify the final state using the original strict FP64 tolerances. */
+ * pre-DIIS maximum residual. The incumbent clears nonlinear history; a
+ * separately admitted bounded history may supply proposals, never physical
+ * stopping evidence. Every consumer must reset the energy epoch and certify
+ * the final state using the original strict FP64 tolerances. */
 struct MixedPrecisionWarmup {
   double switch_residual{};
   unsigned max_iterations{};

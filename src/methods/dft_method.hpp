@@ -113,12 +113,11 @@ generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t
  * force admission. PBE/PBE0 RKS/UKS only. The additional device allowance
  * excludes the already charged SCF/Fock frame. Failure preserves output; the
  * exact final token gates both submission and terminal publication. */
-generativeqc_status dft_cuda_native_stationary_gradient(PreparedBatch& batch, std::size_t index,
-                                                        const dft::CudaKsFinalStateToken& expected,
-                                                        std::size_t maximum_device_bytes,
-                                                        std::vector<double>& output,
-                                                        dft::CudaStationaryResources& resources,
-                                                        std::string& detail);
+generativeqc_status dft_cuda_native_stationary_gradient(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    std::size_t maximum_device_bytes, std::vector<double>& output,
+    dft::CudaStationaryResources& resources, std::string& detail,
+    scf::DirectForcePrecisionRequest* precision = nullptr);
 
 /** Snapshot-backed variant for a consumer that already exported and validated
  * D/W under the exact same live token. The native owner still revalidates the

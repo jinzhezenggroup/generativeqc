@@ -76,7 +76,8 @@ class KsBatchOwnerPort {
   virtual generativeqc_status native_cuda_stationary_gradient(
       std::size_t index, const dft::CudaKsFinalStateToken& expected,
       std::size_t maximum_device_bytes, std::vector<double>& output,
-      dft::CudaStationaryResources& resources, std::string& detail) = 0;
+      dft::CudaStationaryResources& resources, std::string& detail,
+      scf::DirectForcePrecisionRequest* precision = nullptr) = 0;
 
   virtual generativeqc_status native_cuda_stationary_capacity(std::size_t index,
                                                               dft::CudaStationaryCapacity& capacity,

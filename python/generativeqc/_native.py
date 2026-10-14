@@ -52,6 +52,7 @@ DENSITY_FITTING_CPU_REFERENCE = 1
 DENSITY_FITTING_CUDA = 2
 DENSITY_FITTING_AUTO = 3
 DENSITY_FITTING_CORRELATION_CUDA = 4
+DENSITY_FITTING_FULL_CUDA = 5
 PRECISION_FP64 = 0
 PRECISION_AUTO = 1
 PRECISION_WORK_DETAIL_VERSION = 1
@@ -281,6 +282,16 @@ class KsOptionsDescriptor(ctypes.Structure):
         ("nonlocal_c", ctypes.c_double),
         ("nonlocal_coefficient", ctypes.c_double),
         ("nonlocal_maximum_bytes", ctypes.c_uint64),
+    ]
+
+
+class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
+    """Private size-tagged extension; requires the matching native feature query."""
+
+    _fields_ = [
+        ("application_energy_budget", ctypes.c_double),
+        ("application_max_force_budget", ctypes.c_double),
+        ("application_rms_force_budget", ctypes.c_double),
     ]
 
 
@@ -1190,6 +1201,21 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             ctypes.c_uint32,
         ]
         getter.restype = ctypes.c_int
+    for name, arguments in (
+        ("generativeqc_calculation_gradient_precision_v1", [ctypes.c_void_p]),
+        (
+            "generativeqc_batch_gradient_precision_v1",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+    ):
+        getter = getattr(library, name, None)
+        if getter is not None:
+            getter.argtypes = [
+                *arguments,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            getter.restype = ctypes.c_int
     library.generativeqc_calculation_prepare.argtypes = [
         ctypes.c_void_p,
         ctypes.c_void_p,

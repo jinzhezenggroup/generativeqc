@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import re
 import subprocess
 from pathlib import Path
@@ -19,11 +20,48 @@ from generativeqc_compiler.method.stationary_native_cuda import (
     emit_native_stationary_registry_cpp,
     native_stationary_model,
 )
+from generativeqc_compiler.xc.grid_native import emit_grid_partials
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_typed_geometry_helpers_link_across_native_profiles(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Exercise external linkage, including float helpers hidden by one-profile builds."""
+    units = []
+    for index, profile in enumerate(("pbe0_rks", "pbe_rks")):
+        wrapper = emit_stationary_profile_aot_wrapper_cuda(
+            profile, include_reduction=False
+        )
+        native = emit_native_stationary_profile_cuda(profile)
+        aliases = "\n".join(
+            line
+            for line in native.partition(wrapper)[0].splitlines()
+            if line.startswith("#define ")
+        )
+        unit = tmp_path / f"profile_{index}.cpp"
+        unit.write_text(
+            "#include <array>\n#include <cmath>\n#define __device__\n"
+            + aliases
+            + "\n"
+            + emit_grid_partials(device=True)
+            + emit_grid_partials(device=True, scalar_type="float", suffix="_fp32")
+            + f'extern "C" double probe_{index}() {{\n'
+            + "  return local_norm(3.0, 4.0, 0.0)[0] + local_norm_fp32(3.0f, 4.0f, 0.0f)[0];\n}\n"
+        )
+        units.append(unit)
+    binary = tmp_path / "profiles.so"
+    native_cxx.build_shared(units, binary, compile_args=("-std=c++17", "-O2"))
+    library = ctypes.CDLL(str(binary))
+    for index in range(len(units)):
+        probe = getattr(library, f"probe_{index}")
+        probe.argtypes = ()
+        probe.restype = ctypes.c_double
+        assert probe() == 10.0
 
 
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
@@ -85,7 +123,9 @@ def test_native_transport_metadata_comes_from_plan(profile: str) -> None:
     assert f"native_exchange_slot = {exchange_slot};" in source
 
 
-@pytest.mark.parametrize("selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks")])
+@pytest.mark.parametrize(
+    "selected", [(), ("lda_rks", "b3lyp_uks", "r2scan_rks", "m06_2x_rks")]
+)
 def test_native_registry_contains_only_built_profiles(
     selected: tuple[str, ...], tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
@@ -176,6 +216,7 @@ def test_native_registry_rejects_unknown_or_duplicate_profiles() -> None:
 def test_native_model_matches_independent_native_ks_lowering(profile: str) -> None:
     """The existing SDK transport lowerer independently checks emitted point scales."""
     from generativeqc.ks import (
+        SPLIT_HYBRID_SCF_DOMAIN,
         _native_semilocal_code,
         _scf_domain_for_ir,
         ks_coefficients,
@@ -189,7 +230,10 @@ def test_native_model_matches_independent_native_ks_lowering(profile: str) -> No
         profile
     )
     assert functional == _native_semilocal_code(plan.method)
-    assert SCF_DOMAIN_BY_VERSION[domain] == _scf_domain_for_ir(plan.method)
+    expected_domain = (
+        SPLIT_HYBRID_SCF_DOMAIN if domain == 4 else SCF_DOMAIN_BY_VERSION[domain]
+    )
+    assert expected_domain == _scf_domain_for_ir(plan.method)
     actual_exchange, actual_correlation, _ = ks_coefficients(plan.method)
     assert float(exchange_scale) == actual_exchange
     assert float(correlation_scale) == actual_correlation
@@ -249,6 +293,7 @@ def test_native_operations_preserve_inner_typed_status(
     source = tmp_path / "typed_creation.cpp"
     source.write_text(
         """
+#include <algorithm>
 #include <cstdio>
 #include <cstdint>
 #include <limits>
@@ -258,7 +303,8 @@ struct DeviceAllocationError : std::runtime_error { using std::runtime_error::ru
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 struct Context { void check_device() {} };
 struct Owner { bool failed{}; Context context; uint64_t synchronizations{}; };
-int live_owners{}, inner_status{};
+int live_owners{}, inner_status{}, destroyed_owners{};
+bool fail_creation=true;
 struct NativeOwner {
   Owner* scientific{};
   bool integral_pending{}, nuclear_ready{};
@@ -268,6 +314,10 @@ struct NativeOwner {
   ~NativeOwner() { --live_owners; }
 };
 constexpr size_t stationary_spin_blocks = 1;
+constexpr size_t stationary_becke_max_atoms=128, stationary_becke_pair_tile_rows=4,
+                 stationary_becke_retained_max_atoms=32, stationary_becke_control_bytes=16,
+                 stationary_becke_threads=32;
+namespace generativeqc_grid_adjoint { struct PointPair { double values[8]; }; }
 constexpr uint64_t native_required_integral_mask = 1, native_nuclear_kind = 0;
 namespace generativeqc::dft { struct GridTaskView { size_t npoint{}; }; }
 void native_drain_integrals(NativeOwner&) {}
@@ -276,11 +326,13 @@ int cudaStreamSynchronize(void*) { return 0; }
 void error_text(char* output, size_t capacity, const char* text) {
   if (output && capacity) std::snprintf(output, capacity, "%s", text);
 }
-template <class... Arguments> int stationary_create(Arguments&&...) { return inner_status; }
+template <class... Arguments> int stationary_create(Arguments&&...) { return fail_creation?inner_status:0; }
+template <class... Arguments> int stationary_configure_becke(Arguments&&...) { return inner_status; }
+void stationary_destroy(void*) { ++destroyed_owners; }
 template <class... Arguments> int stationary_geometry_reset(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_nuclear_all(Arguments&&...) { return inner_status; }
 template <class... Arguments>
-int stationary_geometry_molecular_resident_weights_enqueue_v2(Arguments&&...) { return inner_status; }
+int stationary_geometry_molecular_resident_weights_enqueue_impl(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_finish_reduced(Arguments&&...) { return inner_status; }
 template <class... Arguments> int stationary_finish_span(Arguments&&...) { return inner_status; }
 """
@@ -296,6 +348,11 @@ int main() {
     const int actual = native_create(0, 12, 0, 2, 2, 2, 64, 1, 1, 1,
                                      1 << 20, 64, 16, &output, error, sizeof(error));
     if (actual != expected || output || live_owners) return expected;
+    fail_creation=false;
+    const int configured = native_create(0, 12, 0, 2, 2, 2, 64, 1, 1, 1,
+                                         1 << 20, 64, 16, &output, error, sizeof(error));
+    fail_creation=true;
+    if (configured != expected || output || live_owners || destroyed_owners != expected) return 9;
     Owner scientific;
     NativeOwner owner;
     owner.scientific = &scientific;
@@ -304,11 +361,14 @@ int main() {
     scientific.failed = false;
     if (native_nuclear(&owner, nullptr, 2, error, sizeof(error)) != expected ||
         !scientific.failed || owner.nuclear_ready) return 6;
-    scientific.failed = false;
     generativeqc::dft::GridTaskView view{1};
-    if (native_geometry(&owner, &view, nullptr, 0, 1, nullptr, nullptr, 0, 0,
-                        error, sizeof(error)) != expected ||
-        !scientific.failed || owner.grid_points) return 7;
+    for (bool mixed : {false, true}) {
+      scientific.failed = false;
+      const auto geometry = mixed ? native_geometry<true> : native_geometry<false>;
+      if (geometry(&owner, &view, nullptr, 0, 1, nullptr, nullptr, 0, 0,
+                    error, sizeof(error)) != expected ||
+          !scientific.failed || owner.grid_points) return 7;
+    }
     owner.grid_points = 1;
     owner.integral_mask = native_required_integral_mask;
     owner.nuclear_ready = true;

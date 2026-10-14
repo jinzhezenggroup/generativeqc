@@ -262,10 +262,10 @@
       "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
     },
     {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.gz",
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.xz",
       "family": "cpu-eri-coulomb-20261001",
-      "bytes": 425678,
-      "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009",
+      "bytes": 195548,
+      "sha256": "f46dfb1eb56a74c14c32641924ff49f88b6da87894a44992bbe0d7e8b49b2a35",
       "classification": "required-compact-accepted-evidence",
       "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
     },
@@ -332,14 +332,6 @@
       "path": "benchmarks/results/density-candidates/inputs/water_tzvp.npz",
       "role": "reference-input",
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
-    },
-    {
-      "path": "benchmarks/results/df-one-step-warm-20260926/work.json",
-      "family": "df-one-step-warm-20260926",
-      "bytes": 202052,
-      "sha256": "729c2687009cdd6e197dce27ea02507cc5cb4b2367b3cf56d2a59902d1f228f3",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All grouped semantic work counters for eight DF workloads; profiler launch arrays remain ignored."
     },
     {
       "bytes": 485607,
@@ -454,22 +446,6 @@
       "sha256": "f3c2185c9df50b0a28aea9c84f53522a0044fcb0db105b2b9424e10d0a2e3a67"
     },
     {
-      "bytes": 153158,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/384-404.json",
-      "role": "scientific-record",
-      "sha256": "e2f5728f31e23805bbc1f2fd3b3ecc52486eaf68b82abe2c46d385b74f36c1e1"
-    },
-    {
-      "bytes": 226206,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue404-407-df",
-      "path": "benchmarks/results/issue404-407-df/768-404.json",
-      "role": "scientific-record",
-      "sha256": "1ba17b6d525922968c5af89e5667fdc6ffedac9d54e8e04111d39719ea4444b9"
-    },
-    {
       "bytes": 131267,
       "classification": "required-compact-accepted-evidence",
       "family": "issue404-combined-rys",
@@ -524,22 +500,6 @@
       "path": "benchmarks/results/native-memory-arena-20261011/evidence.json.xz",
       "role": "source-bound full lifecycle, native safety, profiler summaries and negative promotion evidence",
       "sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad"
-    },
-    {
-      "bytes": 148102,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-shell_warp.json",
-      "role": "scientific-record",
-      "sha256": "025d97701a9c47aacf436214beb3ead641e4938f2a0ca7464823d47e32f9f7b5"
-    },
-    {
-      "bytes": 148094,
-      "classification": "required-compact-accepted-evidence",
-      "family": "one-electron-values-rtx5090",
-      "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-thread.json",
-      "role": "scientific-record",
-      "sha256": "5caca21fb3c48a5e185821603750cf6041331c0f9e67f35255f61f25dc9f3780"
     },
     {
       "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
@@ -600,16 +560,16 @@
     {
       "path": "benchmarks/results/readme-dft-20261013/df-summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 330160,
-      "sha256": "a841fb8731cf03c3d6391dac9fee5588fdbae6947c3509698d59a15d79b2f943",
+      "bytes": 298072,
+      "sha256": "20c746c545fb69d6f7af1d260d3decd26f035e060ee9dd0a33dfc82d28a84952",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless DF endpoint evidence, complete populations, retained failures and source identities"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/dft-cold-warm.svg",
       "family": "readme-dft-20261013",
-      "bytes": 188062,
-      "sha256": "1db53ae625851527240df00621970162b9a2bf776e1a7ac6ed1b8c603dd83e28",
+      "bytes": 188245,
+      "sha256": "c3d2f4cc08841efe76db1a200f86a289cf3566e78c663459b3695d013e8e352e",
       "classification": "required-compact-accepted-evidence",
       "role": "Complete direct endpoint chart"
     },
@@ -617,15 +577,31 @@
       "path": "benchmarks/results/readme-dft-20261013/followup-prior.json.xz",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
-      "bytes": 393624,
-      "sha256": "cde02a58a72edf6a60713fe230b11ca68a2bb8e5b054698714e94a7d25810827",
+      "bytes": 359344,
+      "sha256": "21126683633607a3df0f87983c324ac1d0faee3b828b2b59b016421d74f4338d",
       "role": "Exact lossless preservation of the prior #2401 summaries, manifest and report"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/followup-receipts.json.xz",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 307368,
+      "sha256": "dfb2f8d5090b21fa2e72bb83648ae2920907fce355797a261490e786d4911bda",
+      "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
+    },
+    {
+      "path": "benchmarks/results/readme-dft-20261013/manifest.json",
+      "family": "readme-dft-20261013",
+      "classification": "required-compact-accepted-evidence",
+      "bytes": 189592,
+      "sha256": "8dfd894702bbf97ed75aa04f09226b7b3d228e8503ead1cd120afa8a7ed4f63a",
+      "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
     },
     {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
-      "bytes": 308028,
-      "sha256": "fb978f7ddde6e4b1969e7d6c5bf834c1c1e32bec96bebd88b54f43ceb2b00342",
+      "bytes": 389824,
+      "sha256": "86e2d367b87106357d5471a0ef40dfd2834e8d80c597d238de74445fcda02e6d",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },

@@ -215,7 +215,8 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double*, std::size_t elements,
     double*, double*, double*, std::size_t correction, int* error, double threshold,
     std::uint64_t* census, std::string&, bool resident,
-    const double* beta, double* beta_exchange) {
+    const double* beta, double* beta_exchange, bool materialized) {
+  require(materialized);
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
           (spec.spin==FockSpin::Unrestricted ? beta!=nullptr : beta==nullptr) &&
           (spec.spin==FockSpin::Unrestricted && spec.exchange.present

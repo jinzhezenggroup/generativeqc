@@ -21,7 +21,9 @@ def test_automatic_df_uses_bounded_source_backed_storage_selection() -> None:
     start = source.index("CudaDensityFittingPlanPtr make_cuda_density_fitting_plan(")
     end = source.index("ScfResult run_cuda_independent_fock_strategy(", start)
     planner = source[start:end]
-    assert "const auto planning_budget = data.resolved_budget.value_bytes;" in planner
+    # Source planning may rebalance this owner; publication must observe its
+    # resolved value allowance rather than a pre-promotion budget copy.
+    assert "const auto& planning_budget = data.resolved_budget.value_bytes;" in planner
     assert "plan_requested_density_fitting_tiles(" in source
     assert "requested_df_pair_storage_request()" in source
     assert (

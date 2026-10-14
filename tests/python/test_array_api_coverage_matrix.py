@@ -80,7 +80,8 @@ def test_coverage_distinguishes_boolean_data_and_reference_execution() -> None:
     assert matrix["sum"]["audited_keywords"]["keepdims"] == "generic-arrays-only"
     assert matrix["astype"]["audited_keywords"]["device"] == "None-only"
     assert matrix["where"]["ad"] == "unsupported; forward-reference-only"
-    assert matrix["where"]["native_cpu"] is False
+    assert matrix["where"]["native_cpu"] is True
+    assert matrix["where"]["native_cpu_dtypes"] == ("float64",)
     for name, operation in matrix.items():
         if name not in {
             "reshape_explicit_indices",
@@ -96,6 +97,7 @@ def test_native_cpu_coverage_is_explicit_and_float64_only() -> None:
     report = capabilities()
     matrix = report["operation_matrix"]
     supported = set(_NATIVE_CPU_CASES) | {
+        "where",
         "reshape_explicit_indices",
         "broadcast_to_explicit_indices",
         "equal",

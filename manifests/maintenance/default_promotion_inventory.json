@@ -773,7 +773,8 @@
         "dft-policy:spatial-spd-force-auto"
       ],
       "owner_issues": [
-        1598
+        1598,
+        2416
       ],
       "sources": [
         "python/generativeqc/resources_hf.py",
@@ -784,10 +785,11 @@
         "src/scf/cuda/direct_coulomb.cpp",
         "src/scf/cuda/direct_force_class_domains.cu"
       ],
-      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range global hybrids with at least 384 AOs, based on method/operator/precision capability rather than a PBE0 label or hard-coded exact-exchange fraction. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal/D4 exclusions and optional resources remain guarded. The 256-to-22\u201354 recurrence evaluation reduction and complete 384/768-AO warm/moved speedups were demonstrated on PBE0 only. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
-      "revisit_condition": "Qualify new global hybrid variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety.",
+      "rationale": "Unset/empty requests the existing primitive-local order-six Coulomb recurrence reuse for strict-FP64 restricted exact-direct full-range sources with at least 384 AOs, including pure J and global hybrids. The actual J/K source, resident final density, prefix/topology, ECP/DF/RSH/nonlocal exclusions and optional resources remain guarded. Independent D4/gCP geometry terms are allowed for pure J; hybrids with D4 remain excluded. PBE0 established the recurrence-reuse and 384/768-AO warm/moved benefit. The pure-J extension records complete 3/12/48/96-atom 3c and 48/96-atom PBE/r2SCAN populations on frozen integrated source aaec57399ef29f96981da368c3a8c6a91af74ae8, with the low-free-memory shell-lease refusals and earlier timeouts retained separately. Explicit 0 and unknown values keep the incumbent; explicit 1 does not bypass scientific/resource guards.",
+      "revisit_condition": "Qualify further source/model variants using independent physical E+F and full cold/warm/moved timings before claiming broad performance wins. Preserve bounded fallbacks, negative results and method-independent operator safety; track the independent low-memory shell-lease fallback and publication of source-matched raw benchmark artifacts under #2416.",
       "evidence": [
         "note:.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md",
+        "note:.agents/notes/implemented/performance/2026-10-13-pure-j-spatial-default.md",
         "docs:docs/user/ks_options.md",
         "benchmarks:benchmarks/results/pbe0-spd-spatial-reuse-20261011/validation.json.gz",
         "tests:tests/python/test_pbe0_spatial_force_policy.py",
@@ -1303,6 +1305,28 @@
       "evidence": [
         "issue:#1972",
         "docs:docs/developer/response.md"
+      ]
+    },
+    {
+      "id": "response.materialized-jk",
+      "classification": "already-default",
+      "controls": [
+        "response-option:materialized_jk"
+      ],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "src/scf/cuda/direct_jk.cpp",
+        "docs/developer/response.md"
+      ],
+      "rationale": "Prepared whole-shell recurrence removes repeated per-component preparation from compensated fixed-mask response. Independent exact scalar audits disable both residency and materialization; unavailable storage retains component-wise replay and masks tighter than prepared rows retain the API refusal.",
+      "revisit_condition": "Requalify when source preparation or a derivative backend changes the work balance. Frozen C5-C7 complete E+F improves, while single C1-C2 controls are slower; do not infer a universal benefit or promote low-order hybrid dispatch from kernel timing alone.",
+      "evidence": [
+        "issue:#1972",
+        "docs:docs/developer/response.md",
+        ".agents/notes/implemented/performance/2026-10-13-cbs-response-whole-shell.md"
       ]
     },
     {

@@ -28,7 +28,7 @@ from types import MappingProxyType
 import numpy as np
 
 from .interpreter import _evaluate, evaluate_nodes
-from .ir import COMPARISONS, Node, _execution_power_exponent
+from .ir import BOOLEAN_VIEWS, COMPARISONS, Node, _execution_power_exponent
 from .program import Program
 from .scaled_arithmetic import scaled_bilinear_value
 from .types import checked_size
@@ -182,6 +182,14 @@ def capabilities() -> dict:
         "rule_version": AD_RULE_VERSION,
         "primitives": sorted(AD_PRIMITIVES),
         "non_differentiable_primitives": sorted(COMPARISONS | {"where"}),
+        "reference_external_mask_where": {
+            "version": 1,
+            "modes": ["jvp", "vjp", "dot_test"],
+            "condition": "external bool input or constant through type-preserving views",
+            "mask_views": sorted(BOOLEAN_VIEWS),
+            "domain": "finite generic float32/float64",
+            "generated_or_native": False,
+        },
         "modes": ["jvp", "vjp"],
         "backend": BACKEND,
         "packed_symmetry": False,
@@ -189,6 +197,55 @@ def capabilities() -> dict:
         "bounded_recomputation": False,
         "cuda": False,
     }
+
+
+def _validate_reference_context(program: Program) -> None:
+    """Admit Boolean values only as external, non-differentiated selectors.
+
+    Node construction already validates view shape/type and where domains.
+    This additional proof is runtime-reference-only: it must not enter the
+    shared primitive capability set or generated derivative admission.
+    """
+    live = program.live_nodes
+    if not any(node.spec.dtype == "bool" for node in live):
+        return
+    error = "Boolean TensorIR data and comparisons are non-differentiable"
+    if any(node.spec.dtype == "bool" for node in program.outputs.values()):
+        raise ValueError(error + "; Boolean outputs are unsupported")
+    external = set()
+    used = set()
+    for node in live:
+        spec = node.spec
+        if (
+            spec.dtype not in ("bool", "float32", "float64")
+            or spec.representation != "general"
+            or spec.symmetries
+            or any(
+                index.space.kind != "matrix"
+                or index.space.name != f"_array_extent_{index.space.size}"
+                or index.space.spin is not None
+                for index in spec.indices
+            )
+        ):
+            raise ValueError(
+                "external-mask reference AD requires generic real/Boolean arrays"
+            )
+        if spec.dtype == "bool":
+            if node.op in ("input", "constant"):
+                external.add(node)
+            elif node.op in BOOLEAN_VIEWS and node.inputs[0] in external:
+                external.add(node)
+                used.add(node.inputs[0])
+            else:
+                raise ValueError(error + "; where requires an external Boolean mask")
+        elif node.op == "where":
+            if node.inputs[0] not in external:
+                raise ValueError(error + "; where requires an external Boolean mask")
+            used.add(node.inputs[0])
+        elif any(operand.spec.dtype == "bool" for operand in node.inputs):
+            raise ValueError(error)
+    if external != used:
+        raise ValueError(error + "; Boolean values must serve only where conditions")
 
 
 def _input_groups(program: Program) -> dict[str, tuple[Node, ...]]:
@@ -838,6 +895,8 @@ def _jvp_arrays(
     """Evaluate every live SSA definition in forward tangent mode."""
     result = {}
     for node in program.live_nodes:
+        if node.spec.dtype == "bool":
+            continue
         if node.op == "input":
             result[node] = tangents.get(node.attrs["name"], _zeros(node.spec))
             continue
@@ -845,10 +904,16 @@ def _jvp_arrays(
             result[node] = _zeros(node.spec)
             continue
         operands = [values[operand] for operand in node.inputs]
-        operand_tangents = [result[operand] for operand in node.inputs]
+        operand_tangents = [
+            result[operand] for operand in node.inputs if operand.spec.dtype != "bool"
+        ]
         try:
             with np.errstate(divide="raise", invalid="raise", over="raise"):
-                value = _jvp_node(node, operands, operand_tangents)
+                value = (
+                    np.where(operands[0], *operand_tangents)
+                    if node.op == "where"
+                    else _jvp_node(node, operands, operand_tangents)
+                )
         except FloatingPointError as exc:
             raise ValueError(
                 f"non-finite JVP arithmetic at primitive {node.op}"
@@ -872,14 +937,18 @@ def _vjp_arrays(
 ) -> dict[Node, np.ndarray]:
     """Propagate cotangents through one primal evaluation in reverse order."""
     live = program.live_nodes
-    relevant = set(live) if selected is None else set()
+    relevant = (
+        {node for node in live if node.spec.dtype != "bool"}
+        if selected is None
+        else set()
+    )
     if selected is not None:
         for node in live:
             if (node.op == "input" and node.attrs["name"] in selected) or any(
                 operand in relevant for operand in node.inputs
             ):
                 relevant.add(node)
-    bars = {node: _zeros(node.spec) for node in live}
+    bars = {node: _zeros(node.spec) for node in live if node.spec.dtype != "bool"}
     for name, cotangent in cotangents.items():
         bars[program.outputs[name]] += cotangent
     for node in reversed(live):
@@ -889,9 +958,18 @@ def _vjp_arrays(
         operands = [values[operand] for operand in node.inputs]
         try:
             with np.errstate(divide="raise", invalid="raise", over="raise"):
-                contributions = _vjp_node(
-                    node, operands, bar, tuple(n in relevant for n in node.inputs)
-                )
+                if node.op == "where":
+                    # Route real bars without a numeric mask or Boolean bar.
+                    zero = np.dtype(node.spec.dtype).type(0)
+                    contributions = [
+                        None,
+                        np.where(operands[0], bar, zero),
+                        np.where(operands[0], zero, bar),
+                    ]
+                else:
+                    contributions = _vjp_node(
+                        node, operands, bar, tuple(n in relevant for n in node.inputs)
+                    )
         except FloatingPointError as exc:
             raise ValueError(
                 f"non-finite VJP arithmetic at primitive {node.op}"
@@ -932,8 +1010,7 @@ def jvp(
     """
     if not isinstance(program, Program):
         raise TypeError("jvp requires a Program")
-    if any(node.spec.dtype == "bool" for node in program.live_nodes):
-        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
+    _validate_reference_context(program)
     checked_size(max_bytes, "autodiff byte budget")
     tangents = _validate_tangents(program, tangents)
     selected = _select_names(program.outputs, outputs, "output")
@@ -970,8 +1047,7 @@ def vjp(
     """
     if not isinstance(program, Program):
         raise TypeError("vjp requires a Program")
-    if any(node.spec.dtype == "bool" for node in program.live_nodes):
-        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
+    _validate_reference_context(program)
     checked_size(max_bytes, "autodiff byte budget")
     cotangents = _validate_cotangents(program, cotangents)
     differentiable = {
@@ -1028,8 +1104,7 @@ def dot_test(
     """Check ``<w, Jv> == <J^T w, v>`` on one fixed primal evaluation."""
     if not isinstance(program, Program):
         raise TypeError("dot_test requires a Program")
-    if any(node.spec.dtype == "bool" for node in program.live_nodes):
-        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
+    _validate_reference_context(program)
     if not math.isfinite(rtol) or rtol < 0:
         raise ValueError("rtol must be finite and nonnegative")
     checked_size(max_bytes, "autodiff byte budget")

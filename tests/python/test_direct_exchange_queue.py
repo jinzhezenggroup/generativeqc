@@ -40,7 +40,8 @@ def test_emitted_queue_executes_each_survivor_once(
     Integral arithmetic is stubbed, but the actual emitted worker runs across
     every lane with blocking collectives. GPU matrix/sanitizer gates remain
     separate; this is an independent admission and synchronization census.
-    Mock consumers retain the real two-plane Fock output ABI.
+    Mock consumers retain the real two-plane Fock output ABI. One persistent
+    host lane group executes every case, avoiding repeated OS thread startup.
     """
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
@@ -96,6 +97,7 @@ def test_emitted_queue_executes_each_survivor_once(
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -137,6 +139,39 @@ auto warp_rendezvous = [] {{
   return groups;
 }}();
 thread_local struct Lane {{ unsigned x; }} threadIdx;
+// Only the host dispatch lifetime is shared between cases. Each invocation still
+// runs every emitted lane with the original block/warp collectives below.
+class LaneGroup {{
+  std::barrier<> dispatch{{block_threads + 1}};
+  std::function<void()> invoke;
+  bool stopping = false;
+  std::vector<std::thread> lanes;
+public:
+  LaneGroup() {{
+    for (unsigned lane = 0; lane < block_threads; ++lane)
+      lanes.emplace_back([this, lane] {{
+        threadIdx.x = lane;
+        for (;;) {{
+          dispatch.arrive_and_wait();
+          if (stopping) return;
+          invoke();
+          dispatch.arrive_and_wait();
+        }}
+      }});
+  }}
+  void run(std::function<void()> next) {{
+    invoke = std::move(next);
+    dispatch.arrive_and_wait();
+    dispatch.arrive_and_wait();
+    // All lanes have returned before the caller checks outputs or destroys inputs.
+    invoke = {{}};
+  }}
+  ~LaneGroup() {{
+    stopping = true;
+    dispatch.arrive_and_wait();
+    for (auto& lane : lanes) lane.join();
+  }}
+}};
 #define __syncthreads() rendezvous.arrive_and_wait()
 void __syncwarp(unsigned) {{ warp_rendezvous[threadIdx.x / 32]->arrive_and_wait(); }}
 bool ballot_votes[block_threads];
@@ -223,6 +258,7 @@ template<bool Unrestricted> void {prefix}_{mixed_consumer}(
         worker
         + f"""
 int main() {{
+  LaneGroup lanes;
   for (auto consumer : {{{"Consumer::Exchange, Consumer::HartreeFockExchange" if work_aware else "Consumer::HartreeFock, Consumer::Coulomb, Consumer::Exchange, Consumer::HartreeFockExchange"}}}) {{
   for (unsigned mode = {3 if work_aware else 0}; mode < {4 if work_aware else 3}; ++mode) {{
     for (pattern = 0; pattern < 4; ++pattern) {{
@@ -313,15 +349,11 @@ int main() {{
         actual.clear(); batches = 0;
         unsigned head = 0;
         unsigned long long fp64 = 0, fp32 = 0;
-        std::vector<std::thread> lanes;
-        for (unsigned lane = 0; lane < block_threads; ++lane)
-          lanes.emplace_back([&, lane] {{
-            threadIdx.x = lane;
-            {worker_name}<false>(&topology, nullptr, primitive_offsets.data(),
-                nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, {{nullptr, nullptr}},
-                &head, &fp64{extra_counter});
-          }});
-        for (auto& lane : lanes) lane.join();
+        lanes.run([&] {{
+          {worker_name}<false>(&topology, nullptr, primitive_offsets.data(),
+              nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, {{nullptr, nullptr}},
+              &head, &fp64{extra_counter});
+        }});
         std::sort(expected.begin(), expected.end()); std::sort(actual.begin(), actual.end());
         if (homogeneous_error || actual != expected || fp64 != expected_fp64 || fp32 != expected_fp32 ||
             (mode != 0 && (consumer == Consumer::Exchange ||

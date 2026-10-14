@@ -332,7 +332,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (bounded_resources) {
     charge(pairs, sizeof(std::uint32_t));
     charge(pair_blocks, sizeof(double));
-    charge(1, sizeof(unsigned long long));
+    charge(4, sizeof(unsigned long long));
     charge(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t));
     charge(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t));
   }
@@ -434,7 +434,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
                                     pair_blocks, bounded_schedule.block_prefix.back()};
     }
     plan->shell_pair_block_bounds = doubles(pair_blocks);
-    plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
+    plan->force_cursor = static_cast<unsigned long long*>(allocate(4, sizeof(unsigned long long)));
     plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
         host.system_shell_pair_block_quartet_offsets.back();
@@ -753,7 +753,7 @@ static cudaError_t validate_generated_full_range_derivative_inputs(
 static cudaError_t enqueue_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
-    bool allow_spatial_default, bool bilinear) {
+    bool allow_spatial_default, bool bilinear, DirectForcePrecisionRequest* precision) {
   // The two existing projection slots carry D and P, not spin densities.
   // Density screening is disabled: spin bounds do not bound a signed cross term.
   auto error = prepare_generated_exchange_density(p, unrestricted || bilinear, alpha, beta);
@@ -761,6 +761,12 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
 
   auto& shared = *p.shared;
   auto b = shared.batch;
+  // A launch-local view keeps strict replay and other owners isolated. The
+  // candidate cannot enter the bilinear/range-separated response contracts.
+  b.direct_force_fp32 = precision && precision->mixed_weighted && !bilinear;
+  b.direct_force_precision_work =
+      b.direct_force_fp32 && precision->collect_work ? p.force_cursor + 1 : nullptr;
+  if (precision) precision->work = {};
   if (bilinear)
     b.direct_force_seed = p.direct_spin + product(static_cast<std::size_t>(b.direct_nbf),
                                                   static_cast<std::size_t>(b.direct_nbf));
@@ -774,7 +780,7 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
   if (error != cudaSuccess) return error;
   error = cudaMemsetAsync(p.force, 0, output_elements * sizeof(double), shared.stream);
   if (error != cudaSuccess) return error;
-  error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+  error = cudaMemsetAsync(p.force_cursor, 0, 4 * sizeof(unsigned long long), shared.stream);
   if (error != cudaSuccess) return error;
   if (coulomb_coefficient != 0.0 || exchange_coefficient != 0.0) {
     if (p.angular_force_opt_in) {
@@ -803,7 +809,8 @@ static cudaError_t enqueue_generated_full_range_energy_derivatives(
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources, bool allow_spatial_default, bool bilinear) {
+    bool separate_sources, bool allow_spatial_default, bool bilinear,
+    DirectForcePrecisionRequest* precision) {
   // Reject inadmissible metadata before allocating output or installing a CUDA
   // drain: no asynchronous work exists yet, so refusal must not synchronize.
   auto error = validate_generated_full_range_derivative_inputs(
@@ -826,11 +833,16 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   } drain{shared.stream};
   error = enqueue_generated_full_range_energy_derivatives(
       p, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, separate_sources,
-      allow_spatial_default, bilinear);
+      allow_spatial_default, bilinear, precision);
   if (error != cudaSuccess) return error;
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);
   if (error != cudaSuccess) return error;
+  if (precision && precision->mixed_weighted && precision->collect_work) {
+    error = cudaMemcpyAsync(precision->work.data(), p.force_cursor + 1, sizeof(precision->work),
+                            cudaMemcpyDeviceToHost, shared.stream);
+    if (error != cudaSuccess) return error;
+  }
   error = cudaStreamSynchronize(shared.stream);
   if (error != cudaSuccess) return error;
   drain.active = false;
@@ -844,7 +856,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 cudaError_t consume_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient,
-    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default) {
+    const CudaDerivativeSourceConsumer& consumer, bool allow_spatial_default,
+    DirectForcePrecisionRequest* precision) {
   if (!plan.shared || !consumer) return cudaErrorInvalidValue;
   const auto input_status = validate_generated_full_range_derivative_inputs(
       plan, unrestricted, beta, coulomb_coefficient, exchange_coefficient, true, false);
@@ -878,17 +891,24 @@ cudaError_t consume_generated_full_range_energy_derivatives(
   } drain{shared.stream};
   const auto error = enqueue_generated_full_range_energy_derivatives(
       plan, unrestricted, alpha, beta, coulomb_coefficient, exchange_coefficient, true,
-      allow_spatial_default, false);
+      allow_spatial_default, false, precision);
   if (error != cudaSuccess) return error;
   // Generated Direct kernels publish forces; the stationary source inventory
   // publishes energy derivatives. The consumer retains this explicit sign.
   consumer({CudaDerivativeSourceKind::FullRangeJk, CudaDerivativeConvention::Force, device,
             reinterpret_cast<void*>(shared.stream), plan.force,
             static_cast<std::size_t>(shared.batch.total_atoms) * 3U, 2});
+  const bool collect = precision && precision->mixed_weighted && precision->collect_work;
+  if (collect) {
+    auto status = cudaMemcpyAsync(precision->work.data(), plan.force_cursor + 1,
+                                  sizeof(precision->work), cudaMemcpyDeviceToHost, shared.stream);
+    if (status == cudaSuccess) status = cudaStreamSynchronize(shared.stream);
+    if (status != cudaSuccess) return status;
+  }
   drain.submitted = false;
   runtime::cuda_trace::trace_counter("host_to_device_bytes", 0);
-  runtime::cuda_trace::trace_counter("device_to_host_bytes", 0);
-  runtime::cuda_trace::trace_counter("stream_synchronizations", 0);
+  runtime::cuda_trace::trace_counter("device_to_host_bytes", collect ? sizeof(precision->work) : 0);
+  runtime::cuda_trace::trace_counter("stream_synchronizations", collect ? 1 : 0);
   return cudaSuccess;
 }
 

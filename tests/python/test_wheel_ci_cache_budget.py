@@ -73,8 +73,27 @@ def test_compiler_cache_saves_partial_progress_without_masking_failure() -> None
         < WORKFLOW.index("name: Save completed compiler cache entries")
         < WORKFLOW.index("name: Verify wheel payload and CUDA linkage")
     )
-    # No cache artifact uploads or new permission/trust boundary are introduced.
-    assert WORKFLOW.count("actions/upload-artifact@") == 1
+    # Keep the required wheel artifact separate from the single optional,
+    # master-only snapshot. Additional uploads must be explicitly reviewed.
+    assert WORKFLOW.count("actions/upload-artifact@") == 2
+    wheel_artifact = WORKFLOW.split("      - uses: actions/upload-artifact@", 1)[
+        1
+    ].split("\n      - name:", 1)[0]
+    assert "name: generativeqc-wheel-manylinux_x86_64" in wheel_artifact
+    assert "path: wheelhouse/*.whl" in wheel_artifact
+    assert "if-no-files-found: error" in wheel_artifact
+    assert "continue-on-error" not in wheel_artifact
+    snapshot = _step("Publish bounded wheel compiler snapshot")
+    assert "if: steps.wheel_snapshot.outcome == 'success'" in snapshot
+    assert "continue-on-error: true" in snapshot
+    assert "retention-days: 1" in snapshot
+    assert _timeout(snapshot) == 2
+    package = _step("Package bounded wheel compiler snapshot")
+    assert "github.repository == 'jinzhezenggroup/generativeqc'" in package
+    assert "github.event_name == 'push'" in package
+    assert "github.ref == 'refs/heads/master'" in package
+    assert "steps.wheel_build.outcome == 'success'" in package
+    assert "steps.wheel_payload.outcome == 'success'" in package
     assert "permissions:\n  contents: read\n" in WORKFLOW
     assert "pull_request_target:" not in WORKFLOW
     assert "cancel-in-progress: false" in WORKFLOW
