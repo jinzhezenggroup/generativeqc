@@ -175,7 +175,7 @@ def validate_metadata(row: dict) -> None:
 
 @lru_cache(maxsize=1024)
 def work_oracle(index: int, dimension: int) -> tuple[int, int, int, int, int]:
-    """Enumerate chronological occupied slots and component visits independently.
+    """Enumerate chronological slots, then count their component cardinalities.
 
     This deliberately does not call the production history-window generator.
     Restarted/partial trajectories stay INCOMPLETE rather than being guessed.
@@ -186,14 +186,11 @@ def work_oracle(index: int, dimension: int) -> tuple[int, int, int, int, int]:
         if slot in slots:
             slots.remove(slot)
         slots.append(slot)
-    coefficient = gram = combination = 0
-    for _slot in slots:
-        for _component in range(dimension):
-            coefficient += 1
-            combination += 1
-        for _other in slots:
-            for _component in range(dimension):
-                gram += 1
+    # Each occupied slot visits every component once; each ordered slot pair
+    # does so for Gram work. Count these Cartesian products without allocating
+    # or iterating dimension-sized vectors in this host evidence consumer.
+    coefficient = combination = len(slots) * dimension
+    gram = len(slots) * len(slots) * dimension
     return len(slots), (index - 1) % 8 if index else -1, coefficient, gram, combination
 
 
@@ -357,7 +354,9 @@ def report(journal: Path, oracle: dict, repetitions: int) -> dict:
         if row["order"] != expected_order:
             raise ValueError("arms did not alternate")
         for field in ("endpoint_seconds", "readback_seconds", "construction_seconds"):
-            if not finite(row[field]) or row[field] < 0:
+            value = row.get(field)
+            executed = field != "construction_seconds" or phase == "cold"
+            if not finite(value) or (value <= 0 if executed else value != 0):
                 raise ValueError("invalid endpoint timing")
         science = numerical(row, cases[case])
         item = {
@@ -531,24 +530,22 @@ def report_lifecycle(journal: Path, oracle: dict) -> dict:
         if row["enabled"] is not True:
             raise ValueError("lifecycle instrumentation disabled")
         if index in (0, 2, 4):
-            if row["status"] != 0:
-                preserved = (
-                    row["energy"] == 123.0
-                    and row["iterations"] == -42
-                    and row["system_status"] == -43
-                    and row["converged"] == 165
-                    and row["flags"] == 0
-                    and len(row["forces"]) == len(expected["forces"])
-                    and all(value == -321.0 for value in row["forces"])
-                )
-            else:
-                preserved = (
-                    row["system_status"] != 0
-                    and row["converged"] == 0
-                    and row["energy"] is None
-                    and len(row["forces"]) == len(expected["forces"])
-                    and all(value is None for value in row["forces"])
-                )
+            # These controlled samples qualify the observed NaN transaction
+            # failure (6) and pre-reset invalid-limit rejection (1) only.
+            # Completion records transaction_status before device restoration;
+            # other final-status domains need their own evidence, not a generic
+            # completion == (API status == 0) assumption.
+            preserved = (
+                row["status"] == (1 if index == 4 else 6)
+                and row["endpoint_completed"] is False
+                and row["energy"] == 123.0
+                and row["iterations"] == -42
+                and row["system_status"] == -43
+                and row["converged"] == 165
+                and row["flags"] == 0
+                and len(row["forces"]) == len(expected["forces"])
+                and all(value == -321.0 for value in row["forces"])
+            )
             if not preserved:
                 raise ValueError(
                     "failed call published incorrect science or changed sentinels"
@@ -567,6 +564,8 @@ def report_lifecycle(journal: Path, oracle: dict) -> dict:
                 row["snapshot_available"]
                 or row["receipts"]
                 or row["attempted_receipts"]
+                or row["call_id"] != 0
+                or row["plan_token"] != 0
             ):
                 raise ValueError("pre-reset rejection exposed stale diagnostics")
         elif not row["snapshot_available"]:

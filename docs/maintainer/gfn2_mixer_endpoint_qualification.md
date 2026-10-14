@@ -46,6 +46,10 @@ execution order for every paired sample. Cold construction is reported separatel
 and charged in paired totals; later fixtures share process/library caches, so
 these are not all fresh-process cold calls. ON totals include synchronous receipt
 readback; file formatting/writing is outside the measured endpoint. The native
+sampler measures endpoint and readback intervals in both arms, including the OFF
+readback branch overhead. Both intervals must be finite and positive. Constructor
+timing must be positive for cold calls and zero for retained-cache phases; absent
+or zero executed intervals cannot qualify complete-endpoint timing. The native
 journal flushes each settled result; the main and lifecycle journals together
 are bounded to 64 MiB. Native receipt
 storage is separately bounded to 64 MiB by the existing runtime; for this single
@@ -60,7 +64,9 @@ convergence/status/iterations, call/plan
 identity, graph family/submission/completion, attempted versus retained receipts,
 ring/live-history state, actual coefficient/Gram/combination visits, completion
 bits and stage `clock64` intervals. The report reconstructs chronological slot
-occupancy and component visits without calling the production generator. Empty,
+occupancy and component visits without calling the production generator.
+Slot cardinalities multiply the vector dimension to count coefficient/combination
+and ordered-pair Gram visits without dimension-sized host enumeration. Empty,
 truncated, partial or restarted trajectories remain `INCOMPLETE`; malformed or
 identity-mismatched evidence is rejected. OFF/ON matching requires equal SCC work
 and statuses plus E/F agreement within `5e-14`, independently of the unchanged
@@ -71,9 +77,14 @@ The lifecycle sibling retains the existing water scenarios: first NaN-position
 failure, healthy recovery, failed replacement with iteration limit 301, reuse,
 pre-reset rejection with limit zero, and healthy reuse after rejection. These
 test-only failure settings are recorded separately from the fixed positive
-qualification settings. The validator preserves rejected-call sentinels or
-published NaN science as appropriate, checks call/plan rollback and snapshot
-invalidation, and independently checks recovered E/F and history work.
+qualification settings. These controlled NaN-position transaction failures require
+API status 6, incomplete endpoint and unchanged result sentinels. The zero-limit
+phase requires synchronous API status 1, incomplete endpoint, unchanged sentinels,
+no snapshot or receipts, and zero call/plan identity. Unknown failure domains are
+not qualified by this protocol. Mixer completion is recorded before device
+restoration, so final API status alone cannot infer transaction completion. The
+validator checks call/plan rollback and snapshot invalidation, and independently
+checks recovered E/F and history work.
 `mixer.jsonl.device.json` records the CUDA API's actual device 0, UUID, visible
 device count, runtime/driver version and compute capability. A node-level
 `nvidia-smi` inventory alone may include GPUs outside the process's visibility.

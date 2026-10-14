@@ -106,6 +106,25 @@ duplicate GPU experiment was submitted.
 
 ## Consequences and revisit
 
+The subsequent host-consumer review reproduced four false qualifications on
+unchanged real journals: zero executed timings, terminal SCC science substituted
+for pre-reset rejection, and completion flipped on each controlled NaN failure.
+The consumer now requires phase-appropriate timing and the observed controlled
+failure status/sentinel/completion combinations. Unknown device-restoration
+failure domains remain unqualified: mixer completion belongs to the transaction
+before `finish()` may replace its status while restoring the caller's device.
+A generic equivalence between completion and final API success was rejected.
+
+The independent work oracle still enumerates chronological occupied slots, but
+counts component Cartesian products by cardinality. Dimension-sized counting
+could perform billions of host increments within an admitted 64 MiB journal.
+Small explicit component enumeration checks the independent counts, while a
+bounded subprocess covers a maximum 300-receipt/100000-element report and rejects
+a corrupted final Gram count. This repair does not change production math, ABI,
+provider selection, frozen native inputs, or the original GPU measurements.
+Final consumer identity and replay evidence are appended in publication provenance
+without relabeling earlier consumer repairs or the 45-case historical record.
+
 Raw endpoint data can be independently revalidated and diagnostic overhead stays
 visible. Restricted single-system qualification leaves ragged/unrestricted
 semantics and profitable provider schedules open. Revisit the timing boundary

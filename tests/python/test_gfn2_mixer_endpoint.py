@@ -54,7 +54,7 @@ def experiment() -> tuple[dict, list[dict]]:
                     "positions": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
                     "construction_seconds": 0.1 if not case and not rep else 0.0,
                     "endpoint_seconds": 0.1,
-                    "readback_seconds": 0.01 if enabled else 0.0,
+                    "readback_seconds": 0.01,
                     "status": 0,
                     "system_status": 0,
                     "converged": 1,
@@ -272,7 +272,7 @@ def lifecycle() -> tuple[dict, list[dict]]:
         )
         if index in (0, 2, 4):
             row.update(
-                status=1,
+                status=1 if index == 4 else 6,
                 system_status=-43,
                 converged=165,
                 iterations=-42,
@@ -394,3 +394,170 @@ def test_pinned_reference_gate_survives_optimized_python(drift: str) -> None:
     assert result.returncode == (0 if drift == "none" else 1)
     if drift != "none":
         assert "original pinned energy/force gate" in result.stderr
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize(
+    "field", ["endpoint_seconds", "readback_seconds", "construction_seconds"]
+)
+@pytest.mark.parametrize("value", [0.0, None, "missing"])
+def test_executed_timing_must_be_available(
+    tmp_path: Path, enabled: bool, field: str, value: object
+) -> None:
+    oracle, rows = experiment()
+    row = next(row for row in rows if row["enabled"] == enabled)
+    if value == "missing":
+        row.pop(field)
+    else:
+        row[field] = value
+    with pytest.raises(ValueError, match="timing"):
+        write_report(tmp_path, rows, oracle)
+
+
+@pytest.mark.parametrize("phase", ["warm", "moved", "moved_replay"])
+def test_retained_cache_does_not_charge_construction(
+    tmp_path: Path, phase: str
+) -> None:
+    oracle, rows = experiment()
+    next(row for row in rows if row["phase"] == phase)["construction_seconds"] = 0.1
+    with pytest.raises(ValueError, match="timing"):
+        write_report(tmp_path, rows, oracle)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["terminal_science", "status", "completed", "call", "plan"]
+)
+def test_zero_iteration_rejection_requires_original_sentinels(
+    tmp_path: Path, mutation: str
+) -> None:
+    oracle, rows = lifecycle()
+    rejected = rows[4]
+    if mutation == "terminal_science":
+        rejected.update(
+            status=0, system_status=1, converged=0, energy=None, forces=[None] * 6
+        )
+    else:
+        rejected[
+            {
+                "status": "status",
+                "completed": "endpoint_completed",
+                "call": "call_id",
+                "plan": "plan_token",
+            }[mutation]
+        ] = {"status": 6, "completed": True, "call": 5, "plan": 100}[mutation]
+    path = tmp_path / "lifecycle.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ValueError):
+        MODULE.report_lifecycle(path, oracle)
+
+
+@pytest.mark.parametrize("index", [0, 2])
+@pytest.mark.parametrize(
+    "mutation", ["completed", "unknown_status", "terminal_science"]
+)
+def test_controlled_nan_failure_rejects_unqualified_outcomes(
+    tmp_path: Path, index: int, mutation: str
+) -> None:
+    oracle, rows = lifecycle()
+    if mutation == "completed":
+        rows[index]["endpoint_completed"] = True
+    elif mutation == "unknown_status":
+        rows[index]["status"] = 1
+    else:
+        rows[index].update(
+            status=0, system_status=1, converged=0, energy=None, forces=[None] * 6
+        )
+    path = tmp_path / "lifecycle.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ValueError):
+        MODULE.report_lifecycle(path, oracle)
+
+
+def test_work_oracle_matches_small_component_enumeration() -> None:
+    for index in range(20):
+        slots = []
+        for step in range(index):
+            slot = step % 8
+            if slot in slots:
+                slots.remove(slot)
+            slots.append(slot)
+        for dimension in (1, 3, 20):
+            coefficients = [
+                (slot, component) for slot in slots for component in range(dimension)
+            ]
+            gram = [
+                (left, right, component)
+                for left in slots
+                for right in slots
+                for component in range(dimension)
+            ]
+            assert MODULE.work_oracle(index, dimension) == (
+                len(slots),
+                slots[-1] if slots else -1,
+                len(coefficients),
+                len(gram),
+                len(coefficients),
+            )
+
+
+def test_large_dimension_trajectory_is_bounded_and_bad_visits_rejected(
+    tmp_path: Path,
+) -> None:
+    # Run a maximum admitted trajectory in a subprocess: a dimension-sized
+    # component loop would exceed the timeout; this also exercises report().
+    oracle, rows = experiment()
+    for case in oracle["cases"]:
+        case["vector_elements"] = 100000
+    for row in rows:
+        row["iterations"] = 300
+        if row["enabled"]:
+            template = row["receipts"][1]
+            row["receipts"] = []
+            row["attempted_receipts"] = 300
+            for index in range(300):
+                receipt = copy.deepcopy(template)
+                live = min(index, 8)
+                receipt.update(
+                    invocation=index,
+                    iteration_before=index,
+                    vector_elements=100000,
+                    live_history=live,
+                    new_slot=(index - 1) % 8 if index else -1,
+                    completed_stages=31 if live else 17,
+                    coefficient_dot_elements=live * 100000,
+                    gram_dot_elements=live * live * 100000,
+                    combination_elements=live * 100000,
+                )
+                for stage in MODULE.STAGES:
+                    receipt[f"{stage}_elapsed_cycles"] = (
+                        10 if live or stage == "residual" else 0
+                    )
+                row["receipts"].append(receipt)
+    oracle_path = tmp_path / "oracle.json"
+    journal = tmp_path / "journal.jsonl"
+    oracle_path.write_text(json.dumps(oracle))
+    for corrupted in (False, True):
+        if corrupted:
+            next(row for row in rows if row["enabled"])["receipts"][-1][
+                "gram_dot_elements"
+            ] -= 1
+        journal.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "benchmarks/gfn2_mixer_endpoint.py"),
+                "report",
+                str(journal),
+                str(oracle_path),
+                str(tmp_path / "report.json"),
+                "--repetitions",
+                "3",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == (1 if corrupted else 0), result.stderr
+        if corrupted:
+            assert "independent work oracle" in result.stderr
