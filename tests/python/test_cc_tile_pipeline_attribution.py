@@ -392,3 +392,29 @@ def test_cli_retains_deterministic_bounded_segment_ledger(
     assert ledger == [{"start_ns": 0, "end_ns": 30, "kinds": ["kernel"]}]
     assert report["segments"]["count"] == 1
     assert report["segments"]["sha256"] == checksum(segments)
+
+
+def test_cli_rejects_report_overwriting_segment_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trace, receipt = fixture()
+    trace_path, receipt_path = tmp_path / "trace.json", tmp_path / "receipt.json"
+    trace_path.write_text(json.dumps(trace))
+    receipt_path.write_text(json.dumps(receipt))
+    shared = tmp_path / "shared-output"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "cc_tile_pipeline_attribution.py",
+            "--trace",
+            str(trace_path),
+            "--receipt",
+            str(receipt_path),
+            "--output",
+            str(shared),
+            "--segments-output",
+            str(shared),
+        ],
+    )
+    with pytest.raises(ValueError, match="distinct"):
+        attribution_main()

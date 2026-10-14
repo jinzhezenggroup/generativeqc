@@ -488,6 +488,8 @@ def main() -> int:
         help="gzip-compressed exclusive interval ledger retained outside benchmarks/results",
     )
     args = parser.parse_args()
+    if args.output.resolve() == args.segments_output.resolve():
+        raise ValueError("report and segment ledger require distinct output paths")
     receipt = json.loads(args.receipt.read_text())
     trace = (
         read_nsys(args.nsys_sqlite, receipt)
