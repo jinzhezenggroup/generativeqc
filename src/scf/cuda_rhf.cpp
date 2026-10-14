@@ -35,6 +35,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "scf/aot_shell_registry.hpp"
+#include "scf/application_precision.hpp"
 #include "scf/cuda/arena.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/direct_angular_fock.hpp"
@@ -1571,6 +1572,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   auto energy_change = arena_pointer<double>(resources.arena_, layout.energy_change);
   auto density_rms = arena_pointer<double>(resources.arena_, layout.density_rms);
   auto forces = arena_pointer<double>(resources.arena_, layout.forces);
+  auto gradient_precision_work =
+      arena_pointer<unsigned long long>(resources.arena_, layout.gradient_precision_work);
   auto active = arena_pointer<std::uint8_t>(resources.arena_, layout.active);
   auto converged = arena_pointer<std::uint8_t>(resources.arena_, layout.converged);
   auto failed = arena_pointer<std::uint8_t>(resources.arena_, layout.failed);
@@ -4216,6 +4219,30 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const double* final_fock =
       force_final_state.has_value() ? force_final_state->physical_fock : fock;
 
+  // Select only arithmetic on the incumbent force schedule. All systems in
+  // this fused bucket must be qualified; a valid final token is mandatory.
+  const auto maximum_angular =
+      host.shell_angular.empty()
+          ? 255U
+          : *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
+  const bool mixed_gradient =
+      quartet_direct && force_final_state.has_value() &&
+      std::all_of(systems.begin(), systems.end(), [&](const core::System& system) {
+        return admit_application_hf_gradient(options.application_precision_budget, nbf,
+                                             system.atoms.size(), maximum_angular, !unrestricted,
+                                             system.ecp_terms.empty());
+      });
+  if (mixed_gradient) {
+    device_batch.direct_force_fp32 = true;
+    device_batch.direct_force_precision_work = gradient_precision_work;
+    cuda_error = cudaMemsetAsync(gradient_precision_work, 0,
+                                 3 * batch_size * sizeof(unsigned long long), resources.stream_);
+    if (cuda_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+  }
+
   // Energy and every force term consume this same P/F(P). In particular, the
   // Pulay weight below cannot switch to another canonical determinant.
   if (options.compute_forces) {
@@ -5210,6 +5237,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   std::vector<double> host_density_rms(batch_size);
   std::vector<double> host_density(spin_matrix_elements);
   std::vector<double> host_forces(options.compute_forces ? total_atoms * 3 : 0U);
+  std::vector<unsigned long long> host_gradient_precision_work(mixed_gradient ? 3 * batch_size
+                                                                              : 0U);
   std::vector<std::uint8_t> host_converged(batch_size);
   std::vector<std::uint8_t> host_failed(batch_size);
   std::vector<std::uint32_t> host_iterations(batch_size);
@@ -5305,6 +5334,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
     cuda_error = runtime::residency_memcpy_async(
         residency_execution, SourceRole::publication, SourceSite::hf_forces, SourcePayload::forces,
         host_forces.data(), forces, total_atoms * 3 * sizeof(double), cudaMemcpyDeviceToHost,
+        resources.stream_);
+    if (cuda_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
+  }
+  if (mixed_gradient) {
+    cuda_error = runtime::residency_memcpy_async(
+        residency_execution, SourceRole::publication, SourceSite::hf_results,
+        SourcePayload::fp32_work, host_gradient_precision_work.data(), gradient_precision_work,
+        host_gradient_precision_work.size() * sizeof(unsigned long long), cudaMemcpyDeviceToHost,
         resources.stream_);
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
@@ -5592,6 +5632,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                         ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
                         : (result.converged ? GENERATIVEQC_STATUS_SUCCESS
                                             : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED);
+    if (mixed_gradient && output.status == GENERATIVEQC_STATUS_SUCCESS &&
+        host_gradient_precision_work[3 * system] > 0 &&
+        host_gradient_precision_work[3 * system + 1] > 0 && std::isfinite(result.energy) &&
+        std::all_of(result.forces.begin(), result.forces.end(),
+                    [](double value) { return std::isfinite(value); })) {
+      // The ordinary SCF census stays incomplete. Only the synchronized,
+      // physical-state-bound gradient and this item's actual work are certified.
+      result.precision_work.gradient = {1, 1, 0, 0, 0};
+      result.precision_work.gradient_qualification = 5;
+      result.precision_work.gradient_weighted_work_collected = true;
+      std::copy_n(host_gradient_precision_work.begin() + 3 * system, 3,
+                  result.precision_work.gradient_weighted_work.begin());
+    }
   }
   return outputs;
 }

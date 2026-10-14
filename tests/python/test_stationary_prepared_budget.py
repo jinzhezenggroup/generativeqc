@@ -224,6 +224,19 @@ def test_retained_host_budget_is_rechecked_before_rebind(
     )
     assert pruned_request.scientific_identity == request.scientific_identity
     assert pruned_request.schedule_identity != request.schedule_identity
+    mixed_request = owner._request(
+        **{
+            name: value
+            for name, value in kwargs.items()
+            if name in inspect.signature(owner._request).parameters
+        },
+        target=target,
+        aot_directory=None,
+        native_grid_library=None,
+        fp32_semilocal_geometry=True,
+    )
+    assert mixed_request.scientific_identity == request.scientific_identity
+    assert mixed_request.schedule_identity != request.schedule_identity
     owner._lease.install(
         request,
         (

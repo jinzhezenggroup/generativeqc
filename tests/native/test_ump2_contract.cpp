@@ -24,6 +24,14 @@ void require(bool valid, const char* detail) {
   if (!valid) throw std::runtime_error(detail);
 }
 
+generativeqc_method_descriptor ump2_descriptor() {
+  generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = GENERATIVEQC_METHOD_UMP2;
+  return descriptor;
+}
+
 generativeqc::core::System h2() {
   generativeqc::core::System system;
   system.atoms = {{1, {0, 0, -0.7}}, {1, {0, 0, 0.7}}};
@@ -106,7 +114,7 @@ void unsupported_requests() {
   context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
   generativeqc::methods::Capabilities capabilities;
   capabilities.method = GENERATIVEQC_METHOD_UMP2;
-  generativeqc_method_descriptor descriptor{};
+  auto descriptor = ump2_descriptor();
   bool rejected = false;
   try {
     (void)generativeqc::methods::detail::prepare_ump2_calculation(capabilities, context, h2(),
@@ -127,7 +135,7 @@ void unsupported_requests() {
   }
   require(rejected, "native UMP2 silently reset a nonfinite SCF tolerance");
 
-  descriptor = {};
+  descriptor = ump2_descriptor();
   generativeqc_initial_guess_options preliminary{};
   descriptor.initial_guess = &preliminary;
   rejected = false;
@@ -139,7 +147,7 @@ void unsupported_requests() {
   }
   require(rejected, "native UMP2 silently ignored an initial-guess request");
 
-  descriptor = {};
+  descriptor = ump2_descriptor();
   descriptor.density_fitting_memory_budget_bytes = 1024;
   rejected = false;
   try {
@@ -150,20 +158,36 @@ void unsupported_requests() {
   }
   require(rejected, "native UMP2 silently ignored a DF memory request");
 
-  descriptor = {};
+  descriptor = ump2_descriptor();
   generativeqc_system auxiliary{};
   auxiliary.data = h2();
-  descriptor.method = GENERATIVEQC_METHOD_UMP2;
   descriptor.density_fitting_auxiliary_basis = &auxiliary;
+  // Registry admission checks the ABI before family-specific options. Keep
+  // malformed-prefix rejection separate from the valid auxiliary-basis case.
+  for (unsigned fault = 0; fault < 3; ++fault) {
+    auto malformed = descriptor;
+    if (fault == 0)
+      malformed.abi_version = GENERATIVEQC_ABI_VERSION + 1;
+    else
+      malformed.struct_size = fault == 1 ? 0 : sizeof(malformed) - 1;
+    rejected = false;
+    try {
+      (void)generativeqc::methods::prepare_batch(context, {h2()}, malformed, 0);
+    } catch (const generativeqc::methods::MethodError& error) {
+      rejected = error.status() == GENERATIVEQC_STATUS_ABI_MISMATCH;
+    }
+    require(rejected, "native UMP2 batch did not reject an invalid descriptor prefix");
+  }
   rejected = false;
   try {
     (void)generativeqc::methods::prepare_batch(context, {h2()}, descriptor, 0);
   } catch (const generativeqc::methods::MethodError& error) {
-    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+               std::string(error.what()).find("auxiliary-basis") != std::string::npos;
   }
   require(rejected, "native UMP2 batch silently erased an auxiliary basis");
 
-  descriptor = {};
+  descriptor = ump2_descriptor();
   generativeqc_ks_options ks{};
   descriptor.ks_options = &ks;
   rejected = false;

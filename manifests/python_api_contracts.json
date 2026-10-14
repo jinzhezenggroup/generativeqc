@@ -5820,6 +5820,17 @@
         "behavior": "docstring"
       }
     },
+    "generativeqc/precision_policy.py:PrecisionCalculator.prepare_batch": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/user/application_precision.md#python-precision-backends",
+        "errors": "docs/user/application_precision.md#python-precision-errors",
+        "ownership": "docs/user/application_precision.md#python-precision-ownership",
+        "values": "docs/user/application_precision.md#python-precision-values"
+      }
+    },
     "generativeqc/precision_policy.py:PrecisionCalculator.singlepoint": {
       "kind": "function",
       "profile": "execution",

@@ -218,19 +218,23 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     if (ks_input->struct_size >= sizeof(dft::ApplicationPrecisionKsOptions)) {
       const auto& application =
           *reinterpret_cast<const dft::ApplicationPrecisionKsOptions*>(ks_input);
-      options.application_precision_budget = {application.energy, application.maximum_force,
-                                              application.rms_force};
+      const std::array<double, 3> legacy_budget{application.energy, application.maximum_force,
+                                                application.rms_force};
       bool requested = false;
-      for (const auto allowance : options.application_precision_budget) {
+      for (const auto allowance : legacy_budget) {
         if (!std::isfinite(allowance) || allowance < 0.0)
           throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                             "application precision allowances must be finite and nonnegative");
         requested = requested || allowance != 0.0;
       }
-      if (requested && (options.application_precision_budget[0] == 0.0 ||
+      if (requested && options.application_precision_budget != std::array<double, 3>{})
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "application precision must have one method/KS transport owner");
+      if (requested && (legacy_budget[0] == 0.0 ||
                         checked_precision_mode(descriptor) != GENERATIVEQC_PRECISION_AUTO))
         throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                           "application precision requires AUTO and an energy allowance");
+      if (requested) options.application_precision_budget = legacy_budget;
     }
     if ((ks_input->spin_channels != 1 && ks_input->spin_channels != 2) ||
         (ks_input->exchange_terms == nullptr) != (ks_input->exchange_term_count == 0))

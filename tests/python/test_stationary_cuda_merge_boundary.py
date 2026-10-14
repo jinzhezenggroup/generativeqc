@@ -491,10 +491,12 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         profile_device: bool = False,
         source_names: tuple[str, ...] = runtime._SOURCE_NAMES,
         integral_derivatives: bool = True,
+        fp32_geometry: bool = False,
     ) -> MagicMock:
         assert timeline is not None
         assert profile_device is False
         assert source_names == runtime._SOURCE_NAMES
+        assert fp32_geometry is False
         admitted["budget"] = budget
         admitted["spin_blocks"] = spin_blocks
         admitted["page_work_budget"] = page_work_budget

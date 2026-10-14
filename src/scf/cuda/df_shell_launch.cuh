@@ -93,12 +93,13 @@ cudaError_t profile_resources(Kernel kernel) {
 }
 
 template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false,
-          bool Screening = false>
+          bool Screening = false, bool Mixed = false>
 cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
                            std::span<const DfShellBasisView> auxiliary, const double* positions,
                            std::size_t begin, std::size_t count, const double* weights,
                            double* gradient, unsigned long long* counters, cudaStream_t stream,
-                           DfDerivativePairs pairs, DfShellDiagnostics* diagnostics) {
+                           DfDerivativePairs pairs, DfShellDiagnostics* diagnostics,
+                           unsigned long long* precision_work = nullptr) {
   if (pairs != DfDerivativePairs::full && A < B) return cudaSuccess;
   using Schedule = generated::Schedule<A, B, C, Variant>;
   constexpr auto maximum = static_cast<std::size_t>(std::numeric_limits<int>::max());
@@ -123,7 +124,7 @@ cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
           "signature_packet_preparation_ns",
           std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - preparation).count());
       const auto error = profile_resources<A, B, C, Variant, Rys, Screening>(
-          shell_packet<A, B, C, Variant, Rys, Screening>);
+          shell_packet<A, B, C, Variant, Rys, Screening, Mixed>);
       if (error != cudaSuccess) return error;
     }
     char name[64]{};
@@ -132,10 +133,10 @@ cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
     if (error != cudaSuccess) return error;
     {
       runtime::cuda_trace::TraceRegion region(name, stream);
-      shell_packet<A, B, C, Variant, Rys, Screening>
+      shell_packet<A, B, C, Variant, Rys, Screening, Mixed>
           <<<packet.blocks, Schedule::lanes * Schedule::groups, 0, stream>>>(
               orbital.front(), auxiliary.front(), positions, begin, count, weights, gradient,
-              counters, pairs, packet, diagnostics ? diagnostics->device : nullptr);
+              counters, pairs, packet, diagnostics ? diagnostics->device : nullptr, precision_work);
     }
     error = cudaPeekAtLastError();
     if (error == cudaSuccess) error = read_work(diagnostics, packet.count, stream);
@@ -196,12 +197,13 @@ cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
 }
 
 template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false,
-          bool Screening = false>
+          bool Screening = false, bool Mixed = false>
 cudaError_t launch_group(DfShellBasisView first, DfShellBasisView second, DfShellBasisView x,
                          const double* positions, std::size_t begin, std::size_t count,
                          const double* weights, double* gradient, unsigned long long* counters,
                          cudaStream_t stream, DfDerivativePairs pairs, bool triangle,
-                         DfShellDiagnostics* diagnostics) {
+                         DfShellDiagnostics* diagnostics,
+                         unsigned long long* precision_work = nullptr) {
   if (!first.count[A] || !second.count[B] || !x.count[C]) return cudaSuccess;
   if (triangle &&
       (pairs == DfDerivativePairs::full || A != B || first.count[A] != second.count[B] ||
@@ -225,18 +227,18 @@ cudaError_t launch_group(DfShellBasisView first, DfShellBasisView second, DfShel
                   first.primitives, second.primitives, x.primitives);
     runtime::cuda_trace::trace_counter(profile_name, tasks);
     const auto error = profile_resources<A, B, C, Variant, Rys, Screening>(
-        shell_panel<A, B, C, Variant, Rys, Screening>);
+        shell_panel<A, B, C, Variant, Rys, Screening, Mixed>);
     if (error != cudaSuccess) return error;
   }
   auto error = clear_work(diagnostics, 1, stream);
   if (error != cudaSuccess) return error;
   runtime::cuda_trace::TraceRegion profile(profile_name, stream);
   if (tasks)
-    shell_panel<A, B, C, Variant, Rys, Screening>
+    shell_panel<A, B, C, Variant, Rys, Screening, Mixed>
         <<<static_cast<unsigned>((tasks + Schedule::groups - 1) / Schedule::groups),
            Schedule::lanes * Schedule::groups, 0, stream>>>(
             first, second, x, positions, begin, count, weights, gradient, counters, pairs, triangle,
-            tasks, diagnostics ? diagnostics->device : nullptr);
+            tasks, diagnostics ? diagnostics->device : nullptr, precision_work);
   error = cudaPeekAtLastError();
   profile.finish();
   if (error == cudaSuccess) error = read_work(diagnostics, 1, stream);
@@ -246,15 +248,15 @@ cudaError_t launch_group(DfShellBasisView first, DfShellBasisView second, DfShel
 }
 
 template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false,
-          bool Screening = false>
+          bool Screening = false, bool Mixed = false>
 cudaError_t launch(DfShellBasisView o, DfShellBasisView x, const double* positions,
                    std::size_t begin, std::size_t count, const double* weights, double* gradient,
                    unsigned long long* counters, cudaStream_t stream, DfDerivativePairs pairs,
-                   DfShellDiagnostics* diagnostics) {
+                   DfShellDiagnostics* diagnostics, unsigned long long* precision_work = nullptr) {
   if (pairs != DfDerivativePairs::full && A < B) return cudaSuccess;
-  return launch_group<A, B, C, Variant, Rys, Screening>(
+  return launch_group<A, B, C, Variant, Rys, Screening, Mixed>(
       o, o, x, positions, begin, count, weights, gradient, counters, stream, pairs,
-      pairs != DfDerivativePairs::full && A == B, diagnostics);
+      pairs != DfDerivativePairs::full && A == B, diagnostics, precision_work);
 }
 template <unsigned A, unsigned B, unsigned C, bool Rys, class Launch>
 cudaError_t dispatch_screening(double budget, Launch&& launch) {
@@ -267,10 +269,20 @@ cudaError_t dispatch_screening(double budget, Launch&& launch) {
 template <unsigned A, unsigned B, unsigned C, class Launch>
 cudaError_t dispatch_class(const DfShellLaunch& context, double budget, Launch&& launch) {
   auto variant = [&]<bool Rys, bool Screening>() -> cudaError_t {
-    if (context.variant == 0) return launch.template operator()<0, Rys, Screening>();
-    if (context.variant == 1) return launch.template operator()<1, Rys, Screening>();
-    if (context.variant == 2) return launch.template operator()<2, Rys, Screening>();
-    return cudaErrorInvalidValue;
+    const auto arithmetic = [&]<bool Mixed>() -> cudaError_t {
+      if (context.variant == 0) return launch.template operator()<0, Rys, Screening, Mixed>();
+      if (context.variant == 1) return launch.template operator()<1, Rys, Screening, Mixed>();
+      if (context.variant == 2) return launch.template operator()<2, Rys, Screening, Mixed>();
+      return cudaErrorInvalidValue;
+    };
+    // Strict Gaussian/root preparation dominates the s/p bra lowerings; their
+    // FP32 guards and compensated sums cost more than narrowing recovers.
+    // Preserve those optimized strict kernels rather than changing schedules
+    // or calling a losing dtype path Fast. Independent kernel probes still
+    // qualify every float class; this is an endpoint cost policy, not availability.
+    constexpr bool mixed_contraction_preferred = A >= 2 || B >= 2;
+    return context.mixed && mixed_contraction_preferred ? arithmetic.template operator()<true>()
+                                                        : arithmetic.template operator()<false>();
   };
   if constexpr (generated::rys_available<A, B, C>)
     if (context.rys) return dispatch_screening<A, B, C, true>(budget, variant);
@@ -280,10 +292,10 @@ cudaError_t dispatch_class(const DfShellLaunch& context, double budget, Launch&&
 template <unsigned A, unsigned B, unsigned C>
 cudaError_t launch_panel_class(DfShellBasisView o, DfShellBasisView x, const DfShellLaunch& c) {
   return dispatch_class<A, B, C>(
-      c, o.force_screen_budget, [&]<unsigned Variant, bool Rys, bool Screening>() {
-        return launch<A, B, C, Variant, Rys, Screening>(o, x, c.positions, c.begin, c.count,
-                                                        c.weights, c.gradient, c.counters, c.stream,
-                                                        c.pairs, c.diagnostics);
+      c, o.force_screen_budget, [&]<unsigned Variant, bool Rys, bool Screening, bool Mixed>() {
+        return launch<A, B, C, Variant, Rys, Screening, Mixed>(
+            o, x, c.positions, c.begin, c.count, c.weights, c.gradient, c.counters, c.stream,
+            c.pairs, c.diagnostics, c.precision_work);
       });
 }
 
@@ -291,22 +303,23 @@ template <unsigned A, unsigned B, unsigned C>
 cudaError_t launch_group_class(DfShellBasisView first, DfShellBasisView second, DfShellBasisView x,
                                bool triangle, const DfShellLaunch& c) {
   return dispatch_class<A, B, C>(
-      c, first.force_screen_budget, [&]<unsigned Variant, bool Rys, bool Screening>() {
-        return launch_group<A, B, C, Variant, Rys, Screening>(
+      c, first.force_screen_budget, [&]<unsigned Variant, bool Rys, bool Screening, bool Mixed>() {
+        return launch_group<A, B, C, Variant, Rys, Screening, Mixed>(
             first, second, x, c.positions, c.begin, c.count, c.weights, c.gradient, c.counters,
-            c.stream, c.pairs, triangle, c.diagnostics);
+            c.stream, c.pairs, triangle, c.diagnostics, c.precision_work);
       });
 }
 
 template <unsigned A, unsigned B, unsigned C>
 cudaError_t launch_packets_class(std::span<const DfShellBasisView> o,
                                  std::span<const DfShellBasisView> x, const DfShellLaunch& c) {
-  return dispatch_class<A, B, C>(
-      c, o.front().force_screen_budget, [&]<unsigned Variant, bool Rys, bool Screening>() {
-        return launch_packets<A, B, C, Variant, Rys, Screening>(o, x, c.positions, c.begin, c.count,
-                                                                c.weights, c.gradient, c.counters,
-                                                                c.stream, c.pairs, c.diagnostics);
-      });
+  return dispatch_class<A, B, C>(c, o.front().force_screen_budget,
+                                 [&]<unsigned Variant, bool Rys, bool Screening, bool Mixed>() {
+                                   return launch_packets<A, B, C, Variant, Rys, Screening, Mixed>(
+                                       o, x, c.positions, c.begin, c.count, c.weights, c.gradient,
+                                       c.counters, c.stream, c.pairs, c.diagnostics,
+                                       c.precision_work);
+                                 });
 }
 }  // namespace
 }  // namespace generativeqc::scf

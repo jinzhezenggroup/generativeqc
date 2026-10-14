@@ -100,8 +100,17 @@ struct PrecisionWork {
   std::vector<PrecisionOperatorRecord> operators;
   /** Private gradient v1: completed, weighted mixed dispatch, attempted mixed
    * geometry/grid points, whole-gradient FP64 retries. Per-task weighted
-   * counters require intrusive qualification and are deliberately not inferred. */
+   * counters require intrusive qualification and are deliberately not inferred.
+   * DF model 7 uses dispatch value 2 for the cost-selected d/f orbital-bra
+   * candidate; historical value 1 attempted all admitted shell classes. */
   std::array<std::uint64_t, 5> gradient{};
+  /** Private v2 identifies the independently qualified complete force model;
+   * zero means no qualification, irrespective of the requested precision. */
+  std::uint64_t gradient_qualification{};
+  /** Private v3: explicit collection bit distinguishes uninstrumented work
+   * from a measured zero. Task attempts, primitive sources, strict retries. */
+  bool gradient_weighted_work_collected{};
+  std::array<std::uint64_t, 3> gradient_weighted_work{};
 };
 
 }  // namespace generativeqc::scf

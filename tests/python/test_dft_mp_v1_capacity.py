@@ -388,10 +388,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
         ),
         "cuda_force_method_sha256": (
-            "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
+            "60885551705fbb5410a450037c08bbf9e3e9674502b9b77ff94d78c001cb6e28"
         ),
         "prepared_aot_selection_sha256": (
-            "260e61e6628c716ac940f730e52575512136fc76825570d62f3e4a6b1c9b197f"
+            "dbc6ee7cf50d25349b5cf345919a5e6741d4dfc3c4c9d8dacddffc83df4c9504"
         ),
     }
 
@@ -509,7 +509,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
         "public_wrapper_sha256": (
-            "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
+            "45097f6787b42bd6fb13ddd38fd77dead329af1ec357fc8e620610ac967081af"
         ),
         "ordinary_tile_layout_sha256": (
             "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -524,16 +524,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
         ),
         "metric_delta_sha256": (
-            "0b158358e77b94d84b845b388a3403769b9ae30b6b6ad5172ca30e0f329b1143"
+            "c9df420cacb6a16733a023c4de396db5d5c37cbfbecffdc8a232817c197017ec"
         ),
         "metrics_sha256": (
-            "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
+            "8bf8189b68d9da2c421efe0ec13abfb3296d5106ae2f3df73b7106edf3a0f01e"
         ),
         "ordinary_tile_resources_sha256": (
             "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
         ),
         "initializer_sha256": (
-            "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
+            "d79b0f5c255b78f1f56f017ca4363aeadb99d978de87279395edb4acd53cf183"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -569,7 +569,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "f6836f992fcbfe6dfd5fe5dcc040e927de286c9c419edb6271038ec31740ef9a"
+            "dd4e8026d26989e122b28b46098deb5925421ccaf11a7d26142670272f60dbb8"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -581,7 +581,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
         ),
         "native_owner_sha256": (
-            "ddca5ed4b429304cf051b9c28d4c3d5f88d805b0c94c08fbbe1e3955c8e944a1"
+            "82d609f25e944f0ca115b59f14da8e18c43a43a7042c6275ba7fa9d22b38c791"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -1772,6 +1772,113 @@ def test_capacity_contract_rejects_prepared_lifecycle_drift(
         qualify_capacity._source_limits(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "fp32_semilocal_geometry: bool = False",
+            "fp32_semilocal_geometry: bool = True",
+        ),
+        (
+            '"fp32_semilocal_geometry": fp32_semilocal_geometry,',
+            '"fp32_semilocal_geometry": True,',
+        ),
+        ("except ArithmeticError:", "except RuntimeError:"),
+        ("if not fp32_semilocal_geometry or baseline is None:", "if baseline is None:"),
+        ('if not attempts.get("fp32_geometry_points", 0):', "if False:"),
+        (
+            'kwargs["fp32_semilocal_geometry"] = False',
+            'kwargs["fp32_semilocal_geometry"] = True',
+        ),
+        ("                prepared._discard_resources()\n", ""),
+        ('"rejected_semilocal_work": attempts,', '"rejected_semilocal_work": {},'),
+    ],
+)
+def test_capacity_binding_retains_strict_default_and_bounded_precision_retry(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    """An audited identity update must not admit opt-in or retry-policy drift."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "complete_rks_cuda_gradient_diagnostic"
+    )
+    segment = ast.get_source_segment(source, owner)
+    assert segment is not None and old in segment
+    stationary_contract_tree(
+        tmp_path, source.replace(segment, segment.replace(old, new, 1), 1)
+    )
+    with pytest.raises(RuntimeError, match="public wrapper contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "method,old,new,gate",
+    [
+        (
+            "__init__",
+            "if type(fp32_geometry) is not bool:",
+            "if False:",
+            "initializer page",
+        ),
+        (
+            "__init__",
+            "if fp32_geometry and profile_device:",
+            "if False:",
+            "initializer page",
+        ),
+        (
+            "__init__",
+            'or not hasattr(lib, "stationary_geometry_precision_metrics_v1")',
+            "or False",
+            "initializer page",
+        ),
+        (
+            "__init__",
+            "mixed_enqueue is None",
+            "False",
+            "initializer page",
+        ),
+        (
+            "metrics",
+            "if precision_metrics(self.handle, precision_values, 3):",
+            "if False:",
+            "metrics page",
+        ),
+        (
+            "metrics",
+            '"fp32_geometry_points",',
+            '"invented_fp32_geometry_points",',
+            "metrics page",
+        ),
+    ],
+)
+def test_capacity_binding_retains_optional_precision_transport_and_metric_abi(
+    tmp_path: Path, method: str, old: str, new: str, gate: str
+) -> None:
+    """Mixed work needs a usable transport and truthful native work counters."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef) and node.name == "_CudaSources"
+    )
+    method_node = next(
+        node
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == method
+    )
+    segment = ast.get_source_segment(source, method_node)
+    assert segment is not None and old in segment
+    stationary_contract_tree(
+        tmp_path, source.replace(segment, segment.replace(old, new, 1), 1)
+    )
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
 def test_memory_bounds_fail_closed_when_production_definition_moves(
     tmp_path: Path,
 ) -> None:
@@ -2341,6 +2448,78 @@ def test_prepared_request_cannot_drop_the_restricted_point_policy(
     )
     with pytest.raises(RuntimeError, match="AO request contract changed"):
         qualify_capacity._prepared_aot_route_contract(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "method,old,new,gate",
+    [
+        (
+            "_request",
+            '"fp32_semilocal_geometry": fp32_semilocal_geometry,',
+            '"fp32_semilocal_geometry": False,',
+            "AO request",
+        ),
+        (
+            "ensure",
+            "fp32_semilocal_geometry=fp32_semilocal_geometry,",
+            "fp32_semilocal_geometry=False,",
+            "AOT selection",
+        ),
+        (
+            "ensure",
+            "fp32_geometry=fp32_semilocal_geometry,",
+            "fp32_geometry=False,",
+            "AOT selection",
+        ),
+    ],
+)
+def test_prepared_precision_mode_binds_replay_identity_and_source_owner(
+    tmp_path: Path, method: str, old: str, new: str, gate: str
+) -> None:
+    relative = "python/generativeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    path = tmp_path / relative
+    source = path.read_text()
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef)
+        and node.name == "PreparedStationaryCudaExecution"
+    )
+    method_node = next(
+        node
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == method
+    )
+    segment = ast.get_source_segment(source, method_node)
+    assert segment is not None and old in segment
+    path.write_text(source.replace(segment, segment.replace(old, new, 1), 1))
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "admission",
+    ("fitted_gradient_admission", "composite_gradient_admission"),
+)
+def test_public_precision_candidate_cannot_bypass_model_eligibility(
+    tmp_path: Path, admission: str
+) -> None:
+    copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    path = tmp_path / "python/generativeqc/batch.py"
+    source = path.read_text()
+    owner = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == admission
+    )
+    segment = ast.get_source_segment(source, owner)
+    assert segment is not None
+    path.write_text(source.replace(segment, "True", 1))
+    with pytest.raises(RuntimeError, match="public CUDA force route changed"):
+        qualify_capacity._source_public_route(tmp_path)
 
 
 def test_grid_count_fails_closed_when_native_cuda_shape_moves(
@@ -4151,6 +4330,8 @@ def test_zero_seed_native_contract_fails_closed(
         "restricted_point_count",
         "general_point_batches",
         "general_point_count",
+        "fp32_geometry_batches",
+        "fp32_geometry_points",
     ),
 )
 def test_restricted_point_metric_deltas_remain_source_bound(

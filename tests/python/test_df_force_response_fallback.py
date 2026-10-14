@@ -48,7 +48,7 @@ void trace_counter(const char*,std::uint64_t) {}
 }
 namespace generativeqc::scf {
 CudaDfFinalStateToken current;
-int mode=0;
+int mode=0,precision_authentication_calls=0;
 struct CudaDensityFittingJkPlan {
   std::size_t nbf=2,naux=8,batch_size=1,matrix_elements=4,tensor_elements_per_system=32;
   std::size_t row_tile=2,auxiliary_tile=8,stored_pair_count=3,stored_tensor_elements_per_system=24;
@@ -97,6 +97,19 @@ generativeqc_status cuda_density_fitting_final_state_token(const CudaDensityFitt
     std::size_t,CudaDfFinalStateToken& result,std::string&) { if(mode==14 || mode==15) pending_error=mode==14 ? cudaErrorMemoryAllocation : cudaErrorLaunchFailure;
   if(mode==11 || mode==14 || mode==15 || mode==17) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   result=current; return GENERATIVEQC_STATUS_SUCCESS; }
+// These boundaries must remain unused when no arithmetic request was supplied.
+// They deliberately cannot authenticate a candidate; this probe tests strict
+// response dispatch and failure handling, not mixed-precision qualification.
+std::uint64_t cuda_density_fitting_solve_epoch(const CudaDensityFittingJkPlan*) noexcept {
+  ++precision_authentication_calls; return 0;
+}
+DensityFactorIdentity cuda_density_fitting_factor_identity(const CudaDensityFittingJkPlan*,
+    std::size_t,std::uint64_t,std::uint64_t) noexcept {
+  ++precision_authentication_calls; return {};
+}
+FockBuildSpec make_hf_fock_spec(FockSpin,FockApproximation) {
+  ++precision_authentication_calls; return {};
+}
 bool cuda_density_fitting_integral_source_geometry_matches(const CudaDensityFittingIntegralSource*,
     std::size_t,const core::System&,const core::System&) noexcept { return true; }
 DensityFittingMetricFactor factor_density_fitting_metric(const std::vector<double>&,std::size_t,double) { return {}; }
@@ -115,10 +128,13 @@ generativeqc_status execute_cuda_df_hf_gradient(int,void*,CudaDensityFittingInte
     std::size_t,const core::System&,const core::System&,std::span<const double>,
     const std::vector<double>&,const std::vector<double>&,
     std::span<const DensityFittingDensityResponse>,double,unsigned,std::size_t,std::size_t,
-    std::vector<double>& output,std::string&,DfGradientResources*,const CudaDfMetricView*,void*,
+    std::vector<double>& output,std::string&,DfGradientResources* resources,const CudaDfMetricView*,void*,
     const CudaDfResponseBuffers*,const CudaDfPackedRawTensorView*,const CudaDfWhitenedTensorView*,
-    const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*) {
+    const CudaDfOccupiedResponseView* occupied,const CudaDfBorrowedResponseDensity*,bool mixed_shell) {
   assert(!active->final_projection_token); // The lease is consumed before any response attempt.
+  assert(!mixed_shell && precision_authentication_calls==0);
+  assert(resources && !resources->precision_work_collected);
+  assert((resources->precision_work==std::array<std::uint64_t,3>{}));
   if (occupied) {
     ++occupied_calls;
     assert(occupied->final_fitted_occupied_projection==active->auxiliary_tile_values);
@@ -156,8 +172,11 @@ int main(int argc,char** argv) {
   if(mode==9) plan.metric_full_rank[0]=0;
   if(mode==10) plan.final_projection_token.reset();
   std::vector<double> output{-1}; std::string detail;
+  DfGradientResources resources;
+  resources.precision_work_collected=true;
+  resources.precision_work={7,8,9};
   auto status=execute_cuda_density_fitting_generated_force_response(&plan,0,orbital,auxiliary,{},
-      {},{&term,1},0,4096,0,output,detail,nullptr,&requested,lease,nullptr);
+      {},{&term,1},0,4096,0,output,detail,&resources,&requested,lease,nullptr);
   const auto expected_status=mode==2 ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
       : (mode==3 || mode==5 || mode==17 || mode==18) ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
       : (mode==13 || mode==15 || mode==16) ? GENERATIVEQC_STATUS_CUDA_ERROR
@@ -169,10 +188,13 @@ int main(int argc,char** argv) {
   if(mode==13 || mode==15) assert(pending_error==cudaErrorLaunchFailure);
   if(status==GENERATIVEQC_STATUS_SUCCESS) assert(output==std::vector<double>{42});
   if(status!=GENERATIVEQC_STATUS_SUCCESS) assert(output==std::vector<double>{-1});
+  assert(!resources.precision_work_collected);
+  assert((resources.precision_work==std::array<std::uint64_t,3>{}));
+  assert(precision_authentication_calls==0);
   assert(!plan.final_projection_token);
   if(mode==0) { // Repeated response cannot borrow the consumed projection again.
     status=execute_cuda_density_fitting_generated_force_response(&plan,0,orbital,auxiliary,{},
-        {},{&term,1},0,4096,0,output,detail,nullptr,&requested,nullptr,nullptr);
+        {},{&term,1},0,4096,0,output,detail,&resources,&requested,nullptr,nullptr);
     assert(status==GENERATIVEQC_STATUS_SUCCESS && occupied_calls==1 && panel_calls==1);
   }
 }

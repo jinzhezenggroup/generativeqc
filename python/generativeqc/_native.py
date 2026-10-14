@@ -373,6 +373,16 @@ class MethodDescriptor(ctypes.Structure):
     ]
 
 
+class ApplicationPrecisionMethodDescriptor(MethodDescriptor):
+    """Private v2 prefix extension; scientific method descriptors stay unchanged."""
+
+    _fields_ = [
+        ("application_energy_budget", ctypes.c_double),
+        ("application_max_force_budget", ctypes.c_double),
+        ("application_rms_force_budget", ctypes.c_double),
+    ]
+
+
 class MethodCapabilitiesDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -1203,8 +1213,18 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
         getter.restype = ctypes.c_int
     for name, arguments in (
         ("generativeqc_calculation_gradient_precision_v1", [ctypes.c_void_p]),
+        ("generativeqc_calculation_gradient_precision_v2", [ctypes.c_void_p]),
+        ("generativeqc_calculation_gradient_precision_v3", [ctypes.c_void_p]),
         (
             "generativeqc_batch_gradient_precision_v1",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+        (
+            "generativeqc_batch_gradient_precision_v2",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+        (
+            "generativeqc_batch_gradient_precision_v3",
             [ctypes.c_void_p, ctypes.c_uint32],
         ),
     ):
