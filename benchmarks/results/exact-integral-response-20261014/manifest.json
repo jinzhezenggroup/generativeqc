@@ -1,0 +1,106 @@
+{
+  "source": "b5ca4306e0ae01776b0b5d17b1365db751602201",
+  "native_built_source": "78961f12db3482a9e79f409c435237a96c693237",
+  "nonnative_changes": [
+    "tests/python/test_exact_density_response_cache.py",
+    "tests/python/test_integral_response_reuse_cuda.py"
+  ],
+  "native_source_identity": "6326a312702b21bf338cdff066511df843da451a50455e96f5a14f117417494c",
+  "inventory_files": 1731,
+  "library_sha256": "6e180869daee6a32aa504c700d7ab8cfb83a6b47af8d53d4496436e06e81f5ab",
+  "schema": "generativeqc.exact-integral-response-publication.v1",
+  "default_enabled": false,
+  "points": [
+    {
+      "arm": "off",
+      "atoms": 3,
+      "prefix": "off/3/",
+      "phases_seconds": {
+        "cold": 7.131464453006629,
+        "warm": 0.38498013402568176,
+        "moved": 5.40271583199501,
+        "moved-warm": 0.3846595989889465
+      },
+      "integral_warm_seconds": 0.05604296101955697,
+      "energy_error_max": 9.947598300641403e-13,
+      "force_error_max": 5.528799640330817e-11
+    },
+    {
+      "arm": "off",
+      "atoms": 12,
+      "prefix": "off/12/",
+      "phases_seconds": {
+        "cold": 30.612537219014484,
+        "warm": 1.6526357010006905,
+        "moved": 19.461605171032716,
+        "moved-warm": 1.6591080400394276
+      },
+      "integral_warm_seconds": 0.4457898660330102,
+      "energy_error_max": 3.353761712787673e-12,
+      "force_error_max": 2.2494894835745072e-11
+    },
+    {
+      "arm": "off",
+      "atoms": 48,
+      "prefix": "off/48/",
+      "phases_seconds": {
+        "cold": 253.57255623704987,
+        "warm": 11.407460399961565,
+        "moved": 212.45508025202435,
+        "moved-warm": 11.404772460984532
+      },
+      "integral_warm_seconds": 4.066646913997829,
+      "energy_error_max": 3.865352482534945e-12,
+      "force_error_max": 1.801492288677764e-11
+    },
+    {
+      "arm": "on",
+      "atoms": 3,
+      "prefix": "on/3/",
+      "phases_seconds": {
+        "cold": 7.134832780051511,
+        "warm": 0.33264454500749707,
+        "moved": 5.408944710972719,
+        "moved-warm": 0.3324634169694036
+      },
+      "integral_warm_seconds": 0.0037024220218881965,
+      "energy_error_max": 1.0089706847793423e-12,
+      "force_error_max": 5.528888458172787e-11
+    },
+    {
+      "arm": "on",
+      "atoms": 12,
+      "prefix": "on/12/",
+      "phases_seconds": {
+        "cold": 30.323068826051895,
+        "warm": 1.2111592270084657,
+        "moved": 19.518194395990577,
+        "moved-warm": 1.2244277859572321
+      },
+      "integral_warm_seconds": 0.011817108024843037,
+      "energy_error_max": 3.183231456205249e-12,
+      "force_error_max": 2.2491619677822428e-11
+    },
+    {
+      "arm": "on",
+      "atoms": 48,
+      "prefix": "on/48/",
+      "phases_seconds": {
+        "cold": 253.55526785604889,
+        "warm": 7.493687540991232,
+        "moved": 212.35507574799703,
+        "moved-warm": 7.485476084984839
+      },
+      "integral_warm_seconds": 0.15911852195858955,
+      "energy_error_max": 4.547473508864641e-12,
+      "force_error_max": 1.8032686455171643e-11
+    }
+  ],
+  "accepted_calls": 72,
+  "evidence": {
+    "path": "evidence.json.xz",
+    "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+    "bytes": 356132,
+    "uncompressed_sha256": "742d52bebefae680ba0519be2bc3bad43c3f8afc25957abf1eb1d583e2ae16e7"
+  }
+}
