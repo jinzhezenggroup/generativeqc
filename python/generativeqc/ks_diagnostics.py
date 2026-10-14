@@ -77,6 +77,8 @@ class KsDiagnostic:
     physical_residual_max: float
     history: tuple[KsIteration, ...]
     coulomb_exchange_work: dict[str, typing.Any] | None = None
+    nonlocal_work: dict[str, int] | None = None
+    nonlocal_history_scopes: tuple[str, ...] | None = None
 
     def to_payload(self) -> typing.Any:
         """Copy every iteration; known unavailable stage baselines are null.
@@ -85,7 +87,24 @@ class KsDiagnostic:
         numerical values remain visible for callers to reject, not hidden as
         missing stage baselines.
         """
-        return asdict(self)
+        payload = asdict(self)
+        # The optional native initial-density experiment keeps its work in the
+        # same history. Those rows describe the provisional operator, so they
+        # must never look like physical WB97M-V target checks to readers.
+        provisional = (self.nonlocal_work or {}).get("provisional_focks", 0)
+        if self.nonlocal_history_scopes is not None:
+            for row, scope in zip(
+                payload["history"], self.nonlocal_history_scopes, strict=True
+            ):
+                row["operator_scope"] = scope
+        elif provisional:
+            for row in payload["history"]:
+                row["operator_scope"] = (
+                    "provisional-semilocal-rsh"
+                    if row["iteration"] <= provisional
+                    else "full-target"
+                )
+        return payload
 
 
 @dataclass(frozen=True)
@@ -224,6 +243,59 @@ def read_ks_diagnostic(
         physical_residual_max=summary.physical_residual_max,
         history=tuple(rows),
         coulomb_exchange_work=_coulomb_exchange_work(library, handle, index),
+        nonlocal_work=_nonlocal_work(library, handle, index),
+        nonlocal_history_scopes=_nonlocal_history_scopes(
+            library, handle, index, len(history)
+        ),
+    )
+
+
+def _nonlocal_history_scopes(
+    library: typing.Any, handle: typing.Any, index: typing.Any, count: int
+) -> tuple[str, ...] | None:
+    """Distinguish interleaved inner problems from physical target evaluations."""
+    query = getattr(
+        library, "generativeqc_internal_batch_get_nonlocal_history_scopes_v1", None
+    )
+    if index is None or query is None or not count:
+        return None
+    values = (ctypes.c_uint64 * count)()
+    status = query(handle, index, values, count)
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    names = ("full-target", "provisional-semilocal-rsh", "provisional-frozen-vv10")
+    if any(value >= len(names) for value in values):
+        raise ValueError("invalid native nonlocal operator scope")
+    return tuple(names[value] for value in values)
+
+
+def _nonlocal_work(
+    library: typing.Any, handle: typing.Any, index: typing.Any
+) -> typing.Any:
+    """Read completed run-local VV10 counters; older libraries remain unavailable."""
+    query = getattr(library, "generativeqc_internal_batch_get_nonlocal_work_v1", None)
+    if index is None or query is None:
+        return None
+    values = (ctypes.c_uint64 * 6)()
+    status = query(handle, index, values, len(values))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        return None
+    _native.check(library, status)
+    if values[0] != 1:
+        raise ValueError("invalid native nonlocal work availability")
+    return dict(
+        zip(
+            (
+                "provisional_focks",
+                "target_focks",
+                "pair_cache_probes",
+                "pair_cache_hits",
+                "pair_sweeps",
+            ),
+            values[1:],
+            strict=True,
+        )
     )
 
 

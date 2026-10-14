@@ -81,6 +81,54 @@
       ]
     },
     {
+      "id": "scf.phase-local-radial-values",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
+        "src/scf/cuda/direct_jk.cpp"
+      ],
+      "rationale": "Automatic only for screened SPD strict-FP64 restricted VV10 native initialization with at least 65536 points, the existing reuse threshold and a 4 GiB optional value ceiling. Cold and moved initialization amortize one immutable geometry/radial source; warm calls never construct a new quartic source. Complete host/device admission, original screening, matching operator/omega and explicit off/capacity fallback remain mandatory. Larger and partial-source policies remain explicit experiments; #2426 remains open.",
+      "revisit_condition": "Require complete source-matched endpoints, independent energy/force gates and capacity/lifetime evidence before expanding the 4 GiB automatic domain; retain all failed 96-atom populations.",
+      "evidence": [
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
+        "tests/python/test_range_resident_values_cuda.py",
+        "tests/python/test_range_resident_ks_cuda.py",
+        "issue:#2426",
+        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md"
+      ]
+    },
+    {
+      "id": "scf.radial-value-warm-replay",
+      "classification": "already-default",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "An admitted audited radial lease survives same-geometry warm replay by default only while range, bucket and capacity selections match. Independent source and incumbent energy baselines preserve physical convergence after policy changes and force-memory eviction. Every call still executes the physical Fock and complete force work; explicit zero retires the source.",
+      "revisit_condition": "Keep complete endpoint, no-new-warm-source, policy-invalidation and failure-cleanup gates; this does not expand radial source admission or resolve the unqualified large-capacity domain.",
+      "evidence": [
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/proposed/2026-10-14-range-warm-source-replay.md",
+        "tests/python/test_range_resident_ks_cuda.py",
+        "tests/python/test_ks_warm_orbital_failure.py",
+        "issue:#2426",
+        ".agents/notes/implemented/performance/2026-10-14-bounded-vv10-range-default.md"
+      ]
+    },
+    {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
       "controls": [
@@ -1481,6 +1529,49 @@
       "evidence": [
         "pr:#2100",
         "benchmarks/results/md-j-default-cold/README.md"
+      ]
+    },
+    {
+      "id": "ks.exact-two-electron-response-reuse",
+      "classification": "needs-qualification",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "src/methods/dft_method.cpp",
+        "src/methods/exact_density_response_cache.hpp"
+      ],
+      "rationale": "Default-off experiment retaining only the Direct RSH two-electron response inside an immutable prepared owner after exact comparison of the already authenticated host snapshot density. W-dependent Pulay and one-electron response always run; bounded optional storage refusal preserves computation.",
+      "revisit_condition": "Require independent complete E/F, geometry/one-ULP/failure/resource invalidation and original-protocol endpoint populations before any default promotion.",
+      "evidence": [
+        "tests/python/test_exact_density_response_cache.py",
+        ".agents/notes/proposed/2026-10-14-exact-two-electron-response-reuse.md",
+        "issue:#2426",
+        "benchmarks/results/exact-integral-response-20261014/README.md"
+      ]
+    },
+    {
+      "id": "ks.exact-geometry-response-reuse",
+      "classification": "needs-qualification",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "python/generativeqc/_stationary_composite_cuda.py",
+        "python/generativeqc/_geometry_response_cache.py"
+      ],
+      "rationale": "Default-off exact-density reuse of completed geometry-only semilocal/nonlocal and nuclear responses within an immutable prepared owner. Native one-electron/Pulay response always runs; optional bounded host storage can be refused without changing the endpoint.",
+      "revisit_condition": "Require independent E/F and displaced-energy gates, actual hits, geometry/one-ULP/resource/failure invalidation and complete original-protocol endpoints before default promotion.",
+      "evidence": [
+        "tests/python/test_geometry_response_cache.py",
+        ".agents/notes/proposed/2026-10-14-exact-geometry-response-reuse.md",
+        "issue:#2426"
       ]
     },
     {

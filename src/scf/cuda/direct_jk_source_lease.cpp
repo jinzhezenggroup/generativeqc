@@ -1,6 +1,7 @@
 #include "scf/cuda/direct_jk_source_lease.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -45,6 +46,12 @@ generativeqc_status DirectJkSourceLease::prepare(
   if (prepared_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   prepared_ = true;
   if (spins != 1 && spins != 2) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if ((source_operator_ != FockOperator::FullRange &&
+       source_operator_ != FockOperator::ShortRange &&
+       source_operator_ != FockOperator::LongRange) ||
+      !std::isfinite(source_omega_) || source_omega_ < 0.0 ||
+      (source_operator_ == FockOperator::FullRange && source_omega_ != 0.0))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   runtime::df_progress::Scope trace(trace_name, "cuda_completed");
   const auto finish = [&](generativeqc_status status, bool admitted = false) {
     const auto diagnostic = cuda_direct_jk_plan_diagnostic(direct_.get());
@@ -134,7 +141,9 @@ generativeqc_status DirectJkSourceLease::prepare(
   // Match the common response owner's conservative host-preparation inventory;
   // explicit scratch includes the diagnostic integer and last-action census.
   const auto bucket_layout_bytes =
-      bucket_mask == (1U << 28) - 1 ? 0 : checked_mul(systems.size(), 28 * sizeof(std::size_t));
+      bucket_mask == (1U << 28) - 1 && source_operator_ == FockOperator::FullRange
+          ? 0
+          : checked_mul(systems.size(), 28 * sizeof(std::size_t));
   const auto overhead = checked_add(
       bucket_layout_bytes,
       checked_add(
@@ -226,10 +235,8 @@ generativeqc_status DirectJkSourceLease::prepare(
   }
   runtime::df_progress::Scope::number("source_values_requested", required_values / sizeof(double));
   runtime::df_progress::Scope::number("admitted_optional_capacity_bytes", capacity_bytes_);
-  status = bucket_mask == (1U << 28) - 1
-               ? prepare_cuda_direct_jk_resident_values(direct_.get(), allowance, reason_)
-               : prepare_cuda_direct_jk_selected_resident_values(direct_.get(), allowance,
-                                                                 bucket_mask, reason_);
+  status = prepare_cuda_direct_jk_range_resident_values(direct_.get(), allowance, bucket_mask,
+                                                        source_operator_, source_omega_, reason_);
   if (optional_refusal(status)) {
     return refuse_optional();
   }
@@ -250,6 +257,17 @@ generativeqc_status DirectJkSourceLease::enqueue(FockBuildSpec spec, const doubl
                                                  std::string& detail, const double* beta,
                                                  double* beta_exchange) {
   if (!active()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  // An immutable lease never silently switches operator or range parameter.
+  // This also prevents its census from treating fallback work as cache reuse.
+  const bool matches = source_operator_ == FockOperator::FullRange
+                           ? !spec.exchange.present || spec.exchange.op == FockOperator::FullRange
+                           : !spec.coulomb.present && spec.exchange.present &&
+                                 spec.exchange.op == source_operator_ &&
+                                 spec.exchange.omega == source_omega_;
+  if (!matches) {
+    detail = "resident source radial identity mismatch";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   auto* correction = scratch_ + output_elements_;
   last_error_ = numerical_error ? numerical_error : error_;
   const auto status = enqueue_cuda_direct_jk_compensated_device(

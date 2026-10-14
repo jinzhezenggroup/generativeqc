@@ -2,8 +2,8 @@
   "current_default": "Generated two-/three-center center derivatives on shared normalized primitive/AO traversal; bounded cooperative weighted response is the sole CUDA HF force route.",
   "evidence": [
     "benchmarks/results/cuda-ownership/df/publication.json",
-    "benchmarks/results/cuda-ownership/df/validation.json",
-    "benchmarks/results/cuda-ownership/df/raw-source.json",
+    "benchmarks/results/cuda-ownership/df/validation.json.xz",
+    "benchmarks/results/cuda-ownership/df/raw-source.json.xz",
     "benchmarks/results/cuda-ownership/df/README.md",
     "benchmarks/results/issue308-shell-schedules/summary.json"
   ],

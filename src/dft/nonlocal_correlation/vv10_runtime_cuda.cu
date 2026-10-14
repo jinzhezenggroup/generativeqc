@@ -122,7 +122,9 @@ bool parallel_pair_outputs_disjoint(std::size_t npoint, const double* points, co
  * neither preference bypasses numerical or output-lease guards. */
 bool prefer_parallel_pairs(std::size_t npoint, int device_id) {
   const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
-  if (selector && *selector) return std::string_view(selector) == "parallel";
+  if (selector && *selector)
+    return std::string_view(selector) == "parallel" ||
+           std::string_view(selector) == "parallel-wide";
   if (npoint < 65536) return false;
   int major = 0, minor = 0;
   runtime::cuda_resource_check(
@@ -419,7 +421,18 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
           generated::parallel_pair_initialize<Geometry>
               <<<blocks, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
-          generated::parallel_pair_kernel<Geometry><<<680, threads, 0, stream>>>(input, output);
+          const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");
+          if (selector && std::string_view(selector) == "parallel-wide") {
+            // Both kernels use the same admitted device count. Exactly one
+            // executes, preserving small-domain occupancy without a host read.
+            generated::parallel_pair_kernel<Geometry, 4, false, true>
+                <<<680, threads, 0, stream>>>(input, output);
+            runtime::cuda_resource_check(cudaGetLastError());
+            generated::parallel_pair_kernel<Geometry, 8, true, true>
+                <<<680, threads, 0, stream>>>(input, output);
+          } else {
+            generated::parallel_pair_kernel<Geometry><<<680, threads, 0, stream>>>(input, output);
+          }
           runtime::cuda_resource_check(cudaGetLastError());
           generated::parallel_pair_zero_rows<<<680, threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
@@ -722,10 +735,10 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
       (point_derivative == nullptr) != (weight_derivative == nullptr))
     throw std::invalid_argument("resident VV10 CUDA geometry outputs disagree with layout");
   if (cache_mismatch &&
-      (parameters.variant != Vv10Variant::vv10 || !layout.features || !layout.geometry ||
+      (parameters.variant != Vv10Variant::vv10 || !layout.features ||
        !layout.mask_zero_weight_rows || layout.point_count > (std::uint64_t{1} << 32) ||
        std::fabs(parameters.coefficient) > 0x1p32))
-    throw std::invalid_argument("exact VV10 force reuse is outside its admitted owner domain");
+    throw std::invalid_argument("exact VV10 component reuse is outside its admitted owner domain");
 
   runtime::CudaDeviceScope device(device_id);
   auto* cursor = static_cast<double*>(workspace);

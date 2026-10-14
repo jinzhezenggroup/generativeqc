@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 
+#include "methods/application_precision.hpp"
 #include "methods/method.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -16,6 +17,7 @@ namespace generativeqc::methods::detail {
 // numerical, backend, density-fitting, and feature admission policies.
 inline scf::ScfOptions common_scf_options(const generativeqc_method_descriptor& descriptor) {
   scf::ScfOptions options;
+  options.application_precision_budget = application_precision_budget(descriptor);
   options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
   options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
   options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;

@@ -151,6 +151,8 @@ struct ArenaLayout {
   std::size_t energy_change{};
   std::size_t density_rms{};
   std::size_t forces{};
+  /** Three execution counters per physical item, never a bucket-wide census. */
+  std::size_t gradient_precision_work{};
   std::size_t active{};
   std::size_t converged{};
   std::size_t failed{};

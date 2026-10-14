@@ -23,6 +23,7 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
     cpp.write_text(
         r"""
 #include <cassert>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -65,8 +66,11 @@ struct Owner {
   bool is_active = true, started = false, is_failed = true;
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
+  bool pending_mixed_point = true;
+  bool experimental_mixed_point{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
   struct { std::optional<int> precision_mode;
+    std::array<double, 3> application_precision_budget{};
     scf::ScfOptions::XcExecutionSchedule xc_execution_schedule{};
     double semilocal_exchange_scale = 1, semilocal_correlation_scale = 1;
   } options;
@@ -76,6 +80,9 @@ struct Owner {
   std::uint64_t owner = 1;
   bool has_exchange = true, has_range_correction{}, fitted_coulomb{}, incremental_direct_jk{};
   bool device_nonlocal{}, device_chunk_mode{};
+  bool nonlocal_seed_stage{}, nonlocal_cache_enabled{};
+  int *nonlocal_domain_error{}, *nonlocal_pair_error{};
+  std::uint64_t* nonlocal_cache_counters{};
   void* nonlocal_correlation{};
   double exchange_coefficient{};
   unsigned spins = 1;
@@ -107,10 +114,11 @@ struct Owner {
   std::size_t elements = 1;
   struct { std::size_t density_h2d_bytes{}, synchronizations{}; } movement;
   bool warm_energy_baseline{};
+  double range_warm_energy{}, range_warm_energy_correction{};
   double warm_energy{}, warm_energy_correction{}, previous_energy{}, previous_energy_correction{};
   std::unique_ptr<int> phase_source;
   int scenario{}, retired{};
-  void prepare_phase_source(bool) {
+  void prepare_phase_source(bool, bool) {
     if (scenario == 1) throw std::runtime_error("source CUDA failure");
     phase_source = std::make_unique<int>(1);
     if (scenario == 2) throw std::bad_alloc();
@@ -119,7 +127,10 @@ struct Owner {
   void begin() {
     const std::vector<double>* input = nullptr;
     const auto seed_origin = CudaKsSeedOrigin::External;
-    const bool use_warm = false;
+    const bool use_warm = false, retain_range_source = false;
+    // This probe exercises optional source-admission failures; its ordinary
+    // begin transaction has no provisional nonlocal initializer.
+    const bool nonlocal_initialization = false;
     std::vector<double> prepared;
 """
         + transaction
@@ -136,11 +147,14 @@ int main(int argc, char** argv) {
     try { owner.begin(); } catch (...) { thrown = true; }
     assert(thrown);
     assert(owner.is_failed && !owner.is_active);
+    assert(!owner.pending_mixed_point);
     assert(!owner.phase_source && owner.retired == 1);
+    owner.pending_mixed_point = true;
     owner.scenario = 0;
     active_scenario = 0;
     owner.begin();
     assert(!owner.is_failed && owner.is_active && owner.phase_source);
+    assert(!owner.pending_mixed_point);
 }
 """
     )

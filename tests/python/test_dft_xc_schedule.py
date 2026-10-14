@@ -333,22 +333,25 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract(
             "validate_density(double*)", 24, 0, 0, 0, 0, validation_local_bytes
         ),
         KernelResources("ao_kernel(double*)", 52, 0, 0, 0, 0, 0),
-        KernelResources("tiled_density_product<false>(double*)", 64, 0, 0, 0, 4352, 0),
+        KernelResources(
+            "tiled_density_product<false, double>(double*)", 64, 0, 0, 0, 4352, 0
+        ),
         KernelResources("density_features<true>(double*)", 56, 0, 0, 0, 0, 0),
         KernelResources(
             "evaluate_points<4, false, false>(double*)", 72, 0, 16, 8, 0, 32
         ),
         KernelResources("evaluate_points<4, false, true>(double*)", 72, 0, 0, 0, 0, 32),
         KernelResources("compact_potential_panels(double*)", 40, 0, 0, 0, 0, 0),
-        KernelResources("tiled_potential(double*)", 68, 0, 0, 0, 2048, 0),
+        KernelResources("tiled_potential<double>(double*)", 68, 0, 0, 0, 2048, 0),
         *(
             KernelResources(f"{token}(double*)", 32, 0, 0, 0, 0, 0)
             for token in (
-                "batch_density_products",
+                "batch_density_products<double>",
                 "batch_density_features",
                 "batch_potential_panels",
-                "batch_local_potentials",
-                "batch_ordered_scatter",
+                "batch_local_potentials<double>",
+                "batch_ordered_scatter<false, double>",
+                "batch_ordered_scatter<true, double>",
             )
         ),
     )

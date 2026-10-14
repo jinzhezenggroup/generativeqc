@@ -92,6 +92,101 @@ def merge_precision_work(
     }
 
 
+def query_gradient_precision(
+    library: object, handle: object, index: int | None = None
+) -> dict[str, Any] | None:
+    """Decode actual completed mixed-gradient work, never infer it from SCF.
+
+    Uninstrumented KS calls report weighted dispatch policy rather than
+    inventing counts or zero retries. V3 can publish explicitly collected
+    per-item counts, including the direct-HF production consumer.
+    Whole-gradient retries replace all sources at the identical strict token.
+    """
+    name = (
+        "generativeqc_calculation_gradient_precision"
+        if index is None
+        else "generativeqc_batch_gradient_precision"
+    )
+    version = 3
+    getter = getattr(library, f"{name}_v3", None)
+    if getter is None:
+        version = 2
+        getter = getattr(library, f"{name}_v2", None)
+    if getter is None:
+        version = 1
+        getter = getattr(library, f"{name}_v1", None)
+    if getter is None:
+        return None
+    values = (ctypes.c_uint64 * {1: 5, 2: 6, 3: 10}[version])()
+    arguments = (handle,) if index is None else (handle, index)
+    status = getter(*arguments, values, len(values))
+    if status in (_native.STATUS_PRECISION_UNAVAILABLE, _native.STATUS_NOT_IMPLEMENTED):
+        return None
+    _native.check(library, status)
+    qualification = int(values[5]) if version >= 2 else 1
+    collected = version == 3 and bool(values[6])
+    all_weighted_retried = (
+        collected and values[7] > 0 and values[7] == values[9] and values[2] == 0
+    )
+    return {
+        "schema_version": version,
+        "qualification": {
+            1: "pbe0-rks-budget-fp32-v1",
+            2: "pbe-rks-budget-fp32-v1",
+            3: "b3lyp-rks-budget-fp32-v1",
+            4: "r2scan-rks-budget-fp32-v1",
+            5: "rhf-budget-fp32-v1",
+            6: "m06-2x-rks-budget-fp32-v1",
+            7: "rhf-df-shell-budget-fp32-v1",
+        }.get(qualification, "unknown"),
+        "complete": bool(values[0]),
+        "weighted_fp32_orders": (
+            [0, 1, 2, 3, 4, 5] if values[1] and qualification != 7 else []
+        ),
+        **(
+            {"weighted_fp32_consumer": "df-shell-polynomial-and-rys"}
+            if qualification == 7 and values[1]
+            else {}
+        ),
+        "weighted_task_retries": int(values[9]) if collected else None,
+        "weighted_task_counters_collected": collected,
+        "attempted_fp32_weighted_tasks": int(values[7]) if collected else None,
+        "attempted_fp32_primitive_sources": int(values[8]) if collected else None,
+        "attempted_fp32_geometry_points": int(values[2]),
+        "attempted_fp32_grid_points": int(values[3]),
+        "fp64_gradient_retries": int(values[4]),
+        "returned_mode": "fp64" if values[4] or all_weighted_retried else "mixed",
+        "fp64_components": [
+            "final_scf",
+            "one_electron_and_pulay",
+            "boys",
+            "integral_geometry_and_density_weights",
+            *(["weighted_orders_above_5"] if qualification != 7 else []),
+            "global_reductions",
+            "numerical_fallbacks",
+            *(["unselected_weighted_schedules"] if qualification == 5 else []),
+            *(
+                [
+                    "df_metric_and_response_weights",
+                    "generic_df_derivatives",
+                ]
+                if qualification == 7
+                else []
+            ),
+            *(
+                ["df_shell_sp_bra_contractions"]
+                if qualification == 7 and values[1] == 2
+                else []
+            ),
+            *(
+                ["xc_work_input_conditioning", "xc_cartesian_conversion"]
+                if qualification in (3, 4, 6)
+                else []
+            ),
+        ],
+    }
+
+
 def query_precision_work(
     library: object, handle: object, index: int | None = None
 ) -> dict[str, Any] | None:

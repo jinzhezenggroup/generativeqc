@@ -15,6 +15,11 @@ struct DfShellLaunch {
   DfDerivativePairs pairs;
   DfShellDiagnostics* diagnostics;
   bool rys = false;
+  /** Private arithmetic request, independent of schedule/production policy.
+   * The caller owns admission; ordinary launchers keep this disabled. */
+  bool mixed = false;
+  /** Optional device census: attempted tasks, primitive products, strict retries. */
+  unsigned long long* precision_work = nullptr;
 };
 
 /** Every generated angular class provides the same three public launch forms. */

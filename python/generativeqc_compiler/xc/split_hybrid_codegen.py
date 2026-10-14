@@ -118,7 +118,11 @@ def _selected_features(program: BulkProgram) -> tuple[str, ...]:
 
 
 def _emit_work_wrapper(
-    type_name: str, function_name: str, policy: SplitHybridWorkPolicy
+    type_name: str,
+    function_name: str,
+    policy: SplitHybridWorkPolicy,
+    *,
+    scalar_type: str = "double",
 ) -> str:
     signature = ", ".join(f"double {name}" for name in _MGGA_FEATURES)
     density_threshold = float(policy.density_threshold).hex()
@@ -150,7 +154,9 @@ def _emit_work_wrapper(
             "      work_rho_a, work_rho_b, work_sigma_aa, work_sigma_ab, work_sigma_bb,",
             "      work_tau_a, work_tau_b);",
             "  // Libxc returns epsilon at work inputs. Integrate with the original density.",
-            "  out.energy_density *= total / (work_rho_a + work_rho_b);",
+            "  out.energy_density *= total / (work_rho_a + work_rho_b);"
+            if scalar_type == "double"
+            else "  out.energy_density = static_cast<float>(static_cast<double>(out.energy_density) * total / (work_rho_a + work_rho_b));",
             "  // vxc follows work_mgga: derivatives at work inputs, not AD through clipping.",
             "  return out;",
             "}",
@@ -165,6 +171,8 @@ def _emit_component(
     type_name: str,
     function_name: str,
     policy: SplitHybridWorkPolicy,
+    *,
+    scalar_type: str = "double",
 ) -> str:
     selected = _selected_features(program)
     by_name = dict(zip(program.features, program.variables, strict=True))
@@ -175,10 +183,11 @@ def _emit_component(
             for name in selected
         ),
     )
-    variables = {name: name if name in selected else "0.0" for name in program.features}
-    emitter = CudaEmitter(program.graph, variables)
+    zero = "0.0f" if scalar_type == "float" else "0.0"
+    variables = {name: name if name in selected else zero for name in program.features}
+    emitter = CudaEmitter(program.graph, variables, scalar_type=scalar_type)
     emitter.emit(roots)
-    signature = ", ".join(f"double {name}" for name in selected)
+    signature = ", ".join(f"{scalar_type} {name}" for name in selected)
     interior = "\n".join(
         [
             f"__device__ inline {type_name} {function_name}_interior({signature}) {{",
@@ -193,7 +202,7 @@ def _emit_component(
         ]
     )
     restricted_roots = equal_spin_roots(program.graph, roots)
-    restricted_emitter = CudaEmitter(program.graph, variables)
+    restricted_emitter = CudaEmitter(program.graph, variables, scalar_type=scalar_type)
     restricted_emitter.emit(restricted_roots)
     restricted_interior = "\n".join(
         [
@@ -212,14 +221,26 @@ def _emit_component(
     )
     return (
         interior
-        + _emit_work_wrapper(type_name, function_name, policy)
+        + _emit_work_wrapper(type_name, function_name, policy, scalar_type=scalar_type)
         + restricted_interior
-        + _emit_work_wrapper(type_name, f"{function_name}_equal_spin", policy)
+        + _emit_work_wrapper(
+            type_name, f"{function_name}_equal_spin", policy, scalar_type=scalar_type
+        )
     )
 
 
-def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str, ...]]:
-    """Return namespace body, type name and selected feature ABI for one method."""
+def emit_split_hybrid_device_body(
+    identifier: str, *, scalar_type: str = "double"
+) -> tuple[str, str, tuple[str, ...]]:
+    """Return one typed component graph with the unchanged Libxc work contract.
+
+    Float selects raw-component parameters, graph arithmetic and result storage.
+    Domain conditioning and physical-density energy rescaling stay FP64; the
+    caller still owns interior qualification and a strict numerical fallback.
+    No rounding policy changes the mathematical expression identity.
+    """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
     method = build_split_global_hybrid(identifier)
     if method.exchange.family != method.correlation.family:
         raise MapleImportError("split hybrid CUDA components use different families")
@@ -249,16 +270,24 @@ def emit_split_hybrid_device_body(identifier: str) -> tuple[str, str, tuple[str,
     signature = ", ".join(f"double {name}" for name in selected)
     arguments = ", ".join(selected)
     exchange = _emit_component(
-        method.exchange, type_name, f"{function_name}_exchange", x_policy
+        method.exchange,
+        type_name,
+        f"{function_name}_exchange",
+        x_policy,
+        scalar_type=scalar_type,
     )
     correlation = _emit_component(
-        method.correlation, type_name, f"{function_name}_correlation", c_policy
+        method.correlation,
+        type_name,
+        f"{function_name}_correlation",
+        c_policy,
+        scalar_type=scalar_type,
     )
     body = "\n".join(
         [
             f"struct {type_name} {{",
-            "  double energy_density{};",
-            f"  double feature_derivative[{len(selected)}]{{}};",
+            f"  {scalar_type} energy_density{{}};",
+            f"  {scalar_type} feature_derivative[{len(selected)}]{{}};",
             "};",
             f'inline constexpr const char* k{type_stem}DeviceExpressionIdentity = "{expression_identity}";',
             f"inline constexpr double k{type_stem}ExactExchange = {float(method.exact_exchange).hex()};",

@@ -490,6 +490,18 @@ void CudaXcPlan::prepare_potential(std::size_t provider_budget) {
   }
 }
 
+void CudaXcPlan::prepare_mixed_pbe_points(bool mixed_ao, bool mixed_contractions) {
+  check_device();
+  if (evaluation_started_ || layout_.response || layout_.spins != 1 ||
+      layout_.functional != static_cast<std::uint32_t>(SemilocalFamily::Pbe))
+    throw std::invalid_argument("mixed point preparation requires physical restricted PBE");
+  if (mixed_ao && !cuda_xc_capability_qualified(layout_.fast_paths.mixed_ao_precision))
+    throw std::invalid_argument("mixed PBE AO arithmetic is unavailable for this point program");
+  mixed_pbe_points_ = true;
+  mixed_pbe_ao_ = mixed_ao;
+  mixed_pbe_contractions_ = mixed_contractions;
+}
+
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                                  std::uint64_t expected_replays, std::size_t provider_budget) {
   check_device();
@@ -878,13 +890,21 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     fail_next_xc_status = cudaSuccess;
     generativeqc_tensor::cuda_check(injected);
 #endif
+    const bool mixed_point = mixed_pbe_points_ && phase == PrecisionPhase::Admitted;
+    auto execution_layout = layout_;
+    execution_layout.fp32_contractions = mixed_point && mixed_pbe_contractions_;
+    if (mixed_point && mixed_pbe_ao_)
+      execution_layout.ao_precision = CudaXcAoPrecision::Fp32ComputeFp64Storage;
     cuda_xc_detail::enqueue(
-        layout_, point_launcher_, stream_, basis_, points_, weights_, density, ao_, work_,
-        features_, coefficients_, point_totals_, potential_, totals_, error_,
-        phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
+        execution_layout,
+        mixed_point ? cuda_xc_detail::mixed_pbe_point_launcher() : point_launcher_, stream_, basis_,
+        points_, weights_, density, ao_, work_, features_, coefficients_, point_totals_, potential_,
+        totals_, error_, phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
         local_density_launchers_, direction, delta_features_, total_density, total_gradient,
         ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get(),
-        point_batch_plan_, point_batch_launcher_, point_batch_arena_);
+        point_batch_plan_,
+        mixed_point ? cuda_xc_detail::mixed_pbe_point_batch_launcher() : point_batch_launcher_,
+        point_batch_arena_);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     // The generated executor has a separate exception vocabulary. Translate at
     // this native owner boundary so both single-point and batch APIs preserve it.

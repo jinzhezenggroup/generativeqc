@@ -102,8 +102,8 @@ def test_class_local_math_change_does_not_invalidate_neighbors(
 ) -> None:
     original = df_rys_shell._emit_cooperative_shell
 
-    def changed(angular: typing.Any) -> typing.Any:
-        lines = original(angular)
+    def changed(angular: typing.Any, *, scalar_type: str = "double") -> typing.Any:
+        lines = original(angular, scalar_type=scalar_type)
         return lines + (["// class-local edit"] if angular == (0, 0, 3) else [])
 
     monkeypatch.setattr(df_rys_shell, "_emit_cooperative_shell", changed)

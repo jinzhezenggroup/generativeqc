@@ -703,11 +703,29 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     """Register the stable control; executable probes qualify its admission."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = _read(root / relative)
-    if not re.search(
-        r'\b(?:std::)?getenv\s*\(\s*"GENERATIVEQC_KS_RESIDENT_VALUES"\s*\)', source
-    ):
-        return {}
-    return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
+    # The environment name may be chosen by a conditional or read through a
+    # policy helper. Inventory ownership follows each live control literal,
+    # independently of that harmless call-site spelling. Admission semantics
+    # are covered by the executable source-policy and endpoint tests.
+    source = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source, flags=re.DOTALL)
+    names = re.findall(
+        r'"(GENERATIVEQC_KS_(?:RANGE_)?RESIDENT_(?:VALUES|REPLAY))"', source
+    )
+    controls = {f"ks-runtime:{name}": relative.as_posix() for name in names}
+    method = Path("src/methods/dft_method.cpp")
+    if (root / method).is_file():
+        owner = re.sub(
+            r"//[^\n]*|/\*.*?\*/", " ", _read(root / method), flags=re.DOTALL
+        )
+        for name in re.findall(r'"(GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE)"', owner):
+            controls[f"ks-runtime:{name}"] = method.as_posix()
+    geometry = Path("python/generativeqc/_stationary_composite_cuda.py")
+    if (root / geometry).is_file():
+        for name in re.findall(
+            r'"(GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE)"', _read(root / geometry)
+        ):
+            controls[f"ks-runtime:{name}"] = geometry.as_posix()
+    return controls
 
 
 def _discover_partial_phase_values(root: Path) -> dict[str, str]:

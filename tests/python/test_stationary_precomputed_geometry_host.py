@@ -64,8 +64,10 @@ std::atomic<size_t> point_evaluations{0};
     prefix = prefix.replace(
         "const int old=*p; *p=v; return old;", "return std::atomic_ref(*p).exchange(v);"
     ).replace("  return {};", "  ++point_evaluations; return {};")
-    begin = _STATIONARY_SCIENTIFIC_KERNELS.index(
-        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
+    begin = _STATIONARY_SCIENTIFIC_KERNELS.rfind(
+        "template <",
+        0,
+        _STATIONARY_SCIENTIFIC_KERNELS.index("__device__ bool geometry_point_setup("),
     )
     end = _STATIONARY_SCIENTIFIC_KERNELS.index(
         "}  // namespace generativeqc_stationary_cuda", begin
@@ -78,7 +80,7 @@ std::atomic<size_t> point_evaluations{0};
         Path(__file__).resolve().parents[2] / "src/dft/stationary_gradient_cuda.cuh"
     ).read_text()
     declaration = re.search(
-        r"template\s*<bool precomputed_point>\s*__global__ void geometry_cooperative_kernel\([^;]+;",
+        r"template\s*<bool precomputed_point, class Arithmetic>\s*__global__ void geometry_cooperative_kernel\([^;]+;",
         header,
     )
     assert declaration is not None
@@ -86,9 +88,10 @@ std::atomic<size_t> point_evaluations{0};
         prefix
         + emit_grid_adjoint()
         + emit_grid_partials(3)
+        + emit_grid_partials(3, scalar_type="float", suffix="_fp32")
         + "constexpr size_t stationary_becke_retained_max_atoms=32, stationary_becke_pair_tile_rows=4;\n"
         + declaration[0]
-        + "\nauto* geometry_entry = &geometry_cooperative_kernel<true>;\n"
+        + "\nauto* geometry_entry = &geometry_cooperative_kernel<true, double>;\n"
         + kernels
         + DRIVER.replace("ATOMS", str(atoms)).replace("AOS", str(aos))
     )
@@ -142,10 +145,10 @@ int main() {
         std::vector<std::thread> workers;
         for(size_t rank=0;rank<32;++rank) workers.emplace_back([&,rank] {
           threadIdx.x=rank;blockIdx.x=point;active_barrier=&barrier;
-          geometry_cooperative_kernel<prepared>(view,work.data(),ao_atoms.data(),
+          geometry_cooperative_kernel<prepared,double>(view,work.data(),ao_atoms.data(),
               implicit?nullptr:owners.data(),4,3,nullptr,atoms,weights.data(),raw.data(),
               external?seeds.data():nullptr,stride,2,points,partial.data()+1,
-              scratch.data()+1,nullptr,&error,phase_seeds.data()+1);
+              scratch.data()+1,nullptr,&error,phase_seeds.data()+1,false);
         });
         for(auto& worker:workers) worker.join();
       }

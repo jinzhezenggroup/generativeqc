@@ -285,6 +285,16 @@ class KsOptionsDescriptor(ctypes.Structure):
     ]
 
 
+class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
+    """Private size-tagged extension; requires the matching native feature query."""
+
+    _fields_ = [
+        ("application_energy_budget", ctypes.c_double),
+        ("application_max_force_budget", ctypes.c_double),
+        ("application_rms_force_budget", ctypes.c_double),
+    ]
+
+
 class InitialGuessOptionsDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -360,6 +370,16 @@ class MethodDescriptor(ctypes.Structure):
         ("ccsd_level_shift", ctypes.c_double),
         ("ccsd_frozen_core", ctypes.c_uint32),
         ("initial_guess", ctypes.POINTER(InitialGuessOptionsDescriptor)),
+    ]
+
+
+class ApplicationPrecisionMethodDescriptor(MethodDescriptor):
+    """Private v2 prefix extension; scientific method descriptors stay unchanged."""
+
+    _fields_ = [
+        ("application_energy_budget", ctypes.c_double),
+        ("application_max_force_budget", ctypes.c_double),
+        ("application_rms_force_budget", ctypes.c_double),
     ]
 
 
@@ -1191,6 +1211,31 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
             ctypes.c_uint32,
         ]
         getter.restype = ctypes.c_int
+    for name, arguments in (
+        ("generativeqc_calculation_gradient_precision_v1", [ctypes.c_void_p]),
+        ("generativeqc_calculation_gradient_precision_v2", [ctypes.c_void_p]),
+        ("generativeqc_calculation_gradient_precision_v3", [ctypes.c_void_p]),
+        (
+            "generativeqc_batch_gradient_precision_v1",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+        (
+            "generativeqc_batch_gradient_precision_v2",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+        (
+            "generativeqc_batch_gradient_precision_v3",
+            [ctypes.c_void_p, ctypes.c_uint32],
+        ),
+    ):
+        getter = getattr(library, name, None)
+        if getter is not None:
+            getter.argtypes = [
+                *arguments,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            getter.restype = ctypes.c_int
     library.generativeqc_calculation_prepare.argtypes = [
         ctypes.c_void_p,
         ctypes.c_void_p,
@@ -1279,6 +1324,19 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
                 ctypes.POINTER(KsCoulombExchangeWorkDescriptor),
             ]
             work_query.restype = ctypes.c_int
+    for name in (
+        "generativeqc_internal_batch_get_nonlocal_work_v1",
+        "generativeqc_internal_batch_get_nonlocal_history_scopes_v1",
+    ):
+        nonlocal_query = getattr(library, name, None)
+        if nonlocal_query is not None:
+            nonlocal_query.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint64),
+                ctypes.c_size_t,
+            ]
+            nonlocal_query.restype = ctypes.c_int
     for name, prefix in (
         ("generativeqc_calculation_get_ks_transport_diagnostic", [ctypes.c_void_p]),
         (

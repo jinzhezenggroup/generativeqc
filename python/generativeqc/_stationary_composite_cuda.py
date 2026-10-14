@@ -15,6 +15,7 @@ seeds remain on the device throughout composition.
 from __future__ import annotations
 
 import ctypes as ct
+import os
 import typing
 from contextlib import ExitStack
 from pathlib import Path
@@ -60,6 +61,7 @@ from generativeqc_compiler.method.stationary_resources import (
 
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
+from ._geometry_response_cache import ExactGeometryResponseCache
 from ._ks_snapshot import _integral_source_resources
 from ._resident_ao_maps import (
     ResidentAoMapCache,
@@ -69,6 +71,7 @@ from ._resident_ao_maps import (
 from ._stationary_cuda import (
     _DOUBLE,
     _CudaSources,
+    _Fp32GeometryUnavailable,
     _metric_delta,
     _native_grid_artifact,
     _ptr,
@@ -144,10 +147,13 @@ class PreparedCompositeStationaryCudaGradient:
         self._identity = None
         self._nonlocal = None
         self._ao_maps = None
+        self._geometry_response = ExactGeometryResponseCache()
         self.executions = 0
         self.last_work = None
+        self._attempt_source_metrics = None
 
     def close(self) -> None:
+        self._geometry_response.clear()
         if self._nonlocal is not None:
             # The native nonlocal owner drains its bound stream before freeing
             # seeds, including a failed downstream geometry enqueue.
@@ -173,23 +179,75 @@ class PreparedCompositeStationaryCudaGradient:
         active_ao_cache_bytes: int = 64 << 20,
         active_ao_producer: str = "sampled-jets",
         active_ao_max_active_fraction: float = 1.0,
+        fp32_semilocal_geometry: bool = False,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
-        """Publish only a complete result; failed executions discard retained scratch."""
+        """Publish complete forces; an explicit semilocal candidate is not admission.
+
+        The diagnostic FP32 option changes only semilocal point/projection/Becke
+        arithmetic. SCF, AO production, integral derivatives and the independent
+        nonlocal seed consumer stay strict. A numerical candidate failure retries
+        the complete gradient once at the same live state; driver, allocation and
+        identity failures never trigger a retry. Failed calls discard scratch.
+        """
+        started = perf_counter()
+        options = {
+            "compiler": compiler,
+            "cache": cache,
+            "library": library,
+            "tile_points": tile_points,
+            "max_device_bytes": max_device_bytes,
+            "max_host_bytes": max_host_bytes,
+            "active_ao_cutoff": active_ao_cutoff,
+            "active_ao_cache_bytes": active_ao_cache_bytes,
+            "active_ao_producer": active_ao_producer,
+            "active_ao_max_active_fraction": active_ao_max_active_fraction,
+            "fp32_semilocal_geometry": fp32_semilocal_geometry,
+        }
         try:
-            return self._execute(
-                state,
-                basis,
-                compiler=compiler,
-                cache=cache,
-                library=library,
-                tile_points=tile_points,
-                max_device_bytes=max_device_bytes,
-                max_host_bytes=max_host_bytes,
-                active_ao_cutoff=active_ao_cutoff,
-                active_ao_cache_bytes=active_ao_cache_bytes,
-                active_ao_producer=active_ao_producer,
-                active_ao_max_active_fraction=active_ao_max_active_fraction,
-            )
+            try:
+                return self._execute(state, basis, **options)
+            except _Fp32GeometryUnavailable as error:
+                if not fp32_semilocal_geometry:
+                    raise
+                attempts = (
+                    {}
+                    if self._attempt_source_metrics is None
+                    else _metric_delta(
+                        self.sources.metrics(), self._attempt_source_metrics
+                    )
+                )
+                self.close()
+                options["fp32_semilocal_geometry"] = False
+                forces, work = self._execute(state, basis, **options)
+                work = dict(work)
+                work.update(
+                    fp32_semilocal_geometry_requested=True,
+                    fp32_geometry_unavailable=str(error),
+                    rejected_semilocal_work=attempts,
+                    endpoint_seconds=perf_counter() - started,
+                )
+                self.last_work = work
+                return forces, work
+            except ArithmeticError:
+                if not fp32_semilocal_geometry or self._attempt_source_metrics is None:
+                    raise
+                attempts = _metric_delta(
+                    self.sources.metrics(), self._attempt_source_metrics
+                )
+                if not attempts.get("fp32_geometry_points", 0):
+                    raise
+                self.close()
+                options["fp32_semilocal_geometry"] = False
+                forces, work = self._execute(state, basis, **options)
+                work = dict(work)
+                work.update(
+                    fp32_semilocal_geometry_requested=True,
+                    fp64_geometry_retries=1,
+                    rejected_semilocal_work=attempts,
+                    endpoint_seconds=perf_counter() - started,
+                )
+                self.last_work = work
+                return forces, work
         except BaseException:
             self.close()
             raise
@@ -209,9 +267,13 @@ class PreparedCompositeStationaryCudaGradient:
         active_ao_cache_bytes: int,
         active_ao_producer: str,
         active_ao_max_active_fraction: float,
+        fp32_semilocal_geometry: bool,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
         """Contract all twelve gradients under the live SCF token and publish forces."""
+        self._attempt_source_metrics = None
         started = perf_counter()
+        if type(fp32_semilocal_geometry) is not bool:
+            raise TypeError("semilocal FP32 geometry selection must be boolean")
         if type(active_ao_producer) is not str or active_ao_producer not in {
             "sampled-jets",
             "pre-ao-envelope",
@@ -378,6 +440,7 @@ class PreparedCompositeStationaryCudaGradient:
             ao_cache_allowance,
             active_ao_producer,
             active_ao_max_active_fraction,
+            fp32_semilocal_geometry,
         )
         from ._stationary_cuda import _prepare_force_memory
 
@@ -396,6 +459,22 @@ class PreparedCompositeStationaryCudaGradient:
                     compiler=compiler,
                     cache=cache,
                 )
+                # Accumulators borrow this producer's stream. Register the
+                # producer first so exception cleanup drains/destroys its
+                # consumers before releasing that stream, including pre-drain
+                # numerical failures and the complete strict retry.
+                self.grid = self._stack.enter_context(
+                    CudaGrid(
+                        basis,
+                        _native_grid_artifact(library, compiler.target.architecture),
+                        order=2,
+                        tile_points=tile_points,
+                        active_ao_capacity=n,
+                        budget_bytes=gp.peak_bytes,
+                        device_id=device,
+                        ingredients=grid_features,
+                    )
+                )
                 self.sources = self._stack.enter_context(
                     _CudaSources(
                         basis,
@@ -410,6 +489,7 @@ class PreparedCompositeStationaryCudaGradient:
                         cooperative_becke=True,
                         phased_becke=phased_becke,
                         becke_primitive=becke_primitive,
+                        fp32_geometry=fp32_semilocal_geometry,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -434,18 +514,6 @@ class PreparedCompositeStationaryCudaGradient:
                         phased_becke=phased_becke,
                         becke_primitive=becke_primitive,
                         page_work_budget=1,
-                    )
-                )
-                self.grid = self._stack.enter_context(
-                    CudaGrid(
-                        basis,
-                        _native_grid_artifact(library, compiler.target.architecture),
-                        order=2,
-                        tile_points=tile_points,
-                        active_ao_capacity=n,
-                        budget_bytes=gp.peak_bytes,
-                        device_id=device,
-                        ingredients=grid_features,
                     )
                 )
                 self._nonlocal = _ResidentNonlocalForceOwner(
@@ -473,6 +541,7 @@ class PreparedCompositeStationaryCudaGradient:
                 source, native_budget + native_derivative_bytes
             )
         source_metrics_before = self.sources.metrics()
+        self._attempt_source_metrics = source_metrics_before
         nonlocal_metrics_before = self.nonlocal_sources.metrics()
         component_start = perf_counter()
         evaluate = source._library.generativeqc_ks_snapshot_cuda_integral_gradient_v1
@@ -516,82 +585,148 @@ class PreparedCompositeStationaryCudaGradient:
             raise NotImplementedError(
                 "composite stationary CUDA force requires the resident final-density bridge"
             )
-        self.grid.set_density_device(
-            device_id=resident_density.device,
-            alpha=resident_density.alpha,
-            beta=resident_density.beta,
-            matrix_elements=resident_density.matrix_elements,
-            spins=resident_density.spins,
-            source_stream=resident_density.source_stream,
-        )
-        # A concurrent replacement can only occur before the producer-stream
-        # copy is enqueued; reject it before any stationary source publication.
-        source.check_current()
-        # Integral derivatives already come from the token-bound native prepared
-        # owner above. These retained CUDA accumulators execute only nuclear and
-        # grid-geometry sources, so uploading detached host D/W here is redundant.
-        self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
-        self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
-        charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
-        self.sources.nuclear_all(charges)
-        component_seconds["density_and_nuclear_setup"] = (
-            perf_counter() - component_start
-        )
-        ao_domain = None
-        if active_ao_cutoff is not None:
-            lease = source.cuda_resident_grid()
-            if lease is None:
-                raise NotImplementedError(
-                    "active AO maps require the resident molecular grid"
-                )
-            ao_domain = ResidentAoMapDomain(
-                self.grid.basis_identity,
-                state.identity.geometry_identity,
-                state.grid.identity,
-                lease.device,
-                lease.points,
-                lease.point_count,
-                tile_points,
-                self.grid.plan.order,
+        # Geometry/XC response is a function of D at this immutable owner,
+        # while the current one-electron/Pulay sources above still run anew.
+        # Optional AO experiments retain their own observable execution path.
+        reuse_geometry = (
+            os.environ.get("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE") == "1"
+            # Fast precision receipts require this invocation's executed work.
+            # Keep their capability/strict retry path observable.
+            and not fp32_semilocal_geometry
+            and active_ao_cutoff is None
+            and not bool(getattr(source, "density_fitted", False))
+            and not any(
+                name.startswith("GENERATIVEQC_STATIONARY_")
+                and name != "GENERATIVEQC_STATIONARY_CACHE"
+                for name in os.environ
             )
-            if self._ao_maps is None or self._ao_maps.domain != ao_domain:
-                self._ao_maps = (
-                    ResidentDeviceAoMapOwner(
-                        self.grid,
-                        ao_domain,
-                        cutoff=active_ao_cutoff,
-                        budget_bytes=ao_cache_allowance,
-                        max_active_fraction=active_ao_max_active_fraction,
-                        **(
-                            {"producer": active_ao_producer}
-                            if active_ao_producer == "exact-jets-native-bitmask"
-                            else {}
-                        ),
-                    )
-                    if active_ao_producer
-                    in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
-                    else ResidentAoMapCache(
-                        self.grid,
-                        ao_domain,
-                        cutoff=active_ao_cutoff,
-                        budget_bytes=ao_cache_allowance,
-                        producer=active_ao_producer,
-                    )
-                )
-        resident_parts, resident_seconds, resident_work = resident_nonlocal_geometry(
-            grid=self.grid,
-            sources=self.sources,
-            nonlocal_sources=self.nonlocal_sources,
-            nonlocal_owner=self._nonlocal,
-            state=state,
-            raw_weights=source.atomic_weights,
-            tile_points=tile_points,
-            ao_count=n,
-            functional=functional,
-            ingredients=grid_features,
-            ao_maps=self._ao_maps,
-            ao_domain=ao_domain,
         )
+        geometry_allowance = min(
+            64 << 20, max_host_bytes // 4, max(0, max_host_bytes - host_bound)
+        )
+        if not reuse_geometry:
+            self._geometry_response.clear()
+        retained = (
+            self._geometry_response.lookup(state.density, geometry_allowance)
+            if reuse_geometry
+            else None
+        )
+        geometry_hit = retained is not None
+        source.check_current()
+        if geometry_hit:
+            resident_parts = retained
+            # These are actual zero-work receipts for this invocation. Never
+            # replay the producing call's sweep/traffic counters or timings.
+            resident_work = {
+                "nonlocal_execution": "exact-density-geometry-reuse",
+                "nonlocal_feature_source": "retained-density-only-response",
+                "nonlocal_feature_d2d_bytes": 0,
+                "nonlocal_feature_collection_point_visits": 0,
+                "nonlocal_feature_d2h_bytes": 0,
+                "nonlocal_seed_h2d_bytes": 0,
+                "nonlocal_dense_pair_capacity": npnt * npnt,
+                "nonlocal_seed_generation": None,
+                "nonlocal_active_count_scope": "not evaluated on exact response reuse",
+                "grid_owner_source": "retained-density-only-response",
+                "grid_owner_h2d_bytes": 0,
+                "grid_point_source": "retained-density-only-response",
+                "grid_point_h2d_bytes": 0,
+                "grid_weight_source": "retained-density-only-response",
+                "grid_weight_h2d_bytes": 0,
+                "grid_atomic_measure_source": "retained-density-only-response",
+                "grid_atomic_measure_h2d_bytes": 0,
+                "nonlocal_pair_cache_probes": 0,
+                "nonlocal_pair_cache_hits": 0,
+                "nonlocal_pair_sweeps": 0,
+                "ao_collocation_point_visits": 0,
+                "geometry_point_visits": 0,
+                "stationary_source_d2h_policy": "retained-density-only-response",
+                "semilocal_stationary_source_d2h_bytes": 0,
+                "nonlocal_stationary_source_d2h_bytes": 0,
+            }
+            resident_seconds = {
+                "exact_density_geometry_reuse": perf_counter() - component_start
+            }
+            component_seconds["density_and_nuclear_setup"] = 0.0
+        else:
+            self.grid.set_density_device(
+                device_id=resident_density.device,
+                alpha=resident_density.alpha,
+                beta=resident_density.beta,
+                matrix_elements=resident_density.matrix_elements,
+                spins=resident_density.spins,
+                source_stream=resident_density.source_stream,
+            )
+            # A concurrent replacement can only occur before the producer-stream
+            # copy is enqueued; reject it before any stationary source publication.
+            source.check_current()
+            # Integral derivatives already come from the token-bound native prepared
+            # owner above. These retained CUDA accumulators execute only nuclear and
+            # grid-geometry sources, so uploading detached host D/W here is redundant.
+            self.sources.reset_geometry(source.grid_spec.coincident_tolerance)
+            self.nonlocal_sources.reset_geometry(source.grid_spec.coincident_tolerance)
+            charges = np.array([a.atomic_number for a in basis.atoms], dtype=float)
+            self.sources.nuclear_all(charges)
+            component_seconds["density_and_nuclear_setup"] = (
+                perf_counter() - component_start
+            )
+            ao_domain = None
+            if active_ao_cutoff is not None:
+                lease = source.cuda_resident_grid()
+                if lease is None:
+                    raise NotImplementedError(
+                        "active AO maps require the resident molecular grid"
+                    )
+                ao_domain = ResidentAoMapDomain(
+                    self.grid.basis_identity,
+                    state.identity.geometry_identity,
+                    state.grid.identity,
+                    lease.device,
+                    lease.points,
+                    lease.point_count,
+                    tile_points,
+                    self.grid.plan.order,
+                )
+                if self._ao_maps is None or self._ao_maps.domain != ao_domain:
+                    self._ao_maps = (
+                        ResidentDeviceAoMapOwner(
+                            self.grid,
+                            ao_domain,
+                            cutoff=active_ao_cutoff,
+                            budget_bytes=ao_cache_allowance,
+                            max_active_fraction=active_ao_max_active_fraction,
+                            **(
+                                {"producer": active_ao_producer}
+                                if active_ao_producer == "exact-jets-native-bitmask"
+                                else {}
+                            ),
+                        )
+                        if active_ao_producer
+                        in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
+                        else ResidentAoMapCache(
+                            self.grid,
+                            ao_domain,
+                            cutoff=active_ao_cutoff,
+                            budget_bytes=ao_cache_allowance,
+                            producer=active_ao_producer,
+                        )
+                    )
+            resident_parts, resident_seconds, resident_work = (
+                resident_nonlocal_geometry(
+                    grid=self.grid,
+                    sources=self.sources,
+                    nonlocal_sources=self.nonlocal_sources,
+                    nonlocal_owner=self._nonlocal,
+                    state=state,
+                    raw_weights=source.atomic_weights,
+                    tile_points=tile_points,
+                    ao_count=n,
+                    functional=functional,
+                    ingredients=grid_features,
+                    ao_maps=self._ao_maps,
+                    ao_domain=ao_domain,
+                )
+            )
         components.update(resident_parts)
         component_seconds.update(resident_seconds)
         component_start = perf_counter()
@@ -600,10 +735,19 @@ class PreparedCompositeStationaryCudaGradient:
         # download the same 3*Natom result again.
         gradient = _canonical_gradient_sum(plan, components, na)
         contract.validate(state)
+        if reuse_geometry and not geometry_hit:
+            # Only a complete, independently owned result can replace the key.
+            # Resource refusal leaves the computed endpoint untouched.
+            self._geometry_response.store(
+                state.density, resident_parts, geometry_allowance
+            )
+        host_bound += self._geometry_response.peak_bytes
         component_seconds["reduction_and_validation"] = perf_counter() - component_start
         self.executions += 1
         work = {
             "execution": "cuda-complete-composite",
+            "fp32_semilocal_geometry_requested": fp32_semilocal_geometry,
+            "fp64_geometry_retries": 0,
             "plan_identity": plan.identity,
             "prepared_plan_identity": prepared_plan.identity,
             "execution_graph_identity": prepared_plan.graph.identity,
@@ -617,13 +761,21 @@ class PreparedCompositeStationaryCudaGradient:
             "grid_tile_count": (npnt + tile_points - 1) // tile_points,
             "geometry_planned_lanes": layout.sources.geometry_lanes,
             "becke_planned_threads_per_point": layout.sources.becke_threads_per_point,
-            "grid_density_source": "exact-final-scf-device-binding",
+            "grid_density_source": (
+                "retained-density-only-response"
+                if geometry_hit
+                else "exact-final-scf-device-binding"
+            ),
             "grid_density_h2d_bytes": 0,
             "final_reduction": "host-canonical-source-sum",
             "final_reduction_h2d_bytes": 0,
             "final_reduction_d2h_bytes": 0,
             **resident_work,
-            "partition_pair_visits": 2 * npnt * na * (na - 1),
+            "partition_pair_visits": 0 if geometry_hit else 2 * npnt * na * (na - 1),
+            "geometry_response_cache_hits": int(geometry_hit),
+            "geometry_response_evaluations": int(not geometry_hit),
+            "geometry_response_retained_host_bytes": self._geometry_response.retained_bytes,
+            "geometry_response_host_peak_bytes": self._geometry_response.peak_bytes,
             # The native v1 result does not identify whether optional shell
             # capability or its public-AO fallback executed. Do not infer work
             # from the method name or turn unavailable evidence into zero.

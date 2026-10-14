@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import copy
 import gzip
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
+from generativeqc import _native
 
 from tools import reduce_issue1598_incremental_qualification as reducer
 
@@ -319,30 +322,120 @@ timeout() {{ return 42; }}
     }
 
 
-def test_ks_oracle_selection_matches_both_supported_sizes() -> None:
-    tree = ast.parse((ROOT / "benchmarks/issue1598_ks_cold_control.py").read_text())
-    main = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "main"
-    )
-    assignment = next(
-        node
-        for node in main.body
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "reference_path"
-            for target in node.targets
+@pytest.fixture
+def ks_control(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
+    """Load the complete runner with only GPU/native work replaced by doubles."""
+    cupy = SimpleNamespace(
+        cuda=SimpleNamespace(
+            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
         )
     )
-    expression = ast.Expression(assignment.value)
-    for atoms in (48, 96):
-        path = eval(  # noqa: S307 - evaluate one reviewed local Path expression
-            compile(expression, "reference selector", "eval"),
-            {"Path": Path, "atoms": atoms},
-        )
-        assert path.name == f"reference-{atoms}.json.gz"
-        assert (ROOT / path).is_file()
+    # Use an uncached module so the temporary CuPy replacement cannot leak into
+    # a later canonical import of the benchmark in the same pytest process.
+    spec = importlib.util.spec_from_file_location(
+        "issue1598_ks_control_probe", ROOT / "benchmarks/issue1598_ks_cold_control.py"
+    )
+    assert spec is not None and spec.loader is not None
+    runner = importlib.util.module_from_spec(spec)
+    with monkeypatch.context() as imports:
+        imports.setitem(sys.modules, "cupy", cupy)
+        spec.loader.exec_module(runner)
+    monkeypatch.chdir(ROOT)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("host control-flow test attempted native-library loading")
+
+    monkeypatch.setattr(_native, "load_library", forbidden)
+    item = SimpleNamespace(
+        energy=-1.0,
+        forces=np.zeros((2, 3)),
+        converged=True,
+        status=0,
+        status_message="success",
+        iterations=2,
+        fock_builds=2,
+        density_rms=0.0,
+        physical_residual_rms=0.0,
+        warm_start_used=False,
+        warm_start_fallback=False,
+        incremental_direct_jk=None,
+        ks_diagnostic=None,
+    )
+    state = SimpleNamespace(
+        runner=runner,
+        item=item,
+        acceptance={"gate": True},
+        execute_error=None,
+        oracle=None,
+        output=tmp_path / "control.json",
+    )
+
+    class Owner:
+        closed = False
+
+        def _public_dft_cuda_force(self, *args: object) -> tuple:
+            return np.zeros((2, 3)), {}
+
+        def execute(self, *, strict: bool, properties: tuple[str, ...]) -> object:
+            assert strict is False and properties == ("energy", "forces")
+            if state.execute_error is not None:
+                raise state.execute_error
+            return SimpleNamespace(items=(item,))
+
+        def close(self) -> None:
+            self.closed = True
+
+    state.owner = Owner()
+    monkeypatch.setattr(
+        runner,
+        "scaling_cases",
+        lambda: {f"water-{atoms}": SimpleNamespace(atoms=()) for atoms in (48, 96)},
+    )
+    monkeypatch.setattr(
+        runner, "load_comparison_basis", lambda *args, **kwargs: (object(), {})
+    )
+    monkeypatch.setattr(
+        runner,
+        "protocol",
+        lambda atoms, *args, **kwargs: _ks_identity(atoms)["protocol"],
+    )
+    monkeypatch.setattr(
+        runner,
+        "Calculator",
+        lambda **kwargs: SimpleNamespace(
+            prepare_batch=lambda *args, **kwargs: state.owner
+        ),
+    )
+    monkeypatch.setattr(runner, "native_build_metadata", lambda calculator: {})
+    monkeypatch.setattr(
+        runner, "require_tuned_native_build", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(runner, "read_ao_work", lambda owner: {})
+
+    def acceptance(result: object, oracle: dict) -> dict:
+        state.oracle = oracle
+        return state.acceptance
+
+    monkeypatch.setattr(runner, "check_endpoint", acceptance)
+    monkeypatch.setattr(sys, "argv", ["ks-control", str(state.output), "96"])
+    return state
+
+
+@pytest.mark.parametrize("atoms", [48, 96])
+def test_ks_oracle_selection_matches_both_supported_sizes(
+    ks_control: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, atoms: int
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["ks-control", str(ks_control.output), str(atoms)])
+    ks_control.runner.main()
+    record = json.loads(ks_control.output.read_text())
+    expected = _ks_identity(atoms)
+    assert record["reference_sha256"] == expected["reference_sha256"]
+    assert record["protocol"] == expected["protocol"]
+    oracle = _ks_numerics(atoms)
+    assert ks_control.oracle["energy"] == oracle["energy"]
+    assert ks_control.oracle["forces"] == oracle["forces"]
+    assert record["status"] == "measured"
+    assert ks_control.owner.closed
 
 
 @pytest.mark.parametrize("mutation", ["source", "device", "oracle", "nan", "gate"])
@@ -400,19 +493,53 @@ def test_ks_reducer_consumes_check_endpoint_gate(
             reducer._ks_rows(tmp_path)
 
 
-def test_ks_runner_consumes_real_gate_key() -> None:
-    source = (ROOT / "benchmarks/issue1598_ks_cold_control.py").read_text()
-    tree = ast.parse(source)
-    conditions = [node.test for node in ast.walk(tree) if isinstance(node, ast.If)]
-    gate_condition = next(
-        node for node in conditions if "acceptance.get" in ast.unparse(node)
+@pytest.mark.parametrize("gate", [True, False, "true", None, 1])
+def test_ks_runner_consumes_real_gate_key(
+    ks_control: SimpleNamespace, gate: object
+) -> None:
+    ks_control.acceptance = {"gate": gate}
+    if gate is True:
+        ks_control.runner.main()
+    else:
+        with pytest.raises(SystemExit) as caught:
+            ks_control.runner.main()
+        assert caught.value.code == 3
+    record = json.loads(ks_control.output.read_text())
+    assert record["acceptance"] == {"gate": gate}
+    assert record["status"] == ("measured" if gate is True else "failed")
+    assert record["energy"] == ks_control.item.energy
+    assert record["forces"] == ks_control.item.forces.tolist()
+    assert ks_control.owner.closed
+
+
+def test_ks_runner_execution_failure_retains_record_and_closes_owner(
+    ks_control: SimpleNamespace,
+) -> None:
+    failure = RuntimeError("injected endpoint failure")
+    ks_control.execute_error = failure
+    with pytest.raises(RuntimeError) as caught:
+        ks_control.runner.main()
+    assert caught.value is failure
+    record = json.loads(ks_control.output.read_text())
+    assert record["status"] == "failed"
+    assert record["stage"] == "execute"
+    assert record["error"] == "RuntimeError: injected endpoint failure"
+    assert record["reference_sha256"] == _ks_identity(96)["reference_sha256"]
+    assert ks_control.owner.closed
+
+
+def test_ks_runner_mismatched_protocol_rejects_before_native_work(
+    ks_control: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ks_control.runner, "protocol", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        ks_control.runner,
+        "Calculator",
+        lambda **kwargs: pytest.fail("mismatched oracle reached native work"),
     )
-    for value in (True, False, "true", None):
-        rejected = eval(  # noqa: S307 - reviewed local comparison expression only
-            compile(ast.Expression(gate_condition), "KS acceptance", "eval"),
-            {"acceptance": {"gate": value}},
-        )
-        assert rejected is (value is not True)
+    with pytest.raises(ValueError, match="reference does not match"):
+        ks_control.runner.main()
+    assert not ks_control.output.exists()
 
 
 @pytest.mark.parametrize("mutation", ["median", "seconds", "missing_success"])

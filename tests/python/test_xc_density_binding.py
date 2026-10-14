@@ -60,11 +60,8 @@ template<bool Mixed,bool Tiled>
 void launch_density_product(int,const double*,const double*,I,I,I,I,double*,int*,const std::size_t*,I) {}
 """
     emitted = _emit_tiled(XcMatrixSchedule(16))
-    source += emitted[
-        emitted.index("inline bool tiled_xc_admitted(") : emitted.index(
-            "template <bool Mixed, bool Tiled>"
-        )
-    ]
+    admission_start = emitted.index("inline bool tiled_xc_admitted(")
+    source += emitted[admission_start : emitted.index("\ntemplate <", admission_start)]
     source += emit_density_binding(16, emitted)
     source += r"""
 int main() {
