@@ -1,0 +1,862 @@
+{
+  "points": [
+    {
+      "campaign": "vv10-range-ks-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "07680f557fa8be8802501547a31b32ed73d2b2b71a8a09415fe3b395ea90fcfa",
+      "native_source_identity": "257abf2b203f2090c38d2697f21dd97dda6549b26242817ad4c24a485cb1b770",
+      "library_sha256": "2bbfc71b53162cda73bf013e936a3138d312be7accd68b6086d88c005a33aa80",
+      "phase_medians": {
+        "cold": 7.020643563999329,
+        "warm": 0.42499013897031546,
+        "moved": 5.326249019999523,
+        "moved-warm": 0.42458774702390656
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "883",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-ks-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "c9c14d07eb43fdf23cd5b33a88bfd59e270af48cafffb415a5231c10c0d0dee7",
+      "native_source_identity": "257abf2b203f2090c38d2697f21dd97dda6549b26242817ad4c24a485cb1b770",
+      "library_sha256": "2bbfc71b53162cda73bf013e936a3138d312be7accd68b6086d88c005a33aa80",
+      "phase_medians": {
+        "cold": 30.623574764933437,
+        "warm": 1.791545126994606,
+        "moved": 19.458529992960393,
+        "moved-warm": 1.7942939919885248
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "883",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-ks-qualified",
+      "atoms": 48,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "e13a7f37a3832c8c986070efb9be60d3c88f7526528793cdf457f8573679f46e",
+      "native_source_identity": "257abf2b203f2090c38d2697f21dd97dda6549b26242817ad4c24a485cb1b770",
+      "library_sha256": "2bbfc71b53162cda73bf013e936a3138d312be7accd68b6086d88c005a33aa80",
+      "phase_medians": {
+        "cold": 255.0744671660941,
+        "warm": 15.738188226008788,
+        "moved": 214.899938093964,
+        "moved-warm": 15.667808325961232
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1540",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-ks-qualified",
+      "atoms": 96,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 6,
+      "raw_sha256": "979dd1c50501e5504cb503acec86aad6553c8bebe6212934253bbd5f586e8a5e",
+      "native_source_identity": "257abf2b203f2090c38d2697f21dd97dda6549b26242817ad4c24a485cb1b770",
+      "library_sha256": "2bbfc71b53162cda73bf013e936a3138d312be7accd68b6086d88c005a33aa80",
+      "phase_medians": {
+        "cold": 1339.8581366989529,
+        "warm": 60.6233265750343
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1541",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-paired-baseline",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "83fbd1d9d7a58dd0bfea8468b18eeef87e689fee0593d96d32d9c0c9e669c316",
+      "native_source_identity": "291afaef7e9660d744df2f9786b3a3dcece04fa1efa4d32fcd90fde84993e4ec",
+      "library_sha256": "242be46485a289310f0034feb5ff3f8532f8993e8f22961194f15c7f703becb3",
+      "phase_medians": {
+        "cold": 7.738153539947234,
+        "warm": 0.42658698797458783,
+        "moved": 5.783999233972281,
+        "moved-warm": 0.4244920029886998
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "885",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-paired-baseline",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "cf89900cab7f0c9a9f5094e08b1238d4bce1d89604bc1e276fbe6a6ad93811fb",
+      "native_source_identity": "291afaef7e9660d744df2f9786b3a3dcece04fa1efa4d32fcd90fde84993e4ec",
+      "library_sha256": "242be46485a289310f0034feb5ff3f8532f8993e8f22961194f15c7f703becb3",
+      "phase_medians": {
+        "cold": 34.633092374075204,
+        "warm": 1.7861469069612212,
+        "moved": 21.103130302974023,
+        "moved-warm": 1.7907425520243123
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "885",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-partial-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "0074c41040ea073daba195dcad34e69cbe8faa19bf9bb990eaaa637c57ce03be",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 7.562573951086961,
+        "warm": 0.41159415105357766,
+        "moved": 5.7770396519917995,
+        "moved-warm": 0.41089815692976117
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1543",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-partial-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "1c416b6d0f22b021d57ab0d0aee34e4c2bac7b052d6df8591aed1e866da46e4f",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 35.1470853399951,
+        "warm": 1.7914019799791276,
+        "moved": 21.72099085501395,
+        "moved-warm": 1.794483739999123
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1543",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-partial-qualified",
+      "atoms": 48,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "d4cf80fcea253d89ea4d066499364bdfb6ced4082df8c4ca3d832f3bb111790b",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 304.87609050702304,
+        "warm": 12.857424157031346,
+        "moved": 243.11236311198445,
+        "moved-warm": 12.85921117698308
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "900",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-partial-qualified",
+      "atoms": 96,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 6,
+      "raw_sha256": "9e30945185f82fdcb9a86101f59e9c69327b51b45783011bad3358614d9bd639",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 1018.6412179840263,
+        "warm": 50.54176752199419
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1544",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-full-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "ed5c95c194fefb55cd344db7e232f632bc1fad04ccf969525d5fbc5b836f563e",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 7.026141386013478,
+        "warm": 0.38673356198705733,
+        "moved": 5.32958546601003,
+        "moved-warm": 0.38576287298928946
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xfffffff",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "903",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-full-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "f2d8f4d33c5adeb3d5495bec9c32dbfb4228919dcb84d66a0ecf35296772abf9",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 30.40879819204565,
+        "warm": 1.6520253859926015,
+        "moved": 19.388265534013044,
+        "moved-warm": 1.6675701239728369
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xfffffff",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "903",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-full-qualified",
+      "atoms": 48,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "897e1268a9c0eb60f45cea8ebf9f117a9882096a3aad2eaeb3068b6c3eb20aeb",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 253.4877334109624,
+        "warm": 11.40827579901088,
+        "moved": 212.39229596802033,
+        "moved-warm": 11.391661717032548
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xfffffff",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "903",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-replay-expanded-qualified",
+      "atoms": 96,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 6,
+      "raw_sha256": "461907effc1d80e422b3c235bb7bb61fc6a124105214917acca463fda55295ec",
+      "native_source_identity": "69d1c3e2d9b26162fca4aeccb45ef5917085c3c567ec5f4690ba2e857ea40da6",
+      "library_sha256": "5326c01a5c17e411bc3785066a4c2e980dc333c540a1dd3decfda578551104eb",
+      "phase_medians": {
+        "cold": 950.9473968519596,
+        "warm": 49.35300591494888
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffbfc",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1550",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-inexact-inner-launch-failure",
+      "atoms": 3,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 1,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 1,
+      "raw_sha256": "cc25e48988f831821a1ebc678e8cb3308be0e8ec45f82cefe1a4b80f2c18540d",
+      "native_source_identity": "765581bbf48223bd4980214064287456712cbf2b4ab2adf4d85b730f637f2707",
+      "library_sha256": "3251b26f51c1a52005ef1851c10382e4283efea8e5fe6d00c302e2302377087c",
+      "phase_medians": {},
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-readme-20261013/source/.cache/stationary-cuda",
+        "GENERATIVEQC_VV10_INEXACT_INNER": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1545",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-inexact-inner-launch-failure",
+      "atoms": 12,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 1,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 1,
+      "raw_sha256": "ec1524b7cc68aa72e8897f01ada8b0b670ae15e0d60626ce789f3f60c7041a71",
+      "native_source_identity": "765581bbf48223bd4980214064287456712cbf2b4ab2adf4d85b730f637f2707",
+      "library_sha256": "3251b26f51c1a52005ef1851c10382e4283efea8e5fe6d00c302e2302377087c",
+      "phase_medians": {},
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-readme-20261013/source/.cache/stationary-cuda",
+        "GENERATIVEQC_VV10_INEXACT_INNER": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1545",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-inexact-inner-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "8737ca5367821018de1bed97f4b7ce4e621bd1d09fbfff07a8226e5cbd9df836",
+      "native_source_identity": "765581bbf48223bd4980214064287456712cbf2b4ab2adf4d85b730f637f2707",
+      "library_sha256": "3251b26f51c1a52005ef1851c10382e4283efea8e5fe6d00c302e2302377087c",
+      "phase_medians": {
+        "cold": 71.92172400583513,
+        "warm": 0.43207239208277315,
+        "moved": 6.571174040902406,
+        "moved-warm": 0.4333877139724791
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_INEXACT_INNER": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1546",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-inexact-inner-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "c38267f004149a3dbaa60400b3caaaa4f9618a91f9084b5cea74488aa29aaa64",
+      "native_source_identity": "765581bbf48223bd4980214064287456712cbf2b4ab2adf4d85b730f637f2707",
+      "library_sha256": "3251b26f51c1a52005ef1851c10382e4283efea8e5fe6d00c302e2302377087c",
+      "phase_medians": {
+        "cold": 31.891936028026976,
+        "warm": 1.7961278250440955,
+        "moved": 23.66637172503397,
+        "moved-warm": 1.7454167250543833
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_INEXACT_INNER": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1546",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-inexact-inner-qualified",
+      "atoms": 96,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 6,
+      "raw_sha256": "c77080f072e87a301ad045c821e472a26b2e07003f4968686f4a3c43961e883f",
+      "native_source_identity": "765581bbf48223bd4980214064287456712cbf2b4ab2adf4d85b730f637f2707",
+      "library_sha256": "3251b26f51c1a52005ef1851c10382e4283efea8e5fe6d00c302e2302377087c",
+      "phase_medians": {
+        "cold": 947.6964262210531,
+        "warm": 50.151936041074805
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_INEXACT_INNER": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1547",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-outer-secant-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "8ef65a0d6bb6816a36cc602e42c2a8f60146ee5fe129097a4869a4e5d0489e3c",
+      "native_source_identity": "7855a92e42aaeacc80ea645a061b061d1740972cac90a953eb2bc826e637a541",
+      "library_sha256": "8947757f3f33a8fa14a4f39c7c4c1a8bbcf1ee223320112ceb8704c6aa4d01db",
+      "phase_medians": {
+        "cold": 7.409970698005054,
+        "warm": 0.40588759700767696,
+        "moved": 5.593438531970605,
+        "moved-warm": 0.4042049190029502
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_OUTER_SECANT": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "906",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-outer-secant-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "c4c9a3f595906d717244fcb3bdc7f4371f8e9adfe21703ab5e4514f33be9801d",
+      "native_source_identity": "7855a92e42aaeacc80ea645a061b061d1740972cac90a953eb2bc826e637a541",
+      "library_sha256": "8947757f3f33a8fa14a4f39c7c4c1a8bbcf1ee223320112ceb8704c6aa4d01db",
+      "phase_medians": {
+        "cold": 31.613218110927846,
+        "warm": 1.7090948250261135,
+        "moved": 20.355405270995107,
+        "moved-warm": 1.7201482689706609
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_OUTER_SECANT": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "906",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-outer-secant-qualified",
+      "atoms": 96,
+      "complete_population": false,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 6,
+      "raw_sha256": "dd2d60004ddcc843d5b0303d7a3244b62a6f3c2734d31129194d80367dc8acf2",
+      "native_source_identity": "7855a92e42aaeacc80ea645a061b061d1740972cac90a953eb2bc826e637a541",
+      "library_sha256": "8947757f3f33a8fa14a4f39c7c4c1a8bbcf1ee223320112ceb8704c6aa4d01db",
+      "phase_medians": {
+        "cold": 1056.499682859052,
+        "warm": 51.026269226917066
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_OUTER_SECANT": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1548",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-default-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "0ce867e849f32b6203d517a160186510c66d66898a22d977bc0a15a1def933ae",
+      "native_source_identity": "e26677dfdf5d83ed09fb156c43e1ce29307dd6f609e31bd7977167b1c52fe47f",
+      "library_sha256": "50ced7049f6cf2ecafa2fcfa55cc82cb7e79e401f84c1fb51f79d760f76ebe85",
+      "phase_medians": {
+        "cold": 7.047752642072737,
+        "warm": 0.38630275399191305,
+        "moved": 5.338582645985298,
+        "moved-warm": 0.3858885080553591
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "908",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-default-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "1add85873420ef0c69b01b6d6f1540f3d582b4fd8d7c8432672f698ed0698290",
+      "native_source_identity": "e26677dfdf5d83ed09fb156c43e1ce29307dd6f609e31bd7977167b1c52fe47f",
+      "library_sha256": "50ced7049f6cf2ecafa2fcfa55cc82cb7e79e401f84c1fb51f79d760f76ebe85",
+      "phase_medians": {
+        "cold": 30.65235418296652,
+        "warm": 1.6627411960507743,
+        "moved": 19.502350326045416,
+        "moved-warm": 1.6661879030289128
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "908",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-default-qualified",
+      "atoms": 48,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "9ad7207f28cd9f15e8115126f5a82e9d65170f0ba73f6c16a8a3a8dd92379bab",
+      "native_source_identity": "e26677dfdf5d83ed09fb156c43e1ce29307dd6f609e31bd7977167b1c52fe47f",
+      "library_sha256": "50ced7049f6cf2ecafa2fcfa55cc82cb7e79e401f84c1fb51f79d760f76ebe85",
+      "phase_medians": {
+        "cold": 387.5074175440823,
+        "warm": 15.479862205975223,
+        "moved": 289.64286038902355,
+        "moved-warm": 15.458923363010399
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "908",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-four-gib-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "f834b4f8da9f906b592e29de24bcbbddb4e248dbc96fff2446cbba0876bdd607",
+      "native_source_identity": "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07",
+      "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+      "phase_medians": {
+        "cold": 7.058922890981194,
+        "warm": 0.3868101050029509,
+        "moved": 5.340627464989666,
+        "moved-warm": 0.3859349529957399
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "909",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-four-gib-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "79d9af77562d004ed320cbfbe88e8484074b7ebadc168c18b997f0a61a01c24c",
+      "native_source_identity": "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07",
+      "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+      "phase_medians": {
+        "cold": 30.38782804296352,
+        "warm": 1.6511164450203069,
+        "moved": 19.601996916986536,
+        "moved-warm": 1.6681171969976276
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "909",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-range-four-gib-qualified",
+      "atoms": 48,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "7cc546bb94852c3f4907e41571f1c2faaad214b81742490716ef1ec58b75f342",
+      "native_source_identity": "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07",
+      "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+      "phase_medians": {
+        "cold": 253.59497600304894,
+        "warm": 11.405517912993673,
+        "moved": 212.17601563199423,
+        "moved-warm": 11.391929087985773
+      },
+      "settings": {
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "909",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-target-tail-qualified",
+      "atoms": 3,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "824cfd40fb1d5bb62243a5295d250a084832493361b5d7103b1663afe2b7751e",
+      "native_source_identity": "fc4c3e2bb52c1bb95bbdd96645084d0322a75c1fc72d25400e54a37cf177fb4d",
+      "library_sha256": "138a6ef8e75cc7342d5fa6119e4645f8c94d515ed3e0e85a2166a8b8f0aa5215",
+      "phase_medians": {
+        "cold": 41.074123851023614,
+        "warm": 0.41423871205188334,
+        "moved": 6.387250662082806,
+        "moved-warm": 0.41198719199746847
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_TARGET_DIIS_TAIL": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1549",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    },
+    {
+      "campaign": "vv10-target-tail-qualified",
+      "atoms": 12,
+      "complete_population": true,
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 1800
+      },
+      "returned_calls": 12,
+      "raw_sha256": "5553a5191aab8bae757fde2d3198d3b743e0519101a0c21f267f90ea0795e5e9",
+      "native_source_identity": "fc4c3e2bb52c1bb95bbdd96645084d0322a75c1fc72d25400e54a37cf177fb4d",
+      "library_sha256": "138a6ef8e75cc7342d5fa6119e4645f8c94d515ed3e0e85a2166a8b8f0aa5215",
+      "phase_medians": {
+        "cold": 32.017971187015064,
+        "warm": 1.7182010390097275,
+        "moved": 27.519621767103672,
+        "moved-warm": 1.7892828930635005
+      },
+      "settings": {
+        "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY": "1",
+        "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES": "1",
+        "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK": "0xffffff8",
+        "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/gqc-benchmark-vv10-frozen-seed-20261014/stationary-cache",
+        "GENERATIVEQC_VV10_TARGET_DIIS_TAIL": "1"
+      },
+      "scheduler": {
+        "SLURM_JOB_ID": "1549",
+        "SLURM_JOB_PARTITION": "main",
+        "SLURM_GPUS_ON_NODE": "1"
+      }
+    }
+  ]
+}

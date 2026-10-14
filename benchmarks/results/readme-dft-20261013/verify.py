@@ -24,6 +24,16 @@ def verify(*, rerender: bool = False) -> None:
         payload = (root / name).read_bytes()
         assert len(payload) == receipt["bytes"], name
         assert hashlib.sha256(payload).hexdigest() == receipt["sha256"], name
+    # Source inventories are shared losslessly outside the readable manifest;
+    # storage compaction must preserve every original provenance field.
+    followup = manifest["benchmark_issue_followup"]
+    audit = lzma.decompress((root / followup["source_audit"]).read_bytes())
+    assert len(audit) == followup["source_audit_uncompressed"]["bytes"]
+    assert (
+        hashlib.sha256(audit).hexdigest()
+        == followup["source_audit_uncompressed"]["sha256"]
+    )
+    assert isinstance(json.loads(audit), dict)
     for name, prefix in (("summary.json.xz", ""), ("df-summary.json.xz", "df_")):
         summary = json.loads(lzma.decompress((root / name).read_bytes()))
         complete = observations = 0

@@ -4,6 +4,7 @@ import ast
 import gzip
 import hashlib
 import json
+import lzma
 import typing
 from pathlib import Path
 from xml.etree import ElementTree
@@ -241,7 +242,11 @@ def test_rejected_inventory_run_is_lossless_and_still_fails_raw_gates(
     data = (bundle / archive["path"]).read_bytes()
     assert len(data) == archive["bytes"]
     assert hashlib.sha256(data).hexdigest() == archive["sha256"]
-    raw = gzip.decompress(data)
+    raw = (
+        lzma.decompress(data)
+        if archive["path"].endswith(".xz")
+        else gzip.decompress(data)
+    )
     assert len(raw) == archive["uncompressed_bytes"]
     assert hashlib.sha256(raw).hexdigest() == archive["uncompressed_sha256"]
     original = json.loads(raw)["original_files"]
