@@ -2081,6 +2081,19 @@ jobs:
             -DGENERATIVEQC_ENABLE_CXX_PCH=OFF \
             -DGENERATIVEQC_CUDA_FAST_COMPILE="$CLI_FAST_COMPILE"
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
+      - name: Report completed CLI Ninja command timings
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          FRESH_NINJA_LOG: ${{ steps.cli_ninja_boundary.outputs.fresh }}
+        run: >-
+          python3 tools/report_ci_ninja_timing.py
+          --build-dir build/cuda-release-cli-sm120 --fresh-log "$FRESH_NINJA_LOG"
+      - name: Show detailed CLI compiler cache statistics
+        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
+        continue-on-error: true
+        run: ccache --show-stats --verbose
       - name: Bound successful PR CLI compiler misses
         id: pr_cli_ccache_bound
         if: always() && github.event_name == 'pull_request' && steps.native_cli_build.outcome == 'success' && steps.pr_cli_ccache.outputs.key != '' && steps.pr_cli_ccache_restore.outcome == 'success' && steps.pr_cli_ccache_restore.outputs.cache-hit != 'true' && steps.pr_cli_ccache_restore.outputs.cache-matched-key == ''
@@ -2097,19 +2110,6 @@ jobs:
         with:
           path: ${{ steps.pr_cli_ccache.outputs.path }}
           key: ${{ steps.pr_cli_ccache.outputs.key }}
-      - name: Report completed CLI Ninja command timings
-        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outcome != '' && steps.native_cli_build.outcome != 'skipped'
-        continue-on-error: true
-        timeout-minutes: 1
-        env:
-          FRESH_NINJA_LOG: ${{ steps.cli_ninja_boundary.outputs.fresh }}
-        run: >-
-          python3 tools/report_ci_ninja_timing.py
-          --build-dir build/cuda-release-cli-sm120 --fresh-log "$FRESH_NINJA_LOG"
-      - name: Show detailed CLI compiler cache statistics
-        if: always() && steps.cli_scope.outputs.tier != 'skip' && steps.native_cli_build.outputs.cache_stats_reset == 'true'
-        continue-on-error: true
-        run: ccache --show-stats --verbose
       - name: Verify full automatic CUDA XC catalog is compiled for distribution
         if: steps.cli_scope.outputs.tier != 'skip'
         shell: bash
