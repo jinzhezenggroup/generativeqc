@@ -194,6 +194,63 @@
     "native_scientific_inputs_unchanged": true,
     "gpu_rerun": false
   },
+  "final_consumer_review_repair": {
+    "commit": "b033bf8a7dfb8630a7c7134dfe0ff0734565ed2e",
+    "tree": "3663c98b4c83a58e5bc0c09f58bdd6413df0fe33",
+    "source_bytes": "committed LF Git blobs, not Windows working-copy bytes",
+    "reporter_sha256": "3b229db22e296e0547ae1638d40012e5bba74569f4ffb59f7ff0a44703ce67fe",
+    "behavior_tests_sha256": "15f8d7ada84edb2419bcd5847a4c61a9742c5e5e01adff63bcde432b09c52301",
+    "preceding_consumer": {
+      "commit": "7d5d2435ff54d95ec4e5dfeef0a6fa2b1b6f4145",
+      "reporter_sha256": "247e55ac8aa4867a7f3f9d6e3c0ece5bf46e73ae4eef4ebaccce7c4775b4bb7e",
+      "behavior_tests": 50,
+      "local_recheck_exit": 0,
+      "local_recheck_passed": 50
+    },
+    "validation": {
+      "platform": "Windows host; CPU-only consumer validation",
+      "python": "3.13.14",
+      "pytest": "9.1.1",
+      "behavior_command": "uv run --no-project --with pytest --with ruff python -m pytest tests/python/test_gfn2_mixer_endpoint.py --basetemp .artifacts/2470-repair/tmp-final -q",
+      "behavior_exit": 0,
+      "behavior_passed": 84,
+      "lint_command": "uv run --no-project --with pytest --with ruff ruff check benchmarks/gfn2_mixer_endpoint.py tests/python/test_gfn2_mixer_endpoint.py",
+      "lint_exit": 0,
+      "reducer_command": "python benchmarks/gfn2_mixer_endpoint.py report .artifacts/2470-repair/raw-endpoints.jsonl .artifacts/2470-repair/oracle.json .artifacts/2470-repair/final-cli-report.json --repetitions 5 --failures .artifacts/2470-repair/raw-lifecycle.jsonl",
+      "reducer_exit": 0,
+      "main_rows": 216,
+      "lifecycle_rows": 6,
+      "stored_and_decoded_hashes_and_sizes_verified": true,
+      "real_report_semantically_unchanged": true,
+      "replay_raw_main_sha256": "d003785e915eb08f607eb67982c55700ee7fce80e9efc7b071d8c8c62a73c901",
+      "replay_raw_lifecycle_sha256": "f25c1b4d104fd5c1bdc795b299f918202cee5c5d8c42a9bd5f04ec3e17b2c6c0",
+      "replay_oracle_sha256": "3d8da94defcf7487ff5991a7d2fa1f9d8c767f7586c3b1c7e09b20547d821570",
+      "real_negative_controls": {
+        "zero_executed_timings": "old PASS; repaired ValueError",
+        "zero_limit_terminal_science": "old PASS; repaired ValueError",
+        "first_failure_completed": "old PASS; repaired ValueError",
+        "replacement_failure_completed": "old PASS; repaired ValueError"
+      },
+      "synthetic_maximum_trajectory": {
+        "receipts": 300,
+        "vector_elements": 100000,
+        "subprocess_timeout_seconds": 10,
+        "old_consumer": "timeout on valid input",
+        "repaired_consumer": "valid input exits 0; corrupted final Gram count exits 1"
+      },
+      "red_behavior_subset_before_missing_field_cases": {
+        "consumer": "7d5d2435",
+        "passed": 57,
+        "failed": 21,
+        "exit": 1
+      },
+      "retained_local_setup_failures": "default Python lacked pytest; initial pytest tmp_path setup had WinError 5; successful rerun used task-owned basetemp"
+    },
+    "native_scientific_inputs_unchanged": true,
+    "gpu_rerun": false,
+    "library_binary_rehashed_locally": false,
+    "earlier_gpu_and_consumer_records_preserved": true
+  },
   "retained_preparation_artifacts": {
     "separate_negative_bundle_sha256": "093e7ef84a455f96532ca0d2e1a03a3c2fdb274f54ae123a62e7518898b3d293",
     "paths": [

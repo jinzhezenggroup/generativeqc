@@ -74,6 +74,18 @@ The unchanged real journals produce the same semantic report. The provenance
 receipt records this later consumer repair separately from the original GPU
 snapshot; no duplicate GPU run or new library identity is implied.
 
+The final consumer review repair is separately bound to commit `b033bf8a7` and
+its LF reporter/test blob hashes in provenance. Its 84 host behavior cases pass;
+the preceding `7d5d2435` consumer retains its separate 50-case identity. Executed
+timings must be positive and construction phase-appropriate; controlled failure
+completion/status/sentinels must match the retained protocol. Maximum admitted
+work is checked with bounded host counting and a corrupted-count negative control.
+The four real-data corruption controls that previously passed are now rejected.
+The legal 216+6-row replay remains semantically identical to `report.json.xz`.
+Original 45-case/73-host records above remain historical, and no current device
+rerun, new library hash, provider promotion or resolution of the 768-AO FAIL is
+claimed.
+
 To independently replay the publication on a CPU host, decompress the four XZ
 files, verify stored/decoded hashes from provenance, then run:
 
