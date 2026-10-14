@@ -25,6 +25,17 @@ struct Control {
   int active{}, converged{}, failed{};
 };
 
+/** One bounded two-step fixed-point proposal. The scalar is zero unless the
+ * density increments contract by at least tenfold and the extrapolation is
+ * finite and at most two percent. This never modifies a physical density. */
+void outer_secant_coefficient(cudaStream_t stream, std::size_t elements, const double* anchor,
+                              const double* proposal, const double* previous_delta,
+                              double* coefficient);
+/** Form a Hermitian proposal Fock from two converged frozen-inner Focks.
+ * The caller must diagonalize it and independently certify the new density. */
+void outer_secant_fock(cudaStream_t stream, std::size_t elements, double coefficient,
+                       const double* current, const double* previous, double* proposal);
+
 void reset_control(cudaStream_t stream, unsigned spins, int occupied_alpha, int occupied_beta,
                    Control* control, std::uint8_t* enabled, std::uint8_t* spin_enabled);
 /** Approximate proposal-only continuation: shift live DIIS vectors so the most
@@ -32,9 +43,9 @@ void reset_control(cudaStream_t stream, unsigned spins, int occupied_alpha, int 
  * may use slightly different densities; physical acceptance must ignore this
  * transformed history. Callers must invalidate all cached Gram products. */
 void rebase_provisional_diis(cudaStream_t stream, std::size_t elements, unsigned capacity,
-                             const double* fock, const double* residual,
-                             const std::uint32_t* count, const std::uint32_t* head,
-                             double* fock_history, double* residual_history);
+                             const double* fock, const double* residual, const std::uint32_t* count,
+                             const std::uint32_t* head, double* fock_history,
+                             double* residual_history);
 void assemble_fock(cudaStream_t stream, std::size_t n, unsigned spins, const double* hcore,
                    const double* coulomb, const double* exchange, double exchange_coefficient,
                    const double* range_exchange, double range_exchange_coefficient,

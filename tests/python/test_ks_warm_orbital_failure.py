@@ -105,6 +105,8 @@ struct Owner {
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
   bool confirm_nonlocal_stationary_density = false;
+  bool update_outer_anchor = false, advance_outer_history = false;
+  bool propose_outer_secant() { return true; }
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
     double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
@@ -122,7 +124,7 @@ struct Owner {
     std::uint64_t warm_orbital_frames_retained = 0, warm_orbital_frame_invalidations = 0;
     std::uint64_t submitted_iterations = 3, phase_resident_fock_actions = 0;
   } movement;
-  double density[8], proposal[8], warm[8], warm_orbitals[8], tmp2[8];
+  double density[8], proposal[8], warm[8], warm_orbitals[8], tmp2[8], outer_anchor[8];
   void* stream = nullptr;
   std::string scenario;
   void rebase_warm_energy() {
@@ -186,6 +188,7 @@ int main(int argc, char** argv) {
   owner.warm_orbitals_ready = initially_ready;
   owner.elements = 4 * std::atoi(argv[3]);
   const auto& scenario = owner.scenario;
+  if (scenario == "outer-proposal") owner.advance_outer_history = true;
   if (scenario == "density") fail_copy = 1;
   if (scenario == "orbitals") fail_copy = 2;
   if (scenario == "converged") { owner.is_active = false; owner.output.converged = true; }
@@ -274,6 +277,10 @@ int main(int argc, char** argv) {
     assert(owner.warm_orbitals_ready == initially_ready);
     assert(copies == 0 && owner.density[0] == 10.0);
     assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
+  } else if (scenario == "outer-proposal") {
+    assert(owner.density[0] == 20.0 && !owner.warm_orbitals_ready);
+    assert(owner.movement.warm_orbital_frames_retained == 0);
+    assert(owner.movement.warm_orbital_frame_invalidations == initially_ready);
   } else if (scenario == "converged") {
     assert(owner.warm_ready && owner.warm[0] == 10.0);
     assert(owner.warm_energy == owner.physical.electronic_energy);
@@ -332,6 +339,7 @@ int main(int argc, char** argv) {
         "handoff-source",
         "physical",
         "success",
+        "outer-proposal",
         "retry",
         "converged",
         "resident-converged",

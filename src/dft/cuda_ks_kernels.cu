@@ -8,10 +8,54 @@
 
 namespace generativeqc::dft::cuda_ks_detail {
 namespace {
-__global__ void rebase_provisional_diis_kernel(
-    std::size_t elements, unsigned capacity, const double* fock, const double* residual,
-    const std::uint32_t* count, const std::uint32_t* head, double* fock_history,
-    double* residual_history) {
+__global__ void outer_secant_coefficient_kernel(std::size_t elements, const double* anchor,
+                                                const double* proposal,
+                                                const double* previous_delta, double* result) {
+  // One ordered block is sufficient for a once-per-solve scalar. It avoids
+  // atomic-order variation and an additional reduction allocation.
+  __shared__ double sums[4][256];
+  double numerator = 0.0, denominator = 0.0, current_norm = 0.0, previous_norm = 0.0;
+  for (std::size_t i = threadIdx.x; i < elements; i += blockDim.x) {
+    const double delta = proposal[i] - anchor[i];
+    const double difference = delta - previous_delta[i];
+    numerator += delta * difference;
+    denominator += difference * difference;
+    current_norm += delta * delta;
+    previous_norm += previous_delta[i] * previous_delta[i];
+  }
+  sums[0][threadIdx.x] = numerator;
+  sums[1][threadIdx.x] = denominator;
+  sums[2][threadIdx.x] = current_norm;
+  sums[3][threadIdx.x] = previous_norm;
+  __syncthreads();
+  for (unsigned stride = 128; stride; stride /= 2) {
+    if (threadIdx.x < stride)
+      for (unsigned row = 0; row < 4; ++row)
+        sums[row][threadIdx.x] += sums[row][threadIdx.x + stride];
+    __syncthreads();
+  }
+  if (threadIdx.x == 0) {
+    const double alpha = -sums[0][0] / sums[1][0];
+    const bool admitted = isfinite(alpha) && isfinite(sums[2][0]) && isfinite(sums[3][0]) &&
+                          sums[1][0] > 1e-28 && sums[3][0] > 1e-28 &&
+                          sums[2][0] < 0.01 * sums[3][0] && fabs(alpha) <= 0.02;
+    *result = admitted ? alpha : 0.0;
+  }
+}
+
+__global__ void outer_secant_fock_kernel(std::size_t elements, double coefficient,
+                                         const double* current, const double* previous,
+                                         double* proposal) {
+  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < elements;
+       i += std::size_t(blockDim.x) * gridDim.x)
+    proposal[i] = current[i] + coefficient * (current[i] - previous[i]);
+}
+
+__global__ void rebase_provisional_diis_kernel(std::size_t elements, unsigned capacity,
+                                               const double* fock, const double* residual,
+                                               const std::uint32_t* count,
+                                               const std::uint32_t* head, double* fock_history,
+                                               double* residual_history) {
   const unsigned live = *count, next = *head;
   if (capacity < 2 || live < 2 || live > capacity || next >= capacity) return;
   const unsigned newest = (next + capacity - 1) % capacity;
@@ -246,10 +290,25 @@ __global__ void advance_kernel(std::size_t matrix, unsigned spins, double nuclea
 }
 }  // namespace
 
+void outer_secant_coefficient(cudaStream_t stream, std::size_t elements, const double* anchor,
+                              const double* proposal, const double* previous_delta,
+                              double* coefficient) {
+  outer_secant_coefficient_kernel<<<1, 256, 0, stream>>>(elements, anchor, proposal, previous_delta,
+                                                         coefficient);
+}
+
+void outer_secant_fock(cudaStream_t stream, std::size_t elements, double coefficient,
+                       const double* current, const double* previous, double* proposal) {
+  if (!elements) return;
+  const auto blocks = static_cast<unsigned>(std::min<std::size_t>((elements + 255) / 256, 65535));
+  outer_secant_fock_kernel<<<blocks, 256, 0, stream>>>(elements, coefficient, current, previous,
+                                                       proposal);
+}
+
 void rebase_provisional_diis(cudaStream_t stream, std::size_t elements, unsigned capacity,
-                             const double* fock, const double* residual,
-                             const std::uint32_t* count, const std::uint32_t* head,
-                             double* fock_history, double* residual_history) {
+                             const double* fock, const double* residual, const std::uint32_t* count,
+                             const std::uint32_t* head, double* fock_history,
+                             double* residual_history) {
   if (!elements || capacity < 2) return;
   const auto blocks = static_cast<unsigned>(std::min<std::size_t>((elements + 255) / 256, 65535));
   rebase_provisional_diis_kernel<<<blocks, 256, 0, stream>>>(

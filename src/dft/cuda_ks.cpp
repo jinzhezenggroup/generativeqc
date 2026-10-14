@@ -146,6 +146,11 @@ std::size_t sum(std::size_t a, std::size_t b) {
 }
 /** Numeric arena view shared by allocation and metadata-only planning. */
 struct KsStateStorage {
+  double *outer_anchor{}, *outer_previous_delta{}, *outer_previous_fock{}, *outer_coefficient{};
+  static bool outer_secant_requested() noexcept {
+    const char* selection = std::getenv("GENERATIVEQC_VV10_OUTER_SECANT");
+    return selection && selection[0] == '1' && selection[1] == '\0';
+  }
   scf::cuda_df::ValidationPartial* final_validation_partial{};
   double *hcore{}, *overlap{}, *x{}, *j{}, *exchange{}, *range_exchange{}, *density{}, *proposal{},
       *warm{}, *warm_orbitals{}, *fock{}, *residual{}, *tmp1{}, *tmp2{}, *effective{},
@@ -166,7 +171,7 @@ struct KsStateStorage {
    * persistent and phase-local numeric buffers are explicitly charged. */
   std::size_t partition(std::size_t n, unsigned spins, unsigned history, bool exact_exchange,
                         bool range_correction, bool incremental_direct_jk,
-                        bool incremental_diis_gram, void* storage) {
+                        bool incremental_diis_gram, void* storage, bool outer_secant = false) {
     const auto matrix = product(n, n), elements = product(spins, matrix);
     std::size_t bytes = 0;
     const auto reserve = [&](auto*& pointer, std::size_t count) {
@@ -176,6 +181,14 @@ struct KsStateStorage {
       pointer = storage ? reinterpret_cast<T*>(static_cast<char*>(storage) + bytes) : nullptr;
       bytes = sum(bytes, product(count, sizeof(T)));
     };
+    if (outer_secant) {
+      reserve(outer_anchor, elements);
+      reserve(outer_previous_delta, elements);
+      reserve(outer_previous_fock, elements);
+      reserve(outer_coefficient, 1);
+    } else {
+      outer_anchor = outer_previous_delta = outer_previous_fock = outer_coefficient = nullptr;
+    }
     for (auto** pointer : {&hcore, &overlap, &x, &j}) reserve(*pointer, matrix);
     if (exact_exchange)
       reserve(exchange, elements);
@@ -269,7 +282,8 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
   return sum(
       layout.partition(
           n, spins, std::max(1U, history), exact_exchange, range_correction, incremental_direct_jk,
-          history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(), nullptr),
+          history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(), nullptr,
+          spins == 1 && range_correction && KsStateStorage::outer_secant_requested()),
       n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
@@ -349,6 +363,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool nonlocal_provisional_delta_chain{};
   bool nonlocal_rebase_inner_diis{}, nonlocal_rebase_pending{};
   bool nonlocal_inexact_inner{};
+  bool nonlocal_outer_storage{}, nonlocal_outer_secant{}, nonlocal_outer_previous{},
+      nonlocal_outer_attempted{};
   double nonlocal_inner_residual_tolerance{1e-9};
   unsigned nonlocal_inner_iterations{}, nonlocal_exact_epoch_iterations{};
   double exchange_coefficient{}, range_exchange_coefficient{};
@@ -1209,8 +1225,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
         throw std::invalid_argument(
             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
     }
-    ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
-                               incremental_direct_jk, incremental_diis_gram, nullptr);
+    nonlocal_outer_storage = spins == 1 && has_range_correction && device_nonlocal &&
+                             outer_secant_requested() && !runtime::active_device_resource_ledger;
+    ks_arena_bytes =
+        partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
+                  incremental_diis_gram, nullptr, nonlocal_outer_storage);
     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
     resource.xc_device_bytes =
         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
@@ -1247,9 +1266,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes, ao_selection_bound.host_peak_bytes);
     try {
-      check(runtime::resource_cuda_malloc(&arena, ks_arena_bytes));
+      bool arena_host_oom = false;
+      auto arena_status = runtime::resource_cuda_malloc(&arena, ks_arena_bytes, &arena_host_oom);
+      if (arena_status == cudaErrorMemoryAllocation && !arena_host_oom && nonlocal_outer_storage) {
+        // Three optional matrices cannot make the incumbent owner inadmissible.
+        // Preserve non-allocation errors and publish the actual smaller arena.
+        const auto pending = cudaGetLastError();
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+        nonlocal_outer_storage = false;
+        const auto old_bytes = ks_arena_bytes;
+        ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
+                                   incremental_direct_jk, incremental_diis_gram, nullptr, false);
+        resource.state_device_bytes -= old_bytes - ks_arena_bytes;
+        arena_status = runtime::resource_cuda_malloc(&arena, ks_arena_bytes);
+      }
+      check(arena_status);
       partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
-                incremental_diis_gram, arena);
+                incremental_diis_gram, arena, nonlocal_outer_storage);
       if (nonlocal_arena_bytes) {
         bool host_oom = false;
         auto status =
@@ -1498,6 +1531,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_outer_active && rebased_diis && std::string_view(rebased_diis) == "1";
     nonlocal_rebase_pending = false;
     nonlocal_freeze_range = nonlocal_outer_active && has_range_correction && freeze_range_requested;
+    // A proposal-only, once-per-solve secant must not borrow history from a
+    // prior geometry, failed solve, warm replay or another provisional policy.
+    nonlocal_outer_secant = nonlocal_outer_storage && outer_secant_requested() &&
+                            nonlocal_outer_active && !nonlocal_freeze_range &&
+                            !incremental_direct_jk && !nonlocal_continue_inner_diis &&
+                            !nonlocal_rebase_inner_diis;
+    nonlocal_outer_previous = nonlocal_outer_attempted = false;
     // A transported/external density may already approximate the full target.
     // Anchor it first instead of pulling it back to the semilocal-only solution.
     const bool native_cold_seed = !input || seed_origin == CudaKsSeedOrigin::NativeColdGuess;
@@ -2510,6 +2550,80 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
   }
 
+  /** Extrapolate only after two genuinely converged frozen-inner solves.
+   * Density differences estimate a weak fixed-point contraction, but we
+   * extrapolate Hermitian Focks and diagonalize them instead of extrapolating
+   * densities. The resulting occupied projector preserves positivity and
+   * electron count. All target Fock/energy/residual acceptance remains ahead. */
+  bool propose_outer_secant() {
+    if (!nonlocal_outer_previous) {
+      check(cudaMemcpyAsync(outer_previous_delta, proposal, elements * sizeof(double),
+                            cudaMemcpyDeviceToDevice, stream));
+      launch_subtract_matrix_batches_kernel(static_cast<unsigned>((elements + 127) / 128), 128, 0,
+                                            stream, 1, spins, n, outer_anchor, enabled,
+                                            outer_previous_delta);
+      check(cudaGetLastError());
+      check(cudaMemcpyAsync(outer_previous_fock, fock, elements * sizeof(double),
+                            cudaMemcpyDeviceToDevice, stream));
+      nonlocal_outer_previous = true;
+      return false;
+    }
+    nonlocal_outer_attempted = true;
+    runtime::df_progress::Scope trace("cuda_ks_vv10_outer_secant", "cuda_completed");
+    cuda_ks_detail::outer_secant_coefficient(stream, elements, outer_anchor, proposal,
+                                             outer_previous_delta, outer_coefficient);
+    check(cudaGetLastError());
+    double coefficient = 0.0;
+    // Only a scalar crosses the boundary. Drain stack-backed transfers even
+    // if a later runtime operation fails; never copy density matrices to host.
+    try {
+      check(cudaMemcpyAsync(&coefficient, outer_coefficient, sizeof(double), cudaMemcpyDeviceToHost,
+                            stream));
+      check(cudaStreamSynchronize(stream));
+    } catch (...) {
+      (void)cudaStreamSynchronize(stream);
+      throw;
+    }
+    movement.scalar_d2h_bytes += sizeof(double);
+    ++movement.synchronizations;
+    char value[40];
+    std::snprintf(value, sizeof(value), "%.17g", coefficient);
+    runtime::df_progress::Scope::label("coefficient", value);
+    if (coefficient == 0.0) {
+      trace.finish("rejected_secant");
+      return false;
+    }
+    cuda_ks_detail::outer_secant_fock(stream, elements, coefficient, fock, outer_previous_fock,
+                                      effective);
+    check(cudaGetLastError());
+    multiply_spin(spins, effective, true, false, x, false, enabled, tmp1);
+    multiply_spin(spins, x, false, true, tmp1, true, enabled, tmp2);
+    check(eigensolver->launch(spins, tmp2, effective, eigenvalues, solver_info, spin_enabled),
+          "CUDA KS outer secant eigensolver launch failed");
+    int info = 0;
+    try {
+      check(cudaMemcpyAsync(&info, solver_info, sizeof(info), cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+    } catch (...) {
+      (void)cudaStreamSynchronize(stream);
+      throw;
+    }
+    movement.scalar_d2h_bytes += sizeof(info);
+    ++movement.synchronizations;
+    if (info < 0) throw std::logic_error("CUDA KS outer secant eigensolver rejected arguments");
+    if (info > 0) {
+      // The original converged inner proposal has not been overwritten.
+      // Retain it, but the scratch orbital frame is no longer its identity.
+      trace.finish("rejected_eigensolver");
+      return true;
+    }
+    multiply_spin(spins, x, false, false, tmp2, true, enabled, tmp1);
+    build_density(tmp1, nullptr, enabled, proposal);
+    check(cudaGetLastError());
+    trace.finish("proposed");
+    return true;
+  }
+
   bool finish_legacy() {
     current_device();
     if (!is_pending) throw std::logic_error("no pending CUDA KS iteration");
@@ -2690,6 +2804,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (physical.maximum_residual < nonlocal_stage_tolerance ||
          (pending_nonlocal_seed ? nonlocal_seed_iterations : nonlocal_inner_iterations) >= 16 ||
          output.iterations + (nonlocal_outer_active ? 20U : 2U) >= options.max_iterations);
+    bool update_outer_anchor = false, advance_outer_history = false;
     if (pending_nonlocal_seed || pending_nonlocal_frozen) {
       // Never export a provisional density, energy, residual or force as a
       // converged target. The original total iteration budget remains finite.
@@ -2701,6 +2816,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         nonlocal_exact_epoch_iterations = 0;
         // Leave a bounded ordinary full-target tail if the nested solve stalls.
         if (output.iterations + 20 >= options.max_iterations) nonlocal_outer_active = false;
+        advance_outer_history = pending_nonlocal_frozen && nonlocal_outer_active &&
+                                nonlocal_outer_secant && !nonlocal_outer_attempted && is_active &&
+                                physical.maximum_residual < nonlocal_stage_tolerance;
         // Optional continuation uses old inner history only as a proposal
         // accelerator across nearby frozen potentials. Those entries are not
         // full-target work or acceptance evidence. The initial semilocal switch
@@ -2728,6 +2846,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         }
       } else {
         nonlocal_frozen_stage = true;
+        update_outer_anchor = nonlocal_outer_secant && !nonlocal_outer_attempted;
         nonlocal_inner_iterations = 0;
         nonlocal_inner_residual_tolerance = std::clamp(
             physical.maximum_residual * 1e-3, std::min(1e-12, target_residual_gate * 0.1), 1e-7);
@@ -2790,6 +2909,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && refinement_budget;
     }
     try {
+      if (update_outer_anchor)
+        check(cudaMemcpyAsync(outer_anchor, density, elements * sizeof(double),
+                              cudaMemcpyDeviceToDevice, stream));
+      const bool outer_rebuilt_frame = advance_outer_history && propose_outer_secant();
       // Final RI-K provenance is independent of whether the caller elects to
       // update the reusable warm density cache.
       if (output.converged) retain_final_fitted_projection();
@@ -2814,11 +2937,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
         // frame. Retain it beside the accepted proposal so the next RKS/UKS
         // iteration can evaluate the same #996 occupied-subspace gate without
         // a matrix D2H. No solver routing changes in this slice.
-        check(cudaMemcpyAsync(warm_orbitals, tmp2, elements * sizeof(double),
-                              cudaMemcpyDeviceToDevice, stream));
-        warm_orbitals_ready = true;
-        ++movement.warm_orbital_frames_retained;
-        occupied_fitted_factor_ready = fitted_exchange;
+        if (outer_rebuilt_frame) {
+          occupied_fitted_factor_ready = false;
+          invalidate_warm_orbitals();
+        } else {
+          check(cudaMemcpyAsync(warm_orbitals, tmp2, elements * sizeof(double),
+                                cudaMemcpyDeviceToDevice, stream));
+          warm_orbitals_ready = true;
+          ++movement.warm_orbital_frames_retained;
+          occupied_fitted_factor_ready = fitted_exchange;
+        }
       } else {
         occupied_fitted_factor_ready = false;
         invalidate_warm_orbitals();
