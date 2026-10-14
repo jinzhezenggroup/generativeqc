@@ -23,7 +23,7 @@ void require(bool condition, const char* message) {
 int main() {
   constexpr std::size_t count = 1025, bytes = count * sizeof(double);
   double* device = nullptr;
-  check(cudaMalloc(&device, 6 * bytes + sizeof(double)));
+  check(cudaMalloc(reinterpret_cast<void**>(&device), 6 * bytes + sizeof(double)));
   try {
     std::vector<double> anchor(count), proposal(count), delta(count), old_fock(count), fock(count),
         actual(count);
