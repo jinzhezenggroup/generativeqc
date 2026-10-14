@@ -231,6 +231,11 @@
       "owner": "bounded exact-density two-electron response qualification",
       "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, cache work traces and all initial/final/sanitizer outcomes for the frozen source. Default remains disabled and 96 acceptance is not claimed. No external archive, removed sample or increased budget.",
       "review_document": "benchmarks/results/exact-integral-response-20261014/README.md"
+    },
+    "exact-geometry-response-20261014": {
+      "owner": "bounded exact-density XC geometry response qualification",
+      "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, zero-work cache hits and all retained device/sanitizer/build outcomes. Defaults remain unchanged and 96 acceptance is not claimed. Six older endpoint JSON samples are losslessly gzip-compressed with decoded identities retained; no sample is removed and the storage budget is unchanged.",
+      "review_document": "benchmarks/results/exact-geometry-response-20261014/README.md"
     }
   },
   "files": [
@@ -385,6 +390,22 @@
       "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
       "role": "source-provenance",
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
+    },
+    {
+      "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
+      "family": "exact-geometry-response-20261014",
+      "bytes": 179440,
+      "sha256": "acc90ec8b5a61d94310b0e07845271cbb28e8de45de1c15d9dd909e888402c9b",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
+    },
+    {
+      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
+      "family": "exact-integral-response-20261014",
+      "bytes": 356132,
+      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
     },
     {
       "bytes": 162452,
@@ -601,14 +622,6 @@
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
-      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
-      "family": "exact-integral-response-20261014",
-      "bytes": 356132,
-      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

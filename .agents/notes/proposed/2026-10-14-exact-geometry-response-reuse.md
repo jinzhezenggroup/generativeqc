@@ -1,6 +1,6 @@
 # Proposal: exact density-keyed composite geometry response reuse
 
-Status: experimental, default-off; endpoint qualification pending
+Status: experimental, default-off; 3/12/48 endpoint qualification passed; 96 pending
 Date: 2026-10-14
 
 The retained expanded-cache WB97M-V/96 diagnostic spends about 22.8 seconds per
@@ -28,3 +28,10 @@ Host tests cover exact/changed keys, shape, finite output, immutable retention,
 capacity rejection and allocation recovery. Independent E/F/displaced-energy,
 actual device hits, moved geometry, failure isolation and original-protocol
 complete populations remain required before any default promotion.
+
+The retained [qualification](../../../benchmarks/results/exact-geometry-response-20261014/README.md)
+records 72 accepted complete E/F calls. At 48 atoms, warm / moved-warm decreased
+from 7.43 / 7.57 to 4.36 / 4.39 seconds, while cold/moved remained comparable.
+Actual cache hits performed zero geometry pair sweeps and AO/partition visits.
+Independent molecular/displaced-energy, RKS/UKS, failure and sanitizer gates pass.
+This does not qualify a default promotion or the outstanding 96-atom endpoint.
