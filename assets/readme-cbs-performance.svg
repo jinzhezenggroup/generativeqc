@@ -414,26 +414,6 @@ L 662.114477 64.410778
     <path d="M 97.088207 235.005222
 " clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
     <defs>
-     <path id="mdac593671d" d="M 0 3
-C 0.795609 3 1.55874 2.683901 2.12132 2.12132
-C 2.683901 1.55874 3 0.795609 3 0
-C 3 -0.795609 2.683901 -1.55874 2.12132 -2.12132
-C 1.55874 -2.683901 0.795609 -3 0 -3
-C -0.795609 -3 -1.55874 -2.683901 -2.12132 -2.12132
-C -2.683901 -1.55874 -3 -0.795609 -3 0
-C -3 0.795609 -2.683901 1.55874 -2.12132 2.12132
-C -1.55874 2.683901 -0.795609 3 0 3
-z
-" style="stroke: #087e8b"/>
-    </defs>
-    <g clip-path="url(#pd17574eaad)">
-     <use xlink:href="#mdac593671d" x="97.088207" y="235.005222" style="fill: #087e8b; stroke: #087e8b"/>
-    </g>
-   </g>
-   <g id="line2d_45">
-    <path d="M 191.259252 206.453662
-" clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
-    <defs>
      <path id="m16724b28e0" d="M 0 3
 C 0.795609 3 1.55874 2.683901 2.12132 2.12132
 C 2.683901 1.55874 3 0.795609 3 0
@@ -447,6 +427,13 @@ z
 " style="stroke: #087e8b"/>
     </defs>
     <g clip-path="url(#pd17574eaad)">
+     <use xlink:href="#m16724b28e0" x="97.088207" y="235.005222" style="fill: #087e8b; stroke: #087e8b"/>
+    </g>
+   </g>
+   <g id="line2d_45">
+    <path d="M 191.259252 206.453662
+" clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
+    <g clip-path="url(#pd17574eaad)">
      <use xlink:href="#m16724b28e0" x="191.259252" y="206.453662" style="fill: #087e8b; stroke: #087e8b"/>
     </g>
    </g>
@@ -454,35 +441,35 @@ z
     <path d="M 285.430297 175.654244
 " clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
     <g clip-path="url(#pd17574eaad)">
-     <use xlink:href="#mdac593671d" x="285.430297" y="175.654244" style="fill: #087e8b; stroke: #087e8b"/>
+     <use xlink:href="#m16724b28e0" x="285.430297" y="175.654244" style="fill: #087e8b; stroke: #087e8b"/>
     </g>
    </g>
    <g id="line2d_47">
     <path d="M 379.601342 146.921699
 " clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
     <g clip-path="url(#pd17574eaad)">
-     <use xlink:href="#mdac593671d" x="379.601342" y="146.921699" style="fill: #087e8b; stroke: #087e8b"/>
+     <use xlink:href="#m16724b28e0" x="379.601342" y="146.921699" style="fill: #087e8b; stroke: #087e8b"/>
     </g>
    </g>
    <g id="line2d_48">
     <path d="M 473.772387 120.960679
 " clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
     <g clip-path="url(#pd17574eaad)">
-     <use xlink:href="#mdac593671d" x="473.772387" y="120.960679" style="fill: #087e8b; stroke: #087e8b"/>
+     <use xlink:href="#m16724b28e0" x="473.772387" y="120.960679" style="fill: #087e8b; stroke: #087e8b"/>
     </g>
    </g>
    <g id="line2d_49">
     <path d="M 567.943432 90.961826
 " clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
     <g clip-path="url(#pd17574eaad)">
-     <use xlink:href="#mdac593671d" x="567.943432" y="90.961826" style="fill: #087e8b; stroke: #087e8b"/>
+     <use xlink:href="#m16724b28e0" x="567.943432" y="90.961826" style="fill: #087e8b; stroke: #087e8b"/>
     </g>
    </g>
    <g id="line2d_50">
     <path d="M 662.114477 64.410778
 " clip-path="url(#pd17574eaad)" style="fill: none; stroke: #087e8b; stroke-width: 1.5; stroke-linecap: square"/>
     <g clip-path="url(#pd17574eaad)">
-     <use xlink:href="#mdac593671d" x="662.114477" y="64.410778" style="fill: #087e8b; stroke: #087e8b"/>
+     <use xlink:href="#m16724b28e0" x="662.114477" y="64.410778" style="fill: #087e8b; stroke: #087e8b"/>
     </g>
    </g>
    <g id="patch_3">
@@ -529,10 +516,9 @@ L 709.2 26.88
    <g id="text_20">
     <text style="font-size: 12px; font-family: 'DejaVu Sans'; text-anchor: middle" x="379.601342" y="20.88" transform="rotate(-0 379.601342 20.88)">DF-CCSD(T)/CBS · cc-pV[D,T]Z + DZ correction · RTX 5090</text>
    </g>
-
   </g>
-  <g id="text_23">
-   <text style="font-size: 9px; font-family: 'DejaVu Sans'" transform="translate(105.274687 328.609969)">Full DF: RI-JK reference/response; shared JKFIT auxiliaries for correlation. One cold call; compiler caches retained.</text>
+  <g id="text_21">
+   <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="360" y="338.688" transform="rotate(-0 360 338.688)">Full DF: RI-JK reference/response; shared JKFIT auxiliaries for correlation. One cold call; compiler caches retained.</text>
   </g>
  </g>
  <defs>
