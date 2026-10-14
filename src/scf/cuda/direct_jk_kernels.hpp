@@ -46,16 +46,18 @@ cudaError_t prepare_materialized_pair_order(cudaStream_t stream, DeviceBatch bat
                                             std::int32_t* sorted_order, void* workspace,
                                             std::size_t workspace_bytes);
 
-/** Persistent, indexed order-three-through-nine shell CTAs; up to nine
- * register packets own the complete component domain. Full J/K or a single
+/** Persistent, indexed shell CTAs cover every through-f angular order. Full J/K or a single
  * SR/LR K reuses one primitive recurrence.
- * No task tensor, density screening, or new mathematical evaluator is used. */
+ * No task tensor, density screening, or new mathematical evaluator is used.
+ * Optional correction planes use the canonical Cartesian output layout;
+ * the caller clears/folds them together with the remaining canonical writers. */
 void launch_materialized_canonical_jk_kernel(
     cudaStream_t stream, DeviceBatch batch, unsigned angular_order, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, DirectCoulombRange range, double omega,
     double screening, const double* bounds, const double* density, const std::uint8_t* active,
-    double* coulomb, double* exchange, std::uint64_t* work_count);
+    double* coulomb, double* exchange, std::uint64_t* work_count,
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr);
 
 /** Prefix only quartets admitted by the original product comparison.
  * The same-bucket triangle is defined in the sorted order, preserving symmetry.

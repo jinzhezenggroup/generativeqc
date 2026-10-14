@@ -41,7 +41,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     for tile in (8, 16, 32):
         emitted = _emit_tiled(XcMatrixSchedule(tile))
         start = emitted.index("inline bool tiled_xc_admitted(")
-        end = emitted.index("template <bool Mixed, bool Tiled>", start)
+        end = emitted.index("template <bool Mixed, bool Tiled,", start)
         source += emitted[start:end].replace("tiled_xc_admitted", f"admitted_{tile}")
     source += r"""
 int main() {

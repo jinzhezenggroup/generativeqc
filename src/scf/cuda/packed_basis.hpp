@@ -103,6 +103,13 @@ struct DeviceBatch {
    * single-item derivative launch. Null preserves quadratic RHF/UHF weights.
    * Set only on a local batch view; never mutate the retained source identity. */
   const double* direct_force_seed{};
+  /** Per-launch qualification candidate, never a process-global precision mode.
+   * Only full-range weighted order-0..5 sources consume it. Geometry, density
+   * weights and radial moments stay double; all other derivative owners stay
+   * strict. Optional counters contain mixed tasks, primitive/source evaluations
+   * and nonfinite strict retries, in that order. */
+  bool direct_force_fp32{};
+  unsigned long long* direct_force_precision_work{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

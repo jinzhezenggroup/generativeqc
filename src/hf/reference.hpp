@@ -19,6 +19,8 @@ namespace generativeqc::hf {
 struct PhysicalReference {
   std::size_t nbf{};
   std::size_t nocc{};
+  /** RI-JK and four-center RHF are distinct stationary reference models. */
+  bool density_fitted{};
   std::vector<double> overlap, hcore, fock, coefficients, orbital_energies, density;
   /** Optional native force diagnostic: the actual occupation-weighted W used
    * by Pulay response, detached before force assembly. Energy-only/post-HF

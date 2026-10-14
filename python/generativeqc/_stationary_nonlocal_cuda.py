@@ -88,7 +88,8 @@ def resident_nonlocal_geometry(
         ao_maps.reset_work()
 
     began = perf_counter()
-    diagnostic = nonlocal_owner.diagnostic()
+    diagnostic = nonlocal_owner.diagnostic(include_work=True)
+    initial_pair_work = diagnostic
     if diagnostic.executed:
         nonlocal_owner.reset()
     elif diagnostic.collected_points:
@@ -227,6 +228,7 @@ def resident_nonlocal_geometry(
         "vv10_pair_enqueue": pair_seconds,
         geometry_timing: geometry_and_drain_seconds,
     }
+    final_pair_work = nonlocal_owner.diagnostic(include_work=True)
     work = {
         "nonlocal_execution": "resident-full-grid-device-seeds",
         "nonlocal_feature_source": (
@@ -257,6 +259,15 @@ def resident_nonlocal_geometry(
         "nonlocal_stationary_source_d2h_bytes": 3 * 3 * sources.natom * 8,
         "stationary_source_full_arena_d2h_bytes_avoided": 6 * 3 * sources.natom * 8,
     }
+    for label, field in (
+        ("nonlocal_pair_cache_probes", "pair_cache_probes"),
+        ("nonlocal_pair_cache_hits", "pair_cache_hits"),
+        ("nonlocal_pair_sweeps", "pair_evaluations"),
+    ):
+        before = getattr(initial_pair_work, field)
+        after = getattr(final_pair_work, field)
+        if before is not None and after is not None:
+            work[label] = after - before
     if ao_maps is not None:
         work["active_ao_maps"] = ao_maps.work
     # Detailed profiling deliberately uses the retained explicit-owner / host

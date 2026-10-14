@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_SCF_TYPES_HPP
 #define GENERATIVEQC_SCF_TYPES_HPP
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -171,6 +172,9 @@ struct ScfOptions {
   enum class XcExecutionSchedule : std::uint32_t { DeviceFused = 0, HostUnfused = 1 };
   /** Placement-only semilocal XC schedule; scientific identity is unchanged. */
   XcExecutionSchedule xc_execution_schedule{XcExecutionSchedule::DeviceFused};
+  /** Requested energy, maximum force-component and RMS force-component
+   * allowances. The method owns admission; zeros preserve incumbent behavior. */
+  std::array<double, 3> application_precision_budget{};
   /** Resolved semilocal component scales; exact exchange lives only in the
    * common FockBuildSpec. Unit defaults preserve legacy LDA/PBE callers. */
   double semilocal_exchange_scale{1.0};

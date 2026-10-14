@@ -471,6 +471,7 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nonlocal_pair.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nonlocal_pair_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/nonlocal_correlation.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
     ARGS --output "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}"

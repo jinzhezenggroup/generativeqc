@@ -69,6 +69,7 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
   resources_.grid_numeric_bytes = storage.allocation_bytes;
   resources_.stationary_numeric_bytes = stationary_budget;
   resources_.grid_provider_allowance_bytes = storage.provider_allowance;
+  mixed_grid_budget_ = maximum_device_bytes - resources_.device_upper_bytes;
   unsigned order = 0;
   while ((order + 1) * (order + 2) * (order + 3) / 6 < binding_->ao_jets) ++order;
   if (order > 3 || (order + 1) * (order + 2) * (order + 3) / 6 != binding_->ao_jets)
@@ -136,13 +137,14 @@ void CudaStationaryController::close() noexcept {
   if (grid_) grid_cuda_destroy_v1(grid_);
   grid_ = nullptr;
   grid_provider_allowance_.reset();
+  mixed_grid_provider_allowance_.reset();
 }
 
 generativeqc_status CudaStationaryController::gradient(
     const CudaKsResidentDensityBinding& density,
     const CudaKsResidentStationaryWeightsBinding& weights, const scf::PreparedFockPlan& fock,
     const std::function<bool()>& token_current, std::vector<double>& output, std::string& detail,
-    bool allow_spatial_default) {
+    bool allow_spatial_default, scf::DirectForcePrecisionRequest* precision) {
   detail.clear();
   try {
     const auto derivative = scf::prepared_cuda_direct_derivative_binding(fock);
@@ -183,12 +185,41 @@ generativeqc_status CudaStationaryController::gradient(
         grid_cuda_density_device_v1(grid_, density.alpha, density.beta, density.matrix_elements,
                                     density.spins, density.stream, error.data(), error.size()),
         error);
+    const bool mixed_geometry = precision && precision->mixed_geometry;
+    bool mixed_grid = precision && precision->mixed_grid;
+    const auto geometry = mixed_geometry ? binding_->geometry_fp32 : binding_->geometry;
+    if (!geometry) throw std::invalid_argument("no typed FP32 stationary geometry binding");
+    if (precision) precision->geometry_points = 0;
+    if (precision) precision->grid_points = 0;
+    if (mixed_grid && !mixed_grid_bytes_) {
+      try {
+        mixed_grid_provider_allowance_.emplace(device_, CudaGridStorage::provider_allowance);
+        require_grid_call(grid_cuda_prepare_fp32_v1(grid_, mixed_grid_budget_, &mixed_grid_bytes_,
+                                                    error.data(), error.size()),
+                          error);
+        resources_.device_upper_bytes += mixed_grid_bytes_;
+        resources_.grid_numeric_bytes += mixed_grid_bytes_ - CudaGridStorage::provider_allowance;
+        resources_.grid_provider_allowance_bytes += CudaGridStorage::provider_allowance;
+      } catch (const std::bad_alloc&) {
+        // Optional resident float panels may not displace the admitted strict
+        // owner. Zero grid_points records the fallback; no clipping or CPU work.
+        mixed_grid_provider_allowance_.reset();
+        mixed_grid = false;
+      }
+    }
     for (std::size_t offset = 0; offset < quadrature_.point_count; offset += tile_points_) {
       const auto points = std::min(tile_points_, quadrature_.point_count - offset);
-      require_grid_call(grid_cuda_run_selected_device_deferred_v1(
-                            grid_, quadrature_.points + 3 * offset, points, 1, nullptr, aos_,
-                            nullptr, nullptr, error.data(), error.size()),
-                        error);
+      if (mixed_grid) {
+        require_grid_call(
+            grid_cuda_run_fp32_device_deferred_v1(grid_, quadrature_.points + 3 * offset, points,
+                                                  aos_, error.data(), error.size()),
+            error);
+        precision->grid_points += points;
+      } else
+        require_grid_call(grid_cuda_run_selected_device_deferred_v1(
+                              grid_, quadrature_.points + 3 * offset, points, 1, nullptr, aos_,
+                              nullptr, nullptr, error.data(), error.size()),
+                          error);
       GridTaskView view;
       require_grid_call(grid_cuda_view_v1(grid_, &view, error.data(), error.size()), error);
       const double* work = nullptr;
@@ -197,10 +228,11 @@ generativeqc_status CudaStationaryController::gradient(
                                                   &work, &flags, error.data(), error.size()),
                         error);
       require_stationary_call(
-          binding_->geometry(stationary_, &view, work, offset, points_per_atom_,
-                             quadrature_.weights + offset, quadrature_.atomic_weights + offset,
-                             view.generation, flags, error.data(), error.size()),
+          geometry(stationary_, &view, work, offset, points_per_atom_, quadrature_.weights + offset,
+                   quadrature_.atomic_weights + offset, view.generation, flags, error.data(),
+                   error.size()),
           error);
+      if (mixed_geometry) precision->geometry_points += points;
     }
     const scf::CudaDerivativeSourceConsumer consume = [&](const auto& view) {
       require_stationary_call(
@@ -212,7 +244,7 @@ generativeqc_status CudaStationaryController::gradient(
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     status = scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
         fock, density.alpha, density.beta, density.matrix_elements, consume, detail,
-        allow_spatial_default);
+        allow_spatial_default, precision);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     std::vector<double> candidate(centers_.size());
     require_stationary_call(

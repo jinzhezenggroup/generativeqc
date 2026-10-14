@@ -1117,9 +1117,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
-  constexpr long double per_ao =
-      2 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint8_t) +
-      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+  const bool auxiliary_g =
+      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum == 4; });
+  const auto expansion_terms = auxiliary_g ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                                           : molecule::kMaximumAoExpansionTerms;
+  const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
+                             sizeof(std::uint8_t) +
+                             expansion_terms * (3 * sizeof(std::uint8_t) + sizeof(double));
   const long double host_bound = 2 * (per_ao * (n + a) + 2 * sizeof(double) * primitives +
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
@@ -1127,7 +1132,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital), host_a = pack(auxiliary);
+    const auto host_o = pack(orbital, 3, expansion_terms),
+               host_a = pack(auxiliary, 4, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -1176,7 +1182,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         occupied && device_metric && device_metric->full_rank, source_schedule == "qualify");
     runtime::cuda_trace::trace_counter("response_source_derivative_qualification_requested",
                                        source_schedule == "qualify");
-    if (device_metric && schedule == 0 && source_schedule_eligible &&
+    if (!auxiliary_g && device_metric && schedule == 0 && source_schedule_eligible &&
         !(upload_diagnostic && *upload_diagnostic) &&
         !(scatter_diagnostic && *scatter_diagnostic) &&
         !(serial_diagnostic && std::string_view(serial_diagnostic) == "1")) {
@@ -1191,6 +1197,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
         execution_control ? execution_control : (promoted_default ? "shell" : "generic");
     if (execution != "generic" && execution != "shell-sp" && execution != "shell")
       throw std::invalid_argument("unknown DF weighted execution (use generic, shell-sp or shell)");
+    // The whole-shell consumer has only s/p/d/f class metadata. Auxiliary g
+    // uses the same six-term generated derivative as the correlation sink;
+    // never omit its class or reinterpret six-term metadata with stride three.
+    if (auxiliary_g && execution != "generic")
+      throw std::invalid_argument("auxiliary g DF-HF derivatives require generic execution");
     const bool shell_execution = execution != "generic" && device_metric && schedule == 0;
     runtime::cuda_trace::trace_counter("response_derivative_shell_execution", shell_execution);
     runtime::cuda_trace::trace_counter("response_derivative_profile_promoted", promoted_default);
@@ -2010,7 +2021,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
             if (metric_weights || !shell_execution || !full_shell_domain)
               check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
                                               derivative_output, arena.stream, 0, result.size(),
-                                              gradient_copies, shell_execution && !metric_weights));
+                                              gradient_copies, shell_execution && !metric_weights,
+                                              expansion_terms));
             ++arena.stats.tiles;
             arena.stats.device_response_bytes += count * sizeof(double);
           },
@@ -2075,7 +2087,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
                   kind ? "metric_derivative_weight_bytes" : "three_center_derivative_weight_bytes",
                   count * sizeof(double));
               check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
-                                              output, arena.stream, begin));
+                                              output, arena.stream, begin, 0, 1, false,
+                                              expansion_terms));
               ++arena.stats.tiles;
             }
             // The adapter reuses this host span after returning. Drain all its

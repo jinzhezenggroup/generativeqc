@@ -7,11 +7,14 @@ scheduling or molecular-force qualification.
 from __future__ import annotations
 
 import math
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -109,7 +112,7 @@ int main(int argc, char** argv) {
   for (std::size_t lane = 0; lane < n; ++lane) {
     threadIdx.x = lane;
     pack_force_seeds_kernel(n, weights.data(), point_derivative.data(), seeds.data(),
-                           &collect_error, &domain_error, &pair_error);
+                           &collect_error, &domain_error, &pair_error, nullptr);
   }
   for (std::size_t row = 0; row < 6; ++row)
     for (std::size_t i = 0; i < n; ++i) {
@@ -128,10 +131,9 @@ int main(int argc, char** argv) {
 
 
 @pytest.fixture(scope="module")
-def error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def error_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     directory = tmp_path_factory.mktemp("resident-nonlocal-error")
     path, executable = directory / "probe.cpp", directory / "probe"
@@ -145,15 +147,13 @@ def error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             )
         )
     )
-    compiled = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    return native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=["-std=c++20", "-O0"],
+        compile_timeout=30,
+        link_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
-    return executable
 
 
 @pytest.mark.parametrize("mode", range(8))
