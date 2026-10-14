@@ -80,6 +80,30 @@
       ]
     },
     {
+      "id": "scf.phase-local-radial-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
+        "src/scf/cuda/direct_jk.cpp"
+      ],
+      "rationale": "Explicit 1 selects immutable radial ERIs only for strict-FP64 resident direct RKS VV10. Unset/auto remains off. Matching operator/omega, original screening, full/partial bucket accounting, complete host/device admission and incumbent capacity fallback remain mandatory. The range source cannot provide full Coulomb or derivatives. Exact-source independent matrices and complete molecular energy/forces qualify correctness, while original 96-atom populations still exceed the whole-point deadline; no default promotion or issue closure is claimed.",
+      "revisit_condition": "Require complete source-matched 3/12/48/96 original-protocol populations, independent energy/force gates, actual selected source work, failure/retirement and memory-cliff evidence before automatic selection. Preserve explicit off and bounded fallback.",
+      "evidence": [
+        "docs/developer/xc_native_cuda.md",
+        ".agents/notes/proposed/2026-10-14-range-bound-resident-values.md",
+        "tests/python/test_range_resident_values_cuda.py",
+        "tests/python/test_range_resident_ks_cuda.py",
+        "issue:#2426"
+      ]
+    },
+    {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
       "controls": [
@@ -915,8 +939,13 @@
     {
       "id": "initial.huckel-auto",
       "classification": "already-default",
-      "controls": ["initial-guess:huckel-auto"],
-      "owner_issues": [192, 2052],
+      "controls": [
+        "initial-guess:huckel-auto"
+      ],
+      "owner_issues": [
+        192,
+        2052
+      ],
       "sources": [
         "python/generativeqc/calculator.py",
         "python/generativeqc/initial_guess.py",
@@ -924,7 +953,9 @@
       ],
       "rationale": "Native Modified Huckel is the user-authorized FP64 all-electron restricted H-Ar CPU/CUDA HF/KS default, including DF. Positive additive target-domain capability bits prevent old libraries from advertising unimplemented CUDA RHF/DF integrations. Exact atomic preparation does not change the target approximation. Budget limits, strict independent numerical gates, warm precedence and one ordinary Hcore retry remain mandatory. Measured benefits are workload-specific, not a universal speedup claim.",
       "revisit_condition": "Revisit on root/state or complete-endpoint regressions. Unsupported spin, ECP, elements, precision and resource-planner domains remain unchanged; preserve explicit None rollback and independent DF numerical validation.",
-      "evidence": ["note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"]
+      "evidence": [
+        "note:.agents/notes/implemented/numerics/2026-10-12-default-huckel-df.md"
+      ]
     },
     {
       "id": "initial.basis-projection",
