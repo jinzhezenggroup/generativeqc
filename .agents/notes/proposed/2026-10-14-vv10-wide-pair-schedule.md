@@ -16,3 +16,10 @@ change, requiring independent oracles, adversarial canaries and sanitizer gates.
 
 The existing default and ordered fallback remain available. A full same-library
 off/on population, including changed geometry, is required before promotion.
+
+Device admission, independent molecular E/F and sanitizer qualification passed,
+as did all 48 original-protocol 3/12-atom calls. The user requested wrapping up
+before the 48/96 experiments finished; their cancellations remain separate from
+timeout evidence. See the retained qualification in
+`benchmarks/results/vv10-wide-pair-20261014/`. Complete 48/96 qualification and
+a new default-policy campaign remain outstanding; this stays a draft experiment.
