@@ -10,6 +10,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from test_ci_prose_workflow import assert_full_coverage_step, selected
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -64,7 +65,8 @@ def _assert_cold_budget(workflow: str) -> None:
     for name, required_work in gates:
         section = _step(job, name)
         assert required_work in section
-        assert "if:" not in section and "continue-on-error:" not in section
+        assert_full_coverage_step(section)
+        assert "continue-on-error:" not in section
         positions.append(job.index(f"      - name: {name}\n"))
     assert positions == sorted(positions)
     radial = _step(job, gates[2][0])
@@ -79,7 +81,15 @@ def _assert_cold_budget(workflow: str) -> None:
     assert _minutes(report) == 1
     assert "--verbose --build-dir build/cuda-release-sm120" in report
     receipt = _step(job, "Preserve failed fast CUDA build diagnostics")
-    assert "if: ${{ failure() || cancelled() }}" in receipt
+    for failed, cancelled in ((False, False), (True, False), (False, True)):
+        assert selected(
+            receipt,
+            {
+                "success()": not failed and not cancelled,
+                "failure()": failed,
+                "cancelled()": cancelled,
+            },
+        ) == (failed or cancelled)
     assert "continue-on-error: true" in receipt
     assert _minutes(receipt) == 2
     assert "include-hidden-files: true" in receipt
@@ -111,7 +121,7 @@ def test_cold_budget_keeps_qualification_and_failure_diagnostics() -> None:
         ("--target generativeqc_cuda_runtime_tests --parallel 3", "--target help"),
         ("ctest --test-dir build/cuda-release-sm120", "echo skipped"),
         ("if: always()", "if: success()"),
-        ("if: ${{ failure() || cancelled() }}", "if: success()"),
+        ("failure() || cancelled()", "success()"),
         ("build/cuda-release-sm120/.ninja_log", "build/cuda-release-sm120/**"),
         (
             "build/cuda-fast-compile-cache.txt",

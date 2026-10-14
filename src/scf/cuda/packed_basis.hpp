@@ -115,6 +115,13 @@ struct DeviceBatch {
   bool direct_dddd_force_class_major{};
   /** Intrusive census-only split repeats enumeration to time low/6 separately. */
   bool direct_force_split_low{};
+  /** Per-launch qualification candidate, never a process-global precision mode.
+   * Only full-range weighted order-0..5 sources consume it. Geometry, density
+   * weights and radial moments stay double; all other derivative owners stay
+   * strict. Optional counters contain mixed tasks, primitive/source evaluations
+   * and nonfinite strict retries, in that order. */
+  bool direct_force_fp32{};
+  unsigned long long* direct_force_precision_work{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

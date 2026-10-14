@@ -696,8 +696,10 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
   diagnostic.set_schedules(batch.direct_order_seven_page_size, batch.direct_dddd_force_class_major,
                            batch.direct_force_split_low);
   diagnostic.set_complete_domain(
-      purpose == DirectScreeningPurpose::Force && batch.direct_maximum_shell_angular == 2U &&
-      materialized_pair_derivative_available(batch) &&
+      // The census is qualified for strict work. Mixed source attempts can
+      // retry in FP64 and need their separate precision-owner accounting.
+      purpose == DirectScreeningPurpose::Force && !batch.direct_force_fp32 &&
+      batch.direct_maximum_shell_angular == 2U && materialized_pair_derivative_available(batch) &&
       cooperative_pair_derivative_available(batch) && force_topology &&
       block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U && block_domain.prefix &&
       spd_schedule == DirectSpdForceSchedule::SpatialReuse);
@@ -707,7 +709,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     batch.direct_force_work = diagnostic.device();
   }
   runtime::cuda_trace::TraceOperation operation(
-      "direct_force_classes", stream,
+      purpose == DirectScreeningPurpose::Force ? "direct_force_classes" : "direct_bounded_fock",
+      stream,
       {static_cast<std::size_t>(batch.batch_size), static_cast<std::size_t>(batch.direct_nbf)});
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;

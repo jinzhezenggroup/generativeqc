@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "dft/ao_grid.hpp"
+#include "dft/application_precision.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
@@ -290,12 +291,26 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
 /** One immutable CUDA admission rule for metadata and complete force consumers.
  * Availability is deliberately context-specific, not a method-global force bit.
  * Optional compiled bindings, precise Fock coefficients, representation and
- * FP64 are prerequisites; unsupported contexts retain their existing consumer. */
+ * FP64 final states are prerequisites. Budget-admitted AUTO may narrow the
+ * gradient, never the final token checks; other contexts retain their consumer. */
 const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const NativeKsExecutionPlan& execution_plan, const scf::ScfOptions& options,
-    const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular) noexcept {
-  if (!all_electron || maximum_angular > 1 || grid.partition_iterations != 3 ||
-      options.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+    const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
+    std::size_t atoms, bool qualify_through_d = false) noexcept {
+  const bool application =
+      options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+      dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
+                                      maximum_angular, execution_plan.spin_channels == 1);
+  // Above the retained-pair regime, the incumbent phased strict consumer is
+  // faster than native inline cooperative FP64. Do not slow the comparator
+  // merely to make both precision modes use an identical execution schedule.
+  const bool native_shape =
+      atoms <= 32 && dft::admit_native_stationary_gradient_shape(aos, atoms, maximum_angular,
+                                                                 execution_plan.spin_channels == 1);
+  if (!all_electron ||
+      maximum_angular > ((qualify_through_d || native_shape || application) ? 2U : 1U) ||
+      grid.partition_iterations != 3 ||
+      (options.precision_mode != GENERATIVEQC_PRECISION_FP64 && !application) ||
       options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
       !options.resolved_fock_build ||
       options.resolved_fock_build->backend != scf::FockBackend::Cuda ||
@@ -325,6 +340,11 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
                                        options.semilocal_correlation_scale,
                                        exchange};
   const auto* binding = dft::cuda_stationary_binding(model);
+  if ((application || (maximum_angular > 1 && !qualify_through_d)) &&
+      (model.functional != static_cast<std::uint32_t>(dft::SemilocalFamily::Pbe) ||
+       model.spin_blocks != 1 || model.semilocal_exchange_scale != 0.75 ||
+       model.semilocal_correlation_scale != 1.0 || model.full_range_exchange != 0.25))
+    return {};
   return binding;
 }
 
@@ -1574,11 +1594,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   }
 
-  generativeqc_status native_cuda_stationary_gradient(const dft::CudaKsFinalStateToken& expected,
-                                                      std::size_t maximum_device_bytes,
-                                                      std::vector<double>& output,
-                                                      dft::CudaStationaryResources& resources,
-                                                      std::string& detail) {
+  generativeqc_status native_cuda_stationary_gradient(
+      const dft::CudaKsFinalStateToken& expected, std::size_t maximum_device_bytes,
+      std::vector<double>& output, dft::CudaStationaryResources& resources, std::string& detail,
+      scf::DirectForcePrecisionRequest* precision = nullptr) {
     resources = {};
     detail.clear();
 #if GENERATIVEQC_HAS_CUDA
@@ -1593,7 +1612,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       detail = "native CUDA stationary gradient requires the exact live final-state token";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    const auto* binding = admitted_cuda_stationary_binding();
+    // Private probes can qualify complete d-shell providers. Public requests
+    // must first pass the immutable application-budget/model admission above.
+    const auto* binding = admitted_cuda_stationary_binding(precision != nullptr);
     if (!binding) {
       detail = "native CUDA stationary profile is unavailable for this scientific model";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -1630,7 +1651,17 @@ class KsPreparedState final : public KsSingleOwnerPort {
           cuda_->prepare_resident_final_stationary_weights(expected, weights, diagnostic, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
-                                                qualified_spatial_force_default());
+                                                qualified_spatial_force_default(), precision);
+      if (status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && precision &&
+          (precision->mixed_geometry || precision->mixed_grid)) {
+        // Failed geometry never publishes a partial result. Reset every source
+        // and retry the complete gradient once in FP64 at the SAME final token.
+        // Driver, token and resource failures must not masquerade as rounding.
+        ++precision->geometry_retries;
+        detail.clear();
+        status = stationary_controller_->gradient(density, weights, fock_, current, output, detail,
+                                                  qualified_spatial_force_default(), nullptr);
+      }
       if (status == GENERATIVEQC_STATUS_SUCCESS)
         resources = stationary_controller_->resources();
       else
@@ -1657,7 +1688,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
   }
 
-  const dft::CudaStationaryBinding* admitted_cuda_stationary_binding() const noexcept {
+  const dft::CudaStationaryBinding* admitted_cuda_stationary_binding(
+      bool qualify_through_d = false) const noexcept {
     if (backend_ != GENERATIVEQC_BACKEND_CUDA) return {};
     const bool all_electron = system_.ecp_terms.empty() &&
                               std::none_of(system_.atoms.begin(), system_.atoms.end(),
@@ -1666,7 +1698,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
     for (const auto& shell : system_.shells)
       maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
     return native_cuda_stationary_binding(execution_plan_, options_, grid_.spec(), all_electron,
-                                          maximum_angular);
+                                          maximum_angular, basis_.nao, basis_.natom,
+                                          qualify_through_d);
   }
 
   generativeqc_status native_cuda_stationary_capacity(dft::CudaStationaryCapacity& capacity,
@@ -1677,9 +1710,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     try {
-      const auto candidate =
-          dft::cuda_stationary_capacity(*binding, basis_.natom, basis_.nao, basis_.nprimitive,
-                                        grid_.point_count(), options_.xc_tile_points);
+      const auto candidate = dft::cuda_stationary_capacity(
+          *binding, basis_.natom, basis_.nao, basis_.nprimitive, grid_.point_count(),
+          options_.xc_tile_points, options_.precision_mode == GENERATIVEQC_PRECISION_AUTO);
       capacity = candidate;
       detail.clear();
       return GENERATIVEQC_STATUS_SUCCESS;
@@ -1731,14 +1764,23 @@ class KsPreparedState final : public KsSingleOwnerPort {
         status = native_cuda_stationary_capacity(capacity, detail);
       std::vector<double> gradient;
       dft::CudaStationaryResources resources;
+      scf::DirectForcePrecisionRequest precision;
+      const bool application = options_.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+                               options_.application_precision_budget[0] > 0.0;
+      precision.mixed_weighted = application;
+      precision.mixed_geometry = application;
+      precision.mixed_grid = application;
       if (status == GENERATIVEQC_STATUS_SUCCESS)
         status = native_cuda_stationary_gradient(
             token, stationary_device_allowance_.value_or(capacity.cached_device_bytes), gradient,
-            resources, detail);
+            resources, detail, application ? &precision : nullptr);
       if (status != GENERATIVEQC_STATUS_SUCCESS)
         throw MethodError(status, detail.empty() ? "native CUDA DFT force unavailable" : detail);
       for (auto& value : gradient) value = -value;
       result.forces.swap(gradient);
+      if (application)
+        result.precision_work.gradient = {1, precision.mixed_weighted, precision.geometry_points,
+                                          precision.grid_points, precision.geometry_retries};
       return;
     }
     if (status == GENERATIVEQC_STATUS_SUCCESS)
@@ -2490,15 +2532,14 @@ class KsPreparedBatch final : public PreparedBatch,
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
-  generativeqc_status native_cuda_stationary_gradient(std::size_t index,
-                                                      const dft::CudaKsFinalStateToken& expected,
-                                                      std::size_t maximum_device_bytes,
-                                                      std::vector<double>& output,
-                                                      dft::CudaStationaryResources& resources,
-                                                      std::string& detail) {
+  generativeqc_status native_cuda_stationary_gradient(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected,
+      std::size_t maximum_device_bytes, std::vector<double>& output,
+      dft::CudaStationaryResources& resources, std::string& detail,
+      scf::DirectForcePrecisionRequest* precision = nullptr) {
     if (index < items_.size() && items_[index].plan)
-      return items_[index].plan->native_cuda_stationary_gradient(expected, maximum_device_bytes,
-                                                                 output, resources, detail);
+      return items_[index].plan->native_cuda_stationary_gradient(
+          expected, maximum_device_bytes, output, resources, detail, precision);
     resources = {};
     detail = "KS batch item has no native stationary owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -2786,14 +2827,16 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
     auto options = dft_options(descriptor, GENERATIVEQC_BACKEND_CUDA, execution_plan);
     const auto grid = ks_grid_options(descriptor, options, execution_plan);
     const auto* binding = native_cuda_stationary_binding(execution_plan, options, grid,
-                                                         shape[5] == 0 && shape[6] == 0, shape[4]);
+                                                         shape[5] == 0 && shape[6] == 0, shape[4],
+                                                         shape[1], shape[0]);
     if (!binding) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const auto points = runtime::size_mul(
         shape[0], runtime::size_mul(grid.radial_points,
                                     runtime::size_mul(grid.angular_polar, grid.angular_azimuth)));
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto candidate = dft::cuda_stationary_capacity(*binding, shape[0], shape[1], shape[2],
-                                                         shape[3], options.xc_tile_points);
+    const auto candidate = dft::cuda_stationary_capacity(
+        *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
+        options.precision_mode == GENERATIVEQC_PRECISION_AUTO);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

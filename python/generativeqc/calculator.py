@@ -563,13 +563,23 @@ class Calculator:
             "cuda": _native.DENSITY_FITTING_CUDA,
             "auto": _native.DENSITY_FITTING_AUTO,
             "correlation_cuda": _native.DENSITY_FITTING_CORRELATION_CUDA,
+            "full_cuda": _native.DENSITY_FITTING_FULL_CUDA,
         }
         try:
             density_fitting_mode = density_fitting_modes[str(density_fitting).lower()]
         except KeyError as error:
             raise ValueError(
-                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', or 'correlation_cuda'"
+                "density_fitting must be 'none', 'cpu', 'cuda', 'auto', 'correlation_cuda', or 'full_cuda'"
             ) from error
+        if density_fitting_mode == _native.DENSITY_FITTING_FULL_CUDA:
+            if method_id not in (_native.METHOD_MP2, _native.METHOD_DF_RCCSD_T):
+                raise ValueError("full_cuda requires MP2 or DF-CCSD(T)")
+            if device != "cuda":
+                raise NotImplementedError("full DF correlated methods require CUDA")
+            if auxiliary_basis is None:
+                raise ValueError(
+                    "full DF requires an explicit shared JK/correlation auxiliary basis"
+                )
         if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
             if method_id != _native.METHOD_MP2:
                 raise ValueError(
@@ -584,6 +594,7 @@ class Calculator:
         if intrinsic_df_rccsdt and density_fitting_mode not in (
             _native.DENSITY_FITTING_CUDA,
             _native.DENSITY_FITTING_AUTO,
+            _native.DENSITY_FITTING_FULL_CUDA,
         ):
             raise NotImplementedError(
                 "df-rccsd(t) currently requires CUDA density fitting"
@@ -837,6 +848,21 @@ class Calculator:
                 raise NotImplementedError(
                     "native library does not support the current semantic KS execution-plan ABI"
                 )
+            if self._ks_options._precision_budget is not None:
+                query = getattr(
+                    self._library, "generativeqc_application_precision_version_v1", None
+                )
+                if query is None:
+                    raise NotImplementedError(
+                        "native library lacks application precision transport"
+                    )
+                query.argtypes, query.restype = [], ctypes.c_uint32
+                if query() != 1:
+                    raise NotImplementedError(
+                        "unsupported native application precision transport"
+                    )
+                if self._precision_mode != _native.PRECISION_AUTO:
+                    raise ValueError("application precision transport requires AUTO")
 
         available = ctypes.c_int32()
         _native.check(
@@ -850,7 +876,10 @@ class Calculator:
                 f"method {method!r} is reserved but not implemented"
             )
         self._capabilities = method_capabilities(self._method_name)
-        if density_fitting_mode == _native.DENSITY_FITTING_CORRELATION_CUDA:
+        if density_fitting_mode in (
+            _native.DENSITY_FITTING_CORRELATION_CUDA,
+            _native.DENSITY_FITTING_FULL_CUDA,
+        ):
             self._capabilities = replace(self._capabilities, supports_batch=False)
         from ._cpu_force_resources import (
             qualified_basis,
@@ -1117,7 +1146,10 @@ class Calculator:
                     self._initial_guess = None
 
         if self._initial_guess is not None:
-            from .initial_guess import require_initial_guess_library
+            from .initial_guess import (
+                _initial_guess_precision,
+                require_initial_guess_library,
+            )
 
             minao = self._initial_guess.kind in ("minao", "huckel")
             backend_ok = self._device_name == "cpu" or (
@@ -1133,7 +1165,8 @@ class Calculator:
             )
             if (
                 not backend_ok
-                or self._precision_mode != _native.PRECISION_FP64
+                or (_initial_guess_precision(self) if minao else self._precision_mode)
+                != _native.PRECISION_FP64
                 or (
                     self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                     and self._initial_guess.kind != "huckel"
@@ -1387,12 +1420,20 @@ class Calculator:
     ) -> dict | None:
         """Expose aggregate provenance plus execution-owned detailed work."""
 
-        from ._precision_work import merge_precision_work, query_precision_work
+        from ._precision_work import (
+            merge_precision_work,
+            query_gradient_precision,
+            query_precision_work,
+        )
 
-        return merge_precision_work(
+        report = merge_precision_work(
             self._precision_provenance(calculation, index),
             query_precision_work(self._library, calculation, index=index),
         )
+        gradient = query_gradient_precision(self._library, calculation, index=index)
+        if gradient is not None:
+            report = {**(report or {}), "gradient": gradient}
+        return report
 
     def _incremental_direct_jk_diagnostic(
         self, calculation: ctypes.c_void_p, index: int | None = None
@@ -1488,7 +1529,10 @@ class Calculator:
             and (
                 self._method == _native.METHOD_DF_RCCSD_T
                 or self._density_fitting_mode
-                == _native.DENSITY_FITTING_CORRELATION_CUDA
+                in (
+                    _native.DENSITY_FITTING_CORRELATION_CUDA,
+                    _native.DENSITY_FITTING_FULL_CUDA,
+                )
             )
         ):
             return "correlation_df"

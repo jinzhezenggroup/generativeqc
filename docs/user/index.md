@@ -64,6 +64,7 @@ ecp
 :caption: Validation and advanced options
 
 accuracy
+application_precision
 local_autotuning
 experimental_array_api
 ```

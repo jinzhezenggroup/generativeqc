@@ -22,6 +22,7 @@
 #include "cc/reference_input.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
+#include "hf/df_reference.hpp"
 #include "methods/batch_capabilities.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
@@ -381,7 +382,8 @@ RccsdNativeState execute_rccsd_prepared(
     std::unique_ptr<scf::PreparedFockPlan>* cuda_source_cache,
     const core::System* correlation_auxiliary = nullptr, bool retain_df_response = false,
     const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr,
-    scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr, bool df_mp2_mode = false) {
+    scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr, bool df_mp2_mode = false,
+    bool df_reference = false) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
@@ -397,9 +399,19 @@ RccsdNativeState execute_rccsd_prepared(
     const auto reference_started = std::chrono::steady_clock::now();
     bool reference_plan_reused = false;
     std::shared_ptr<const integrals::ElectronInteractionSource> borrowed_reference_source;
+    std::shared_ptr<hf::DFReference> fitted_reference;
     const auto run_reference = [&](const std::vector<double>* seed) {
       borrowed_reference_source.reset();
       reference_source = {};
+      if (df_reference) {
+        if (!cuda || !correlation_auxiliary || cuda_reference_plan || prepared_exact)
+          throw std::invalid_argument("full DF reference requires its native CUDA source");
+        // A retry retires the entire old source before creating a new metric/frame.
+        fitted_reference.reset();
+        fitted_reference = std::make_shared<hf::DFReference>();
+        return fitted_reference->solve(system, *correlation_auxiliary, reference_options,
+                                       execution.device_id(), seed);
+      }
       if (prepared_exact) {
         auto prepared_options = reference_options;
         prepared_options.resolved_fock_build = prepared_exact->strategy();
@@ -472,6 +484,7 @@ RccsdNativeState execute_rccsd_prepared(
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
     state.reference = reference;
+    state.df_reference = fitted_reference;
     state.reference_interaction_source = std::move(borrowed_reference_source);
     state.reference_energy_change = hf.energy_change;
     state.reference_density_rms = hf.density_rms;
@@ -502,10 +515,19 @@ RccsdNativeState execute_rccsd_prepared(
         source = raw_source.get();
       }
       try {
-        return build_problem(system, source, *reference, correlation_options, cuda,
-                             execution.device_id(), provider_work, provider_metrics,
-                             correlation_auxiliary, retain_df_response ? &state.df_source : nullptr,
-                             correlation_policy, df_mp2_mode);
+        auto source_options = correlation_options;
+        const auto retained_df = fitted_reference ? fitted_reference->storage_bytes() : 0;
+        if (retained_df >= source_options.max_bytes)
+          throw std::length_error("RI-JK reference exhausts correlation source budget");
+        source_options.max_bytes -= retained_df;
+        auto problem = build_problem(
+            system, source, *reference, source_options, cuda, execution.device_id(), provider_work,
+            provider_metrics, correlation_auxiliary,
+            retain_df_response ? &state.df_source : nullptr, correlation_policy, df_mp2_mode);
+        problem.reference_retained_bytes =
+            posthf::checked_add(problem.reference_retained_bytes, retained_df);
+        problem.provider_peak_bytes = posthf::checked_add(problem.provider_peak_bytes, retained_df);
+        return problem;
       } catch (...) {
         // A failed provider may have published its response owner before a
         // later capacity check. Drop only that unsuccessful output before the
@@ -615,14 +637,14 @@ RccsdNativeState execute_rccsd_prepared(
     }
     diagnostic.reference_residual = reference->commutator_residual;
     diagnostic.minimum_absolute_denominator = state.problem.minimum_absolute_denominator;
-    diagnostic.numeric_capacity_bytes =
-        std::max({reference_capacity,
-                  posthf::checked_add(
-                      reference->numeric_capacity_bytes,
-                      correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0),
-                  source_preparation_peak, provider_phase_peak,
-                  posthf::checked_add(state.reference_execution_plan_bytes,
-                                      state.solved.diagnostic.numeric_capacity_bytes)});
+    diagnostic.numeric_capacity_bytes = std::max(
+        {fitted_reference ? reference_options.reference_memory_budget_bytes : reference_capacity,
+         posthf::checked_add(
+             reference->numeric_capacity_bytes,
+             correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0),
+         source_preparation_peak, provider_phase_peak,
+         posthf::checked_add(state.reference_execution_plan_bytes,
+                             state.solved.diagnostic.numeric_capacity_bytes)});
     diagnostic.mo_host_staging = cuda ? 1 : 0;
     diagnostic.reference_execution_plan_reused = reference_plan_reused ? 1 : 0;
     diagnostic.reference_execution_plan_owned_device_bytes =
@@ -1062,7 +1084,7 @@ RccsdNativeState run_rccsd_native_state(
     bool retain_df_response, bool df_matrix_gemm, scf::CudaRhfBucketPlan** cuda_reference_plan,
     std::size_t df_auxiliary_batch_limit, bool derived_denominators, bool packed_diis,
     std::optional<bool> df_mixed_precision, double df_mixed_precision_switch_residual,
-    bool df_mp2_mode) {
+    bool df_mp2_mode, bool df_reference) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -1136,7 +1158,7 @@ RccsdNativeState run_rccsd_native_state(
       execution, system, reference, solver_options, reference_capacity, prepared_exact,
       initial_density, warm_start_fallback, prepared_exact_cache, correlation_auxiliary,
       retain_df_response, correlation_auxiliary ? &correlation_policy : nullptr,
-      cuda_reference_plan, df_mp2_mode);
+      cuda_reference_plan, df_mp2_mode, df_reference);
   state.external_reservation_bytes = external_reservation_bytes;
   state.diagnostic.numeric_capacity_bytes =
       posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);

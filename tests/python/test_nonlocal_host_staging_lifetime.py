@@ -189,6 +189,10 @@ template<class... T> void prefix_active_partner_blocks_kernel(T&&...) {}
 template<class... T> void scatter_active_partners_ordered_kernel(T&&...) {}
 template<class... T> void admit_molecular_pair_domain_kernel(T&&...) {}
 template<class... T> void reduce_energy_ordered_kernel(T&&...) {}
+template<class... T> void mark_cached_pair_outputs_kernel(T&&...) {}
+void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout&,Vv10Parameters,int,cudaStream_t,
+ const double*,const double*,const double*,const double*,void*,std::size_t,
+ double*,double*,double*,double*,double*,int*,const int* = nullptr);
 """
 
 SUFFIX = r"""

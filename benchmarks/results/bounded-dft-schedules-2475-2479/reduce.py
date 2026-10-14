@@ -90,7 +90,12 @@ def write_table(points: list[dict], path: Path) -> None:
             if len(values) > 1:
                 cell += f" [{min(values):.3f}, {max(values):.3f}]"
             work = sorted({(row["iterations"], row["fock_builds"]) for row in rows})
-            cells.append(cell + " (" + ", ".join(f"{i}/{f}" for i, f in work) + ")")
+            cells.append(
+                cell
+                + " ("
+                + ", ".join(f"{i}/{f if f is not None else '—'}" for i, f in work)
+                + ")"
+            )
         lines.append(
             f"| {point['method']} | {point['mode']} | {point['atoms']} | "
             f"{point['arm']} | " + " | ".join(cells) + " |"

@@ -168,6 +168,24 @@ def supports_automatic_huckel(
     return query() & required == required
 
 
+def _initial_guess_precision(calculator: typing.Any) -> int:
+    """Keep native MINAO/Huckel preparation strict for budget-selected XC warmup.
+
+    The application extension changes provisional XC arithmetic, not the seed
+    provider. Ordinary AUTO retains its existing admission. This value is only
+    for preparation policy queries; the target still receives AUTO controls.
+    """
+    options = getattr(calculator, "_ks_options", None)
+    if (
+        calculator._precision_mode == _native.PRECISION_AUTO
+        and calculator._device_name == "cuda"
+        and options is not None
+        and options._precision_budget is not None
+    ):
+        return _native.PRECISION_FP64
+    return calculator._precision_mode
+
+
 def _native_automatic_minao_eligible(
     calculator: typing.Any,
     *,
@@ -209,7 +227,7 @@ def _native_automatic_minao_eligible(
         _native.BACKEND_CPU_REFERENCE
         if calculator._device_name == "cpu"
         else _native.BACKEND_CUDA,
-        calculator._precision_mode,
+        _initial_guess_precision(calculator),
         calculator._density_fitting_mode,
         int(restricted),
         int(has_ecp),
@@ -274,7 +292,7 @@ def _automatic_minao_model_eligible(
             calculator._device_name == "cpu"
             or calculator._capabilities.family == "density_functional"
         )
-        and calculator._precision_mode == _native.PRECISION_FP64
+        and _initial_guess_precision(calculator) == _native.PRECISION_FP64
         and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
         and restricted
         and not has_ecp

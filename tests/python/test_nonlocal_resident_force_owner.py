@@ -265,3 +265,52 @@ def test_resident_feature_handoff_failure_cleanup_is_not_on_success_path() -> No
     )[0]
     assert "drain_failed_seed_source(source_stream);" in hot
     assert "catch (...)" in hot
+
+
+def test_resident_work_diagnostics_distinguish_unavailable_from_measured_zero() -> None:
+    """Old six-field libraries and unrequested work never fabricate counters."""
+    from generativeqc import _native
+
+    library, _ = _fake_library()
+    owner = _ResidentNonlocalForceOwner(
+        original_nonlocal_correlation("vv10"),
+        np.arange(12, dtype=np.float64).reshape(4, 3) / 10.0,
+        np.full(4, 0.25),
+        coefficient=Fraction(1),
+        tile_points=2,
+        maximum_bytes=1 << 20,
+        density_threshold=1.0e-12,
+        device_id=0,
+        context=ctypes.c_void_p(0x2222),
+        library=library,
+    )
+    original = library.generativeqc_internal_nonlocal_cuda_force_metrics_v1
+
+    def metrics(_owner: object, values: object, count: int) -> int:
+        if count == 9:
+            # Even a failed optional query may leave partial output behind.
+            ctypes.cast(values, ctypes.POINTER(ctypes.c_uint64))[8] = 91
+            return _native.STATUS_INVALID_ARGUMENT
+        return original(_owner, values, count)
+
+    library.generativeqc_internal_nonlocal_cuda_force_metrics_v1 = metrics
+    try:
+        for diagnostic in (owner.diagnostic(), owner.diagnostic(include_work=True)):
+            assert diagnostic.generation == 3 and diagnostic.executed
+            assert diagnostic.pair_cache_probes is None
+            assert diagnostic.pair_cache_hits is None
+            assert diagnostic.pair_evaluations is None
+
+        def extended(_owner: object, values: object, count: int) -> int:
+            original(_owner, values, 6)
+            target = ctypes.cast(values, ctypes.POINTER(ctypes.c_uint64))
+            target[6], target[7], target[8] = 11, 10, 0
+            return _native.STATUS_SUCCESS
+
+        library.generativeqc_internal_nonlocal_cuda_force_metrics_v1 = extended
+        measured = owner.diagnostic(include_work=True)
+        assert measured.pair_cache_probes == 11
+        assert measured.pair_cache_hits == 10
+        assert measured.pair_evaluations == 0
+    finally:
+        owner.close()

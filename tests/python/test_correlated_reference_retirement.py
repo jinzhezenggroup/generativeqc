@@ -403,7 +403,7 @@ def test_actual_cc_provider_and_solver_callbacks_preserve_retry_state(
         PLAN_STANDINS
         + CC_CALLBACK_STANDINS
         + r"""
-void provider_probe(int failure, bool resident) {
+void provider_probe(int failure, bool resident, bool fitted) {
   reset_injection(failure);
   CorrelatedCudaReferencePlan owner;
   *owner.slot() = new scf::CudaRhfBucketPlan{30,10};
@@ -414,6 +414,14 @@ void provider_probe(int failure, bool resident) {
   auto reference = std::make_shared<hf::PhysicalReference>();
   cc::SolverOptions solver_options, correlation_options;
   solver_options.max_bytes = 100;
+  // The extracted callback borrows the fitted owner from its enclosing frame.
+  // Its allowance must survive exact-source retirement and be charged once on
+  // every provider attempt, without changing the legacy unfitted budgets.
+  struct FittedReference {
+    std::size_t storage_bytes() const { return 7; }
+  };
+  auto fitted_reference = fitted ? std::make_shared<FittedReference>() : nullptr;
+  const std::size_t fitted_bytes = fitted ? 7 : 0;
   const bool cuda = true, retain_df_response = true, df_mp2_mode = false;
   const core::System* correlation_auxiliary = nullptr;
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr;
@@ -435,9 +443,13 @@ void provider_probe(int failure, bool resident) {
         + provider
         + r"""
     assert(failure != 2);
-    assert(state.problem.provider_peak_bytes == 40 && provider_phase_peak == 40);
-    assert((build_budgets == (resident ? std::vector<std::size_t>{100,100}
-                                      : std::vector<std::size_t>{70,100})));
+    assert(state.problem.provider_peak_bytes == 40 + fitted_bytes &&
+           provider_phase_peak == 40 + fitted_bytes);
+    assert(state.problem.reference_retained_bytes == fitted_bytes);
+    assert((build_budgets == (resident
+        ? std::vector<std::size_t>{100-fitted_bytes,100-fitted_bytes}
+        : std::vector<std::size_t>{70-fitted_bytes,100-fitted_bytes})));
+    assert(bool(fitted_reference) == fitted);
     assert(raw_constructions == 2 && destroyed_sources == 1);
     assert(!state.reference_interaction_source);
     assert(provider_work.source_scans == 2 && provider_work.source_values == 6);
@@ -511,7 +523,8 @@ void solver_probe(int failure, bool resident) {
 }
 int main() {
   for (bool resident : {false,true}) {
-    for (int failure : {0,1,2}) provider_probe(failure,resident);
+    for (bool fitted : {false,true})
+      for (int failure : {0,1,2}) provider_probe(failure,resident,fitted);
     for (int failure : {0,1,2,3}) solver_probe(failure,resident);
   }
   std::cout << "actual provider/solver callback rollback and cumulative work gates passed\n";

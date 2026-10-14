@@ -232,7 +232,10 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       const auto density_launcher = l.local_ao
                                         ? local_density_launchers[block.point_start / l.tile_points]
                                         : density_bindings[count == l.tile_points ? 0 : 1].launch;
-      if (density_provider && active) {
+      if (l.fp32_contractions && tiled_xc_admitted(active, count, l.spins, l.work_jets)) {
+        launch_density_product<false, true, float>(stream, density, ao, active, count, l.spins,
+                                                   l.work_jets, work, error, ids, l.nao);
+      } else if (density_provider && active) {
         if (l.local_ao) {
           // Preserve the mapped scientific domain. Only its compact symmetric
           // factor is packed; all tiles reuse the same bounded provider cache.
@@ -309,7 +312,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
       scheduled_potential(stream, batch_ao + ao_offset, batch_coefficients + feature_offset,
                           weights + begin, active, count, l.spins, l.feature_terms, l.work_jets,
                           work, batch_totals + 3 * (begin - batch_begin), potential, totals,
-                          begin != 0 || l.local_ao, error, block.ao_ids, l.nao, potential_binding);
+                          begin != 0 || l.local_ao, error, block.ao_ids, l.nao, potential_binding,
+                          l.fp32_contractions);
       cuda_check(cudaGetLastError());
       ao_offset += count * active * l.jets;
     }

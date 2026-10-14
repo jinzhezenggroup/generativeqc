@@ -290,3 +290,109 @@ def test_force_phase_aliases_poison_invalid_generation_then_recover(
             rtol=2e-11,
             atol=1e-12,
         )
+
+
+@pytest.mark.parametrize("schedule", ("ordered", "parallel"))
+@pytest.mark.parametrize("cross_stream", (False, True))
+def test_exact_pair_component_reuse_and_invalidation(
+    cuda_runtime: tuple[Any, ct.CDLL],
+    monkeypatch: pytest.MonkeyPatch,
+    schedule: str,
+    cross_stream: bool,
+) -> None:
+    """A byte-equal ingredient key may reuse seeds; changed inputs never do.
+
+    New source allocations, signed/zero weights, masked rows and stream handoff
+    are covered by the same independent discrete-functional oracle. A one-ULP
+    density change must miss even if some derived local scales round equally.
+    """
+    monkeypatch.setenv("GENERATIVEQC_VV10_COMPONENT_REUSE", "1")
+    monkeypatch.setenv("GENERATIVEQC_VV10_PAIR_SCHEDULE", schedule)
+    cp, library = cuda_runtime
+    count = 129
+    spec = original_nonlocal_correlation("vv10")
+    points, weights, density, gradient = _inputs(count)
+    consumer = cp.cuda.Stream(non_blocking=True)
+    producer = cp.cuda.Stream(non_blocking=True) if cross_stream else consumer
+    with (
+        NonlocalFixedGridPlan(spec, count, device="cuda", library=library) as plan,
+        _owner(plan, points, weights, library) as owner,
+    ):
+        baseline = _seed_device(cp, owner, producer, consumer, density, gradient)
+        np.testing.assert_allclose(
+            baseline,
+            _reference(points, weights, density, gradient, spec),
+            rtol=2e-11,
+            atol=1e-12,
+        )
+        assert owner.diagnostic(include_work=True).pair_evaluations == 1
+        owner.reset()
+        repeated = _seed_device(
+            cp, owner, producer, consumer, density.copy(), gradient.copy()
+        )
+        np.testing.assert_array_equal(repeated, baseline)
+        work = owner.diagnostic(include_work=True)
+        assert (
+            work.pair_cache_probes,
+            work.pair_cache_hits,
+            work.pair_evaluations,
+        ) == (1, 1, 1)
+
+        owner.reset()
+        density[1] = np.nextafter(density[1], np.inf)
+        changed = _seed_device(cp, owner, producer, consumer, density, gradient)
+        np.testing.assert_allclose(
+            changed,
+            _reference(points, weights, density, gradient, spec),
+            rtol=2e-11,
+            atol=1e-12,
+        )
+        work = owner.diagnostic(include_work=True)
+        assert (work.pair_cache_hits, work.pair_evaluations) == (1, 2)
+
+        owner.reset()
+        bad = gradient.copy()
+        bad[0, 0] = np.nan
+        assert np.isnan(_seed_device(cp, owner, producer, consumer, density, bad)).all()
+        owner.reset()
+        recovered = _seed_device(cp, owner, producer, consumer, density, gradient)
+        np.testing.assert_allclose(recovered, changed, rtol=2e-11, atol=1e-12)
+        assert owner.diagnostic(include_work=True).pair_cache_hits == 1
+
+        owner.reset()
+        monkeypatch.setenv(
+            "GENERATIVEQC_VV10_PAIR_SCHEDULE",
+            "parallel" if schedule == "ordered" else "ordered",
+        )
+        _seed_device(cp, owner, producer, consumer, density, gradient)
+        assert owner.diagnostic(include_work=True).pair_evaluations == 5
+
+
+def test_large_grid_automatic_reuse_has_explicit_opt_out(
+    cuda_runtime: tuple[Any, ct.CDLL], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Screened large grids exercise automatic ownership without quadratic work."""
+    cp, library = cuda_runtime
+    monkeypatch.delenv("GENERATIVEQC_VV10_COMPONENT_REUSE", raising=False)
+    count = 65536
+    spec = original_nonlocal_correlation("vv10")
+    points = np.zeros((count, 3))
+    weights = np.ones(count)
+    density = np.full(count, THRESHOLD / 2)
+    gradient = np.zeros((count, 3))
+    stream = cp.cuda.Stream(non_blocking=True)
+    with (
+        NonlocalFixedGridPlan(spec, count, device="cuda", library=library) as plan,
+        _owner(plan, points, weights, library) as owner,
+    ):
+        for _ in range(2):
+            result = _seed_device(cp, owner, stream, stream, density, gradient)
+            # MolecularV1 removes every row and partner exactly.
+            np.testing.assert_array_equal(result, np.zeros((6, count)))
+            owner.reset()
+        work = owner.diagnostic(include_work=True)
+        assert (work.pair_cache_hits, work.pair_evaluations) == (1, 1)
+        monkeypatch.setenv("GENERATIVEQC_VV10_COMPONENT_REUSE", "0")
+        _seed_device(cp, owner, stream, stream, density, gradient)
+        work = owner.diagnostic(include_work=True)
+        assert (work.pair_cache_hits, work.pair_evaluations) == (1, 2)

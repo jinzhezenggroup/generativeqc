@@ -73,6 +73,7 @@ from ._stationary_cuda import (
     _native_grid_artifact,
     _ptr,
     _resolve_becke_primitive_policy,
+    _resolve_phased_becke_policy,
 )
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
@@ -303,9 +304,15 @@ class PreparedCompositeStationaryCudaGradient:
             if bool(getattr(source, "density_fitted", False))
             else 0
         )
+        # Match the source owner's existing large-system policy in the dry
+        # inventory. Reserving only the ordinary arena silently forces both
+        # owners back to the slow schedule even when the complete cap has room.
+        phased_becke = _resolve_phased_becke_policy(na, None)
+        becke_primitive = _resolve_becke_primitive_policy()
         layout = plan_composite_stationary_cuda_resources(
             basis,
-            becke_primitive=bool(_resolve_becke_primitive_policy()),
+            phased_becke=phased_becke,
+            becke_primitive=bool(becke_primitive),
             grid_plan=lambda points: plan_tiles(
                 basis,
                 backend="cuda",
@@ -365,6 +372,8 @@ class PreparedCompositeStationaryCudaGradient:
             max_device_bytes,
             max_host_bytes,
             nlc_budget,
+            phased_becke,
+            becke_primitive,
             active_ao_cutoff,
             ao_cache_allowance,
             active_ao_producer,
@@ -399,6 +408,8 @@ class PreparedCompositeStationaryCudaGradient:
                         spin_blocks=plan.spin_blocks,
                         integral_derivatives=False,
                         cooperative_becke=True,
+                        phased_becke=phased_becke,
+                        becke_primitive=becke_primitive,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -420,6 +431,8 @@ class PreparedCompositeStationaryCudaGradient:
                         spin_blocks=plan.spin_blocks,
                         integral_derivatives=False,
                         cooperative_becke=True,
+                        phased_becke=phased_becke,
+                        becke_primitive=becke_primitive,
                         page_work_budget=1,
                     )
                 )

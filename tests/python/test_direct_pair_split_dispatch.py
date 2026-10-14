@@ -86,6 +86,7 @@ struct DeviceBatch {
   unsigned direct_order_seven_page_size{32};
   bool direct_dddd_force_class_major{};
   bool direct_force_split_low{};
+  bool direct_force_fp32{};
   bool operator==(const DeviceBatch&) const = default;
 };
 // Diagnostics are disabled for this scheduling/fault-injection seam. Their

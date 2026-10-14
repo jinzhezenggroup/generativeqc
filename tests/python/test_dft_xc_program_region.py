@@ -107,11 +107,12 @@ def _compiled_evidence(*, spins: int = 2) -> GridXcCompiledRegionEvidence:
         *(
             KernelResources(f"{token}(double*)", 32, 0, 0, 0, 0)
             for token in (
-                "batch_density_products",
+                "batch_density_products<double>",
                 "batch_density_features",
                 "batch_potential_panels",
-                "batch_local_potentials",
-                "batch_ordered_scatter",
+                "batch_local_potentials<double>",
+                "batch_ordered_scatter<false, double>",
+                "batch_ordered_scatter<true, double>",
             )
         ),
     )

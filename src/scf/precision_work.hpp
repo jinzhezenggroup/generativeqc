@@ -1,6 +1,7 @@
 #ifndef GENERATIVEQC_SCF_PRECISION_WORK_HPP
 #define GENERATIVEQC_SCF_PRECISION_WORK_HPP
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -97,6 +98,10 @@ struct PrecisionWork {
   std::uint64_t returned_state_generation{};
   std::vector<PrecisionWorkEvent> events;
   std::vector<PrecisionOperatorRecord> operators;
+  /** Private gradient v1: completed, weighted mixed dispatch, attempted mixed
+   * geometry/grid points, whole-gradient FP64 retries. Per-task weighted
+   * counters require intrusive qualification and are deliberately not inferred. */
+  std::array<std::uint64_t, 5> gradient{};
 };
 
 }  // namespace generativeqc::scf

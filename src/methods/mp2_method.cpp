@@ -749,7 +749,8 @@ std::unique_ptr<PreparedCalculation> prepare_mp2_calculation(
     const Capabilities& caps, core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& d, const core::System* auxiliary_basis) {
   const auto density_fitting_mode = d.density_fitting_mode;
-  if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA)
+  if (density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA ||
+      density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_FULL_CUDA)
     return prepare_df_rccsdt_calculation(caps, context, system, d, auxiliary_basis);
   if (density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
       density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&

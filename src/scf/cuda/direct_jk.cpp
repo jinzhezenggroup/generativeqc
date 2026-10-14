@@ -383,7 +383,8 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(detail::kDirectQuartetShellClassCount, sizeof(std::uint32_t));
     add(atoms, 9 * sizeof(double));
     add(batch + 1, 2 * sizeof(std::int64_t));
-    add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
+    // The bounded force owner retains its cursor plus three qualification counters.
+    add(1, sizeof(cuda_execution::GeneratedShellPairStream) + 4 * sizeof(unsigned long long));
   }
   const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
   if (reserve_optional_md && !runtime::active_device_resource_ledger && nao >= 8 &&
@@ -1014,8 +1015,8 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
               // Every s/p/d/f angular bucket needs its own bounded prefix plane.
-              // Strict reuse covers orders 3--9; mixed reuse also admits 0--2
-              // and 10--12. Equal buckets retain only their sorted triangles.
+              // Compensated fixed-mask and mixed reuse cover orders 0--12.
+              // Equal buckets retain only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
                 for (unsigned angular_order = 0; angular_order <= 12; ++angular_order)
                   for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
@@ -1387,7 +1388,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, bool mixed_j, std::uint64_t* mixed_coulomb_work_count,
     double fixed_threshold, std::uint64_t* census, std::string& detail,
-    double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true) {
+    double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true,
+    bool allow_materialized_fixed = false) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
     const bool fixed = fixed_threshold >= 0;
@@ -1622,14 +1624,16 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   census ? census : plan->canonical_work_count, correction, exchange_correction,
                   fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
                   direct_jk_resident_bucket_count(plan, item, first, second));
-            else if (first + second >= 3 && first + second <= 9 && plan->materialized_pair_order &&
-                     !correction && !fixed &&
+            else if (plan->materialized_pair_order &&
+                     ((fixed && allow_materialized_fixed) ||
+                      (!fixed && !correction && first + second >= 3 && first + second <= 9)) &&
                      (!canonical_strict_j || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {
-              // The compiler owns complete-domain lanes/slots for orders 3--9.
-              // Low orders use smaller CTAs; higher orders retain wider owners.
-              // Fixed-density screening, compensation and resident-value
-              // layouts retain their established component-wise fallbacks.
+              // The prepared shell rows only prune candidates. Each AO still
+              // applies the canonical geometry-only predicate, preserving a
+              // linear signed-density operator at a fixed threshold. Every
+              // writer shares the caller's compensation planes and final fold.
+              // Admission rejects masks tighter than rows pruned at setup.
               const auto& shells = plan->materialized_pair_offsets[item];
               const auto pairs = plan->materialized_pair_offsets.back()[7];
               launch_materialized_canonical_jk_kernel(
@@ -1641,10 +1645,12 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   dispatch.canonical_exchange ? direct_exchange_range(spec.exchange)
                                               : DirectCoulombRange::Full,
                   dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
-                  plan->screening_tolerance, plan->materialized_bounds, plan->canonical_density,
-                  plan->canonical_active, canonical_strict_j ? plan->canonical_coulomb : nullptr,
+                  fixed ? fixed_threshold : plan->screening_tolerance, plan->materialized_bounds,
+                  plan->canonical_density, plan->canonical_active,
+                  canonical_strict_j ? plan->canonical_coulomb : nullptr,
                   dispatch.canonical_exchange ? plan->canonical_exchange : nullptr,
-                  census ? census : plan->canonical_work_count);
+                  census ? census : plan->canonical_work_count, correction, exchange_correction);
+              ++plan->diagnostic.materialized_value_launches;
             } else
               launch_canonical_jk_kernel(
                   plan->stream, plan->canonical_batch, plan->canonical_cartesian,
@@ -2284,7 +2290,7 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t elements,
     double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
     int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
-    bool allow_resident, const double* beta, double* beta_exchange) {
+    bool allow_resident, const double* beta, double* beta_exchange, bool allow_materialized) {
   if (!std::isfinite(threshold) || threshold < 0 || !correction ||
       (spec.spin != FockSpin::Restricted && spec.spin != FockSpin::Unrestricted) ||
       (spec.exchange.present && direct_exchange_range(spec.exchange) != DirectCoulombRange::Full)) {
@@ -2297,7 +2303,8 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
   }
   return enqueue_cuda_direct_jk_device_impl(
       plan, spec, density, beta, elements, coulomb, exchange, beta_exchange, numerical_error, false,
-      nullptr, threshold, census, detail, correction, correction_elements, allow_resident);
+      nullptr, threshold, census, detail, correction, correction_elements, allow_resident,
+      allow_materialized);
 }
 
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
@@ -2422,7 +2429,7 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail, bool separate_sources,
-    bool allow_spatial_default) {
+    bool allow_spatial_default, DirectForcePrecisionRequest* precision) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     // The optional shell owner can be refused when its recurrence-stack
@@ -2471,7 +2478,8 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     direct_jk_check(cudaSetDevice(plan->device_id));
     direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
         *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-        exchange_coefficient, derivatives, separate_sources, allow_spatial_default));
+        exchange_coefficient, derivatives, separate_sources, allow_spatial_default, false,
+        precision));
     direct_jk_finite_result(derivatives);
   });
 }
@@ -2479,7 +2487,8 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
 generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default) {
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default,
+    DirectForcePrecisionRequest* precision) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -2513,7 +2522,7 @@ generativeqc_status consume_cuda_direct_shell_full_range_derivatives_device(
     try {
       direct_jk_check(cuda_execution::consume_generated_full_range_energy_derivatives(
           *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-          exchange_coefficient, consumer, allow_spatial_default));
+          exchange_coefficient, consumer, allow_spatial_default, precision));
     } catch (const generativeqc::Error& error) {
       // Preserve the callback's typed status through the existing provider
       // guard and its failure drain; driver failures are not bad seed input.

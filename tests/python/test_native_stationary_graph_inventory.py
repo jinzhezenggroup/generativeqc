@@ -95,6 +95,8 @@ def test_prepared_admission_retains_graph_and_capacity(
     source.write_text(
         '#include "scf/types.hpp"\n'
         '#include "dft/grid.hpp"\n'
+        '#include "dft/application_precision.hpp"\n'
+        '#include "dft/semilocal_family.hpp"\n'
         '#include "dft/cuda_stationary_capacity.hpp"\n'
         + emit_native_stationary_registry_cpp(("pbe_rks", "pbe_uks"))
         + r"""
@@ -150,7 +152,7 @@ int main() {
     provider.spec.spin = spin == 1 ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted;
     provider.spec.exchange.coefficient = spin == 1 ? -0.125 : -0.25;
     dft::GridSpec grid;
-    const auto select = [&] { return native_cuda_stationary_binding(plan, options, grid, true, 1); };
+    const auto select = [&] { return native_cuda_stationary_binding(plan, options, grid, true, 1, 96, 12); };
     const auto* selected = select();
     const auto* expected = spin == 1 ? &dft::native_stationary_profile_pbe_rks()
                                      : &dft::native_stationary_profile_pbe_uks();
@@ -158,8 +160,19 @@ int main() {
     const auto capacity = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2);
     if (capacity.stationary_minimum_bytes != 1000 + 10 * spin ||
         capacity.stationary_cached_bytes != 2000 + 10 * spin) return 2;
-    if (native_cuda_stationary_binding(plan, options, grid, false, 1) ||
-        native_cuda_stationary_binding(plan, options, grid, true, 2)) return 3;
+    if (native_cuda_stationary_binding(plan, options, grid, false, 1, 96, 12) ||
+        bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 96, 12)) != (spin == 1)) return 3;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 768, 96)) return 14;
+    if (native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) return 15;
+    const auto mixed = dft::cuda_stationary_capacity(*selected, 2, 2, 2, 4, 2, true);
+    const auto extra = 4 * (8 * 2 * 2 + 2 * 2) + dft::CudaGridStorage::provider_allowance;
+    if (mixed.minimum_device_bytes != capacity.minimum_device_bytes ||
+        mixed.stationary_cached_bytes != capacity.stationary_cached_bytes ||
+        mixed.cached_grid_extra_bytes != extra ||
+        mixed.cached_device_bytes != capacity.cached_device_bytes + extra) return 10;
+    const auto receipt = dft::cuda_stationary_capacity_values(mixed);
+    if(receipt[4] != receipt[0]+receipt[1]+receipt[2] ||
+       receipt[5] != receipt[0]+receipt[1]+receipt[3]) return 11;
     ++plan.domain;
     if (select()) return 4;
     --plan.domain;
@@ -176,6 +189,12 @@ int main() {
     if (select()) return 8;
     provider.backend = scf::FockBackend::Cuda;
     if (select() != expected) return 9;
+    options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+    options.application_precision_budget = {1e-5, 1e-4, 3e-5};
+    if (bool(select()) != (spin == 1)) return 12;
+    if (bool(native_cuda_stationary_binding(plan, options, grid, true, 2, 384, 48)) != (spin == 1)) return 16;
+    options.application_precision_budget[1] = 1e-7;
+    if (select()) return 13;
   }
 }
 """

@@ -11,6 +11,9 @@
 namespace generativeqc::integrals {
 class ElectronInteractionSource;
 }
+namespace generativeqc::hf {
+class DFReference;
+}
 namespace generativeqc::scf {
 class PreparedFockPlan;
 struct CudaRhfBucketPlan;
@@ -18,6 +21,8 @@ struct CudaRhfBucketPlan;
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
   std::shared_ptr<const hf::PhysicalReference> reference;
+  /** Present only for the explicitly requested full RI-JK reference model. */
+  std::shared_ptr<hf::DFReference> df_reference;
   // Sole source owner from this exact RHF: resident storage when eligible,
   // otherwise compact immutable metadata. Shared retirement covers all CC stages.
   std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
@@ -45,7 +50,9 @@ struct RccsdNativeState {
 };
 
 // The optional auxiliary selects the internal correlation-only DF Hamiltonian.
-// The descriptor/reference remain conventional FP64 RHF. Response retention
+// The descriptor remains conventional; df_reference explicitly selects RI-JK
+// and retains its immutable owner. Otherwise the reference is exact FP64 RHF.
+// Response retention
 // keeps the original source/frame alive and charges it beside the CC solve;
 // energy-only calls release it normally. Public method registration is separate.
 // An absent mixed request selects the qualified native DF auto policy; explicit
@@ -61,7 +68,7 @@ RccsdNativeState run_rccsd_native_state(
     bool packed_diis = false, std::optional<bool> df_mixed_precision = std::nullopt,
     double df_mixed_precision_switch_residual =
         cc::SolverOptions{}.df_mixed_precision_switch_residual,
-    bool df_mp2_mode = false);
+    bool df_mp2_mode = false, bool df_reference = false);
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities&, core::ContextState&, const core::System&,

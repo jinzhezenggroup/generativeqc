@@ -562,13 +562,27 @@ def assert_policy(workflow: dict[str, Any], action: dict[str, Any]) -> None:
         assert restore["with"]["path"] == "~/.cache/ccache"
         for outcome in ["success", "failure", "cancelled", "skipped", ""]:
             for key in ["", "exact-key", "prefix-key"]:
-                assert condition(
-                    fallback["if"],
-                    {
-                        f"steps.{primary}.outcome": outcome,
-                        f"steps.{primary}.outputs.cache-matched-key": key,
-                    },
-                ) == (outcome == "success" and key == "")
+                for selector_outcome, test_scope in [
+                    ("success", "full"),
+                    ("success", "prose"),
+                    ("success", ""),
+                    ("failure", "prose"),
+                    ("", "prose"),
+                ]:
+                    prose = (
+                        job in {"cpu", "python"}
+                        and selector_outcome == "success"
+                        and test_scope == "prose"
+                    )
+                    assert condition(
+                        fallback["if"],
+                        {
+                            f"steps.{primary}.outcome": outcome,
+                            f"steps.{primary}.outputs.cache-matched-key": key,
+                            "steps.prose_scope.outcome": selector_outcome,
+                            "steps.prose_scope.outputs.scope": test_scope,
+                        },
+                    ) == (outcome == "success" and key == "" and not prose)
     steps = action["runs"]["steps"]
     download, verify, activate = steps[1:4]
     assert download["with"]["digest-mismatch"] == "error"

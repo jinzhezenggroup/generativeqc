@@ -11,6 +11,7 @@
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_stationary_binding.hpp"
 #include "runtime/resource_ledger.hpp"
+#include "scf/direct_force_precision.hpp"
 
 namespace generativeqc::dft {
 struct CudaStationaryResources {
@@ -43,7 +44,8 @@ class CudaStationaryController {
                                const scf::PreparedFockPlan& fock,
                                const std::function<bool()>& token_current,
                                std::vector<double>& output, std::string& detail,
-                               bool allow_spatial_default = false);
+                               bool allow_spatial_default = false,
+                               scf::DirectForcePrecisionRequest* precision = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
 
  private:
@@ -52,10 +54,12 @@ class CudaStationaryController {
   const CudaStationaryBinding* binding_{};
   CudaMolecularGridView quadrature_;
   std::size_t aos_{}, tile_points_{}, points_per_atom_{};
+  std::size_t mixed_grid_budget_{}, mixed_grid_bytes_{};
   double coincident_tolerance_{};
   std::vector<double> centers_, charges_;
   void *grid_{}, *stationary_{};
   std::optional<runtime::DeviceProviderAllowance> grid_provider_allowance_;
+  std::optional<runtime::DeviceProviderAllowance> mixed_grid_provider_allowance_;
   CudaStationaryResources resources_;
 };
 }  // namespace generativeqc::dft

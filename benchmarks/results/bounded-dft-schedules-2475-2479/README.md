@@ -119,9 +119,19 @@ complete cold/moved improvement, so **host discovery remains the default**.
 The matched AO binary also covers 3/12-atom host/device/dense controls. Independent
 CPU E/V, sorted sampled maps, spherical/cartesian s/p/d/f expansion, empty/tail
 maps, multiple ballot waves, tiny scratch, capacity refusal and failed-retry
-tests pass on real GPUs. Compute Sanitizer reports zero errors. All five AO
-production files in the initial endpoint image are byte-identical to this PR's
-AO implementation; later changes extend force diagnostics and qualification.
+tests pass on real GPUs. Compute Sanitizer reports zero errors. The initial
+five-file AO implementation is retained in source reconstruction. The subsequent
+master merge adds separate precision paths around discovery; post-merge FP64
+validation is reported separately rather than relabeling the old image.
+
+## Integration with current master
+
+Master `eae30bcdb` includes #2452's separate PBE0 Fast precision owner. The merge
+preserves its fields and retry contract alongside the scheduling/census fields.
+The diagnostic marks mixed force execution as incomplete coverage: FP32 attempts
+and strict retries require the precision owner's separate accounting. This
+campaign's numerical and timing populations remain strict FP64. The merged
+host suite passes 758 tests; source-matched GPU integration validation is pending.
 
 ## Four-jet contractions after CSE (#2478)
 

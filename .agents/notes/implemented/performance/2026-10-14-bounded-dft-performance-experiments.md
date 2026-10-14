@@ -93,3 +93,13 @@ for a larger CTA and possible occupancy loss. It needs no second bilinear,
 vendor provider, additional panel allocation or dropped tau lane. A matched
 post-CSE build must decide this tradeoff with complete endpoints; legal static
 resource bounds are not performance evidence.
+
+## Integration boundary with #2452
+
+The current-master merge adds independently owned PBE0 Fast source attempts and
+strict retries. Preserve that policy and both sets of borrowed fields. A force
+census with `direct_force_fp32` is not a qualified complete strict-work census;
+its execution/recurrence fields remain unavailable. This prevents a retry from
+being mistaken for one admitted FP64 shell execution. All experiments in this
+campaign retain strict FP64, and frozen measurements keep their original source
+identity across the merge.

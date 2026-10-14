@@ -28,7 +28,7 @@ struct DFCCSDTReferenceExperiment {
   scf::PrecisionProvenance work;
 };
 
-/** Complete native endpoint on an unchanged conventional RHF reference with
+/** Complete native endpoint on the selected exact or RI-JK RHF reference with
  * a DF correlation Hamiltonian. The public DF-RCCSD(T) selector reuses this
  * owner for both energy and force requests. */
 struct DFCCSDTResult {
@@ -60,11 +60,13 @@ struct DFCCSDTResult {
 struct DFCorrelationDemand {
   bool mp2{};
   unsigned companions{};
+  /** Explicit scientific model change, never inferred from resource refusal. */
+  bool df_reference{};
 };
 
-/** Cold normalized geometry -> exact native CUDA RHF -> DF source -> CCSD(T)
- * -> complete nuclear forces. Retains the exact source/frame only when forces
- * are requested, and consumes it before either input geometry can change.
+/** Cold normalized geometry -> selected native CUDA RHF -> DF source -> CCSD(T)
+ * -> complete nuclear forces. The reference model is explicit in demand;
+ * the matching source/frame is consumed before either input geometry changes.
  * Energy-only calls share the same scientific Hamiltonian and solver gates.
  * The optional CCSD-only mode omits triples and is an independent closure gate.
  * Disabling df_auxiliary_reduction retains expanded Lambda actions for matched

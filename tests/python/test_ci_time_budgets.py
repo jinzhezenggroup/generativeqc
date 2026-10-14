@@ -5,6 +5,7 @@ import typing
 from pathlib import Path
 
 import pytest
+from test_ci_prose_workflow import assert_full_coverage_step
 
 
 def _assert_cpu_budget(workflow: str) -> None:
@@ -36,7 +37,7 @@ def _assert_cpu_work_and_cache_lifecycle(workflow: str) -> None:
     ):
         block = step(name)
         assert command in block
-        assert "if:" not in block
+        assert_full_coverage_step(block)
         assert "continue-on-error:" not in block
     assert section.index("      - name: Build\n") < section.index(
         "      - name: Test\n"
