@@ -94,8 +94,36 @@
   "accepted_calls": 72,
   "evidence": {
     "path": "evidence.json.xz",
-    "sha256": "acc90ec8b5a61d94310b0e07845271cbb28e8de45de1c15d9dd909e888402c9b",
-    "bytes": 179440,
-    "uncompressed_sha256": "7738a12e159b536cec2aa398e22fc380f5c0712696eb11a0e3966d5d52420083"
-  }
+    "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
+    "bytes": 206880,
+    "uncompressed_sha256": "a80fa2d743707b01a80a7e4237bc202d2e8af38202b440c9be2181de84f53a95"
+  },
+  "incomplete_96_attempts": [
+    {
+      "label": "integral-only",
+      "prefix": "partial96/integral-only/",
+      "source": "b5ca4306e0ae01776b0b5d17b1365db751602201",
+      "library_sha256": "6e180869daee6a32aa504c700d7ab8cfb83a6b47af8d53d4496436e06e81f5ab",
+      "native_source_identity": "6326a312702b21bf338cdff066511df843da451a50455e96f5a14f117417494c",
+      "stage": "moved/0",
+      "returned_calls": 6,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      }
+    },
+    {
+      "label": "integral-and-geometry",
+      "prefix": "partial96/integral-and-geometry/",
+      "source": "8683bd03f735dc5ee52e66b58dce9a7d6650cfb9",
+      "library_sha256": "1ae4d70019e3a4f018bb55df74c71a87dc3eaf7347980a7c9edd3991e1fa2a8b",
+      "native_source_identity": "d200091023ce32df93713f466c3a39e665b2255d5110c16b079bee964f62de21",
+      "stage": "moved/0",
+      "returned_calls": 6,
+      "outcome": {
+        "exit_code": 124,
+        "time_limit_seconds": 1800
+      }
+    }
+  ]
 }

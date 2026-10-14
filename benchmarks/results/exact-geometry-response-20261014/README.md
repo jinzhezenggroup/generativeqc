@@ -40,3 +40,13 @@ Run `python benchmarks/results/exact-geometry-response-20261014/verify.py`
 (with `defusedxml` installed) to recompute every E/F gate, population and median
 and inspect the retained JUnit outcomes. No tolerance-based key, host reference
 calculation or altered stopping rule is introduced.
+
+Two explicit expanded-range 96-atom attempts are retained separately. Integral
+reuse alone (n4 job 915) returns cold 944.105 s and five warm calls with median
+38.376 s; integral plus geometry reuse (n1 job 8451) returns cold 943.962 s and
+five warm calls with median 15.525 s. Both reach the unchanged 1800-second
+whole-point limit during moved/0. All 12 returned calls pass independent E/F
+gates, but neither is a complete population or a qualified moved timing. These
+experiments do not close the outstanding 96-atom acceptance in #2426. Their
+distinct source/library identities, flags, full vectors, logs and outcomes are
+preserved and verified alongside the six complete smaller populations.

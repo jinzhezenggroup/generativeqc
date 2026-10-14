@@ -378,8 +378,8 @@
     {
       "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
       "family": "exact-geometry-response-20261014",
-      "bytes": 179440,
-      "sha256": "acc90ec8b5a61d94310b0e07845271cbb28e8de45de1c15d9dd909e888402c9b",
+      "bytes": 206880,
+      "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
       "classification": "required-compact-accepted-evidence",
       "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
     },

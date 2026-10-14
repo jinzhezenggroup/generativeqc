@@ -121,6 +121,67 @@ def verify() -> None:
             for phase, _ in phases
         } == point["phases_seconds"]
     assert accepted == manifest["accepted_calls"] == 72
+    # Returned calls from timed-out populations remain accuracy evidence only.
+    # They must never be promoted into the complete timing population above.
+    assert evidence["incomplete_96_attempts"] == manifest["incomplete_96_attempts"]
+    partial_calls = 0
+    for attempt in manifest["incomplete_96_attempts"]:
+        prefix = attempt["prefix"]
+        native = json.loads(files[prefix + "native.json"])
+        reference = json.loads(files[prefix + "reference.json"])
+        outcome = json.loads(files[prefix + "native.outcome"])
+        assert (
+            outcome
+            == attempt["outcome"]
+            == {"exit_code": 124, "time_limit_seconds": 1800}
+        )
+        assert native["stage"] == attempt["stage"] != "complete"
+        assert native["native_build"]["library_sha256"] == attempt["library_sha256"]
+        assert (
+            native["native_build"]["probe"]["source_identity"]
+            == attempt["native_source_identity"]
+        )
+        assert native["protocol"] == reference["protocol"]
+        assert native["protocol"]["max_iterations"] == 100
+        assert (
+            native["protocol"]["energy_gate"],
+            native["protocol"]["force_gate"],
+        ) == (1e-8, 1e-7)
+        oracles = {
+            r["geometry"]: r
+            for r in reference["records"]
+            if r["phase"] in ("cold", "moved") and r["converged"]
+        }
+        for filename in (
+            "accuracy-reference-cold.json",
+            "accuracy-reference-moved.json",
+        ):
+            if prefix + filename in files:
+                oracle = json.loads(files[prefix + filename])
+                assert oracle["converged"] and oracle["protocol"] == native["protocol"]
+                oracles.setdefault(oracle["geometry"], oracle)
+        rows = native["records"]
+        assert len(rows) == attempt["returned_calls"] < 12
+        assert [(r["phase"], r["repeat"]) for r in rows] == order[: len(rows)]
+        for row in rows:
+            oracle = oracles[row["geometry"]]
+            assert row["converged"] and row["status"] == 0 and row["gate"] is True
+            assert len(row["forces"]) == len(oracle["forces"]) == 96
+            assert abs(row["energy"] - oracle["energy"]) <= 1e-8
+            assert all(
+                len(a) == len(b) == 3
+                for a, b in zip(row["forces"], oracle["forces"], strict=True)
+            )
+            assert (
+                max(
+                    abs(a - b)
+                    for va, vb in zip(row["forces"], oracle["forces"], strict=True)
+                    for a, b in zip(va, vb, strict=True)
+                )
+                <= 1e-7
+            )
+            partial_calls += 1
+    assert partial_calls == 12
     junit = {
         "qualification/device-8447.xml": (9, 0),
         "qualification/memcheck-8448.xml": (3, 0),
