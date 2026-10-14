@@ -23,6 +23,7 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
     cpp.write_text(
         r"""
 #include <cassert>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -66,8 +67,10 @@ struct Owner {
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool pending_mixed_point = true;
+  bool experimental_mixed_point{};
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
   struct { std::optional<int> precision_mode;
+    std::array<double, 3> application_precision_budget{};
     scf::ScfOptions::XcExecutionSchedule xc_execution_schedule{};
     double semilocal_exchange_scale = 1, semilocal_correlation_scale = 1;
   } options;

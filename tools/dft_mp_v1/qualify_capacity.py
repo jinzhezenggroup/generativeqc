@@ -274,8 +274,11 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
+    "60885551705fbb5410a450037c08bbf9e3e9674502b9b77ff94d78c001cb6e28"
 )
+# The optional Fast candidate is admitted by the fitted/composite policy before
+# forwarding its explicit flag. AOT plan selection, complete-grid overrides,
+# byte budgets, topology rebuild and source cleanup remain bound above.
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
 )
@@ -315,15 +318,20 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 # Component packing also binds its ragged scratch/descriptor helpers. The
 # generic restricted-point request still borrows the same admitted geometry
 # scratch; refreshing these owners does not relax any promotion evidence gate.
+# Explicit FP32 adds boolean/profile admission and requires both optional
+# transport and work-counter ABIs. Descriptor capacity, primitive page budgets,
+# resource planning and legacy Becke fallback/control remain unchanged.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
+    "d79b0f5c255b78f1f56f017ca4363aeadb99d978de87279395edb4acd53cf183"
 )
-# Explicit strict pairing retains the fixed native counter-array arities.
+# Explicit strict pairing retains the fixed native counter-array arities. The
+# optional three-field FP32 ABI reports capability and actual enqueued work;
+# deltas subtract both work counters but never subtract the capability flag.
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
+    "8bf8189b68d9da2c421efe0ec13abfb3296d5106ae2f3df73b7106edf3a0f01e"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
-    "0b158358e77b94d84b845b388a3403769b9ae30b6b6ad5172ca30e0f329b1143"
+    "c9df420cacb6a16733a023c4de396db5d5c37cbfbecffdc8a232817c197017ec"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
@@ -395,8 +403,11 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Read-only grid admission now follows the requested AO capability. Refresh
 # these existing bindings with dry report/runtime parity and fallback witnesses;
 # do not reinstate writable indexed staging in the no-map census.
+# The explicit precision candidate adds forwarding, attempt-baseline capture
+# and work metadata. Native requirements, finite/shape checks, complete source
+# reduction, pending windows and all allocation equations remain unchanged.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "f6836f992fcbfe6dfd5fe5dcc040e927de286c9c419edb6271038ec31740ef9a"
+    "dd4e8026d26989e122b28b46098deb5925421ccaf11a7d26142670272f60dbb8"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -441,14 +452,18 @@ NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
 )
-# Audited lifecycle-only change: capacity defaults and forwarding remain intact.
-# Closed/running refusal and BaseException revocation protect the original lease.
+# Strict defaults and all resource forwarding remain intact. Explicit candidates
+# may retry numerical failure only after positive mixed work, or replay strict
+# for missing optional transport. Both paths drain/invalidate before one retry;
+# driver/allocation/identity failures never grant an arithmetic retry.
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "6469bd395b196bb58610e2a6e4e92964076144d8e7869f702f615c5600688f92"
+    "45097f6787b42bd6fb13ddd38fd77dead329af1ec357fc8e620610ac967081af"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "ddca5ed4b429304cf051b9c28d4c3d5f88d805b0c94c08fbbe1e3955c8e944a1"
+    "82d609f25e944f0ca115b59f14da8e18c43a43a7042c6275ba7fa9d22b38c791"
 )
+# The native owner adds two integer FP32 work counters. Allocation(), create(),
+# scratch layout, optional-phase reservation and all resource guards are intact.
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
@@ -553,12 +568,15 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 # Force-memory admission requests the full cold envelope and only the unretained
 # remainder on replay. Keep this existing compatibility binding until #2296;
 # no new whole-function fingerprint or production-source gate is introduced.
+# Precision selection is forwarded to source construction and replay identity;
+# AOT selection, cold/replay reservations and lease admission remain unchanged.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "260e61e6628c716ac940f730e52575512136fc76825570d62f3e4a6b1c9b197f"
+    "dbc6ee7cf50d25349b5cf345919a5e6741d4dfc3c4c9d8dacddffc83df4c9504"
 )
-# Prepared schedule identity also retains the selected read-only grid capability.
+# Prepared schedule identity retains the read-only grid capability and precision
+# mode; every topology, MethodIR, AO-policy and resource dimension is preserved.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "9362e2d766922cfe39572019244db842db6651ce7f9674097856688eeb8b4fbc"
+    "1c71cf4b076b5c16d992bf84a66efd4f9ebe824da24f2f738a3f2ff8f7c3d7ad"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
