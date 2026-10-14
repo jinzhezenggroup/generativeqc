@@ -30,10 +30,10 @@
 | M06-2X | 12 (96) | 7.919 | 25.024 | 1.430 | 1.775 |
 | M06-2X | 48 (384) | 46.884 | 54.767 | 6.824 | 5.294 [4.994–7.289]† |
 | M06-2X | 96 (768) | 150.704 | 97.687 | 20.014 | 13.406 |
-| ωB97M-V | 3 (24) | 29.237 | 27.917 | 0.415 | 2.575 |
-| ωB97M-V | 12 (96) | 42.382 | 109.918 | 1.755 | 8.837 |
-| ωB97M-V | 48 (384) | 575.813 | 1216.489 | 15.548 | 105.410 |
-| ωB97M-V | 96 (768) | timeout | timeout | timeout | timeout |
+| ωB97M-V | 3 (24) | 17.498 | 27.917 | 0.420 | 2.575 |
+| ωB97M-V | 12 (96) | 34.235 | 109.918 | 1.797 | 8.837 |
+| ωB97M-V | 48 (384) | 388.993 | 1216.489 | 15.453 | 105.410 |
+| ωB97M-V | 96 (768) | 1332.267 | timeout | 59.321 | timeout |
 
 Warm cells show the median of all five complete endpoints. † marks differing
 SCF work and includes the full range; timings are never normalized by iterations.
@@ -78,10 +78,10 @@ between engines; complete endpoint time includes analytic forces as well.
 | M06-2X | 12 | 19/20 | 39/40 | 1/1 | 1/2 |
 | M06-2X | 48 | 18/19 | 41/42 | 1/1 | 1/2, 2/3, 3/4 |
 | M06-2X | 96 | 18/19 | 41/42 | 1/1 | 1/2 |
-| ωB97M-V | 3 | 13/13 | 32/33 | 1/1 | 1/2 |
-| ωB97M-V | 12 | 19/19 | 45/46 | 1/1 | 1/2 |
-| ωB97M-V | 48 | 19/19 | 45/46 | 1/1 | 1/2 |
-| ωB97M-V | 96 | — | — | — | — |
+| ωB97M-V | 3 | 23/23 | 32/33 | 1/1 | 1/2 |
+| ωB97M-V | 12 | 36/36 | 45/46 | 1/1 | 1/2 |
+| ωB97M-V | 48 | 36/36 | 45/46 | 1/1 | 1/2 |
+| ωB97M-V | 96 | 36/36 | — | 1/1 | — |
 
 The [measurement report](README.md) describes the protocol and unsuccessful
 points; [summary.json.xz](summary.json.xz) retains all scalar observations,

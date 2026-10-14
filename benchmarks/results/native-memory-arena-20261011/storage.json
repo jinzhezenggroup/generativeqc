@@ -6,8 +6,8 @@
   "original_stored_bytes": 296248,
   "original_stored_sha256": "999fabdffef8f14ab02690e3139676cd868f3de3aec8463d9110fe341c3c1af8",
   "schema": "generativeqc.lossless-evidence-storage.v1",
-  "stored_bytes": 145996,
+  "stored_bytes": 118468,
   "stored_path": "evidence.json.xz",
-  "stored_sha256": "cba952bc8280d42a4bce074c0e21b041e5fe54cb8e3421fd4e400fdea65f01ad",
+  "stored_sha256": "01dedadb0975a4359cd2c77666dc7110af82835876c39578a4adf0013fc023cd",
   "transformation": "Lossless gzip-to-XZ recompression only; original decoded JSON bytes are unchanged."
 }
