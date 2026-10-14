@@ -6,8 +6,8 @@
   "common_endpoint_base": "786c31a48",
   "summary": {
     "path": "summary.json.xz",
-    "bytes": 236108,
-    "sha256": "951a9b57e034e5408ee1c73fe10a8af73ea1b77f9441a717ab764be0f4402ab3"
+    "bytes": 24988,
+    "sha256": "006d581f0f55d382330df6b2a79bd6fd580ecd4eea87aa84b476e70762bb7411"
   },
   "successful_endpoint_calls": 108,
   "scientific_gates": {
@@ -15,5 +15,11 @@
     "force_Eh_per_Bohr": 1e-07
   },
   "strict_tail_diagnostic_passed": false,
-  "clean_release_point_qualification": false
+  "clean_release_point_qualification": false,
+  "full_evidence": {
+    "manifest": "benchmarks/results/m06-rks-force-powers-20261014/full-evidence.json",
+    "bytes": 1389,
+    "sha256": "6c107fe5d7fa62a5ed0ab0a40fe6e55bfca59fb86d6a40d8ff122a6a981838dd",
+    "source_revision": "3ca3fa0038fbea5350a8bb799cca26d678522678"
+  }
 }

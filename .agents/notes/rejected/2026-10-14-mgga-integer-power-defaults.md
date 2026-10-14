@@ -188,14 +188,21 @@ receipt. Endpoint gates remain 1e-8 Eh and 1e-7 Eh/Bohr. No profile or oracle
 is inserted into a timed native call. Larger benchmarks keep the existing
 1,800-second whole-point limit.
 
-The global and force-only candidates, full ranges and build receipts are retained in
-`benchmarks/results/mgga-integer-powers-20261014/summary.json.xz`.
+The global and force-only candidates and full ranges are retained in the endpoint
+ledger `benchmarks/results/mgga-integer-powers-20261014/summary.json.xz`.
+The exact original capsule, including vectors and build receipts, remains in
+Git ancestor `3ca3fa0038fbea5350a8bb799cca26d678522678`, bound by the superseding
+campaign's `full-evidence.json` and restored offline with
+`tools/restore_retained_evidence.py`. This storage-only projection does not
+change the historical rejection or discard negative observations.
 Baseline Slurm jobs are n5/1568, 1569 and 1570; global candidate n5/1571;
 force-only candidate n5/1572. Native timings use the common compatible runtime
 bundle, Release/auto AOT, matrix tile 16 and separate arm-local compilation caches.
 Cold includes construction and preparation using `complete_seconds`, not just
 `seconds`. All returned energy/force data, source/library/consumer hashes,
 scientific inputs and reproduction scripts are embedded in the compressed data.
+After the storage-only projection described above, this refers to the original
+full capsule in pinned Git history, not to the compact current-tree ledger.
 The final unit cohort passes 96 tests and skips 43 explicitly optional tests;
 skips are not qualification. Compiler structure, Ruff and formatting checks pass.
 Do not update the public README using point-kernel timings or the different

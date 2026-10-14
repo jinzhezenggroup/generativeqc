@@ -94,12 +94,34 @@ solver improvement: the large second-population cold/moved timing differences
 include different SCF work. Stable fixed-work warm endpoint gains are the
 default-promotion claim, not guarantees for arbitrary noisy cold solves.
 
-The new capsule includes 96 master calls and 48 historical same-image control
-calls, with all vectors, references, samples, counts and identities. The earlier
-108-call negative capsule is kept separately. Host validation has 124 passes
+The new evidence includes 96 master calls and 48 historical same-image control
+calls; the earlier 108-call negative experiment is kept separately. Host
+validation has 124 passes
 and 43 explicit optional skips; final policy-only validation has 17 passes.
 Configured pre-commit and compiler ownership checks pass. The master README is
 not rewritten from mixed-source historical timing populations.
+
+## Evidence storage boundary
+
+The first PR CI retention check found the two complete compressed capsules
+exceeded the unchanged 64-MiB aggregate checkout budget by 533059 bytes. Keep
+their exact originals in already-pushed ancestor
+`3ca3fa0038fbea5350a8bb799cca26d678522678`; do not rewrite/drop that ancestor,
+increase budgets, publish Releases or migrate unrelated campaigns. The owned
+`full-evidence.json` snapshot binds both original capsules and their guides and
+manifests by revision, SHA256, byte lengths and totals. Existing
+`tools/restore_retained_evidence.py` restores all six files offline, verifying
+before publication and refusing overwrite. No new external host is introduced.
+
+Current capsules are explicitly endpoint ledgers, not full-vector archives.
+They preserve every timing sample, phase range, E/error/gate/convergence value,
+available semantic work counter, source/model/library identity and diagnostic
+failure. Full vectors/references, point arrays, SCF histories, component
+profiling, logs/cache/build receipts and scripts are restored from the pinned
+originals. `tools/compact_m06_force_evidence.py` deterministically regenerates
+the ledgers from the verified snapshot without rounding or filtering; tests
+protect negative rows, null counters, timing values, all 252 calls and identities.
+The historical rejection is not reclassified by this storage-only projection.
 
 ## References
 

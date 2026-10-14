@@ -13,7 +13,13 @@
   "successful_historical_control_calls": 48,
   "summary": {
     "path": "summary.json.xz",
-    "bytes": 351336,
-    "sha256": "96ab76428982acd790618f94fdc121e93445f300f627b241f9c449e3794e0368"
+    "bytes": 27392,
+    "sha256": "02a35e5d390e17fadde2454a634375de8ab0d6352998ec72555e4f76c691596b"
+  },
+  "full_evidence": {
+    "manifest": "benchmarks/results/m06-rks-force-powers-20261014/full-evidence.json",
+    "bytes": 1389,
+    "sha256": "6c107fe5d7fa62a5ed0ab0a40fe6e55bfca59fb86d6a40d8ff122a6a981838dd",
+    "source_revision": "3ca3fa0038fbea5350a8bb799cca26d678522678"
   }
 }

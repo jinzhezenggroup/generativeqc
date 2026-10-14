@@ -1,134 +1,97 @@
 # FP64 M06-2X RKS force integer powers
 
-Campaign: October 14–15, 2026. Qualification source: master `8c770b34c`
-(including #2486), candidate `8021e2d92`. This is an independent improvement;
-it neither depends on nor re-credits #2464's equal-spin branch CSE.
+Campaign: October 14–15, 2026. Control: master `8c770b34c` (including #2486).
+Scientific candidate: `8021e2d92`. This does not depend on or re-credit #2464's
+unmerged equal-spin branch CSE.
 
-The candidate lowers integer powers up to four **after independent polarized
-AD**, only in the FP64 M06-2X RKS stationary force consumer. SCF point source,
-UKS consumers, float scalar graphs, MN15 and r2SCAN defaults stay unchanged.
-Strict FP64 force fallbacks use the qualified FP64 force graph. Generated
-source/artifact identities change; mathematical expression identities do not.
+Lower powers up to four **after independent polarized AD**, only in FP64
+M06-2X RKS stationary forces. SCF point source, UKS, float scalar graphs, MN15
+and r2SCAN defaults remain unchanged. Strict FP64 force fallbacks use the
+qualified graph. Generated-source/artifact identities deliberately change.
 
 ## Complete endpoint timing
 
-RTX 5090, node n5, finite Slurm jobs 1576/1578, CUDA 12.9.1, `sm_120`, Release,
-FP64, spherical def2-SVP, matched moving quadrature and DF model. Ordinary
-README native energy **plus host-returned analytic forces**, no foreign seed.
-Each population includes cold + five fixed own-engine post-cold warm replays
-+ moved + five fixed post-move warm replays. Cold includes preparation; all
-entries use `complete_seconds`. Warm entries are medians of all five calls;
-cold and moved below are single calls, not statistical assurances of small
-sub-percent improvements. Raw samples and ranges remain in the capsule.
+RTX 5090/n5, finite Slurm jobs 1576/1578, CUDA 12.9.1, sm_120, Release, FP64,
+spherical def2-SVP, matched moving quadrature and DF model. Measure native energy
+**plus host-returned analytic forces**, with fixed own-engine seeds, no foreign
+density. Each population has cold + five warm + moved + five moved-warm calls.
+Use `complete_seconds`, including cold preparation; warm entries are medians
+of **all five** calls. Cold/moved are single samples, not statistical assurances.
 
-First matched population:
-
-| Case | Cold, baseline → candidate (s) | Warm (s) | Moved (s) | Moved-warm (s) |
+| First population | Cold, baseline → candidate (s) | Warm (s) | Moved (s) | Moved-warm (s) |
 | --- | --- | --- | --- | --- |
 | DF48 | 45.952664 → 45.384089 | 8.899711 → 8.077829 | 34.786684 → 34.070293 | 8.891267 → 8.076551 |
 | DF96 | 152.750312 → 151.213377 | 37.364340 → 35.669518 | 112.652525 → 110.930658 | 37.354787 → 35.647791 |
 | Direct96 | 163.911763 → 163.142795 | 20.089646 → 19.214328 | 113.078680 → 112.308974 | 20.064995 → 19.228165 |
 
-Complete warm E+F reductions are **9.23%, 4.54%, 4.36%**; moved-warm reductions
-are **9.16%, 4.57%, 4.17%**. The first population's cold/moved times also decrease,
-but those small changes are not the headline claim. This is not a point-kernel
-percentage relabeled as an endpoint improvement, and is not a new GPU4PySCF
-comparison or a claim that every README gap is solved.
+Complete warm E+F reductions: **9.23%, 4.54%, 4.36%**; moved-warm: **9.16%,
+4.57%, 4.17%**. First-population iterations/Fock builds match in both arms:
+DF48 18/1/13/1, DF96 18/3/12/3, direct96 18/1/12/1, in phase order. This is
+neither a point-only speed claim nor a new GPU4PySCF comparison.
 
-Observed iterations/Fock builds in **both** arms, in phase order:
-
-| Case | Cold | Each warm | Moved | Each moved-warm |
-| --- | --- | --- | --- | --- |
-| DF48 | 18 | 1 | 13 | 1 |
-| DF96 | 18 | 3 | 12 | 3 |
-| Direct96 | 18 | 1 | 12 | 1 |
-
-Second complete matched direct96 population:
-
-| Phase | Baseline → candidate (s) | Baseline → candidate builds |
+| Second direct96 population | Baseline → candidate (s) | Builds |
 | --- | --- | --- |
 | Cold | 171.732486 → 163.300249 | 19 → 18 |
 | Warm | 20.093679 → 19.228675 | 1 → 1, all five |
 | Moved | 120.919491 → 112.209232 | 13 → 12 |
 | Moved-warm | 20.089118 → 19.224459 | 1 → 1, all five |
 
-Warm/moved-warm reproduce **4.30%/4.30%** fixed-work complete E+F gains. The
-unchanged baseline image itself varies from 18/12 to 19/13 cold/moved builds;
-those larger second-population timing differences include different SCF work
-and are **not** credited as a solver improvement from force-only arithmetic.
-Qualification contains all **96 master endpoint calls**, with unchanged gates
-passing throughout. Maximum observed errors are **2.0464e-11 Eh** and
-**1.5725e-10 Eh/Bohr**. Available AO/grid/force work is retained per call; absent
-integral execution counters are unknown, not zero. No SCF work is subtracted,
-normalized or replaced.
+Warm/moved-warm reproduce **4.30%/4.30%** fixed-work gains. The unchanged
+baseline image itself varies from 18/12 to 19/13 cold/moved builds. Do **not**
+credit the second population's larger cold/moved changes as a solver improvement,
+subtract SCF work or normalize it away. Unknown integral counters remain null.
 
-## Scientific and operational acceptance
+## Independent acceptance
 
-- Unchanged endpoint gates: **1e-8 Eh / 1e-7 Eh/Bohr**, independent references
-  at both geometries. Every returned E/F vector and gate is retained.
-- Host tests execute the production force emitter against independent Libxc
-  Cartesian partials and displaced energies, including the tau/2 ABI and
-  independent polarized derivatives before equal-spin binding. The focused
-  suite has 124 passes and 43 explicitly optional skips; the final policy-only
-  rerun has 17 passes. Configured pre-commit checks pass.
-- Clean-source real-GPU force scalar acceptance on n2/3021 passes original
-  Libxc 7.0.0, finite-difference, restricted-embedding and authenticated 113-bit
-  Maple boundary gates. The validation script explicitly substitutes the
-  **exact production force scalar body** in an ordinary ABI probe; production
-  SCF generation is never patched. Source and body hashes bind the receipt.
-- Memcheck on n2/3020 returns zero errors. Its M06 scalar probe body is
-  byte-identical to the final scoped force body; its earlier source attribution
-  is retained, not relabeled as a new run.
-- Both arms use the same authenticated existing #2486 glibc loader/runtime
-  bundle because n1-built libraries need glibc 2.38 and n5 has 2.35. This is
-  test deployment, not a production symbol patch or CPU fallback.
-- Retain the failed initial GPU compiler receipt: n2's default GCC lacks its
-  C++ frontend; explicitly selecting installed G++ repairs only compilation.
-  Two CPU preparation PATH failures are also retained. No failed invocation
-  supplies a successful endpoint sample.
+All **96 master calls** pass unchanged **E 1e-8 Eh / F 1e-7 Eh/Bohr** gates
+against independent references at both geometries. Maxima: 2.0464e-11 Eh /
+1.5725e-10 Eh/Bohr. Host suite: 124 passed/43 explicitly optional skipped;
+final policy suite: 17 passed. Production force tests independently check Libxc
+Cartesian partials, displaced energies, tau/2 ABI and polarized derivatives.
 
-## Rejected alternatives are not erased
+Clean-source GPU scalar acceptance n2/3021 explicitly probes the exact production
+force body, passing Libxc 7, finite-difference, restricted-embedding and
+authenticated 113-bit Maple boundary gates. It does not patch production SCF.
+Memcheck n2/3020 has zero errors; its earlier source attribution is retained,
+with byte-identical final force scalar body. Both endpoint arms use the same
+authenticated #2486 glibc loader/runtime, not a production CPU fallback.
 
-The separate historical capsule
-`benchmarks/results/mgga-integer-powers-20261014/` retains 108 calls on the
-earlier common CSE source, including global lowering's DF96 warm regression
-(3 → 4 builds) and force-only direct96's moved regression (12 → 14 builds).
-Those observations are not master timings. Moving the new arithmetic out of
-SCF repairs the global proposal's direct operation-ordering feedback; it does
-not relax the convergence threshold or import a different density.
-
-Two complete same-image repetitions of each historical direct96 arm add 48
-independently accepted calls, all with 12 moved builds. The baseline's first
-cold Hartree component itself varies by one ulp, before a force evaluation.
-That shows existing numerical variability but does not isolate all causes of
-the original extra builds; the regression remains visible.
-
-The inherited stricter diffuse-tail diagnostic still has four common M06
-partial failures at 65,536 points against the quad oracle, and fourteen
-candidate entries exceed an extra 5e-12 baseline-pair diagnostic. These remain
-failures. The established independent scientific gates are unchanged; no
-diagnostic row is deleted or tolerance loosened.
-
-Do not retry #2486's AO compaction, dddd acquisition, smaller order-seven
-pages or matrix tiles on the strength of this result. No r2SCAN default or
-FP32 graph promotion is made. No occupancy/stall claim is inferred from
-register counts; #2486's NCU hardware counters were unavailable.
+Keep the original compiler prerequisite failure, two PATH failures, stricter
+M06 tail failures and historical direct moved regression. Extra same-image
+controls contain all 48 calls; they do not erase the original 108-call negative
+experiment. No #2486 AO/tile/dddd/page knob is retried. Details and numerical
+limits: `.agents/notes/implemented/performance/2026-10-15-m06-rks-force-powers.md`.
 
 ## Retention and reproduction
 
-`manifest.json` binds `summary.json.xz` by length and SHA256. The capsule keeps
-all populations, full-precision E/F rows, independent references, phase
-samples, observed work, source/consumer/native identities, cache/build/compiler
-and scheduler receipts, point arrays, operational failures and reproduction
-scripts. Historical negatives have their own unchanged manifest and capsule.
+`manifest.json` binds the current `summary.json.xz` **endpoint ledger** by bytes
+and SHA256. It keeps all 96 master and 48 historical-control timing samples,
+phase ranges, E/error/gate/convergence values, semantic work, model/source/library
+identities, diagnostic reports and failures without rounding or filtering.
+Full E/F vectors, independent references, point arrays, intermediate SCF history,
+component profiles, build/cache/scheduler logs and scripts are **not** in this
+compact ledger; they remain byte-exact in the original Git capsules.
 
-Reproduce at the pinned control/candidate source revisions, using the archived
-`build_master.sh`, `repeat_endpoint.sh`, `python.sh` and
-`validate_force_schedule.py`. Keep compiler caches, compile the actual sources,
-and run every GPU command through a finite compatible Slurm allocation without
-overriding its device visibility. Preserve every planned phase and all samples.
-`retain_master_force.py` retains incomplete/failing populations and marks them
-unqualified instead of selecting only successful calls. No master README
-historical row is rewritten from a differently sourced population.
+`full-evidence.json` pins six original files at ancestor
+`3ca3fa0038fbea5350a8bb799cca26d678522678`, with individual SHA256/lengths and
+snapshot totals. Restore both full capsules and their original guides/manifests
+offline, with no Release, upload or automatic fetch:
 
-Rationale: `.agents/notes/implemented/performance/2026-10-15-m06-rks-force-powers.md`.
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/m06-rks-force-powers-20261014/full-evidence.json \
+  --output .artifacts/m06-force-full-evidence
+```
+
+Use a new output directory; the reader verifies every member before publishing
+and refuses overwrite. Clones must contain that ancestor; if absent, explicitly
+run `git fetch origin refs/pull/2505/head`, the recorded PR ref that contains it.
+Do not rewrite/drop the bound history. `python tools/compact_m06_force_evidence.py` regenerates both ledgers
+from these authenticated originals. Recovery does not rerun GPU work.
+
+For reproduction, restore first and extract `reproduction` from the full current
+capsule. Use its `build_master.sh`, `repeat_endpoint.sh`, `python.sh` and
+`validate_force_schedule.py` at the pinned scientific revisions. Keep caches,
+run every GPU command through finite compatible Slurm, preserve device visibility
+and retain all planned phases/failures. Do not rewrite master README historical
+timings using differently sourced populations.
