@@ -566,9 +566,12 @@ def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:
             [*lines, "  return stationary_evaluate_point(rho, gradient, tau);", "}"]
         )
     if not normalized:
-        requires_tau = (
-            "tau" in semilocal.ingredients if semilocal else curated["requires_tau"]
-        )
+        if semilocal is not None:
+            requires_tau = "tau" in semilocal.ingredients
+        elif curated is not None:
+            requires_tau = curated["requires_tau"]
+        else:
+            raise ValueError("split-hybrid mixed geometry requires its FunctionalSpec")
         return "\n".join(
             [
                 "namespace stationary_narrowed_point {",

@@ -26,6 +26,15 @@ from generativeqc_compiler.xc.spec import functional
 from generativeqc_compiler.xc.split_hybrid_codegen import emit_split_hybrid_device_body
 
 
+@pytest.mark.parametrize(
+    "code", tuple(record["functional_code"] for record in SPLIT_HYBRIDS.values())
+)
+def test_mixed_split_selector_requires_semilocal_definition(code: int) -> None:
+    """A registered split selector cannot invent its missing functional graph."""
+    with pytest.raises(ValueError, match="requires its FunctionalSpec"):
+        _emit_mixed_point(code, None)
+
+
 @pytest.fixture(scope="module", params=("host", "cuda"))
 def point_backend(request: pytest.FixtureRequest) -> str:
     """Keep real-device arithmetic checks within the scheduled CUDA contract."""
