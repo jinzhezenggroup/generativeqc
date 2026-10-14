@@ -510,7 +510,10 @@ retention of completed semilocal/nonlocal and nuclear geometry components in
 the composite prepared owner. Current native integral and Pulay sources still
 execute. Geometry/operator/grid changes, failures and explicit disable retire
 the key; active-AO experiments and explicit stationary execution controls bypass
-retention. Its host allowance includes
+retention. FP32 semilocal geometry requests also bypass retention so Fast
+precision receipts describe fresh work. Capability fallback and numerical retry
+still compute strict geometry; later strict requests may reuse that result.
+Its host allowance includes
 comparison scratch, is capped at 64 MiB and one quarter of the host budget, and
 uses only remaining admitted capacity. Hits report zero executed geometry and
 pair work. This control is also default-off pending endpoint qualification.

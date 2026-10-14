@@ -129,11 +129,11 @@ int main() {
       if(cooperative)
         geometry_cooperative_kernel<false,Arithmetic>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
              4,3,centers,na,weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
-             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr);
+             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr,false);
       else
         geometry_kernel<Arithmetic>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
              weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
-             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error);
+             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,false);
     };
     auto reduce=[&] {
       std::vector<double> output(9*na);

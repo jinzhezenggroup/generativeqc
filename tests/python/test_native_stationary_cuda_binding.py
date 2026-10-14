@@ -212,6 +212,48 @@ def test_native_registry_rejects_unknown_or_duplicate_profiles() -> None:
         emit_native_stationary_profile_cuda("unknown_rks")
 
 
+def test_split_hybrid_model_uses_exact_graph_not_method_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same component pair cannot borrow a different exchange coefficient."""
+    from dataclasses import replace
+    from fractions import Fraction
+    from types import SimpleNamespace
+
+    from generativeqc_compiler.method import stationary_native_cuda as native
+    from generativeqc_compiler.method.spec import ExactExchangePrimitive
+
+    original = _qualified_aot_profile("m06_2x_rks").plan.method
+    alias = replace(original, identifier="unrelated diagnostic name")
+
+    def bind(method: object) -> None:
+        monkeypatch.setattr(
+            native,
+            "_qualified_aot_profile",
+            lambda _: SimpleNamespace(plan=SimpleNamespace(method=method)),
+        )
+
+    bind(alias)
+    assert native.native_stationary_model("ignored") == (
+        131522,
+        4,
+        Fraction(1),
+        Fraction(1),
+    )
+    altered = replace(
+        alias,
+        primitives=tuple(
+            replace(primitive, coefficient=Fraction(1, 2))
+            if isinstance(primitive, ExactExchangePrimitive)
+            else primitive
+            for primitive in alias.primitives
+        ),
+    )
+    bind(altered)
+    with pytest.raises(ValueError, match="exact graph"):
+        native.native_stationary_model("ignored")
+
+
 @pytest.mark.parametrize("profile", NATIVE_STATIONARY_CUDA_PROFILES)
 def test_native_model_matches_independent_native_ks_lowering(profile: str) -> None:
     """The existing SDK transport lowerer independently checks emitted point scales."""

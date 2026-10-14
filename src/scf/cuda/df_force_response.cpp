@@ -11,6 +11,7 @@
 
 #include "molecule/basis.hpp"
 #include "runtime/cuda_component_trace.hpp"
+#include "scf/application_precision.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_factor.hpp"
@@ -254,7 +255,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::vector<double>& derivative, std::string& detail, DfGradientResources* resources,
     const CudaDfFinalStateToken* final_state,
     const CudaDfBorrowedFittedProjection* borrowed_fitted_projection,
-    const CudaDfBorrowedResponseDensity* borrowed_response_density) {
+    const CudaDfBorrowedResponseDensity* borrowed_response_density,
+    const CudaDfGradientPrecisionRequest* application_precision) {
   if (resources) *resources = {};
   if (!plan || system >= plan->batch_size || molecule::ao_count(orbital) != plan->nbf ||
       molecule::ao_count(auxiliary) != plan->naux) {
@@ -643,6 +645,38 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     // Revoke its immutable view before submission, so an interrupted copy
     // cannot leave a previously valid cache available to the next force.
     if (borrow && !buffers.resident_raw.data && !packed_raw.data) plan->resident_raw_valid = false;
+    const auto maximum_angular = [](const core::System& basis) {
+      std::size_t angular = 0;
+      for (const auto& shell : basis.shells)
+        angular = std::max(angular, std::size_t{shell.angular_momentum});
+      return angular;
+    };
+    const bool mixed_shell =
+        application_precision && resources && final_state && metric.full_rank &&
+        application_precision->verified_state == final_state && terms.size() == 1 &&
+        application_precision->verified_density.data() == terms[0].density.data() &&
+        application_precision->verified_density.size() == plan->matrix_elements &&
+        terms[0].density.size() == plan->matrix_elements && final_state->version == 1 &&
+        final_state->identity.solve_epoch != 0 &&
+        final_state->identity.solve_epoch == cuda_density_fitting_solve_epoch(plan) &&
+        final_state->identity.factor.basis != 0 &&
+        final_state->identity.factor ==
+            cuda_density_fitting_factor_identity(plan, system,
+                                                 final_state->identity.factor.orbital_generation,
+                                                 final_state->identity.factor.density_generation) &&
+        final_state->identity.model.spec ==
+            make_hf_fock_spec(FockSpin::Restricted, FockApproximation::DensityFitted) &&
+        final_state->identity.model.backend == FockBackend::Cuda &&
+        final_state->identity.model.precision == FockPrecision::Float64 &&
+        final_state->identity.model.metric_relative_threshold == plan->metric_relative_threshold &&
+        final_state->identity.occupied.size() == 1 && final_state->identity.occupied[0] != 0 &&
+        terms[0].coulomb_coefficient == 1.0 && terms[0].exchange_coefficient == .25 &&
+        admit_application_df_hf_gradient(
+            application_precision->budget, plan->nbf, plan->naux, orbital.atoms.size(),
+            maximum_angular(orbital), maximum_angular(auxiliary), orbital.multiplicity == 1,
+            orbital.ecp_terms.empty() &&
+                std::none_of(orbital.atoms.begin(), orbital.atoms.end(),
+                             [](const auto& atom) { return atom.ecp_core != 0; }));
     const auto status = execute_cuda_df_hf_gradient(
         plan->device_id, reinterpret_cast<void*>(plan->stream), plan->integral_source, system,
         orbital, auxiliary, raw_a, {}, {}, terms, plan->metric_relative_threshold, schedule,
@@ -650,7 +684,17 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr,
         packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
         streamed_factors.owner_identity ? &streamed_factors : nullptr,
-        select_borrowed_density ? borrowed_response_density : nullptr);
+        select_borrowed_density ? borrowed_response_density : nullptr, mixed_shell);
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && mixed_shell) {
+      // The failed transactional bridge drained its arena. Drop both optional
+      // arithmetic/census storage and the consumed projection lease on replay.
+      const auto cleared = clear_optional_response_allocation_error(detail);
+      if (cleared != GENERATIVEQC_STATUS_SUCCESS) return cleared;
+      return execute_cuda_density_fitting_generated_force_response(
+          plan, system, orbital, auxiliary, raw_a, raw_metric, terms, schedule, maximum_bytes,
+          maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr,
+          borrowed_response_density, nullptr);
+    }
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
         (borrowed_fitted_occupied || automatic_fitted_occupied) && space == "auto" &&
         occupied_source == "auto") {
@@ -663,7 +707,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       return execute_cuda_density_fitting_generated_force_response(
           plan, system, orbital, auxiliary, raw_a, raw_metric, terms, schedule, maximum_bytes,
           maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr,
-          borrowed_response_density);
+          borrowed_response_density, application_precision);
     }
     if (status == GENERATIVEQC_STATUS_SUCCESS && borrow && matching_source &&
         plan->resident_exchange_enabled && plan->batch_size == 1 &&

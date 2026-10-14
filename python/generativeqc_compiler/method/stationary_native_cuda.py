@@ -48,18 +48,23 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]
         }
-        if actual != expected or functional.range_omega != 0 or len(plan.exchange) != 1:
+        if actual != expected or functional.range_omega != 0:
             continue
-        exchange = plan.exchange[0]
         if (
-            exchange.operator == "full-range"
-            and exchange.omega == 0
-            and exchange.coefficient == Fraction(record["exact_exchange"])
+            len(plan.exchange) != 1
+            or plan.exchange[0].operator != "full-range"
+            or plan.exchange[0].omega != 0
+            or plan.exchange[0].coefficient != Fraction(record["exact_exchange"])
+            or plan.nonlocal_correlation is not None
+            or plan.post_scf
         ):
-            # Native KS already publishes split-global-hybrid domain v4. The
-            # point program owns its internal X/C coefficients; the stationary
-            # wrapper carries the separately verified exact-exchange weight.
-            return record["functional_code"], 4, Fraction(1), Fraction(1)
+            raise ValueError(
+                "native split-hybrid stationary model requires its exact graph"
+            )
+        # Native KS already publishes split-global-hybrid domain v4. The
+        # point program owns its internal X/C coefficients; the stationary
+        # wrapper carries the separately verified exact-exchange weight.
+        return record["functional_code"], 4, Fraction(1), Fraction(1)
     for record in SEMILOCAL_FAMILIES:
         expected = {
             name: Fraction(coefficient) for name, coefficient in record["components"]

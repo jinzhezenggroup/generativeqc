@@ -326,5 +326,11 @@ int main() {
   p.failed=false;
   if(guarded(&p,error,sizeof(error),[]{throw DeviceRuntimeError("driver failure");})!=4 || !p.failed)
     return 16;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw std::range_error("invalid numerical source");})!=5 || !p.failed)
+    return 17;
+  p.failed=false;
+  if(guarded(&p,error,sizeof(error),[]{throw std::invalid_argument("stale proof");})!=1 || !p.failed)
+    return 18;
 }
 """

@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass, replace
 from time import perf_counter
 
 from ._api_types import Atom, MethodCapabilities, Result
+from ._composite_precision import COMPOSITE_GRADIENT_QUALIFICATIONS
+from ._df_precision import DF_GRADIENT_QUALIFICATIONS
 from .accuracy import (
     ObservableTarget,
     TargetAccuracy,
@@ -144,7 +146,7 @@ class PrecisionSolve:
 
     role: str
     requested_precision: str
-    seconds: float
+    seconds: float | None
     iterations: int
     force_evaluations: int
     fock_builds: int | None
@@ -171,12 +173,13 @@ class PrecisionValidation:
     errors: tuple[PrecisionError, ...]
     rejected_errors: tuple[PrecisionError, ...]
     solves: tuple[PrecisionSolve, ...]
-    endpoint_seconds: float
+    endpoint_seconds: float | None
     reference: str = "same-backend-independent-relaxed-fp64-solve"
     gradient_admission: str = "no-application-qualified-fp32-gradient-route"
     scope: str = "relaxed_target"
     schema_version: int = 1
     budget: TargetErrorBudget | None = None
+    timing_scope: str = "singlepoint_endpoint"
 
     @property
     def solve_count(self) -> int:
@@ -211,9 +214,6 @@ def _model_identity(
     used here. Consume mathematical basis identities and resolved KS science
     instead. A changed grid or fitted metric is a different target.
     """
-    metadata = calculator.basis_metadata(
-        atoms, charge=charge, multiplicity=multiplicity
-    )
     ks_options = calculator._effective_ks_options(
         (atoms,), charges=(charge,), multiplicities=(multiplicity,)
     )
@@ -221,6 +221,9 @@ def _model_identity(
         return calculator.resolved_model(
             atoms, charge=charge, multiplicity=multiplicity
         ).identity
+    metadata = calculator.basis_metadata(
+        atoms, charge=charge, multiplicity=multiplicity
+    )
     ks_payload = ks_options.to_payload()
     # These knobs schedule the same XC operator. The domain, functional, grid,
     # nonlocal density policy and complete method graph stay in the identity.
@@ -289,6 +292,90 @@ def _errors(
     )
 
 
+def _complete_gradient_admission(
+    calculator: Calculator, result: Result, electronic: str
+) -> str | None:
+    """Do not present an electronic proof as an arbitrary composite proof.
+
+    Canonical 3c has independent endpoint qualification with the unchanged
+    FP64 D4/native-CPU gCP owners. Its electronic precision record still describes
+    only the electronic sources; the facade binds the complete model here.
+    Other corrected graphs retain the explicit observable audit.
+    """
+    correction_model = getattr(calculator, "_dispersion_method_ir", None)
+    if correction_model is None:
+        return electronic
+    from generativeqc_compiler.method import resolve_method
+
+    from .dispersion import R2SCAN3CCorrectionResult
+
+    correction = result.dispersion
+    if (
+        electronic in ("r2scan-rks-budget-fp32-v1", "r2scan-df-rks-budget-fp32-v1")
+        and correction_model.identity
+        == resolve_method("R2SCAN-3c", spin="unpolarized").identity
+        and isinstance(correction, R2SCAN3CCorrectionResult)
+        and correction.ok
+        and correction.d4.ok
+        and correction.gcp.ok
+        and correction.backend == "cuda+cpu"
+        and correction.gradient is not None
+    ):
+        return electronic.replace("r2scan-", "r2scan-3c-", 1)
+    return None
+
+
+def _solve_record(
+    calculator: Calculator,
+    result: typing.Any,
+    *,
+    role: str,
+    precision: str,
+    seconds: float | None,
+    requested: frozenset[str],
+    atom_count: int,
+    backend: str,
+) -> PrecisionSolve:
+    """Check publication and retain only execution-owned semantic work counts.
+
+    A fleet has no measured per-item time. Its native per-item Fock total is
+    authoritative when present; scalar results use the existing complete census.
+    """
+    if not result.converged:
+        raise RuntimeError("precision endpoint did not converge")
+    _observable_array("energy", result.energy)
+    if "forces" in requested:
+        forces = _observable_array("forces", result.forces)
+        if forces.shape != (atom_count, 3):
+            raise ValueError("force dimensions differ from the requested atom count")
+    if result.executed_backend != backend:
+        raise RuntimeError("precision endpoint changed the requested backend")
+    fock_builds = getattr(result, "fock_builds", None)
+    if fock_builds is None:
+        work = result.precision or {}
+        counters = (
+            "mixed_stage_fock_builds",
+            "strict_stage_fock_builds",
+            "post_scf_fock_builds",
+        )
+        if work.get("operator_work_counters_valid") is True and all(
+            name in work for name in counters
+        ):
+            fock_builds = sum(work[name] for name in counters)
+    return PrecisionSolve(
+        role,
+        precision,
+        seconds,
+        result.iterations,
+        int("forces" in requested),
+        fock_builds,
+        result.executed_backend,
+        calculator._energy_tolerance,
+        calculator._density_tolerance,
+        calculator._screening_tolerance,
+    )
+
+
 class PrecisionCalculator:
     """Budget-selected arithmetic and explicit all-electron HF/KS precision audits.
 
@@ -297,12 +384,17 @@ class PrecisionCalculator:
     ``target_accuracy``, which this facade owns. FP64 without an explicit target
     runs once in FP64; native exact source reuse also benefits ordinary Calculator.
     Fast selects provisional FP32 XC for admitted CUDA PBE-family RKS and
-    stationary FP32 gradients for admitted PBE0/RKS force budgets. The final
+    stationary FP32 gradients for admitted RHF and PBE/PBE0/B3LYP/r2SCAN/M06-2X
+    RKS force budgets. Canonical r2SCAN-3c retains its strict corrections. The final
     SCF state stays strict; unsupported budgets/domains use FP64 audits.
+    Qualified DF RKS narrows only semilocal geometry; DF energy-only requests
+    still require the audit fallback and have no mixed-arithmetic acceleration.
     Explicit targets/audit profiles cost two full endpoints, or three after
     rejection. FP64 does not imply FP32 arithmetic or a universal speed guarantee.
-    Batches, correlated
-    methods, Hessians and MD are not promoted. Calls on an instance serialize.
+    Prepared batches reuse native candidate plans and engine-local warm seeds.
+    Audits release candidate GPU resources first and never seed candidates from
+    reference densities. Correlated methods, Hessians and MD are not promoted.
+    Calls on an instance serialize.
     """
 
     def __init__(
@@ -319,9 +411,17 @@ class PrecisionCalculator:
             policy = PrecisionPolicy(policy)
         if not isinstance(policy, PrecisionPolicy):
             raise TypeError("policy must be a PrecisionPolicy or preset name")
-        if {"precision", "target_accuracy"} & options.keys():
+        if {
+            "precision",
+            "target_accuracy",
+            "_application_precision_budget",
+        } & options.keys():
             raise ValueError(
                 "set application requirements through policy, not precision/target_accuracy"
+            )
+        if getattr(options.get("ks_options"), "_precision_budget", None) is not None:
+            raise ValueError(
+                "set application requirements through policy, not KS transport"
             )
         self._policy = policy
         self._lock = threading.RLock()
@@ -360,31 +460,69 @@ class PrecisionCalculator:
         )
         self._candidate_precision = "fp64"
         self._fast_native = False
+        self._fast_transport_v2 = False
         self._route_reasons = ["fp32_gradient_not_qualified"]
         if policy.profile == "fast":
             from .ks import KsOptions
 
-            if device == "cuda" and self._candidate._ks_options is not None:
+            method_transport = getattr(
+                getattr(self._candidate, "_library", None),
+                "generativeqc_application_precision_version_v2",
+                None,
+            )
+            if device == "cuda" and (
+                self._candidate._ks_options is not None or method_transport is not None
+            ):
                 candidate_options = dict(self._options)
-                ks_options = candidate_options.get("ks_options") or KsOptions()
-                candidate_options["ks_options"] = replace(
-                    ks_options,
-                    _precision_budget=(
-                        policy.budget.energy_abs,
-                        policy.budget.force_max_abs,
-                        policy.budget.force_rms or 0.0,
-                    ),
+                if method_transport is not None:
+                    candidate_options["_application_precision_budget"] = policy.budget
+                else:
+                    ks_options = candidate_options.get("ks_options") or KsOptions()
+                    candidate_options["ks_options"] = replace(
+                        ks_options,
+                        _precision_budget=(
+                            policy.budget.energy_abs,
+                            policy.budget.force_max_abs,
+                            policy.budget.force_rms or 0.0,
+                        ),
+                    )
+                    # replace() resets init=False fields. Resolved options retain
+                    # their scientific composition there, including exact exchange.
+                    object.__setattr__(
+                        candidate_options["ks_options"],
+                        "_method_ir",
+                        ks_options._method_ir,
+                    )
+                resolved_ks = self._candidate._ks_options
+                nonlocal_scf = (
+                    resolved_ks is not None
+                    and getattr(resolved_ks, "_method_ir", None) is not None
+                    and resolved_ks.execution_plan.nonlocal_correlation is not None
                 )
-                # replace() resets init=False fields. Resolved options retain
-                # their scientific composition there, including exact exchange.
-                object.__setattr__(
-                    candidate_options["ks_options"], "_method_ir", ks_options._method_ir
+                # Application XC warmup is not qualified for a nonlocal model.
+                # Native AUTO would run strict work anyway; request its actual
+                # strict SCF policy so the independent derivative admission and
+                # ordinary optimized FP64 scheduling stay available.
+                precisions = (
+                    ("auto", "fp64")
+                    if resolved_ks is not None and not nonlocal_scf
+                    else ("fp64",)
                 )
-                try:
-                    self._candidate = Calculator(**candidate_options, precision="auto")
-                    self._candidate_precision = "auto"
+                if method_transport is None:
+                    precisions = ("auto",)
+                # Transport does not confer arithmetic admission. In particular,
+                # strict SCF may still own budget-qualified derivative consumers.
+                for precision in precisions:
+                    try:
+                        candidate = Calculator(**candidate_options, precision=precision)
+                    except NotImplementedError:
+                        continue
+                    self._candidate = candidate
+                    self._candidate_precision = precision
                     self._fast_native = True
-                except NotImplementedError:
+                    self._fast_transport_v2 = method_transport is not None
+                    break
+                else:
                     self._route_reasons.append(
                         "application_warmup_unavailable_for_model"
                     )
@@ -414,7 +552,7 @@ class PrecisionCalculator:
                 self._candidate.capabilities.supported_properties
                 | self._fp64_properties
             ),
-            supports_batch=False,
+            supports_batch=self._candidate.capabilities.supports_batch,
             supported_second_order=frozenset(),
         )
 
@@ -423,13 +561,25 @@ class PrecisionCalculator:
         with self._lock:
             self._candidate.clear_cache()
 
-    def _reference(self, *, tighter: bool = False) -> Calculator:
+    def _reference(
+        self, *, tighter: bool = False, _host_reservation: tuple | None = None
+    ) -> Calculator:
         """Tighten solver controls without changing the model or converting units.
 
         Force budgets are never mapped to SCF residuals. This fixed recipe is
         not an observable-error guarantee: the independent audit must pass.
         """
         options = dict(self._options)
+        if _host_reservation is not None:
+            budget, reserved_bytes = _host_reservation
+            options["resource_budget"] = (
+                None
+                if budget is None
+                else replace(
+                    budget,
+                    host_reserve_bytes=budget.host_reserve_bytes + reserved_bytes,
+                )
+            )
         scale = 0.1 if tighter else 1.0
         for name, ceiling in (
             ("energy_tolerance", 1e-12),
@@ -443,6 +593,80 @@ class PrecisionCalculator:
             if options[name] <= 0:
                 raise ValueError("precision reference tolerance underflowed")
         return Calculator(**options, precision="fp64")
+
+    def prepare_batch(
+        self,
+        systems: typing.Any,
+        *,
+        charges: typing.Any = None,
+        multiplicities: typing.Any = None,
+        warm_start: bool = True,
+        shell_class_profiling: bool = False,
+        inactive_eigensolver_profiling: bool = False,
+        resource_plan: typing.Any = None,
+        maximum_seed_bytes: int = 256 << 20,
+    ) -> typing.Any:
+        """Prepare a reusable native fleet with per-item precision validation.
+
+        Qualified Fast and untargeted FP64 retain the original native plan.
+        Audits suspend that plan with bounded host seed storage; later execution
+        restores only its own seeds, never an auditor's density. Candidate batch
+        timing is shared, not invented per-item or divided equally among items.
+        ``maximum_seed_bytes`` bounds numeric seed staging when an audit is needed.
+        """
+        from ._precision_batch import PreparedPrecisionBatch
+
+        with self._lock:
+            return PreparedPrecisionBatch(
+                self,
+                systems,
+                charges=charges,
+                multiplicities=multiplicities,
+                warm_start=warm_start,
+                shell_class_profiling=shell_class_profiling,
+                inactive_eigensolver_profiling=inactive_eigensolver_profiling,
+                resource_plan=resource_plan,
+                maximum_seed_bytes=maximum_seed_bytes,
+            )
+
+    def _properties(self, properties: typing.Any) -> frozenset[str]:
+        """Validate requested observables identically for scalar and fleet drivers."""
+        target = self.policy.target
+        required = (
+            {requirement.observable for requirement in target.observables} | {"energy"}
+            if target is not None
+            else {"energy"}
+        )
+        if isinstance(properties, (str, bytes)):
+            raise TypeError("properties must be an iterable of property names")
+        default_properties = required if target is not None else {"energy", "forces"}
+        requested = frozenset(default_properties if properties is None else properties)
+        if not required <= requested:
+            raise ValueError(
+                "properties must include every application-budget observable and energy"
+            )
+        if requested - self.capabilities.supported_properties:
+            raise ValueError(
+                "requested properties are unavailable for this precision endpoint"
+            )
+        return requested
+
+    def _candidate_for(self, requested: frozenset[str]) -> tuple:
+        """Choose a capable candidate without changing later singlepoint requests."""
+        candidate_calculator = self._candidate
+        candidate_precision = self._candidate_precision
+        route_reasons = list(self._route_reasons)
+        if requested - candidate_calculator.capabilities.supported_properties:
+            # AUTO can support energies while its force consumer is absent.
+            # Choose FP64 for this request without disabling later AUTO calls.
+            self._candidate.clear_cache()
+            candidate_options = dict(self._options)
+            if self._fast_transport_v2:
+                candidate_options["_application_precision_budget"] = self.policy.budget
+            candidate_calculator = Calculator(**candidate_options, precision="fp64")
+            candidate_precision = "fp64"
+            route_reasons.append("auto_properties_unavailable_for_model")
+        return candidate_calculator, candidate_precision, route_reasons
 
     def singlepoint(
         self,
@@ -473,40 +697,12 @@ class PrecisionCalculator:
                 multiplicity, "multiplicity", low=1, high=2**31 - 1
             )
             target = self.policy.target
-            required = (
-                {requirement.observable for requirement in target.observables}
-                | {"energy"}
-                if target is not None
-                else {"energy"}
-            )
-            if isinstance(properties, (str, bytes)):
-                raise TypeError("properties must be an iterable of property names")
-            default_properties = (
-                required if target is not None else {"energy", "forces"}
-            )
-            requested = frozenset(
-                default_properties if properties is None else properties
-            )
-            if not required <= requested:
-                raise ValueError(
-                    "properties must include every application-budget observable and energy"
-                )
-            if requested - self.capabilities.supported_properties:
-                raise ValueError(
-                    "requested properties are unavailable for this precision endpoint"
-                )
+            requested = self._properties(properties)
             from .ecp import resolve_ecp
 
-            candidate_calculator = self._candidate
-            candidate_precision = self._candidate_precision
-            route_reasons = list(self._route_reasons)
-            if requested - candidate_calculator.capabilities.supported_properties:
-                # AUTO can support energies while its force consumer is absent.
-                # Choose FP64 for this request without disabling later AUTO calls.
-                self._candidate.clear_cache()
-                candidate_calculator = Calculator(**self._options, precision="fp64")
-                candidate_precision = "fp64"
-                route_reasons.append("auto_properties_unavailable_for_model")
+            candidate_calculator, candidate_precision, route_reasons = (
+                self._candidate_for(requested)
+            )
             if any(resolve_ecp(candidate_calculator._basis, native_atoms)[0]):
                 raise NotImplementedError(
                     "application precision ECP model identity is not implemented"
@@ -544,181 +740,247 @@ class PrecisionCalculator:
                         and target is None
                     ):
                         calculator.clear_cache()
-                if not result.converged:
-                    raise RuntimeError("precision endpoint did not converge")
-                _observable_array("energy", result.energy)
-                if "forces" in requested:
-                    forces = _observable_array("forces", result.forces)
-                    if forces.shape != (len(native_atoms), 3):
-                        raise ValueError(
-                            "force dimensions differ from the requested atom count"
-                        )
-                expected_backend = (
-                    "cpu_reference" if self._options["device"] == "cpu" else "cuda"
-                )
-                if result.executed_backend != expected_backend:
-                    raise RuntimeError(
-                        "precision endpoint changed the requested backend"
-                    )
-                work = result.precision or {}
-                valid = work.get("operator_work_counters_valid") is True
-                counters = (
-                    "mixed_stage_fock_builds",
-                    "strict_stage_fock_builds",
-                    "post_scf_fock_builds",
-                )
-                fock_builds = (
-                    sum(work[name] for name in counters)
-                    if valid and all(name in work for name in counters)
-                    else None
-                )
                 solves.append(
-                    PrecisionSolve(
-                        role,
-                        precision,
-                        perf_counter() - solve_started,
-                        result.iterations,
-                        int("forces" in requested),
-                        fock_builds,
-                        result.executed_backend,
-                        calculator._energy_tolerance,
-                        calculator._density_tolerance,
-                        calculator._screening_tolerance,
+                    _solve_record(
+                        calculator,
+                        result,
+                        role=role,
+                        precision=precision,
+                        seconds=perf_counter() - solve_started,
+                        requested=requested,
+                        atom_count=len(native_atoms),
+                        backend="cpu_reference"
+                        if self._options["device"] == "cpu"
+                        else "cuda",
                     )
                 )
                 return result
 
-            candidate = solve(candidate_calculator, "candidate", candidate_precision)
-            fast_native = self._fast_native and candidate_calculator is self._candidate
-            gradient = (candidate.precision or {}).get("gradient") or {}
-            gradient_admission = "no-application-qualified-fp32-gradient-route"
-            if gradient.get("complete") is True and gradient.get("schema_version") == 1:
-                gradient_admission = "pbe0-rks-budget-fp32-v1"
-                route_reasons.remove("fp32_gradient_not_qualified")
-            if self.policy.profile == "fast" and target is None:
-                work = candidate.precision or {}
-                if (
-                    fast_native
-                    and "forces" in requested
-                    and work.get("operator_work_counters_valid") is True
-                    and work.get("complete") is True
-                    and work.get("operator_inventory_complete") is True
-                    and work.get("strict_stage_fock_builds", 0) > 0
-                    and work.get("final_residual_audits", 0) > 0
-                    and gradient.get("complete") is True
-                    and gradient.get("schema_version") == 1
-                    and gradient.get("attempted_fp32_geometry_points", 0) > 0
-                    and gradient.get("returned_mode") in ("mixed", "fp64")
-                ):
-                    if gradient.get("fp64_gradient_retries", 0):
-                        route_reasons.append("native_gradient_retried_fp64")
-                    elif not gradient.get("attempted_fp32_grid_points", 0):
-                        route_reasons.append("fp32_grid_storage_unavailable")
-                    if work.get("execution_retries", 0):
-                        route_reasons.append("native_mixed_execution_retried_fp64")
-                    validation = PrecisionValidation(
-                        self.policy.profile,
-                        None,
-                        model,
-                        "qualified_mixed_gradient"
-                        if gradient["returned_mode"] == "mixed"
-                        else "qualified_strict_final",
-                        tuple(route_reasons),
-                        (),
-                        (),
-                        tuple(solves),
-                        perf_counter() - started,
-                        reference="pbe0-rks-gradient-v1/independent-qualification-and-native-fp64-scf",
-                        gradient_admission=gradient_admission,
-                        scope="qualification_not_per_call_observable_audit",
-                        budget=self.policy.budget,
-                    )
-                    return replace(candidate, precision_validation=validation)
-                if (
-                    fast_native
-                    and work.get("operator_work_counters_valid") is True
-                    and work.get("complete") is True
-                    and work.get("operator_inventory_complete") is True
-                    and any(
-                        operator.get("name") == "xc"
-                        and operator.get("compute") == "fp32"
-                        and operator.get("accumulation") == "fp32"
-                        and operator.get("arithmetic_mode") == "mixed"
-                        and operator.get("count", 0) > 0
-                        for operator in work.get("operators", ())
-                    )
-                    and work.get("mixed_stage_fock_builds", 0) > 0
-                    and work.get("strict_stage_fock_builds", 0) >= 2
-                    and work.get("strict_refinement_applied") is True
-                    and work.get("final_residual_audits", 0) > 0
-                ):
-                    if work.get("execution_retries", 0):
-                        route_reasons.append("native_mixed_execution_retried_fp64")
-                    validation = PrecisionValidation(
-                        self.policy.profile,
-                        None,
-                        model,
-                        "qualified_strict_final",
-                        tuple(route_reasons),
-                        (),
-                        (),
-                        tuple(solves),
-                        perf_counter() - started,
-                        reference="pbe-xc-warmup-v1/independent-qualification-and-native-fp64-final",
-                        scope="qualification_not_per_call_observable_audit",
-                        budget=self.policy.budget,
-                    )
-                    return replace(candidate, precision_validation=validation)
-                target = _budget_target(
-                    self.policy.budget, forces="forces" in requested
+            return self._validate_endpoint(
+                candidate_calculator=candidate_calculator,
+                candidate_precision=candidate_precision,
+                requested=requested,
+                route_reasons=route_reasons,
+                model=model,
+                solves=solves,
+                solve=solve,
+                started=started,
+            )
+
+    def _validate_endpoint(
+        self,
+        *,
+        candidate_calculator: Calculator,
+        candidate_precision: str,
+        requested: frozenset[str],
+        route_reasons: list[str],
+        model: str,
+        solves: list[PrecisionSolve],
+        solve: typing.Callable,
+        started: float,
+        reference_factory: typing.Callable | None = None,
+    ) -> typing.Any:
+        """Apply one policy to either a singlepoint or an input-indexed batch item.
+
+        Drivers own execution, residency and timing. This shared controller owns
+        complete-model qualification, explicit audits and bounded rejection.
+        """
+        target = self.policy.target
+        if reference_factory is None:
+            reference_factory = self._reference
+        candidate = solve(candidate_calculator, "candidate", candidate_precision)
+        fast_native = self._fast_native and (
+            candidate_calculator is self._candidate or self._fast_transport_v2
+        )
+        gradient = (candidate.precision or {}).get("gradient") or {}
+        gradient_admission = "no-application-qualified-fp32-gradient-route"
+        qualification = gradient.get(
+            "qualification",
+            "pbe0-rks-budget-fp32-v1"
+            if gradient.get("schema_version") == 1
+            else "unknown",
+        )
+        qualified_gradient = gradient.get("complete") is True and (
+            (
+                gradient.get("schema_version") in (1, 2, 3)
+                and qualification
+                in (
+                    "pbe0-rks-budget-fp32-v1",
+                    "pbe-rks-budget-fp32-v1",
+                    "b3lyp-rks-budget-fp32-v1",
+                    "r2scan-rks-budget-fp32-v1",
+                    "rhf-budget-fp32-v1",
+                    "rhf-df-shell-budget-fp32-v1",
+                    "m06-2x-rks-budget-fp32-v1",
                 )
-                route_reasons.append("budget_or_domain_requires_fp64_audit")
-            if target is None:
+            )
+            or (
+                gradient.get("schema_version") == 4
+                and (
+                    (
+                        gradient.get("owner") == "python-stationary-cuda"
+                        and qualification in DF_GRADIENT_QUALIFICATIONS
+                    )
+                    or (
+                        gradient.get("owner") == "python-composite-stationary-cuda"
+                        and qualification in COMPOSITE_GRADIENT_QUALIFICATIONS
+                    )
+                )
+            )
+        )
+        if qualified_gradient:
+            admitted = _complete_gradient_admission(
+                candidate_calculator, candidate, qualification
+            )
+            qualified_gradient = admitted is not None
+            if qualified_gradient:
+                gradient_admission = admitted
+                route_reasons.remove("fp32_gradient_not_qualified")
+                if gradient.get("capability_fallback"):
+                    route_reasons.append("fp32_geometry_capability_unavailable")
+            else:
+                route_reasons.append("geometry_correction_not_qualified")
+        if self.policy.profile == "fast" and target is None:
+            work = candidate.precision or {}
+            if (
+                fast_native
+                and "forces" in requested
+                and qualified_gradient
+                # V2 is emitted only after the complete gradient consumer
+                # verifies its strict final-state token. Chunked SCF may
+                # lack detailed operator rows; do not fabricate that census.
+                and (
+                    gradient.get("schema_version") in (2, 3, 4)
+                    or (
+                        work.get("operator_work_counters_valid") is True
+                        and work.get("complete") is True
+                        and work.get("operator_inventory_complete") is True
+                        and work.get("strict_stage_fock_builds", 0) > 0
+                        and work.get("final_residual_audits", 0) > 0
+                    )
+                )
+                and (
+                    gradient.get("attempted_fp32_geometry_points", 0) > 0
+                    or (
+                        gradient.get("schema_version") == 3
+                        and gradient.get("weighted_task_counters_collected") is True
+                        and (gradient.get("attempted_fp32_weighted_tasks") or 0) > 0
+                        and (gradient.get("attempted_fp32_primitive_sources") or 0) > 0
+                    )
+                )
+                and gradient.get("returned_mode") in ("mixed", "fp64")
+            ):
+                if gradient.get("fp64_gradient_retries", 0):
+                    route_reasons.append("native_gradient_retried_fp64")
+                elif (
+                    gradient.get("schema_version") != 4
+                    and qualification
+                    not in ("rhf-budget-fp32-v1", "rhf-df-shell-budget-fp32-v1")
+                    and not gradient.get("attempted_fp32_grid_points", 0)
+                ):
+                    route_reasons.append("fp32_grid_storage_unavailable")
+                if work.get("execution_retries", 0):
+                    route_reasons.append("native_mixed_execution_retried_fp64")
                 validation = PrecisionValidation(
                     self.policy.profile,
                     None,
                     model,
-                    "strict_fp64",
+                    "qualified_mixed_gradient"
+                    if gradient["returned_mode"] == "mixed"
+                    else "qualified_strict_final",
                     tuple(route_reasons),
                     (),
                     (),
                     tuple(solves),
                     perf_counter() - started,
-                    reference="native-fp64-final-state-checks-no-observable-audit",
-                    scope="native_fp64",
+                    reference=f"{gradient_admission}/independent-qualification-and-native-fp64-scf",
+                    gradient_admission=gradient_admission,
+                    scope="qualification_not_per_call_observable_audit",
+                    budget=self.policy.budget,
                 )
                 return replace(candidate, precision_validation=validation)
-            self._candidate.clear_cache()
-            reference_calculator = self._reference()
-            reference = solve(reference_calculator, "fp64_audit", "fp64")
-            errors = _errors(target, candidate, reference)
-            rejected = ()
-            reasons = route_reasons
-            if not all(error.met for error in errors):
-                rejected = errors
-                reasons.append("candidate_exceeded_observable_budget")
-                candidate = reference
-                gradient_admission = "fp64-after-observable-budget-rejection"
-                verification_calculator = self._reference(tighter=True)
-                verification = solve(
-                    verification_calculator, "fp64_fallback_verification", "fp64"
+            if (
+                fast_native
+                and getattr(candidate_calculator, "_dispersion_method_ir", None) is None
+                and work.get("operator_work_counters_valid") is True
+                and work.get("complete") is True
+                and work.get("operator_inventory_complete") is True
+                and any(
+                    operator.get("name") == "xc"
+                    and operator.get("compute") == "fp32"
+                    and operator.get("accumulation") == "fp32"
+                    and operator.get("arithmetic_mode") == "mixed"
+                    and operator.get("count", 0) > 0
+                    for operator in work.get("operators", ())
                 )
-                errors = _errors(target, candidate, verification)
+                and work.get("mixed_stage_fock_builds", 0) > 0
+                and work.get("strict_stage_fock_builds", 0) >= 2
+                and work.get("strict_refinement_applied") is True
+                and work.get("final_residual_audits", 0) > 0
+            ):
+                if work.get("execution_retries", 0):
+                    route_reasons.append("native_mixed_execution_retried_fp64")
+                validation = PrecisionValidation(
+                    self.policy.profile,
+                    None,
+                    model,
+                    "qualified_strict_final",
+                    tuple(route_reasons),
+                    (),
+                    (),
+                    tuple(solves),
+                    perf_counter() - started,
+                    reference="pbe-xc-warmup-v1/independent-qualification-and-native-fp64-final",
+                    scope="qualification_not_per_call_observable_audit",
+                    budget=self.policy.budget,
+                )
+                return replace(candidate, precision_validation=validation)
+            target = _budget_target(self.policy.budget, forces="forces" in requested)
+            route_reasons.append("budget_or_domain_requires_fp64_audit")
+        if target is None:
             validation = PrecisionValidation(
                 self.policy.profile,
-                target,
+                None,
                 model,
-                "observed_met"
-                if all(error.met for error in errors)
-                else "observed_unmet",
-                tuple(reasons),
-                errors,
-                rejected,
+                "strict_fp64",
+                tuple(route_reasons),
+                (),
+                (),
                 tuple(solves),
                 perf_counter() - started,
-                budget=self.policy.budget,
-                gradient_admission=gradient_admission,
+                reference="native-fp64-final-state-checks-no-observable-audit",
+                scope="native_fp64",
             )
-            if validation.status != "observed_met":
-                raise PrecisionBudgetError(validation)
             return replace(candidate, precision_validation=validation)
+        self._candidate.clear_cache()
+        reference_calculator = reference_factory()
+        reference = solve(reference_calculator, "fp64_audit", "fp64")
+        errors = _errors(target, candidate, reference)
+        rejected = ()
+        reasons = route_reasons
+        if not all(error.met for error in errors):
+            rejected = errors
+            reasons.append("candidate_exceeded_observable_budget")
+            candidate = reference
+            gradient_admission = "fp64-after-observable-budget-rejection"
+            verification_calculator = reference_factory(tighter=True)
+            verification = solve(
+                verification_calculator, "fp64_fallback_verification", "fp64"
+            )
+            errors = _errors(target, candidate, verification)
+        validation = PrecisionValidation(
+            self.policy.profile,
+            target,
+            model,
+            "observed_met" if all(error.met for error in errors) else "observed_unmet",
+            tuple(reasons),
+            errors,
+            rejected,
+            tuple(solves),
+            perf_counter() - started,
+            budget=self.policy.budget,
+            gradient_admission=gradient_admission,
+        )
+        if validation.status != "observed_met":
+            raise PrecisionBudgetError(validation)
+        return replace(candidate, precision_validation=validation)

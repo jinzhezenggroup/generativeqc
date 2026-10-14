@@ -93,7 +93,13 @@ def main() -> None:
             emit_df_shell_derivatives_cuda,
         )
 
-        write_if_changed(args.shell_output, emit_df_shell_derivatives_cuda())
+        write_if_changed(
+            args.shell_output,
+            "\n".join(
+                emit_df_shell_derivatives_cuda(scalar_type=scalar_type)
+                for scalar_type in ("double", "float")
+            ),
+        )
         from generativeqc_compiler.integral.df_rys import emit_df_rys_cuda
         from generativeqc_compiler.integral.df_rys_shell import (
             emit_df_rys_policy_cpp,
@@ -127,9 +133,17 @@ def main() -> None:
         for name, emitter in (
             ("generated_df_rys.cuh", emit_df_rys_cuda),
             ("generated_df_rys_policy.hpp", emit_df_rys_policy_cpp),
-            ("generated_df_rys_shell.cuh", emit_df_rys_shell_cuda),
         ):
             write_if_changed(args.shell_output.with_name(name), emitter())
+        write_if_changed(
+            args.shell_output.with_name("generated_df_rys_shell.cuh"),
+            "\n".join(
+                emit_df_rys_shell_cuda(
+                    shell_header=args.shell_output.name, scalar_type=scalar_type
+                )
+                for scalar_type in ("double", "float")
+            ),
+        )
     if args.shell_units_directory:
         from generativeqc_compiler.integral.df_shell_units import emit_df_shell_units
 

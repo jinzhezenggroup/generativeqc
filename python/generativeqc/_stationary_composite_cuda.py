@@ -71,6 +71,7 @@ from ._resident_ao_maps import (
 from ._stationary_cuda import (
     _DOUBLE,
     _CudaSources,
+    _Fp32GeometryUnavailable,
     _metric_delta,
     _native_grid_artifact,
     _ptr,
@@ -149,6 +150,7 @@ class PreparedCompositeStationaryCudaGradient:
         self._geometry_response = ExactGeometryResponseCache()
         self.executions = 0
         self.last_work = None
+        self._attempt_source_metrics = None
 
     def close(self) -> None:
         self._geometry_response.clear()
@@ -177,23 +179,75 @@ class PreparedCompositeStationaryCudaGradient:
         active_ao_cache_bytes: int = 64 << 20,
         active_ao_producer: str = "sampled-jets",
         active_ao_max_active_fraction: float = 1.0,
+        fp32_semilocal_geometry: bool = False,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
-        """Publish only a complete result; failed executions discard retained scratch."""
+        """Publish complete forces; an explicit semilocal candidate is not admission.
+
+        The diagnostic FP32 option changes only semilocal point/projection/Becke
+        arithmetic. SCF, AO production, integral derivatives and the independent
+        nonlocal seed consumer stay strict. A numerical candidate failure retries
+        the complete gradient once at the same live state; driver, allocation and
+        identity failures never trigger a retry. Failed calls discard scratch.
+        """
+        started = perf_counter()
+        options = {
+            "compiler": compiler,
+            "cache": cache,
+            "library": library,
+            "tile_points": tile_points,
+            "max_device_bytes": max_device_bytes,
+            "max_host_bytes": max_host_bytes,
+            "active_ao_cutoff": active_ao_cutoff,
+            "active_ao_cache_bytes": active_ao_cache_bytes,
+            "active_ao_producer": active_ao_producer,
+            "active_ao_max_active_fraction": active_ao_max_active_fraction,
+            "fp32_semilocal_geometry": fp32_semilocal_geometry,
+        }
         try:
-            return self._execute(
-                state,
-                basis,
-                compiler=compiler,
-                cache=cache,
-                library=library,
-                tile_points=tile_points,
-                max_device_bytes=max_device_bytes,
-                max_host_bytes=max_host_bytes,
-                active_ao_cutoff=active_ao_cutoff,
-                active_ao_cache_bytes=active_ao_cache_bytes,
-                active_ao_producer=active_ao_producer,
-                active_ao_max_active_fraction=active_ao_max_active_fraction,
-            )
+            try:
+                return self._execute(state, basis, **options)
+            except _Fp32GeometryUnavailable as error:
+                if not fp32_semilocal_geometry:
+                    raise
+                attempts = (
+                    {}
+                    if self._attempt_source_metrics is None
+                    else _metric_delta(
+                        self.sources.metrics(), self._attempt_source_metrics
+                    )
+                )
+                self.close()
+                options["fp32_semilocal_geometry"] = False
+                forces, work = self._execute(state, basis, **options)
+                work = dict(work)
+                work.update(
+                    fp32_semilocal_geometry_requested=True,
+                    fp32_geometry_unavailable=str(error),
+                    rejected_semilocal_work=attempts,
+                    endpoint_seconds=perf_counter() - started,
+                )
+                self.last_work = work
+                return forces, work
+            except ArithmeticError:
+                if not fp32_semilocal_geometry or self._attempt_source_metrics is None:
+                    raise
+                attempts = _metric_delta(
+                    self.sources.metrics(), self._attempt_source_metrics
+                )
+                if not attempts.get("fp32_geometry_points", 0):
+                    raise
+                self.close()
+                options["fp32_semilocal_geometry"] = False
+                forces, work = self._execute(state, basis, **options)
+                work = dict(work)
+                work.update(
+                    fp32_semilocal_geometry_requested=True,
+                    fp64_geometry_retries=1,
+                    rejected_semilocal_work=attempts,
+                    endpoint_seconds=perf_counter() - started,
+                )
+                self.last_work = work
+                return forces, work
         except BaseException:
             self.close()
             raise
@@ -213,9 +267,13 @@ class PreparedCompositeStationaryCudaGradient:
         active_ao_cache_bytes: int,
         active_ao_producer: str,
         active_ao_max_active_fraction: float,
+        fp32_semilocal_geometry: bool,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
         """Contract all twelve gradients under the live SCF token and publish forces."""
+        self._attempt_source_metrics = None
         started = perf_counter()
+        if type(fp32_semilocal_geometry) is not bool:
+            raise TypeError("semilocal FP32 geometry selection must be boolean")
         if type(active_ao_producer) is not str or active_ao_producer not in {
             "sampled-jets",
             "pre-ao-envelope",
@@ -382,6 +440,7 @@ class PreparedCompositeStationaryCudaGradient:
             ao_cache_allowance,
             active_ao_producer,
             active_ao_max_active_fraction,
+            fp32_semilocal_geometry,
         )
         from ._stationary_cuda import _prepare_force_memory
 
@@ -400,6 +459,22 @@ class PreparedCompositeStationaryCudaGradient:
                     compiler=compiler,
                     cache=cache,
                 )
+                # Accumulators borrow this producer's stream. Register the
+                # producer first so exception cleanup drains/destroys its
+                # consumers before releasing that stream, including pre-drain
+                # numerical failures and the complete strict retry.
+                self.grid = self._stack.enter_context(
+                    CudaGrid(
+                        basis,
+                        _native_grid_artifact(library, compiler.target.architecture),
+                        order=2,
+                        tile_points=tile_points,
+                        active_ao_capacity=n,
+                        budget_bytes=gp.peak_bytes,
+                        device_id=device,
+                        ingredients=grid_features,
+                    )
+                )
                 self.sources = self._stack.enter_context(
                     _CudaSources(
                         basis,
@@ -414,6 +489,7 @@ class PreparedCompositeStationaryCudaGradient:
                         cooperative_becke=True,
                         phased_becke=phased_becke,
                         becke_primitive=becke_primitive,
+                        fp32_geometry=fp32_semilocal_geometry,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -438,18 +514,6 @@ class PreparedCompositeStationaryCudaGradient:
                         phased_becke=phased_becke,
                         becke_primitive=becke_primitive,
                         page_work_budget=1,
-                    )
-                )
-                self.grid = self._stack.enter_context(
-                    CudaGrid(
-                        basis,
-                        _native_grid_artifact(library, compiler.target.architecture),
-                        order=2,
-                        tile_points=tile_points,
-                        active_ao_capacity=n,
-                        budget_bytes=gp.peak_bytes,
-                        device_id=device,
-                        ingredients=grid_features,
                     )
                 )
                 self._nonlocal = _ResidentNonlocalForceOwner(
@@ -477,6 +541,7 @@ class PreparedCompositeStationaryCudaGradient:
                 source, native_budget + native_derivative_bytes
             )
         source_metrics_before = self.sources.metrics()
+        self._attempt_source_metrics = source_metrics_before
         nonlocal_metrics_before = self.nonlocal_sources.metrics()
         component_start = perf_counter()
         evaluate = source._library.generativeqc_ks_snapshot_cuda_integral_gradient_v1
@@ -525,6 +590,9 @@ class PreparedCompositeStationaryCudaGradient:
         # Optional AO experiments retain their own observable execution path.
         reuse_geometry = (
             os.environ.get("GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE") == "1"
+            # Fast precision receipts require this invocation's executed work.
+            # Keep their capability/strict retry path observable.
+            and not fp32_semilocal_geometry
             and active_ao_cutoff is None
             and not bool(getattr(source, "density_fitted", False))
             and not any(
@@ -678,6 +746,8 @@ class PreparedCompositeStationaryCudaGradient:
         self.executions += 1
         work = {
             "execution": "cuda-complete-composite",
+            "fp32_semilocal_geometry_requested": fp32_semilocal_geometry,
+            "fp64_geometry_retries": 0,
             "plan_identity": plan.identity,
             "prepared_plan_identity": prepared_plan.identity,
             "execution_graph_identity": prepared_plan.graph.identity,
