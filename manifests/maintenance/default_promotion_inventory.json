@@ -1550,6 +1550,27 @@
         ".agents/notes/proposed/2026-10-14-exact-two-electron-response-reuse.md",
         "issue:#2426"
       ]
+    },
+    {
+      "id": "ks.exact-geometry-response-reuse",
+      "classification": "needs-qualification",
+      "controls": [
+        "ks-runtime:GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE"
+      ],
+      "owner_issues": [
+        2426
+      ],
+      "sources": [
+        "python/generativeqc/_stationary_composite_cuda.py",
+        "python/generativeqc/_geometry_response_cache.py"
+      ],
+      "rationale": "Default-off exact-density reuse of completed geometry-only semilocal/nonlocal and nuclear responses within an immutable prepared owner. Native one-electron/Pulay response always runs; optional bounded host storage can be refused without changing the endpoint.",
+      "revisit_condition": "Require independent E/F and displaced-energy gates, actual hits, geometry/one-ULP/resource/failure invalidation and complete original-protocol endpoints before default promotion.",
+      "evidence": [
+        "tests/python/test_geometry_response_cache.py",
+        ".agents/notes/proposed/2026-10-14-exact-geometry-response-reuse.md",
+        "issue:#2426"
+      ]
     }
   ]
 }
