@@ -357,7 +357,7 @@ physical work; initialization is never a cached convergence result.
 
 Strict-FP64 direct restricted VV10 initialization automatically admits full
 screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
-the existing reuse threshold, a 2 GiB value ceiling and complete host/device
+the existing reuse threshold, a 4 GiB value ceiling and complete host/device
 admission. Cold and transported-density initialization can prepare a lease;
 a retained warm call only reuses its audited immutable-geometry lease. It never
 builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
