@@ -1623,7 +1623,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
         const auto available = used_host < maximum_bytes ? maximum_bytes - used_host : 0;
         if (reuse_response && value.size() == 3 * nc)
           integral_response_cache_.store(*cached_density, value,
-                                         std::min(response_cache_limit, available));
+                                         std::min<std::uint64_t>(response_cache_limit, available));
       }
       runtime::df_progress::Scope::number("density_key_hit", hit);
       runtime::df_progress::Scope::number("two_electron_response_evaluations", hit ? 0 : 1);
