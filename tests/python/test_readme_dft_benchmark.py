@@ -559,3 +559,39 @@ def test_mixed_wb97mv_oracle_rejects_unmatched_reference(
     )
     with pytest.raises(ValueError, match="requires restricted full-J/K DF"):
         configure_reference_mixed_rsh_df(engine)
+
+
+def test_omission_does_not_hide_completed_native_without_reference(
+    tmp_path: Path,
+) -> None:
+    """Only the incomplete size is absent; an unchecked native size stays visible."""
+    from tools.render_readme_dft import render
+
+    rows = [
+        {"phase": phase, "iterations": 1, "fock_builds": 1, "complete_seconds": seconds}
+        for phase, seconds in [("cold", 10.0)] + [("warm", 1.0)] * 5
+    ]
+    native = {"status": "completed_unchecked", "records": rows}
+    reference = {"status": "not_run", "records": []}
+    annotation = "96: incomplete E+F omitted"
+    summary = {
+        "sizes": [3, 12, 48, 96],
+        "density_fitting": True,
+        "panel_annotations": {"wb97m-v": annotation},
+        "methods": {
+            "wb97m-v": [
+                {
+                    "atoms": 48,
+                    "protocol": {"aos": 384},
+                    "engines": {"native": native, "reference": reference},
+                }
+            ]
+        },
+    }
+    render(summary, tmp_path)
+    assert annotation in (tmp_path / "df-cold-warm.svg").read_text()
+    table = (tmp_path / "df-timings.md").read_text()
+    assert annotation in table
+    assert "10.000‡ | not run | 1.000‡ | not run" in table
+    assert "| ωB97M-V | 48 |" in table
+    assert "| ωB97M-V | 96 |" not in table
