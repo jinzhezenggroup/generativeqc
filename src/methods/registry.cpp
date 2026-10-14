@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "dft/application_precision.hpp"
+#include "methods/application_precision.hpp"
 #include "methods/df_rccsdt_method.hpp"
 #include "methods/dft_admission.hpp"
 #include "methods/dft_method.hpp"
@@ -184,18 +185,26 @@ void validate_preliminary_system(const generativeqc_method_descriptor& descripto
 void validate_option_family(const MethodDefinition& definition,
                             const generativeqc_method_descriptor& descriptor,
                             generativeqc_backend backend) {
+  const auto budget = detail::application_precision_budget(descriptor);
+  const auto family = definition.provider.domain.family;
+  if ((budget[0] > 0.0 && backend != GENERATIVEQC_BACKEND_CUDA) ||
+      (descriptor.struct_size > sizeof(generativeqc_method_descriptor) &&
+       family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
+       family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "application precision transport requires CUDA HF/KS");
   if (descriptor.initial_guess) {
-    const auto family = definition.provider.domain.family;
     const bool automatic =
         descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_CPU ||
         descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU;
     const bool minao = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_MINAO;
     const bool huckel = descriptor.initial_guess->kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL;
     const bool strict_application_seed =
-        family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL &&
+        (family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL ||
+         family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK) &&
         backend == GENERATIVEQC_BACKEND_CUDA &&
         descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-        dft::application_precision_requested(descriptor.ks_options);
+        (budget[0] > 0.0 || dft::application_precision_requested(descriptor.ks_options));
     const auto seed_precision =
         strict_application_seed ? GENERATIVEQC_PRECISION_FP64 : descriptor.precision_mode;
     const bool admitted =

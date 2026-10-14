@@ -148,7 +148,7 @@ int main() {
           geometry_cooperative_kernel<prepared,double>(view,work.data(),ao_atoms.data(),
               implicit?nullptr:owners.data(),4,3,nullptr,atoms,weights.data(),raw.data(),
               external?seeds.data():nullptr,stride,2,points,partial.data()+1,
-              scratch.data()+1,nullptr,&error,phase_seeds.data()+1);
+              scratch.data()+1,nullptr,&error,phase_seeds.data()+1,false);
         });
         for(auto& worker:workers) worker.join();
       }

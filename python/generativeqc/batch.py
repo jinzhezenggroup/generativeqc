@@ -52,6 +52,7 @@ if typing.TYPE_CHECKING:
     from ._api_types import CcPerformanceResult, CorrelationResult
     from .accuracy import AccuracyAssessment
     from .calculator import Calculator
+    from .precision_policy import PrecisionValidation
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,7 @@ class BatchItemResult:
     cc_performance: CcPerformanceResult | None = None
     dispersion: object | None = None
     initial_guess: dict | None = None
+    precision_validation: PrecisionValidation | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -104,6 +106,7 @@ class BatchResult:
     See :ref:`python-results-values` and :ref:`python-results-ownership`."""
 
     items: tuple[BatchItemResult, ...]
+    precision_validation: dict | None = None
 
     @property
     def energies(self) -> np.ndarray:
@@ -731,6 +734,14 @@ class PreparedBatch:
                 decision = resolve_force_active_ao_policy(workload)
 
                 if composite_force:
+                    from ._composite_precision import (
+                        composite_gradient_admission,
+                        composite_gradient_precision,
+                    )
+
+                    qualification = composite_gradient_admission(
+                        calculator, state, basis
+                    )
                     prepared = self._stationary_cuda_execution
                     if not isinstance(
                         prepared, PreparedCompositeStationaryCudaGradient
@@ -756,8 +767,17 @@ class PreparedBatch:
                         active_ao_cache_bytes=decision.cache_bytes,
                         active_ao_producer=decision.producer,
                         active_ao_max_active_fraction=decision.max_active_fraction,
+                        **(
+                            {"fp32_semilocal_geometry": True}
+                            if qualification is not None
+                            else {}
+                        ),
                     )
                     work = dict(work)
+                    if qualification is not None:
+                        work["gradient_precision"] = composite_gradient_precision(
+                            qualification, state.identity, work
+                        )
                     work["force_active_ao_policy"] = force_active_ao_policy_record(
                         decision, work.get("active_ao_maps")
                     )
@@ -807,6 +827,14 @@ class PreparedBatch:
                     "max_grid_points": None,
                     "max_grid_pair_visits": None,
                 }
+                from ._df_precision import (
+                    fitted_gradient_admission,
+                    fitted_gradient_precision,
+                )
+
+                qualification = fitted_gradient_admission(calculator, state, basis)
+                if qualification is not None:
+                    kwargs["fp32_semilocal_geometry"] = True
                 try:
                     result = complete_rks_cuda_gradient_diagnostic(
                         state, basis, prepared=prepared, **kwargs
@@ -819,6 +847,10 @@ class PreparedBatch:
                         state, basis, prepared=prepared, **kwargs
                     )
                 work = dict(result.work)
+                if qualification is not None:
+                    work["gradient_precision"] = fitted_gradient_precision(
+                        qualification, result
+                    )
                 selection = work.get("resident_ao_selection")
                 map_work = (
                     selection.get("work") if isinstance(selection, dict) else None
@@ -1381,6 +1413,7 @@ class PreparedBatch:
                 succeeded = False
                 dispersion_failure_message = f"external correction failed ({dispersion.status}): {dispersion.message}"
             public_force = None
+            force_work = None
             force_failure_message = None
             if succeeded and compatibility_forces[index]:
                 atoms = self._systems[index]
@@ -1513,6 +1546,15 @@ class PreparedBatch:
                     self._multiplicities[index],
                     bool(output.converged),
                 )
+            precision = self._calculator._precision_report(self._batch, index)
+            if precision is not None:
+                precision = dict(precision)
+                if not succeeded or forces is None:
+                    precision.pop("gradient", None)
+            if succeeded and forces is not None and force_work is not None:
+                gradient_precision = force_work.get("gradient_precision")
+                if gradient_precision is not None:
+                    precision = {**(precision or {}), "gradient": gradient_precision}
             items.append(
                 BatchItemResult(
                     index=index,
@@ -1547,7 +1589,7 @@ class PreparedBatch:
                     warm_start_used=bool(output.warm_start_used),
                     warm_start_fallback=bool(output.warm_start_fallback),
                     basis_metadata=deepcopy(self._basis_metadata[index]),
-                    precision=self._calculator._precision_report(self._batch, index),
+                    precision=precision,
                     incremental_direct_jk=self._calculator._incremental_direct_jk_diagnostic(
                         self._batch, index
                     ),

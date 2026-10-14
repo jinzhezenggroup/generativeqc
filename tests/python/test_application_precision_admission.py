@@ -20,10 +20,29 @@ def test_native_budget_domain_admission(
 #include <cassert>
 #include <limits>
 #include "dft/application_precision.hpp"
+#include "scf/application_precision.hpp"
 int main() {
   using generativeqc::dft::admit_application_xc_warmup;
   using generativeqc::dft::admit_application_gradient;
   const std::array<double, 3> loose{1e-5, 1e-4, 3e-5};
+  using generativeqc::scf::admit_application_hf_gradient;
+  for (const auto aos : {24u, 96u})
+    assert(admit_application_hf_gradient(loose, aos, 24, 2, true, true));
+  for (const auto aos : {0u, 23u, 97u})
+    assert(!admit_application_hf_gradient(loose, aos, 24, 2, true, true));
+  assert(!admit_application_hf_gradient(loose, 96, 24, 3, true, true));
+  assert(!admit_application_hf_gradient(loose, 96, 24, 2, false, true));
+  assert(!admit_application_hf_gradient(loose, 96, 24, 2, true, false));
+  assert(!admit_application_hf_gradient(loose, 96, 49, 2, true, true));
+  assert(!admit_application_hf_gradient({1e-5, 0, 0}, 96, 24, 2, true, true));
+  using generativeqc::scf::admit_application_df_hf_gradient;
+  assert(admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 3, true, true));
+  assert(!admit_application_df_hf_gradient(loose, 96, 513, 12, 2, 3, true, true));
+  assert(!admit_application_df_hf_gradient(loose, 96, 0, 12, 2, 3, true, true));
+  assert(!admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 4, true, true));
+  assert(!admit_application_df_hf_gradient(loose, 96, 464, 13, 2, 3, true, true));
+  assert(!admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 3, false, true));
+  assert(!admit_application_df_hf_gradient(loose, 96, 464, 12, 2, 3, true, false));
   for (const auto aos : {24u, 96u, 192u, 384u})
     assert(admit_application_gradient(loose, aos, 24, 2, true));
   for (const auto aos : {0u, 23u, 385u})
@@ -53,6 +72,8 @@ int main() {
       invalid[index] = value;
       assert(!admit_application_xc_warmup(invalid, 96, 2, true, true, true));
       assert(!admit_application_gradient(invalid, 96, 24, 2, true));
+      assert(!admit_application_hf_gradient(invalid, 96, 24, 2, true, true));
+      assert(!admit_application_df_hf_gradient(invalid, 96, 464, 12, 2, 3, true, true));
     }
   }
   assert(offsetof(generativeqc::dft::ApplicationPrecisionKsOptions, energy) ==
@@ -77,6 +98,38 @@ int main() {
     extended.energy = energy;
     assert(!application_precision_requested(&extended.base));
   }
+  generativeqc::dft::CudaStationaryBinding binding;
+  binding.geometry_fp32 = +[](void*, const generativeqc::dft::GridTaskView*, const double*,
+                              std::size_t, std::size_t, const double*, const double*,
+                              std::uint64_t, std::uint64_t, char*, std::size_t) { return 0; };
+  using generativeqc::dft::application_gradient_qualification;
+  const auto qualify = [&] (unsigned aos) {
+    return application_gradient_qualification(binding, loose, aos, 12, 2);
+  };
+  binding.model = {1, 4, 1, 3, 0.75, 1.0, 0.25};
+  assert(qualify(384) == 1);
+  binding.model = {1, 4, 1, 3, 1.0, 1.0, 0.0};
+  assert(qualify(24) == 2 && qualify(96) == 2 && qualify(97) == 0);
+  binding.model = {3, 1, 1, 3, 1.0, 1.0, 0.2};
+  assert(qualify(96) == 3);
+  binding.model.full_range_exchange = 0.25;
+  assert(qualify(96) == 0);
+  binding.model = {2, 1, 1, 3, 1.0, 1.0, 0.0};
+  assert(qualify(96) == 4);
+  binding.model.spin_blocks = 2;
+  assert(qualify(96) == 0);
+  binding.model.spin_blocks = 1;
+  binding.model = {0x201c2, 4, 1, 3, 1.0, 1.0, 0.54};
+  assert(qualify(24) == 6 && qualify(96) == 6 && qualify(97) == 0);
+  binding.model.domain_version = 1;
+  assert(qualify(96) == 0);
+  binding.model.domain_version = 4;
+  binding.model.full_range_exchange = 0.5;
+  assert(qualify(96) == 0);
+  binding.model = {2, 1, 1, 3, 1.0, 1.0, 0.0};
+  binding.geometry_fp32 = nullptr;
+  assert(qualify(96) == 0);
+  assert(generativeqc::dft::stationary_gradient_model_qualification(binding, 96) == 4);
 }
 """)
     executable = tmp_path / "admission"

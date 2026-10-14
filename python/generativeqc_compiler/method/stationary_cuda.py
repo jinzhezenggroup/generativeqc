@@ -369,7 +369,8 @@ template <bool restricted_point = false, class Arithmetic = double>
 __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     size_t p, size_t owner, size_t na,
     const double* raw, const double* external, size_t external_stride, size_t external_offset,
-    double* grad, StationaryPointValue& xc, double& becke_seed, int* error) {
+    double* grad, StationaryPointValue& xc, double& becke_seed, int* error,
+    bool bound_point = false) {
   const size_t np = view.npoint;
   double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
   // Consume the emitted ingredient layout, never a functional's numeric code.
@@ -421,7 +422,13 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     for (size_t k = 0; k < 3; ++k)
       grad[3 * na + 3 * owner + k] += seed[2 + k];
   } else {
-    xc = stationary_evaluate_point(rho, g, tau);
+    // Inline and precomputed consumers must share the producer's same-spin
+    // proof. Otherwise only the mixed point inherits this exact optimization.
+    if constexpr (stationary_restricted_point_capable)
+      xc = bound_point ? stationary_evaluate_restricted_point(rho, g, tau)
+                       : stationary_evaluate_point(rho, g, tau);
+    else
+      xc = stationary_evaluate_point(rho, g, tau);
   }
   if (!xc.valid) {
     atomicExch(error, 1);
@@ -493,10 +500,11 @@ template <class Arithmetic = double>
 __device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const double* work,
     const int64_t* ao_atoms, size_t p, size_t owner, size_t na, const double* weights,
     const double* raw, const double* external, size_t external_stride, size_t external_offset,
-    double* grad, double& becke_seed, int* error, Arithmetic* point_partial = nullptr) {
+    double* grad, double& becke_seed, int* error, Arithmetic* point_partial = nullptr,
+    bool bound_point = false) {
   StationaryPointValue xc;
   if (!geometry_point_setup<false, Arithmetic>(view, p, owner, na, raw, external, external_stride, external_offset,
-                            grad, xc, becke_seed, error)) return false;
+                            grad, xc, becke_seed, error, bound_point)) return false;
   if constexpr (std::is_same_v<Arithmetic, float>) {
     if (!point_partial) { atomicExch(error, 1); return false; }
     for (size_t coordinate = 0; coordinate < 6 * na; ++coordinate) point_partial[coordinate] = 0;
@@ -616,7 +624,7 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-                                double* phase_seeds) {
+                                double* phase_seeds, bool bound_point) {
   // Lanes remain point workers. A whole block cooperates on one worker's panel.
   const size_t lane = blockIdx.x;
   if (lane >= geometry_lanes) return;
@@ -666,11 +674,11 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
         } else {
           if (cooperative_ao)
             control.valid = geometry_point_setup<false, Arithmetic>(view, p, owner, na, raw, external,
-                external_stride, external_offset, grad, *point_value, control.seed, error);
+                external_stride, external_offset, grad, *point_value, control.seed, error, bound_point);
           else
             control.valid = geometry_point_ao<Arithmetic>(view, work, ao_atoms, p, owner, na, weights, raw, external,
                 external_stride, external_offset, grad, control.seed, error,
-                reinterpret_cast<Arithmetic*>(ws + 5 * na));
+                reinterpret_cast<Arithmetic*>(ws + 5 * na), bound_point);
         }
       }
     }
@@ -779,7 +787,8 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 const double* raw, const double* external,
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
-                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
+                                bool bound_point) {
   const size_t lane = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= geometry_lanes) return;
   // Same-stream consumers may receive a resident grid tile before a host
@@ -812,7 +821,8 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
     // serial within one lane; FP32 point sums widen once, not once per AO.
     auto* point_partial = reinterpret_cast<Arithmetic*>(ws + 5 * na);
     if (!geometry_point_ao<Arithmetic>(view, work, ao_atoms, p, owner, na, weights, raw, external,
-                           external_stride, external_offset, grad, becke_seed, error, point_partial)) return;
+                           external_stride, external_offset, grad, becke_seed, error, point_partial,
+                           bound_point)) return;
     bool valid;
     if constexpr (std::is_same_v<Arithmetic, float>) {
       // Float distances end at byte 56*na; the 12*na point-adjoint bytes fit
