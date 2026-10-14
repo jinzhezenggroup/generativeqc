@@ -1,8 +1,8 @@
 {
   "archive": {
-    "bytes": 270744,
-    "path": "rejected-inventory-run.json.gz",
-    "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c",
+    "bytes": 51340,
+    "path": "rejected-inventory-run.json.xz",
+    "sha256": "26bdeb2241e6a5a490ce76f91c5e41d9abb1dce1c0f2557104ff52c0f8bb9ee6",
     "uncompressed_bytes": 3795930,
     "uncompressed_sha256": "1a16bcff14eb926db9936c9df80925f2fad70ffb9a780014bfef1e5b30fe40a2"
   },

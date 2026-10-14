@@ -283,14 +283,6 @@
       "sha256": "5c483f8bd0140336c40fd12a09f921c9af76964ffd4d14d55b7c0897cd169183"
     },
     {
-      "bytes": 270744,
-      "classification": "required-compact-accepted-evidence",
-      "family": "cuda-ownership",
-      "path": "benchmarks/results/cuda-ownership/df/rejected-inventory-run.json.gz",
-      "role": "scientific-record",
-      "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
-    },
-    {
       "bytes": 155087,
       "classification": "required-compact-accepted-evidence",
       "family": "cuda-ownership",
