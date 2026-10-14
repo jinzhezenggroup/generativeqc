@@ -25,6 +25,7 @@ def test_exact_two_electron_response_reuse(
         pytest.skip("requires an explicitly scheduled GPU")
     assert os.environ.get("SLURM_JOB_ID")
     from generativeqc import Calculator, GridSpec, KsOptions
+    from generativeqc._ks_snapshot import NativeKsSnapshot
 
     atoms = [("O", (0.02, -0.03, 0.04)), ("H", (0.1, 1.43, 1.1))]
     if not unrestricted:
@@ -85,6 +86,23 @@ def test_exact_two_electron_response_reuse(
                     moved, strict=True, properties=("energy", "forces")
                 ).items[0]
             )
+            if enabled:
+                # UKS can change D by a few bits on every successful warm SCF.
+                # A frozen, authenticated snapshot supplies an exact repeat for
+                # both spins without treating numerical closeness as equality.
+                monkeypatch.setenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", "1")
+                snapshot = NativeKsSnapshot(batch, 0)
+                try:
+                    first = snapshot.cuda_integral_derivatives(
+                        len(atoms), 256 << 20, range_exchange=True
+                    )
+                    second = snapshot.cuda_integral_derivatives(
+                        len(atoms), 256 << 20, range_exchange=True
+                    )
+                    assert first is not None and second is not None
+                    np.testing.assert_allclose(first[0], second[0], rtol=0, atol=1e-12)
+                finally:
+                    snapshot.close()
         assert all(item.converged for item in results)
         outputs.append(results)
         events = [json.loads(line) for line in journal.read_text().splitlines()]
@@ -94,10 +112,12 @@ def test_exact_two_electron_response_reuse(
             if event.get("name") == "ks_integral_response"
             and event.get("key") == "two_electron_response_evaluations"
         ]
-        assert len(work) == 8
-        assert work[0] == work[3] == work[6] == work[-1] == 1
+        assert len(work) == (10 if enabled else 8)
+        assert work[0] == work[3] == work[6] == work[7] == 1
         if enabled:
-            assert work[2] == work[5] == 0
+            assert work[-2:] == [1, 0]
+            if not unrestricted:
+                assert work[2] == work[5] == 0
         else:
             assert work == [1] * 8
     for original, reused in zip(*outputs, strict=True):

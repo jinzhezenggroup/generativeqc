@@ -18,8 +18,18 @@ def test_exact_density_response_cache(native_cxx: NativeCxx, tmp_path: Path) -> 
 #include "methods/exact_density_response_cache.hpp"
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 using generativeqc::methods::detail::ExactDensityResponseCache;
+// Inject failure only into the retained array allocation, not the input vectors.
+bool reject_array_allocation = false;
+void* operator new[](std::size_t size) {
+  if (!reject_array_allocation)
+    if (auto* memory = std::malloc(size)) return memory;
+  throw std::bad_alloc();
+}
+void operator delete[](void* memory) noexcept { std::free(memory); }
+void operator delete[](void* memory, std::size_t) noexcept { std::free(memory); }
 int main() {
   ExactDensityResponseCache cache;
   ExactDensityResponseCache::Blocks density{{1, 0, 0, 1}, {2, 0, 0, 2}};
@@ -54,6 +64,12 @@ int main() {
   assert(cache.store(density, force, bytes));
   cache.clear();
   assert(cache.bytes() == 0 && !cache.matches(density, 3, bytes));
+  assert(cache.store(density, force, bytes));
+  reject_array_allocation = true;
+  assert(!cache.store(density, force, bytes));
+  assert(cache.bytes() == 0 && cache.response().empty());
+  reject_array_allocation = false;
+  assert(cache.store(density, force, bytes)); // Refusal does not poison recovery.
 }
 """)
     binary = tmp_path / "probe"
