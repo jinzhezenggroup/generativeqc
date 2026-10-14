@@ -16,6 +16,9 @@ struct CudaStationaryCapacity {
   std::size_t packed_elements{}, tile_points{}, geometry_lanes{}, geometry_threads{};
   std::size_t stationary_minimum_bytes{}, stationary_cached_bytes{};
   std::size_t minimum_device_bytes{}, cached_device_bytes{};
+  /** Optional producer panels/provider belong to the cached consumer tier,
+   * not to the emitted stationary arena or the mandatory strict grid layout. */
+  std::size_t cached_grid_extra_bytes{};
 };
 
 /** Stable v1 receipt shared by raw, descriptor and prepared-item queries. */
@@ -24,7 +27,7 @@ inline std::array<std::uint64_t, 9> cuda_stationary_capacity_values(
   return {capacity.grid.allocation_bytes,
           capacity.grid.provider_allowance,
           capacity.stationary_minimum_bytes,
-          capacity.stationary_cached_bytes,
+          capacity.stationary_cached_bytes + capacity.cached_grid_extra_bytes,
           capacity.minimum_device_bytes,
           capacity.cached_device_bytes,
           capacity.tile_points,
@@ -41,7 +44,8 @@ inline CudaStationaryCapacity cuda_stationary_capacity(const CudaStationaryBindi
                                                        std::size_t atoms, std::size_t aos,
                                                        std::size_t primitives,
                                                        std::size_t grid_points,
-                                                       std::size_t tile_points) {
+                                                       std::size_t tile_points,
+                                                       bool mixed_grid = false) {
   if (!binding.numeric_bytes || !atoms || !grid_points || grid_points % atoms || !tile_points)
     throw std::invalid_argument("invalid native stationary capacity shape");
   CudaStationaryCapacity capacity;
@@ -65,6 +69,12 @@ inline CudaStationaryCapacity cuda_stationary_capacity(const CudaStationaryBindi
       runtime::size_add(capacity.grid.allocation_bytes, capacity.grid.provider_allowance);
   capacity.minimum_device_bytes = runtime::size_add(grid_upper, capacity.stationary_minimum_bytes);
   capacity.cached_device_bytes = runtime::size_add(grid_upper, capacity.stationary_cached_bytes);
+  if (mixed_grid) {
+    capacity.cached_grid_extra_bytes =
+        cuda_grid_fp32_storage(aos, capacity.tile_points).device_upper_bytes;
+    capacity.cached_device_bytes =
+        runtime::size_add(capacity.cached_device_bytes, capacity.cached_grid_extra_bytes);
+  }
   return capacity;
 }
 }  // namespace generativeqc::dft

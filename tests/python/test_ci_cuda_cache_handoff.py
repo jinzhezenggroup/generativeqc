@@ -136,6 +136,8 @@ def _assert_transport(workflow: str) -> None:
             "github.event_name": event,
             "github.ref": ref,
             "github.run_attempt": "2",
+            "steps.prose_scope.outcome": "success",
+            "steps.prose_scope.outputs.scope": "full",
             "format('file://{0}/cuda-ccache-handoff', runner.temp)": "file:///tmp/delta",
         }
         assert (

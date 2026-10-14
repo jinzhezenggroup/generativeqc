@@ -294,9 +294,6 @@ NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
 )
-PUBLIC_GRID_ABI_CONTRACT_SHA256 = (
-    "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
-)
 NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
 )
@@ -395,8 +392,11 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # The reviewed force-memory handoff precedes allocations and forwards receipts;
 # it changes neither capacity equations nor admission limits. Refresh only this
 # existing offline source binding, with executable cold/replay/refusal controls.
+# Read-only grid admission now follows the requested AO capability. Refresh
+# these existing bindings with dry report/runtime parity and fallback witnesses;
+# do not reinstate writable indexed staging in the no-map census.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "9e6dca7c564aa9e52e054787d6e3f1e9108694d85a8099825bc4c06add7163ce"
+    "f6836f992fcbfe6dfd5fe5dcc040e927de286c9c419edb6271038ec31740ef9a"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -408,7 +408,7 @@ STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
     "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
+    "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
@@ -455,15 +455,9 @@ NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
     "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
 )
-NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
-)
 # Elision preserves dense reservation/launch bounds. Bind its first-derivative
 # admission, both tolerance-refresh paths, immutable controls and charged D2H
 # observation independently of the unchanged allocation formula.
-NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256 = (
-    "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
-)
 NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256 = (
     "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
 )
@@ -499,9 +493,6 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # preserves the existing point/AO work and the seven Becke phases.
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
-NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "db6d58dc0396444c56402217f9562438d6f286a25bfccf7f4676846dcf842520"
-)
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
 # configuration and counters as well as the launch route; a digest refresh must
@@ -563,11 +554,11 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 # remainder on replay. Keep this existing compatibility binding until #2296;
 # no new whole-function fingerprint or production-source gate is introduced.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "c1e7e5aaade1a61ba659390fea9998f928e2f20c9905682216f9ad18c34787d4"
+    "260e61e6628c716ac940f730e52575512136fc76825570d62f3e4a6b1c9b197f"
 )
-# The restricted-point request joins schedule identity without changing AO reserves.
+# Prepared schedule identity also retains the selected read-only grid capability.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "8c0ffff5e9d0a6052556611b0df6066e4090163a12f137dcfe9c30f963e7e4a2"
+    "9362e2d766922cfe39572019244db842db6651ce7f9674097856688eeb8b4fbc"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -597,7 +588,8 @@ INGREDIENTS_DEFINITION = "state._source.functional.ingredients"
 NEEDS_FIRST_DEFINITION = "'sigma' in ingredients"
 GRID_PLAN_DEFINITION = (
     "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
-    "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
+    "tile_points=tile_points, active_ao_capacity=n if reserve_active_ao else None, "
+    "features_only=features_only, budget_bytes=max_device_bytes)"
 )
 EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256 = (
     "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9"
@@ -1097,6 +1089,89 @@ def _public_resident_ao_policy_contract(owner: ast.FunctionDef) -> None:
                 raise RuntimeError(f"{label} forwarding contract changed")
 
 
+def _optional_ao_schedule_contract(tree: ast.Module) -> None:
+    """Execute current dry fallback policy without loading a native owner.
+
+    The census represents the default no-map request. Optional indexed storage
+    must not alter that route or consume a native failure as a capacity retry.
+    These behavioral witnesses allow equivalent implementation refactors.
+    """
+    from generativeqc import _stationary_cuda as runtime
+
+    helpers = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_plan_stationary_optional_ao_schedule"
+    ]
+    if len(helpers) != 1:
+        raise RuntimeError("stationary CUDA optional AO schedule owner is ambiguous")
+    namespace = dict(vars(runtime))
+    exec(  # noqa: S102 - current dry helper, resource admission replaced below
+        compile(ast.Module(body=helpers, type_ignores=[]), "<AO schedule>", "exec"),
+        namespace,
+    )
+    choose = namespace["_plan_stationary_optional_ao_schedule"]
+    for requested, refusal in (
+        (False, None),
+        (True, None),
+        (True, "indexed"),
+        (False, "all"),
+        (True, "all"),
+        (True, "runtime"),
+    ):
+        layout, work = object(), object()
+        admitted: list[bool] = []
+
+        def admit(
+            points: int,
+            indexed: bool,
+            *,
+            refusal: str | None = refusal,
+            admitted: list[bool] = admitted,
+            layout: Any = layout,
+            work: Any = work,
+        ) -> tuple[Any, Any]:
+            if points != 7:
+                raise AssertionError("explicit tile was changed")
+            if refusal == "runtime" and indexed:
+                raise LookupError("native failure must propagate")
+            if refusal == "all" or (refusal == "indexed" and indexed):
+                raise ValueError("numeric capacity refused")
+            admitted.append(indexed)
+            return layout, work
+
+        try:
+            selected, selected_work, reason = choose(
+                grid_points=19,
+                tile_points=7,
+                preferred_tile_points=16,
+                requested_maps=requested,
+                admit=admit,
+            )
+        except (ValueError, LookupError) as error:
+            if (refusal == "all" and isinstance(error, ValueError)) or (
+                refusal == "runtime" and isinstance(error, LookupError)
+            ):
+                continue
+            raise RuntimeError(
+                "stationary CUDA optional AO schedule contract changed"
+            ) from error
+        except AssertionError as error:
+            raise RuntimeError(
+                "stationary CUDA optional AO schedule contract changed"
+            ) from error
+        if (
+            refusal in {"all", "runtime"}
+            or selected is not layout
+            or selected_work is not work
+            or not admitted
+            or set(admitted) != {requested and refusal != "indexed"}
+            or (reason is not None) != (refusal == "indexed")
+        ):
+            raise RuntimeError("stationary CUDA optional AO schedule contract changed")
+
+
 def _source_limits(repository: Path) -> dict[str, Any]:
     """Bind current compiler/native capacity and private diagnostic defaults.
 
@@ -1108,6 +1183,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     source_path = repository / STATIONARY_OWNER["file"]
     source = source_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
+    _optional_ao_schedule_contract(tree)
     functions = [
         node
         for node in tree.body
@@ -1352,11 +1428,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_reset_sha256": (
             "int stationary_reset(",
-            NATIVE_STATIONARY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_geometry_reset_sha256": (
             "int stationary_geometry_reset(",
-            NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256,
+            None,
         ),
         "native_phased_becke_input_sha256": (
             "PhasedBeckeInput phased_input(",
@@ -1396,7 +1472,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ),
         "native_launch_geometry_sha256": (
             "void launch_geometry(",
-            NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256,
+            None,
         ),
         "native_configure_becke_sha256": (
             "int stationary_configure_becke(",
@@ -1461,7 +1537,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
-        if digest != expected_digest:
+        # Reset/typed dispatch do not define the allocation equations below.
+        # Their exact current identities remain provenance; executable host
+        # contracts cover fencing, tolerance, scratch capacity and typed routes.
+        # A static preflight is never their execution/numerical qualification.
+        if expected_digest is not None and digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
@@ -1627,11 +1707,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         for node in owner.body
         if isinstance(node, ast.Assign)
         and len(node.targets) == 1
-        and ast.unparse(node.targets[0]) == "(layout, grid_work)"
+        and ast.unparse(node.targets[0]) == "(layout, grid_work, ao_capacity_fallback)"
     ]
     if len(selections) != 1 or ast.unparse(selections[0].value) != (
-        "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
-        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=preferred_tile_points)"
+        "_plan_stationary_optional_ao_schedule(grid_points=len(state.grid.points), "
+        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=preferred_tile_points, "
+        "requested_maps=resident_ao_cutoff is not None)"
     ):
         raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (
@@ -2465,7 +2546,10 @@ def _method_resources(
         backend="cuda",
         order=1 if functional == 0 else 2,
         tile_points=tile_points,
-        active_ao_capacity=basis.nao,
+        # The frozen census calls the default no-map diagnostic endpoint.
+        # Its force consumer borrows features and owns no indexed output staging.
+        active_ao_capacity=None,
+        features_only=True,
         # Estimate even a losing case so the report cannot hide it by raising
         # from the live budget gate before recording the required bytes.
         budget_bytes=(1 << 63) - 1,
@@ -2523,6 +2607,8 @@ def _method_resources(
                 "excludes retained SCF state, snapshot exports, Python/compiler objects and driver/modules"
             ),
             "grid_tile_peak_bytes": grid_plan.peak_bytes,
+            "grid_active_ao_capacity": grid_plan.active_ao_capacity,
+            "grid_features_only": grid_plan.features_only,
             "stationary_source_bytes": source_bytes,
             "stationary_geometry_lanes": resources.geometry_lanes,
             "stationary_geometry_scratch_bytes": resources.geometry_scratch_bytes,
@@ -2872,6 +2958,74 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     }
 
 
+def _check_public_grid_abi(lowerer: ast.FunctionDef) -> None:
+    """Execute the source-bound lowerer and check its observable grid ABI.
+
+    The private precision extension may change the function body without
+    changing the grid. Retain its source hash as provenance, but require field
+    behavior rather than a historical spelling. No native library is loaded.
+    """
+    import ctypes
+
+    from generativeqc import _native
+    from generativeqc import ks as ks_module
+
+    namespace = dict(vars(ks_module))
+    exec(  # noqa: S102 - execute the inspected repository ABI lowerer
+        compile(
+            ast.Module(body=[lowerer], type_ignores=[]), "<grid-abi-contract>", "exec"
+        ),
+        namespace,
+    )
+    for grid in (
+        GridSpec(48, 16, 32),
+        GridSpec(
+            7,
+            5,
+            9,
+            partition_iterations=2,
+            coincident_tolerance=3e-11,
+            element_radii=((1, 0.8), (8, 1.5)),
+        ),
+    ):
+        for budget in (None, (1e-5, 1e-4, 3e-5)):
+            options = resolve_ks_options(
+                "pbe0-rks",
+                KsOptions(grid=grid, tile_points=37, _precision_budget=budget),
+            )
+            descriptor = namespace[lowerer.name](options)
+            expected = {
+                "grid_version": grid.version,
+                "radial_points": grid.radial_points,
+                "angular_polar": grid.angular_polar,
+                "angular_azimuth": grid.angular_azimuth,
+                "partition_iterations": grid.partition_iterations,
+                "coincident_tolerance": grid.coincident_tolerance,
+                "tile_points": 37,
+            }
+            descriptor_type = (
+                _native.KsOptionsDescriptor
+                if budget is None
+                else _native.ApplicationPrecisionKsOptionsDescriptor
+            )
+            if (
+                any(
+                    getattr(descriptor, name) != value
+                    for name, value in expected.items()
+                )
+                or descriptor.struct_size != ctypes.sizeof(descriptor_type)
+                or descriptor.abi_version != _native.ABI_VERSION
+                or descriptor.element_radius_count != (119 if grid.element_radii else 0)
+                or any(
+                    descriptor.element_radii[z] != radius
+                    for z, radius in grid.element_radii
+                )
+            ):
+                raise RuntimeError(
+                    "grid point-count contract changed: public grid ABI fields"
+                )
+
+
 def _grid_count_contract(repository: Path) -> dict[str, str]:
     """Bind the source-only point count to the native CUDA grid owner."""
 
@@ -2907,6 +3061,7 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     if len(public_lowerers) != 1:
         raise RuntimeError("public GridSpec ABI lowerer is missing or ambiguous")
     public_abi_digest = _source_node_sha256(public_ks, public_lowerers[0])
+    _check_public_grid_abi(public_lowerers[0])
 
     quadrature_source = (
         repository / "python/generativeqc_compiler/xc/quadrature_cuda.py"
@@ -2972,14 +3127,17 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     }
     expected = {
         "source_only_molecular_grid_sha256": PYTHON_GRID_CONTRACT_SHA256,
-        "public_grid_abi_sha256": PUBLIC_GRID_ABI_CONTRACT_SHA256,
         "native_grid_abi_sha256": NATIVE_GRID_ABI_CONTRACT_SHA256,
         "generated_quadrature_layout_sha256": QUADRATURE_LAYOUT_CONTRACT_SHA256,
         "native_cuda_grid_sha256": NATIVE_CUDA_GRID_CONTRACT_SHA256,
         "native_cuda_grid_route_sha256": NATIVE_GRID_ROUTE_CONTRACT_SHA256,
         "native_grid_point_count_sha256": NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256,
     }
-    moved = [name for name, digest in contracts.items() if digest != expected[name]]
+    moved = [
+        name
+        for name, digest in contracts.items()
+        if name in expected and digest != expected[name]
+    ]
     if moved:
         raise RuntimeError("grid point-count contract changed: " + ", ".join(moved))
     return {

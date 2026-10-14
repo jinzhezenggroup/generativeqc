@@ -8,10 +8,18 @@ from importlib.machinery import SourceFileLoader
 from importlib.util import cache_from_source
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
+from test_stationary_dispatch_contract import (
+    assert_dispatch_contract,
+    assert_reset_contract,
+)
 
 from tools.dft_mp_v1 import qualify_capacity
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_SHA = "f" * 40
@@ -34,6 +42,22 @@ GRID_CONTRACT_FILES = (
     "src/methods/dft_method.cpp",
     "src/methods/dft_method_preparation.cpp",
 )
+
+
+def current_native_identity(marker: str) -> str:
+    return qualify_capacity._cpp_block_sha256(
+        (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text(), marker
+    )
+
+
+def current_grid_abi_identity() -> str:
+    source = (ROOT / "python/generativeqc/ks.py").read_text()
+    lowerer = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef) and node.name == "native_ks_options"
+    )
+    return qualify_capacity._source_node_sha256(source, lowerer)
 
 
 def report(*, aot_directory: Path | None = None) -> dict:
@@ -77,6 +101,37 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
     target = tmp_path / "python/generativeqc/_stationary_cuda.py"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(source, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("choose(requested_maps)", "choose(True)"),
+        ("choose(False)", "choose(True)"),
+        ("except ValueError as error:", "except Exception as error:"),
+        ("tile_points=tile_points,", "tile_points=1,"),
+    ],
+)
+def test_optional_ao_schedule_contract_executes_capacity_and_failure_policy(
+    old: str,
+    new: str,
+) -> None:
+    """Keep no-map, dense fallback, explicit tiles and runtime errors truthful."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    tree = ast.parse(source)
+    owner = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_plan_stationary_optional_ao_schedule"
+    )
+    original = ast.get_source_segment(source, owner)
+    assert original is not None and old in original
+    qualify_capacity._optional_ao_schedule_contract(ast.parse(original))
+    with pytest.raises(RuntimeError, match="optional AO schedule contract changed"):
+        qualify_capacity._optional_ao_schedule_contract(
+            ast.parse(original.replace(old, new, 1))
+        )
 
 
 @pytest.mark.parametrize(
@@ -298,9 +353,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "source_only_molecular_grid_sha256": (
             "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
         ),
-        "public_grid_abi_sha256": (
-            "b64b0ca7be75b9425c32220476d5eda9b5f013168bd68c856a448fdd320a679e"
-        ),
+        "public_grid_abi_sha256": (current_grid_abi_identity()),
         "native_grid_abi_sha256": (
             "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
         ),
@@ -338,7 +391,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
         ),
         "prepared_aot_selection_sha256": (
-            "c1e7e5aaade1a61ba659390fea9998f928e2f20c9905682216f9ad18c34787d4"
+            "260e61e6628c716ac940f730e52575512136fc76825570d62f3e4a6b1c9b197f"
         ),
     }
 
@@ -477,7 +530,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "45dd3d80c0af4b35e13a8c921d39c822fc3f45e265d32d6b06523b5e594159fd"
         ),
         "ordinary_tile_resources_sha256": (
-            "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
+            "d9683ad506e608bd7043bea3480079379f7a180cdedcd6425d0dab5622063b8f"
         ),
         "initializer_sha256": (
             "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
@@ -516,7 +569,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "9e6dca7c564aa9e52e054787d6e3f1e9108694d85a8099825bc4c06add7163ce"
+            "f6836f992fcbfe6dfd5fe5dcc040e927de286c9c419edb6271038ec31740ef9a"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -536,11 +589,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_create_sha256": (
             "85e522fcd2278167cd611b5bccd89c96329db4de6be942203c7bb4e73f64b5a6"
         ),
-        "native_reset_sha256": (
-            "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
-        ),
+        "native_reset_sha256": (current_native_identity("int stationary_reset(")),
         "native_geometry_reset_sha256": (
-            "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
+            current_native_identity("int stationary_geometry_reset(")
         ),
         "native_phased_becke_input_sha256": (
             "650cf22e25da20ed16fcb6a996e08b9786d540fb51cc7dc19f5f1af6a86f73a8"
@@ -570,7 +621,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "db6d58dc0396444c56402217f9562438d6f286a25bfccf7f4676846dcf842520"
+            current_native_identity("void launch_geometry(")
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -645,8 +696,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
         "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
-        "tile_points=tile_points, active_ao_capacity=n, "
-        "budget_bytes=max_device_bytes)"
+        "tile_points=tile_points, active_ao_capacity=n if reserve_active_ao else None, "
+        "features_only=features_only, budget_bytes=max_device_bytes)"
     )
     assert result["admission_limits"]["source_resources_definition"].startswith(
         "plan_stationary_cuda_resources(atoms=na"
@@ -810,6 +861,8 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
             "pbe0_uks",
             "b3lyp_rks",
             "b3lyp_uks",
+            "m06_2x_rks",
+            "m06_2x_uks",
         ],
         "component_domain": "spd",
     }
@@ -874,12 +927,17 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         + 4_851_008
         + 39_755_392
         + grid_binding_host_bytes
+        - 84_953_088  # Unused indexed host and aligned device staging.
     )
     assert water32["resource_requirements"][
         "stationary_center_geometry_bytes"
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_187_488 + 4_851_008 + grid_binding_host_bytes + 8 * (48 * 4096 + 7 * 768)
+        192_187_488
+        + 4_851_008
+        + grid_binding_host_bytes
+        + 8 * (48 * 4096 + 7 * 768)
+        - 8 * (12 * 768**2 + 2 * 768)
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -2384,6 +2442,52 @@ def test_grid_count_fails_closed_when_public_abi_lowering_moves(
         qualify_capacity._grid_count_contract(tmp_path)
 
 
+def test_grid_abi_provenance_tracks_harmless_lowerer_edits(tmp_path: Path) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    before = qualify_capacity._grid_count_contract(tmp_path)
+    target = tmp_path / "python/generativeqc/ks.py"
+    source = target.read_text()
+    position = source.index(
+        "    grid = options.grid", source.index("def native_ks_options(")
+    )
+    target.write_text(
+        source[:position]
+        + "    # Harmless source-only formatting change.\n"
+        + source[position:]
+    )
+    after = qualify_capacity._grid_count_contract(tmp_path)
+    assert after["public_grid_abi_sha256"] != before["public_grid_abi_sha256"]
+    assert after["point_count_definition"] == before["point_count_definition"]
+
+
+def test_native_execution_provenance_tracks_harmless_body_edits(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    before = qualify_capacity._source_limits(tmp_path)["primitive_page_contract_sha256"]
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    source = target.read_text()
+    labels = {
+        "native_reset_sha256": "int stationary_reset(",
+        "native_geometry_reset_sha256": "int stationary_geometry_reset(",
+        "native_launch_geometry_sha256": "void launch_geometry(",
+    }
+    for marker in labels.values():
+        position = source.index("{", source.index(marker)) + 1
+        source = (
+            source[:position]
+            + "\n// Harmless source-only formatting change.\n"
+            + source[position:]
+        )
+    target.write_text(source)
+    after = qualify_capacity._source_limits(tmp_path)["primitive_page_contract_sha256"]
+    assert all(after[label] != before[label] for label in labels)
+    assert_reset_contract(source, tmp_path, native_cxx)
+    assert_dispatch_contract(source, tmp_path, native_cxx)
+
+
 def test_grid_count_fails_closed_when_native_abi_lowering_moves(
     tmp_path: Path,
 ) -> None:
@@ -2867,8 +2971,8 @@ def test_geometry_resource_budget_changes_fail_closed(
         ),
         (
             "void launch_geometry(",
-            "geometry_cooperative_kernel<true>",
-            "geometry_cooperative_kernel<false>",
+            "geometry_cooperative_kernel<true, double>",
+            "geometry_cooperative_kernel<false, double>",
             "native_launch_geometry_sha256",
         ),
         (
@@ -2904,7 +3008,7 @@ def test_geometry_resource_budget_changes_fail_closed(
     ],
 )
 def test_cooperative_native_schedule_contract_fails_closed(
-    tmp_path: Path, marker: str, old: str, new: str, gate: str
+    tmp_path: Path, marker: str, old: str, new: str, gate: str, native_cxx: "NativeCxx"
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
@@ -2916,8 +3020,15 @@ def test_cooperative_native_schedule_contract_fails_closed(
     target.write_text(
         native[:position] + new + native[position + len(old) :], encoding="utf-8"
     )
-    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
-        qualify_capacity._source_limits(tmp_path)
+    if gate == "native_launch_geometry_sha256":
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_dispatch_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    else:
+        with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+            qualify_capacity._source_limits(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -3195,7 +3306,10 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
     # discount the conservative paired-provider reserve or its v1 fallback.
     # Keep that reserve and add the separate grid binding once.
     assert memory["additional_host_numeric_bound"] == (
-        197_047_712 + (32 << 10) + 8 * (48 * 4096 + 7 * 768)
+        197_047_712
+        + (32 << 10)
+        + 8 * (48 * 4096 + 7 * 768)
+        - 8 * (12 * 768**2 + 2 * 768)
     )
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
@@ -3472,8 +3586,8 @@ def test_native_primitive_domain_capability_and_work_proofs_fail_closed(
             "tile layout contract changed",
         ),
         (
-            "        active_ao_capacity=n,\n",
-            "        active_ao_capacity=n // 2,\n",
+            "        active_ao_capacity=n if reserve_active_ao else None,\n",
+            "        active_ao_capacity=n // 2 if reserve_active_ao else None,\n",
             "grid-plan input definition changed",
         ),
         (
@@ -4008,7 +4122,7 @@ def test_zero_seed_python_contract_fails_closed(
     ],
 )
 def test_zero_seed_native_contract_fails_closed(
-    tmp_path: Path, marker: str, old: str, new: str, gate: str
+    tmp_path: Path, marker: str, old: str, new: str, gate: str, native_cxx: "NativeCxx"
 ) -> None:
     """Keep elision inside its admitted mode, existing control storage and lifetime."""
     stationary_contract_tree(
@@ -4019,8 +4133,15 @@ def test_zero_seed_native_contract_fails_closed(
     source = target.read_text()
     position = source.index(old, source.index(marker))
     target.write_text(source[:position] + new + source[position + len(old) :])
-    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
-        qualify_capacity._source_limits(tmp_path)
+    if gate == "native_launch_geometry_sha256":
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_dispatch_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    else:
+        with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+            qualify_capacity._source_limits(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -4142,7 +4263,13 @@ def test_generic_optimization_capacity_helpers_remain_source_bound(
     ],
 )
 def test_restricted_point_capacity_controls_remain_source_bound(
-    tmp_path: Path, relative: str, marker: str, old: str, new: str, gate: str
+    tmp_path: Path,
+    relative: str,
+    marker: str,
+    old: str,
+    new: str,
+    gate: str,
+    native_cxx: "NativeCxx",
 ) -> None:
     """Retain policy, telemetry, capability/seed and existing-scratch admission."""
     stationary_contract_tree(
@@ -4153,8 +4280,15 @@ def test_restricted_point_capacity_controls_remain_source_bound(
     source = target.read_text()
     position = source.index(old, source.index(marker))
     target.write_text(source[:position] + new + source[position + len(old) :])
-    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
-        qualify_capacity._source_limits(tmp_path)
+    if gate == "native_launch_geometry_sha256":
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_dispatch_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    else:
+        with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+            qualify_capacity._source_limits(tmp_path)
 
 
 @pytest.mark.parametrize("atoms", [24, 96])
@@ -4307,7 +4441,13 @@ def test_zero_seed_override_preserves_dense_capacity(
     ],
 )
 def test_binary_scaled_becke_contract_fails_closed(
-    tmp_path: Path, relative: str, marker: str, old: str, new: str, gate: str
+    tmp_path: Path,
+    relative: str,
+    marker: str,
+    old: str,
+    new: str,
+    gate: str,
+    native_cxx: "NativeCxx",
 ) -> None:
     """Bind bounded admission, extracted dispatch and per-call work accounting."""
     stationary_contract_tree(
@@ -4318,5 +4458,12 @@ def test_binary_scaled_becke_contract_fails_closed(
     source = target.read_text()
     position = source.index(old, source.index(marker))
     target.write_text(source[:position] + new + source[position + len(old) :])
-    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
-        qualify_capacity._source_limits(tmp_path)
+    if gate == "native_launch_geometry_sha256":
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_dispatch_contract(target.read_text(), tmp_path, native_cxx)
+    elif gate in ("native_reset_sha256", "native_geometry_reset_sha256"):
+        with pytest.raises(subprocess.CalledProcessError):
+            assert_reset_contract(target.read_text(), tmp_path, native_cxx)
+    else:
+        with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+            qualify_capacity._source_limits(tmp_path)

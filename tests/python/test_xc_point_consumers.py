@@ -32,6 +32,7 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "using generativeqc::dft::semilocal_family_code;\n"
         "namespace generated = generativeqc::dft::generated;\n"
         "using CudaXcPointLauncher = void (*)();\n"
+        "using CudaXcPointBatchLauncher = void (*)();\n"
         "namespace generativeqc::dft::generated {\n"
         "struct AutomaticPointStub { CudaXcPointLauncher launch{}; };\n"
         "const AutomaticPointStub* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }\n"
@@ -40,6 +41,8 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         "  bool local_ao_selection{}, mixed_density_contraction{};\n"
         "};\n"
         "unsigned selected_functional; bool selected_response;\n"
+        "void launch_mixed_pbe_points() { selected_functional=17; }\n"
+        "void launch_mixed_pbe_point_batches() { selected_functional=18; }\n"
         "template <unsigned F, bool R> void launch_points() {\n"
         "  selected_functional = F; selected_response = R;\n}\n"
         "template <unsigned Mask> void launch_split_hybrid_points() {\n"
@@ -47,6 +50,10 @@ def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
         + emit_native_xc_point_dispatch()
         + r"""
 int main() {
+  mixed_pbe_point_launcher()();
+  if(selected_functional != 17) return 13;
+  mixed_pbe_point_batch_launcher()();
+  if(selected_functional != 18) return 14;
   CudaXcPointLauncher entries[7]{};
   unsigned count = 0;
   for (unsigned f = 0; f < 6; ++f) {

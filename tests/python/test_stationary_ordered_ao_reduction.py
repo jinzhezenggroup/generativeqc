@@ -18,10 +18,11 @@ def test_ordered_ao_reduction_preserves_bits_and_visits_each_label_once(
     reducer = (
         _block(
             _STATIONARY_SCIENTIFIC_KERNELS,
+            "template <class Arithmetic, class Accumulation>\n"
             "__device__ void geometry_reduce_ao_panel(",
         )
         .replace("const int64_t* ao_atoms", "const AtomMap& ao_atoms")
-        .replace("double* grad", "const GradientMap& grad")
+        .replace("Accumulation* grad", "const GradientMap& grad")
     )
     source = tmp_path / "ordered_ao.cpp"
     source.write_text(PREFIX + reducer + DRIVER)
@@ -104,7 +105,7 @@ int main() {
               expected[1 + 3 * atoms + 3 * owner + axis] += panel[3 * ao_index + axis];
           AtomMap measured{labels};
           GradientMap destination{actual};
-          geometry_reduce_ao_panel(view, measured, owner, atoms, panel.data(), destination);
+          geometry_reduce_ao_panel<double, double>(view, measured, owner, atoms, panel.data(), destination);
           assert(measured.reads == active);
           std::size_t runs = 0, previous_atom = atoms;
           for (std::size_t ao_index = 0; ao_index < active; ++ao_index) {

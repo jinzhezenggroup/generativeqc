@@ -89,7 +89,9 @@ def test_emitted_compact_arithmetic_matches_independent_bilinears(
         + potential_step
         + "}",
     )
-    batch = emit_native_xc_tile_batches().split("inline void launch_batch_density")[0]
+    batch = emit_native_xc_tile_batches().split(
+        "template <class Arithmetic>\ninline void launch_batch_density_typed"
+    )[0]
     source = tmp_path / "compact-numerics.cpp"
     source.write_text(
         _SIMULATOR

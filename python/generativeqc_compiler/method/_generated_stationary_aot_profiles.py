@@ -9,4 +9,5 @@ STATIONARY_AOT_BUILD_PROFILES = (
     ("r2scan", 2, "R2SCAN", True),
     ("pbe0", 1, "PBE0", False),
     ("b3lyp", 3, "B3LYP", False),
+    ("m06_2x", 131522, "M06-2X", False),
 )

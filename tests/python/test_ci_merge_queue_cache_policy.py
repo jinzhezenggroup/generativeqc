@@ -1,6 +1,7 @@
 """Merge-queue cache provenance, finite transport, and isolated fallback."""
 
 import ast
+import itertools
 import os
 import re
 import subprocess
@@ -8,6 +9,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from test_ci_prose_workflow import assert_full_coverage_step
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
@@ -15,6 +17,16 @@ DOWNLOAD = "Restore trusted master CUDA ccache snapshot"
 ACTIVATE = "Activate verified trusted CUDA ccache snapshot"
 DISCARD = "Discard incomplete trusted CUDA cache download"
 FALLBACK = "Restore shared Linux CUDA ccache"
+SCOPE_CASES = (
+    ("success", "full", True),
+    ("success", "", True),
+    ("success", "unknown", True),
+    ("failure", "prose", True),
+    ("cancelled", "prose", True),
+    ("skipped", "prose", True),
+    ("", "prose", True),
+    ("success", "prose", False),
+)
 
 
 def _step(name: str, workflow: str = WORKFLOW) -> str:
@@ -106,27 +118,33 @@ def _assert_isolated_transport(workflow: str) -> None:
     assert _field(fallback, "path") == "~/.cache/ccache"
     assert _field(fallback, "path") != staging
 
-    for event in ("merge_group", "pull_request", "push", "workflow_dispatch"):
-        for run_id in ("", "12345"):
-            for outcome in ("success", "failure", "cancelled", "skipped", ""):
-                context = {
-                    "github.event_name": event,
-                    "steps.trusted_cuda_ccache.outputs.run_id": run_id,
-                    "steps.trusted_cuda_ccache_download.outcome": outcome,
-                    "steps.trusted_cuda_ccache_activate.outcome": outcome,
-                }
-                assert _condition(download, context) == (
-                    event == "merge_group" and bool(run_id)
-                )
-                assert _condition(activate, context) == (
-                    event == "merge_group" and outcome == "success"
-                )
-                assert _condition(fallback, context) == (
-                    event != "merge_group" or outcome != "success"
-                )
-                assert _condition(discard, context) == (
-                    event == "merge_group" and outcome in ("failure", "cancelled")
-                )
+    for event, run_id, outcome, scope_case in itertools.product(
+        ("merge_group", "pull_request", "push", "workflow_dispatch"),
+        ("", "12345"),
+        ("success", "failure", "cancelled", "skipped", ""),
+        SCOPE_CASES,
+    ):
+        selector_outcome, scope, active = scope_case
+        context = {
+            "github.event_name": event,
+            "steps.trusted_cuda_ccache.outputs.run_id": run_id,
+            "steps.trusted_cuda_ccache_download.outcome": outcome,
+            "steps.trusted_cuda_ccache_activate.outcome": outcome,
+            "steps.prose_scope.outcome": selector_outcome,
+            "steps.prose_scope.outputs.scope": scope,
+        }
+        assert _condition(download, context) == (
+            active and event == "merge_group" and bool(run_id)
+        )
+        assert _condition(activate, context) == (
+            active and event == "merge_group" and outcome == "success"
+        )
+        assert _condition(fallback, context) == (
+            active and (event != "merge_group" or outcome != "success")
+        )
+        assert _condition(discard, context) == (
+            active and event == "merge_group" and outcome in ("failure", "cancelled")
+        )
 
     # Transport may choose a cache, never suppress or soften required work.
     for name in (
@@ -138,7 +156,8 @@ def _assert_isolated_transport(workflow: str) -> None:
     ):
         cuda_job = workflow.split("\n  cuda-compile:\n", 1)[1]
         required = _step(name, cuda_job)
-        assert "if:" not in required and "continue-on-error:" not in required
+        assert_full_coverage_step(required)
+        assert "continue-on-error:" not in required
     assert (
         workflow.index(DOWNLOAD)
         < workflow.index(ACTIVATE)
@@ -202,8 +221,15 @@ def test_restore_policy_rejects_unsafe_transport_mutations(
 @pytest.mark.parametrize(
     "staging_exists", [True, False], ids=["partial-or-complete", "missing"]
 )
+@pytest.mark.parametrize(("selector_outcome", "scope", "active"), SCOPE_CASES)
 def test_actual_activation_shell_never_selects_failed_or_missing_staging(
-    tmp_path: Path, outcome: str, downloaded: bytes, staging_exists: bool
+    tmp_path: Path,
+    outcome: str,
+    downloaded: bytes,
+    staging_exists: bool,
+    selector_outcome: str,
+    scope: str,
+    active: bool,
 ) -> None:
     home = tmp_path / "home"
     normal = home / ".cache/ccache"
@@ -221,6 +247,8 @@ def test_actual_activation_shell_never_selects_failed_or_missing_staging(
     context = {
         "github.event_name": "merge_group",
         "steps.trusted_cuda_ccache_download.outcome": outcome,
+        "steps.prose_scope.outcome": selector_outcome,
+        "steps.prose_scope.outputs.scope": scope,
     }
     activation_outcome = "skipped"
     if _condition(activate, context):
@@ -240,12 +268,12 @@ def test_actual_activation_shell_never_selects_failed_or_missing_staging(
         )
         activation_outcome = "success" if result.returncode == 0 else "failure"
 
-    selected = outcome == "success" and staging_exists
+    selected = active and outcome == "success" and staging_exists
     assert environment_file.read_text() == (
         f"CCACHE_DIR={staging}\n" if selected else ""
     )
     context["steps.trusted_cuda_ccache_activate.outcome"] = activation_outcome
-    assert _condition(_step(FALLBACK), context) is not selected
+    assert _condition(_step(FALLBACK), context) == (active and not selected)
     discard = _step(DISCARD)
     discarded = _condition(discard, context)
     if discarded:

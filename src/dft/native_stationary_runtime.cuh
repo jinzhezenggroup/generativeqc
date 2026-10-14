@@ -56,6 +56,25 @@ int native_create(int device, int major, int minor, size_t atoms, size_t aos, si
                           primitive_work, budget, lanes, threads, &scientific, error, error_size);
     native_require_status(status, error, error_size, "stationary owner creation failed");
     owner->scientific = static_cast<Owner*>(scientific);
+    if (atoms >= 2 && atoms <= stationary_becke_max_atoms) {
+      // Use the same bounded cooperative schedule for strict and mixed work.
+      // A serial-only native owner otherwise leaves most SMs idle and cannot
+      // be substituted for the public force executor on a speed claim alone.
+      const size_t rows = std::min(atoms - 1, size_t{stationary_becke_pair_tile_rows});
+      const size_t states = atoms <= stationary_becke_retained_max_atoms
+                                ? atoms * (atoms - 1) / 2
+                                : rows * (2 * atoms - rows - 1) / 2;
+      const size_t shared =
+          stationary_becke_control_bytes + sizeof(generativeqc_grid_adjoint::PointPair) * states;
+      try {
+        native_require_status(stationary_configure_becke(scientific, stationary_becke_threads,
+                                                         shared, error, error_size),
+                              error, error_size, "stationary cooperative schedule failed");
+      } catch (...) {
+        stationary_destroy(scientific);
+        throw;
+      }
+    }
     *output = owner.release();
   });
 }
@@ -161,6 +180,7 @@ int native_nuclear(void* pointer, const double* charges, size_t count, char* err
   });
 }
 
+template <bool Fp32Geometry = false>
 int native_geometry(void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
                     size_t owner_offset, size_t points_per_atom, const double* weights,
                     const double* raw, uint64_t generation, uint64_t binding_flags, char* error,
@@ -170,10 +190,11 @@ int native_geometry(void* pointer, const generativeqc::dft::GridTaskView* view, 
     if (!owner || !view || owner_offset != owner->grid_points || !view->npoint ||
         view->npoint > std::numeric_limits<uint64_t>::max() - owner->grid_points)
       throw std::invalid_argument("native stationary grid tiles are not an ordered complete span");
-    native_require_status(stationary_geometry_molecular_resident_weights_enqueue_v2(
-                              owner->scientific, view, work, owner_offset, points_per_atom, weights,
-                              raw, generation, binding_flags, error, error_size),
-                          error, error_size, "stationary geometry source failed");
+    native_require_status(
+        stationary_geometry_molecular_resident_weights_enqueue_impl(
+            owner->scientific, view, work, owner_offset, points_per_atom, weights, raw, true,
+            generation, binding_flags, error, error_size, Fp32Geometry),
+        error, error_size, "stationary geometry source failed");
     owner->grid_points += view->npoint;
   });
 }

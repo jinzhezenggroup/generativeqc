@@ -22,7 +22,7 @@ def test_bulk_geometry_launches_preserve_sticky_status_and_fail_closed(
     ).read_text()
     branch = _block(header, "if (precomputed_point) {")
     branch, replacements = re.subn(
-        r"(geometry_point_kernel<(?:true|false)>|geometry_cooperative_kernel<true>)\s*<<<.*?>>>\(.*?\);",
+        r"(geometry_point_kernel<(?:true|false)>|geometry_cooperative_kernel<true[^>]*>)\s*<<<.*?>>>\(.*?\);",
         lambda match: (
             f"producer_launch({str(match.group(1) == 'geometry_point_kernel<true>').lower()});"
             if match.group(1).startswith("geometry_point_kernel<")
@@ -31,7 +31,7 @@ def test_bulk_geometry_launches_preserve_sticky_status_and_fail_closed(
         branch,
         flags=re.DOTALL,
     )
-    assert replacements == 4
+    assert replacements and "<<<" not in branch
     source = tmp_path / "launch.cpp"
     source.write_text(
         PREFIX

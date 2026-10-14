@@ -57,6 +57,7 @@ def test_native_task_budget_is_per_page_not_cumulative(
         _block(header, "struct Owner {") + ";",
         "template <class F>\n" + _block(header, "int guarded("),
         _block(header, "void check("),
+        _block(header, "void discard_geometry("),
     ]
     launches = 0
     for name in ("stationary_reset", "stationary_tasks", "stationary_nuclear"):
@@ -265,6 +266,7 @@ void error_text(char* out,size_t size,const char* message) {
 }
 void cuda_check(int) {}
 int cudaMemsetAsync(void*,int,size_t,void*) { return 0; }
+int cudaStreamSynchronize(void*) { return 0; }
 bool fail_finish=false;
 template<class T> void profile_record(T&,cudaEvent_t,void*) {}
 template<class T> void profile_elapsed(T&,double&,cudaEvent_t,cudaEvent_t) {}
@@ -284,9 +286,12 @@ int main() {
   int64_t task[9]{0,0,2,-1,0,1,-1,-1,9000000};
   auto reset=[&](){return stationary_reset(&p,xyz,density,weighted,0,error,sizeof(error));};
   auto page=[&](){return stationary_tasks(&p,task,charges,1,error,sizeof(error));};
+  p.geometry_pending=true;
+  p.geometry_stream=reinterpret_cast<void*>(1);
   if(reset() || page() || page()) {
     std::fprintf(stderr,"legal bounded pages rejected: %s\n",error); return 1;
   }
+  if(p.geometry_pending || p.geometry_stream || p.synchronizations!=1) return 17;
   if(p.primitive_count!=18000000) return 2;
   task[8]=16000001;
   if(page()==0 || !p.failed || p.primitive_count!=18000000) return 3;

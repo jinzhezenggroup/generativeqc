@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from conftest import NativeCxx
+
 import pytest
 from generativeqc_compiler.method.stationary_cuda import _STATIONARY_SCIENTIFIC_KERNELS
 from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
@@ -19,10 +21,13 @@ from test_stationary_geometry_kernel_host import PREFIX
     ("atoms", "aos"),
     [(12, 2), (33, 2), (96, 2), (128, 2), (12, 96), (12, 1024), (96, 768), (128, 1024)],
 )
+@pytest.mark.parametrize("arithmetic", ("double", "float"))
 def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(
     tmp_path: Path,
     atoms: int,
     aos: int,
+    arithmetic: str,
+    native_cxx: NativeCxx,
 ) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
@@ -56,8 +61,14 @@ double* geometry_pair_storage;
         "  for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];",
         "  ++ao_evaluations;\n  for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];",
     )
-    begin = _STATIONARY_SCIENTIFIC_KERNELS.index(
-        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
+    prefix = prefix.replace(
+        "void ao_pullback(const double* c,const double* w,double* out)",
+        "template<class Scalar> void ao_pullback(const Scalar* c,const Scalar* w,Scalar* out)",
+    )
+    begin = _STATIONARY_SCIENTIFIC_KERNELS.rfind(
+        "template <",
+        0,
+        _STATIONARY_SCIENTIFIC_KERNELS.index("__device__ bool geometry_point_setup("),
     )
     end = _STATIONARY_SCIENTIFIC_KERNELS.index(
         "}  // namespace generativeqc_stationary_cuda", begin
@@ -70,10 +81,12 @@ double* geometry_pair_storage;
         prefix
         + emit_grid_adjoint()
         + emit_grid_partials(3)
+        + emit_grid_partials(3, scalar_type="float", suffix="_fp32")
         + "constexpr size_t stationary_becke_retained_max_atoms=32, stationary_becke_pair_tile_rows=4;\n"
         + kernels
         + r"""
 int main() {
+  using Arithmetic=ARITHMETIC;
   constexpr size_t na=ATOMS,n=AOS,np=(na>32?5:17),pairs=na*(na-1)/2;
   constexpr size_t state_count=na<=32?pairs:4*(2*na-5)/2;
   double centers[3*na];
@@ -91,6 +104,7 @@ int main() {
   }
   for(bool cached:{false,true}) for(bool implicit:{false,true}) for(bool external:{false,true})
   for(size_t capacity:{size_t(1),size_t(7)}) for(size_t points:{size_t(0),size_t(1),np}) {
+    if (external && std::is_same_v<Arithmetic,float>) continue;
     const size_t lanes=std::min(capacity,points);
     std::vector<double> partial(capacity*9*na+2,987654),scratch(capacity*9*na+2,987654);
     std::vector<double> storage(8*state_count+2,987654);
@@ -113,11 +127,11 @@ int main() {
     auto invoke=[&](bool cooperative,size_t lane,size_t rank) {
       blockIdx.x=cooperative?lane:lane/32; threadIdx.x=cooperative?rank:lane%32;
       if(cooperative)
-        geometry_cooperative_kernel<false>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
+        geometry_cooperative_kernel<false,Arithmetic>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
              4,3,centers,na,weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
              lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr);
       else
-        geometry_kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
+        geometry_kernel<Arithmetic>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
              weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
              lanes,partial.data()+1,scratch.data()+1,center_pairs,&error);
     };
@@ -150,7 +164,13 @@ int main() {
     if(ao_evaluations!=2*n*points) return 7;
     for(size_t coordinate=0;coordinate<6*na;++coordinate)
       if(expected[coordinate]!=actual[coordinate]) return 8;
-    for(size_t k=0;k<9*na;++k) if(std::abs(expected[k]-actual[k])>2e-11) return 3;
+    const double tolerance=std::is_same_v<Arithmetic,float>?3e-6:2e-11;
+    for(size_t k=0;k<9*na;++k) if(std::abs(expected[k]-actual[k])>tolerance) return 3;
+    if (!external) for(size_t axis=0;axis<3;++axis) {
+      double total=0;
+      for(size_t coordinate=axis;coordinate<9*na;coordinate+=3) total+=actual[coordinate];
+      if(std::abs(total)>1e-10) return 9;
+    }
     if(partial.front()!=987654 || partial.back()!=987654 || scratch.front()!=987654 ||
        scratch.back()!=987654 || storage.front()!=987654 || storage.back()!=987654) return 4;
     if(!points) continue;
@@ -176,26 +196,16 @@ int main() {
   }
   return 0;
 }
-""".replace("ATOMS", str(atoms)).replace("AOS", str(aos))
+""".replace("ATOMS", str(atoms))
+        .replace("AOS", str(aos))
+        .replace("ARITHMETIC", arithmetic)
     )
     binary = tmp_path / "kernel"
-    process = subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-pthread",
-            "-O2",
-            "-ffp-contract=off",
-            str(source),
-            "-o",
-            str(binary),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=["-std=c++20", "-pthread", "-O2", "-ffp-contract=off"],
     )
-    assert process.returncode == 0, process.stdout + process.stderr
     result = subprocess.run(
         [str(binary)], capture_output=True, text=True, timeout=60, check=False
     )

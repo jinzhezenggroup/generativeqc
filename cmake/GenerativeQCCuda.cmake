@@ -338,6 +338,7 @@ macro(generativeqc_configure_cuda_backend target)
       "src/dft/becke_scaled_policy.hpp"
       "src/dft/grid_task_view.cuh"
       "src/dft/xc_point.hpp"
+      "src/dft/xc_point_mixed.hpp"
       "src/integrals/eri_geometry.hpp"
       "src/integrals/range_moments.hpp"
       "src/tensor/cuda_runtime.cuh"

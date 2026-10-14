@@ -77,7 +77,10 @@ enum {
   /** Select CUDA when requested by the context, otherwise use CPU reference. */
   GENERATIVEQC_DENSITY_FITTING_AUTO = 3,
   /** MP2 only: conventional RHF with accelerator-native correlation DF. */
-  GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA = 4
+  GENERATIVEQC_DENSITY_FITTING_CORRELATION_CUDA = 4,
+  /** MP2/DF-RCCSD(T): RI-JK reference and correlation with the same auxiliary
+   * basis, including fixed-rank metric and orbital response in analytic forces. */
+  GENERATIVEQC_DENSITY_FITTING_FULL_CUDA = 5
 };
 
 /**

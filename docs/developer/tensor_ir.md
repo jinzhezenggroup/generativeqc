@@ -217,8 +217,22 @@ and metric.
 `python/generativeqc_compiler/tensor/autodiff.py` provides a CPU reference for
 JVP (`jvp`) and matrix-free VJP (`vjp`) with an adjoint dot test (`dot_test`). It
 covers every differentiable primitive, preserves exact rational coefficients,
-accumulates multiple consumers, and rejects a runtime AD request when its live
-program contains Boolean data. The interpreter deliberately treats
+accumulates multiple consumers, and rejects Boolean derivatives and comparisons.
+Runtime reference JVP/VJP/dot tests admit `where` only in finite generic
+float32/float64 graphs with external Boolean input/constant masks. Masks may
+pass through validated transpose, reshape, slice, static gather and broadcast
+views; they never receive tangent/cotangent storage. JVP selects the real branch
+tangents with the actual Boolean mask; VJP routes real bars to the branches and
+uses the existing broadcast/scatter adjoints. Computed comparison conditions,
+Boolean outputs, scientific annotations and differentiation with respect to
+masks remain unsupported. This context-specific contract appears in
+`autodiff.capabilities()["reference_external_mask_where"]`, rather than the
+unrestricted `AD_PRIMITIVES`/generated/native capability set.
+
+All live primal operands remain finite/domain checked, including unselected
+branches. Existing derivative-domain/finiteness checks and VJP requested-input
+pruning remain in force: selection does not promise to suppress singular or
+overflowing derivatives on an unselected branch. The interpreter deliberately treats
 packed/symmetric parameters as dense general tensors only through an explicit
 packing boundary; callers must not replace the weighted adjoint with an
 unweighted Euclidean one.

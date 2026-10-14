@@ -155,6 +155,8 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
         "src/cli/wheel_launcher.cpp",
         "python/generativeqc/tune_cli.py",
         "python/ci/prepare-wheel-build.sh",
+        ".github/actions/restore-wheel-ccache/**",
+        "tools/ci_cpu_ccache_snapshot.py",
         "python/ci/repair-wheel.sh",
         "src/runtime/nvidia_host_api/**",
         "tools/generate_cuda_implib.py",
