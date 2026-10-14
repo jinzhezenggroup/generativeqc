@@ -1,9 +1,9 @@
 {
   "files": [
     {
-      "bytes": 10006,
+      "bytes": 10233,
       "path": "README.md",
-      "sha256": "9a81a46e446ae3c8ae5bc153f16e1d26289996316294e361995db6ebc129f711"
+      "sha256": "6c5df7e8d09cffe25e6c824b8f02402f094371288ccc3581a227cbef136cff85"
     },
     {
       "bytes": 17733,
@@ -71,14 +71,14 @@
       "sha256": "5c483f8bd0140336c40fd12a09f921c9af76964ffd4d14d55b7c0897cd169183"
     },
     {
-      "bytes": 3234,
+      "bytes": 3233,
       "path": "rejected-inventory-run.json",
-      "sha256": "453f37edefebd69e3553e1a74ca9f93c235fabf9296bfe053ea1a1c04f9d6277"
+      "sha256": "6d4ed96e1363dd21741369e29bb09c632d6ba3379328edb950c25f196966eaba"
     },
     {
-      "bytes": 270744,
-      "path": "rejected-inventory-run.json.gz",
-      "sha256": "579d1edae2916632ca67eeba09be97003abea88e0cf13a922f0e993ac7b0f91c"
+      "bytes": 51340,
+      "path": "rejected-inventory-run.json.xz",
+      "sha256": "26bdeb2241e6a5a490ce76f91c5e41d9abb1dce1c0f2557104ff52c0f8bb9ee6"
     },
     {
       "bytes": 6174,

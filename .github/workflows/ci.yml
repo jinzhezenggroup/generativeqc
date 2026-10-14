@@ -1945,6 +1945,46 @@ jobs:
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
+      # Recover an evicted/missing cache from trusted master. Prefix hits remain
+      # usable: an older artifact must never replace a successfully restored cache.
+      - name: Locate trusted master CLI ccache snapshot
+        id: trusted_cli_ccache
+        if: steps.cli_scope.outputs.tier != 'skip' && steps.cli_ccache.outcome == 'success' && steps.cli_ccache.outputs.cache-matched-key == '' && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/master'))
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: timeout --kill-after=2s 25s python3 tools/ci_cli_ccache_snapshot.py discover
+      - name: Restore trusted master CLI ccache snapshot
+        id: trusted_cli_ccache_download
+        if: steps.trusted_cli_ccache.outcome == 'success' && steps.trusted_cli_ccache.outputs.artifact_id != ''
+        continue-on-error: true
+        timeout-minutes: 2
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ steps.trusted_cli_ccache.outputs.artifact_id }}
+          run-id: ${{ steps.trusted_cli_ccache.outputs.run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          path: ${{ steps.trusted_cli_ccache.outputs.stage }}
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Activate verified trusted CLI ccache snapshot
+        id: trusted_cli_ccache_activate
+        if: steps.trusted_cli_ccache_download.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          CLI_CACHE_STAGE: ${{ steps.trusted_cli_ccache.outputs.stage }}
+        run: python3 tools/ci_cli_ccache_snapshot.py activate
+      - name: Discard incomplete trusted CLI cache download
+        if: always() && steps.trusted_cli_ccache.outputs.stage != '' && steps.trusted_cli_ccache_activate.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 1
+        env:
+          CLI_CACHE_STAGE: ${{ steps.trusted_cli_ccache.outputs.stage }}
+        run: python3 tools/ci_cli_ccache_snapshot.py cleanup
       - name: Restore this run's master fast CUDA cache delta
         id: master_fast_ccache_download
         if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_scope.outputs.tier != 'skip' && env.FAST_CUDA_CACHE_ARTIFACT_ID != '' && env.FAST_CUDA_CACHE_RUN_ATTEMPT == github.run_attempt
