@@ -7,7 +7,34 @@ from types import SimpleNamespace
 from typing import Any
 
 from generativeqc import _native
-from generativeqc._precision_work import merge_precision_work, query_precision_work
+from generativeqc._precision_work import (
+    merge_precision_work,
+    query_gradient_precision,
+    query_precision_work,
+)
+
+
+def test_gradient_decoder_reports_attempts_and_retry_without_fabricating_counts() -> (
+    None
+):
+    observed = []
+
+    def getter(handle: object, index: int, output: Any, count: int) -> int:
+        observed.append(index)
+        assert count == 5
+        output[:] = [1, 1, 500, 400, 1]
+        return _native.STATUS_SUCCESS
+
+    library = SimpleNamespace(generativeqc_batch_gradient_precision_v1=getter)
+    record = query_gradient_precision(library, None, 3)
+    assert observed == [3]
+    assert record["returned_mode"] == "fp64"
+    assert record["fp64_gradient_retries"] == 1
+    assert record["attempted_fp32_geometry_points"] == 500
+    assert record["attempted_fp32_grid_points"] == 400
+    assert record["weighted_task_retries"] is None
+    assert not record["weighted_task_counters_collected"]
+    assert query_gradient_precision(SimpleNamespace(), None) is None
 
 
 def _library(*, unknown: bool = False, unavailable: bool = False) -> SimpleNamespace:

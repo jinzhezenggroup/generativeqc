@@ -18,6 +18,7 @@ from generativeqc_compiler.dft.cuda import GridTaskView
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.stationary_cuda import _STATIONARY_SCIENTIFIC_KERNELS
 from generativeqc_compiler.xc.geometry_cuda import (
+    _emit_mixed_point,
     _emit_restricted_point_capability,
     _emit_stationary_point,
 )
@@ -240,6 +241,7 @@ def test_emitted_point_inputs_follow_layout_not_functional_code(
         + r"""
 #include <cassert>
 #include <limits>
+#include <type_traits>
 constexpr bool stationary_restricted_point_capable = true;
 struct StationaryPointValue {
   double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};
@@ -261,8 +263,12 @@ StationaryPointValue stationary_evaluate_restricted_point(
     const double rho[2], const double gradient[2][3], const double tau[2]) {
   return stationary_evaluate_point(rho, gradient, tau);
 }
+StationaryPointValue stationary_evaluate_point_fp32(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  return stationary_evaluate_point(rho, gradient, tau);
+}
 """
-        + "template <bool restricted_point = false>\n"
+        + "template <bool restricted_point = false, class Arithmetic = double>\n"
         + setup
         + r"""
 int main() {
@@ -315,9 +321,11 @@ def test_emitted_bound_point_preserves_all_independent_references(
     source = tmp_path / "point.cpp"
     source.write_text(
         _POINT_PREFIX
+        + '#include "dft/xc_point_mixed.hpp"\n'
         + _emit_stationary_point(1, semilocal=semilocal)
         + _emit_restricted_point_capability(1, semilocal)
-        + "template <bool restricted_point=false>\n"
+        + _emit_mixed_point(1, semilocal)
+        + "template <bool restricted_point=false, class Arithmetic=double>\n"
         + setup
         + "\ntemplate <bool restricted_point=false>\n"
         + kernel
@@ -403,7 +411,7 @@ bool valid_geometry_ao_map(const generativeqc::dft::GridTaskView&,size_t) { retu
 void check(Owner&) {}
 void launch_geometry(Owner&,int,generativeqc::dft::GridTaskView,const double*,
     const int*,const int*,size_t,size_t,const double*,size_t,const double*,const double*,
-    const double*,size_t,size_t,size_t,double*,double*,const void*,int*,bool bound) {
+    const double*,size_t,size_t,size_t,double*,double*,const void*,int*,bool bound,bool=false) {
   ++launches; proof_selected=bound;
 }
 void cuda_check(int) {}

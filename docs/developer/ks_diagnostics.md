@@ -284,7 +284,11 @@ not a second functional-name whitelist. A renamed equivalent MethodIR keeps the
 same admission; changed coefficients or point domains do not reuse another graph's
 binding. Admission shares one native
 rule with descriptor sizing, remains per prepared item, and does not add a
-method-global force bit. DF, ECP, wider angular momentum, other precision,
+method-global force bit. PBE0/RKS additionally admits strict d-shell native
+forces with 24–384 AOs and 2–32 atoms; larger d-shell strict contexts retain
+the incumbent phased consumer. Budget-selected Fast extends mixed gradients
+through 48 atoms under the [application precision contract](../user/application_precision.md).
+DF, ECP, remaining angular/precision domains,
 range-separated/nonlocal/dispersion and unavailable compiled profiles do not
 inherit this admission. The complete gradient is negated once at publication.
 Python routes only fleets whose every prepared item advertises forces; remaining

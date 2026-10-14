@@ -5,11 +5,29 @@
 #include <limits>
 #include <stdexcept>
 
+#include "runtime/bounded_workspace.hpp"
+
 namespace generativeqc::dft {
 struct CudaGridStorage {
   std::size_t numeric_bytes{}, error_offset{}, workspace_bytes{}, allocation_bytes{};
   static constexpr std::size_t provider_allowance = 96U << 20;
 };
+
+struct CudaGridFp32Storage {
+  std::size_t elements{}, device_upper_bytes{};
+};
+
+/** Shared optional FP32-panel authority for planning and actual allocation.
+ * The second bounded contraction provider coexists with the strict replay
+ * provider; counting only float array bytes would under-reserve the endpoint. */
+inline CudaGridFp32Storage cuda_grid_fp32_storage(std::size_t aos, std::size_t capacity) {
+  if (!aos || !capacity || aos > INT_MAX || capacity > INT_MAX)
+    throw std::invalid_argument("invalid FP32 grid storage shape");
+  const auto elements = runtime::size_add(runtime::size_mul(8, runtime::size_mul(capacity, aos)),
+                                          runtime::size_mul(aos, aos));
+  return {elements, runtime::size_add(runtime::size_mul(sizeof(float), elements),
+                                      CudaGridStorage::provider_allowance)};
+}
 
 /** Pure capacity authority shared by the native grid producer and consumers.
  * This retains the existing arena/alignment/provider contracts; it does not

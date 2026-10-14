@@ -32,8 +32,8 @@ def _ao_source() -> tuple[str, str, str]:
     end = policy.index(";", policy.index("__constant__ int derivatives")) + 1
     source = emit_grid_scientific_kernels(ao_radial_reuse=True)
     kernels = source[
-        source.index("__global__ void ao_kernel(") : source.index(
-            "__global__ void feature_kernel("
+        source.index("__global__ void ao_kernel(") : source.rfind(
+            "template <", 0, source.index("__global__ void feature_kernel(")
         )
     ]
     schedule_begin = source.index("void scheduled_ao(")

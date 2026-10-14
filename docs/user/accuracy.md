@@ -4,6 +4,11 @@
 requirements and evidence. It is an explicit comparison API. It does not yet
 select precision, screening or iteration tolerances inside `Calculator`.
 
+For a single optimized strict HF/KS endpoint or an explicit observable-error
+audit with bounded FP64 fallback, use
+[application precision policies](application_precision.md). FP64 without an
+explicit target does not claim an independently measured observable budget.
+
 `Calculator.resolved_model(atoms, charge=..., multiplicity=...)` hashes the
 actual ordered geometry, basis/representation, electron populations and
 Hamiltonian. It reuses the existing basis mathematical identity and canonical

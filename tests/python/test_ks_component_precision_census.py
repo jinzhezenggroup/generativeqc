@@ -63,6 +63,7 @@ using Mode = scf::PrecisionArithmeticMode;
 using Dtype = scf::PrecisionDtype;
 struct Owner {
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
+  bool pending_mixed_point{}, experimental_mixed_contractions{};
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
   bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{}, device_nonlocal{};
   bool final_state_ready{true}, occupied_fitted_factor_ready{};
@@ -82,7 +83,7 @@ struct Owner {
                 std::array<std::uint64_t, 3> nonlocal_work = {}) {
     pending_mixed_coulomb = coulomb;
     pending_mixed_density = density;
-    mixed_precision_executed |= coulomb || density;
+    mixed_precision_executed |= coulomb || density || pending_mixed_point;
 """
         + census
         + r"""
@@ -121,6 +122,32 @@ void check_inventory(const Owner& p, bool coulomb, bool density, bool stabilized
   assert(p.output.precision_work.operators.size() == expected_rows);
 }
 int main() {
+  // Budget-selected point work keeps J/K strict and records the actual
+  // contraction accumulator instead of inheriting the legacy AUTO census.
+  for (const bool contractions : {false, true}) {
+    Owner point;
+    point.pending_mixed_point = true;
+    point.experimental_mixed_contractions = contractions;
+    point.complete(false, false, 0);
+    unsigned xc_rows = 0;
+    for (const auto& op : point.output.precision_work.operators) {
+      assert(op.storage == Dtype::Fp64);
+      if (op.kind == Kind::Xc) {
+        ++xc_rows;
+        assert(op.count == 1 && op.compute == Dtype::Fp32 && op.arithmetic_mode == Mode::Mixed);
+        assert(op.accumulation == (contractions ? Dtype::Fp32 : Dtype::Fp64));
+        assert(op.reduction == op.accumulation);
+      } else {
+        assert(op.compute == Dtype::Fp64 && op.accumulation == Dtype::Fp64);
+        assert(op.reduction == Dtype::Fp64 && op.arithmetic_mode == Mode::Strict);
+      }
+    }
+    assert(xc_rows == 1 && point.output.precision.mixed_stage_fock_builds == 1);
+    point.pending_mixed_point = false;
+    point.complete(false, false, 0);
+    assert(point.output.precision.strict_stage_fock_builds == 1);
+    assert(point.output.precision_work.events.back().phase == scf::PrecisionWorkPhase::Refinement);
+  }
   // All four independent component settings, including density-only, must
   // retain the complete strict inventory and exact exchange arithmetic.
   for (bool coulomb : {false, true}) for (bool density : {false, true})
@@ -286,7 +313,7 @@ int main() {
     const auto capabilities = semilocal_family_metadata(family).cuda_fast_paths;
     const auto strict = resolve_cuda_ks_precision_schedule(
         GENERATIVEQC_PRECISION_FP64, capabilities, false, false);
-    assert(strict.size() == 6 && strict.is_strict_fp64() && !strict.any_lower_precision());
+    assert(strict.size() == 7 && strict.is_strict_fp64() && !strict.any_lower_precision());
     assert(strict.strict_audit_dtype() == PrecisionDtype::Fp64);
     assert(strict.audit_owner() == "method-controller");
     assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);
@@ -295,7 +322,7 @@ int main() {
 
     const auto automatic = resolve_cuda_ks_precision_schedule(
         GENERATIVEQC_PRECISION_AUTO, capabilities, false, false);
-    assert(automatic.size() == 6 && automatic.any_lower_precision());
+    assert(automatic.size() == 7 && automatic.any_lower_precision());
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
     const bool density_mixed =
         cuda_xc_capability_qualified(capabilities.mixed_density_precision);
@@ -332,6 +359,7 @@ int main() {
     for (const auto region : {cuda_ks_precision_region::kExactExchange,
                               cuda_ks_precision_region::kTau,
                               cuda_ks_precision_region::kXcPointAlgebra,
+                              cuda_ks_precision_region::kXcMatrixContractions,
                               cuda_ks_precision_region::kFinalAudit})
       assert(!automatic.uses_lower_precision(region));
 
@@ -348,12 +376,13 @@ int main() {
 
     const auto nonlocal =
         resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, capabilities, false, true);
-    assert(nonlocal.size() == 7 && nonlocal.any_lower_precision());
+    assert(nonlocal.size() == 8 && nonlocal.any_lower_precision());
     assert(nonlocal.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
     assert(!nonlocal.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
     for (const auto region : {cuda_ks_precision_region::kExactExchange,
                               cuda_ks_precision_region::kTau,
                               cuda_ks_precision_region::kXcPointAlgebra,
+                              cuda_ks_precision_region::kXcMatrixContractions,
                               cuda_ks_precision_region::kNonlocalCorrelation,
                               cuda_ks_precision_region::kFinalAudit})
       assert(!nonlocal.uses_lower_precision(region));
@@ -370,7 +399,7 @@ int main() {
     assert(!nonlocal_execution.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
     const auto nonlocal_refinement =
         resolve_cuda_ks_iteration_precision(nonlocal, true, true);
-    assert(nonlocal_refinement.size() == 7 && nonlocal_refinement.is_strict_fp64());
+    assert(nonlocal_refinement.size() == 8 && nonlocal_refinement.is_strict_fp64());
 
     for (const bool nonlocal_graph : {false, true}) {
       bool rejected = false;
@@ -391,7 +420,7 @@ int main() {
   assert(local.uses_lower_precision("extra.component"));
   assert(local.find("extra.component")->qualification == "extra-gate");
   const auto refinement = resolve_cuda_ks_iteration_precision(extended, true, false);
-  assert(refinement.size() == 7 && refinement.is_strict_fp64());
+  assert(refinement.size() == 8 && refinement.is_strict_fp64());
   assert(extended.uses_lower_precision("extra.component"));
   // Strict regions never invoke the predicate or become candidates for lowering.
   unsigned visits = 0;

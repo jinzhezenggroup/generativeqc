@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import builtins
 import sys
 import typing
 from pathlib import Path
@@ -412,6 +413,86 @@ def test_xc_trajectory_rejects_retained_output_before_gpu_or_input_work(
         pbe0_xc_trajectories.main()
     assert error.value.code == 2
     assert existing.read_text(encoding="utf-8") == "original evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize("existing_output", [False, True])
+@pytest.mark.parametrize(
+    "destination_kind", ["retained", "alias", "traversal", "file-alias"]
+)
+def test_mixed_gradient_rejects_retained_output_before_gpu_or_input_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    destination_kind: str,
+    existing_output: bool,
+) -> None:
+    from benchmarks import _retention, pbe0_mixed_gradient
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    original = retained / "existing.json"
+    original.write_text("original evidence", encoding="utf-8")
+    target = original if existing_output else retained / "new/result.json"
+    destination = target
+    if destination_kind == "alias":
+        alias = tmp_path / "alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / target.relative_to(retained)
+    elif destination_kind == "traversal":
+        destination = (
+            tmp_path / ".artifacts/../benchmarks/results" / target.relative_to(retained)
+        )
+    elif destination_kind == "file-alias":
+        destination = tmp_path / "output.json"
+        destination.symlink_to(target)
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("invalid output reached native, oracle or scientific work")
+
+    original_import = builtins.__import__
+
+    def guarded_import(
+        name: str, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        if name.split(".")[0] in {"cupy", "pyscf", "gpu4pyscf"}:
+            pytest.fail("invalid output reached a GPU or oracle import")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.setenv("SLURM_JOB_ID", "test-output-admission")
+    for name in (
+        "GradientProbe",
+        "Calculator",
+        "GridSpec",
+        "reference",
+        "protocol",
+        "sample",
+    ):
+        monkeypatch.setattr(pbe0_mixed_gradient, name, forbidden)
+    monkeypatch.setattr(pbe0_mixed_gradient.ctypes, "CDLL", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pbe0_mixed_gradient",
+            "--case",
+            "water-def2-svp-spherical",
+            "--probe",
+            str(tmp_path / "missing-probe.so"),
+            "--reference",
+            str(tmp_path / "missing-reference.json"),
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        pbe0_mixed_gradient.main()
+    assert error.value.code == 2
+    assert "invalid raw_output_path value" in capsys.readouterr().err
+    assert original.read_text(encoding="utf-8") == "original evidence"
+    assert not (retained / "new").exists()
     assert not (tmp_path / ".artifacts").exists()
 
 

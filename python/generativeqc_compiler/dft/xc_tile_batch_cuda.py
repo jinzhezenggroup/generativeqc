@@ -29,12 +29,13 @@ __device__ const size_t* compact_tile_ids(const CudaXcCompactTile& tile,
   return tile.active && tile.active < size_t(full_n) ? ids + tile.map_offset : nullptr;
 }
 
+template <class Arithmetic = double>
 __global__ void batch_density_products(const CudaXcCompactTile* tiles, const double* density,
     const double* ao, double* work, I full_n, I spins, I work_jets, const size_t* ids, int* error) {
   const auto& tile = tiles[blockIdx.z / (spins * work_jets)];
   if (!tile.active || blockIdx.x >= (tile.active + @TILE@ - 1) / @TILE@ ||
       blockIdx.y >= (tile.count + @TILE@ - 1) / @TILE@) return;
-  tiled_density_product_body<false, true>(density, ao + tile.ao_offset, tile.active, tile.count,
+  tiled_density_product_body<false, true, Arithmetic>(density, ao + tile.ao_offset, tile.active, tile.count,
       work_jets, work + tile.work_offset, error, compact_tile_ids(tile, ids, full_n),
       full_n, blockIdx.z % (spins * work_jets));
 }
@@ -61,12 +62,13 @@ __global__ void batch_potential_panels(const CudaXcCompactTile* tiles, const dou
       tile.active, tile.count, spins, terms, work_jets, work + tile.work_offset, error);
 }
 
+template <class Arithmetic = double>
 __global__ void batch_local_potentials(const CudaXcCompactTile* tiles, const double* ao,
     const double* work, double* potential, I spins, I work_jets, int* error) {
   const auto& tile = tiles[blockIdx.z / spins];
   const I columns = (tile.active + @TILE@ - 1) / @TILE@;
   if (!tile.active || blockIdx.x >= columns * (columns + 1) / 2) return;
-  tiled_potential_body<true>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
+  tiled_potential_body<true, Arithmetic>(ao + tile.ao_offset, work + tile.work_offset, tile.active,
       tile.count, work_jets, nullptr, potential + tile.potential_offset, nullptr, false,
       error, nullptr, tile.active, blockIdx.z % spins);
 }
@@ -82,7 +84,7 @@ __device__ I compact_row_lower_bound(const size_t* map, I active, I row) {
   return first;
 }
 
-template<bool Segmented = false>
+template<bool Segmented = false, class Arithmetic = double>
 __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_count,
     const double* local, const double* point_totals, I batch_begin, const size_t* ids,
     I full_n, double* potential, double* totals, int* error) {
@@ -141,9 +143,10 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
       for (I member = tile_index; member < next_tile; ++member) {
         const auto& current = tiles[member];
         const auto* source = point_totals + 3 * (current.begin - batch_begin) + channel * current.count;
-        double value = 0.0;
-        for (I point = 0; point < I(current.count); ++point) value += source[point];
-        totals[channel] = finite(totals[channel] + value, error, 3);
+        Arithmetic value = 0.0;
+        for (I point = 0; point < I(current.count); ++point)
+          value += static_cast<Arithmetic>(source[point]);
+        totals[channel] = finite(totals[channel] + static_cast<double>(value), error, 3);
       }
     }
     __syncthreads();
@@ -151,10 +154,11 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
   }
 }
 
-inline void launch_batch_density(cudaStream_t stream, const CudaXcLayout& layout,
+template <class Arithmetic>
+inline void launch_batch_density_typed(cudaStream_t stream, const CudaXcLayout& layout,
     const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* density, const double* ao,
     double* work, double* features, I batch_begin, const size_t* ids, int* error) {
-  batch_density_products<<<dim3((max_active + @TILE@ - 1) / @TILE@,
+  batch_density_products<Arithmetic><<<dim3((max_active + @TILE@ - 1) / @TILE@,
       (layout.tile_points + @TILE@ - 1) / @TILE@, tile_count * layout.spins * layout.work_jets),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, density, ao, work, layout.nao, layout.spins,
       layout.work_jets, ids, error);
@@ -164,7 +168,19 @@ inline void launch_batch_density(cudaStream_t stream, const CudaXcLayout& layout
       layout.jets, layout.work_jets, layout.feature_terms, layout.functional, error);
 }
 
-inline void launch_batch_potential(cudaStream_t stream, const CudaXcLayout& layout,
+inline void launch_batch_density(cudaStream_t stream, const CudaXcLayout& layout,
+    const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* density, const double* ao,
+    double* work, double* features, I batch_begin, const size_t* ids, int* error) {
+  if (layout.fp32_contractions)
+    launch_batch_density_typed<float>(stream, layout, tiles, tile_count, max_active, density, ao,
+        work, features, batch_begin, ids, error);
+  else
+    launch_batch_density_typed<double>(stream, layout, tiles, tile_count, max_active, density, ao,
+        work, features, batch_begin, ids, error);
+}
+
+template <class Arithmetic>
+inline void launch_batch_potential_typed(cudaStream_t stream, const CudaXcLayout& layout,
     const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* ao, const double* coefficients,
     const double* weights, double* work, double* local, const double* point_totals,
     I batch_begin, const size_t* ids, double* potential, double* totals, int* error) {
@@ -173,18 +189,29 @@ inline void launch_batch_potential(cudaStream_t stream, const CudaXcLayout& layo
       layout.spins, layout.feature_terms, layout.work_jets, error);
   generativeqc_tensor::cuda_check(cudaGetLastError());
   const I columns = (max_active + @TILE@ - 1) / @TILE@;
-  batch_local_potentials<<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
+  batch_local_potentials<Arithmetic><<<dim3(columns * (columns + 1) / 2, 1, tile_count * layout.spins),
       dim3(@TILE@, @TILE@), 0, stream>>>(tiles, ao, work, local, layout.spins, layout.work_jets, error);
   generativeqc_tensor::cuda_check(cudaGetLastError());
   // Preserve small-group execution. Large groups parallelize only output
   // ownership, with an explicit launch-domain fallback and no new scratch.
   if (max_active > 128 && layout.nao <= size_t{65535} * @TILE@)
-    batch_ordered_scatter<true><<<dim3(layout.spins, (layout.nao + @TILE@ - 1) / @TILE@),
+    batch_ordered_scatter<true, Arithmetic><<<dim3(layout.spins, (layout.nao + @TILE@ - 1) / @TILE@),
         128, 0, stream>>>(tiles, tile_count, local, point_totals, batch_begin, ids,
         layout.nao, potential, totals, error);
   else
-    batch_ordered_scatter<<<layout.spins, 128, 0, stream>>>(tiles, tile_count, local, point_totals,
+    batch_ordered_scatter<false, Arithmetic><<<layout.spins, 128, 0, stream>>>(tiles, tile_count, local, point_totals,
         batch_begin, ids, layout.nao, potential, totals, error);
+}
+inline void launch_batch_potential(cudaStream_t stream, const CudaXcLayout& layout,
+    const CudaXcCompactTile* tiles, I tile_count, I max_active, const double* ao, const double* coefficients,
+    const double* weights, double* work, double* local, const double* point_totals,
+    I batch_begin, const size_t* ids, double* potential, double* totals, int* error) {
+  if (layout.fp32_contractions)
+    launch_batch_potential_typed<float>(stream, layout, tiles, tile_count, max_active, ao, coefficients,
+        weights, work, local, point_totals, batch_begin, ids, potential, totals, error);
+  else
+    launch_batch_potential_typed<double>(stream, layout, tiles, tile_count, max_active, ao, coefficients,
+        weights, work, local, point_totals, batch_begin, ids, potential, totals, error);
 }
 }  // namespace
 }  // namespace generativeqc::dft::cuda_xc_detail

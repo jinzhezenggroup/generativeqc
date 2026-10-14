@@ -54,6 +54,9 @@ struct GridPlan {
   std::unique_ptr<ResidentAoMap> resident_map;
   // Destroy the binding before its borrowed stream/arena owner.
   std::unique_ptr<generativeqc::tensor::PreparedBoundedContraction> projection;
+  std::unique_ptr<generativeqc::tensor::PreparedBoundedContraction> projection_fp32;
+  generativeqc::runtime::OwnedCudaBuffer<float> fp32_panels;
+  size_t fp32_bytes{};
   double projection_prepare_seconds{};
   generativeqc::dft::AoGridWork work_metrics;
   bool profile_stages = false;
@@ -83,6 +86,15 @@ size_t mul(size_t a, size_t b) {
 size_t add(size_t a, size_t b) {
   if (a > SIZE_MAX - b) throw std::overflow_error("grid allocation overflow");
   return a + b;
+}
+template <class Output, class Input>
+__global__ void convert_grid_panel(const Input* input, Output* output, size_t count, int* error) {
+  for (size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += size_t(blockDim.x) * gridDim.x) {
+    const Output value = static_cast<Output>(input[index]);
+    if (!isfinite(value)) atomicExch(error, 1);
+    output[index] = value;
+  }
 }
 template <class F>
 int guarded(char* error, size_t size, F operation) noexcept {
@@ -321,6 +333,36 @@ void grid_cuda_fail_next_allocation_for_test_v1() { fail_next_grid_allocation = 
 void grid_cuda_fail_next_host_allocation_for_test_v1() { fail_next_grid_allocation = 2; }
 void grid_cuda_fail_next_runtime_for_test_v1() { fail_next_grid_runtime = true; }
 #endif
+/** Prepare bounded float operands and a genuine FP32 TensorIR contraction.
+ * The ordinary double ABI and strict binding remain available for replay.
+ * No per-tile allocation or provider search is permitted. */
+int grid_cuda_prepare_fp32_v1(void* pointer, size_t budget, size_t* retained, char* error,
+                              size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !retained) throw std::invalid_argument("invalid FP32 grid owner");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (p.orbital_enabled) throw std::invalid_argument("FP32 grid requires density panels");
+    const auto storage = generativeqc::dft::cuda_grid_fp32_storage(p.active_capacity, p.capacity);
+    const auto elements = storage.elements;
+    const auto bytes = storage.device_upper_bytes;
+    if (bytes > budget) throw std::bad_alloc();
+    if (!p.projection_fp32) {
+      auto projection = generativeqc::dft::generated::prepare_grid_panel_fp32(
+          std::min(size_t{4}, p.jets), p.capacity, p.active_capacity, p.active_capacity, ctx.stream,
+          generativeqc::dft::CudaGridStorage::provider_allowance +
+              generativeqc::tensor::PreparedBoundedContraction::host_reservation);
+      p.fp32_panels.allocate(ctx.device, elements, ctx.stream);
+      p.projection_fp32 = std::move(projection);
+      p.fp32_bytes = bytes;
+      ctx.metrics.provider_retained_bytes += p.projection_fp32->retained_provider_bytes();
+    }
+    *retained = p.fp32_bytes;
+  });
+}
+
 int grid_cuda_create_v2(int device, int major, int minor, const size_t* dimensions,
                         const double* basis, size_t capacity, unsigned order, size_t expected_bytes,
                         size_t active_capacity, void** output, char* error, size_t size) {
@@ -520,7 +562,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
                                        double* feature_output, double* jet_output,
                                        int defer_error_to_consumer, int points_on_device,
                                        char* error, size_t size, size_t resident_begin = SIZE_MAX,
-                                       const char* map_identity = nullptr) {
+                                       const char* map_identity = nullptr, bool fp32 = false) {
   return guarded(error, size, [&] {
     if (!pointer || (features != 0 && features != 1) ||
         (defer_error_to_consumer != 0 && defer_error_to_consumer != 1) ||
@@ -531,6 +573,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     std::lock_guard<std::mutex> lock(ctx.mutex);
     ctx.check_device();
     p.view_ready = p.density_jets_ready = false;
+    if (fp32 && (!p.projection_fp32 || p.use_orbitals))
+      throw std::invalid_argument("FP32 grid execution has no prepared density binding");
     ++p.generation;
     bool identity_map = false;
     const bool resident = resident_begin != SIZE_MAX;
@@ -625,8 +669,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     if (active)
       ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
         scheduled_ao(ctx.stream, p.basis, p.natom, p.nprimitive, active, task_points, npoint,
-                     p.jets, p.ao, ctx.error,
-                     p.local && !identity_map ? p.current_ao_ids : nullptr);
+                     p.jets, p.ao, ctx.error, p.local && !identity_map ? p.current_ao_ids : nullptr,
+                     fp32);
         cuda_check(cudaGetLastError());
       });
     p.work_metrics.record_ao(npoint, active, p.nao, p.jets);
@@ -689,11 +733,30 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           const double* density = p.local && !identity_map ? p.local_density : p.density;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
-          for (I spin = 0; spin < density_spins; ++spin)
-            p.projection->execute(
-                generativeqc::dft::generated::grid_panel_descriptor(count, npoint, active, active),
-                ctx.stream, p.ao + first * stride, density + spin * active * active,
-                p.work + (spin * 4 + first) * stride, ctx.error);
+          for (I spin = 0; spin < density_spins; ++spin) {
+            if (fp32) {
+              const auto panel_capacity = 4 * p.capacity * p.active_capacity;
+              auto* ao = p.fp32_panels.get();
+              auto* matrix = ao + panel_capacity;
+              auto* projected = matrix + p.active_capacity * p.active_capacity;
+              convert_grid_panel<<<blocks(count * stride, 128), 128, 0, ctx.stream>>>(
+                  p.ao + first * stride, ao, count * stride, ctx.error);
+              convert_grid_panel<<<blocks(active * active, 128), 128, 0, ctx.stream>>>(
+                  density + spin * active * active, matrix, active * active, ctx.error);
+              cuda_check(cudaGetLastError());
+              p.projection_fp32->execute(generativeqc::dft::generated::grid_panel_descriptor_fp32(
+                                             count, npoint, active, active),
+                                         ctx.stream, ao, matrix, projected, ctx.error);
+              convert_grid_panel<<<blocks(count * stride, 128), 128, 0, ctx.stream>>>(
+                  projected, p.work + (spin * 4 + first) * stride, count * stride, ctx.error);
+              cuda_check(cudaGetLastError());
+            } else
+              p.projection->execute(generativeqc::dft::generated::grid_panel_descriptor(
+                                        count, npoint, active, active),
+                                    ctx.stream, p.ao + first * stride,
+                                    density + spin * active * active,
+                                    p.work + (spin * 4 + first) * stride, ctx.error);
+          }
           // Publish both ordered panels without repeating the identical GEMM.
           // The copy uses existing charged storage on the same owner stream;
           // first/count exclude unrequested jets, including the tau-only case.
@@ -708,8 +771,12 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         p.work_metrics.projection_ms += ctx.metrics.library_ms - projection_ms_before;
       const auto feature_ms_before = ctx.metrics.packing_ms;
       ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
-        scheduled_grid_features(ctx.stream, p.ao, p.work, npoint, active, p.features, ctx.error,
-                                p.feature_mask);
+        if (fp32)
+          scheduled_grid_features<float>(ctx.stream, p.ao, p.work, npoint, active, p.features,
+                                         ctx.error, p.feature_mask);
+        else
+          scheduled_grid_features(ctx.stream, p.ao, p.work, npoint, active, p.features, ctx.error,
+                                  p.feature_mask);
         cuda_check(cudaGetLastError());
         generativeqc::dft::AoGridWork::accumulate(p.work_metrics.feature_passes, 1);
       });
@@ -760,6 +827,12 @@ int grid_cuda_run_selected_device_deferred_v1(void* pointer, const double* point
                                               char* error, size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
                                      feature_output, jet_output, 1, 1, error, size);
+}
+
+int grid_cuda_run_fp32_device_deferred_v1(void* pointer, const double* points, size_t npoint,
+                                          size_t active, char* error, size_t size) {
+  return grid_cuda_run_selected_impl(pointer, points, npoint, 1, nullptr, active, nullptr, nullptr,
+                                     1, 1, error, size, SIZE_MAX, nullptr, true);
 }
 
 /** Build once, before AO evaluation. Budget rejection leaves the dense domain
