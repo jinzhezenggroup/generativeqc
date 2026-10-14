@@ -10,7 +10,12 @@ Pass the exact canonical CUDA `SourceVariant`, its LF source file, an absolute
 NVCC path, ordered plain flags and a `CudaToolchainManifest`. Flags are limited
 to C++17, O0–O3, `--fmad=false` and absolute safe-spelled include directories.
 Other targets/releases, wrappers, response files, plugins, alternate sysroots,
-RDC/device linking and LTO are unsupported. Ambiguous path spellings fail closed.
+host toolchain prefixes/specs, RDC/device linking and host/device LTO are
+unsupported. Ambiguous path spellings fail closed.
+Observed host jobs admit only stock native preprocessing/object stages, their
+source and NVCC intermediate inputs/outputs, and bounded scalar arguments.
+Unknown tool-search, target, wrapper, macro or extra-input arguments fail closed;
+the caller's completeness assertion cannot enlarge this supported job domain.
 The child environment is exactly `CPU_ENVIRONMENT`; inherited `NVCC_CCBIN`,
 `NVCC_PREPEND_FLAGS`, `NVCC_APPEND_FLAGS`, include and loader overrides are absent.
 

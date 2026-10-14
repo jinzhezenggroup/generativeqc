@@ -115,8 +115,44 @@ def fake_nvcc(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple:
                 )
                 + "\n"
                 + "\n".join(
-                    "#$ " + shlex.quote(str(p)) + " -c input"
-                    for p in [host, tools[3], host, *tools[4:7], host]
+                    "#$ " + shlex.quote(str(p)) + " " + shlex.join(arguments)
+                    for p, arguments in [
+                        (
+                            host,
+                            [
+                                "-E",
+                                "-x",
+                                "c++",
+                                str(source),
+                                "-o",
+                                source.stem + ".cpp4.ii",
+                            ],
+                        ),
+                        (tools[3], ["-c", "input"]),
+                        (
+                            host,
+                            [
+                                "-E",
+                                "-x",
+                                "c++",
+                                str(source),
+                                "-o",
+                                source.stem + ".cpp1.ii",
+                            ],
+                        ),
+                        *((p, ["-c", "input"]) for p in tools[4:7]),
+                        (
+                            host,
+                            [
+                                "-c",
+                                "-x",
+                                "c++",
+                                source.stem + ".cudafe1.cpp",
+                                "-o",
+                                "/dev/null",
+                            ],
+                        ),
+                    ]
                 )
             )
         elif "-E" in command:
@@ -266,9 +302,31 @@ def test_fail_closed(
 
 
 @pytest.mark.parametrize(
-    "option", ["--sysroot=/opt/sdk", "--sysroot /opt/sdk", "-isysroot /opt/sdk"]
+    "option",
+    [
+        "--sysroot=/opt/sdk",
+        "--sysroot /opt/sdk",
+        "-isysroot /opt/sdk",
+        "-B /opt/toolchain",
+        "-B/opt/toolchain",
+        "--prefix=/opt/toolchain",
+        "--prefix /opt/toolchain",
+        "-specs=/opt/toolchain/specs",
+        "--specs=/opt/toolchain/specs",
+        "--specs /opt/toolchain/specs",
+        "-wrapper /opt/toolchain/wrapper",
+        "--wrapper /opt/toolchain/wrapper",
+        "-flto",
+        "-m32",
+        "-mx32",
+        "-march=native",
+        "--target=aarch64-linux-gnu",
+        "-Xpreprocessor @options",
+        "-DUNKNOWN_NAMESPACE=1",
+        "/opt/untracked-input.cpp",
+    ],
 )
-def test_diagnostic_alternate_sysroot(
+def test_diagnostic_alternate_toolchain(
     fake_nvcc: tuple, monkeypatch: pytest.MonkeyPatch, option: str
 ) -> None:
     original = collector.run_compiler
@@ -278,9 +336,7 @@ def test_diagnostic_alternate_sysroot(
         if "--dryrun" in command:
             return replace(
                 result,
-                stderr=result.stderr.replace(
-                    " -c input", " " + option + " -c input", 1
-                ),
+                stderr=result.stderr.replace(" -E ", " " + option + " -E ", 1),
             )
         return result
 

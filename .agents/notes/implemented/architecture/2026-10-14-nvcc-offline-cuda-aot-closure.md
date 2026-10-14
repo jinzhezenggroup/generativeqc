@@ -133,8 +133,62 @@ matches the remote archive. Earlier v7/v8 evidence and failures remain retained;
 new receipts qualify only source-v9, not relabeled historical objects. New-head
 CI, independent delta approval and protected delivery remain required.
 
+## Review repair: bounded host job arguments
+
+A later finding at b4b3fa6405a689b8765c3bbc6e617a4c2d36d6ca admitted
+job-local `-B` tool-search overrides while the required cc1plus/as census queried
+bare native G++. Both `-B` spellings, their GNU `--prefix` aliases, specs and a
+wrapper were incorrectly admitted in the controlled full collector: seven
+failures, three existing sysroot controls passed. The PR was restored to Draft
+and explicitly dequeued; Draft alone initially left the queue entry present.
+
+Real G++ 13.3.0 observations independently showed four prefix spellings select
+different cc1plus/as paths (eight observations), retained in
+`host-tool-selection-v10.json`, SHA-256
+566cdaaf7a9446295d91f0f6d8d55397617772e9a308c9a58fecf2e00804236a.
+The initial bounded predicate repair, source-v10, passed 62 real tests; archive
+f7f007daf29245a300ad0e48fecbbb55dc2e82c4a03d710fc0a56b7ae561195d
+is retained independently, not relabeled for the final source.
+
+The final repair positively admits the actual stock 12.9 host preprocessing and
+object stages, exact source/intermediate input and output names, C++ language,
+fixed CUDA scalar arguments and the validated public flags. Unknown argument
+domains, including alternate searches/specs/wrappers, targets, host LTO, macros
+and extra inputs, fail closed. A caller completeness assertion cannot waive this
+support restriction. This preserves the native bare-driver census rather than
+trying to discover an unbounded alternate host toolchain. The existing compiler,
+cache/store owners and CPU function/class bodies remain unchanged.
+
+User-approved new dedicated CPU Notebook i1123-nvcc129-v10-1014: same project,
+workspace/group and official image, 2 CPU/8 GiB, 2 GiB shared memory. Requested
+priority 10, observed HIGH 6; project HIGH, numeric-cap proof still unavailable.
+Live quota rate 0 points/hour and member/project budget 70614.89 at submission;
+these are this run's observations. Actual start 10:41:29 Asia/Shanghai, 60-minute
+platform timer read back as uptime 18 + remaining 3582 seconds, deadline 11:41:29.
+The original instance was confirmed STOPPED; no restart, renewal or other-owner
+resource use. Stopping does not establish access-session token revocation.
+
+Final local CUDA/cache/store controls: 75 passed, seven explicit real-NVCC skips;
+Ruff, whitespace and compiler ownership checks passed (539 modules, zero errors).
+Source-v11 LF archive SHA-256
+aff2e654170fa507d4490ede55cdfe66a594a0919547ebd04aaf2f82317955cd;
+collector SHA-256
+d299b54232c771473583d1d8bca29be651efbe80430e626ec46c41a5dd8a6fa7.
+All 69 real NVCC tests passed with zero skips, including default-job regression,
+fresh pre/object/post, independent MD/M, store publication/read/hash, cache/salt,
+opaque payload, ambiguous paths, selection drift and FIFO controls. Driver/device
+hits and salt misses retain internal host non-cacheability and unchanged-PTX
+ptxas reuse. Downloaded source-v11 evidence archive SHA-256
+286e7eb2b97360ba778dee4d6f9d9848408cb715be88bc1091c2abef9e7a6a71
+matches remote retention; red/model logs and actual raw host plan are included.
+All previous failures/receipts remain separate. New exact-head CI, independent
+delta approval, later review threads and protected delivered merge remain gates.
+
 ## References
 
 - Refs #1123; CPU GCC #2218 and Clang #2444.
 - `docs/developer/libxc_cuda_aot_closure.md`.
 - NVIDIA CUDA Compiler Driver archive 12.9.1.
+- [GNU GCC Directory Options](https://gcc.gnu.org/onlinedocs/gcc/Directory-Options.html)
+  and [Overall Options](https://gcc.gnu.org/onlinedocs/gcc/Overall-Options.html)
+  (prefix and wrapper semantics).

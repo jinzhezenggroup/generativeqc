@@ -643,7 +643,66 @@ def _nvcc_dependencies(text: str) -> tuple[str, ...]:
     return names
 
 
-def _cuda_jobs(plan: str, nvcc: Path, host: Path) -> tuple[str, ...]:
+def _cuda_host_job(
+    words: list[str], nvcc: Path, source: Path, flags: tuple[str, ...], stage: int
+) -> None:
+    """Admit only the observed stock host stages, inputs and bounded options."""
+    stages = {
+        0: ("-E", str(source), source.stem + ".cpp4.ii"),
+        2: ("-E", str(source), source.stem + ".cpp1.ii"),
+        6: ("-c", source.stem + ".cudafe1.cpp", "/dev/null"),
+    }
+    if stage not in stages:
+        raise ValueError("unsupported-nvcc-job-model")
+    mode, input_name, output_name = stages[stage]
+    scalar = {
+        "-m64",
+        "-Wno-psabi",
+        "-Werror=date-time",
+        "-D__CUDA_ARCH_LIST__=800",
+        "-D__CUDA_ARCH__=800",
+        "-D__NV_LEGACY_LAUNCH",
+        "-D__CUDACC__",
+        "-D__NVCC__",
+        "-DCUDA_DOUBLE_MATH_FUNCTIONS",
+        "-D__CUDACC_VER_MAJOR__=12",
+        "-D__CUDACC_VER_MINOR__=9",
+        "-D__CUDA_API_VER_MAJOR__=12",
+        "-D__CUDA_API_VER_MINOR__=9",
+        "-D__NVCC_DIAG_PRAGMA_SUPPORT__=1",
+        "-D__CUDACC_DEVICE_ATOMIC_BUILTINS__=1",
+        "-I" + str(nvcc.parent / "..") + "/targets/x86_64-linux/include",
+        *(flag for flag in flags if flag != "--fmad=false"),
+    }
+    seen = set()
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if word in {mode, input_name}:
+            if word in seen:
+                raise ValueError("unsupported-nvcc-job-model")
+            seen.add(word)
+        elif word in {"-x", "-include", "-o"}:
+            expected = {"-x": "c++", "-include": "cuda_runtime.h", "-o": output_name}[
+                word
+            ]
+            if word in seen or index + 1 >= len(words) or words[index + 1] != expected:
+                raise ValueError("unsupported-nvcc-job-model")
+            seen.add(word)
+            index += 1
+        elif (
+            word not in scalar
+            and re.fullmatch(r"-D__CUDACC_VER_BUILD__=[0-9]+", word) is None
+        ):
+            raise ValueError("unsupported-nvcc-job-model")
+        index += 1
+    if not {mode, input_name, "-x", "-o"} <= seen:
+        raise ValueError("unsupported-nvcc-job-model")
+
+
+def _cuda_jobs(
+    plan: str, nvcc: Path, host: Path, source: Path, flags: tuple[str, ...]
+) -> tuple[str, ...]:
     """Read the admitted 12.9 diagnostic model without executing shell text."""
     device = {
         (nvcc.parent / ".." / "nvvm" / "bin" / "cicc").resolve(): "cicc",
@@ -685,9 +744,17 @@ def _cuda_jobs(plan: str, nvcc: Path, host: Path) -> tuple[str, ...]:
         program = program.resolve()
         if program != host and program not in device:
             raise ValueError("unsupported-nvcc-job-model")
+        if program == host:
+            _cuda_host_job(words[1:], nvcc, source, flags, len(jobs))
         if any(
             word.startswith(
-                ("@", "-fplugin", "--options-file", "-isysroot", "--sysroot")
+                (
+                    "@",
+                    "-fplugin",
+                    "--options-file",
+                    "-isysroot",
+                    "--sysroot",
+                )
             )
             or word in {"-rdc=true", "-dc", "-dlink", "-dlto"}
             for word in words[1:]
@@ -982,7 +1049,7 @@ def collect_cuda_closure(
                 ],
                 True,
             )
-            jobs = _cuda_jobs(plan, nvcc, host)
+            jobs = _cuda_jobs(plan, nvcc, host, source, flags)
             for job in jobs:
                 path = Path(job)
                 if path not in identities:
