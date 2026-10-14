@@ -104,6 +104,7 @@ struct Owner {
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
+  // This orbital-lifetime probe does not run the nonlocal initializer.
   bool confirm_nonlocal_stationary_density = false;
   double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
   struct {
