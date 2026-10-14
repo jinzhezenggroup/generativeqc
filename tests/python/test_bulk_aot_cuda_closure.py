@@ -266,6 +266,31 @@ def test_fail_closed(
 
 
 @pytest.mark.parametrize(
+    "option", ["--sysroot=/opt/sdk", "--sysroot /opt/sdk", "-isysroot /opt/sdk"]
+)
+def test_diagnostic_alternate_sysroot(
+    fake_nvcc: tuple, monkeypatch: pytest.MonkeyPatch, option: str
+) -> None:
+    original = collector.run_compiler
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        result = original(command, timeout, **kwargs)
+        if "--dryrun" in command:
+            return replace(
+                result,
+                stderr=result.stderr.replace(
+                    " -c input", " " + option + " -c input", 1
+                ),
+            )
+        return result
+
+    monkeypatch.setattr(collector, "run_compiler", run)
+    result = collect(fake_nvcc)
+    assert result.reasons == ("unsupported-nvcc-job-model",)
+    assert result.closure is None or not result.closure.reusable
+
+
+@pytest.mark.parametrize(
     "changed",
     [
         "header",

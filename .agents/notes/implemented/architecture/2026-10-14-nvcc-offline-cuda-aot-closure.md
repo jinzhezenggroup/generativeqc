@@ -106,6 +106,33 @@ retains v7 and delta records separately. Collector LF bytes SHA-256
 a585735a3dd60dd8b11e281e6f5dacd6e401084d63e51cb60d9d255d32db7814
 are unchanged across both qualification snapshots.
 
+## Review repair: alternate host sysroot
+
+The initial PR head 35f6ddfd361b80798abf80d2dd83b7a1b128d0a4 admitted
+GNU host diagnostic jobs with `--sysroot=/opt/sdk` or `--sysroot /opt/sdk`,
+contrary to the bounded namespace contract. Failure injection reproduced two
+incorrect reusable closures; the existing `-isysroot` control already rejected
+the alternate namespace. Reject both GNU spellings in the diagnostic job model,
+with three executable failure-injection cases. CPU entrypoints remain unchanged.
+The PR was returned to Draft, outside the queue with auto-merge disabled; the old
+exact-head approval does not qualify this repair or clear the later finding.
+
+Local repair controls/store: 58 passed, seven explicit real-NVCC skips. Ruff
+passed and compiler ownership checked 539 modules with zero errors. Fresh LF
+source-v9 archive SHA-256
+618195a61c369660318aa36369ef3a0c9723bba57f937f9dae035d42d8241ba7;
+collector SHA-256
+e7e5b3c2f893e3d164dc4b7045b05bc07d43a91e50ac8d792558fe652193681b.
+The original dedicated CPU environment completed all 52 real tests with zero
+skips, including fresh object/store receipts, pre/object/post identity, actual
+driver/device cache replay and salt misses, opaque payload and path/FIFO controls.
+The non-cacheable internal host stage and unchanged-PTX reuse limitations remain.
+Downloaded ignored `.cache/nvcc1123-evidence-v9.tar.gz` SHA-256
+611a6b65a9bb3c2b51bb9f505b64f92d0f69c06cb4517f481beb6c2bc9ed6f7e
+matches the remote archive. Earlier v7/v8 evidence and failures remain retained;
+new receipts qualify only source-v9, not relabeled historical objects. New-head
+CI, independent delta approval and protected delivery remain required.
+
 ## References
 
 - Refs #1123; CPU GCC #2218 and Clang #2444.

@@ -686,7 +686,9 @@ def _cuda_jobs(plan: str, nvcc: Path, host: Path) -> tuple[str, ...]:
         if program != host and program not in device:
             raise ValueError("unsupported-nvcc-job-model")
         if any(
-            word.startswith(("@", "-fplugin", "--options-file", "-isysroot"))
+            word.startswith(
+                ("@", "-fplugin", "--options-file", "-isysroot", "--sysroot")
+            )
             or word in {"-rdc=true", "-dc", "-dlink", "-dlto"}
             for word in words[1:]
         ):
