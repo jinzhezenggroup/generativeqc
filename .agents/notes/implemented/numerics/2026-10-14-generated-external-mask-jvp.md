@@ -120,6 +120,35 @@ math/source/execution/resource descriptions exactly. Qualified TensorAD,
 Array API, compiler-common and CPU-header inputs have no upstream delta, so
 no new CPU allocation or whole-library qualification claim was needed.
 
+PR #2482's first `pre_commit` run at head
+`ad2608944e32fbb10bc2e37f02b0980555a9b054` failed the pinned `ty==0.0.82`
+check on four `Node | None` arguments. The opt-in domain builds explicit real
+zero directions, so branch/output tangents and the validation root must exist.
+Explicit local refusals now check and narrow those invariants rather than
+casting away the diagnostics. The complete pinned type check passes when
+pointed at the validated environment and Linux target; an initial Windows
+invocation using the unrelated default environment retains its additional
+platform/import/stub failures. The related host run passes 140 cases with 23
+deselected. All three prior probes retain identical generated equations,
+source, execution identity and resource descriptions; these refusals do not
+change the qualified C++ graph or relabel the old library's source receipt.
+
+An independent review also found a real first-order boundary failure: dropping
+the optional provenance with `Program(first.program.outputs)` allowed a mixed
+second derivative with respect to an original unseeded input. A minimal
+`where(c, x*y, x+y)` reproduction actually returned `[1.0]`. The repaired new
+domain seals retained real feeds with the existing `TensorSpec.differentiable`
+contract, preserving their names, roles, dtypes and shapes as execution data.
+Canonical rebuilding propagates that declaration; no new schema, validity
+primitive, input-name heuristic or mathematical owner is added. A declared
+real tangent input is required for generation. Original primals remain valid
+first-order AD spaces, and non-selection programs retain their legacy behavior.
+Reconstruction without provenance, serialization and optimization preserve the
+boundary; explicit generated/runtime JVP, VJP, transpose and dot requests cannot
+differentiate the execution artifact. The typed declaration is part of logical
+identity, so new selection identities genuinely change and require their own
+native qualification; the earlier library receipt is not relabeled.
+
 ## Consequences and revisit conditions
 
 Explicit selection pays for eager primal and forward validation rather than

@@ -267,6 +267,10 @@ backend-independent TensorIR `Program` DAGs:
   packed/precision policies, FP32/mixed values and higher-order generation
   reject. Native qualification is limited to the materializing CPU owner;
   CUDA, portable/scalar, public compiled AD, VJP and HVP are outside this slice.
+  Generated real feeds preserve names, roles, dtypes and shapes but are declared
+  non-differentiable execution data. This existing typed boundary survives
+  reconstruction without provenance, replay and optimization; the result is
+  not another AD input space. Generation requires a declared real tangent input.
 - In that opt-in domain, output selection controls publication, while all
   original live primal and forward derivative domains remain checked. Missing
   real input directions become explicit zero-like values, so an unselected or

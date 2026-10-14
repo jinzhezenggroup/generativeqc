@@ -1,5 +1,6 @@
 """Fixed external-mask generated JVP: independent math and eager domains."""
 
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
@@ -7,7 +8,7 @@ from typing import Any
 import numpy as np
 import pytest
 from generativeqc.experimental import array_api as xp
-from generativeqc_compiler.tensor import Program, execute, jvp, optimize
+from generativeqc_compiler.tensor import Program, dot_test, execute, jvp, optimize, vjp
 from generativeqc_compiler.tensor.ad_program import linearize, transpose_program
 
 
@@ -273,6 +274,41 @@ def test_generated_names_and_serialized_backend_boundaries() -> None:
             prepare_for_backend(graph, backend)
 
 
+@pytest.mark.parametrize("replay", ["reconstruct", "serialize", "optimize"])
+def test_first_order_boundary_survives_provenance_removal(replay: str) -> None:
+    feeds = {"c": np.asarray([True]), "x": np.asarray([2.0]), "y": np.asarray([3.0])}
+    primal = capture(lambda c, x, y: {"out": xp.where(c, x * y, x + y)}, feeds)
+    first = generated(primal, ("x",))
+    graph = Program(first.program.outputs)
+    if replay == "serialize":
+        graph = Program.loads(graph.dumps())
+    elif replay == "optimize":
+        graph = optimize(graph)
+    assert all(not node.spec.differentiable for node in graph.live_nodes)
+    np.testing.assert_array_equal(
+        execute(graph, {**feeds, "d_x": np.ones(1)}).outputs["d_out"], [3.0]
+    )
+    for names in (("y",), ("x",), None):
+        with pytest.raises(ValueError, match="tangent input|differentiable input"):
+            generated(graph, names)
+    with pytest.raises(ValueError, match="not declared differentiable"):
+        jvp(graph, {**feeds, "d_x": np.ones(1)}, {"y": np.ones(1)})
+    for names in (None, ("y",)):
+        with pytest.raises(ValueError):
+            vjp(
+                graph, {**feeds, "d_x": np.ones(1)}, {"d_out": np.ones(1)}, inputs=names
+            )
+        with pytest.raises(ValueError):
+            transpose_program(graph, ("d_out",), inputs=names)
+    with pytest.raises(ValueError):
+        dot_test(
+            graph,
+            {**feeds, "d_x": np.ones(1)},
+            {"y": np.ones(1)},
+            {"d_out": np.ones(1)},
+        )
+
+
 @pytest.mark.parametrize("backend", ["reference", "native"])
 def test_nested_selection_transpose_reshape_slice(tmp_path: Path, backend: str) -> None:
     feeds = {
@@ -350,7 +386,7 @@ def test_unreturned_where_domain_with_nonselection_output(
 
 
 def test_native_typed_abi_budget_failure_recovery_and_owner(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, record_property: Any
 ) -> None:
     import ctypes as ct
 
@@ -399,6 +435,18 @@ def test_native_typed_abi_budget_failure_recovery_and_owner(
     actual = owner.execute(graph, all_feeds)["d_out"]
     np.testing.assert_allclose(actual, [np.e, 0, np.e])
     native = next(iter(owner.executables.values()))
+    # Retain actual execution provenance in CI's JUnit artifact. These are
+    # observations, never expected source/body fingerprints or cache-hit claims.
+    _, cpp_source, _, _ = describe_cpu_compilation(graph)
+    record_property("generated_jvp_logical_hash", graph.logical_hash)
+    record_property("cpu_execution_identity", native.identity)
+    record_property(
+        "cpu_source_sha256", hashlib.sha256(cpp_source.encode()).hexdigest()
+    )
+    record_property(
+        "cpu_library_sha256",
+        hashlib.sha256(native.artifact.library.read_bytes()).hexdigest(),
+    )
     assert native.resources["typed_bytes"] == 1
     assert 75 <= native.resources["input_count"] <= 80
     for bad in (

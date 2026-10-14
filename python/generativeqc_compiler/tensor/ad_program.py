@@ -736,6 +736,8 @@ def _rebuild_node(node: Node, inputs: typing.Any) -> Node:
         return cast(inputs[0], node.spec.dtype)
     if node.op in COMPARISONS:
         return compare(node.op, *inputs)
+    if node.op == "where":
+        return where(*inputs)
     if node.op == "multiply":
         return multiply(*inputs)
     if node.op == "divide":
@@ -1012,6 +1014,8 @@ def linearize(
         tangent_inputs,
         "tangent input",
     )
+    if external_where and not requested:
+        raise ValueError("external-mask JVP requires a declared differentiable input")
     tangent_nodes = {}
     for name, node in requested.items():
         generated = f"{TANGENT_PREFIX}{name}"
@@ -1035,7 +1039,10 @@ def linearize(
             tangent = _zero_like(node) if external_where else None
         elif external_where and node.op == "where":
             condition, left, right = node.inputs
-            tangent = where(condition, tangents[left], tangents[right])
+            left_tangent, right_tangent = tangents[left], tangents[right]
+            if left_tangent is None or right_tangent is None:
+                raise ValueError("external-mask JVP requires real branch tangents")
+            tangent = where(condition, left_tangent, right_tangent)
         else:
             tangent = _jvp_graph(node, [tangents[operand] for operand in node.inputs])
         tangents[node] = tangent
@@ -1048,7 +1055,10 @@ def linearize(
         # through serialization, CSE/DCE and empty requested-output shapes.
         guards = []
         for root in program.outputs.values():
-            for value in (root, tangents[root]):
+            root_tangent = tangents[root]
+            if root_tangent is None:
+                raise ValueError("external-mask JVP requires live output tangents")
+            for value in (root, root_tangent):
                 zero = _zero_like(value)
                 guards.append(reduce_sum(zero, tuple(range(len(zero.spec.indices)))))
         validation = _combine(guards)
@@ -1060,6 +1070,8 @@ def linearize(
             tangent = _zero_like(node)
             generated_nodes.append(tangent)
         if external_where:
+            if validation is None:
+                raise ValueError("external-mask JVP requires live-domain validation")
             tangent = add(tangent, broadcast(validation, tangent.spec.indices, ()))
             generated_nodes.append(tangent)
         derivative_name = f"{TANGENT_PREFIX}{name}"
@@ -1095,6 +1107,20 @@ def linearize(
             ),
         },
     )
+    if external_where:
+        # The result is a first-order execution artifact, not a new AD input
+        # space. Keep this boundary in typed feeds so reconstruction without
+        # descriptive provenance cannot turn it into an unqualified higher order.
+        generated_program = _rebuild(
+            generated_program,
+            {
+                node: input_tensor(
+                    node.attrs["name"], replace(node.spec, differentiable=False)
+                )
+                for node in generated_program.nodes
+                if node.op == "input" and node.spec.differentiable
+            },
+        )
     return JVPProgram(
         generated_program,
         primal_hash,
