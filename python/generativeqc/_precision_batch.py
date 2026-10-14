@@ -506,7 +506,21 @@ class PreparedPrecisionBatch:
                 if self._owner is not None:
                     began = perf_counter()
                     try:
-                        seeds = _SeedLease(self._owner, self._maximum_seed_bytes)
+                        # A failed refresh must not expose a stale pre-export
+                        # snapshot as the candidate's final movement total.
+                        self._transport = (None,) * self.system_count
+                        try:
+                            seeds = _SeedLease(self._owner, self._maximum_seed_bytes)
+                        except BaseException:
+                            # Even a partial export can materialize resident
+                            # densities. Preserve that movement without hiding
+                            # the original staging failure if its query fails.
+                            with suppress(Exception):
+                                self._transport = self._owner.ks_transport_diagnostics
+                            raise
+                        # Exporting warm states may itself perform D2H work.
+                        # Capture it before destroying the only native owner.
+                        self._transport = self._owner.ks_transport_diagnostics
                         self._owner.close()
                         self._owner = None
                         self._seeds = seeds

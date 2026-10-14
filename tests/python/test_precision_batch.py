@@ -18,6 +18,7 @@ from generativeqc import PrecisionCalculator, PrecisionPolicy, ResourceBudget, _
 from generativeqc._precision_batch import _SeedLease
 from generativeqc._warm_state import WarmStartState
 from generativeqc.batch import BatchItemResult, BatchResult
+from generativeqc.ks_diagnostics import KsTransportDiagnostic
 from test_precision_policy import (
     ATOMS,
     ENERGY,
@@ -407,6 +408,95 @@ def test_seed_failure_preserves_owner_and_is_auditable(
             for attempt in output.precision_validation["audit_calls"]
         )
     assert fleet.live is None
+
+
+@pytest.mark.parametrize("partial_failure", [False, True])
+def test_audit_transport_includes_resident_seed_exports(
+    fleet: Any, monkeypatch: Any, partial_failure: bool
+) -> None:
+    """Retained diagnostics include suspension D2H, even before a failed peer."""
+    fleet.fleet_outputs = [[item(0), item(1)], [item()], [item()]]
+    with PrecisionCalculator(policy="balanced").prepare_batch(
+        [ATOMS, ATOMS]
+    ) as prepared:
+        owner = fleet.live
+        owner.ks_transport_diagnostics = (
+            KsTransportDiagnostic(0, 0, 0, 0, 0, 0, 0),
+        ) * 2
+        exported = set()
+        library_type = type(owner._library)
+        get = library_type.generativeqc_batch_get_hf_warm_state
+
+        def export(library: Any, batch: Any, index: int, pointer: Any) -> int:
+            if partial_failure and index == 1:
+                raise RuntimeError("second resident export failed")
+            if index not in exported:
+                rows = list(batch.ks_transport_diagnostics)
+                rows[index] = replace(
+                    rows[index], matrix_d2h_bytes=32, synchronizations=1
+                )
+                batch.ks_transport_diagnostics = tuple(rows)
+                exported.add(index)
+            return get(library, batch, index, pointer)
+
+        monkeypatch.setattr(
+            library_type, "generativeqc_batch_get_hf_warm_state", export
+        )
+        output = prepared.execute()
+        transport = prepared.ks_transport_diagnostics
+        assert transport[0].matrix_d2h_bytes == 32
+        assert transport[0].synchronizations == 1
+        assert transport[1].matrix_d2h_bytes == (0 if partial_failure else 32)
+        assert transport[1].synchronizations == (0 if partial_failure else 1)
+        if partial_failure:
+            assert output.failure_indices == (0, 1)
+            assert fleet.live is owner and not owner.closed
+            assert all(
+                "second resident export failed" in attempt["error"]
+                for attempt in output.precision_validation["audit_calls"]
+            )
+        else:
+            assert output.succeeded and owner.closed
+            assert fleet.live is None
+
+
+def test_failed_seed_export_transport_query_preserves_original_error(
+    fleet: Any, monkeypatch: Any
+) -> None:
+    """A secondary diagnostic failure must not replace the staging cause."""
+    fleet.fleet_outputs = [[item()]]
+    with PrecisionCalculator(policy="balanced").prepare_batch([ATOMS]) as prepared:
+        owner = fleet.live
+        initial = (KsTransportDiagnostic(0, 0, 0, 64, 2, 0, 0),)
+        export_failed = False
+
+        def read_transport(batch: Any) -> tuple:
+            if export_failed:
+                raise RuntimeError("secondary transport query failed")
+            return initial
+
+        def fail_export(*args: Any) -> int:
+            nonlocal export_failed
+            export_failed = True
+            raise MemoryError("original resident export failed")
+
+        monkeypatch.setattr(
+            type(owner),
+            "ks_transport_diagnostics",
+            property(read_transport),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            type(owner._library), "generativeqc_batch_get_hf_warm_state", fail_export
+        )
+        output = prepared.execute()
+        assert output.items[0].status == _native.STATUS_OUT_OF_MEMORY
+        assert "original resident export failed" in output.items[0].status_message
+        attempt = output.precision_validation["audit_calls"][0]
+        assert "original resident export failed" in attempt["error"]
+        assert "secondary transport" not in attempt["error"]
+        assert prepared.ks_transport_diagnostics == (None,)
+        assert fleet.live is owner and not owner.closed
 
 
 def test_clear_suspended_seeds_disables_restore_and_close_is_idempotent(
