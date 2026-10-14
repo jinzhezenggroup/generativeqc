@@ -13,6 +13,7 @@ import ctypes
 import hashlib
 import json
 import os
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 from statistics import median
@@ -66,19 +67,52 @@ def protocol(case_name: str, spec: GridSpec) -> dict[str, Any]:
     )
 
 
-def reference(case_name: str, spec: GridSpec, threads: int) -> dict[str, Any]:
+def reference(
+    case_name: str,
+    spec: GridSpec,
+    threads: int,
+    *,
+    functional: str = "PBE0",
+    atoms: Any = None,
+    basis: Any = None,
+    auxiliary_basis: Any = None,
+    backend: str = "pyscf",
+) -> dict[str, Any]:
     """PySCF owns SCF, integrals, XC, partition and analytic moving-grid response.
 
     Reconstruct atomic quadrature from the public specification rather than
     supplying native final grid weights; derivatives must move the same grid.
     The basis coefficients are common inputs, not a native numerical oracle.
+    Other RKS qualification consumers may select the XC functional, an explicit
+    moved geometry and shared basis inputs. Nonlocal functionals use the same
+    independent atomic rules for their second grid, including its full moving
+    response. PySCF's VV10 energy and gradient use the molecular 1e-8 density
+    threshold. The default PBE0 protocol keeps the original geometry and basis.
+    An explicit PySCF auxiliary basis selects its independent density-fitted
+    Hamiltonian, including auxiliary-center and metric response in the forces.
+    The optional ``gpu4pyscf`` oracle retains independent grids and complete
+    strict SCF/gradient work; it requires a Slurm allocation. Fitted WB97M-V
+    uses full-range DF J/K plus exact long-range K and its analytic derivative,
+    not the default GPU4PySCF all-fitted range-separated Hamiltonian.
     """
+    if backend not in ("pyscf", "gpu4pyscf"):
+        raise ValueError("reference backend must be pyscf or gpu4pyscf")
+    if backend == "gpu4pyscf" and not os.environ.get("SLURM_JOB_ID"):
+        raise RuntimeError("GPU reference requires a finite Slurm allocation")
+    if (
+        auxiliary_basis is not None
+        and functional.upper().replace("-", "_") == "WB97M_V"
+        and backend != "gpu4pyscf"
+    ):
+        raise NotImplementedError("fitted WB97M-V requires the matched GPU reference")
     import pyscf
     from pyscf import dft, gto, lib
 
     lib.num_threads(threads)
     case = benchmark_cases()[case_name]
-    basis = snapshot_basis(case.generativeqc_basis, case.basis_representation)
+    basis = snapshot_basis(
+        case.generativeqc_basis if basis is None else basis, case.basis_representation
+    )
     shells = {
         SYMBOLS[element.atomic_number - 1]: [
             [
@@ -96,7 +130,7 @@ def reference(case_name: str, spec: GridSpec, threads: int) -> dict[str, Any]:
         for element in basis.elements
     }
     molecule = gto.M(
-        atom=case.atoms,
+        atom=case.atoms if atoms is None else atoms,
         basis=shells,
         unit="Bohr",
         cart=case.basis_representation == "cartesian",
@@ -131,29 +165,75 @@ def reference(case_name: str, spec: GridSpec, threads: int) -> dict[str, Any]:
         raise ValueError(
             "reference adapter requires version-1 unit radii/three Becke passes"
         )
-    engine = dft.RKS(molecule)
-    engine.xc = "PBE0"
-    engine.grids.radii_adjust = None
-    engine.grids.becke_scheme = dft.gen_grid.original_becke
-    engine.grids.prune = None
-    engine.grids.gen_atomic_grids = lambda *args, **kwargs: atomic_rules
+    if backend == "gpu4pyscf":
+        import cupy as cp
+        import gpu4pyscf
+        from gpu4pyscf.dft import gen_grid, rks
+
+        from benchmarks.readme_wb97mv import (
+            configure_reference_full_fock,
+            configure_reference_mixed_rsh_df,
+            reference_vv10_domain,
+        )
+
+        engine = rks.RKS(molecule)
+        atomic_rules = {
+            symbol: tuple(cp.asarray(array) for array in arrays)
+            for symbol, arrays in atomic_rules.items()
+        }
+        becke_scheme = gen_grid.original_becke
+    else:
+        engine = dft.RKS(molecule)
+        becke_scheme = dft.gen_grid.original_becke
+    if auxiliary_basis is not None:
+        engine = engine.density_fit(auxbasis=auxiliary_basis)
+    engine.xc = functional
+    if backend == "gpu4pyscf":
+        configure_reference_full_fock(engine)
+        if auxiliary_basis is not None and engine.do_nlc():
+            configure_reference_mixed_rsh_df(engine)
+    for grids in (
+        (engine.grids, engine.nlcgrids) if engine.do_nlc() else (engine.grids,)
+    ):
+        grids.radii_adjust = None
+        grids.becke_scheme = becke_scheme
+        grids.prune = None
+        grids.gen_atomic_grids = lambda *args, **kwargs: atomic_rules
     engine.small_rho_cutoff = 0
     engine.conv_tol, engine.conv_tol_grad = 1e-12, 1e-10
     engine.direct_scf_tol, engine.max_cycle = 1e-14, 180
     engine.init_guess = "1e"
+    if backend == "gpu4pyscf":
+        cp.cuda.Stream.null.synchronize()
     started = perf_counter()
-    energy = float(engine.kernel())
-    if not engine.converged:
-        raise RuntimeError("independent PBE0 SCF did not converge")
-    gradient = engine.nuc_grad_method()
-    gradient.grid_response = True
-    forces = -gradient.kernel()
+    with (
+        reference_vv10_domain(1e-8)
+        if backend == "gpu4pyscf" and engine.do_nlc()
+        else nullcontext()
+    ):
+        energy = float(engine.kernel())
+        if not engine.converged:
+            raise RuntimeError(f"independent {functional} SCF did not converge")
+        gradient = engine.nuc_grad_method()
+        gradient.grid_response = True
+        forces = -gradient.kernel()
+        if backend == "gpu4pyscf":
+            forces = cp.asnumpy(forces)
+            cp.cuda.Stream.null.synchronize()
     return {
         "energy": energy,
         "forces": forces.tolist(),
         "converged": True,
         "seconds": perf_counter() - started,
         "pyscf_version": pyscf.__version__,
+        "reference_backend": backend,
+        **(
+            {"gpu4pyscf_version": gpu4pyscf.__version__}
+            if backend == "gpu4pyscf"
+            else {}
+        ),
+        "functional": functional,
+        "density_fitting": auxiliary_basis is not None,
         "aos": molecule.nao,
         "grid_points": len(engine.grids.weights),
         "iterations": engine.cycles,

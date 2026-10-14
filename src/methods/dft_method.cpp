@@ -298,7 +298,6 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
     const dft::GridSpec& grid, bool all_electron, std::size_t maximum_angular, std::size_t aos,
     std::size_t atoms, bool qualify_through_d = false) noexcept {
   const bool application =
-      options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
       dft::admit_application_gradient(options.application_precision_budget, aos, atoms,
                                       maximum_angular, execution_plan.spin_channels == 1);
   // Above the retained-pair regime, the incumbent phased strict consumer is
@@ -340,10 +339,19 @@ const dft::CudaStationaryBinding* native_cuda_stationary_binding(
                                        options.semilocal_correlation_scale,
                                        exchange};
   const auto* binding = dft::cuda_stationary_binding(model);
-  if ((application || (maximum_angular > 1 && !qualify_through_d)) &&
-      (model.functional != static_cast<std::uint32_t>(dft::SemilocalFamily::Pbe) ||
-       model.spin_blocks != 1 || model.semilocal_exchange_scale != 0.75 ||
-       model.semilocal_correlation_scale != 1.0 || model.full_range_exchange != 0.25))
+  // Newly packaged split-hybrid graphs are diagnostic candidates until their
+  // complete shape is qualified. Merely linking one must not promote the
+  // historical s/p strict consumer or an unqualified unrestricted peer.
+  if (execution_plan.generated_split_hybrid && !qualify_through_d &&
+      (!native_shape || !binding || !dft::stationary_gradient_model_qualification(*binding, aos)))
+    return {};
+  if (application) {
+    if (!binding ||
+        !dft::application_gradient_qualification(*binding, options.application_precision_budget,
+                                                 aos, atoms, maximum_angular))
+      return {};
+  } else if ((maximum_angular > 1 && !qualify_through_d) &&
+             (!binding || !dft::stationary_gradient_model_qualification(*binding, aos)))
     return {};
   return binding;
 }
@@ -1627,9 +1635,9 @@ class KsPreparedState final : public KsSingleOwnerPort {
       }
       // The controller's shape plan includes grid/provider scratch. Charge only
       // storage not already retained on a replay, before creating any force owner.
-      const auto capacity =
-          dft::cuda_stationary_capacity(*binding, basis_.natom, basis_.nao, basis_.nprimitive,
-                                        grid_.point_count(), options_.xc_tile_points);
+      const auto capacity = dft::cuda_stationary_capacity(
+          *binding, basis_.natom, basis_.nao, basis_.nprimitive, grid_.point_count(),
+          options_.xc_tile_points, precision && precision->mixed_grid);
       const auto envelope = std::min(maximum_device_bytes, capacity.cached_device_bytes);
       const auto retained =
           stationary_controller_ ? stationary_controller_->resources().device_upper_bytes : 0;
@@ -1702,6 +1710,18 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                           qualify_through_d);
   }
 
+  /** Both capacity planning and execution consume the same budget/model gate.
+   * In particular, strict SCF does not imply strict derivative arithmetic. */
+  std::uint64_t application_gradient_qualification() const noexcept {
+    const auto* binding = admitted_cuda_stationary_binding();
+    if (!binding) return 0;
+    std::size_t maximum_angular = 0;
+    for (const auto& shell : system_.shells)
+      maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
+    return dft::application_gradient_qualification(*binding, options_.application_precision_budget,
+                                                   basis_.nao, basis_.natom, maximum_angular);
+  }
+
   generativeqc_status native_cuda_stationary_capacity(dft::CudaStationaryCapacity& capacity,
                                                       std::string& detail) const {
     const auto* binding = admitted_cuda_stationary_binding();
@@ -1712,7 +1732,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     try {
       const auto candidate = dft::cuda_stationary_capacity(
           *binding, basis_.natom, basis_.nao, basis_.nprimitive, grid_.point_count(),
-          options_.xc_tile_points, options_.precision_mode == GENERATIVEQC_PRECISION_AUTO);
+          options_.xc_tile_points, application_gradient_qualification() != 0);
       capacity = candidate;
       detail.clear();
       return GENERATIVEQC_STATUS_SUCCESS;
@@ -1765,8 +1785,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
       std::vector<double> gradient;
       dft::CudaStationaryResources resources;
       scf::DirectForcePrecisionRequest precision;
-      const bool application = options_.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-                               options_.application_precision_budget[0] > 0.0;
+      const auto qualification = application_gradient_qualification();
+      const bool application = qualification != 0;
       precision.mixed_weighted = application;
       precision.mixed_geometry = application;
       precision.mixed_grid = application;
@@ -1778,9 +1798,11 @@ class KsPreparedState final : public KsSingleOwnerPort {
         throw MethodError(status, detail.empty() ? "native CUDA DFT force unavailable" : detail);
       for (auto& value : gradient) value = -value;
       result.forces.swap(gradient);
-      if (application)
+      if (application) {
         result.precision_work.gradient = {1, precision.mixed_weighted, precision.geometry_points,
                                           precision.grid_points, precision.geometry_retries};
+        result.precision_work.gradient_qualification = qualification;
+      }
       return;
     }
     if (status == GENERATIVEQC_STATUS_SUCCESS)
@@ -2836,7 +2858,8 @@ generativeqc_status dft_cuda_stationary_capacity(const generativeqc_method_descr
     if (points != shape[3]) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto candidate = dft::cuda_stationary_capacity(
         *binding, shape[0], shape[1], shape[2], shape[3], options.xc_tile_points,
-        options.precision_mode == GENERATIVEQC_PRECISION_AUTO);
+        dft::application_gradient_qualification(*binding, options.application_precision_budget,
+                                                shape[1], shape[0], shape[4]) != 0);
     capacity = candidate;
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

@@ -40,12 +40,26 @@ def emit_df_shell_units() -> typing.Any:
         polynomial = f"df_shell_polynomial_{name}.cuh"
         policy = f"df_shell_policy_{name}.hpp"
         math = f"df_shell_math_{name}.cuh"
-        yield polynomial, emit_df_shell_derivatives_cuda(classes=(angular,))
+        yield (
+            polynomial,
+            "\n".join(
+                emit_df_shell_derivatives_cuda(
+                    classes=(angular,), scalar_type=scalar_type
+                )
+                for scalar_type in ("double", "float")
+            ),
+        )
         yield policy, emit_df_rys_policy_cpp(classes=(angular,))
         yield (
             math,
-            emit_df_rys_shell_cuda(
-                classes=(angular,), shell_header=polynomial, policy_header=policy
+            "\n".join(
+                emit_df_rys_shell_cuda(
+                    classes=(angular,),
+                    shell_header=polynomial,
+                    policy_header=policy,
+                    scalar_type=scalar_type,
+                )
+                for scalar_type in ("double", "float")
             ),
         )
         yield (

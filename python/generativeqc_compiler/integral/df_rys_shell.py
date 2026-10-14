@@ -210,15 +210,29 @@ template<unsigned A,unsigned B,unsigned C>
 def emit_df_rys_shell_cuda(
     *,
     classes: typing.Any = None,
-    shell_header: typing.Any = "generated_df_shell_derivatives.cuh",
+    shell_header: str | None = None,
     policy_header: typing.Any = "generated_df_rys_policy.hpp",
+    scalar_type: str = "double",
 ) -> typing.Any:
     """Emit the complete bounded family against the unchanged packet/sink ABI.
 
     Delivered low-angular winners retain pruned component moments in registers.
     Higher classes share one bounded axis program per root/axis. Unsupported
     tuples have no specialization; qualification remains separate from support.
+
+    Float retains the same quadrature, component/cooperative ownership and
+    scientific DAG. Only root/axis recurrence, cached moments, weighted local
+    derivative algebra and local sums narrow. Roots and Gaussian geometry stay
+    double in a separately named preparation owner, so both variants can link.
     """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
+    if shell_header is None:
+        shell_header = (
+            "generated_df_fp32_shell_derivatives.cuh"
+            if scalar_type == "float"
+            else "generated_df_shell_derivatives.cuh"
+        )
     selected = select_shell_classes(classes)
     geometry = emit_df_geometry_cuda(
         "prepare_geometry_rys",
@@ -242,7 +256,11 @@ def emit_df_rys_shell_cuda(
         if angular not in selected:
             continue
         if angular in COOPERATIVE_RYS_SHELL_CLASSES:
-            lines.extend(_emit_cooperative_shell(angular))
+            lines.extend(
+                _emit_cooperative_shell(angular)
+                if scalar_type == "double"
+                else _emit_cooperative_shell(angular, scalar_type=scalar_type)
+            )
             continue
         parameters = ",".join(map(str, angular))
         roots = shell_rys_roots(angular)
@@ -280,7 +298,11 @@ def emit_df_rys_shell_cuda(
                 }
             )
             variables.update(root="g.f[root]", root_weight=f"g.f[root+{roots}]")
-            emitter = CudaEmitter(graph, variables)
+            if scalar_type == "float":
+                variables = {
+                    name: f"float({value})" for name, value in variables.items()
+                }
+            emitter = CudaEmitter(graph, variables, scalar_type=scalar_type)
             emitter.emit(outputs)
             lines += [
                 f"    case {item}: {{",
@@ -295,7 +317,37 @@ def emit_df_rys_shell_cuda(
             lines += ["      }", "      return;", "    }"]
         lines += ["    }", "  }", "};"]
     lines += ["} // namespace generativeqc::scf::generated_df_shell", "#endif", ""]
-    return "\n".join(lines)
+    source = "\n".join(lines)
+    if scalar_type == "float":
+        # Quadrature/geometry must remain strict even when the rest of this
+        # generated consumer uses float. Substitute that canonical body only
+        # after typing the shell interface and its local scalar work.
+        source = source.replace(geometry, "__STRICT_RYS_GEOMETRY__")
+        # Include paths are caller-owned identities, not arithmetic tokens.
+        # A combined class header may legitimately contain "double" or the
+        # strict namespace spelling in its filename.
+        includes = [line for line in lines if line.startswith("#include ")]
+        for index, include in enumerate(includes):
+            source = source.replace(include, f"__RYS_INCLUDE_{index}__")
+        source = (
+            source.replace("double", "float")
+            .replace(
+                "GENERATIVEQC_GENERATED_DF_RYS_SHELL",
+                "GENERATIVEQC_GENERATED_DF_FP32_RYS_SHELL",
+            )
+            .replace("generated_df_shell", "generated_df_fp32_shell")
+            .replace("__STRICT_RYS_GEOMETRY__", geometry)
+            .replace("prepare_geometry_rys", "prepare_geometry_rys_fp32_consumer")
+            .replace(": 0.0)", ": 0.0f)")
+            .replace("g.pb[axis]-g.pa[axis]", "float(g.pb[axis])-float(g.pa[axis])")
+            .replace(
+                "weight*g.prefactor*g.f[nroots+root]",
+                "weight*float(g.prefactor)*float(g.f[nroots+root])",
+            )
+        )
+        for index, include in enumerate(includes):
+            source = source.replace(f"__RYS_INCLUDE_{index}__", include)
+    return source
 
 
 def build_df_rys_shared_axis_ir(angular: typing.Any) -> typing.Any:
@@ -350,7 +402,9 @@ def build_df_rys_shared_axis_ir(angular: typing.Any) -> typing.Any:
     return graph, tuple(outputs), len(states)
 
 
-def _emit_cooperative_shell(angular: typing.Any) -> typing.Any:
+def _emit_cooperative_shell(
+    angular: typing.Any, *, scalar_type: str = "double"
+) -> typing.Any:
     """Lower the shared root/axis graph into the existing shell packet ABI."""
     parameters = ",".join(map(str, angular))
     roots = shell_rys_roots(angular)
@@ -358,7 +412,9 @@ def _emit_cooperative_shell(angular: typing.Any) -> typing.Any:
     variables = {name: f"g.{name}" for name in ("sx", "sy", "ip", "iq")}
     variables.update({name: f"g.{name}[axis]" for name in ("pa", "pb", "dx")})
     variables["root"] = "g.f[root]"
-    emitter = CudaEmitter(graph, variables)
+    if scalar_type == "float":
+        variables = {name: f"float({value})" for name, value in variables.items()}
+    emitter = CudaEmitter(graph, variables, scalar_type=scalar_type)
     emitter.emit(outputs)
     a, b, c = angular
     return [

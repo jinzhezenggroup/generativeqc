@@ -42,7 +42,9 @@ def _functional_code(functional: typing.Any, pbe: typing.Any) -> int:
     return functional
 
 
-def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
+def _emit_composed_point(
+    code: int, semilocal: FunctionalSpec, *, scalar_type: str = "double"
+) -> str:
     """Reuse the energy consumer's exact generated graph and boundary policy.
 
     The force consumer changes only the rho/sigma/tau-to-Cartesian ABI; it
@@ -61,6 +63,7 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
             identity_constant="kStationarySemilocalIdentity",
             production=True,
             function_qualifier="__device__ inline",
+            scalar_type=scalar_type,
         )
         features = 7 if curated["requires_tau"] else 5
     else:
@@ -74,7 +77,9 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
             name: Fraction(weight) for name, weight in record["components"]
         }:
             raise ValueError("stationary split-hybrid point composition mismatch")
-        body, _, selected = emit_split_hybrid_device_body(identifier)
+        body, _, selected = emit_split_hybrid_device_body(
+            identifier, scalar_type=scalar_type
+        )
         # The generated symbol follows the same canonical registry convention.
         import re
 
@@ -201,24 +206,37 @@ def _emit_restricted_point_capability(
 
 
 def _emit_stationary_point(
-    functional: int, *, semilocal: FunctionalSpec | None = None
+    functional: int,
+    *,
+    semilocal: FunctionalSpec | None = None,
+    scalar_type: str = "double",
 ) -> str:
-    """Emit the exact SCF-domain point differential consumed by geometry CUDA."""
+    """Emit a point differential with the SCF owner's work-domain semantics.
+
+    Typed composed graphs retain FP64 conditioning and Cartesian conversion.
+    Only the guarded caller may select their float graph; this emitter alone
+    neither admits molecular Fast nor guarantees an observable error budget.
+    The PBE/LDA owner has its own normalized mixed implementation.
+    """
+    if scalar_type not in ("double", "float"):
+        raise ValueError("scalar type must be double or float")
     curated: typing.Mapping[str, typing.Any] | None = SEMILOCAL_FAMILY_BY_CODE.get(
         functional
     )
     if functional in _SPLIT_HYBRID_BY_CODE:
         if not isinstance(semilocal, FunctionalSpec):
             raise ValueError("composed stationary point requires its FunctionalSpec")
-        return _emit_composed_point(functional, semilocal)
+        return _emit_composed_point(functional, semilocal, scalar_type=scalar_type)
     if curated is None:
         raise ValueError("unknown stationary semilocal functional code")
     kernel = curated["stationary_kernel"]
     if kernel == "composed":
         if not isinstance(semilocal, FunctionalSpec):
             raise ValueError("composed stationary point requires its FunctionalSpec")
-        return _emit_composed_point(functional, semilocal)
+        return _emit_composed_point(functional, semilocal, scalar_type=scalar_type)
     if kernel in ("lda", "pbe"):
+        if scalar_type != "double":
+            raise ValueError("PBE/LDA float graphs require the normalized mixed owner")
         pbe = "true" if kernel == "pbe" else "false"
         scales = ""
         if semilocal is not None:
@@ -284,6 +302,7 @@ def _emit_stationary_point(
             identity_constant="kStationaryWb97mvExpressionIdentity",
             production=True,
             function_qualifier="__device__ inline",
+            scalar_type=scalar_type,
         )
         return "\n".join(
             [
@@ -373,6 +392,7 @@ def _emit_stationary_point(
         function_name="stationary_r2scan_raw",
         identity_constant="kStationaryR2scanIdentity",
         qualifier="__device__ inline",
+        scalar_type=scalar_type,
     )
     return (
         body
@@ -524,17 +544,81 @@ def emit_geometry_cuda(
 
 
 def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:
-    """Reuse the point owner's typed algebra, never cast a completed FP64 value."""
+    """Reuse typed graphs with strict tails and execution-owned work reporting.
+
+    Capability means that a compiler candidate exists, not that a public method
+    or budget has been qualified. The runtime still owns that admission. Keep
+    input conditioning and Cartesian conversion with their original owner so
+    an FP32 candidate cannot introduce a second functional or clipping policy.
+    """
     curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
-    capable = curated is not None and curated["stationary_kernel"] in ("lda", "pbe")
+    normalized = curated is not None and curated["stationary_kernel"] in ("lda", "pbe")
+    capable = code in _REGISTERED_STATIONARY_CODES
     lines = [
         f"constexpr bool stationary_fp32_point_capable = {str(capable).lower()};",
         "__device__ inline StationaryPointValue stationary_evaluate_point_fp32(",
-        "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
+        "    const double rho[2], const double gradient[2][3], const double tau[2],",
+        "    bool* fp32_used = nullptr) {",
+        "  if (fp32_used) *fp32_used = false;",
     ]
     if not capable:
         return "\n".join(
             [*lines, "  return stationary_evaluate_point(rho, gradient, tau);", "}"]
+        )
+    if not normalized:
+        requires_tau = (
+            "tau" in semilocal.ingredients if semilocal else curated["requires_tau"]
+        )
+        return "\n".join(
+            [
+                "namespace stationary_narrowed_point {",
+                _emit_stationary_point(code, semilocal=semilocal, scalar_type="float"),
+                "}",
+                *lines,
+                # Near full polarization, cancellation in 1-zeta amplifies
+                # float rounding in minority-spin meta-GGA derivatives.
+                "  bool interior = rho[0] <= 16.0 * rho[1] && rho[1] <= 16.0 * rho[0];",
+                "  for (unsigned spin = 0; spin < 2; ++spin) {",
+                "    interior = interior && rho[spin] >= 1e-6 && rho[spin] <= 1e3;",
+                "    for (unsigned axis = 0; axis < 3; ++axis)",
+                "      interior = interior && isfinite(gradient[spin][axis]) &&",
+                "                 fabs(gradient[spin][axis]) <= 100.0 * rho[spin];",
+                *(
+                    [
+                        "    interior = interior && tau[spin] >= 1e-6 && tau[spin] <= 1e6;"
+                    ]
+                    if requires_tau
+                    else []
+                ),
+                "  }",
+                "  if (interior) {",
+                "    bool equal_spin = rho[0] == rho[1];",
+                "    for (unsigned axis = 0; axis < 3; ++axis)",
+                "      equal_spin = equal_spin && gradient[0][axis] == gradient[1][axis];",
+                *(
+                    ["    equal_spin = equal_spin && tau[0] == tau[1];"]
+                    if requires_tau
+                    else []
+                ),
+                "    const auto candidate = equal_spin",
+                "        ? stationary_narrowed_point::stationary_evaluate_point<true>(rho, gradient, tau)",
+                "        : stationary_narrowed_point::stationary_evaluate_point(rho, gradient, tau);",
+                "    if (candidate.valid) {",
+                "      StationaryPointValue result;",
+                "      result.energy = candidate.energy;",
+                "      for (unsigned spin = 0; spin < 2; ++spin) {",
+                "        result.rho[spin] = candidate.rho[spin];",
+                "        result.kinetic[spin] = candidate.kinetic[spin];",
+                "        for (unsigned axis = 0; axis < 3; ++axis)",
+                "          result.gradient[spin][axis] = candidate.gradient[spin][axis];",
+                "      }",
+                "      if (fp32_used) *fp32_used = true;",
+                "      return result;",
+                "    }",
+                "  }",
+                "  return stationary_evaluate_point(rho, gradient, tau);",
+                "}",
+            ]
         )
     exchange = correlation = 1.0
     if semilocal is not None:
@@ -546,8 +630,10 @@ def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:
     return "\n".join(
         [
             *lines,
-            "  const auto raw = generativeqc::dft::point::evaluate_pbe_full_mixed(",
-            f"      {pbe}, rho, gradient, {exchange.hex()}, {correlation.hex()}).value;",
+            "  const auto mixed = generativeqc::dft::point::evaluate_pbe_full_mixed(",
+            f"      {pbe}, rho, gradient, {exchange.hex()}, {correlation.hex()});",
+            "  if (fp32_used) *fp32_used = mixed.fp32_correlation;",
+            "  const auto& raw = mixed.value;",
             "  StationaryPointValue result;",
             "  result.energy = raw.energy;",
             "  result.valid = raw.valid;",
