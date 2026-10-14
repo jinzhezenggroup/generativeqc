@@ -125,6 +125,24 @@ provider selection, frozen native inputs, or the original GPU measurements.
 Final consumer identity and replay evidence are appended in publication provenance
 without relabeling earlier consumer repairs or the 45-case historical record.
 
+After PR #2470 merged, a source observer identified three additional review
+threads created before that merge. The delivery SHA, CI, and delivered blobs were
+real, but the all-findings-closed completion statement was withdrawn publicly:
+the queue watcher had checked CI without rechecking later review threads. The
+bounded follow-up rejects each missing executed stage interval, default owner
+identity on available failed snapshots, and fallback/submission contradictions.
+The original 84-case record remains historical rather than being relabeled.
+
+Only the first measured residual stage runs on the initial invocation; the other
+three measured intervals must remain zero there. Available failed snapshots copy
+the concrete candidate plan and cache device, while pre-reset rejection has no
+snapshot and retains its default identity. Failed calls in the authentic journal
+can have family 1 with submission true, so neither graph submission nor mixer
+transaction completion is equated to final API success. The raw journals and GPU
+build are unchanged. Current source-bound host validation is appended separately;
+every later substantive thread must be checked while the follow-up waits in queue,
+even after an exact-head approval has been recorded.
+
 Raw endpoint data can be independently revalidated and diagnostic overhead stays
 visible. Restricted single-system qualification leaves ragged/unrestricted
 semantics and profitable provider schedules open. Revisit the timing boundary

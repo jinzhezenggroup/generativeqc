@@ -561,3 +561,132 @@ def test_large_dimension_trajectory_is_bounded_and_bad_visits_rejected(
         assert result.returncode == (1 if corrupted else 0), result.stderr
         if corrupted:
             assert "independent work oracle" in result.stderr
+
+
+def readout_experiment(kind: str) -> tuple[dict, list[dict], dict]:
+    oracle, rows = experiment() if kind == "main" else lifecycle()
+    healthy = next(row for row in rows if row["enabled"] and row["endpoint_completed"])
+    return oracle, rows, healthy
+
+
+def readout_report(tmp_path: Path, kind: str, rows: list[dict], oracle: dict) -> dict:
+    if kind == "main":
+        return write_report(tmp_path, rows, oracle)
+    path = tmp_path / "lifecycle.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return MODULE.report_lifecycle(path, oracle)
+
+
+@pytest.mark.parametrize("kind", ["main", "lifecycle"])
+@pytest.mark.parametrize("stage", MODULE.STAGES)
+def test_each_executed_stage_requires_its_clock(
+    tmp_path: Path, kind: str, stage: str
+) -> None:
+    oracle, rows, healthy = readout_experiment(kind)
+    next(receipt for receipt in healthy["receipts"] if receipt["live_history"])[
+        f"{stage}_elapsed_cycles"
+    ] = 0
+    assert readout_report(tmp_path, kind, rows, oracle)["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize("kind", ["main", "lifecycle"])
+def test_first_invocation_requires_only_residual_clock(
+    tmp_path: Path, kind: str
+) -> None:
+    oracle, rows, healthy = readout_experiment(kind)
+    assert readout_report(tmp_path, kind, rows, oracle)["status"] == "PASS"
+    healthy["receipts"][0]["residual_elapsed_cycles"] = 0
+    assert readout_report(tmp_path, kind, rows, oracle)["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize("kind", ["main", "lifecycle"])
+@pytest.mark.parametrize("stage", MODULE.STAGES[1:])
+def test_first_invocation_cannot_claim_unexecuted_clocks(
+    tmp_path: Path, kind: str, stage: str
+) -> None:
+    oracle, rows, healthy = readout_experiment(kind)
+    healthy["receipts"][0][f"{stage}_elapsed_cycles"] = 10
+    with pytest.raises(ValueError, match="unexecuted"):
+        readout_report(tmp_path, kind, rows, oracle)
+
+
+@pytest.mark.parametrize("index", [0, 2])
+@pytest.mark.parametrize(
+    "field,value", [("plan_token", 0), ("device_id", -1), ("device_id", 1)]
+)
+def test_available_failed_snapshot_requires_qualified_identity(
+    tmp_path: Path, index: int, field: str, value: int
+) -> None:
+    oracle, rows = lifecycle()
+    rows[index][field] = value
+    with pytest.raises(ValueError):
+        readout_report(tmp_path, "lifecycle", rows, oracle)
+
+
+@pytest.mark.parametrize("index", [0, 2])
+def test_unavailable_failed_snapshot_does_not_observe_resource_lifetime(
+    tmp_path: Path, index: int
+) -> None:
+    oracle, rows = lifecycle()
+    rows[index]["snapshot_available"] = False
+    result = readout_report(tmp_path, "lifecycle", rows, oracle)
+    assert result["status"] == "INCOMPLETE"
+    assert not any(row.get("phase") == rows[index]["phase"] for row in result["rows"])
+
+
+@pytest.mark.parametrize("kind", ["main", "lifecycle"])
+@pytest.mark.parametrize("family", [0, 1, 2])
+@pytest.mark.parametrize("submitted", [False, True])
+def test_graph_family_submission_pair_is_consistent(
+    tmp_path: Path, kind: str, family: int, submitted: bool
+) -> None:
+    oracle, rows, healthy = readout_experiment(kind)
+    healthy.update(graph_family=family, graph_submitted=submitted)
+    if family == 0 and submitted:
+        with pytest.raises(ValueError, match="fallback"):
+            readout_report(tmp_path, kind, rows, oracle)
+    else:
+        expected = "INCOMPLETE" if family and not submitted else "PASS"
+        assert readout_report(tmp_path, kind, rows, oracle)["status"] == expected
+
+
+@pytest.mark.parametrize("index", [0, 2])
+def test_failed_fallback_snapshot_cannot_claim_graph_submission(
+    tmp_path: Path, index: int
+) -> None:
+    oracle, rows = lifecycle()
+    rows[index]["graph_submitted"] = True
+    with pytest.raises(ValueError, match="fallback"):
+        readout_report(tmp_path, "lifecycle", rows, oracle)
+
+
+def test_disabled_snapshot_cannot_claim_fallback_graph_submission(
+    tmp_path: Path,
+) -> None:
+    oracle, rows = experiment()
+    off = next(row for row in rows if not row["enabled"])
+    off["graph_submitted"] = True
+    with pytest.raises(ValueError, match="fallback"):
+        write_report(tmp_path, rows, oracle)
+
+
+@pytest.mark.parametrize(
+    "field,value", [("device_id", 0), ("graph_family", 1), ("graph_submitted", True)]
+)
+def test_pre_reset_snapshot_keeps_unavailable_identity(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    oracle, rows = lifecycle()
+    rows[4][field] = value
+    with pytest.raises(ValueError):
+        readout_report(tmp_path, "lifecycle", rows, oracle)
+
+
+@pytest.mark.parametrize("index", [0, 2])
+def test_missing_failure_snapshot_does_not_hide_changed_science(
+    tmp_path: Path, index: int
+) -> None:
+    oracle, rows = lifecycle()
+    rows[index].update(snapshot_available=False, energy=-1.0)
+    with pytest.raises(ValueError, match="science"):
+        readout_report(tmp_path, "lifecycle", rows, oracle)
