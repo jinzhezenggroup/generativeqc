@@ -1228,6 +1228,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (request_ao && !capable_local_ao)
       throw std::invalid_argument(
           "local SCF AO maps require a device-fused physical FP64 XC layout");
+    // Experimental schedule control is frozen at geometry preparation. It
+    // changes only discovery ownership; the sampled predicate and dense
+    // fallback admission remain the same for every functional.
+    const char* discovery = std::getenv("GENERATIVEQC_CUDA_KS_AO_DISCOVERY");
+    const bool device_discovery = discovery && std::strcmp(discovery, "device") == 0;
+    if (discovery && !device_discovery && std::strcmp(discovery, "host") != 0)
+      throw std::invalid_argument("GENERATIVEQC_CUDA_KS_AO_DISCOVERY accepts host or device");
     const bool select_ao = !disable_ao && capable_local_ao;
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
@@ -1393,7 +1400,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (experimental_mixed_point)
           xc->prepare_mixed_pbe_points(experimental_mixed_ao, experimental_mixed_contractions);
         if (admit_ao) {
-          if (!xc->select_local_ao(1e-16, ao_map_host_budget))
+          if (!xc->select_local_ao(1e-16, ao_map_host_budget,
+                                   device_discovery ? CudaXcAoDiscovery::DeviceChunks
+                                                    : CudaXcAoDiscovery::HostTiles))
             throw std::logic_error("admitted native SCF AO selection failed its resource check");
           xc_layout = xc->layout();
         }

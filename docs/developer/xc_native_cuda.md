@@ -453,6 +453,21 @@ Host/device resource admission can still retain dense execution, so read
 selection actually occurred and inspect actual AO work and XC build counts.
 This policy does not select local force AO maps or change Becke response.
 
+`GENERATIVEQC_CUDA_KS_AO_DISCOVERY=host|device` selects the discovery schedule
+at geometry preparation; `host` remains the default. The experimental `device`
+schedule evaluates the same generated AO jets and `abs(jet)>1e-16` predicate,
+then compacts sorted IDs on the device. It downloads CSR offsets and the error
+status once per bounded chunk (at most 128 tiles). It reuses dead XC scratch
+and the already admitted worst-case map storage; it adds no device allocation.
+Both schedules publish only after validation and drain outstanding borrowers
+on exceptions. Resource refusal retains the existing dense route.
+
+The optional `GENERATIVEQC_DF_PROGRESS_TRACE` preparation trace reports
+`cuda_xc_ao_discovery` with observed tiles, chunks, synchronization count,
+transfer bytes, AO jet work and active counts. These are discovery-only counts;
+frozen-geometry XC calls reuse the map. The public v1 AO-work ABI is unchanged.
+Use separate clean complete endpoints for timing, including geometry preparation.
+
 The targeted `generativeqc_dft_cuda_tests --pbe0-local-ao` gate compares
 scaled-PBE E/V with independent CPU integration and checks empty maps and
 bounded admission. It does not establish complete PBE0 SCF/force accuracy or

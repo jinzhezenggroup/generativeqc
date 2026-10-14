@@ -1324,6 +1324,12 @@ macro(generativeqc_register_cuda_generated_sources target)
   target_sources(${target} PRIVATE $<TARGET_OBJECTS:generativeqc_libxc_semilocal_cuda>)
   add_dependencies(${target} generativeqc_libxc_semilocal_cuda_codegen)
   target_include_directories(${target} PRIVATE "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}")
+  # Standalone code-generation consumers can include this module without the
+  # root project options. In that case retain the generator's default schedule.
+  set(_generativeqc_grid_matrix_args)
+  if(DEFINED GENERATIVEQC_CUDA_XC_MATRIX_TILE)
+    list(APPEND _generativeqc_grid_matrix_args --xc-matrix-tile "${GENERATIVEQC_CUDA_XC_MATRIX_TILE}")
+  endif()
   generativeqc_register_generated_sources(
     TARGET ${target}
     ADD_TO_TARGET
@@ -1337,7 +1343,8 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
-    ARGS --output "${GENERATIVEQC_GRID_SOURCE}" ${_generativeqc_grid_ao_schedule_args})
+    ARGS --output "${GENERATIVEQC_GRID_SOURCE}"
+      ${_generativeqc_grid_matrix_args} ${_generativeqc_grid_ao_schedule_args})
 
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")

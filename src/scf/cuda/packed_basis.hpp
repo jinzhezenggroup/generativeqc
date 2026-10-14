@@ -7,6 +7,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+struct DirectForceWork;
+
 /** Borrowed device basis view and primitive-pair storage ABI. The owning plan outlives every
  * submitted kernel. */
 template <typename Scalar>
@@ -103,6 +105,16 @@ struct DeviceBatch {
    * single-item derivative launch. Null preserves quadratic RHF/UHF weights.
    * Set only on a local batch view; never mutate the retained source identity. */
   const double* direct_force_seed{};
+  /** Borrowed only by an intrusive synchronous diagnostic invocation. The
+   * dispatcher drains before releasing it; retained geometry never owns it.
+   */
+  DirectForceWork* direct_force_work{};
+  /** Experimental acquisition preferences, frozen with the prepared owner.
+   * Defaults retain the qualified schedules; neither changes derivative math. */
+  unsigned direct_order_seven_page_size{32};
+  bool direct_dddd_force_class_major{};
+  /** Intrusive census-only split repeats enumeration to time low/6 separately. */
+  bool direct_force_split_low{};
   /** Per-launch qualification candidate, never a process-global precision mode.
    * Only full-range weighted order-0..5 sources consume it. Geometry, density
    * weights and radial moments stay double; all other derivative owners stay

@@ -21,6 +21,7 @@ def emit_direct_pair_materialized_gradient_support() -> str:
 #if defined(__CUDACC__)
 #include <limits>
 #include "scf/cuda/direct_force_density.cuh"
+#include "scf/cuda/direct_force_profile.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
 #include "scf/cuda/direct_force_sources.hpp"
 
@@ -274,6 +275,18 @@ __device__ inline void contract_materialized_direct_pair_force(
     any_admitted |= admitted[slot];
   }
   if (!__syncthreads_or(any_admitted)) return;
+  auto* diagnostic = direct_force_task_work(batch, task);
+  if (diagnostic) {
+    if (threadIdx.x == 0U) {
+      atomicAdd(&diagnostic->executed_shells, 1ULL);
+      profile_direct_force_primitive_products(batch, diagnostic, first_pair, second_pair);
+    }
+    unsigned components = 0;
+    for (unsigned slot = 0; slot < Slots; ++slot) components += admitted[slot];
+    if (components) atomicAdd(&diagnostic->executed_components,
+                               static_cast<unsigned long long>(components));
+    if (!work) work = &diagnostic->recurrence;
+  }
   const auto bra_begin = batch.shell_pair_primitive_offsets[first_pair];
   const auto ket_begin = batch.shell_pair_primitive_offsets[second_pair];
   const auto nb = batch.shell_primitive_offsets[sj + 1] - batch.shell_primitive_offsets[sj];

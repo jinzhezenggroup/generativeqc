@@ -456,10 +456,54 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_selected_physical_layout_propagates_back_to_the_ks_owner() -> None:
+def test_selected_physical_layout_propagates_back_to_the_ks_owner(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute publication/refusal using the owner's real admission block."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("        if (admit_ao) {")
-    end = source.index("        prepared_ao_work = xc->ao_selection_work();", start)
-    block = source[start:end]
-    assert "xc->select_local_ao(1e-16, ao_map_host_budget)" in block
-    assert "xc_layout = xc->layout();" in block
+    end = source.index("        const auto admitted_precision", start)
+    probe = tmp_path / "publication.cpp"
+    probe.write_text(
+        r"""
+#include <cassert>
+#include <cstddef>
+#include <stdexcept>
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
+struct Layout { bool local; };
+struct Owner {
+  bool success, called{};
+  CudaXcAoDiscovery schedule{};
+  bool select_local_ao(double cutoff, std::size_t budget, CudaXcAoDiscovery selected) {
+    assert(cutoff == 1e-16 && budget == 1024);
+    called = true; schedule = selected; return success;
+  }
+  Layout layout() { return {true}; }
+};
+int main() {
+  for (bool admit_ao : {false, true})
+    for (bool device_discovery : {false, true})
+      for (bool success : {false, true}) {
+        Owner owner{success}; auto* xc = &owner;
+        Layout xc_layout{false};
+        const std::size_t ao_map_host_budget = 1024;
+        bool refused = false;
+        try {
+"""
+        + source[start:end]
+        + r"""
+        } catch (const std::logic_error&) { refused = true; }
+        assert(refused == (admit_ao && !success));
+        assert(xc_layout.local == (admit_ao && success));
+        assert(owner.called == admit_ao);
+        if (owner.called)
+          assert(owner.schedule == (device_discovery ? CudaXcAoDiscovery::DeviceChunks
+                                                     : CudaXcAoDiscovery::HostTiles));
+      }
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [probe], tmp_path / "publication", compile_args=["-std=c++20", "-O0"]
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)

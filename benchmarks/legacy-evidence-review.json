@@ -246,9 +246,30 @@
       "owner": "experimental large-domain VV10 pair schedule",
       "reason": "Lossless generated-kernel, independent E/F, boundary, sanitizer, build and complete smaller-population evidence. Larger attempts were cancelled on user wrap-up and remain explicitly incomplete. No default promotion or 96-atom completion claim.",
       "review_document": "benchmarks/results/vv10-wide-pair-20261014/README.md"
+    },
+    "bounded-dft-schedules-2475-2479": {
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts",
+      "bytes": 140660,
+      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+    },
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "clean-samples-and-source-reconstruction",
+      "bytes": 193076,
+      "sha256": "5b4600add56a2e757eccc25a64100e440183a65b011513368b97a1f0ecd3b2af"
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -256,14 +277,6 @@
       "path": "benchmarks/results/cg01/capabilities.json",
       "role": "decision-or-audit-record",
       "sha256": "1bc9dd514c7396fb9a3dd6a637a654fd6617c6bb00a55858c0c445412d143a2d"
-    },
-    {
-      "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.gz",
-      "family": "cpu-eri-coulomb-20261001",
-      "bytes": 311664,
-      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e",
-      "classification": "required-compact-accepted-evidence",
-      "role": "All six final untimed HF/PBE/PBE0 checks, both failed oracle pilots, exact per-attempt scripts, independent convergence checks and self-refinement history; no failed attempt is relabeled as passing."
     },
     {
       "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.xz",
@@ -376,6 +389,22 @@
       "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
       "role": "source-provenance",
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
+    },
+    {
+      "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
+      "family": "exact-geometry-response-20261014",
+      "bytes": 206880,
+      "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
+    },
+    {
+      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
+      "family": "exact-integral-response-20261014",
+      "bytes": 356132,
+      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
     },
     {
       "bytes": 162452,
@@ -530,14 +559,6 @@
       "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
-      "bytes": 230258,
-      "classification": "required-compact-accepted-evidence",
-      "family": "retention-checkout",
-      "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
-      "role": "decision-or-audit-record",
-      "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/df-cold-warm.svg",
       "family": "readme-dft-20261013",
       "classification": "required-compact-accepted-evidence",
@@ -586,28 +607,20 @@
       "role": "Lossless direct endpoint evidence, complete populations, retained failures and source identities"
     },
     {
+      "bytes": 230258,
+      "classification": "required-compact-accepted-evidence",
+      "family": "retention-checkout",
+      "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
+      "role": "decision-or-audit-record",
+      "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
+    },
+    {
       "path": "benchmarks/results/vv10-range-followups-20261014/campaigns.json.xz",
       "family": "vv10-range-followups-20261014",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact source-bound endpoint records, reference force vectors and final failure outcomes",
       "bytes": 244288,
       "sha256": "44b62ad986213806ca06ce0249e136d32e48402710a4030552e90b91d1e1cce1"
-    },
-    {
-      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
-      "family": "exact-integral-response-20261014",
-      "bytes": 356132,
-      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
-    },
-    {
-      "path": "benchmarks/results/exact-geometry-response-20261014/evidence.json.xz",
-      "family": "exact-geometry-response-20261014",
-      "bytes": 206880,
-      "sha256": "25253ced63896060ebd763a1d7bd6a0951f348dcee2cbe7c0b808b4b3308bdd8",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Lossless same-library geometry response qualification, full E/F populations, source identity and sanitizer receipts"
     },
     {
       "path": "benchmarks/results/vv10-wide-pair-20261014/evidence.json.xz",

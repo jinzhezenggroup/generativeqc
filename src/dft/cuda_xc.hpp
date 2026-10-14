@@ -124,6 +124,12 @@ struct CudaXcAoTiles {
   int derivative_order{-1};
 };
 
+/** Discovery schedule only: both routes sample the same generated AO jets.
+ * DeviceChunks compacts sorted IDs on the plan stream and downloads offsets
+ * at bounded chunk boundaries. HostTiles is the retained qualification control.
+ */
+enum class CudaXcAoDiscovery { HostTiles, DeviceChunks };
+
 /** Worst-case admission for sampled-jet discovery. The device bound includes
  * the dense arena and one global-capacity map per tile; host peak includes
  * offsets/launchers and only the current tile's indices/flags. No mean AO count enters
@@ -267,7 +273,8 @@ class CudaXcPlan {
    * Returns false without discovery if either numeric budget is insufficient.
    * A successful selection is immutable for the lifetime of this geometry
    * owner. A positive sampled-jet cutoff requires endpoint qualification. */
-  bool select_local_ao(double cutoff, std::size_t max_host_bytes);
+  bool select_local_ao(double cutoff, std::size_t max_host_bytes,
+                       CudaXcAoDiscovery schedule = CudaXcAoDiscovery::HostTiles);
   const CudaXcAoSelectionWork& ao_selection_work() const noexcept { return ao_selection_work_; }
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
@@ -385,6 +392,16 @@ std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const Cud
 void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
                const double* points, std::size_t count, double cutoff, double* ao, double* work,
                int* error, unsigned* host_flags);
+/** Discover a bounded chunk using the existing AO predicate. Scratch consists
+ * of the dense AO/work panels and at most 3*tile_points offsets in point_totals.
+ * The only host publication is tile_count absolute CSR offsets after one fence;
+ * errors drain the stream before releasing borrowed host output storage.
+ */
+void select_ao_chunk(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
+                     const double* points, std::size_t first_tile, std::size_t tile_count,
+                     double cutoff, double* ao, double* work, double* point_totals, int* error,
+                     std::size_t* indices, std::size_t capacity, std::size_t initial_offset,
+                     std::size_t* host_offsets);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
 CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
 CudaXcPointLauncher mixed_pbe_point_launcher();

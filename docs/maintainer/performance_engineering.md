@@ -261,6 +261,56 @@ materialized, a smaller active domain, fewer launches/fences, higher useful
 throughput for unchanged work, or fewer expensive solver actions. If none of
 those changes, a speedup hypothesis is incomplete.
 
+### DFT endpoint and direct-force diagnostics
+
+`python -m benchmarks.profile_dft_endpoint --capture warm --method r2scan-3c
+native ... --repeats 5 --reference reference.json --output diagnostic.json`
+runs the unchanged README scientific driver and stops after cold plus the first
+frozen warm call. Run it through finite `srun`. Its `diagnostic_only` output is
+not a completed 12-call timing cohort. Keep the reference protocol's repeat
+count even though the diagnostic deliberately stops early. Nsight Systems can
+use `--capture-range=cudaProfilerApi` to capture only the warm call. The nested
+host ledger subtracts immediate children and reports its reconciliation error;
+CUDA kernel/API/event intervals are separate views, not additional wall time.
+
+`GENERATIVEQC_DF_TRACE=components.jsonl` adds intrusive CUDA-event regions.
+`GENERATIVEQC_DIRECT_FORCE_CENSUS=work.jsonl` separately enables synchronous,
+resource-ledger-charged counters for the bounded direct-force dispatcher. The
+`generativeqc.direct-force-census.v1` records separate candidate pages, block
+rejection, shell screening, admission, and actual consumer work. Only a true
+`complete_bounded_spd_domain` certifies complete coverage of the qualified
+bounded s/p/d domain. Generated-owned work or other fallback routes invalidate
+that coverage; unavailable execution/recurrence fields are `null`. Primitive
+products count actual consumer traversals after their final admission, not
+theoretical shell capacity. The diagnostic refuses graph capture and drains
+all borrowers before releasing its temporary counters, including on failure.
+
+With the census enabled, `GENERATIVEQC_DIRECT_FORCE_CENSUS_SPLIT_LOW=1`
+separates the generated low-order and order-six spatial consumers for event
+attribution. This diagnostic repeats candidate enumeration; its measured
+intervals cannot replace the ordinary combined kernel's clean endpoint time.
+
+Two preparation-time experimental controls retain the incumbent defaults:
+`GENERATIVEQC_EXPERIMENT_ORDER7_FORCE_PAGE=8|16|32` changes only the admitted
+dd×dp page width (default 32); `GENERATIVEQC_EXPERIMENT_DDDD_FORCE_CLASS_MAJOR=1`
+requests dd×dd class-major acquisition feeding the existing materialized
+derivative. Unknown values retain the incumbent. The dddd request still needs
+the existing qualified s/p/d materialized resources and coherent topology;
+ineligible owners keep their bounded fallback. Neither option changes
+screening, coefficient lanes, precision, or derivative equations. Compare each
+option independently in the same binary, with diagnostics disabled, before
+considering default promotion.
+
+`-DGENERATIVEQC_CUDA_XC_MATRIX_TILE=8|16|32` exposes the compiler's existing
+bounded matrix schedules for a build-level experiment; the default remains 16.
+It changes shared-panel reuse and block dimensions for the same density and
+symmetric-potential definitions, without changing jet count or precision.
+Retain the CMake setting, generated-grid-source hash and library hash for each
+arm, and include ragged/tiny-map and full SCF+force controls. Alternative legal
+tile sizes are not qualified production defaults. In meta-GGA campaigns,
+identify the shared-branch XC prerequisite separately and report force-side
+projection independently of SCF density/Vxc work.
+
 ## Work amplification is a first-class metric
 
 A schedule can satisfy a memory budget while repeating expensive work many
