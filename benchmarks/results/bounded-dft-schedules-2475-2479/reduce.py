@@ -259,7 +259,10 @@ def main() -> None:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(
-        lzma.compress(json.dumps(payload, sort_keys=True, allow_nan=False).encode())
+        lzma.compress(
+            json.dumps(payload, sort_keys=True, allow_nan=False, separators=(",", ":")).encode(),
+            preset=9 | lzma.PRESET_EXTREME,
+        )
     )
     if args.table:
         write_table(points, args.table)

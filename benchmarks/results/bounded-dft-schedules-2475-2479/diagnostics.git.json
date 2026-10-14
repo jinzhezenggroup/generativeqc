@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.git-evidence-recovery.v1",
+  "revision": "99a81b80ac426384cab6adaef0ebb479aafeb85e",
+  "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
+  "bytes": 140660,
+  "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e",
+  "git_blob": "71c95aa79f15b1a029ceb8b84f59690310fbcfde",
+  "repository": "https://github.com/jinzhezenggroup/generativeqc.git",
+  "retained_ref": "refs/pull/2486/head",
+  "permanent_url": "https://github.com/njzjz-bot/vibeqc/blob/99a81b80ac426384cab6adaef0ebb479aafeb85e/benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
+  "reason": "Preserve the complete intrusive diagnostic archive in this PR ancestry while keeping the combined current tree below the existing evidence budget. The clean endpoint archive remains in the current tree."
+}

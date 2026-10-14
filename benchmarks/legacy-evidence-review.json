@@ -235,20 +235,12 @@
   },
   "files": [
     {
-      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
-      "family": "bounded-dft-schedules-2475-2479",
-      "classification": "required-compact-accepted-evidence",
-      "role": "diagnostic-and-validation-receipts",
-      "bytes": 140660,
-      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
-    },
-    {
       "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
       "family": "bounded-dft-schedules-2475-2479",
       "classification": "required-compact-accepted-evidence",
       "role": "clean-samples-and-source-reconstruction",
-      "bytes": 209520,
-      "sha256": "8569d53a3305daffe24585ef65c441d1746d9613d707e67fd9f5370e859f1aa2"
+      "bytes": 193076,
+      "sha256": "5b4600add56a2e757eccc25a64100e440183a65b011513368b97a1f0ecd3b2af"
     },
     {
       "bytes": 145857,

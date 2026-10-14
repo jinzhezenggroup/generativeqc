@@ -12,8 +12,8 @@
     {
       "path": "README.md",
       "role": "report",
-      "bytes": 21583,
-      "sha256": "5a2bf4ff7d41e2396f284885491b68cfbc807cf938d1e411dc10d1b6afdb1077"
+      "bytes": 22709,
+      "sha256": "e46363b7484dd802686da064e21dbc9fee30ac9c298a6dd28844f2d0ae8e30e8"
     },
     {
       "path": "endpoints.md",
@@ -24,20 +24,20 @@
     {
       "path": "summary.json.xz",
       "role": "clean-samples-and-source-reconstruction",
-      "bytes": 209520,
-      "sha256": "8569d53a3305daffe24585ef65c441d1746d9613d707e67fd9f5370e859f1aa2"
+      "bytes": 193076,
+      "sha256": "5b4600add56a2e757eccc25a64100e440183a65b011513368b97a1f0ecd3b2af"
     },
     {
-      "path": "diagnostics.json.xz",
-      "role": "diagnostic-and-validation-receipts",
-      "bytes": 140660,
-      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+      "path": "diagnostics.git.json",
+      "role": "git-recovery-for-complete-diagnostic-receipts",
+      "bytes": 860,
+      "sha256": "37ab1c99c45f29b5354a31d13c6651c53b9f9278a37bd2c9e7ab2d4b393bd2cc"
     },
     {
       "path": "reduce.py",
       "role": "reproduction",
-      "bytes": 11441,
-      "sha256": "aeca97265a49987001ce1d2c9738ede65a932419f8be10cec62d77f01b025ab8"
+      "bytes": 11531,
+      "sha256": "09cf51a81f8de1e7fa6c05a211ad5e241005c639b1ecd3529f9eec3cb85181dd"
     }
   ],
   "external_archives": []

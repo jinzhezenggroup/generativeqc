@@ -151,3 +151,15 @@ cold/first-warm diagnostic passes at 459.134/91.373 seconds (26/1 Fock builds),
 with complete census and wall reconciliation. Later host-only status-ABI and
 CLI/codegen compatibility fixes have separate executable host qualification;
 these do not relabel or replace the immutable GPU measurements.
+
+## Retention after the combined-tree CI check
+
+The final local evidence check passed, but the GitHub merge tree combined
+other master evidence and exceeded the unchanged aggregate budget by 80,554
+bytes. Preserve the complete intrusive archive in the already-published PR
+ancestor `99a81b80ac426384cab6adaef0ebb479aafeb85e`; its recovery receipt pins
+the path, Git blob, size and SHA-256. The PR head retains this ancestor. The
+report documents fetching the PR ref and recovering the exact bytes, including
+from a shallow/squash checkout. Keep the clean endpoint summary in the current
+tree, with lossless stronger XZ compression. This avoids removing observations,
+changing storage budgets or publishing an external archive.
