@@ -5,10 +5,12 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include "dft/ao_grid.hpp"
@@ -26,8 +28,10 @@
 #include "methods/batch_capabilities.hpp"
 #include "methods/dft_method_owner_port.hpp"
 #include "methods/dft_method_preparation.hpp"
+#include "methods/exact_density_response_cache.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
@@ -491,6 +495,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
         runtime::add_capacity(fock_.cpu_observation_capacity(),
                               runtime::vector_capacities(basis_.packed, grid_.points(),
                                                          grid_.weights(), grid_.owners(), warm_));
+    bytes = runtime::add_capacity(bytes, integral_response_cache_.bytes());
     if (range_correction_)
       bytes = runtime::add_capacity(bytes, range_correction_->cpu_observation_capacity());
 #if GENERATIVEQC_HAS_CUDA
@@ -1456,6 +1461,14 @@ class KsPreparedState final : public KsSingleOwnerPort {
       detail = "cached CUDA stationary D/W must be supplied together";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+    // Only the already exported, token-bound Direct RSH density is a key.
+    // This experiment introduces no new host density export and never reuses W.
+    const auto* reuse_policy = std::getenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE");
+    const bool reuse_response = reuse_policy && std::string_view(reuse_policy) == "1" && !fitted &&
+                                range_exchange && cached_density;
+    const auto response_cache_limit = std::min<std::size_t>(64U << 20, maximum_bytes / 4);
+    if (!reuse_response || integral_response_cache_.bytes() > response_cache_limit)
+      integral_response_cache_.clear();
     const auto transfers_before = cuda_->transfers();
     dft::VerifiedKsFinalState exported_state;
     generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
@@ -1467,7 +1480,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     }
     const auto& model = expected.identity.model;
     const auto device = model.device;
-    const auto bytes = maximum_bytes;
+    const auto bytes = maximum_bytes - integral_response_cache_.bytes();
     const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
     if (!fitted && !derivative_source) {
       detail = "CUDA integral gradient requires a retained prepared Direct derivative source";
@@ -1545,7 +1558,15 @@ class KsPreparedState final : public KsSingleOwnerPort {
       status = scf::execute_cuda_stationary_one_electron_pair(
           device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
           resident_weights.weighted_density);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      const bool retry_without_cache =
+          status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && integral_response_cache_.bytes() != 0;
+      integral_response_cache_.clear();
+      if (retry_without_cache)
+        return cuda_integral_gradient(expected, output, maximum_bytes, work, detail, cached_density,
+                                      cached_weighted_density, combined_two_electron);
+      return status;
+    }
     work[2] = std::max<std::uint64_t>(work[2], one.device_bytes);
     work[3] = std::max<std::uint64_t>(work[3], one.host_numeric_bytes);
     work[4] += one.host_to_device_bytes;
@@ -1576,17 +1597,40 @@ class KsPreparedState final : public KsSingleOwnerPort {
       // canonical four-source layout without manufacturing exchange work.
       candidate.insert(candidate.end(), nc, 0.0);
     } else {
-      status = range_exchange
-                   ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
-                         fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
-                         resident_density.matrix_elements, value, detail)
-                   : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
-                         fock_, resident_density.alpha, resident_density.beta,
-                         resident_density.matrix_elements, value, detail, !combined_two_electron,
-                         qualified_spatial_force_default());
-      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      runtime::df_progress::Scope response_trace("ks_integral_response", "cuda_completed");
+      const bool hit = reuse_response && integral_response_cache_.matches(*cached_density, 3 * nc,
+                                                                          response_cache_limit);
+      if (hit) {
+        const auto retained = integral_response_cache_.response();
+        value.assign(retained.begin(), retained.end());
+        status = GENERATIVEQC_STATUS_SUCCESS;
+      } else {
+        integral_response_cache_.clear();
+        status = range_exchange
+                     ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+                           fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
+                           resident_density.matrix_elements, value, detail)
+                     : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+                           fock_, resident_density.alpha, resident_density.beta,
+                           resident_density.matrix_elements, value, detail, !combined_two_electron,
+                           qualified_spatial_force_default());
+        if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+        // Reserve room for both transient one-electron work and publication;
+        // refusal or allocation failure leaves the ordinary computed value.
+        const auto publication_bytes = 8 * (candidate.capacity() + value.capacity());
+        const auto used_host = work[3] + publication_bytes;
+        const auto available = used_host < maximum_bytes ? maximum_bytes - used_host : 0;
+        if (reuse_response)
+          integral_response_cache_.store(*cached_density, value,
+                                         std::min(response_cache_limit, available));
+      }
+      runtime::df_progress::Scope::number("density_key_hit", hit);
+      runtime::df_progress::Scope::number("two_electron_response_evaluations", hit ? 0 : 1);
+      runtime::df_progress::Scope::number("retained_host_bytes", integral_response_cache_.bytes());
+      response_trace.finish(hit ? "exact_density_reuse" : "computed");
       candidate.insert(candidate.end(), value.begin(), value.end());
     }
+    work[3] += integral_response_cache_.bytes();
     output = std::move(candidate);
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
@@ -2074,6 +2118,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   dft::AoBasis basis_;
   dft::MolecularGrid grid_;
   std::vector<double> warm_;
+  ExactDensityResponseCache integral_response_cache_;
   const std::uint64_t cpu_owner_{next_cpu_ks_owner()};
   std::uint64_t cpu_epoch_{};
   std::optional<dft::KsPhysicalState> cpu_physical_;
