@@ -34,6 +34,9 @@ def test_exact_two_electron_response_reuse(
     moved[0, -1, 0] += 0.001
     outputs = []
     for enabled in (False, True):
+        monkeypatch.delenv(
+            "GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK", raising=False
+        )
         journal = tmp_path / f"response-{unrestricted}-{enabled}.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
         monkeypatch.setenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", str(int(enabled)))
@@ -67,6 +70,14 @@ def test_exact_two_electron_response_reuse(
                             geometry, strict=True, properties=("energy", "forces")
                         ).items[0]
                     )
+            # Explicit derivative routing keeps its own observable execution.
+            monkeypatch.setenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK", "1")
+            results.append(
+                batch.execute(
+                    moved, strict=True, properties=("energy", "forces")
+                ).items[0]
+            )
+            monkeypatch.delenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK")
             # Policy disable must retire retention even for the same density.
             monkeypatch.setenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE", "0")
             results.append(
@@ -83,12 +94,12 @@ def test_exact_two_electron_response_reuse(
             if event.get("name") == "ks_integral_response"
             and event.get("key") == "two_electron_response_evaluations"
         ]
-        assert len(work) == 7
-        assert work[0] == work[3] == work[-1] == 1
+        assert len(work) == 8
+        assert work[0] == work[3] == work[6] == work[-1] == 1
         if enabled:
             assert work[2] == work[5] == 0
         else:
-            assert work == [1] * 7
+            assert work == [1] * 8
     for original, reused in zip(*outputs, strict=True):
         assert abs(original.energy - reused.energy) <= 1e-8
         np.testing.assert_allclose(original.forces, reused.forces, rtol=0, atol=1e-7)

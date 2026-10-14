@@ -1465,7 +1465,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
     // This experiment introduces no new host density export and never reuses W.
     const auto* reuse_policy = std::getenv("GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE");
     const bool reuse_response = reuse_policy && std::string_view(reuse_policy) == "1" && !fitted &&
-                                range_exchange && cached_density;
+                                range_exchange && cached_density &&
+                                !std::getenv("GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK");
     const auto response_cache_limit = std::min<std::size_t>(64U << 20, maximum_bytes / 4);
     if (!reuse_response || integral_response_cache_.bytes() > response_cache_limit)
       integral_response_cache_.clear();
