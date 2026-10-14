@@ -1,12 +1,16 @@
 """Test emitted worker adaptation independently of the functional algebra."""
 
+import re
 import shutil
 import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.xc import libxc_bulk
+from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
+from generativeqc_compiler.xc.geometry_cuda import _emit_composed_point
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 from generativeqc_compiler.xc.split_hybrid_domain import stabilize_m06_2x_stoll
 
@@ -15,6 +19,7 @@ from tools.generate_xc_split_hybrid_cuda import (
     _component_work_policy,
     _emit_work_wrapper,
     emit_split_hybrid_device,
+    emit_split_hybrid_device_body,
 )
 from tools.libxc_split_hybrid import (
     _bound_component,
@@ -33,6 +38,59 @@ def test_pinned_mgga_components_use_global_fhc_and_direct_spin_screens() -> None
         assert "if (rho_a <= " in source
         assert "if (rho_b <= " in source
         assert "work_sigma_aa = fmin(work_sigma_aa" in source
+
+
+@pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
+@pytest.mark.parametrize("lower_integer_powers", (False, True))
+def test_split_mgga_components_lower_bounded_integer_powers_only_when_requested(
+    identifier: str, lower_integer_powers: bool
+) -> None:
+    """Qualify FP64 lowering without changing the unqualified float schedule."""
+    source, _, features = emit_split_hybrid_device_body(
+        identifier, lower_integer_powers=lower_integer_powers
+    )
+    assert len(features) == 7
+    assert "_equal_spin_interior(" in source
+    exponents = re.findall(
+        r"\bpowf?\([^,\n]+,\s*([-+]?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)f?\)",
+        source,
+    )
+    assert exponents
+    has_bounded_integer_power = any(
+        float(exponent).is_integer() and 1 <= abs(float(exponent)) <= 4
+        for exponent in exponents
+    )
+    assert has_bounded_integer_power != lower_integer_powers
+    assert "work_sigma_aa = fmin(work_sigma_aa" in source
+    assert "// vxc follows work_mgga" in source
+
+
+@pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
+@pytest.mark.parametrize("scalar_type", ("double", "float"))
+def test_split_consumers_qualify_integer_power_schedule_separately(
+    identifier: str, scalar_type: str
+) -> None:
+    """The force-only M06 schedule must not change SCF or float consumers."""
+    semilocal = resolve_method(identifier, spin="polarized").primitives[0].functional
+    code = SPLIT_HYBRIDS[identifier]["functional_code"]
+    force_source = _emit_composed_point(code, semilocal, scalar_type=scalar_type)
+    point_source, _, _ = emit_split_hybrid_device_body(
+        identifier, scalar_type=scalar_type
+    )
+    pattern = r"\bpowf?\([^,\n]+,\s*[-+]?(?:2|3|4)(?:\.0)?f?\)"
+    assert re.search(pattern, point_source)
+    assert bool(re.search(pattern, force_source)) == (
+        identifier != "M06-2X" or scalar_type != "double"
+    )
+
+
+def test_integer_power_lowering_rejects_unqualified_precision_and_policy() -> None:
+    with pytest.raises(ValueError, match="FP64 qualification"):
+        emit_split_hybrid_device_body(
+            "M06-2X", scalar_type="float", lower_integer_powers=True
+        )
+    with pytest.raises(TypeError, match="boolean"):
+        emit_split_hybrid_device_body("M06-2X", lower_integer_powers="true")
 
 
 def test_stoll_rewrite_fails_closed_on_changed_modified_pw_parameters() -> None:

@@ -173,7 +173,17 @@ def _emit_component(
     policy: SplitHybridWorkPolicy,
     *,
     scalar_type: str = "double",
+    lower_integer_powers: bool = False,
 ) -> str:
+    """Lower integer powers after AD without changing polarized work policies.
+
+    Split Libxc programs retain power nodes in their imported graph. Reuse the
+    existing bounded scalar lowering used by curated semilocal programs, rather
+    than invoking general pow for squares, cubes and reciprocal squares.
+    Differentiating first preserves independent spin partials and lazy screens.
+    Keep float emission unchanged until its separate precision gates qualify
+    the new operation ordering; the README endpoint comparison is FP64.
+    """
     selected = _selected_features(program)
     by_name = dict(zip(program.features, program.variables, strict=True))
     roots = (
@@ -183,9 +193,12 @@ def _emit_component(
             for name in selected
         ),
     )
+    graph = program.graph
+    if lower_integer_powers:
+        graph, roots = graph.lower_small_integer_powers(roots)
     zero = "0.0f" if scalar_type == "float" else "0.0"
     variables = {name: name if name in selected else zero for name in program.features}
-    emitter = CudaEmitter(program.graph, variables, scalar_type=scalar_type)
+    emitter = CudaEmitter(graph, variables, scalar_type=scalar_type)
     emitter.emit(roots)
     signature = ", ".join(f"{scalar_type} {name}" for name in selected)
     interior = "\n".join(
@@ -201,8 +214,8 @@ def _emit_component(
             "",
         ]
     )
-    restricted_roots = equal_spin_roots(program.graph, roots)
-    restricted_emitter = CudaEmitter(program.graph, variables, scalar_type=scalar_type)
+    restricted_roots = equal_spin_roots(graph, roots)
+    restricted_emitter = CudaEmitter(graph, variables, scalar_type=scalar_type)
     restricted_emitter.emit(restricted_roots)
     restricted_interior = "\n".join(
         [
@@ -230,7 +243,10 @@ def _emit_component(
 
 
 def emit_split_hybrid_device_body(
-    identifier: str, *, scalar_type: str = "double"
+    identifier: str,
+    *,
+    scalar_type: str = "double",
+    lower_integer_powers: bool = False,
 ) -> tuple[str, str, tuple[str, ...]]:
     """Return one typed component graph with the unchanged Libxc work contract.
 
@@ -238,9 +254,17 @@ def emit_split_hybrid_device_body(
     Domain conditioning and physical-density energy rescaling stay FP64; the
     caller still owns interior qualification and a strict numerical fallback.
     No rounding policy changes the mathematical expression identity.
+    FP64 force consumers may opt into bounded integer-power lowering after AD.
+    The default preserves SCF operation ordering: changing a converged replay's
+    point arithmetic can increase work even when numerical gates still pass.
+    Endpoint qualification belongs to the consumer, not this generic emitter.
     """
     if scalar_type not in ("double", "float"):
         raise ValueError("scalar type must be double or float")
+    if type(lower_integer_powers) is not bool:
+        raise TypeError("integer-power lowering must be a boolean")
+    if lower_integer_powers and scalar_type != "double":
+        raise ValueError("integer-power lowering requires FP64 qualification")
     method = build_split_global_hybrid(identifier)
     if method.exchange.family != method.correlation.family:
         raise MapleImportError("split hybrid CUDA components use different families")
@@ -275,6 +299,7 @@ def emit_split_hybrid_device_body(
         f"{function_name}_exchange",
         x_policy,
         scalar_type=scalar_type,
+        lower_integer_powers=lower_integer_powers,
     )
     correlation = _emit_component(
         method.correlation,
@@ -282,6 +307,7 @@ def emit_split_hybrid_device_body(
         f"{function_name}_correlation",
         c_policy,
         scalar_type=scalar_type,
+        lower_integer_powers=lower_integer_powers,
     )
     body = "\n".join(
         [
