@@ -83,7 +83,7 @@ def test_retained_ledgers_bind_full_snapshot_and_keep_all_calls(
 ) -> None:
     directory = ROOT / "benchmarks/results" / campaign
     manifest = json.loads((directory / "manifest.json").read_bytes())
-    packed = (directory / manifest["summary"]["path"]).read_bytes()
+    packed = (ROOT / manifest["summary"]["path"]).read_bytes()
     assert len(packed) == manifest["summary"]["bytes"]
     assert hashlib.sha256(packed).hexdigest() == manifest["summary"]["sha256"]
     snapshot_bytes = (ROOT / manifest["full_evidence"]["manifest"]).read_bytes()
@@ -96,7 +96,9 @@ def test_retained_ledgers_bind_full_snapshot_and_keep_all_calls(
     assert snapshot["source_revision"] == manifest["full_evidence"]["source_revision"]
     assert snapshot["file_count"] == len(snapshot["files"])
     assert snapshot["total_bytes"] == sum(entry["bytes"] for entry in snapshot["files"])
-    ledger = json.loads(lzma.decompress(packed))
+    ledgers = json.loads(lzma.decompress(packed))
+    assert manifest["summary"]["member"] == campaign
+    ledger = ledgers[manifest["summary"]["member"]]
     assert ledger["schema"] == "generativeqc.m06-force-endpoint-ledger.v1"
     assert ledger["retention"]["original_capsule"] in snapshot["files"]
     records = []

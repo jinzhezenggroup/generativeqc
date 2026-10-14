@@ -24,6 +24,7 @@ from tools.restore_retained_evidence import restore_snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = "benchmarks/results/m06-rks-force-powers-20261014/full-evidence.json"
+SHARED_LEDGER = "benchmarks/results/m06-rks-force-powers-20261014/summary.json.xz"
 FULL_ONLY = (
     "build_files",
     "logs",
@@ -100,22 +101,29 @@ def main() -> None:
         restored = restore_snapshot(
             Path(temporary) / "original", manifest=snapshot_path
         )
+        ledgers = {}
+        manifests = {}
         for entry in snapshot["files"]:
             if not entry["path"].endswith("/summary.json.xz"):
                 continue
             path = Path(entry["path"])
             payload = json.loads(lzma.decompress((restored / path).read_bytes()))
-            ledger = compact(payload, entry)
-            packed = lzma.compress(
-                json.dumps(
-                    ledger, sort_keys=True, separators=(",", ":"), allow_nan=False
-                ).encode(),
-                preset=9,
-            )
+            campaign = path.parent.name
+            ledgers[campaign] = compact(payload, entry)
             manifest_path = path.parent / "manifest.json"
-            manifest = json.loads((restored / manifest_path).read_bytes())
+            manifests[manifest_path] = json.loads(
+                (restored / manifest_path).read_bytes()
+            )
+        packed = lzma.compress(
+            json.dumps(
+                ledgers, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode(),
+            preset=9 | lzma.PRESET_EXTREME,
+        )
+        for manifest_path, manifest in manifests.items():
             manifest["summary"] = {
-                "path": path.name,
+                "path": SHARED_LEDGER,
+                "member": manifest_path.parent.name,
                 "bytes": len(packed),
                 "sha256": hashlib.sha256(packed).hexdigest(),
             }
@@ -125,11 +133,15 @@ def main() -> None:
                 "sha256": hashlib.sha256(snapshot_bytes).hexdigest(),
                 "source_revision": snapshot["source_revision"],
             }
-            (ROOT / path).write_bytes(packed)
             (ROOT / manifest_path).write_text(
                 json.dumps(manifest, indent=2, allow_nan=False) + "\n"
             )
-            print(f"{path}: {len(packed)} bytes")
+        (ROOT / SHARED_LEDGER).write_bytes(packed)
+        for manifest_path in manifests:
+            previous = manifest_path.parent / "summary.json.xz"
+            if previous.as_posix() != SHARED_LEDGER:
+                (ROOT / previous).unlink(missing_ok=True)
+        print(f"{SHARED_LEDGER}: {len(packed)} bytes, {len(ledgers)} complete ledgers")
 
 
 if __name__ == "__main__":

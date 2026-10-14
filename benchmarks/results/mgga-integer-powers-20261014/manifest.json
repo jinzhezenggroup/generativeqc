@@ -5,9 +5,10 @@
   "master_readme_changed": false,
   "common_endpoint_base": "786c31a48",
   "summary": {
-    "path": "summary.json.xz",
-    "bytes": 24988,
-    "sha256": "006d581f0f55d382330df6b2a79bd6fd580ecd4eea87aa84b476e70762bb7411"
+    "path": "benchmarks/results/m06-rks-force-powers-20261014/summary.json.xz",
+    "member": "mgga-integer-powers-20261014",
+    "bytes": 39192,
+    "sha256": "6e758d6de57d0ac16403a04ad926046a5d448882dd517e95adca1373abf52124"
   },
   "successful_endpoint_calls": 108,
   "scientific_gates": {

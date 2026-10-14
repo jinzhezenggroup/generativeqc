@@ -12,9 +12,10 @@
   "successful_master_endpoint_calls": 96,
   "successful_historical_control_calls": 48,
   "summary": {
-    "path": "summary.json.xz",
-    "bytes": 27392,
-    "sha256": "02a35e5d390e17fadde2454a634375de8ab0d6352998ec72555e4f76c691596b"
+    "path": "benchmarks/results/m06-rks-force-powers-20261014/summary.json.xz",
+    "member": "m06-rks-force-powers-20261014",
+    "bytes": 39192,
+    "sha256": "6e758d6de57d0ac16403a04ad926046a5d448882dd517e95adca1373abf52124"
   },
   "full_evidence": {
     "manifest": "benchmarks/results/m06-rks-force-powers-20261014/full-evidence.json",

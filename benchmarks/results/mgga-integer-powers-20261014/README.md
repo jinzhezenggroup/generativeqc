@@ -42,7 +42,9 @@ Successful memchecks have zero errors. No #2486 scheduling experiment is retried
 
 ## Evidence recovery
 
-`manifest.json` binds the compact `summary.json.xz` ledger: all endpoint rows
+`manifest.json` binds this campaign's named member in the shared XZ capsule.
+Resolve `summary.path` from the repository root and select `summary.member`
+from the decoded JSON object. The complete ledger retains all endpoint rows
 except force vectors, with complete timing samples/ranges, E/error/gate values,
 SCF/AO/grid/force work, source/library/model identities, point reports and strict
 failure rows. Unknown inner J/K counters stay null. Full vectors/references,

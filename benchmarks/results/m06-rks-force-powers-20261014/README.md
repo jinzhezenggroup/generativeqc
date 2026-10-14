@@ -64,8 +64,11 @@ limits: `.agents/notes/implemented/performance/2026-10-15-m06-rks-force-powers.m
 
 ## Retention and reproduction
 
-`manifest.json` binds the current `summary.json.xz` **endpoint ledger** by bytes
-and SHA256. It keeps all 96 master and 48 historical-control timing samples,
+Both campaign manifests bind one shared `summary.json.xz` by bytes and SHA256.
+Each `summary.path` is repository-relative; `summary.member` selects that
+campaign's complete endpoint ledger from the decoded JSON object. Shared XZ
+storage retains both ledgers without changing their fields. This ledger keeps
+all 96 master and 48 historical-control timing samples,
 phase ranges, E/error/gate/convergence values, semantic work, model/source/library
 identities, diagnostic reports and failures without rounding or filtering.
 Full E/F vectors, independent references, point arrays, intermediate SCF history,
@@ -86,7 +89,7 @@ python tools/restore_retained_evidence.py --all \
 Use a new output directory; the reader verifies every member before publishing
 and refuses overwrite. Clones must contain that ancestor; if absent, explicitly
 run `git fetch origin refs/pull/2505/head`, the recorded PR ref that contains it.
-Do not rewrite/drop the bound history. `python tools/compact_m06_force_evidence.py` regenerates both ledgers
+Do not rewrite/drop the bound history. `python tools/compact_m06_force_evidence.py` regenerates the shared capsule
 from these authenticated originals. Recovery does not rerun GPU work.
 
 For reproduction, restore first and extract `reproduction` from the full current

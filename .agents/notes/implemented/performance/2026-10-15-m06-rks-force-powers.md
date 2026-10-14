@@ -123,6 +123,13 @@ the ledgers from the verified snapshot without rounding or filtering; tests
 protect negative rows, null counters, timing values, all 252 calls and identities.
 The historical rejection is not reclassified by this storage-only projection.
 
+The two ledgers share one XZ JSON container with separately named campaign
+members. Both manifests use a repository-relative path and explicit member.
+This lossless container change keeps every ledger field while fitting the
+unchanged aggregate budget when composed with the concurrent #2504 evidence;
+standalone retention success alone was insufficient for that queue tree.
+The six-file original snapshot and its recovery identities remain unchanged.
+
 ## References
 
 - Historical rejected proposals:
