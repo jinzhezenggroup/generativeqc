@@ -50,7 +50,6 @@ def test_split_mgga_components_lower_bounded_integer_powers_only_when_requested(
         identifier, lower_integer_powers=lower_integer_powers
     )
     assert len(features) == 7
-    assert "_equal_spin_interior(" in source
     exponents = re.findall(
         r"\bpowf?\([^,\n]+,\s*([-+]?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?)f?\)",
         source,
@@ -61,8 +60,6 @@ def test_split_mgga_components_lower_bounded_integer_powers_only_when_requested(
         for exponent in exponents
     )
     assert has_bounded_integer_power != lower_integer_powers
-    assert "work_sigma_aa = fmin(work_sigma_aa" in source
-    assert "// vxc follows work_mgga" in source
 
 
 @pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))

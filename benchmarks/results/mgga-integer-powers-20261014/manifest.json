@@ -1,0 +1,19 @@
+{
+  "schema": "mgga-integer-powers-evidence/v1",
+  "decision": "Both global and force-only lowering rejected as defaults; explicit compiler experiment retained",
+  "default_consumers_changed": false,
+  "master_readme_changed": false,
+  "common_endpoint_base": "786c31a48",
+  "summary": {
+    "path": "summary.json.xz",
+    "bytes": 236108,
+    "sha256": "951a9b57e034e5408ee1c73fe10a8af73ea1b77f9441a717ab764be0f4402ab3"
+  },
+  "successful_endpoint_calls": 108,
+  "scientific_gates": {
+    "energy_Eh": 1e-08,
+    "force_Eh_per_Bohr": 1e-07
+  },
+  "strict_tail_diagnostic_passed": false,
+  "clean_release_point_qualification": false
+}

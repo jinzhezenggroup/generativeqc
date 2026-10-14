@@ -1,0 +1,19 @@
+{
+  "schema": "m06-rks-force-integer-powers/v1",
+  "control_head": "8c770b34ccb95accbaeaba4abde2687ba8fef0db",
+  "candidate_head": "8021e2d92717b7035448227936a4e960dc25c0b6",
+  "scope": "FP64 M06-2X RKS force only; SCF/UKS/float scalar graphs, MN15 and r2SCAN preserved",
+  "complete_endpoints_pass": true,
+  "qualification_errors": [],
+  "scientific_gates": {
+    "energy_Eh": 1e-08,
+    "force_Eh_per_Bohr": 1e-07
+  },
+  "successful_master_endpoint_calls": 96,
+  "successful_historical_control_calls": 48,
+  "summary": {
+    "path": "summary.json.xz",
+    "bytes": 351336,
+    "sha256": "96ab76428982acd790618f94fdc121e93445f300f627b241f9c449e3794e0368"
+  }
+}
