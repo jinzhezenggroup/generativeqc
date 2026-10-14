@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 from statistics import median
 
+from benchmarks.readme_omol25 import source_hashes
 from tools.generate_build_identity import _inventory, _source_identity
 from tools.render_readme_dft import collect_point, phase_rows
 
@@ -57,8 +58,35 @@ def freeze_source(campaign: Path, arm: str) -> dict:
         },
         "native_source_identity": _source_identity(source, inventory),
         "native_input_sha256": inputs,
+        "consumer_source_file_sha256": {
+            name: digest(source / name) for name in source_hashes()
+        },
         "installed_library_sha256": digest(campaign / arm / "lib/libgenerativeqc.so"),
     }
+
+
+def source_binding(native: dict, source: dict) -> dict:
+    """Keep incomplete or mismatched receipts without certifying their source."""
+    reasons = []
+    build = native.get("native_build")
+    if not isinstance(build, dict):
+        reasons.append("missing or malformed native_build")
+    else:
+        probe = build.get("probe")
+        if (
+            not isinstance(probe, dict)
+            or probe.get("source_identity") != source["native_source_identity"]
+        ):
+            reasons.append("missing or mismatched native source identity")
+        if build.get("library_sha256") != source["installed_library_sha256"]:
+            reasons.append("missing or mismatched installed library hash")
+    observed = native.get("source_file_sha256")
+    expected = source["consumer_source_file_sha256"]
+    if not isinstance(observed, dict) or set(observed) != set(expected):
+        reasons.append("missing, malformed or incomplete consumer source inventory")
+    elif observed != expected:
+        reasons.append("consumer source hash mismatch")
+    return {"status": "unqualified" if reasons else "verified", "reasons": reasons}
 
 
 def write_table(points: list[dict], path: Path) -> None:
@@ -69,7 +97,8 @@ def write_table(points: list[dict], path: Path) -> None:
         (
             "Seconds, including preparation. Warm cells show median [min, max] over "
             "all five calls. Parentheses retain observed iteration/Fock-build pairs. "
-            "Failed or missing populations never receive a complete-population median."
+            "Failed, missing or source-unqualified populations never receive a "
+            "complete-population median."
         ),
         "",
         "| Method | Provider | Atoms | Arm | Cold | Warm | Moved | Moved-warm |",
@@ -79,6 +108,9 @@ def write_table(points: list[dict], path: Path) -> None:
         native = point["engines"]["native"]
         cells = []
         for phase in ("cold", "warm", "moved", "moved-warm"):
+            if point["source_binding"]["status"] != "verified":
+                cells.append("source_unqualified")
+                continue
             rows = phase_rows(native, phase)
             if native.get("phase_status", {}).get(phase) != "measured":
                 cells.append(
@@ -120,21 +152,12 @@ def main() -> None:
         point = collect_point(path.parent.parent, int(atoms))
         point.update(arm=label, source_arm=arm, method=method, mode=mode)
         native = point["engines"]["native"]
-        build = native.get("native_build")
-        if build:
-            assert (
-                build["probe"]["source_identity"] == source["native_source_identity"]
-            ), path
-            assert build["library_sha256"] == source["installed_library_sha256"], path
-        for name, checksum in native.get("source_file_sha256", {}).items():
-            assert digest(args.campaign / f"{arm}-source" / name) == checksum, (
-                path,
-                name,
-            )
+        point["source_binding"] = source_binding(native, source)
         point["reference_role"] = "retained independent geometry oracle"
         point["accepted_phase_seconds"] = {
             phase: [row["complete_seconds"] for row in phase_rows(native, phase)]
-            if native["phase_status"][phase] == "measured"
+            if point["source_binding"]["status"] == "verified"
+            and native["phase_status"][phase] == "measured"
             else []
             for phase in ("cold", "warm", "moved", "moved-warm")
         }
