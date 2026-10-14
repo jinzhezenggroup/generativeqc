@@ -336,6 +336,25 @@ current evaluated density; only converged states replace the resident warm
 cache. An energy-only public call omits final matrix export. Full #203 public
 planning remains separate integration work.
 
+Strict-FP64 restricted resident VV10 solves use bounded native initialization
+before the ordinary physical target tail. The initializer first solves a
+semilocal/range-exchange proposal problem, then refreshes complete VV10 anchors
+between fixed-potential inner solves. Transported densities start with a target
+anchor. Provisional and full-target iterations share the caller's main SCF
+iteration budget; initialization gets no separate allowance. The existing ECP
+physical-final-closure policy retains its separate bound of four correction
+iterations. Only consecutive complete target evaluations passing the unchanged
+energy, density and physical residual gates can publish a successful state or
+forces. An already stationary target density is held for a further
+physical energy confirmation, instead of applying another sub-tolerance update.
+
+Resident warm replays and unsupported spin, precision, incremental-J/K or
+budget cases retain their existing solve. A caller-selected device chunk also
+keeps its existing solver. Set `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` to
+select the ordinary full-target fallback explicitly. Provisional history scopes
+and actual VV10 pair-work receipts distinguish initialization from accepted
+physical work; initialization is never a cached convergence result.
+
 ## Prepared ragged execution
 
 `KsPreparedBatch` owns one compatible KS plan per input item. CUDA execution
