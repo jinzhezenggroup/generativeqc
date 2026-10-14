@@ -32,23 +32,41 @@ Direct WB97M-V passes all 12 calls at 48 atoms within 1800 s with
 [#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454), automatic exact
 force reuse [#2462](https://github.com/jinzhezenggroup/generativeqc/pull/2462),
 automatic exact SCF reuse [#2467](https://github.com/jinzhezenggroup/generativeqc/pull/2467),
-and the composite phased-Becke budget repair
-[#2468](https://github.com/jinzhezenggroup/generativeqc/pull/2468). Cold/warm/moved/moved-warm are
-575.813 / 15.548 / 405.620 / 15.580 s. The warm median moves from 67.707 s
+the composite phased-Becke budget repair
+[#2468](https://github.com/jinzhezenggroup/generativeqc/pull/2468), and default bounded
+native frozen-VV10 initialization, followed by bounded automatic range values
+and audited warm reuse [#2490](https://github.com/jinzhezenggroup/generativeqc/pull/2490).
+Cold/warm/moved/moved-warm are now
+253.595 / 11.406 / 212.176 / 11.392 s, compared with
+388.993 / 15.453 / 290.381 / 15.559 s before range reuse and
+575.813 / 15.548 / 405.620 / 15.580 s before initialization. The warm median moves from 67.707 s
 (bilateral source) to 39.029 s (force reuse), 18.435 s (SCF reuse), then 15.548 s
-(correctly budgeted Becke); all four complete populations remain retained.
-Maximum current 48-atom energy/force errors are 4.320e-12 Eh / 6.520e-11 Eh/Bohr.
+(correctly budgeted Becke); all superseded complete populations remain retained.
+Maximum current 48-atom energy/force errors are 4.093e-12 Eh / 1.798e-11 Eh/Bohr.
 Every frozen replay records zero SCF and force VV10 pair sweeps, while physical
 Focks and remaining work still run. Both geometry owners allocate 41,706,304
 phased bytes and actually visit all 1,179,648 points in 1,152 phase batches.
 The preceding source had zero phased bytes/batches despite requesting the path.
 
-Both new default rounds pass all 36 calls at 3/12/48 atoms. The figure uses the
-latest complete round at all three sizes, including its slower 29.237-s 3-atom
-cold point; it does not choose the faster 16.172-s cold point from the preceding
-SCF-only round. Earlier startup/cache controls and superseded observations remain
-in the receipts. Experimental initializers and explicit device-final-validation
-are disabled in the plotted source. The 96-atom endpoint remains unresolved.
+The latest default round passes all 36 calls at 3/12/48 atoms. The figure uses
+this one round at all three sizes: 3-atom cold/warm/moved/moved-warm are
+7.059 / 0.387 / 5.341 / 0.386 s, and 12-atom values are
+30.388 / 1.651 / 19.602 / 1.668 s. Earlier startup/cache controls and all
+superseded populations remain in the receipts. The bounded native initializer,
+full screened range values within a 4 GiB optional ceiling, and audited same-geometry
+range replay are automatic in this measured source. Incremental J/K, range freezing,
+DIIS continuation, inexact inner solves, outer secant, target-DIIS tail,
+longer delta chains and explicit device-final-validation are absent.
+All provisional and target Focks share the original 100-iteration budget, and
+only consecutive physical target states can satisfy the unchanged gates.
+
+At 96 atoms, default cold completes in 1332.267 s and all five warm calls
+complete with median 59.321 s. All six returned E/F records pass the independent
+gates (maximum errors 6.821e-12 Eh / 2.342e-11 Eh/Bohr). The whole sequence
+times out in moved/0 at the original 1800 s limit. Its complete cold/warm phases
+are plotted with the sequence explicitly marked incomplete; no moved timing or
+full-population acceptance is inferred. The 96-atom endpoint and #2426 remain
+unresolved.
 
 Default-off initializer trials are retained separately: one 96-atom cold returns
 in 1562.126 s, and its revised inner solve regresses to 1629.527 s. Both hit the
@@ -57,7 +75,22 @@ initializer completes in 411.440 / 18.234 / 313.692 / 18.256 s, but it is not a
 default result. Freezing range exchange as well increases small-system iteration
 counts and is not promoted. Its original null gates remain unchanged; an offline
 comparison with the identical independent protocol is retained separately.
-Neither partial 96-atom trial closes #2426.
+Later incremental initialization and bounded eight-delta experiments complete
+96-atom cold in 1328.238 / 1352.005 s and all five warm calls, but both time out
+in moved/0. The longer chain yields little complete 48-atom improvement and is
+not promoted. Unshifted and approximately rebased inner DIIS do not reduce the
+small-system iteration count and are also not promoted. All partial trials,
+negative results and source identities remain separate from default curves.
+
+The [range follow-up](../vv10-range-followups-20261014/README.md) retains every
+new finalized trial, including complete force vectors and independent references.
+The first 2 GiB automatic candidate refused the 3.61 GB 48-atom inventory and
+remained near 388/15.48/290/15.46 s. The corrected 4 GiB candidate above is a
+fresh no-experiment-switch population. The 96-atom partial-cache/replay,
+inexact-inner and outer-secant trials still time out in moved/0 after six passing
+calls; their cold times are 1018.641, 947.696 and 1056.500 s. A target-DIIS tail
+increases pair sweeps from four to six on small controls and is not advanced to
+a large timing population. The expanded range mask `0xffffbfc` also times out at moved/0 (cold 950.947 s; all-five warm median 49.353 s), without force-memory eviction. None of these experiments replaces the default 96 point.
 
 These are before/after complete endpoint observations, not isolated attribution
 of every source change. The newer integration uses the current native public
@@ -160,8 +193,10 @@ Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
 
 ## Provenance, validation and retention
 
-All GPU work uses finite Slurm allocations on n1/node1, partition main,
-RTX 5090, eight CPU threads, with assigned device visibility preserved.
+Benchmark GPU work uses finite Slurm allocations on n1/node1, n4/node4 or
+n5/node5, partition main, RTX 5090 and eight CPU threads, with assigned device
+visibility preserved. Later independent PR qualifications also use n2/node2's
+RTX PRO 6000; those test durations are not RTX 5090 benchmark observations.
 The reference stack is GPU4PySCF 1.8.1, PySCF 2.14.0, CuPy 13.6.0 and
 CUDA 12.9. Core/AOT builds are Release sm_120 and use verified ccache;
 runtime JIT retains the verified sccache cache where needed.
@@ -182,13 +217,39 @@ Both are ancestors of the frozen
 Automatic exact force reuse is qualified on `9aabd59a3` with library SHA256
 `4c7b6ace6f07466af7967c0cc1f4453a7ff09a03c0ebcf13316527105e6779c7`, retained on
 [its frozen source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-automatic-source-20261014).
-Automatic SCF reuse is qualified on `3b15b73d7`, and the plotted phased-budget
+Automatic SCF reuse is qualified on `3b15b73d7`, and the preceding phased-budget
 round uses `948fb1058` with library SHA256
 `4a5ccdabd0a3c67eeab53281a52ae4d0c556e364f9e421d0d29b1f2f16fb5e39`.
 Both, and the separately labeled initializer trials, are retained in
 [the frozen source ancestry](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-scf-phased-source-20261014).
+The retained prior default initializer populations use `22ff59fd3`, library SHA256
+`242be46485a289310f0034feb5ff3f8532f8993e8f22961194f15c7f703becb3`, retained on
+[the frozen initializer source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-default-initializer-source-20261014).
+That source passes 28 receipt/budget/replay and independent molecular E/F
+checks; 22 receipt/budget/replay cases also pass both memcheck and synccheck
+with zero errors. These checks use finite n4 Slurm allocations and cover the
+default policy and explicit alternate/failure paths. A separate intrusive n1
+short-iteration trace counts six actual Fock evaluations across a failed-seed
+retry, including four VV10 sweeps averaging 81.964 s; the configured
+three-iteration limit is per attempt. Its 470.728 s execution is diagnostic
+only and never a benchmark sample.
+The independently assembled [initialization PR #2480](https://github.com/jinzhezenggroup/generativeqc/pull/2480)
+is qualified at `e0def8fff`: 15 host checks pass; n4 job 875 passes 13 mixed
+receipt/budget/replay checks and six independent molecular energy/force and
+reconverged energy-difference checks. Jobs 876/877 each pass 13 cases under
+memcheck/synccheck, with zero errors. Its library hash, 1724-input native source
+audit, scheduler receipts and exact logs are retained in the follow-up receipts.
 The PR branches can differ from these assembled snapshots; only the recorded
 snapshot identities identify a measured population.
+The current 3/12/48 default populations use `fa291a6f2151202c84b25034af9db9604a4543a2`,
+library SHA256 `b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3`,
+retained on [the frozen range source](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-range-four-gib-source-20261014).
+The 1724-input native audit and all 44 recorded consumer hashes match that Git
+source. n4 Slurm 909 passes 23 range/replay/refusal and independent molecular
+E/F/reconverged energy-difference cases, followed by all 36 original-protocol
+benchmark calls. The [separate range receipts](../vv10-range-followups-20261014/manifest.json)
+also distinguish synchronized PR-stack qualification at `8c3752791` from its
+historical parent snapshots. The default 96 observation remains at `22ff59fd3`.
 Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
@@ -251,3 +312,5 @@ Complete independently checked 12-call populations replace historical points.
 A newer incomplete population can add complete checked phases where no complete
 population exists, with its timeout and partial rows retained. All old outcomes
 remain recoverable; no incomplete warm series is reduced to a successful median.
+
+The complete follow-up source inventories are stored losslessly in [source-audit.json.xz](source-audit.json.xz), with stored and uncompressed hashes in the manifest. This storage compaction preserves every provenance field and all samples.

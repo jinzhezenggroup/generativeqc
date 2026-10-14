@@ -144,9 +144,16 @@ def compact_point(point: dict) -> None:
                 for key, value in diagnostic.items()
                 if key
                 in {
-                    "ao_order", "coulomb_exchange_work", "fock_builds", "grid_points",
-                    "history_iterations", "initial_density_used", "physical_residual_max",
-                    "density_change_max", "scf_domain", "tile_points",
+                    "ao_order",
+                    "coulomb_exchange_work",
+                    "fock_builds",
+                    "grid_points",
+                    "history_iterations",
+                    "initial_density_used",
+                    "physical_residual_max",
+                    "density_change_max",
+                    "scf_domain",
+                    "tile_points",
                 }
             }
         force = row.get("native_force_components")
@@ -156,9 +163,14 @@ def compact_point(point: dict) -> None:
                 for key, value in force.items()
                 if key
                 in {
-                    "schema", "source_route", "stationary_integral_derivative_route",
-                    "native_integrals_required", "traffic", "resource_bounds",
-                    "work_counts", "scf_force_memory",
+                    "schema",
+                    "source_route",
+                    "stationary_integral_derivative_route",
+                    "native_integrals_required",
+                    "traffic",
+                    "resource_bounds",
+                    "work_counts",
+                    "scf_force_memory",
                 }
             }
 
@@ -224,7 +236,13 @@ def main() -> None:
     }
     for label, mode, method, atoms in sorted(planned | observed):
         path = (
-            args.campaign / "endpoints" / label / mode / method / str(atoms) / "native.json"
+            args.campaign
+            / "endpoints"
+            / label
+            / mode
+            / method
+            / str(atoms)
+            / "native.json"
         )
         arm = source_arm(label)
         if arm not in sources:
@@ -260,7 +278,9 @@ def main() -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(
         lzma.compress(
-            json.dumps(payload, sort_keys=True, allow_nan=False, separators=(",", ":")).encode(),
+            json.dumps(
+                payload, sort_keys=True, allow_nan=False, separators=(",", ":")
+            ).encode(),
             preset=9 | lzma.PRESET_EXTREME,
         )
     )

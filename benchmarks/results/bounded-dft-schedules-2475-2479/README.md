@@ -332,33 +332,15 @@ rescaled to a preferred SCF iteration count.
   across returned clean calls is 2.1964297e-10 Eh / 1.6855894e-10 Eh/Bohr.
 - [endpoints.md](endpoints.md): every accepted phase, five-sample range, observed
   iteration/build pairs and whole-point status.
-- [diagnostics.json.xz](https://github.com/njzjz-bot/vibeqc/blob/99a81b80ac426384cab6adaef0ebb479aafeb85e/benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz): separately gated two-call profiles,
+- [diagnostics.json.xz](diagnostics.json.xz): separately gated two-call profiles,
   exact kernel names/resources, exclusive ledgers, actual work censuses, AO
   transfer counters, cache/compiler provenance, test/sanitizer receipts, refused
   profiler attempts and additional dirty-source reconstructions. Collection
   scripts are retained under `receipts`; every original input has a hash.
-  This complete archive remains at the immutable PR ancestor `99a81b80ac42`;
-  [diagnostics.git.json](diagnostics.git.json) pins its Git object, size and
-  SHA-256. The current tree retains the clean summary and this recovery receipt
-  to fit the aggregate budget after unrelated master evidence is combined.
-  No diagnostic bytes or scientific observations were discarded.
 - [manifest.json](manifest.json): checksum/size inventory and explicit default
   decisions. No external Release or archive is required to read these records.
 
 ## Reproduction
-
-Recover the historical diagnostic member from this PR ancestry when needed
-(the PR ref also makes the ancestor fetchable from a shallow/squash checkout):
-
-```bash
-git fetch https://github.com/jinzhezenggroup/generativeqc.git refs/pull/2486/head
-mkdir -p .artifacts/bounded-dft-recovered
-git show 99a81b80ac426384cab6adaef0ebb479aafeb85e:benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz > .artifacts/bounded-dft-recovered/diagnostics.json.xz
-sha256sum .artifacts/bounded-dft-recovered/diagnostics.json.xz
-```
-
-Expected SHA-256: `016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e`.
-
 
 Build with verified CXX/CUDA compiler launchers and the same generated/AOT
 configuration. Select one immutable installed image with

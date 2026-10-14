@@ -4,11 +4,14 @@ This checks accounting and admission only. Numerical AUTO SCF/force acceptance
 still requires the unmodified real-device gates.
 """
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,10 +29,8 @@ def _method(source: str, signature: str) -> str:
 
 def test_component_precision_census_preserves_complete_inventory(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     methods = "\n".join(
         _method(source, name)
@@ -50,6 +51,7 @@ def test_component_precision_census_preserves_complete_inventory(
     harness = (
         r"""
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -65,8 +67,11 @@ struct Owner {
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
   bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{}, device_nonlocal{};
   bool final_state_ready{true}, occupied_fitted_factor_ready{};
+  bool pending_nonlocal_seed{}, pending_nonlocal_frozen{}, nonlocal_cache_enabled{};
   void* nonlocal_correlation{};
   unsigned refinement_iterations{};
+  unsigned nonlocal_seed_iterations{}, nonlocal_exact_iterations{};
+  unsigned nonlocal_exact_epoch_iterations{}, nonlocal_inner_iterations{};
   std::uint64_t owner{17}, solve_epoch{3}, generation{5}, final_generation{5};
   scf::ScfOptions options;
   scf::ScfResult output;
@@ -74,7 +79,8 @@ struct Owner {
 """
         + methods
         + r"""
-  void complete(bool coulomb, bool density, std::uint64_t mixed_coulomb_recurrences) {
+  void complete(bool coulomb, bool density, std::uint64_t mixed_coulomb_recurrences,
+                std::array<std::uint64_t, 3> nonlocal_work = {}) {
     pending_mixed_coulomb = coulomb;
     pending_mixed_density = density;
     mixed_precision_executed |= coulomb || density || pending_mixed_point;
@@ -211,6 +217,25 @@ int main() {
          nlc.output.precision_work.operator_inventory_complete);
   assert(nlc.output.precision_work.events.back().kind ==
          scf::PrecisionWorkEventKind::FinalAudit);
+  // Initializer/frozen work must stay separate from exact target iterations,
+  // including the fallback receipt when no resident pair cache is active.
+  for (bool cached : {false, true}) {
+    Owner staged;
+    staged.nonlocal_correlation = &staged;
+    staged.device_nonlocal = true;
+    staged.nonlocal_cache_enabled = cached;
+    staged.pending_nonlocal_seed = true;
+    staged.complete(false, false, 0);
+    staged.pending_nonlocal_seed = false;
+    staged.pending_nonlocal_frozen = true;
+    staged.complete(false, false, 0);
+    staged.pending_nonlocal_frozen = false;
+    staged.complete(false, false, 0, {7, 11, 3});
+    assert(staged.nonlocal_seed_iterations == 2 && staged.nonlocal_inner_iterations == 1);
+    assert(staged.nonlocal_exact_iterations == 1 && staged.nonlocal_exact_epoch_iterations == 1);
+    const std::array<std::uint64_t, 6> expected{1, 2, 1, 7, 11, cached ? 3U : 1U};
+    assert(staged.output.dft_diagnostic.nonlocal_work == expected);
+  }
   for (int excluded = 0; excluded < 3; ++excluded) {
     Owner partial;
     partial.device_chunk_mode = excluded == 0;
@@ -239,9 +264,10 @@ int main() {
     cpp = tmp_path / "component_census.cpp"
     executable = tmp_path / "component_census"
     cpp.write_text(harness)
-    compiled = subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
@@ -250,16 +276,9 @@ int main() {
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
-            str(cpp),
-            "-o",
-            str(executable),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=45,
+        ),
+        compile_timeout=45,
     )
-    assert compiled.returncode == 0, compiled.stderr
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
@@ -273,10 +292,8 @@ def test_method_controller_defers_nonlocal_auto_to_component_schedule() -> None:
 
 def test_component_schedule_limits_lowering_to_qualified_density_families(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
     harness = r"""
 #include <cassert>
 #include <optional>
@@ -425,9 +442,10 @@ int main() {
     cpp = tmp_path / "component_schedule.cpp"
     executable = tmp_path / "component_schedule"
     cpp.write_text(harness)
-    compiled = subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
@@ -436,14 +454,7 @@ int main() {
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
-            str(cpp),
-            "-o",
-            str(executable),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=45,
+        ),
+        compile_timeout=45,
     )
-    assert compiled.returncode == 0, compiled.stderr
     subprocess.run([str(executable)], check=True, timeout=10)

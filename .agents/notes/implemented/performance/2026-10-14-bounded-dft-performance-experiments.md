@@ -154,12 +154,10 @@ these do not relabel or replace the immutable GPU measurements.
 
 ## Retention after the combined-tree CI check
 
-The final local evidence check passed, but the GitHub merge tree combined
-other master evidence and exceeded the unchanged aggregate budget by 80,554
-bytes. Preserve the complete intrusive archive in the already-published PR
-ancestor `99a81b80ac426384cab6adaef0ebb479aafeb85e`; its recovery receipt pins
-the path, Git blob, size and SHA-256. The PR head retains this ancestor. The
-report documents fetching the PR ref and recovering the exact bytes, including
-from a shallow/squash checkout. Keep the clean endpoint summary in the current
-tree, with lossless stronger XZ compression. This avoids removing observations,
-changing storage budgets or publishing an external archive.
+Keep the complete clean observations and intrusive diagnostic archive in the
+current publication. The aggregate checkout budget is recovered by a lossless
+gzip-to-XZ storage migration of the existing Coulomb auxiliary-validation
+capsule, using its existing reader. Its exact decoded bytes and original
+per-record identities are unchanged; no observations or validation failures are
+retired to unmerged PR history. The source-bound reducer and stronger compact
+summary encoding remain unchanged.

@@ -7,9 +7,11 @@
       "sha256": "45092bd68aefce39e5e6ae9aff5110e9e0cb8086cbf318befc28b4e1fbbf0a46"
     },
     {
-      "path": "auxiliary-validation.json.gz",
-      "bytes": 311664,
-      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e"
+      "path": "auxiliary-validation.json.xz",
+      "bytes": 72168,
+      "sha256": "38e9c1794af64b282f9ca344a674b31a98082065fdafd5ca9ef2dc8e1f84e8c6",
+      "decoded_bytes": 1038931,
+      "decoded_sha256": "a815505bd236932150f96fdb0ab19b5a55da338b421f134dbe175aefb2b58b09"
     },
     {
       "path": "check_hf_pbe_pbe0.py",
@@ -60,8 +62,8 @@
     },
     {
       "path": "retention-review.json",
-      "bytes": 3040,
-      "sha256": "3a69ac395d4c477ed05946e3b94278590bb067b966e338cd99f5a8c5314bea0a"
+      "bytes": 3163,
+      "sha256": "0576b82379521ac44d52084aef07a235efb8cfe52ffd326a3d40cfbaaa59f843"
     },
     {
       "path": "summary.json",

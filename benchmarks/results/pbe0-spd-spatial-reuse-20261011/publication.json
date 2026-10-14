@@ -13,10 +13,10 @@
       "sha256": "40898add9f432f5b7cfd00dff91b66b3137b9590dc884c9ae9b44470310fda56"
     },
     {
-      "bytes": 401876,
+      "bytes": 338108,
       "path": "raw-receipts.json.xz",
       "role": "reproduction",
-      "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
+      "sha256": "bffd5f177fba91244a583e9f975a5d70fe482dba6c65178676328208719f76f9"
     },
     {
       "bytes": 218108,
@@ -52,7 +52,7 @@
       "bytes": 6421,
       "path": "validation.json.gz",
       "role": "evidence",
-      "sha256": "c875a09e9cba966ea7c38e4a925c872b87ba4402f71a731a1f9ff6b28d02a092"
+      "sha256": "4e05bb2287956d15f6956335eb212faa2865aee95689cea8b9f4ffe3f08ee402"
     }
   ],
   "reproduction": {

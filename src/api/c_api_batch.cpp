@@ -200,6 +200,33 @@ generativeqc_status generativeqc_batch_get_ks_coulomb_exchange_work_v1(
   return generativeqc::api::copy_ks_coulomb_exchange_work(batch->ks_diagnostics[index], out);
 }
 
+/** Copy the optional VV10 work receipt without another device read or fence. */
+extern "C" GENERATIVEQC_API generativeqc_status generativeqc_internal_batch_get_nonlocal_work_v1(
+    const generativeqc_batch* batch, uint32_t index, uint64_t* values, size_t count) {
+  if (!batch || !values || count != 6 || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto& diagnostic = batch->ks_diagnostics[index];
+  if (!diagnostic || !diagnostic->nonlocal_work[0]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  std::copy(diagnostic->nonlocal_work.begin(), diagnostic->nonlocal_work.end(), values);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Preserve interleaved provisional/physical history without changing public ABI. */
+extern "C" GENERATIVEQC_API generativeqc_status
+generativeqc_internal_batch_get_nonlocal_history_scopes_v1(const generativeqc_batch* batch,
+                                                           uint32_t index, uint64_t* values,
+                                                           size_t count) {
+  if (!batch || !values || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  const auto& diagnostic = batch->ks_diagnostics[index];
+  if (!diagnostic || !diagnostic->nonlocal_work[0]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (count != diagnostic->history.size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  for (size_t i = 0; i < count; ++i) values[i] = diagnostic->history[i].nonlocal_operator_scope;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_ks_ao_selection_diagnostic_v1* out) {

@@ -20,10 +20,14 @@ claim. All subsequent native/GPU, independent raw/source and sanitizer gates pas
 The first complete inventory-ordered comparison (Slurm 9229, source `635dc2c`)
 passed every numerical gate and 89/90 performance gates. OH/def2-SVP UHF,
 spherical, batch one, energy-only failed: ratio **1.033615423 > 1.02**. That
-complete rejected run is retained losslessly in `rejected-inventory-run.json.gz`,
+complete rejected run is retained losslessly in `rejected-inventory-run.json.xz`,
 with explicit rejection and per-file checksums in `rejected-inventory-run.json`.
 It is not accepted promotion evidence. The driver stopped at that failure, so
 its later native/GPU/oracle/sanitizer stages did not execute.
+
+The storage-only gzip-to-XZ migration preserves every decoded byte and all
+original-file checksums. XZ uses LZMA2 preset 9 extreme, a 64 MiB dictionary,
+lc=3, lp=0, pb=0 and CRC64; the decoded archive remains 3,795,930 bytes.
 
 `oh-diagnostic.json` retains every isolated worker, the diagnostic drivers and
 complete extracted profiler reports with checksums. An isolated five-sample

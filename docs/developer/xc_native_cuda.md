@@ -336,6 +336,43 @@ current evaluated density; only converged states replace the resident warm
 cache. An energy-only public call omits final matrix export. Full #203 public
 planning remains separate integration work.
 
+Strict-FP64 restricted resident VV10 solves use bounded native initialization
+before the ordinary physical target tail. The initializer first solves a
+semilocal/range-exchange proposal problem, then refreshes complete VV10 anchors
+between fixed-potential inner solves. Transported densities start with a target
+anchor. Provisional and full-target iterations share the caller's main SCF
+iteration budget; initialization gets no separate allowance. The existing ECP
+physical-final-closure policy retains its separate bound of four correction
+iterations. Only consecutive complete target evaluations passing the unchanged
+energy, density and physical residual gates can publish a successful state or
+forces. An already stationary target density is held for a further
+physical energy confirmation, instead of applying another sub-tolerance update.
+
+Resident warm replays and unsupported spin, precision, incremental-J/K or
+budget cases retain their existing solve. A caller-selected device chunk also
+keeps its existing solver. Set `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` to
+select the ordinary full-target fallback explicitly. Provisional history scopes
+and actual VV10 pair-work receipts distinguish initialization from accepted
+physical work; initialization is never a cached convergence result.
+
+Strict-FP64 direct restricted VV10 initialization automatically admits full
+screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
+the existing reuse threshold, a 4 GiB value ceiling and complete host/device
+admission. Cold and transported-density initialization can prepare a lease;
+a retained warm call only reuses its audited immutable-geometry lease. It never
+builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
+selects ordinary Direct evaluation; explicit `1` retains the separately selected
+experimental capacity domain. The existing bucket mask and byte ceiling remain
+explicit controls. Capacity refusal, unsupported angular classes, fitted,
+lower-precision, incremental and externally budgeted device-ledger paths retain
+their existing providers.
+
+The lease binds geometry, radial operator and omega. It supplies only matching
+raw range K; primary full J/K and derivative owners remain independent.
+Successful solves rebase warm energy metadata with both incumbent exchange
+terms before optional values are retired. This preserves the physical replay
+gates and records the additional complete Fock and both exchange applications.
+
 ## Prepared ragged execution
 
 `KsPreparedBatch` owns one compatible KS plan per input item. CUDA execution
@@ -465,3 +502,11 @@ separately covered by `tests/python/test_ks_resources.py`; the full workload
 evidence required by #162 remains a separate acceptance gate.
 The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
+
+An admitted radial source survives fixed-geometry warm replay by default.
+`GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY=0` retires it before the next solve.
+Changing range selection, bucket mask or byte ceiling also retires the lease.
+A force-memory eviction restores the incumbent provider; separate energy
+baselines preserve the original convergence checks in both cases. Every call
+still evaluates the physical Fock, convergence gates, derivatives and force
+assembly.
