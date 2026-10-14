@@ -65,6 +65,7 @@ struct Owner {
   bool is_active = true, started = false, is_failed = true;
   bool stabilize_occupations{}, final_closure{}, strict_refinement{}, phase_source_cold{};
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
+  bool pending_mixed_point = true;
   unsigned final_corrections{}, refinement_iterations{}, pending_iterations{};
   struct { std::optional<int> precision_mode;
     scf::ScfOptions::XcExecutionSchedule xc_execution_schedule{};
@@ -142,11 +143,14 @@ int main(int argc, char** argv) {
     try { owner.begin(); } catch (...) { thrown = true; }
     assert(thrown);
     assert(owner.is_failed && !owner.is_active);
+    assert(!owner.pending_mixed_point);
     assert(!owner.phase_source && owner.retired == 1);
+    owner.pending_mixed_point = true;
     owner.scenario = 0;
     active_scenario = 0;
     owner.begin();
     assert(!owner.is_failed && owner.is_active && owner.phase_source);
+    assert(!owner.pending_mixed_point);
 }
 """
     )

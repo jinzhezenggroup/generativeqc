@@ -109,9 +109,12 @@ contractions, shape/index transforms, reductions and finite-domain `exp`, `log`,
 `sqrt` and exact `pow`; CUDA admits float32 and float64 for these scalar functions.
 The materializing CPU backend also accepts one-byte Boolean inputs, constants,
 shape/static-index views and six comparisons of finite float64 operands.
+It also executes forward `where` on genuine Boolean selectors and finite generic
+float64 branches, with explicit broadcasting and detached outputs.
 Programs containing Boolean data use a separate checked byte ABI; pure float64
 programs retain their existing ABI. FP32 comparison operands, Boolean AD,
-`where`, nonfinite comparison semantics and native CUDA Boolean data remain
+float32/mixed selection branches, nonfinite comparison semantics and native CUDA
+Boolean data remain
 unsupported. This subset does not establish complete Array API conformance.
 Other operations fail closed; full eager conformance does
 not imply full compiler coverage. Higher-order public transforms are unsupported.
@@ -469,9 +472,18 @@ against its retained-byte budget; selection costs one unit of logical work per
 result element. All live operands are evaluated and finite-checked, so an invalid
 or nonfinite unselected branch still raises, even under a constant condition.
 Scientific index domains, representations and symmetry annotations are not
-admitted by this selection primitive. `where` has no JVP/VJP/HVP rule and no
-native CPU/CUDA/portable/scalar/bundle qualification; those paths reject before
-compiler discovery or device execution. This captured contract does not change
+admitted by this selection primitive. TensorIR runtime reference JVP/VJP/dot
+tests support only external fixed Boolean masks in finite generic real graphs;
+see the [TensorIR derivative contract](../developer/tensor_ir.md#derivative-programs-151).
+The public compiled AD wrappers, generated derivative programs and HVP remain
+unsupported for `where`. The materializing native CPU forward path admits only
+float64 branches with the same generic-domain restrictions and explicit broadcasts.
+Its byte ABI stores each Boolean in one byte and aligns FP64 fields. Every live
+input and branch is materialized and validated before selection; unselected
+invalid branches fail without publishing outputs. Byte, work and node budgets
+include the selector and both branches. Native CUDA/portable/scalar/bundle paths
+and float32/mixed CPU branches reject before compiler discovery or device execution.
+This captured contract does not change
 the broader standard eager namespace or promise full IEEE conformance.
 
 `einsum` and `slice` remain bounded GenerativeQC extensions, not standard API

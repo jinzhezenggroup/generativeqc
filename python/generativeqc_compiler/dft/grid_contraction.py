@@ -22,7 +22,9 @@ from generativeqc_compiler.tensor.native_lowering import (
 )
 
 
-def grid_panel_program(jets: int, points: int, active: int, width: int) -> Program:
+def grid_panel_program(
+    jets: int, points: int, active: int, width: int, *, dtype: str = "float64"
+) -> Program:
     """Project all requested contiguous jets; coefficient panels are broadcast.
 
     Flattening jet/point free axes describes one matrix view without packing or
@@ -42,14 +44,16 @@ def grid_panel_program(jets: int, points: int, active: int, width: int) -> Progr
             strict=True,
         )
     )
-    ao = input_tensor("ao_jets", TensorSpec((j, p, u), role="input"))
-    coefficients = input_tensor("coefficients", TensorSpec((u, v), role="input"))
+    ao = input_tensor("ao_jets", TensorSpec((j, p, u), role="input", dtype=dtype))
+    coefficients = input_tensor(
+        "coefficients", TensorSpec((u, v), role="input", dtype=dtype)
+    )
     return Program({"projected": einsum("jpu,uv->jpv", ao, coefficients)})
 
 
-def emit_grid_contraction() -> str:
+def emit_grid_contraction(*, dtype: str = "float64", suffix: str = "") -> str:
     """Emit symbolic descriptors and one prepare-only shared provider binding."""
-    program = grid_panel_program(4, 2, 3, 5)
+    program = grid_panel_program(4, 2, 3, 5, dtype=dtype)
     node = program.outputs["projected"]
     adapter = TensorLoweringAdapter(program)
     request = adapter.request(node, backend="cuda")
@@ -64,14 +68,14 @@ def emit_grid_contraction() -> str:
     portfolio = emit_contraction_region_portfolio(
         request,
         canonical_hash({"descriptor": descriptor, "domain": "bounded-packed-v1"}),
-        name="grid_panel_lowering",
+        name="grid_panel_lowering" + suffix,
         bounded_dense=True,
     )
     return "\n".join(
         (
             '#include "tensor/native_contraction.hpp"',
             "namespace generativeqc::dft::generated {",
-            "inline tensor::ContractionRequest grid_panel_descriptor(std::size_t jets,",
+            f"inline tensor::ContractionRequest grid_panel_descriptor{suffix}(std::size_t jets,",
             "    std::size_t points, std::size_t active, std::size_t width) {",
             "  (void)tensor::contraction_product(jets,points); return "
             + descriptor
@@ -81,13 +85,13 @@ def emit_grid_contraction() -> str:
             '#include "tensor/cuda_contraction_selection.cuh"',
             "namespace generativeqc::dft::generated {",
             portfolio,
-            "inline std::unique_ptr<tensor::PreparedBoundedContraction> prepare_grid_panel(",
+            f"inline std::unique_ptr<tensor::PreparedBoundedContraction> prepare_grid_panel{suffix}(",
             "    std::size_t jets, std::size_t points, std::size_t active, std::size_t width,",
             "    cudaStream_t stream, std::size_t budget) {",
             "  return std::make_unique<tensor::PreparedBoundedContraction>(",
-            "      grid_panel_lowering_request,grid_panel_lowering_candidates,",
-            "      grid_panel_lowering_target,grid_panel_lowering_compilation,",
-            "      grid_panel_descriptor(jets,points,active,width),stream,budget);}",
+            f"      grid_panel_lowering{suffix}_request,grid_panel_lowering{suffix}_candidates,",
+            f"      grid_panel_lowering{suffix}_target,grid_panel_lowering{suffix}_compilation,",
+            f"      grid_panel_descriptor{suffix}(jets,points,active,width),stream,budget);}}",
             "} // namespace generativeqc::dft::generated\n#endif\n",
         )
     )

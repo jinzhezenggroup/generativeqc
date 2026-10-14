@@ -7,14 +7,20 @@ from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
 
-def emit_feature_policy(*, device: typing.Any = False) -> typing.Any:
+def emit_feature_policy(
+    *, device: typing.Any = False, scalar_type: str = "double"
+) -> typing.Any:
     """Emit rho/gradient/tau and sigma with identical occupation conventions.
 
     D supplies AO jets and their density products; C supplies weighted orbital
     jets in both slots. Runtime controls traversal and requested-output masks.
     The host XC consumer uses the same roots as bounded dense/local CUDA.
     """
-    emitter_type = CudaEmitter if device else ScalarCEmitter
+
+    def emitter_type(graph: Graph, names: dict) -> ScalarCEmitter:
+        emitter = CudaEmitter if device else ScalarCEmitter
+        return emitter(graph, names, scalar_type=scalar_type)
+
     qualifier = "__device__" if device else "inline"
     lines = []
     graph = Graph()
@@ -27,7 +33,7 @@ def emit_feature_policy(*, device: typing.Any = False) -> typing.Any:
         sum((d * w / 2 for d, w in zip(dp, work[1:], strict=True)), graph.constant(0)),
     )
     lines.append(
-        f"{qualifier} void add_features(double phi, const double* derivative, const double* work, double* accum, unsigned mask) {{"
+        f"{qualifier} void add_features({scalar_type} phi, const {scalar_type}* derivative, const {scalar_type}* work, {scalar_type}* accum, unsigned mask) {{"
     )
     # The orbital route supplies phi=Psi, derivative=grad(Psi), work=Psi jets.
     # The same compiler-owned bilinears then give the occupation-weighted
@@ -48,7 +54,9 @@ def emit_feature_policy(*, device: typing.Any = False) -> typing.Any:
     )
     emitter = emitter_type(graph, {})
     emitter.emit(roots)
-    lines.append(f"{qualifier} void sigma(const double (&g)[2][3], double* output) {{")
+    lines.append(
+        f"{qualifier} void sigma(const {scalar_type} (&g)[2][3], {scalar_type}* output) {{"
+    )
     lines.extend(emitter.lines)
     lines.extend(
         f"  output[{i}] = {emitter.reference(r)};" for i, r in enumerate(roots)

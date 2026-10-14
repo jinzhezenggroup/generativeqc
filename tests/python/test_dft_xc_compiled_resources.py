@@ -60,7 +60,9 @@ def test_resource_demangler_preserves_active_scopes(
     )
     assert actual.to_payload() == expected.to_payload()
     missing_fp64 = tuple(
-        item for item in decoded if "tiled_density_product<false>" not in item.function
+        item
+        for item in decoded
+        if "tiled_density_product<false, double>" not in item.function
     )
     with pytest.raises(ValueError, match="strict-FP64 tiled density-product kernel"):
         native_grid_xc_compiled_region_evidence(
@@ -118,7 +120,7 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             registers=52,
         ),
         resource(
-            "generativeqc::dft::cuda_xc_detail::tiled_density_product<false>(double*)",
+            "generativeqc::dft::cuda_xc_detail::tiled_density_product<false, double>(double*)",
             registers=64,
             shared_bytes=4352,
         ),
@@ -141,18 +143,19 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             registers=40,
         ),
         resource(
-            "generativeqc::dft::cuda_xc_detail::tiled_potential(double*)",
+            "generativeqc::dft::cuda_xc_detail::tiled_potential<double>(double*)",
             registers=72,
             shared_bytes=8704,
         ),
         *(
             resource(f"{token}(double*)")
             for token in (
-                "batch_density_products",
+                "batch_density_products<double>",
                 "batch_density_features",
                 "batch_potential_panels",
-                "batch_local_potentials",
-                "batch_ordered_scatter",
+                "batch_local_potentials<double>",
+                "batch_ordered_scatter<false, double>",
+                "batch_ordered_scatter<true, double>",
             )
         ),
         # Compiled but inactive variants must not contaminate the selected region.
@@ -192,6 +195,83 @@ def test_complete_region_selects_only_active_pbe_scopes() -> None:
     assert evidence.profitability.compiled_occupancy_upper_bound > 0
     # The inactive r2SCAN and FP32 variants are intentionally much worse.
     assert evidence.profitability.compiled_registers_per_thread < 200
+
+
+@pytest.mark.parametrize(
+    ("strict_name", "inactive_names", "label"),
+    [
+        (
+            "tiled_density_product<false, double>",
+            (
+                "tiled_density_product<false, float>",
+                "tiled_density_product<true, double>",
+            ),
+            "strict-FP64 tiled density-product kernel",
+        ),
+        (
+            "tiled_potential<double>",
+            ("tiled_potential<float>",),
+            "tiled Vxc contraction kernel",
+        ),
+        (
+            "batch_density_products<double>",
+            ("batch_density_products<float>",),
+            "batched mapped density-product kernel",
+        ),
+        (
+            "batch_local_potentials<double>",
+            ("batch_local_potentials<float>",),
+            "batch_local_potentials kernel",
+        ),
+        (
+            "batch_ordered_scatter<false, double>",
+            (
+                "batch_ordered_scatter<false, float>",
+                "batch_ordered_scatter<true, float>",
+            ),
+            "batch_ordered_scatter unsegmented kernel",
+        ),
+        (
+            "batch_ordered_scatter<true, double>",
+            (
+                "batch_ordered_scatter<false, float>",
+                "batch_ordered_scatter<true, float>",
+            ),
+            "batch_ordered_scatter segmented kernel",
+        ),
+    ],
+)
+def test_typed_contraction_resources_require_the_strict_instantiation(
+    strict_name: str, inactive_names: tuple[str, ...], label: str
+) -> None:
+    """Compiled FP32 variants cannot substitute for or inflate FP64 evidence."""
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+    )
+    rows = pbe_resources()
+    inactive = tuple(
+        resource(name + "(double*)", registers=255, spill_store_bytes=128)
+        for name in inactive_names
+    )
+    evidence = native_grid_xc_compiled_region_evidence(
+        rows + inactive,
+        shape=shape,
+        functional="PBE",
+        target=TARGET,
+        source_identity="typed-contractions",
+    )
+    assert evidence.profitability.compiled_registers_per_thread == 80
+    assert evidence.profitability.spill_bytes == 0
+    missing = tuple(row for row in rows if strict_name not in row.function)
+    for alternatives in ((), inactive):
+        with pytest.raises(ValueError, match=label):
+            native_grid_xc_compiled_region_evidence(
+                missing + alternatives,
+                shape=shape,
+                functional="PBE",
+                target=TARGET,
+                source_identity="missing-strict-instantiation",
+            )
 
 
 @pytest.mark.parametrize("npoint", [256, 512])
@@ -271,18 +351,19 @@ def test_compact_batch_evidence_covers_fallback_and_every_stage(
     """An explicit compact candidate cannot hide an unmeasured stage or fallback."""
     shape = GridXcCompiledResourceShape(4096, 256, 96, 2, True, True, True)
     tokens = (
-        "batch_density_products",
+        "batch_density_products<double>",
         "batch_density_features",
         "batch_potential_panels",
-        "batch_local_potentials",
-        "batch_ordered_scatter",
+        "batch_local_potentials<double>",
+        "batch_ordered_scatter<false, double>",
+        "batch_ordered_scatter<true, double>",
     )
     rows = (
         *(row for row in pbe_resources() if not row.function.startswith("batch_")),
         *(
             resource(f"{token}(double*)", registers=104)
             for token in tokens
-            if token != missing
+            if missing is None or not token.startswith(missing)
         ),
     )
     options = {
@@ -298,7 +379,7 @@ def test_compact_batch_evidence_covers_fallback_and_every_stage(
     evidence = native_grid_xc_compiled_region_evidence(rows, **options)
     names = {row.function for _, scope in evidence.scopes for row in scope}
     assert all(f"{token}(double*)" in names for token in tokens)
-    assert any("tiled_density_product<false>" in name for name in names)
+    assert any("tiled_density_product<false, double>" in name for name in names)
     assert any("tiled_potential" in name for name in names)
     assert evidence.profitability.compiled_registers_per_thread == 104
 
@@ -376,17 +457,18 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
         resource("evaluate_points<4, false, true>(double*)", registers=63),
         resource("assemble_potential(double*)", registers=64),
         resource("accumulate_totals(double*)", registers=8),
-        resource("tiled_density_product<false>(double*)", registers=250),
+        resource("tiled_density_product<false, double>(double*)", registers=250),
         resource("density_features<true>(double*)", registers=250),
-        resource("tiled_potential(double*)", registers=250),
+        resource("tiled_potential<double>(double*)", registers=250),
         *(
             resource(f"{token}(double*)")
             for token in (
-                "batch_density_products",
+                "batch_density_products<double>",
                 "batch_density_features",
                 "batch_potential_panels",
-                "batch_local_potentials",
-                "batch_ordered_scatter",
+                "batch_local_potentials<double>",
+                "batch_ordered_scatter<false, double>",
+                "batch_ordered_scatter<true, double>",
             )
         ),
     )

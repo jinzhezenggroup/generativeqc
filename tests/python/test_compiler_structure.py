@@ -43,8 +43,11 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
     assert "__double2float_rn" in native_contractions
     assert "__fmul_rn" in native_contractions
     assert "__dadd_rn" in native_contractions
-    assert "template <bool Mixed>\n__global__ void tiled_density_product" in native
-    assert "tiled_density_product<Mixed>" in native
+    assert (
+        "template <bool Mixed, class Arithmetic = double>\n"
+        "__global__ void tiled_density_product" in native
+    )
+    assert "tiled_density_product<Mixed, Arithmetic>" in native
     assert "density_product<Mixed>" in native
     assert "launch_density_product<true,false>" in native
     assert "launch_density_product<true,true>" in native

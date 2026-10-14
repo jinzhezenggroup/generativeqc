@@ -319,6 +319,7 @@ PREFIX = r"""
 #include <vector>
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/direct_spd_force_schedule.hpp"
+#include "scf/direct_force_precision.hpp"
 using namespace generativeqc::scf::cuda_execution;
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/generated_shell_task.hpp"
@@ -398,6 +399,8 @@ enum class DirectCoulombRange { Full, Short, Long };
 struct Batch {
   int total_atoms=1, batch_size=1, nbf=2, direct_nbf=2;
   const double* direct_force_seed=nullptr;
+  bool direct_force_fp32=false;
+  unsigned long long* direct_force_precision_work=nullptr;
 };
 std::size_t product(std::size_t first,std::size_t second) { return first*second; }
 using GeneratedShellPairStream = generativeqc::scf::detail::GeneratedShellPairStream;
@@ -553,7 +556,7 @@ int main(int argc,char** argv) {
   Shared shared;
   if(refusal==1) shared.screening=1e-8;
   if(refusal==2) shared.batch.batch_size=2;
-  std::uint32_t pair=0,head=0; unsigned long long cursor=0;
+  std::uint32_t pair=0,head=0; unsigned long long cursor[4]{};
   double force[9]{}, bound=1, density=1;
   force_buffer=force;
   // The total density is small; the unused same-spin exchange squares overflow.
@@ -574,7 +577,7 @@ int main(int argc,char** argv) {
       2,0,0,spin_density,1,1,0,0,1.0,0.0)!=4.0 ||
       std::isfinite(direct_force_density_coefficient_scaled<true>(
           2,0,0,spin_density,1,1,0,0,0.0,1.0)))) return 9;
-  GeneratedExchangePlan plan{&shared,true,angular_schedule,&pair,&bound,force,&cursor,&head};
+  GeneratedExchangePlan plan{&shared,true,angular_schedule,&pair,&bound,force,cursor,&head};
   plan.bounded_block_domain=37;
   std::vector<double> output{99.0};
   const auto result_matches = [&]() {
@@ -673,12 +676,14 @@ def test_resident_capture_refusal_uses_portable_status_without_submission(
 RESIDENT_CAPTURE_PREFIX = r"""
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include "scf/cuda_derivative_sources.hpp"
+#include "scf/direct_force_precision.hpp"
 using namespace generativeqc::scf;
 using cudaStream_t = void*;
 using cudaError_t = int;
-constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1;
+constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1, cudaMemcpyDeviceToHost = 2;
 #if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL)
 constexpr int expected_capture_error = cudaErrorInvalidValue;
 #else
@@ -686,7 +691,7 @@ constexpr int cudaErrorStreamCaptureUnsupported = 2;
 constexpr int expected_capture_error = cudaErrorStreamCaptureUnsupported;
 #endif
 enum cudaStreamCaptureStatus { cudaStreamCaptureStatusNone, cudaStreamCaptureStatusActive };
-int capture_error{}, device_error{}, submission_error{}, submissions{}, drains{}, callbacks{};
+int capture_error{}, device_error{}, submission_error{}, copy_error{}, submissions{}, drains{}, callbacks{};
 cudaStreamCaptureStatus capture_state = cudaStreamCaptureStatusNone;
 int cudaGetDevice(int* device) { *device = 0; return device_error; }
 int cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* capture) {
@@ -694,6 +699,11 @@ int cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* capture) {
   return capture_error;
 }
 int cudaStreamSynchronize(cudaStream_t) { ++drains; return cudaSuccess; }
+int cudaMemcpyAsync(void* target, const void* source, std::size_t bytes, int, cudaStream_t) {
+  if (copy_error) return copy_error;
+  std::memcpy(target, source, bytes);
+  return cudaSuccess;
+}
 namespace runtime::cuda_trace {
 struct Shape { std::size_t batch, nbf, naux; bool source, streamed; };
 struct TraceOperation { TraceOperation(const char*, cudaStream_t, Shape) {} };
@@ -701,7 +711,9 @@ void trace_counter(const char*, std::size_t) {}
 }
 struct Batch { int batch_size{1}, nbf{2}, total_atoms{1}; };
 struct Shared { Batch batch; cudaStream_t stream{reinterpret_cast<void*>(1)}; };
-struct GeneratedExchangePlan { Shared* shared; double* force; };
+struct GeneratedExchangePlan {
+  Shared* shared; double* force; unsigned long long* force_cursor{};
+};
 template <class... Args>
 int validate_generated_full_range_derivative_inputs(Args&&...) { return cudaSuccess; }
 template <class... Args>
@@ -725,7 +737,7 @@ int main() {
   };
   const auto invoke = [&] {
     return consume_generated_full_range_energy_derivatives(
-        plan, false, density, nullptr, 1.0, -0.5, consumer, false);
+        plan, false, density, nullptr, 1.0, -0.5, consumer, false, nullptr);
   };
   capture_state = cudaStreamCaptureStatusActive;
   if (invoke() != expected_capture_error || submissions || drains || callbacks) return 1;
@@ -746,5 +758,20 @@ int main() {
   if (!caught || submissions != 3 || drains != 2 || callbacks != 2) return 6;
   callback_failure = false;
   if (invoke() != cudaSuccess || submissions != 4 || drains != 2 || callbacks != 3) return 7;
+  // Instrumentation adds exactly its explicit fence; ordinary strict calls
+  // above retain the asynchronous borrowed-source contract.
+  unsigned long long cursor[4]{0, 19, 37, 2};
+  plan.force_cursor = cursor;
+  DirectForcePrecisionRequest precision{true, true};
+  const auto collect = [&] {
+    return consume_generated_full_range_energy_derivatives(
+        plan, false, density, nullptr, 1.0, -0.5, consumer, false, &precision);
+  };
+  if (collect() != cudaSuccess || drains != 3 ||
+      precision.work != std::array<std::uint64_t, 3>{19, 37, 2}) return 8;
+  copy_error = 9;
+  if (collect() != 9 || drains != 4) return 9;
+  copy_error = 0;
+  if (collect() != cudaSuccess || drains != 5) return 10;
 }
 """

@@ -280,6 +280,33 @@ template<bool Unrestricted> void qualify_compensation() {
         assert(exchange[entry]==(sink&2U ? expected[2][entry] : 0.0));
       }
     }
+    // The two raw channels must recover small signed contributions separately;
+    // neither may borrow the exported-HF correction plane.
+    for(unsigned sink=1;sink<=3;++sink) {
+      constexpr double large=0x1p60;
+      std::array<double,storage> coulomb{}, exchange{}, coulomb_correction{},
+          exchange_correction{}, unused_correction;
+      unused_correction.fill(23.0);
+      batch.reference_fock_correction=unused_correction.data();
+      for(std::size_t entry=begin;entry<end;++entry) {
+        if(sink&1U) coulomb[entry]=large;
+        if(sink&2U) exchange[entry]=large;
+      }
+      MaterializedDirectPairRecurrence<8> shared{};
+      contract_materialized_direct_pair_fock<Unrestricted,8>(batch,{0,0,0},0.0,
+          bound,density.data(),active,nullptr,nullptr,shared,nullptr,
+          false,false,nullptr,false,generativeqc::integrals::CoulombRange::Full,0.0,
+          sink&1U ? coulomb.data() : nullptr,sink&2U ? exchange.data() : nullptr,
+          nullptr,nullptr,coulomb_correction.data(),exchange_correction.data());
+      for(std::size_t entry=0;entry<storage;++entry) {
+        assert(unused_correction[entry]==23.0);
+        const bool active_entry=entry>=begin && entry<end;
+        if(active_entry && (sink&1U)) coulomb[entry]-=large;
+        if(active_entry && (sink&2U)) exchange[entry]-=large;
+        assert(coulomb[entry]+coulomb_correction[entry]==(sink&1U ? expected[1][entry] : 0.0));
+        assert(exchange[entry]+exchange_correction[entry]==(sink&2U ? expected[2][entry] : 0.0));
+      }
+    }
   }
   assert(observed_lost_contribution);
 }

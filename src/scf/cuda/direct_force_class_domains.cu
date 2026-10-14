@@ -126,7 +126,7 @@ __launch_bounds__(kBoundedDirectForceThreads, 1) void direct_force_spatial_spd_l
         if (direct_shell_class_angular_order(shell_class) <= 6U &&
             direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Force>(
                 batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
-                shell_pair_density_bounds, nullptr, false, false) &&
+                shell_pair_density_bounds, nullptr, false, exchange_coefficient == 0.0) &&
             (generated_overflow[shell_class] != 0U ||
              !bounded_generated_class_enabled(shell_class, enabled_mask_pointer, enabled_mask))) {
           queue[atomicAdd(&queue_count, 1U)] = task;
@@ -205,7 +205,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_force_class_d
       const auto second_pair = bra < ket ? bra : ket;
       if (direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Force>(
               batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
-              shell_pair_density_bounds, nullptr, false, false)) {
+              shell_pair_density_bounds, nullptr, false, exchange_coefficient == 0.0)) {
         const ActiveShellQuartetTile task{first_pair, second_pair, 0U};
         const auto shell_class = direct_force_task_shell_class(batch, task);
         if (generated_overflow[shell_class] != 0U ||

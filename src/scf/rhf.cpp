@@ -8,6 +8,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -33,6 +34,7 @@
 #include "scf/cuda_fock_provider.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/df_exchange_policy.hpp"
 #include "scf/df_preparation_budget.hpp"
 #include "scf/fock_build.hpp"
 #include "scf/fock_prepared.hpp"
@@ -881,6 +883,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
     auto reference = std::make_shared<PhysicalReference>();
     reference->nbf = n;
     reference->nocc = occupied;
+    reference->density_fitted = true;
     reference->overlap = data.one_electron.overlap;
     reference->hcore = data.one_electron.hcore;
     reference->fock = final_fock;
@@ -1444,13 +1447,57 @@ unsigned cuda_df_iteration_diis_history(const ScfOptions& options) {
   return value && value[0] == '1' && value[1] == '\0' ? 0 : options.diis_history;
 }
 
+/** Preserve a complete final occupied projection at the singleton RHF crossover.
+ * The total allowance and explicit policies stay fixed. Rebalance only when
+ * the resulting physical source plan actually admits both resident B and U;
+ * a memory-only win that drops U would leave the force endpoint work cliff.
+ * Update the response owners together so cache replay cannot use the old cap.
+ */
+DensityFittingTilePlan plan_cuda_rhf_source_tiles(std::span<DensityFittingScfData> data,
+                                                  const ScfOptions& options, std::size_t nbf,
+                                                  std::size_t naux, std::size_t occupied,
+                                                  std::size_t source_bytes,
+                                                  std::size_t automatic_rhf_rank) {
+  auto& budget = data.front().resolved_budget;
+  const auto plan = [&](std::size_t value_bytes) {
+    return plan_cuda_density_fitting_tiles(
+        data.size(), nbf, naux, std::max<std::size_t>(occupied, 1), value_bytes, source_bytes, true,
+        options.diis_history, automatic_rhf_rank);
+  };
+  auto tiles = plan(budget.value_bytes);
+  if (data.size() != 1 || !automatic_rhf_rank || !df_occupied_exchange_auto_requested() ||
+      requested_df_pair_storage_request() != DfPairStorageRequest::Automatic ||
+      budget.response_override_bytes ||
+      (tiles.stores_full_three_center &&
+       (tiles.value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+        tiles.value_storage.rank_capacity >= occupied)))
+    return tiles;
+  const auto resident =
+      resolve_method_owned_df_resident_budget(budget, nbf, naux, occupied, source_bytes);
+  if (resident == budget) return tiles;
+  // The shared resolver tests basic packed capacity. The RHF planner additionally
+  // charges its DIIS/factor state and may drop optional U; never promote that case.
+  const auto promoted = plan(resident.value_bytes);
+  if (!promoted.stores_full_three_center ||
+      promoted.value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+      promoted.value_storage.rank_capacity < occupied ||
+      promoted.automatic_rhf_rank != automatic_rhf_rank)
+    return tiles;
+  budget = resident;
+  if (data.front().df_gradient_orbital) data.front().df_gradient_budget = budget.response_bytes;
+  if (data.front().one_electron_gradient_system)
+    data.front().one_electron_gradient_budget = budget.response_bytes;
+  trace_df_resolved_budget(budget);
+  return promoted;
+}
+
 CudaDensityFittingPlanPtr make_cuda_density_fitting_plan(
-    const DensityFittingScfData& data, const ScfOptions& options, int device_id,
-    std::size_t occupied, bool unrestricted,
+    DensityFittingScfData& data, const ScfOptions& options, int device_id, std::size_t occupied,
+    bool unrestricted,
     std::vector<CudaDensityFittingMetricDiagnostic>* output_diagnostics = nullptr,
     const core::System* orbital_system = nullptr, const core::System* auxiliary_system = nullptr) {
   std::size_t automatic_rhf_rank = unrestricted ? 0 : occupied;
-  const auto planning_budget = data.resolved_budget.value_bytes;
+  const auto& planning_budget = data.resolved_budget.value_bytes;
 
   CudaDensityFittingJkPlan* raw_plan = nullptr;
   std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
@@ -1487,10 +1534,9 @@ CudaDensityFittingPlanPtr make_cuda_density_fitting_plan(
     }
     DensityFittingTilePlan source_tile_plan;
     try {
-      source_tile_plan = plan_cuda_density_fitting_tiles(
-          1, source_nbf, source_naux, std::max<std::size_t>(occupied, 1), planning_budget,
-          cuda_density_fitting_integral_source_device_bytes(source), true, options.diis_history,
-          automatic_rhf_rank);
+      source_tile_plan = plan_cuda_rhf_source_tiles(
+          {&data, 1}, options, source_nbf, source_naux, occupied,
+          cuda_density_fitting_integral_source_device_bytes(source), automatic_rhf_rank);
     } catch (...) {
       destroy_cuda_density_fitting_integral_source(source);
       throw;
@@ -1554,7 +1600,7 @@ ScfResult run_cuda_independent_fock_strategy(const core::System& system,
 }
 
 CudaDensityFittingPlanPtr make_cuda_density_fitting_batch_plan(
-    const std::vector<DensityFittingScfData>& data, const ScfOptions& options, int device_id,
+    std::vector<DensityFittingScfData>& data, const ScfOptions& options, int device_id,
     std::size_t occupied, bool unrestricted,
     std::vector<CudaDensityFittingMetricDiagnostic>* output_diagnostics = nullptr,
     const std::vector<core::System>* orbital_systems = nullptr,
@@ -1564,7 +1610,7 @@ CudaDensityFittingPlanPtr make_cuda_density_fitting_batch_plan(
     throw std::invalid_argument("CUDA density-fitting batch cannot be empty");
   }
   const auto& resolved = data.front().resolved_budget;
-  const auto planning_budget = resolved.value_bytes;
+  const auto& planning_budget = resolved.value_bytes;
   if (std::any_of(data.begin(), data.end(),
                   [&](const auto& item) { return item.resolved_budget != resolved; }))
     throw std::invalid_argument("CUDA density-fitting batch has mixed resource-policy identity");
@@ -1597,10 +1643,9 @@ CudaDensityFittingPlanPtr make_cuda_density_fitting_batch_plan(
     }
     DensityFittingTilePlan tile_plan;
     try {
-      tile_plan = plan_cuda_density_fitting_tiles(
-          data.size(), nbf, naux, std::max<std::size_t>(occupied, 1), planning_budget,
-          cuda_density_fitting_integral_source_device_bytes(source), true, options.diis_history,
-          automatic_rhf_rank);
+      tile_plan = plan_cuda_rhf_source_tiles(
+          data, options, nbf, naux, occupied,
+          cuda_density_fitting_integral_source_device_bytes(source), automatic_rhf_rank);
     } catch (...) {
       destroy_cuda_density_fitting_integral_source(source);
       throw;

@@ -24,8 +24,40 @@ failed or incomplete phases have no successful timing. No timeout was increased.
 | [#2413](https://github.com/jinzhezenggroup/generativeqc/issues/2413) | WB97M-V DF passes all 12 calls at 3 and 12 atoms with the matching independent full-range-DF/exact-long-range-K oracle. The old default-reference mismatch remains in historical probes. Large WB endpoints remain unresolved. |
 | [#2414](https://github.com/jinzhezenggroup/generativeqc/issues/2414) | [#2438](https://github.com/jinzhezenggroup/generativeqc/pull/2438) qualifies M06-2X FP64 local AO execution. Direct and DF pass all 12 independent calls at 3/12/48/96 atoms. DF/96 cold: 628.378 → 150.082 s; warm: 116.061 → 36.357 s. The older timeout remains retained. |
 | [#2415](https://github.com/jinzhezenggroup/generativeqc/issues/2415) | [#2443](https://github.com/jinzhezenggroup/generativeqc/pull/2443) removes the DF resident/streamed crossover on geometry rebuilds. Canonical r²SCAN-3c DF passes all 12 calls at 3/12/48/96 atoms, including D4/gCP. DF/96 cold/warm/moved/moved-warm: 226.247 / 23.080 / 145.915 / 23.085 s; the prior cold and moved timeouts remain retained. |
+| [#2416](https://github.com/jinzhezenggroup/generativeqc/issues/2416) | [#2446](https://github.com/jinzhezenggroup/generativeqc/pull/2446) forwards pure-J force demand; [#2450](https://github.com/jinzhezenggroup/generativeqc/pull/2450) admits the existing spatial schedule automatically. Direct r²SCAN-3c now completes all 12 calls at 3/12/48/96 atoms under the original limits. At 96 atoms: cold 538.312 s, warm 90.092 s, moved 268.003 s, moved-warm 90.203 s. Prior final-replay timeouts remain retained. |
 | [#2418](https://github.com/jinzhezenggroup/generativeqc/issues/2418) | [#2436](https://github.com/jinzhezenggroup/generativeqc/pull/2436) packages exact M06-2X stationary AOT plans. Source `61b9387f3` gives 3-atom direct cold 4.378 s versus historical 229.691 s. A separate empty artifact-cache run passes all 12 calls with runtime compiler discovery and invocation forbidden. Later source-matched populations remain separately identified. |
 | [#2421](https://github.com/jinzhezenggroup/generativeqc/issues/2421) | [#2437](https://github.com/jinzhezenggroup/generativeqc/pull/2437) adds automatic HF/DF value-response planning and exact-state final occupied projection reuse. All 12 calls pass at 96 atoms. Warm: 59.318 → 3.201 s; new cold 32.994 s, moved 28.670 s. |
+
+Direct WB97M-V passes all 12 calls at 48 atoms within 1800 s with
+[#2454](https://github.com/jinzhezenggroup/generativeqc/pull/2454), automatic exact
+force reuse [#2462](https://github.com/jinzhezenggroup/generativeqc/pull/2462),
+automatic exact SCF reuse [#2467](https://github.com/jinzhezenggroup/generativeqc/pull/2467),
+and the composite phased-Becke budget repair
+[#2468](https://github.com/jinzhezenggroup/generativeqc/pull/2468). Cold/warm/moved/moved-warm are
+575.813 / 15.548 / 405.620 / 15.580 s. The warm median moves from 67.707 s
+(bilateral source) to 39.029 s (force reuse), 18.435 s (SCF reuse), then 15.548 s
+(correctly budgeted Becke); all four complete populations remain retained.
+Maximum current 48-atom energy/force errors are 4.320e-12 Eh / 6.520e-11 Eh/Bohr.
+Every frozen replay records zero SCF and force VV10 pair sweeps, while physical
+Focks and remaining work still run. Both geometry owners allocate 41,706,304
+phased bytes and actually visit all 1,179,648 points in 1,152 phase batches.
+The preceding source had zero phased bytes/batches despite requesting the path.
+
+Both new default rounds pass all 36 calls at 3/12/48 atoms. The figure uses the
+latest complete round at all three sizes, including its slower 29.237-s 3-atom
+cold point; it does not choose the faster 16.172-s cold point from the preceding
+SCF-only round. Earlier startup/cache controls and superseded observations remain
+in the receipts. Experimental initializers and explicit device-final-validation
+are disabled in the plotted source. The 96-atom endpoint remains unresolved.
+
+Default-off initializer trials are retained separately: one 96-atom cold returns
+in 1562.126 s, and its revised inner solve regresses to 1629.527 s. Both hit the
+original 1800-second whole-point limit during warm replays. The revised 48-atom
+initializer completes in 411.440 / 18.234 / 313.692 / 18.256 s, but it is not a
+default result. Freezing range exchange as well increases small-system iteration
+counts and is not promoted. Its original null gates remain unchanged; an offline
+comparison with the identical independent protocol is retained separately.
+Neither partial 96-atom trial closes #2426.
 
 These are before/after complete endpoint observations, not isolated attribution
 of every source change. The newer integration uses the current native public
@@ -34,22 +66,22 @@ counts are preserved. M06-2X API-cold timing includes package loading. Its
 separate compiler-forbidden control establishes AOT use, not a reconstruction
 of the historical compiler-cache state.
 
-The current reductions contain 29 fully qualified direct points (348 calls)
+The current reductions contain 31 fully qualified direct points (372 calls)
 and 30 fully qualified DF points (360 calls). Maximum accepted errors are
-2.274e-11 / 9.159e-11 for direct and 2.261e-10 / 1.573e-10 for DF, in Eh and
+3.275e-11 / 2.201e-10 for direct and 2.261e-10 / 1.573e-10 for DF, in Eh and
 Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
 
 ## Remaining qualification
 
-- #2416: [#2439](https://github.com/jinzhezenggroup/generativeqc/pull/2439)'s
-  bounded SCF AO-map staging and read-only force-grid leases remove the
-  diagnosed host capacity cliffs. Direct/48 passes all 12 calls (86.302-s cold,
-  26.070-s warm median). Direct/96 returns cold in 500.751 s and passes all
-  11 returned E/F calls, but the 1800-s point limit interrupts the final moved
-  replay. Its complete warm series has a 105.539-s median; integral derivatives
-  contribute about 77.8 s per call. Initial capacity failures and the final
-  incomplete population remain retained. The incomplete moved-warm series has
-  no successful median.
+- #2416's ordinary-resource population is qualified on source `aaec57399`.
+  PBE/r²SCAN 48/96 controls also complete all 12 calls. Initial small controls
+  exposed a separate resource-dependent force refusal, reproduced with 8 GiB
+  free: the optional shell stack lease was unavailable after successful SCF.
+  [#2451](https://github.com/jinzhezenggroup/generativeqc/pull/2451) preserves the
+  existing canonical GPU force fallback and passes independent Libcint checks
+  plus a complete 12-atom pressure population. Pressure runs and diagnostic
+  error-detail wrappers are excluded from the plotted timings; their failures
+  and successes remain in `followup-receipts.json.xz`.
 - #2415 is now qualified at 96 atoms on source `3660e04d2`. Source `227c55c06`
   timed out in cold SCF; the intermediate `fedf81b83` completed cold and five
   warm calls but timed out after geometry movement. Both failures remain in
@@ -58,12 +90,27 @@ Eh/Bohr respectively. All pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
   allowance by the minimum needed to retain fitted values. Observed free
   memory, absolute headroom, explicit caller caps and solver workspace bounds
   remain enforced. Cold and moved both report non-streamed fitted values.
-- #2417 and #2426: WB97M-V large reference/native populations remain incomplete.
+- #2417 and #2426: WB97M-V reference timing populations remain incomplete at
+  48/96 atoms; native now completes the independently checked 48-atom population.
+  A separately reconverged moved-geometry oracle supplies accuracy only and
+  never adds a reference timing sample. The preceding correct native candidate
+  `99e7c54b2` still timed out during its last moved-warm call; the earlier
+  `de4d7f564` trial was explicitly stopped after its admission failure was
+  diagnosed, rather than relabelled as a timeout. Both remain retained.
   Diagnostic reference/48 has approximately 820 billion active ordered pairs
   and about 23 s per VV10 feature call. Native/96's first measured SCF stage
   takes 116.0 s in nonlocal pairs versus 4.24 s in semilocal density/features
-  and 2.45 s in nonlocal AO potential assembly. Diagnostic times are excluded
-  from the figures. They establish quadratic pair work, not a qualified fix.
+  and 2.45 s in nonlocal AO potential assembly on the older source. A 180-second
+  trace of `7001858f1` measures an 82.6 s bilateral pair call; this short trace
+  is not a formal 1800-second outcome. A subsequent formal run on that source
+  (Slurm 8241) reaches the unchanged 1800-second whole-point limit in cold/0,
+  with no completed native E/F records. Independent 96-atom cold and moved
+  oracles have separately converged in 4617.1 / 4578.2 s (45 iterations each),
+  with complete finite E/F and retained residuals. Both start from independent
+  atomic guesses. Their diagnostic durations are excluded from reference timing
+  populations and speedups. These accuracy-only receipts provide the alternative
+  oracle allowed by #2417; they do not resolve the reference timing population
+  or native/96 performance. Original and new time limits stay visible.
 - The superseded M06-2X/DF 96-atom timeout and an earlier slower 48-atom
   population remain in the summaries. A same-source 48-atom replay already
   reduced cold/warm to 102.832/12.012 s before the local-AO change; this variation
@@ -127,11 +174,28 @@ final feature-grid populations use `227c55c06`; M06-2X local-AO populations use
 DF setup lifetime trials use `fedf81b83`; final DF geometry-rebuild qualification
 uses `3660e04d2`, retained on the
 [DF qualification source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-df-qualified-source-20261013).
+Pure-J spatial populations use `aaec57399`; bilateral VV10 populations use
+`7001858f1` with library SHA256
+`08b866dc5404feebf024011fe95a9e04b16ba55256078874d4fcda080e21fdd0`.
+Both are ancestors of the frozen
+[VV10 qualification source](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-qualified-source-20261014).
+Automatic exact force reuse is qualified on `9aabd59a3` with library SHA256
+`4c7b6ace6f07466af7967c0cc1f4453a7ff09a03c0ebcf13316527105e6779c7`, retained on
+[its frozen source branch](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-automatic-source-20261014).
+Automatic SCF reuse is qualified on `3b15b73d7`, and the plotted phased-budget
+round uses `948fb1058` with library SHA256
+`4a5ccdabd0a3c67eeab53281a52ae4d0c556e364f9e421d0d29b1f2f16fb5e39`.
+Both, and the separately labeled initializer trials, are retained in
+[the frozen source ancestry](https://github.com/jinzhezenggroup/generativeqc/tree/codex/benchmark-vv10-scf-phased-source-20261014).
+The PR branches can differ from these assembled snapshots; only the recorded
+snapshot identities identify a measured population.
+Earlier explicit opt-in populations use `129d1fa3c` and remain in the receipts.
 Full revisions, source inventories, library hashes and
 individual raw-file identities are in [manifest.json](manifest.json) and both
 compressed summaries. Later source changes do not relabel these measurements.
-The source audit reconstructs the native source inventory and verifies all
-43 recorded consumer files from those Git trees. Host integration tests and
+The source audit reconstructs each native source inventory and verifies all
+recorded consumer files (43 or 44, as recorded for each frozen revision).
+Host integration tests and
 independent CUDA tests qualify the changes; intrusive
 profilers, setup failures and compiler-forbidden controls stay outside clean
 benchmark populations.
@@ -147,6 +211,13 @@ receipts, the compiler-forbidden control, source audits, the DF geometry-rebuild
 diagnosis and the rejected reciprocal probe. Failed fixtures and missing-library setup attempts remain
 labelled as failures, rather than being rewritten as final acceptance. Native
 arrays, build products and full trial logs stay in ignored local storage.
+
+The optional small-grid regression attempts retain real absolute-reference
+failures: coarse sto-3g water-48 differs by about 9.883e-7 Eh on both unphased
+and phased sources, and two hydrogen-cluster grids differ by 1.353e-8 and
+1.017e-8 Eh. They are not accepted E/F fixtures. The unchanged original-grid
+water-48 population and two-step reconverged energy derivatives qualify the
+budget repair; neither the benchmark grid nor acceptance gate was relaxed.
 
 ## Reproduction
 
@@ -169,7 +240,12 @@ PYTHONPATH=.:python python -m tools.render_readme_dft \
   --output .artifacts/readme-figure
 ```
 
-Both engines can run independently (`reference` or `native`). Missing reference
+Both engines can run independently (`reference` or `native`). The separately
+reviewed [accuracy-oracle driver](https://github.com/jinzhezenggroup/generativeqc/pull/2449)
+can validate a missing geometry using an independent atomic-guess solve, exact
+protocol/basis identity and strict convergence residuals. The original
+48-atom one-off driver's exact bytes and SHA remain in the receipts, separately
+from the maintained driver used for 96 atoms. Missing reference
 geometries remain unchecked. A later oracle never rewrites original null gates.
 Complete independently checked 12-call populations replace historical points.
 A newer incomplete population can add complete checked phases where no complete

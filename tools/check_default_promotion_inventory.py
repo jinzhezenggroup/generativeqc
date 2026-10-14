@@ -288,7 +288,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
         r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
     )
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_full_range\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in schedule
@@ -311,10 +311,11 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             "spec.coulomb.op == scf::FockOperator::FullRange",
             "spec.exchange.op == scf::FockOperator::FullRange",
             "!execution_plan_.range_exchange && !range_strategy_",
-            "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
+            "!execution_plan_.nonlocal_correlation",
+            "spec.exchange.op == scf::FockOperator::FullRange && !execution_plan_.d4_correction",
             "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
             "system_.ecp_terms.empty()",
-            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_full_range, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
         )
     ):
         raise ValueError("Spatial force default method authentication drifted")
