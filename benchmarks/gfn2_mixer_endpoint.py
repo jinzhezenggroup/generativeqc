@@ -171,6 +171,8 @@ def validate_metadata(row: dict) -> None:
         ("maximum_iterations", 0, 301),
     ):
         integer(row[field], field, low=low, high=high)
+    if row["graph_family"] == 0 and row["graph_submitted"]:
+        raise ValueError("fallback snapshot reports graph submission")
 
 
 @lru_cache(maxsize=1024)
@@ -194,15 +196,10 @@ def work_oracle(index: int, dimension: int) -> tuple[int, int, int, int, int]:
     return len(slots), (index - 1) % 8 if index else -1, coefficient, gram, combination
 
 
-def validate_receipts(row: dict, expected: dict) -> dict:
-    receipts = row["receipts"]
-    attempted = integer(row["attempted_receipts"], "attempted")
-    if len(receipts) > 300:
-        raise ValueError("retained receipt capacity exceeded")
-    if not row["snapshot_available"] or not row["endpoint_completed"]:
-        return {"status": "INCOMPLETE", "reason": "snapshot or endpoint unavailable"}
-    if attempted != len(receipts) or not receipts:
-        return {"status": "INCOMPLETE", "reason": "empty or truncated journal"}
+def validate_snapshot(row: dict) -> dict:
+    """Bind every available snapshot, including failed calls, to its owner."""
+    if not row["snapshot_available"]:
+        return {"status": "INCOMPLETE", "reason": "call-owned snapshot unavailable"}
     integer(row["device_id"], "device identity")
     integer(row["graph_family"], "graph family", high=2)
     integer(row["plan_token"], "plan identity", low=1)
@@ -212,8 +209,25 @@ def validate_receipts(row: dict, expected: dict) -> dict:
         or row["plan_token"] <= 0
     ):
         raise ValueError("snapshot identity mismatch")
+    if row["graph_family"] == 0 and row["graph_submitted"]:
+        raise ValueError("fallback snapshot reports graph submission")
     if row["graph_family"] in (1, 2) and not row["graph_submitted"]:
         return {"status": "INCOMPLETE", "reason": "graph was not submitted"}
+    return {"status": "PASS"}
+
+
+def validate_receipts(row: dict, expected: dict) -> dict:
+    receipts = row["receipts"]
+    attempted = integer(row["attempted_receipts"], "attempted")
+    if len(receipts) > 300:
+        raise ValueError("retained receipt capacity exceeded")
+    if not row["snapshot_available"] or not row["endpoint_completed"]:
+        return {"status": "INCOMPLETE", "reason": "snapshot or endpoint unavailable"}
+    snapshot = validate_snapshot(row)
+    if snapshot["status"] != "PASS":
+        return snapshot
+    if attempted != len(receipts) or not receipts:
+        return {"status": "INCOMPLETE", "reason": "empty or truncated journal"}
     dimension = integer(expected["vector_elements"], "oracle dimension", 1, 100000)
     shares = []
     for index, receipt in enumerate(receipts):
@@ -262,12 +276,13 @@ def validate_receipts(row: dict, expected: dict) -> dict:
         ]
         if not live and any(cycles[1:]):
             raise ValueError("unexecuted history stages reported clock intervals")
-        total = sum(cycles)
-        if total == 0:
+        executed = cycles if live else cycles[:1]
+        if any(value == 0 for value in executed):
             return {
                 "status": "INCOMPLETE",
-                "reason": "stage clock intervals unavailable",
+                "reason": "executed stage clock interval unavailable",
             }
+        total = sum(cycles)
         # All intervals in this denominator belong to this one invocation/CTA.
         # It excludes unmeasured normalization, commit and launch overhead.
         shares.append({stage: cycles[i] / total for i, stage in enumerate(STAGES)})
@@ -550,6 +565,14 @@ def report_lifecycle(journal: Path, oracle: dict) -> dict:
                 raise ValueError(
                     "failed call published incorrect science or changed sentinels"
                 )
+            if index in (0, 2):
+                snapshot = validate_snapshot(row)
+                if snapshot["status"] != "PASS":
+                    return {
+                        "status": "INCOMPLETE",
+                        "reason": snapshot["reason"],
+                        "rows": findings,
+                    }
             findings.append({"phase": row["phase"], "failure_observed": True})
         else:
             findings.append(
@@ -566,6 +589,9 @@ def report_lifecycle(journal: Path, oracle: dict) -> dict:
                 or row["attempted_receipts"]
                 or row["call_id"] != 0
                 or row["plan_token"] != 0
+                or row["device_id"] != -1
+                or row["graph_family"] != 0
+                or row["graph_submitted"]
             ):
                 raise ValueError("pre-reset rejection exposed stale diagnostics")
         elif not row["snapshot_available"]:

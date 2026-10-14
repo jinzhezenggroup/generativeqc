@@ -85,13 +85,24 @@ not qualified by this protocol. Mixer completion is recorded before device
 restoration, so final API status alone cannot infer transaction completion. The
 validator checks call/plan rollback and snapshot invalidation, and independently
 checks recovered E/F and history work.
+Every available snapshot, including a failed call, must retain a nonzero candidate
+plan token and device 0 for this qualification. Unavailable pre-reset rejection
+keeps its zero call/plan tokens, device -1 and default graph metadata. Bounded
+fallback family 0 cannot claim graph submission; families 1/2 require submission
+before their available snapshot can qualify. A failed transaction may still have
+submitted a graph, so submission must not be inferred from final API status.
 `mixer.jsonl.device.json` records the CUDA API's actual device 0, UUID, visible
 device count, runtime/driver version and compute capability. A node-level
 `nvidia-smi` inventory alone may include GPUs outside the process's visibility.
 
 Cycle shares use only intervals from **one CTA invocation**. The denominator is
 the sum of its measured residual/history/solve/combination stages; it excludes
-normalization, commit, launch overhead and the rest of SCC. Do not aggregate
+normalization, commit, launch overhead and the rest of SCC.
+Every executed measured stage must have a positive interval before publishing
+its share. The first invocation executes only the measured residual stage, with
+history/solve/combination intervals remaining zero. A single missing executed
+interval makes the receipt incomplete even when the sum of other intervals is
+positive. Do not aggregate
 cycles across SMs or convert them to milliseconds using nominal clock rate. A
 complete SCC wall-time denominator is not exposed by this slice, so mixer/SCC
 fraction is `UNAVAILABLE`. Report complete endpoint timing alongside local stage
