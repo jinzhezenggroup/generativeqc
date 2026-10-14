@@ -110,6 +110,7 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc_compiler/method/stationary_resources.py",
         "python/generativeqc_compiler/method/stationary_composite_resources.py",
         "python/generativeqc/_stationary_composite_cuda.py",
+        "python/generativeqc/_geometry_response_cache.py",
         "benchmarks/readme_omol25.py",
         "benchmarks/readme_accuracy_oracle.py",
         "benchmarks/ks_preliminary_density.py",

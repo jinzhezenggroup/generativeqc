@@ -690,6 +690,12 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
         )
         for name in re.findall(r'"(GENERATIVEQC_KS_INTEGRAL_RESPONSE_REUSE)"', owner):
             controls[f"ks-runtime:{name}"] = method.as_posix()
+    geometry = Path("python/generativeqc/_stationary_composite_cuda.py")
+    if (root / geometry).is_file():
+        for name in re.findall(
+            r'"(GENERATIVEQC_KS_GEOMETRY_RESPONSE_REUSE)"', _read(root / geometry)
+        ):
+            controls[f"ks-runtime:{name}"] = geometry.as_posix()
     return controls
 
 
