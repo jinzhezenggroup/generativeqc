@@ -52,8 +52,8 @@ MOCK = r"""
 #include <cstring>
 #include <vector>
 using cudaStream_t = int;
-enum cudaError_t { cudaSuccess, cudaErrorUnknown, cudaErrorMemoryAllocation,
-                  cudaErrorStreamCaptureUnsupported };
+// Match compatibility headers that omit CUDA's capture-specific enumerators.
+enum cudaError_t : int { cudaSuccess, cudaErrorUnknown, cudaErrorMemoryAllocation };
 enum cudaStreamCaptureStatus { cudaStreamCaptureStatusNone, cudaStreamCaptureStatusActive };
 constexpr int cudaMemcpyDeviceToHost = 0;
 inline cudaStreamCaptureStatus capturing = cudaStreamCaptureStatusNone;
@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
   setenv("GENERATIVEQC_DIRECT_FORCE_CENSUS", argv[1], 1);
   capturing = cudaStreamCaptureStatusActive;
   { DirectForceDiagnostic captured(17);
-    assert(captured.prepare() == cudaErrorStreamCaptureUnsupported); }
+    assert(static_cast<int>(captured.prepare()) == 900); }
   assert(calls == std::vector<int>{1}); calls.clear();
   capturing = cudaStreamCaptureStatusNone; allocation = cudaErrorMemoryAllocation;
   { DirectForceDiagnostic failed(17);

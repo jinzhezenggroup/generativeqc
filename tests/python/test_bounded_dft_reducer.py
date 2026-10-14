@@ -109,12 +109,19 @@ def reduce_receipt(
     output, table = tmp_path / "result.json.xz", tmp_path / "result.md"
     monkeypatch.setattr(reducer, "freeze_source", lambda *_: copy.deepcopy(source))
     monkeypatch.setattr(
+        reducer, "planned_points", lambda: {("ao-host", "direct", "pbe", 3)}
+    )
+    monkeypatch.setattr(
         sys,
         "argv",
         ["reduce", str(tmp_path), "--output", str(output), "--table", str(table)],
     )
     reducer.main()
-    result = json.loads(lzma.decompress(output.read_bytes()))["points"][0]
+    result = next(
+        point
+        for point in json.loads(lzma.decompress(output.read_bytes()))["points"]
+        if point["method"] == "pbe" and point["mode"] == "direct"
+    )
     assert native.read_bytes() == before
     assert (
         result["engines"]["native"]["raw_sha256"] == hashlib.sha256(before).hexdigest()

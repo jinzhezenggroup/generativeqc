@@ -1,6 +1,6 @@
 # Decision: keep bounded DFT scheduling experiments behind measured gates
 
-Status: implemented (opt-in experiments; endpoint qualification pending)
+Status: implemented (opt-in experiments; defaults retained)
 Date: 2026-10-14
 
 ## Problem
@@ -30,7 +30,7 @@ The order-seven experiment changes only page width (8/16 versus 32), retaining
 all 256 coefficient lanes, generated Coulomb equations and shared barriers.
 Requests are captured with prepared geometry. All defaults remain unchanged.
 
-## Evidence available before qualification
+## Frozen baseline and qualification evidence
 
 Unmodified master `36574095876e4d12a3945b39cef72f6c77895f00` passes all 12
 canonical r²SCAN-3c direct 48- and 96-atom E+force gates on n1 RTX 5090, Slurm
@@ -103,3 +103,51 @@ its execution/recurrence fields remain unavailable. This prevents a retry from
 being mistaken for one admitted FP64 shell execution. All experiments in this
 campaign retain strict FP64, and frozen measurements keep their original source
 identity across the merge.
+
+## Measured contraction and acquisition decisions
+
+The matched post-CSE tile 8/16/32 campaign completes all 36 populations and
+432 calls. Tile 8 reduces the 96-atom four-jet matrix device time from 2.267
+to 1.976 seconds at unchanged AO work and 4,520 launches per consumer.
+Tile 32 increases it to 4.805 seconds. Smaller tiles reduce Vxc static shared
+storage from 8,720 to 2,320 bytes and CTA width from 256 to 64; these are
+resource observations, not an achieved-occupancy explanation.
+
+Tile 8 improves r2SCAN direct and M06-2X DF complete endpoints, but M06-2X
+direct warm/moved-warm regress about 1.4%/2.1%. Keep 16 as the default and
+retain 8 for explicit qualification after the independently owned CSE change.
+Do not repeat the tile-32 experiment without a new resource/work hypothesis.
+
+The force census demonstrates why task acquisition alone is insufficient.
+Class-major dddd reduces candidates from 380,073,488 to 2,164,240 while
+preserving 95,976 executed shells/primitive products; the observed isolated
+kernel saving is only 0.323 seconds. Page 16/8 retain all 1,250,544 order-seven
+Coulomb preparations and save only about 0.24–0.28 seconds in the separate
+warm diagnostics. The intrusive low/order-six split reports roughly 4.4/21.7
+seconds; it repeats enumeration and cannot replace the unchanged-kernel
+measurement. Future work should examine generated order-six cross-component
+preparation reuse and order-seven dependency/barrier liveness, with independent
+proofs. Counting fewer candidates does not establish fewer contractions.
+
+The [campaign report](../../../../benchmarks/results/bounded-dft-schedules-2475-2479/README.md)
+retains complete samples, scientific work, independent errors, source/library
+identities, negative candidates and explicitly unavailable hardware counters.
+
+## Final cohort and integration outcome
+
+All 110 planned populations are retained: 109 complete, one same-image default
+96-atom direct population times out at the original 1800-second bound. It uses
+37/27 cold/moved Fock builds and returns only two moved-warm calls. All 1,317
+returned calls pass independent gates. Candidate warm medians improve by less
+than 2%, so the >=5% warm-and-moved-warm promotion criterion is already unmet;
+the missing default samples remain missing. Do not rerun a failed point merely
+to replace this outcome.
+
+The merged scientific image at `6e8cf0f23` passes 758 host tests, 36 independent
+Libcint GPU scheduling cases, AO/matrix/point/ragged gates and zero-error AO
+memcheck. Two independent FCI all-coordinate finite-difference cases pass after
+supplying missing threadpoolctl in task-local storage. The strict 96-atom
+cold/first-warm diagnostic passes at 459.134/91.373 seconds (26/1 Fock builds),
+with complete census and wall reconciliation. Later host-only status-ABI and
+CLI/codegen compatibility fixes have separate executable host qualification;
+these do not relabel or replace the immutable GPU measurements.

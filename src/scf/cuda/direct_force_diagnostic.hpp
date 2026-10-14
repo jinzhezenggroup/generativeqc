@@ -33,7 +33,9 @@ class DirectForceDiagnostic {
     cudaStreamCaptureStatus capture{};
     auto status = cudaStreamIsCapturing(stream_, &capture);
     if (status != cudaSuccess) return status;
-    if (capture != cudaStreamCaptureStatusNone) return cudaErrorStreamCaptureUnsupported;
+    // CUDA's stable capture-unsupported status is 900. Compatibility headers
+    // such as CuMetal retain the status ABI but may omit this enumerator name.
+    if (capture != cudaStreamCaptureStatusNone) return static_cast<cudaError_t>(900);
     status = runtime::resource_cuda_malloc(reinterpret_cast<void**>(&device_), sizeof(*device_));
     if (status != cudaSuccess) return status;
     return cudaMemsetAsync(device_, 0, sizeof(*device_), stream_);

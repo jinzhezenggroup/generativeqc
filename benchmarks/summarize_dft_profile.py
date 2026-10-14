@@ -16,6 +16,11 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+try:
+    from benchmarks._retention import raw_output_path
+except ImportError:  # Direct script execution places benchmarks/ on sys.path.
+    from _retention import raw_output_path
+
 
 def exclusive_host_intervals(rows: list[dict[str, Any]]) -> dict[str, float]:
     """Subtract direct children from a properly nested single-thread timeline."""
@@ -185,7 +190,7 @@ def summarize(path: Path) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sqlite", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     args.output.write_text(json.dumps(summarize(args.sqlite), indent=2) + "\n")
 

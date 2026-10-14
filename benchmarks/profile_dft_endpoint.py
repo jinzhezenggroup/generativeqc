@@ -19,8 +19,9 @@ import time
 from collections import defaultdict
 from contextlib import ExitStack, contextmanager
 from functools import wraps
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from benchmarks._retention import raw_output_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -111,7 +112,7 @@ def main() -> None:
     """Retain the real endpoint records and independently attributable scopes."""
     parser = argparse.ArgumentParser(description=__doc__, add_help=False)
     parser.add_argument("--capture", choices=("warm", "all", "none"), default="warm")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     known, remaining = parser.parse_known_args()
     remaining += ["--output", str(known.output)]
     if not os.environ.get("SLURM_JOB_ID"):

@@ -1,0 +1,44 @@
+{
+  "schema": "generativeqc.bounded-dft-retention.v1",
+  "measured_baseline_revision": "36574095876e4d12a3945b39cef72f6c77895f00",
+  "integration_revision": "6e8cf0f23f0f49f4cf040f7b97efb26a4cf0b10e",
+  "decision": {
+    "ao_discovery": "retain host; complete cold/moved gain inconsistent",
+    "dddd_force": "retain generic acquisition; warm gain below 5% and paired population incomplete",
+    "order7_force": "retain page 32; warm gain below 5% and paired population incomplete",
+    "xc_matrix": "retain tile 16; tile 8 conditional gains, tile 32 regression"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "report",
+      "bytes": 21583,
+      "sha256": "5a2bf4ff7d41e2396f284885491b68cfbc807cf938d1e411dc10d1b6afdb1077"
+    },
+    {
+      "path": "endpoints.md",
+      "role": "complete-phase-table",
+      "bytes": 15772,
+      "sha256": "5daad7a670a0ce0ec618fad0a98c205601a104a207b1a27537d8f54a2e435701"
+    },
+    {
+      "path": "summary.json.xz",
+      "role": "clean-samples-and-source-reconstruction",
+      "bytes": 209520,
+      "sha256": "8569d53a3305daffe24585ef65c441d1746d9613d707e67fd9f5370e859f1aa2"
+    },
+    {
+      "path": "diagnostics.json.xz",
+      "role": "diagnostic-and-validation-receipts",
+      "bytes": 140660,
+      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+    },
+    {
+      "path": "reduce.py",
+      "role": "reproduction",
+      "bytes": 11441,
+      "sha256": "aeca97265a49987001ce1d2c9738ede65a932419f8be10cec62d77f01b025ab8"
+    }
+  ],
+  "external_archives": []
+}

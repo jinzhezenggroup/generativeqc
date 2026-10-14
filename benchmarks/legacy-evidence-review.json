@@ -226,9 +226,30 @@
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
       "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
+    },
+    "bounded-dft-schedules-2475-2479": {
+      "owner": "bounded DFT scheduling qualification for #2475\u2013#2479",
+      "reason": "Compact full-precision records retain all 110 planned populations, 1,317 returned independently checked calls, one unchanged-limit timeout, negative/conditional candidates and exact source/library/oracle identities. Separate diagnostics retain exclusive ledgers, actual work, source reconstruction and GPU/cache/sanitizer receipts; raw profiler databases and large build logs remain ignored. No default promotion, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/bounded-dft-schedules-2475-2479/README.md"
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/diagnostics.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "diagnostic-and-validation-receipts",
+      "bytes": 140660,
+      "sha256": "016036bad3798d25f090609690049eec34f9641df6a3cd296128da9f0f18198e"
+    },
+    {
+      "path": "benchmarks/results/bounded-dft-schedules-2475-2479/summary.json.xz",
+      "family": "bounded-dft-schedules-2475-2479",
+      "classification": "required-compact-accepted-evidence",
+      "role": "clean-samples-and-source-reconstruction",
+      "bytes": 209520,
+      "sha256": "8569d53a3305daffe24585ef65c441d1746d9613d707e67fd9f5370e859f1aa2"
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
