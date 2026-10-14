@@ -1,6 +1,6 @@
 # Proposal: exact density-keyed Direct RSH integral response reuse
 
-Status: experimental, default-off; device and endpoint qualification pending
+Status: experimental, default-off; 3/12/48 endpoints qualified, 96 acceptance pending
 Date: 2026-10-14
 
 The expanded 96-atom range-cache experiment still times out at moved/0 under
@@ -33,3 +33,14 @@ failures, resource pressure and original full populations remain mandatory.
 The trace reports exact key hits and actual two-electron response evaluations;
 capacity is not called executed work. No performance or issue-resolution claim
 is implied by this implementation.
+
+Qualification at `b5ca4306e` (native inputs identical to compiled `78961f12d`)
+passes all 72 same-library off/on original-protocol E/F calls. The 48-atom warm
+median is 11.40746 s off and 7.49369 s on; cold/moved remain unchanged within
+these observations. Six independent molecular and displaced-energy gates,
+stale-state recovery, actual RKS/UKS exact-snapshot hits, memcheck and synccheck
+pass. The initial UKS warm-hit assumption failed because its density bytes
+changed; retain that failure and require a frozen authenticated snapshot for
+its exact-repeat test. All samples, failures and identities are preserved in
+`benchmarks/results/exact-integral-response-20261014/`. No 96-atom completion or
+default-promotion claim follows from the smaller populations.

@@ -226,6 +226,11 @@
       "owner": "Complete HF/DFT cold/warm endpoint and force-memory evidence",
       "reason": "Source-bound follow-up to #2401: retain all complete and partial cold/warm/moved observations, independent reference binding, superseded campaigns, failures and exact prior publication; regenerate the direct and DF figures without changing scientific gates or deadlines. The family stays within the existing 2 MiB budget and repository aggregate limit.",
       "review_document": "benchmarks/results/readme-dft-20261013/README.md"
+    },
+    "exact-integral-response-20261014": {
+      "owner": "bounded exact-density two-electron response qualification",
+      "reason": "Lossless complete off/on 72-call populations, independent full E/F vectors, cache work traces and all initial/final/sanitizer outcomes for the frozen source. Default remains disabled and 96 acceptance is not claimed. No external archive, removed sample or increased budget.",
+      "review_document": "benchmarks/results/exact-integral-response-20261014/README.md"
     }
   },
   "files": [
@@ -582,14 +587,6 @@
       "role": "Compressed authentic qualification receipts, historical attempts and accuracy-only oracles"
     },
     {
-      "path": "benchmarks/results/readme-dft-20261013/manifest.json",
-      "family": "readme-dft-20261013",
-      "classification": "required-compact-accepted-evidence",
-      "bytes": 229003,
-      "sha256": "f323605024324fadd31db335c2575fc89c743cd158c0f1cabc46d0307dafdcd6",
-      "role": "Source, build, consumer, raw-evidence and publication integrity manifest"
-    },
-    {
       "path": "benchmarks/results/readme-dft-20261013/summary.json.xz",
       "family": "readme-dft-20261013",
       "bytes": 412672,
@@ -604,6 +601,14 @@
       "path": "benchmarks/results/retention-checkout/snapshot.manifest.json",
       "role": "decision-or-audit-record",
       "sha256": "5ad6280ff0a55a61f5ed714e5f44491388ca42894616fae925aa229e7b7a5176"
+    },
+    {
+      "path": "benchmarks/results/exact-integral-response-20261014/evidence.json.xz",
+      "family": "exact-integral-response-20261014",
+      "bytes": 356132,
+      "sha256": "ae722eb0d2a87b9cdd1c6795f13f6b9a3c168c3a14247e40d415a5a30216deae",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete 72 original-protocol off/on E/F calls, independent oracles, all phases and exact source/scheduler/cache/initial-failure/sanitizer receipts; lossless encoded raw files."
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",

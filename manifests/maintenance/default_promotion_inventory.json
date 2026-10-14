@@ -1548,7 +1548,8 @@
       "evidence": [
         "tests/python/test_exact_density_response_cache.py",
         ".agents/notes/proposed/2026-10-14-exact-two-electron-response-reuse.md",
-        "issue:#2426"
+        "issue:#2426",
+        "benchmarks/results/exact-integral-response-20261014/README.md"
       ]
     },
     {
