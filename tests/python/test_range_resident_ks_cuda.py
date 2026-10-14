@@ -1,4 +1,4 @@
-"""Opt-in complete range-source replay and bounded-refusal qualification."""
+"""Complete range-source selection, replay and bounded-refusal qualification."""
 
 import json
 import os
@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("policy", ["full", "partial", "refused"])
+@pytest.mark.parametrize(
+    "policy", ["full", "partial", "refused", "auto", "auto-refused"]
+)
 def test_range_source_preserves_complete_geometry_and_warm_results(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str
 ) -> None:
@@ -50,6 +52,15 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
             "GENERATIVEQC_KS_RESIDENT_MAX_BYTES",
             "1" if policy == "refused" else str(8 << 30),
         )
+        if policy.startswith("auto"):
+            if enabled:
+                monkeypatch.delenv("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES")
+            monkeypatch.delenv("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY", raising=False)
+            monkeypatch.delenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK")
+            if policy == "auto-refused":
+                monkeypatch.setenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", "1")
+            else:
+                monkeypatch.delenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES")
         calculator = Calculator(
             method="wb97m-v",
             basis="def2-svp",
@@ -60,7 +71,11 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
             energy_tolerance=1e-12,
             density_tolerance=1e-10,
             screening_tolerance=1e-14,
-            ks_options=KsOptions(grid=GridSpec(12, 4, 8)),
+            ks_options=KsOptions(
+                grid=GridSpec(48, 16, 32)
+                if policy.startswith("auto")
+                else GridSpec(12, 4, 8)
+            ),
         )
         with calculator.prepare_batch([atoms], warm_start=True) as owner:
             cold = owner.execute(strict=True).items[0]
@@ -80,7 +95,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         consumed = [
             r["value"] for r in rows if r.get("key") == "phase_resident_fock_actions"
         ]
-        if enabled and policy != "refused":
+        if enabled and policy not in {"refused", "auto-refused"}:
             assert any(built) and any(consumed), "optional source was never consumed"
         else:
             assert not any(built) and not any(consumed)
@@ -103,7 +118,7 @@ def test_range_source_preserves_complete_geometry_and_warm_results(
         np.testing.assert_allclose(ordinary.forces, cached.forces, atol=1e-7, rtol=0)
 
 
-@pytest.mark.parametrize("policy", ["full", "partial"])
+@pytest.mark.parametrize("policy", ["full", "partial", "auto"])
 @pytest.mark.parametrize("invalidate", ["selection", "capacity", "buckets", "replay"])
 def test_range_replay_reuses_values_and_falls_back_after_policy_change(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, policy: str, invalidate: str
@@ -134,6 +149,14 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
         "0x1555" if policy == "partial" else "0xfffffff",
     )
     monkeypatch.setenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES", str(8 << 30))
+    if policy == "auto":
+        for name in (
+            "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES",
+            "GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY",
+            "GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
+            "GENERATIVEQC_KS_RESIDENT_MAX_BYTES",
+        ):
+            monkeypatch.delenv(name)
     journal = tmp_path / "replay.jsonl"
     monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(journal))
     atoms = [
@@ -151,7 +174,9 @@ def test_range_replay_reuses_values_and_falls_back_after_policy_change(
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
         screening_tolerance=1e-14,
-        ks_options=KsOptions(grid=GridSpec(12, 4, 8)),
+        ks_options=KsOptions(
+            grid=GridSpec(48, 16, 32) if policy == "auto" else GridSpec(12, 4, 8)
+        ),
     )
     evidence = []
     offset = 0

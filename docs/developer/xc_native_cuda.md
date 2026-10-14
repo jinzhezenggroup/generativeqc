@@ -355,14 +355,17 @@ select the ordinary full-target fallback explicitly. Provisional history scopes
 and actual VV10 pair-work receipts distinguish initialization from accepted
 physical work; initialization is never a cached convergence result.
 
-An explicit `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=1` selects an experimental
-bounded range-ERI lease for strict-FP64 direct restricted VV10 with single-step
-control. It applies to cold and transported-density solves; retained warm
-replays use the incumbent provider. The existing resident bucket mask and byte
-ceiling constrain optional storage after complete host/device admission. A
-capacity refusal retains exact Direct evaluation. Unset, `auto` and `0` leave
-this range experiment off. Fitted, lower-precision, incremental and externally
-budgeted device-ledger paths retain their existing providers.
+Strict-FP64 direct restricted VV10 initialization automatically admits full
+screened s/p/d range-ERI storage on grids of at least 65536 points, subject to
+the existing reuse threshold, a 4 GiB value ceiling and complete host/device
+admission. Cold and transported-density initialization can prepare a lease;
+a retained warm call only reuses its audited immutable-geometry lease. It never
+builds a new quartic source for one Fock. `GENERATIVEQC_KS_RANGE_RESIDENT_VALUES=0`
+selects ordinary Direct evaluation; explicit `1` retains the separately selected
+experimental capacity domain. The existing bucket mask and byte ceiling remain
+explicit controls. Capacity refusal, unsupported angular classes, fitted,
+lower-precision, incremental and externally budgeted device-ledger paths retain
+their existing providers.
 
 The lease binds geometry, radial operator and omega. It supplies only matching
 raw range K; primary full J/K and derivative owners remain independent.
@@ -485,10 +488,10 @@ evidence required by #162 remains a separate acceptance gate.
 The five CUDA batch cases also pass Compute Sanitizer memcheck with full leak
 checking: zero errors and zero bytes leaked.
 
-For the explicit radial-source experiment,
-`GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY=1` also permits fixed-geometry warm calls
-to retain an audited cache. Changing the range selection, bucket mask or byte
-ceiling retires it. A force-memory eviction also restores the incumbent provider;
-separate energy baselines preserve the original convergence checks in both cases.
-This switch does not cache a complete energy/force result or enable automatic
-radial residency.
+An admitted radial source survives fixed-geometry warm replay by default.
+`GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY=0` retires it before the next solve.
+Changing range selection, bucket mask or byte ceiling also retires the lease.
+A force-memory eviction restores the incumbent provider; separate energy
+baselines preserve the original convergence checks in both cases. Every call
+still evaluates the physical Fock, convergence gates, derivatives and force
+assembly.

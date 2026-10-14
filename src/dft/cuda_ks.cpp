@@ -374,7 +374,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool phase_source_range{};
   double range_warm_energy{std::numeric_limits<double>::infinity()};
   double range_warm_energy_correction{};
-  std::string range_bucket_policy, range_capacity_policy;
+  std::string range_bucket_policy, range_capacity_policy, range_selection_policy;
 
   static std::string range_policy_value(const char* key) {
     const auto* value = std::getenv(key);
@@ -385,9 +385,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * Policy changes and force-memory eviction fall back to the separately
    * rebased incumbent energy. No density, Fock or force evaluation is skipped. */
   bool retain_range_source_for_replay(bool use_warm) const {
+    const auto replay = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY");
     return use_warm && range_source_active() && std::isfinite(range_warm_energy) &&
-           range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_REPLAY") == "1" &&
-           range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == "1" &&
+           (replay.empty() || replay == "1") &&
+           range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES") == range_selection_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK") == range_bucket_policy &&
            range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES") == range_capacity_policy &&
            !incremental_direct_jk && configured_chunk_width() == 1 &&
@@ -437,13 +438,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void prepare_phase_source(bool cold, bool frozen_warm = false) {
     using namespace scf::cuda_execution;
     if (experimental_mixed_point && phase_source && phase_source->active()) return;
-    // Range residency is a separately selected experiment. Never rebuild a
+    // Range residency has its own bounded automatic policy. Never rebuild a
     // quartic source for a retained one-step replay, or compose it with the
     // incremental, mixed or device-chunk solvers.
     const auto* selection =
         std::getenv(has_range_correction ? "GENERATIVEQC_KS_RANGE_RESIDENT_VALUES"
                                          : "GENERATIVEQC_KS_RESIDENT_VALUES");
-    if (has_range_correction && !selection) return;
     // Unset follows the same bounded cold policy as explicit auto; 0 restores
     // the incumbent schedule without preparing any optional source storage.
     const auto requested = direct_jk_source_selection(selection);
@@ -451,8 +451,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::invalid_argument("invalid KS resident value selection (expected auto, 0 or 1)");
     if (requested == DirectJkSourceSelection::disabled) return;
     if (has_range_correction &&
-        (requested != DirectJkSourceSelection::forced || frozen_warm || spins != 1 ||
-         !device_nonlocal || !nonlocal_correlation ||
+        (frozen_warm || spins != 1 || !device_nonlocal || !nonlocal_correlation ||
          nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 ||
          configured_chunk_width() != 1 || precision_schedule.any_lower_precision()))
       return;
@@ -476,10 +475,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // its incumbent admission rather than inheriting an unmeasured cost model.
     const auto auto_policy = has_exchange ? DirectJkSourceAutoPolicy::screened_hybrid_cold
                                           : DirectJkSourceAutoPolicy::screened_cold;
+    const bool automatic_range =
+        has_range_correction && requested == DirectJkSourceSelection::automatic;
+    // A bounded native initialization has repeated density-current range K
+    // consumers even after a geometry move. Warm calls only retain an existing
+    // audited source; they never construct a quartic one for a single Fock.
+    // Complete endpoints qualify screened SPD sources on substantial grids.
+    if (automatic_range &&
+        (!nonlocal_outer_active || xc_layout.npoint < 65536 || maximum_angular > 2))
+      return;
+    const bool source_cold_phase = cold || (automatic_range && nonlocal_outer_active);
     const auto buckets = direct_jk_resident_bucket_policy(
         std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
         std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),
-        direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
+        automatic_range ? 4ULL << 30
+                        : direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
     if (!buckets.valid)
       throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
     const auto generic_fock =
@@ -489,8 +499,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // sorting compact rows. A permitted iteration limit is not expected reuse.
     if (requested == DirectJkSourceSelection::automatic) {
       if (const auto* refusal = direct_jk_source_auto_refusal(
-              molecule::ao_count(system), direct_nbf, options.max_iterations, maximum_angular, cold,
-              generic_fock, auto_policy, strategy.screening_tolerance)) {
+              molecule::ao_count(system), direct_nbf, options.max_iterations, maximum_angular,
+              source_cold_phase, generic_fock, auto_policy, strategy.screening_tolerance)) {
         runtime::df_progress::Scope trace("cuda_ks_resident_values_skip", "host_decision");
         runtime::df_progress::Scope::label("selection", "auto");
         runtime::df_progress::Scope::label("admission", refusal);
@@ -512,15 +522,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
         stream,
         has_range_correction ? source_strategy.spec.exchange.op : scf::FockOperator::FullRange,
         has_range_correction ? source_strategy.spec.exchange.omega : 0.0);
-    check(phase_source->prepare(device, {system}, options.max_iterations, direct_nbf, required,
-                                options.reference_memory_budget_bytes
-                                    ? options.reference_memory_budget_bytes
-                                    : std::numeric_limits<std::size_t>::max(),
-                                selection,
-                                has_range_correction ? "cuda_ks_range_resident_values_prepare"
-                                                     : "cuda_ks_resident_values_prepare",
-                                cold, generic_fock, source_strategy.screening_tolerance,
-                                buckets.ceiling, false, auto_policy, buckets.mask, spins),
+    check(phase_source->prepare(
+              device, {system}, options.max_iterations, direct_nbf, required,
+              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
+                                                    : std::numeric_limits<std::size_t>::max(),
+              selection,
+              has_range_correction ? "cuda_ks_range_resident_values_prepare"
+                                   : "cuda_ks_resident_values_prepare",
+              source_cold_phase, generic_fock, source_strategy.screening_tolerance, buckets.ceiling,
+              false, auto_policy, buckets.mask, spins),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -536,6 +546,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     phase_source_range = has_range_correction;
     if (phase_source_range) {
+      range_selection_policy = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES");
       range_bucket_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK");
       range_capacity_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_MAX_BYTES");
     }
