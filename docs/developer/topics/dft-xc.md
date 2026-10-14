@@ -24,4 +24,5 @@ Molecular grids, XC expressions and contractions, functional integration, SCF se
 ../ks_diagnostics
 ../libxc_bulk_capabilities
 ../libxc_cpu_aot_closure
+../libxc_cuda_aot_closure
 ```

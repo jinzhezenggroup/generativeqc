@@ -293,6 +293,31 @@ def test_primary_cc_counter_is_not_reported_as_companion_scf_work() -> None:
     assert "22/14" not in result
 
 
+def test_readme_chart_hides_accuracy_markers_without_changing_gates(
+    tmp_path: Path,
+) -> None:
+    """README highlights complete times; scientific acceptance stays in the archive."""
+    pytest.importorskip("matplotlib")
+    protocol, sample, _ = records()
+    check = qualification(sample, protocol, None)
+    assert check["execution_gate"] is True
+    assert check["accuracy_gate"] is None
+    point = {
+        "carbon": 1,
+        "native": {"protocol": protocol, "samples": [sample], "requested_samples": 1},
+        "checks": [check],
+    }
+    chart = tmp_path / "readme.svg"
+    render({"points": [point]}, chart, readme_style=True)
+    content = chart.read_text()
+    assert "12.0 s" in content
+    assert "RHF uses exact J/K" in content
+    assert "directional-force checks" not in content
+    assert "accuracy unchecked" not in content
+    assert "‡" not in content
+    assert "No full-vector or CBS basis-limit accuracy claim" not in content
+
+
 def test_plot_retains_all_seven_positions_and_timeout_gaps(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     points = [

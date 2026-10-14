@@ -121,6 +121,11 @@
       "git_commit": "22ff59fd31e8aef6946c2c3e43aaf683a8018a8e",
       "library_sha256": "242be46485a289310f0034feb5ff3f8532f8993e8f22961194f15c7f703becb3",
       "production_changes": "Default bounded native frozen-VV10 initialization and physical same-density energy confirmation; no incremental JK, range freezing, DIIS continuation, longer delta chain or device-validation opt-in"
+    },
+    "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07": {
+      "git_commit": "fa291a6f2151202c84b25034af9db9604a4543a2",
+      "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+      "production_changes": "Automatic full screened SPD radial values within a 4 GiB ceiling and audited fixed-geometry warm reuse; all inexact/outer-secant experiments remain off."
     }
   },
   "acceptance": {
@@ -132,8 +137,8 @@
   },
   "files": {
     "README.md": {
-      "bytes": 21300,
-      "sha256": "5845ea5bc93c24f9843d1deaa79362a931eed01beb4440141b884a3da241efe6"
+      "bytes": 23731,
+      "sha256": "7c22c6b4f7a7a3b87449899a5a55399bef3554440ea24178dd9d7e1890e0f6d3"
     },
     "df-cold-warm.svg": {
       "bytes": 185892,
@@ -148,8 +153,8 @@
       "sha256": "9d866eb0472c840e86aac73a869140a566f126b54c9a1a2a68e3d3b752ba109a"
     },
     "dft-cold-warm.svg": {
-      "bytes": 188906,
-      "sha256": "b185529dc4c54f58593d6ed54861ff2254826be89c0487cf75a06e855d8a946b"
+      "bytes": 189107,
+      "sha256": "4bed4aea491bf39a802ac14ecbd3f1a4fa9af107c8d1bd83bb85196ee7701fcd"
     },
     "followup-prior.json.xz": {
       "bytes": 359344,
@@ -167,30 +172,30 @@
       "bytes": 19485,
       "sha256": "7a7250d519c83eb9d3af0d1cfef5bdfd94a929ad1edb4fb30dde2f7d3ec30934"
     },
+    "source-audit.json.xz": {
+      "bytes": 4604,
+      "sha256": "4541a00d438bb5776604e166525399b1a25091549740ba9ffc57b931f98707e4"
+    },
     "source-campaigns.json.xz": {
       "bytes": 18216,
       "sha256": "7cc3227266ce5e85e16cbc534558226a7f2de7677d9d3b5c638bdf8bc6e4e59d"
     },
     "summary.json.xz": {
-      "bytes": 412672,
-      "sha256": "a56e94b6f086fa3087a7bcb40e35a6dcc98d9a52b4781f02f9171db6950afcd8"
+      "bytes": 428796,
+      "sha256": "effa9342d7b19e882e5563444eac50db334136e9b58681fcbb3e69714e1a0c06"
     },
     "timings.md": {
-      "bytes": 4727,
-      "sha256": "2a970c91983ffaf954f2da1aa4ae9772943a68f33ca5e838a58ff04b19b7d9ef"
+      "bytes": 4726,
+      "sha256": "388712048c4fdb517829b1a0d5878e647d23ce3e685b7524aeaa68d8e0b8b517"
     },
     "verify.py": {
-      "bytes": 3696,
-      "sha256": "acdb0761c6ab1f690afae777fb4fd6c5065975472c8b0aeab44008f20e778bf6"
-    },
-    "source-audit.json.xz": {
-      "bytes": 4480,
-      "sha256": "3c6c4bbe7f220f01f206406d540a23fe902d1e558b3f36bfb6f1bc865ba111a3"
+      "bytes": 3756,
+      "sha256": "480b9a7e05aaf08d1e4143bc0958c363bed2a49b1afe21017de24fa87e20582c"
     }
   },
   "uncompressed_summary": {
-    "bytes": 22012901,
-    "sha256": "f59c48fd135f9c601ed0c2f108595547d320d2923784073de78d2e9fa1ea0a04"
+    "bytes": 23041090,
+    "sha256": "97886c597d5989bce2901e7cd5f5d00c1877a8493c0a4bae6fbb1885252c5f22"
   },
   "original_master_campaign_report_retention": ".artifacts/force-memory-20261013/master-report",
   "uncompressed_df_summary": {
@@ -1796,6 +1801,84 @@
           "moved": "incomplete",
           "moved-warm": "incomplete"
         }
+      },
+      {
+        "mode": "none",
+        "method": "wb97m-v",
+        "atoms": 3,
+        "source_commit": "fa291a6f2151202c84b25034af9db9604a4543a2",
+        "source_identity": "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07",
+        "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+        "raw_sha256": "f834b4f8da9f906b592e29de24bcbbddb4e248dbc96fff2446cbba0876bdd607",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/vv10-range-four-gib-qualified/none/wb97m-v/3",
+        "scheduler": {
+          "SLURM_JOB_ID": "909",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true,
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 1800
+        },
+        "phase_status": {
+          "cold": "measured",
+          "warm": "measured",
+          "moved": "measured",
+          "moved-warm": "measured"
+        }
+      },
+      {
+        "mode": "none",
+        "method": "wb97m-v",
+        "atoms": 12,
+        "source_commit": "fa291a6f2151202c84b25034af9db9604a4543a2",
+        "source_identity": "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07",
+        "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+        "raw_sha256": "79d9af77562d004ed320cbfbe88e8484074b7ebadc168c18b997f0a61a01c24c",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/vv10-range-four-gib-qualified/none/wb97m-v/12",
+        "scheduler": {
+          "SLURM_JOB_ID": "909",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true,
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 1800
+        },
+        "phase_status": {
+          "cold": "measured",
+          "warm": "measured",
+          "moved": "measured",
+          "moved-warm": "measured"
+        }
+      },
+      {
+        "mode": "none",
+        "method": "wb97m-v",
+        "atoms": 48,
+        "source_commit": "fa291a6f2151202c84b25034af9db9604a4543a2",
+        "source_identity": "195c61773e3b1eb9e02503bb50462cc9982234cd0c11bf8f73e21bf99f88cd07",
+        "library_sha256": "b4342d8389ab5dbc32291b54a82aee884c1e008a07090fc6d2d1ce5de8ee89b3",
+        "raw_sha256": "7cc546bb94852c3f4907e41571f1c2faaad214b81742490716ef1ec58b75f342",
+        "raw_directory": "/data/jzzeng/qc-benchmark-followups-20261013/.artifacts/vv10-range-four-gib-qualified/none/wb97m-v/48",
+        "scheduler": {
+          "SLURM_JOB_ID": "909",
+          "SLURM_JOB_PARTITION": "main",
+          "SLURM_GPUS_ON_NODE": "1"
+        },
+        "complete_population": true,
+        "outcome": {
+          "exit_code": 0,
+          "time_limit_seconds": 1800
+        },
+        "phase_status": {
+          "cold": "measured",
+          "warm": "measured",
+          "moved": "measured",
+          "moved-warm": "measured"
+        }
       }
     ],
     "policy": "Each complete independently checked 12-call population replaces its prior point. A newer failed/incomplete point updates an unqualified or missing point; only complete checked phases become timings, with failures and partial rows visible. Unchecked/setup/mismatched runs are excluded and retained separately.",
@@ -1833,9 +1916,10 @@
     ],
     "source_audit": "source-audit.json.xz",
     "note": "Historical acceptance fields retain their original campaigns. Current totals are acceptance and df_acceptance; incomplete phase timings are not complete-population qualification.",
+    "range_followup_evidence": "benchmarks/results/vv10-range-followups-20261014/manifest.json",
     "source_audit_uncompressed": {
-      "bytes": 143530,
-      "sha256": "098679f73f1abcd9077e63621b7a7a587b11784249f88c88082018716490ab90"
+      "bytes": 143881,
+      "sha256": "8bf5a130fc09d901210b45dc85d0f3d7f2079be768b212ce687d3894115e2742"
     }
   },
   "implementation_qualification": {
