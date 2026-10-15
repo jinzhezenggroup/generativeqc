@@ -55,6 +55,33 @@ inline bool admit_native_stationary_gradient_shape(std::size_t aos, std::size_t 
   return restricted && aos >= 24 && aos <= 384 && atoms >= 2 && atoms <= 48 && maximum_angular <= 2;
 }
 
+/** Budget-Fock candidate domain, independent of mixed-gradient capacity.
+ * The method owner must authenticate complete canonical PBE0, exact all-electron
+ * J/K and the reference quadrature. A strict physical Fock closes the solve;
+ * allowances select provisional arithmetic, not a per-molecule error bound. */
+inline bool admit_application_fock(const std::array<double, 3>& allowances, std::size_t aos,
+                                   std::size_t atoms, unsigned maximum_angular,
+                                   bool canonical_restricted_pbe0, bool all_electron,
+                                   bool exact_full_range) noexcept {
+  for (const auto allowance : allowances)
+    if (!std::isfinite(allowance) || allowance < 0.0) return false;
+  return canonical_restricted_pbe0 && all_electron && exact_full_range && aos >= 24 && aos <= 768 &&
+         atoms >= 2 && atoms <= 96 && maximum_angular <= 2 && allowances[0] >= 1e-5 &&
+         allowances[1] >= 1e-4 && (allowances[2] == 0.0 || allowances[2] >= 3e-5);
+}
+
+/** Restricted densities contain both spins: the Fock K coefficient is -a_x/2,
+ * not the positive MethodIR energy fraction. Provider/range checks stay with
+ * the prepared owner rather than being inferred from these scalar weights. */
+inline bool admit_application_pbe0_fock_model(std::uint32_t functional, unsigned spins,
+                                              double semilocal_exchange,
+                                              double semilocal_correlation,
+                                              double fock_exchange_coefficient) noexcept {
+  return functional == static_cast<std::uint32_t>(SemilocalFamily::Pbe) && spins == 1 &&
+         semilocal_exchange == 0.75 && semilocal_correlation == 1.0 &&
+         -2.0 * fock_exchange_coefficient == 0.25;
+}
+
 /** Independently qualified stationary RKS candidate at a strict final
  * density. These allowances select arithmetic, not a rigorous error bound for
  * an arbitrary molecule. Explicit observable targets still require an audit.

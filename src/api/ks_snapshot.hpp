@@ -64,6 +64,9 @@ generativeqc_status generativeqc_ks_snapshot_copy_v1(const generativeqc_batch* b
                                                      const generativeqc_ks_snapshot* snapshot,
                                                      double* values, std::size_t count);
 void generativeqc_ks_snapshot_destroy_v1(generativeqc_ks_snapshot* snapshot);
+/** Read the physical allowance already authenticated at snapshot creation. */
+generativeqc_status generativeqc_ks_snapshot_stationarity_tolerance_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* value);
 generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);

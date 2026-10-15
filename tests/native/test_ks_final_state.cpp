@@ -118,6 +118,20 @@ void backend_product_policy() {
   require(failed, "KS silently fell back after a backend product failure");
 }
 
+void explicit_physical_stationarity_budget() {
+  Fixture fixture;
+  fixture.physical.physical_residual = 2e-6;
+  fixture.limits.density_tolerance = 1e-5;
+  require(!fixture.validate(), "loose density controls bypassed strict KS metadata gate");
+  fixture.limits.stationarity_tolerance = 1e-5;
+  VerifiedKsFinalState retained;
+  require(fixture.validate(true, &retained), "explicit KS physical allowance was ignored");
+  require(retained.stationarity_tolerance == fixture.limits.stationarity_tolerance,
+          "verified KS handoff lost its authenticated allowance");
+  fixture.physical.physical_residual = 2e-5;
+  require(!fixture.validate(), "KS physical allowance admitted an excessive residual");
+}
+
 void residual_norm_contract() {
   for (double tolerance : {1e-12, 1e-10, 1e-7}) {
     const double gate = std::min(1e-8, tolerance);
@@ -539,6 +553,7 @@ void model_and_state_rejection() {
 
 int main() {
   try {
+    explicit_physical_stationarity_budget();
     residual_norm_contract();
     resident_evidence_contract();
     backend_product_policy();

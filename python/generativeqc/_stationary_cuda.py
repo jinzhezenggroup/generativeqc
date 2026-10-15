@@ -3248,7 +3248,11 @@ def _complete_rks_cuda_gradient_diagnostic(
     if prepared is not None:
         prepared._attempt_source_metrics = None
     timeline = _ExclusiveWallTimeline()
-    contract = StationaryDerivativeContract(state.identity)
+    contract = StationaryDerivativeContract(
+        state.identity,
+        allow_budget_stationarity=getattr(state._source, "stationarity_tolerance", 1e-8)
+        > 1e-8,
+    )
     contract.validate(state)
     if state._source.backend != "cuda":
         raise NotImplementedError("CUDA diagnostic requires a native CUDA KS state")

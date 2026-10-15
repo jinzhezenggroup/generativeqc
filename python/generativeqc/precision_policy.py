@@ -54,6 +54,51 @@ def _budget_target(budget: TargetErrorBudget, *, forces: bool = True) -> TargetA
     return TargetAccuracy(tuple(observables))
 
 
+def _budget_fock_controls(
+    calculator: Calculator, budget: TargetErrorBudget, requested: dict
+) -> dict[str, float]:
+    """Select relaxed controls only with an authenticated new native capability.
+
+    Native preparation additionally checks spin, basis shape and provider. Older
+    libraries, fitted/corrected models and tighter budgets retain strict controls.
+    Explicit caller tolerances are ceilings, never silently loosened.
+    """
+    from generativeqc_compiler.method import resolve_method
+
+    from .ks import GridSpec
+
+    capability = getattr(
+        getattr(calculator, "_library", None),
+        "generativeqc_application_fock_precision_version_v1",
+        None,
+    )
+    ks_options = getattr(calculator, "_ks_options", None)
+    model = getattr(ks_options, "_method_ir", None)
+    if (
+        capability is None
+        or capability() != 1
+        or model is None
+        or model.identity != resolve_method("PBE0", spin="unpolarized").identity
+        or ks_options.grid != GridSpec(48, 16, 32)
+        or getattr(calculator, "_density_fitting_mode", None)
+        or getattr(calculator, "_dispersion_method_ir", None) is not None
+        or budget.energy_abs < 1e-5
+        or budget.force_max_abs < 1e-4
+        or (budget.force_rms is not None and budget.force_rms < 3e-5)
+    ):
+        return {}
+    return {
+        name: min(
+            ceiling, ceiling if requested.get(name) is None else float(requested[name])
+        )
+        for name, ceiling in (
+            ("energy_tolerance", 1e-6),
+            ("density_tolerance", 1e-5),
+            ("screening_tolerance", 1e-10),
+        )
+    }
+
+
 @dataclass(frozen=True)
 class PrecisionPolicy:
     """Select arithmetic by application budget, or request explicit audits.
@@ -147,13 +192,14 @@ class PrecisionSolve:
     role: str
     requested_precision: str
     seconds: float | None
-    iterations: int
-    force_evaluations: int
+    iterations: int | None
+    force_evaluations: int | None
     fock_builds: int | None
     executed_backend: str
     energy_tolerance: float
     density_tolerance: float
     screening_tolerance: float
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -383,10 +429,12 @@ class PrecisionCalculator:
     Other options have Calculator semantics except ``precision`` and
     ``target_accuracy``, which this facade owns. FP64 without an explicit target
     runs once in FP64; native exact source reuse also benefits ordinary Calculator.
-    Fast selects provisional FP32 XC for admitted CUDA PBE-family RKS and
+    Fast selects provisional FP32 J/K with relaxed physical convergence for
+    canonical exact PBE0 on the admitted reference grid; relaxed candidates keep FP64 forces.
+    Other routes select provisional FP32 XC for admitted CUDA PBE-family RKS and
     stationary FP32 gradients for admitted RHF and PBE/PBE0/B3LYP/r2SCAN/M06-2X
     RKS force budgets. Canonical r2SCAN-3c retains its strict corrections. The final
-    SCF state stays strict; unsupported budgets/domains use FP64 audits.
+    SCF state stays strict on those other routes; unsupported domains use FP64 audits.
     Qualified DF RKS narrows only semilocal geometry; DF energy-only requests
     still require the audit fallback and have no mixed-arithmetic acceleration.
     Explicit targets/audit profiles cost two full endpoints, or three after
@@ -460,6 +508,7 @@ class PrecisionCalculator:
         )
         self._candidate_precision = "fp64"
         self._fast_native = False
+        self._fast_fock = False
         self._fast_transport_v2 = False
         self._route_reasons = ["fp32_gradient_not_qualified"]
         if policy.profile == "fast":
@@ -474,6 +523,10 @@ class PrecisionCalculator:
                 self._candidate._ks_options is not None or method_transport is not None
             ):
                 candidate_options = dict(self._options)
+                fock_controls = _budget_fock_controls(
+                    self._candidate, policy.budget, options
+                )
+                candidate_options.update(fock_controls)
                 if method_transport is not None:
                     candidate_options["_application_precision_budget"] = policy.budget
                 else:
@@ -520,6 +573,7 @@ class PrecisionCalculator:
                     self._candidate = candidate
                     self._candidate_precision = precision
                     self._fast_native = True
+                    self._fast_fock = bool(fock_controls) and precision == "auto"
                     self._fast_transport_v2 = method_transport is not None
                     break
                 else:
@@ -728,8 +782,24 @@ class PrecisionCalculator:
                         multiplicity=multiplicity,
                         properties=requested,
                     )
-                except BaseException:
+                except BaseException as error:
                     calculator.clear_cache()
+                    if self._fast_fock and calculator is self._candidate:
+                        solves.append(
+                            PrecisionSolve(
+                                role,
+                                precision,
+                                perf_counter() - solve_started,
+                                None,
+                                None,
+                                None,
+                                "cuda",
+                                calculator._energy_tolerance,
+                                calculator._density_tolerance,
+                                calculator._screening_tolerance,
+                                f"{type(error).__name__}: {error}",
+                            )
+                        )
                     raise
                 finally:
                     # Audit owners run sequentially within the same resource
@@ -788,7 +858,16 @@ class PrecisionCalculator:
         target = self.policy.target
         if reference_factory is None:
             reference_factory = self._reference
-        candidate = solve(candidate_calculator, "candidate", candidate_precision)
+        try:
+            candidate = solve(candidate_calculator, "candidate", candidate_precision)
+        except (RuntimeError, NotImplementedError):
+            if not self._fast_fock:
+                raise
+            route_reasons.append("budget_fock_failed_fp64_fallback")
+            candidate_calculator = reference_factory()
+            candidate_precision = "fp64"
+            fast_native = False
+            candidate = solve(candidate_calculator, "fp64_fallback", "fp64")
         fast_native = self._fast_native and (
             candidate_calculator is self._candidate or self._fast_transport_v2
         )
@@ -844,6 +923,44 @@ class PrecisionCalculator:
             work = candidate.precision or {}
             if (
                 fast_native
+                and self._fast_fock
+                and work.get("operator_work_counters_valid") is True
+                and work.get("complete") is True
+                and work.get("operator_inventory_complete") is True
+                and all(
+                    any(
+                        operator.get("name") == name
+                        and operator.get("compute") == "fp32"
+                        and operator.get("accumulation") == "fp64"
+                        and operator.get("arithmetic_mode") == "mixed"
+                        and operator.get("count", 0) > 0
+                        for operator in work.get("operators", ())
+                    )
+                    for name in ("coulomb_j", "exchange_k", "coulomb_recurrence")
+                )
+                and work.get("strict_stage_fock_builds", 0) >= 2
+                and work.get("strict_refinement_applied") is True
+                and work.get("final_residual_audits", 0) > 0
+            ):
+                validation = PrecisionValidation(
+                    self.policy.profile,
+                    None,
+                    model,
+                    "qualified_budget_fock",
+                    tuple(route_reasons),
+                    (),
+                    (),
+                    tuple(solves),
+                    perf_counter() - started,
+                    reference="pbe0-budget-fock-v1/independent-endpoint-qualification",
+                    gradient_admission=gradient_admission,
+                    scope="qualification_not_per_call_observable_audit",
+                    budget=self.policy.budget,
+                )
+                return replace(candidate, precision_validation=validation)
+            if (
+                fast_native
+                and not self._fast_fock
                 and "forces" in requested
                 and qualified_gradient
                 # V2 is emitted only after the complete gradient consumer
@@ -901,6 +1018,7 @@ class PrecisionCalculator:
                 return replace(candidate, precision_validation=validation)
             if (
                 fast_native
+                and not self._fast_fock
                 and getattr(candidate_calculator, "_dispersion_method_ir", None) is None
                 and work.get("operator_work_counters_valid") is True
                 and work.get("complete") is True

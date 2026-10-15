@@ -1,5 +1,6 @@
 import typing
 from dataclasses import replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -16,7 +17,7 @@ from generativeqc._dft_gradient import (
     xc_geometry_topology_identity,
     xc_regularization_identity,
 )
-from generativeqc._ks_snapshot import _scf_xc_points
+from generativeqc._ks_snapshot import NativeKsSnapshot, _scf_xc_points
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.dft.fixtures import basis_arguments
 from generativeqc_compiler.xc import functional
@@ -297,6 +298,27 @@ def test_stationary_contract_accepts_consistent_rks_and_uks(
     assert contract.family == expected_family
     assert contract.to_payload()["force_capability"] == "unsupported"
     assert contract.identity == StationaryDerivativeContract(value.identity).identity
+
+
+def test_force_budget_needs_native_allowance_and_never_relaxes_response_default() -> (
+    None
+):
+    value = replace(state(), physical_residual=2e-6)
+    loose = StationaryDerivativeContract(value.identity, allow_budget_stationarity=True)
+    with pytest.raises(ValueError, match="physical residual"):
+        loose._validate_arrays(value)
+    source = object.__new__(NativeKsSnapshot)
+    source._handle = 0
+    source._batch = SimpleNamespace(_ensure_open=lambda: None)
+    source.stationarity_tolerance = 1e-5
+    value = replace(value, _source=source)
+    assert loose._validate_arrays(value) is value
+    with pytest.raises(ValueError, match="physical residual"):
+        StationaryDerivativeContract(value.identity)._validate_arrays(value)
+    with pytest.raises(ValueError):
+        loose.validate(value)
+    with pytest.raises(AttributeError, match="immutable"):
+        source.stationarity_tolerance = 1e-4
 
 
 @pytest.mark.parametrize(

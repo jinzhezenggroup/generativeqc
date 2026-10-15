@@ -103,7 +103,7 @@ void capacity(const Fixture& fixture) {
 }
 
 /** Exercise raw coefficients, signed density, screening and source teardown. */
-void raw_oracle(const Fixture& fixture) {
+void raw_oracle(const Fixture& fixture, bool mixed = false) {
   cudaStream_t stream{};
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   double* matrices{};
@@ -113,7 +113,9 @@ void raw_oracle(const Fixture& fixture) {
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&error), sizeof(int)));
   for (const double preparation_mask : {0.0, 1e-12})
     for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
-      scf::cuda_execution::DirectJkSourceLease source(stream);
+      if (mixed && buckets != (1U << 28) - 1) continue;
+      scf::cuda_execution::DirectJkSourceLease source(stream, scf::FockOperator::FullRange, 0.0,
+                                                      mixed);
       require(
           source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
                          3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle", false,
@@ -124,6 +126,10 @@ void raw_oracle(const Fixture& fixture) {
                          buckets) == GENERATIVEQC_STATUS_SUCCESS &&
               source.active(),
           source.reason());
+      require(source.mixed_recurrence() == mixed &&
+                  source.value_bytes() ==
+                      source.value_count() * (mixed ? sizeof(float) : sizeof(double)),
+              "resident source precision/storage inventory mismatch");
       require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
                   (source.exchange() != nullptr) == (preparation_mask == 0.0),
               "borrowed outputs unexpectedly allocated duplicate J/K slots");
@@ -132,24 +138,42 @@ void raw_oracle(const Fixture& fixture) {
       auto* coulomb = matrices + elements;
       auto* exchange = coulomb + elements;
       std::string detail;
-      for (const auto coefficient : {0.25, 0.20}) {
-        const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, coefficient);
-        require(source.enqueue(spec, matrices, coulomb, exchange, error, preparation_mask,
-                               detail) == GENERATIVEQC_STATUS_SUCCESS &&
-                    source.audit() == GENERATIVEQC_STATUS_SUCCESS,
-                "raw phase J/K audit: " + detail);
-        std::vector<double> actual(elements);
-        for (const auto& pair :
-             {std::pair{coulomb, &fixture.coulomb}, std::pair{exchange, &fixture.exchange}}) {
-          cuda_check(cudaMemcpy(actual.data(), pair.first, elements * sizeof(double),
-                                cudaMemcpyDeviceToHost));
-          double maximum_error = 0.0;
-          for (std::size_t index = 0; index < elements; ++index)
-            maximum_error =
-                std::max(maximum_error, std::abs(actual[index] - (*pair.second)[index]));
-          require(maximum_error < 2e-9, "independent PySCF raw J/K parity");
-        }
+      if (mixed) {
+        auto* prepared = const_cast<scf::CudaDirectJkPlan*>(
+            static_cast<const scf::CudaDirectJkPlan*>(source.source_identity()));
+        require(scf::prepare_cuda_direct_jk_resident_values(prepared, 8ULL << 30, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "strict construction reused a mixed source identity");
       }
+      for (const auto coefficient : {0.25, 0.20})
+        for (const double density_scale : {1.0, -0.5, 0.0}) {
+          auto scaled = fixture.density;
+          for (auto& value : scaled) value *= density_scale;
+          cuda_check(cudaMemcpyAsync(matrices, scaled.data(), elements * sizeof(double),
+                                     cudaMemcpyHostToDevice, stream));
+          const auto spec =
+              scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, coefficient);
+          require(source.enqueue(spec, matrices, coulomb, exchange, error, preparation_mask,
+                                 detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                      source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                  "raw phase J/K audit: " + detail);
+          std::vector<double> actual(elements);
+          for (const auto& pair :
+               {std::pair{coulomb, &fixture.coulomb}, std::pair{exchange, &fixture.exchange}}) {
+            cuda_check(cudaMemcpy(actual.data(), pair.first, elements * sizeof(double),
+                                  cudaMemcpyDeviceToHost));
+            double maximum_error = 0.0;
+            for (std::size_t index = 0; index < elements; ++index)
+              maximum_error = std::max(
+                  maximum_error, std::abs(actual[index] - density_scale * (*pair.second)[index]));
+            require(maximum_error < (mixed ? 2e-6 : 2e-9), "independent PySCF raw J/K parity");
+            if (mixed)
+              std::cout << "{\"mixed_source\":true,\"maximum_jk_error\":" << maximum_error
+                        << ",\"density_scale\":" << density_scale
+                        << ",\"source_bytes\":" << source.value_bytes()
+                        << ",\"source_values\":" << source.value_count() << "}\n";
+          }
+        }
       const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
       if (preparation_mask > 0.0)
         require(source.enqueue(spec, matrices, coulomb, exchange, error, 0.0, detail) ==
@@ -734,15 +758,20 @@ int main(int argc, char** argv) {
             (argc == 3 &&
              (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
               std::string(argv[2]) == "endpoint" || std::string(argv[2]) == "endpoint-forces" ||
-              std::string(argv[2]) == "mixed-refinement")),
-        "usage: ks-phase-values-probe INPUT [capacity|endpoint|endpoint-forces|mixed-refinement]");
+              std::string(argv[2]) == "mixed-refinement" ||
+              std::string(argv[2]) == "mixed-source")),
+        "usage: ks-phase-values-probe INPUT "
+        "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
     const bool range_oracle = argc == 3 && std::string(argv[2]) == "range-oracle";
     const Fixture fixture(argv[1],
-                          argc == 2 || std::string(argv[2]) == "mixed-refinement" || range_oracle,
+                          argc == 2 || std::string(argv[2]) == "mixed-refinement" ||
+                              std::string(argv[2]) == "mixed-source" || range_oracle,
                           range_oracle);
     std::cout << std::setprecision(17);
     if (range_oracle) {
       raw_range_oracle(fixture);
+    } else if (argc == 3 && std::string(argv[2]) == "mixed-source") {
+      raw_oracle(fixture, true);
     } else if (argc == 3 && std::string(argv[2]) == "capacity") {
       capacity(fixture);
     } else if (argc == 3 && std::string(argv[2]) == "mixed-refinement") {

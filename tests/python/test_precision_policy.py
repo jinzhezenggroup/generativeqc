@@ -216,6 +216,109 @@ def test_fast_unsupported_backend_records_explicit_fp64_audit(
     assert report.budget == TargetErrorBudget(1e-5, 1e-4, 3e-5)
 
 
+def test_budget_fock_controls_require_complete_model_and_new_native_capability() -> (
+    None
+):
+    from generativeqc.ks import resolve_ks_options
+
+    calculator = SimpleNamespace(
+        _library=SimpleNamespace(
+            generativeqc_application_fock_precision_version_v1=lambda: 1
+        ),
+        _ks_options=resolve_ks_options(
+            "pbe0-rks", KsOptions(grid=GridSpec(48, 16, 32))
+        ),
+        _density_fitting_mode=0,
+        _dispersion_method_ir=None,
+    )
+    budget = TargetErrorBudget(1e-5, 1e-4, 3e-5)
+    select = implementation._budget_fock_controls
+    assert select(calculator, budget, {}) == {
+        "energy_tolerance": 1e-6,
+        "density_tolerance": 1e-5,
+        "screening_tolerance": 1e-10,
+    }
+    strict = {
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "screening_tolerance": 1e-14,
+    }
+    assert select(calculator, budget, strict) == strict
+    for tighter in (
+        TargetErrorBudget(1e-6, 1e-4),
+        TargetErrorBudget(1e-5, 1e-5),
+        TargetErrorBudget(1e-5, 1e-4, 1e-5),
+    ):
+        assert select(calculator, tighter, {}) == {}
+    calculator._density_fitting_mode = 1
+    assert select(calculator, budget, {}) == {}
+    calculator._density_fitting_mode = 0
+    calculator._dispersion_method_ir = object()
+    assert select(calculator, budget, {}) == {}
+    calculator._dispersion_method_ir = None
+    calculator._ks_options = resolve_ks_options(
+        "pbe0-rks", KsOptions(grid=GridSpec(24, 8, 16))
+    )
+    assert select(calculator, budget, {}) == {}
+    calculator._ks_options = resolve_ks_options(
+        "pbe-rks", KsOptions(grid=GridSpec(48, 16, 32))
+    )
+    assert select(calculator, budget, {}) == {}
+    calculator._library = SimpleNamespace()
+    assert select(calculator, budget, {}) == {}
+
+
+@pytest.mark.parametrize("missing", [None, "exchange_k", "coulomb_recurrence"])
+def test_budget_fock_requires_actual_fp32_exchange_work(
+    backend: SimpleNamespace, missing: str | None
+) -> None:
+    work = {
+        "operator_work_counters_valid": True,
+        "complete": True,
+        "operator_inventory_complete": True,
+        "strict_stage_fock_builds": 2,
+        "mixed_stage_fock_builds": 5,
+        "strict_refinement_applied": True,
+        "final_residual_audits": 1,
+        "operators": [
+            {
+                "name": name,
+                "compute": "fp32",
+                "accumulation": "fp64",
+                "arithmetic_mode": "mixed",
+                "count": 0 if name == missing else 5,
+            }
+            for name in ("coulomb_j", "exchange_k", "coulomb_recurrence")
+        ],
+    }
+    backend.outputs = [result(executed_backend="cuda", precision=work)]
+    if missing:
+        backend.outputs.append(result(executed_backend="cuda"))
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    calculator._fast_fock = True
+    output = calculator.singlepoint(ATOMS)
+    report = output.precision_validation
+    assert report.status == ("observed_met" if missing else "qualified_budget_fock")
+    assert report.solve_count == (2 if missing else 1)
+
+
+def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
+    backend: SimpleNamespace,
+) -> None:
+    backend.outputs = [
+        RuntimeError("injected Fock failure"),
+        result(executed_backend="cuda"),
+        result(executed_backend="cuda"),
+    ]
+    calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
+    calculator._fast_fock = True
+    report = calculator.singlepoint(ATOMS).precision_validation
+    assert report.status == "observed_met" and report.solve_count == 3
+    assert "budget_fock_failed_fp64_fallback" in report.fallback_reasons
+    assert report.solves[0].error == "RuntimeError: injected Fock failure"
+    assert report.solves[0].iterations is None and report.solves[0].fock_builds is None
+
+
 def test_fast_budget_selects_native_arithmetic_without_an_extra_solve(
     backend: SimpleNamespace,
 ) -> None:

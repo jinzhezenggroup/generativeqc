@@ -17,6 +17,9 @@ GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v1(void) { 
 /** Method-family-neutral budget transport, independent of SCF arithmetic. */
 GENERATIVEQC_API uint32_t generativeqc_application_precision_version_v2(void) { return 2; }
 
+/** Private capability: budget-selected full-range FP32 J/K and physical gates. */
+GENERATIVEQC_API uint32_t generativeqc_application_fock_precision_version_v1(void) { return 1; }
+
 /** Optional Python provenance transport, independent of the stable SCF ABI.
  * A missing/computation-only result must not inherit a previous force record. */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_gradient_precision_v1(

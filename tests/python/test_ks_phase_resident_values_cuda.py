@@ -16,6 +16,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def test_mixed_resident_source_against_independent_jk(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """FP32 storage remains a geometry-only linear operator on signed densities."""
+    test_global_hybrid_phase_source(tmp_path, native_cxx, "water-small-spd", "1", "fp32-source")
+
+
 @pytest.mark.parametrize("case", ["water", "methane", "water-spd", "water-small-spd"])
 @pytest.mark.parametrize("chunk_width", ["1", "2"])
 @pytest.mark.parametrize("precision", ["fp64", "auto"])
@@ -112,7 +119,8 @@ def test_global_hybrid_phase_source(
         )
     execution = subprocess.run(
         [str(executable), str(input_path)]
-        + (["mixed-refinement"] if precision == "auto" else []),
+        + (["mixed-refinement"] if precision == "auto" else
+           ["mixed-source"] if precision == "fp32-source" else []),
         capture_output=True,
         text=True,
         timeout=600,
@@ -121,6 +129,13 @@ def test_global_hybrid_phase_source(
     )
     Path(f"{input_path}.probe.log").write_text(execution.stdout + execution.stderr)
     assert execution.returncode == 0, execution.stdout + execution.stderr
+    if precision == "fp32-source":
+        records = [json.loads(line) for line in execution.stdout.splitlines()]
+        assert records and all(record["mixed_source"] for record in records)
+        assert max(record["maximum_jk_error"] for record in records) < 2e-6
+        assert {record["density_scale"] for record in records} == {1.0, -0.5, 0.0}
+        assert all(record["source_bytes"] == 4 * record["source_values"] for record in records)
+        return
     oracle_results = []
     for functional in ("pbe0", "b3lyp"):
         state = json.loads(Path(f"{input_path}.{functional}.json").read_text())

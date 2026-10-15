@@ -73,7 +73,10 @@ constexpr unsigned kIndependentJkThreads = 32;
 
 /** Device-only validity reduction for the allocation-free provider seam. */
 void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* values,
-                                         std::size_t count, int* failure);
+                                        std::size_t count, int* failure);
+
+void launch_independent_jk_mixed_finite_kernel(cudaStream_t stream, const float* values,
+                                              std::size_t count, int* failure);
 
 /** Exact unscreened public-AO ERI tile for prepared interaction-source consumers.
  * The output is row-major [i,j,k,l] with l fastest. Caller owns storage/stream.
@@ -146,7 +149,7 @@ void launch_materialized_canonical_mixed_j_kernel(
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool unrestricted, double screening, const double* bounds,
     const double* density, const std::uint8_t* active, double* coulomb, std::uint64_t* work_count,
-    std::uint64_t* mixed_work);
+    std::uint64_t* mixed_work, double* exchange = nullptr);
 
 /** Angular-bucketed recurrence-only FP32 J with FP64 density/scatter/projection. */
 void launch_canonical_mixed_j_kernel(
@@ -155,7 +158,16 @@ void launch_canonical_mixed_j_kernel(
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool same_bucket, bool unrestricted, double screening,
     const double* bounds, const double* density, double* coulomb, std::uint64_t* work_census,
-    std::uint64_t* mixed_coulomb_work_count, double* coulomb_correction = nullptr);
+    std::uint64_t* mixed_coulomb_work_count, double* coulomb_correction = nullptr,
+    double* exchange = nullptr, double* exchange_correction = nullptr);
+
+/** Freeze the same mixed recurrence in canonical geometry-only FP32 slots. */
+void launch_canonical_mixed_resident_values_kernel(
+    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
+    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool same_bucket, double screening, const double* bounds,
+    float* values, std::size_t work_limit);
 
 /** Reuse the canonical orbit scatter with an immutable full-range value source.
  * No integral recurrence is instantiated in this replay kernel. */
@@ -167,6 +179,15 @@ void launch_resident_canonical_jk_kernel(
     double* exchange, std::uint64_t* work_count, double* coulomb_correction = nullptr,
     double* exchange_correction = nullptr, double screening = 0.0, const double* bounds = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max());
+
+/** Restricted replay of FP32 sources; products and compensated scatter are FP64. */
+void launch_mixed_resident_canonical_jk_kernel(
+    cudaStream_t stream, DeviceBatch batch, std::int32_t system, const std::int32_t* pairs,
+    CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
+    std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
+    const float* source_values, const double* density, double* coulomb, double* exchange,
+    std::uint64_t* work_count, double* coulomb_correction, double* exchange_correction,
+    double screening, const double* bounds, std::size_t work_limit);
 
 /** Fold an admitted correction plane before AO projection and finite audit. */
 void launch_jk_compensation_fold(cudaStream_t stream, double* sum, const double* correction,

@@ -260,6 +260,7 @@ class NativeKsSnapshot:
         "method_ir",
         "model_terms",
         "nonlocal_density_policy",
+        "stationarity_tolerance",
         "values",
     )
     _fixed = frozenset(__slots__)
@@ -321,6 +322,21 @@ class NativeKsSnapshot:
             )
             object.__setattr__(self, "_handle", handle.value)
             self.metadata = tuple(metadata)
+            tolerance = getattr(
+                lib, "generativeqc_ks_snapshot_stationarity_tolerance_v1", None
+            )
+            allowance = ct.c_double(1e-8)
+            if tolerance is not None:
+                tolerance.argtypes = [ct.c_void_p, ct.c_void_p, ct.POINTER(ct.c_double)]
+                tolerance.restype = ct.c_int
+                _native.check(
+                    lib,
+                    tolerance(batch._batch, self._handle, ct.byref(allowance)),
+                    context=batch._context,
+                )
+            if not np.isfinite(allowance.value) or not 0 < allowance.value <= 1e-4:
+                raise ValueError("invalid native stationary force allowance")
+            self.stationarity_tolerance = allowance.value
             options = self._batch._calculator.ks_options
             functional_code = _native_semilocal_code(options.method_ir)
             if functional_code >= AUTOMATIC_FUNCTIONAL_CODE_BASE:

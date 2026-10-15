@@ -332,6 +332,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool experimental_mixed_point{}, experimental_mixed_ao{}, pending_mixed_point{};
   bool experimental_mixed_history{};
   bool experimental_mixed_contractions{};
+  bool budget_fock{}, budget_stationarity{}, pending_mixed_exchange{}, pending_mixed_resident{};
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
   bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
       incremental_energy_refinement{};
@@ -437,6 +438,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void prepare_phase_source(bool cold, bool frozen_warm = false) {
     using namespace scf::cuda_execution;
+    const bool mixed_source = budget_fock && !strict_refinement;
+    if (phase_source && phase_source->active() &&
+        phase_source->mixed_recurrence() != mixed_source)
+      retire_phase_source(true);
     if (experimental_mixed_point && phase_source && phase_source->active()) return;
     // Range residency has its own bounded automatic policy. Never rebuild a
     // quartic source for a retained one-step replay, or compose it with the
@@ -461,7 +466,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // must not bypass their complete resource plan or alter precision/ranges.
     if (fitted_coulomb || fitted_exchange || incremental_direct_jk ||
         (precision_schedule.any_lower_precision() && !strict_refinement &&
-         !experimental_mixed_point) ||
+         !experimental_mixed_point && !mixed_source) ||
         runtime::active_device_resource_ledger ||
         strategy.spec.coulomb.op != scf::FockOperator::FullRange ||
         strategy.spec.exchange.op != scf::FockOperator::FullRange)
@@ -521,7 +526,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     phase_source = std::make_unique<DirectJkSourceLease>(
         stream,
         has_range_correction ? source_strategy.spec.exchange.op : scf::FockOperator::FullRange,
-        has_range_correction ? source_strategy.spec.exchange.omega : 0.0);
+        has_range_correction ? source_strategy.spec.exchange.omega : 0.0, mixed_source);
     check(phase_source->prepare(
               device, {system}, options.max_iterations, direct_nbf, required,
               options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
@@ -538,8 +543,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // setup in endpoint work rather than counting only admitted cache reuse.
     movement.phase_resident_values_built += phase_source->completed_value_count();
     record_precision_operator(scf::PrecisionOperatorKind::CoulombRecurrence,
-                              scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
-                              phase_source->completed_value_count());
+                              mixed_source ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
+                              mixed_source ? scf::PrecisionArithmeticMode::Mixed
+                                           : scf::PrecisionArithmeticMode::Strict,
+                              phase_source->completed_value_count(),
+                              mixed_source ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64);
     if (!phase_source->active()) {
       phase_source.reset();
       return;
@@ -563,19 +571,30 @@ struct CudaKsPlan::Impl : KsStateStorage {
   generativeqc_status enqueue_primary_jk(const double* alpha, const double* beta, bool mixed,
                                          std::string& detail, bool use_source = true) {
     const bool resident_source =
-        !mixed && use_source && !phase_source_range && phase_source && phase_source->active();
+        use_source && !phase_source_range && phase_source && phase_source->active() &&
+        mixed == phase_source->mixed_recurrence();
+    pending_mixed_resident = mixed && resident_source;
     runtime::cuda_trace::TraceOperation trace(
         has_exchange ? "cuda_ks_exact_jk_shared" : "cuda_ks_exact_j", stream,
         {1, n, 0, resident_source, false});
-    if (resident_source)
+    if (resident_source) {
+      // Source construction already recorded its completed recurrences once.
+      // A resident F[D] executes FP64 products/scatter and no new recurrences.
+      if (mixed)
+        check(cudaMemsetAsync(mixed_coulomb_work_counter(), 0, sizeof(std::uint64_t), stream));
       return phase_source->enqueue(provider.strategy().spec, alpha, j,
                                    has_exchange ? exchange : nullptr, jk_error,
                                    provider.strategy().screening_tolerance, detail, beta,
                                    has_exchange && spins == 2 ? exchange + matrix : nullptr);
-    return scf::enqueue_prepared_cuda_fock(provider, alpha, beta, matrix, j, exchange,
-                                           has_exchange && spins == 2 ? exchange + matrix : nullptr,
-                                           jk_error, mixed, detail,
-                                           mixed ? mixed_coulomb_work_counter() : nullptr);
+    }
+    return scf::enqueue_prepared_cuda_fock(
+        provider, alpha, beta, matrix, j, exchange,
+        has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, mixed, detail,
+        mixed ? mixed_coulomb_work_counter() : nullptr, mixed && pending_mixed_exchange);
+  }
+
+  double physical_stationarity_tolerance() const noexcept {
+    return std::min(budget_stationarity ? 1e-4 : 1e-9, options.density_tolerance);
   }
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
@@ -687,11 +706,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                                 : scf::PrecisionArithmeticMode::Strict;
       const auto j_compute =
           pending_mixed_coulomb ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
-      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, j_compute, j_mode);
+      const auto source_storage =
+          pending_mixed_resident ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
+      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, j_compute, j_mode,
+                                1, source_storage);
       const std::uint64_t exchange_builds = static_cast<std::uint64_t>(has_exchange) +
                                             static_cast<std::uint64_t>(has_range_correction);
-      record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict, exchange_builds);
+      record_precision_operator(
+          scf::PrecisionOperatorKind::ExchangeK,
+          pending_mixed_exchange ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
+          pending_mixed_exchange ? scf::PrecisionArithmeticMode::Mixed
+                                 : scf::PrecisionArithmeticMode::Strict,
+          pending_mixed_exchange && !mixed_coulomb_recurrences && !pending_mixed_resident
+              ? 0
+              : exchange_builds,
+          source_storage);
       record_precision_operator(
           scf::PrecisionOperatorKind::Xc,
           pending_mixed_point ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64,
@@ -1139,8 +1168,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
       unsigned maximum_angular = 0;
       for (const auto& shell : provider.system().shells)
         maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+      budget_fock =
+          options.precision_mode == GENERATIVEQC_PRECISION_AUTO && grid_spec == GridSpec{} &&
+          admit_application_fock(
+              options.application_precision_budget, molecule::ao_count(provider.system()),
+              provider.system().atoms.size(), maximum_angular,
+              admit_application_pbe0_fock_model(functional, spins, options.semilocal_exchange_scale,
+                                                options.semilocal_correlation_scale,
+                                                exchange_coefficient) &&
+                  strategy.spec.coulomb.coefficient == 1.0 &&
+                  strategy.spec.exchange.op == scf::FockOperator::FullRange &&
+                  strategy.spec.exchange.omega == 0.0 &&
+                  options.xc_execution_schedule ==
+                      scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
+                  !nonlocal_correlation,
+              provider.system().ecp_terms.empty(),
+              !fitted_coulomb && !fitted_exchange && !has_range_correction);
+      budget_stationarity =
+          budget_fock && (options.energy_tolerance > 1e-10 || options.density_tolerance > 1e-8 ||
+                          options.screening_tolerance > 1e-12);
       experimental_mixed_point =
-          options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+          !budget_fock && options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
           admit_application_xc_warmup(
               options.application_precision_budget, molecule::ao_count(provider.system()),
               maximum_angular,
@@ -1173,16 +1221,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       experimental_mixed_history = std::strcmp(selected, "1") == 0;
     }
     precision_schedule = resolve_cuda_ks_precision_schedule(
-        application_precision && !experimental_mixed_point
+        application_precision && !experimental_mixed_point && !budget_fock
             ? std::optional<generativeqc_precision_mode>{GENERATIVEQC_PRECISION_FP64}
             : options.precision_mode,
         xc_layout.fast_paths, fitted_coulomb, nonlocal_correlation != nullptr,
-        experimental_mixed_point, experimental_mixed_contractions);
+        experimental_mixed_point, experimental_mixed_contractions, budget_fock);
     if (precision_schedule.any_lower_precision()) {
       mixed_warmup =
           resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),
                                          std::getenv("GENERATIVEQC_KS_MIXED_MAX_ITERATIONS"));
-      if (experimental_mixed_point) {
+      if (experimental_mixed_point || budget_fock) {
         if (!std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"))
           mixed_warmup.switch_residual = 1e-4;
         if (!std::getenv("GENERATIVEQC_KS_MIXED_MAX_ITERATIONS")) mixed_warmup.max_iterations = 12;
@@ -1600,6 +1648,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     strict_refinement =
         use_warm && options.application_precision_budget[0] > 0.0 && experimental_mixed_point;
     pending_mixed_coulomb = false;
+    pending_mixed_exchange = false;
+    pending_mixed_resident = false;
     pending_mixed_density = false;
     pending_mixed_point = false;
     mixed_precision_executed = false;
@@ -2413,6 +2463,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
       pending_mixed_coulomb =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
+      pending_mixed_exchange =
+          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kExactExchange);
       pending_mixed_point =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kXcPointAlgebra);
       const auto density_phase = strict_refinement
@@ -2663,6 +2715,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
         ++output.precision.execution_retries;
         record_precision_retry();
         strict_refinement = true;
+        // A failed proposal cannot certify reuse or lend FP32 storage to the
+        // strict retry. Retire it before admitting a fresh FP64 source.
+        if (phase_source && phase_source->mixed_recurrence()) retire_phase_source(false);
+        prepare_phase_source(phase_source_cold);
         stabilize_occupations = false;
         final_closure = false;
         final_corrections = 0;
@@ -2698,8 +2754,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                            (!nonlocal_seed_iterations || nonlocal_exact_epoch_iterations >= 2) &&
                            output.energy_change < options.energy_tolerance &&
                            physical.density_change < options.density_tolerance &&
-                           physical.residual < std::min(1e-9, options.density_tolerance) &&
-                           physical.maximum_residual < std::min(1e-9, options.density_tolerance);
+                           physical.residual < physical_stationarity_tolerance() &&
+                           physical.maximum_residual < physical_stationarity_tolerance();
     // Once the initialized target already passes every physical stationarity
     // gate, confirm its energy with another complete F[D] at that same D.
     // Applying a sub-tolerance proposal can otherwise inject summation noise
@@ -2714,7 +2770,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     const bool strict_final_closure =
-        incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();
+        budget_fock || incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();
     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
     const bool enter_strict_refinement =
         mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,
@@ -3023,6 +3079,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       prepare_final_frame();
       scf::solver::FinalStateLimits limits;
       limits.density_tolerance = options.density_tolerance;
+      if (budget_stationarity) limits.stationarity_tolerance = physical_stationarity_tolerance();
       limits.energy_tolerance = options.energy_tolerance;
       limits.maximum_corrections = 0;
       limits.require_canonicality = true;
@@ -3177,6 +3234,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
     scf::solver::FinalStateLimits limits;
     limits.density_tolerance = options.density_tolerance;
+    if (budget_stationarity) limits.stationarity_tolerance = physical_stationarity_tolerance();
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
     limits.require_canonicality = true;
@@ -3583,7 +3641,8 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
       spec.exchange.present = want_k && strategy.spec.exchange.present;
       if (!spec.coulomb.present && !spec.exchange.present) return;
 
-      if (!impl_->phase_source_range && impl_->phase_source && impl_->phase_source->active()) {
+      if (!impl_->phase_source_range && impl_->phase_source && impl_->phase_source->active() &&
+          !impl_->phase_source->mixed_recurrence()) {
         profile.milliseconds[slot] = timed([&] {
           check(impl_->phase_source->enqueue(
                     spec, impl_->density, spec.coulomb.present ? impl_->j : nullptr,

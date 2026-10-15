@@ -25,6 +25,37 @@ int main() {
   using generativeqc::dft::admit_application_xc_warmup;
   using generativeqc::dft::admit_application_gradient;
   const std::array<double, 3> loose{1e-5, 1e-4, 3e-5};
+  using generativeqc::dft::admit_application_fock;
+  using generativeqc::dft::admit_application_pbe0_fock_model;
+  using generativeqc::dft::SemilocalFamily;
+  const auto pbe = static_cast<std::uint32_t>(SemilocalFamily::Pbe);
+  assert(admit_application_pbe0_fock_model(pbe, 1, 0.75, 1.0, -0.125));
+  for (const auto wrong : {0.25, -0.25, 0.0, std::numeric_limits<double>::quiet_NaN()})
+    assert(!admit_application_pbe0_fock_model(pbe, 1, 0.75, 1.0, wrong));
+  assert(!admit_application_pbe0_fock_model(pbe, 2, 0.75, 1.0, -0.125));
+  assert(!admit_application_pbe0_fock_model(pbe, 1, 1.0, 1.0, -0.125));
+  assert(!admit_application_pbe0_fock_model(pbe, 1, 0.75, 0.5, -0.125));
+  assert(!admit_application_pbe0_fock_model(
+      static_cast<std::uint32_t>(SemilocalFamily::Lda), 1, 0.75, 1.0, -0.125));
+  for (const auto aos : {24u, 384u, 768u})
+    assert(admit_application_fock(loose, aos, 96, 2, true, true, true));
+  for (const auto aos : {0u, 23u, 769u})
+    assert(!admit_application_fock(loose, aos, 96, 2, true, true, true));
+  assert(!admit_application_fock(loose, 768, 97, 2, true, true, true));
+  assert(!admit_application_fock(loose, 768, 1, 2, true, true, true));
+  assert(!admit_application_fock(loose, 768, 96, 3, true, true, true));
+  assert(!admit_application_fock(loose, 768, 96, 2, false, true, true));
+  assert(!admit_application_fock(loose, 768, 96, 2, true, false, true));
+  assert(!admit_application_fock(loose, 768, 96, 2, true, true, false));
+  for (unsigned index = 0; index < 3; ++index) {
+    for (const auto value : {loose[index] * 0.9, -1.0,
+                            std::numeric_limits<double>::infinity(),
+                            std::numeric_limits<double>::quiet_NaN()}) {
+      auto invalid = loose;
+      invalid[index] = value;
+      assert(!admit_application_fock(invalid, 768, 96, 2, true, true, true));
+    }
+  }
   using generativeqc::scf::admit_application_hf_gradient;
   for (const auto aos : {24u, 96u})
     assert(admit_application_hf_gradient(loose, aos, 24, 2, true, true));
