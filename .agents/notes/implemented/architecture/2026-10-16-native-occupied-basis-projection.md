@@ -89,3 +89,67 @@ archived Python/native source identity. Native numeric subplan declarations and
 timings are retained separately from physical work and model identity.
 Actual execution provenance is attached to each detached proposal and retained
 per spin in prepared reports; a capability query alone does not prove execution.
+
+## Review correction: retained-metric numerical accuracy
+
+A retained source metric with condition number 1e8 exposed a compatibility
+regression in the scalar provider. Its ordinary relative eigen stopping rule
+left enough eigenvector error that reconstructing a pure six-electron density
+produced populations 1.999999869 and 2.000000180, outside the public 1e-7 purity
+tolerance. The independent relative `D S D - 2 D` error was 1.76e-9; the earlier
+NumPy route accepted the same state. Discarding supported modes or widening
+purity acceptance would hide the numerical error rather than correct it.
+
+An initial scalar-only stopping cap fixed that fixture but was insufficient for
+a reduced two-AO density and other retained modes with condition number near
+9e8. The correction therefore also refines the already-computed metric
+eigenspace with a Rayleigh-Ritz congruence and the existing ordinary CPU
+eigensolver. Two-pass accurate orthonormalization first restores the premise
+that the ordinary eigenvectors form an orthonormal basis; an O(epsilon) Gram
+error otherwise tipped a valid reconstruction from 9.9664452073e-8 over
+the unchanged 1e-7 gate. This normalization is in place and needs no additional
+matrix storage. Refinement precedes PSD/rank classification; the existing FP64
+`relative_threshold * largest_eigenvalue` expression and strict retained-mode
+comparison are preserved exactly. The scalar cap uses the existing solver
+parameter; no shared solver or historical transport defaults change.
+
+Adapter-private two-component FP64 sums, FMA product residuals and corrected
+division retain cancellation terms through metric and density contractions.
+Density congruence, coefficient reconstruction and the separate elementwise
+reconstruction comparison use those components. This does not assume that
+`long double` is wider than `double`, introduce another eigen equation owner,
+or relax any public PSD, rank, purity, reconstruction, target or residual gate.
+Finite-overflow paths still refuse before publication. Coefficients and density
+remain ordinary FP64 at the transport/publication boundary.
+
+Permanent regressions retain the exact seven-AO and reduced two-AO valid states,
+small/large scales and AO sign gauges. They also retain separate ill-conditioned
+states that fail purity or reconstruction even though the old NumPy path may
+accept them. Independent 70/80-digit reconstruction classified fourteen of
+sixteen retained native-refusal fixtures as valid: one failed reconstruction
+and one failed purity. The repaired adapter accepts the fourteen and rejects
+both invalid states. Removing eigenspace refinement, its accurate orthonormalization or accurate
+density congruence makes a valid reproducer fail; removing either source gate
+lets an invalid fixture through. These are numerical behavior checks, not source-text assertions.
+
+The unchanged numeric reservation is 256 times the sum of source-square,
+target-square and cross-overlap element counts. A scalar-provider live-storage
+audit, including accurate temporaries, ordinary eigen scratch and result
+publication, bounds its peak by 8 times (26 source-square +20 target-square
++2 cross-overlap) bytes. Thirty-two tracked allocation checks include highly
+asymmetric AO shapes and full/empty channels; all stay below the declaration.
+The reservation is not an RSS limit. LAPACKE queries provider-dependent optimal
+workspace, so a scalar proof cannot establish its capacity bound; LAPACK
+runtime/capacity qualification remains open.
+
+The repaired scalar sources passed independent ambient least-squares/gauge and
+transactional public-ABI checks, the fourteen valid/two invalid source fixtures,
+and rank/PSD/cutoff/extreme-scale controls. A separate build with FP64-width
+`long double` and compiler FMA inlining/contraction disabled reproduced those
+outcomes. The runtime `std::fma` implementation was not forced to software;
+software-only libm execution is not claimed.
+The independent differential suite found no oracle-valid original success
+lost; three new refusals were confirmed invalid by 80-digit source-gate checks.
+The adapter remains a CPU proposal route, not a target-SCF convergence claim.
+GPU execution, LAPACK execution and repaired-source endpoint performance are
+not qualified by this bounded numerical correction.

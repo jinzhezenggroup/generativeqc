@@ -248,15 +248,19 @@ def project(
             raise ProjectionRejected(
                 f"{name} must be a bounded nonempty square AO metric"
             )
-        metrics.append(np.ascontiguousarray(_array(raw, raw.shape, name)))
+        metrics.append(
+            np.require(_array(raw, raw.shape, name), requirements=("C", "A"))
+        )
     source, target = metrics
-    cross = np.ascontiguousarray(
-        _array(cross_overlap, (len(target), len(source)), "cross overlap")
+    cross = np.require(
+        _array(cross_overlap, (len(target), len(source)), "cross overlap"),
+        requirements=("C", "A"),
     )
     density_input = occupied is not None
     if density_input:
-        state = np.ascontiguousarray(
-            _array(source_state, source.shape, "source density")
+        state = np.require(
+            _array(source_state, source.shape, "source density"),
+            requirements=("C", "A"),
         )
     else:
         raw = np.asarray(source_state)
@@ -265,7 +269,9 @@ def project(
                 "source occupied coefficients have invalid dimensions"
             )
         occupied = raw.shape[1]
-        state = np.ascontiguousarray(_array(raw, raw.shape, "source coefficients"))
+        state = np.require(
+            _array(raw, raw.shape, "source coefficients"), requirements=("C", "A")
+        )
     if occupied > min(len(source), len(target)):
         raise ProjectionRejected(
             "source or target metric has insufficient occupied rank"

@@ -18,9 +18,15 @@ import typing
 from pathlib import Path
 
 import generativeqc
-from _support import raw_output_path
 from generativeqc import Calculator, projected_singlepoint
 from generativeqc.autotune import source_identity
+
+try:
+    from _support import raw_output_path
+except ModuleNotFoundError as error:
+    if error.name != "_support":
+        raise
+    from benchmarks._support import raw_output_path
 
 
 def file_hash(path: Path) -> str:
@@ -150,49 +156,85 @@ def main() -> None:
     ):
         parser.error("source-sha must be the full archived Git revision")
     source_root = Path(generativeqc.__file__).resolve().parents[2]
-    library_path = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
-    library = ctypes.CDLL(str(library_path))
-    library.generativeqc_get_source_identity.restype = ctypes.c_char_p
-    identity = source_identity(source_root)
-    if library.generativeqc_get_source_identity().decode() != identity:
-        raise RuntimeError("installed library does not match the archived source")
-    rows = []
-    for inputs in cases(args.molecule or ["h2"]):
-        first = endpoint(inputs)
-        for _ in range(args.warmups):
-            endpoint(inputs)
-        samples = [endpoint(inputs) for _ in range(args.repeats)]
-        rows.append(
-            {
-                "inputs": inputs,
-                "first_use": first,
-                "samples": samples,
-                "median_seconds": statistics.median(row["seconds"] for row in samples),
-            }
-        )
-        print(inputs["name"], rows[-1]["median_seconds"], flush=True)
-    receipt = {
-        "schema": "generativeqc.basis_projection_revision_endpoint.v1",
-        "source_sha": args.source_sha,
-        "source_identity": identity,
-        "binary_sha256": file_hash(library_path),
-        "runner_sha256": file_hash(Path(__file__)),
-        "python_source_root": str(source_root),
-        "library": str(library_path),
-        "cpu_affinity": sorted(os.sched_getaffinity(0)),
-        "thread_environment": {
-            name: os.environ.get(name)
-            for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
-        },
-        "warmups": args.warmups,
-        "repeats": args.repeats,
-        "first_use_scope": "same process/compiler cache; not compiler-cold",
-        "cases": rows,
-    }
+    # Reserve the destination before loading or executing any scientific owner.
+    # Keep this descriptor throughout: a replaced pathname or symlink must never
+    # redirect publication into someone else's receipt.
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x") as stream:
-        json.dump(receipt, stream, indent=2, allow_nan=False)
-        stream.write("\n")
+        receipt = {
+            "schema": "generativeqc.basis_projection_revision_endpoint.v1",
+            "status": "running",
+            "source_sha": args.source_sha,
+            "runner_sha256": file_hash(Path(__file__)),
+            "python_source_root": str(source_root),
+            "cpu_affinity": sorted(os.sched_getaffinity(0)),
+            "thread_environment": {
+                name: os.environ.get(name)
+                for name in (
+                    "OMP_NUM_THREADS",
+                    "OPENBLAS_NUM_THREADS",
+                    "MKL_NUM_THREADS",
+                )
+            },
+            "warmups": args.warmups,
+            "repeats": args.repeats,
+            "first_use_scope": "same process/compiler cache; not compiler-cold",
+            "cases": [],
+        }
+        _write_receipt(stream, receipt)
+        try:
+            library_path = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+            library = ctypes.CDLL(str(library_path))
+            library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+            identity = source_identity(source_root)
+            receipt.update(
+                source_identity=identity,
+                binary_sha256=file_hash(library_path),
+                library=str(library_path),
+            )
+            if library.generativeqc_get_source_identity().decode() != identity:
+                raise RuntimeError(
+                    "installed library does not match the archived source"
+                )
+            for inputs in cases(args.molecule or ["h2"]):
+                row = {"inputs": inputs, "samples": []}
+                receipt["cases"].append(row)
+                receipt["active"] = {"case": inputs["name"], "phase": "first_use"}
+                row["first_use"] = _validated_endpoint(inputs)
+                for index in range(args.warmups):
+                    receipt["active"].update(phase="warmup", index=index)
+                    _validated_endpoint(inputs)
+                for index in range(args.repeats):
+                    receipt["active"].update(phase="sample", index=index)
+                    row["samples"].append(_validated_endpoint(inputs))
+                row["median_seconds"] = statistics.median(
+                    sample["seconds"] for sample in row["samples"]
+                )
+                print(inputs["name"], row["median_seconds"], flush=True)
+            receipt.pop("active", None)
+            receipt["status"] = "complete"
+            _write_receipt(stream, receipt)
+        except BaseException as error:
+            receipt["status"] = "failed"
+            receipt["error"] = {"type": type(error).__name__, "message": str(error)}
+            _write_receipt(stream, receipt)
+            raise
+
+
+def _validated_endpoint(inputs: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    """Validate each record before retaining it, outside the frozen timed scope."""
+    publication = endpoint(inputs)
+    json.dumps(publication, allow_nan=False)
+    return publication
+
+
+def _write_receipt(stream: typing.TextIO, receipt: dict[str, typing.Any]) -> None:
+    """Update only the exclusively owned descriptor, outside timed endpoints."""
+    payload = json.dumps(receipt, indent=2, allow_nan=False) + "\n"
+    stream.seek(0)
+    stream.write(payload)
+    stream.truncate()
+    stream.flush()
 
 
 if __name__ == "__main__":

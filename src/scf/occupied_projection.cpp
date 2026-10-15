@@ -63,6 +63,132 @@ Matrix product(const Matrix& left, const Matrix& right, bool transpose_left = fa
   return output;
 }
 
+// Two-component FP64 arithmetic for the adapter's metric refinement and
+// density validation. FMA retains each product's rounding residual, and the
+// low component survives intermediate matrix products. This does not rely on
+// long double being wider than double and never changes an acceptance gate.
+struct Accurate {
+  double high{}, low{};
+
+  Accurate() = default;
+  Accurate(double value) : high(value) {}
+  Accurate(double leading, double trailing) : high(leading), low(trailing) {}
+
+  static Accurate sum(double left, double right) {
+    const volatile double rounded = left + right;
+    const double leading = rounded;
+    if (!std::isfinite(leading)) return {leading, 0.0};
+    const double copied_right = leading - left;
+    return {leading, (left - (leading - copied_right)) + (right - copied_right)};
+  }
+
+  double value() const { return high + low; }
+};
+
+Accurate operator+(Accurate left, Accurate right) {
+  auto leading = Accurate::sum(left.high, right.high);
+  const auto trailing = Accurate::sum(left.low, right.low);
+  leading = Accurate::sum(leading.high, leading.low + trailing.high);
+  return Accurate::sum(leading.high, leading.low + trailing.low);
+}
+
+Accurate operator-(Accurate left, Accurate right) {
+  return left + Accurate{-right.high, -right.low};
+}
+
+Accurate operator*(Accurate left, Accurate right) {
+  const volatile double rounded = left.high * right.high;
+  const double leading = rounded;
+  if (!std::isfinite(leading)) return {leading, 0.0};
+  const double residual = std::fma(left.high, right.high, -leading);
+  return Accurate{leading, residual} + Accurate{left.high * right.low} +
+         Accurate{left.low * right.high} + Accurate{left.low * right.low};
+}
+
+Accurate operator/(Accurate numerator, double denominator) {
+  const double leading = numerator.high / denominator;
+  const auto remainder = numerator - Accurate{leading} * Accurate{denominator};
+  return Accurate::sum(leading, remainder.value() / denominator);
+}
+
+Accurate operator/(Accurate numerator, Accurate denominator) {
+  const double leading = numerator.high / denominator.high;
+  const auto remainder = numerator - Accurate{leading} * denominator;
+  return Accurate::sum(leading, remainder.value() / denominator.high);
+}
+
+struct AccurateMatrix {
+  std::size_t rows{}, columns{};
+  std::vector<Accurate> data;
+
+  AccurateMatrix(std::size_t row_count, std::size_t column_count)
+      : rows(row_count), columns(column_count), data(elements(rows, columns)) {}
+  explicit AccurateMatrix(const Matrix& matrix) : AccurateMatrix(matrix.rows, matrix.columns) {
+    for (std::size_t index = 0; index < data.size(); ++index) data[index] = matrix.data[index];
+  }
+  Accurate& operator()(std::size_t row, std::size_t column) { return data[row * columns + column]; }
+  Accurate operator()(std::size_t row, std::size_t column) const {
+    return data[row * columns + column];
+  }
+  Matrix rounded() const {
+    Matrix output(rows, columns);
+    for (std::size_t index = 0; index < data.size(); ++index)
+      output.data[index] = data[index].value();
+    finite(output);
+    return output;
+  }
+};
+
+// Rayleigh-Ritz assumes an orthonormal basis. Ordinary eigenvectors can carry
+// an O(epsilon) Gram error that matters after inversion of a small retained
+// metric mode. Restore that premise in place without changing the eigensolver.
+void orthonormalize(AccurateMatrix& vectors) {
+  for (std::size_t column = 0; column < vectors.columns; ++column) {
+    for (int pass = 0; pass < 2; ++pass) {
+      for (std::size_t prior = 0; prior < column; ++prior) {
+        Accurate projection;
+        for (std::size_t row = 0; row < vectors.rows; ++row)
+          projection = projection + vectors(row, prior) * vectors(row, column);
+        for (std::size_t row = 0; row < vectors.rows; ++row)
+          vectors(row, column) = vectors(row, column) - vectors(row, prior) * projection;
+      }
+    }
+    Accurate square;
+    for (std::size_t row = 0; row < vectors.rows; ++row)
+      square = square + vectors(row, column) * vectors(row, column);
+    const auto rounded_root = std::sqrt(square.value());
+    if (!(rounded_root > 0.0) || !std::isfinite(rounded_root))
+      throw Rejected("occupied projection metric eigenvectors lost rank");
+    const auto root =
+        Accurate{rounded_root} +
+        (square - Accurate{rounded_root} * Accurate{rounded_root}) / (2.0 * rounded_root);
+    for (std::size_t row = 0; row < vectors.rows; ++row)
+      vectors(row, column) = vectors(row, column) / root;
+  }
+}
+
+AccurateMatrix accurate_product(const AccurateMatrix& left, const AccurateMatrix& right,
+                                bool transpose_left = false, bool transpose_right = false,
+                                double scale = 1.0) {
+  const auto rows = transpose_left ? left.columns : left.rows;
+  const auto inner = transpose_left ? left.rows : left.columns;
+  const auto columns = transpose_right ? right.rows : right.columns;
+  if (inner != (transpose_right ? right.columns : right.rows))
+    throw std::logic_error("inconsistent accurate occupied projection contraction");
+  AccurateMatrix output(rows, columns);
+  for (std::size_t row = 0; row < rows; ++row)
+    for (std::size_t column = 0; column < columns; ++column) {
+      Accurate value;
+      for (std::size_t index = 0; index < inner; ++index)
+        value = value + (transpose_left ? left(index, row) : left(row, index)) *
+                            (transpose_right ? right(column, index) : right(index, column));
+      output(row, column) = value * Accurate{scale};
+      if (!std::isfinite(output(row, column).value()))
+        throw Rejected("occupied projection produced nonfinite accurate state");
+    }
+  return output;
+}
+
 double norm(const Matrix& matrix) {
   double value = 0.0;
   for (const auto item : matrix.data) value = std::hypot(value, item);
@@ -109,7 +235,36 @@ Metric metric(std::span<const double> input, std::size_t dimension, const char* 
       if (std::abs(scaled(row, column) - scaled(column, row)) > policy.validation_tolerance * scale)
         throw Rejected(std::string(name) + " is not Hermitian");
   matrix = symmetrize(std::move(matrix));
-  auto spectrum = tensor::cpu_symmetric_eigen(matrix.data, dimension);
+  // Resolving a retained metric mode amplifies eigenvector error by its inverse
+  // eigenvalue. Tighten only this public adapter's scalar metric solve so the
+  // ordinary eigensolver stopping error cannot consume the public purity gate.
+  // Keep the historical initial-guess operation and all acceptance gates intact.
+  tensor::CpuLinalgPlan eigen_plan;
+  double absolute_cap = 0.0;
+  if (tensor::resolve_cpu_linalg_provider(eigen_plan, true) == tensor::CpuLinalgProvider::scalar) {
+    eigen_plan.provider = tensor::CpuLinalgProvider::scalar;
+    absolute_cap = std::max(std::numeric_limits<double>::denorm_min(),
+                            largest * policy.relative_threshold * policy.validation_tolerance /
+                                static_cast<double>(dimension));
+  }
+  auto spectrum = tensor::cpu_symmetric_eigen(matrix.data, dimension, eigen_plan, absolute_cap);
+  // Refine the already-computed eigenspace in accurate arithmetic. The ordinary
+  // shared eigensolver still owns the Rayleigh-Ritz solve. In particular, a
+  // small retained eigenvalue must not inherit cancellation in its first solve.
+  AccurateMatrix initial_vectors(
+      Matrix(dimension, dimension, spectrum.vectors, "metric eigenvectors"));
+  orthonormalize(initial_vectors);
+  const AccurateMatrix accurate_metric(matrix);
+  auto rayleigh = symmetrize(
+      accurate_product(initial_vectors, accurate_product(accurate_metric, initial_vectors), true)
+          .rounded());
+  auto refined =
+      tensor::cpu_symmetric_eigen(std::move(rayleigh.data), dimension, eigen_plan, absolute_cap);
+  auto refined_vectors =
+      accurate_product(initial_vectors, AccurateMatrix(Matrix(dimension, dimension, refined.vectors,
+                                                              "refined metric eigenvectors")))
+          .rounded();
+  spectrum = {std::move(refined.values), std::move(refined_vectors.data)};
   if (spectrum.values.back() <= 0.0 ||
       spectrum.values.front() < -policy.validation_tolerance * spectrum.values.back())
     throw Rejected(std::string(name) + " is not positive semidefinite");
@@ -246,11 +401,12 @@ Result project_density(const Input& input, const Policy& policy) {
         throw Rejected("source density is not Hermitian");
   if (input.occupied > source.values.size())
     throw Rejected("source metric has insufficient occupied rank");
-  auto rooted = source.vectors;
+  AccurateMatrix rooted(source.vectors);
   for (std::size_t row = 0; row < rooted.rows; ++row)
     for (std::size_t column = 0; column < rooted.columns; ++column)
-      rooted(row, column) *= std::sqrt(source.values[column]);
-  auto orthogonal_density = symmetrize(product(rooted, product(density, rooted), true));
+      rooted(row, column) = rooted(row, column) * Accurate{std::sqrt(source.values[column])};
+  auto orthogonal_density = symmetrize(
+      accurate_product(rooted, accurate_product(AccurateMatrix(density), rooted), true).rounded());
   auto spectrum = rooted.columns ? tensor::cpu_symmetric_eigen(std::move(orthogonal_density.data),
                                                                rooted.columns)
                                  : tensor::CpuSymmetricEigenResult{};
@@ -263,17 +419,18 @@ Result project_density(const Input& input, const Policy& policy) {
   for (std::size_t row = 0; row < selected.rows; ++row)
     for (std::size_t column = 0; column < selected.columns; ++column)
       selected(row, column) = spectrum.vectors[row * selected.rows + first + column];
-  auto inverse_rooted = source.vectors;
+  AccurateMatrix inverse_rooted(source.vectors);
   for (std::size_t row = 0; row < inverse_rooted.rows; ++row)
     for (std::size_t column = 0; column < inverse_rooted.columns; ++column)
-      inverse_rooted(row, column) /= std::sqrt(source.values[column]);
-  auto coefficients = product(inverse_rooted, selected);
-  const auto reconstructed = product(coefficients, coefficients, false, true, input.occupation);
+      inverse_rooted(row, column) = inverse_rooted(row, column) / std::sqrt(source.values[column]);
+  const auto coefficients = accurate_product(inverse_rooted, AccurateMatrix(selected));
+  const auto reconstructed =
+      accurate_product(coefficients, coefficients, false, true, input.occupation);
   for (std::size_t index = 0; index < density.data.size(); ++index)
-    if (std::abs(reconstructed.data[index] - density.data[index]) >
+    if (std::abs((reconstructed.data[index] - Accurate{density.data[index]}).value()) >
         policy.validation_tolerance * (1.0 + std::abs(density.data[index])))
       throw Rejected("source density contains unsupported discarded metric components");
-  return occupied(input, policy, source, coefficients);
+  return occupied(input, policy, source, coefficients.rounded());
 }
 
 }  // namespace generativeqc::scf::projection
