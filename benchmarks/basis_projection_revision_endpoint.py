@@ -39,6 +39,9 @@ def item_record(item: typing.Any) -> dict[str, typing.Any]:
         "converged": item.converged,
         "backend": item.executed_backend,
         "restart_origin": item.restart_origin,
+        "warm_start_used": item.warm_start_used,
+        "warm_start_fallback": item.warm_start_fallback,
+        "precision": item.precision,
     }
 
 
@@ -121,7 +124,7 @@ def endpoint(inputs: dict[str, typing.Any]) -> dict[str, typing.Any]:
     for name in ("source", "target"):
         if not publication[name]["converged"]:
             raise RuntimeError(f"{inputs['name']}: {name} did not converge")
-        if publication[name]["backend"] != "cpu":
+        if publication[name]["backend"] != "cpu_reference":
             raise RuntimeError(f"{inputs['name']}: unexpected backend")
     if publication["target"]["restart_origin"] != "basis_projection":
         raise RuntimeError(f"{inputs['name']}: projection was not admitted")
