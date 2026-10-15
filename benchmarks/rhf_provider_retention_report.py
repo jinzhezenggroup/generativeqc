@@ -16,6 +16,7 @@ except ModuleNotFoundError:
 
 SCHEMA = "generativeqc.rhf-provider-probe.v1"
 REPORT_SCHEMA = "generativeqc.rhf-provider-report.v1"
+SUPPORTED_PROVIDERS = ("cublas", "cusolver")
 
 
 def _integer(value: object, name: str) -> int:
@@ -51,7 +52,7 @@ def _providers(policy: dict) -> dict[str, dict]:
         raise ValueError("source policy requires provider allowances")
     result = {}
     for name, record in raw.items():
-        if name not in ("cublas", "cusolver") or not isinstance(record, dict):
+        if name not in SUPPORTED_PROVIDERS or not isinstance(record, dict):
             raise ValueError("unsupported source provider policy")
         allowance = _integer(record.get("allowance_bytes"), f"{name} allowance")
         if not allowance:
@@ -174,8 +175,9 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
     elif len(candidates) != 1:
         issues.append(f"ambiguous provider measurement pairs: {len(candidates)}")
 
-    flags = {name: None for name in allowances}
+    flags = {name: None for name in SUPPORTED_PROVIDERS}
     provider_errors = []
+    unexpected_providers = []
     candidate = candidates[0] if len(candidates) == 1 else None
     if candidate:
         _, _, between = candidate
@@ -189,6 +191,20 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
                 )
         if provider_errors:
             issues.append("provider call returned an error")
+        for provider in SUPPORTED_PROVIDERS:
+            successful_creates = [
+                record
+                for record in between
+                if record["event"] == f"{provider}_create"
+                and record["phase"] == "end"
+                and record["status"] == 0
+            ]
+            if successful_creates and provider not in provider_policy:
+                flags[provider] = True
+                unexpected_providers.append(provider)
+                issues.append(
+                    f"observed provider absent from source policy: {provider}"
+                )
         for provider, provider_record in provider_policy.items():
             creates = [
                 record
@@ -204,7 +220,14 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
                 issues.append(issue)
                 continue
             complete = True
+            end_sequences = []
+            pairs = []
             for required_event in provider_record["required_events"]:
+                begins = [
+                    record
+                    for record in between
+                    if record["event"] == required_event and record["phase"] == "begin"
+                ]
                 observed = [
                     record
                     for record in between
@@ -219,6 +242,33 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
                     complete = False
                 elif observed[0]["status"] != 0:
                     complete = False
+                else:
+                    end_sequences.append(observed[0]["sequence"])
+                if len(begins) != 1:
+                    issues.append(
+                        f"missing provider begin: {required_event}"
+                        if not begins
+                        else f"duplicate provider begin: {required_event}"
+                    )
+                    complete = False
+                elif begins[0]["status"] != 0:
+                    complete = False
+                elif len(observed) == 1:
+                    if begins[0]["sequence"] >= observed[0]["sequence"]:
+                        issues.append(
+                            f"provider event pair is reversed: {required_event}"
+                        )
+                        complete = False
+                    else:
+                        pairs.append((begins[0]["sequence"], observed[0]["sequence"]))
+            if complete and end_sequences != sorted(end_sequences):
+                issues.append(f"provider event order mismatch: {provider}")
+                complete = False
+            if complete and any(
+                previous[1] >= following[0] for previous, following in pairwise(pairs)
+            ):
+                issues.append(f"provider event pairs overlap: {provider}")
+                complete = False
             if complete:
                 flags[provider] = True
 
@@ -259,6 +309,7 @@ def summarize(records: list[dict], policy: dict, identity: dict) -> dict:
         ),
         "issues": issues,
         "observed_provider_flags": flags,
+        "unexpected_observed_providers": unexpected_providers,
         "provider_errors": provider_errors,
         "measurement": measurement,
     }

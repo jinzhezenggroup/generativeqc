@@ -65,22 +65,28 @@ def ordered_records(*, before: int = 1000, after: int = 700) -> list[dict]:
             free_bytes=before,
             total_bytes=2000,
         ),
+        event(1, "cublas_create", phase="begin"),
         event(
-            1,
+            2,
             "cuda_mem_get_info",
             origin="provider_internal",
             observed=True,
             free_bytes=990,
             total_bytes=2000,
         ),
-        event(2, "cublas_create"),
-        event(3, "cublas_set_stream"),
-        event(4, "cublas_set_pointer_mode"),
-        event(5, "cusolver_create"),
-        event(6, "cusolver_set_stream"),
-        event(7, "cusolver_create_params"),
+        event(3, "cublas_create"),
+        event(4, "cublas_set_stream", phase="begin"),
+        event(5, "cublas_set_stream"),
+        event(6, "cublas_set_pointer_mode", phase="begin"),
+        event(7, "cublas_set_pointer_mode"),
+        event(8, "cusolver_create", phase="begin"),
+        event(9, "cusolver_create"),
+        event(10, "cusolver_set_stream", phase="begin"),
+        event(11, "cusolver_set_stream"),
+        event(12, "cusolver_create_params", phase="begin"),
+        event(13, "cusolver_create_params"),
         event(
-            8,
+            14,
             "cuda_mem_get_info",
             origin="application",
             observed=True,
@@ -90,9 +96,9 @@ def ordered_records(*, before: int = 1000, after: int = 700) -> list[dict]:
     ]
     records.append(
         event(
-            9,
+            15,
             "terminal",
-            events_written=9,
+            events_written=15,
             dropped_events=0,
             resolution_errors=0,
         )
@@ -205,6 +211,60 @@ def test_missing_provider_configuration_event_is_incomplete() -> None:
     assert result["observed_provider_flags"]["cublas"] is None
 
 
+def test_source_policy_provider_event_order_is_required() -> None:
+    records = ordered_records()
+    terminal = records[-1]
+    ordinary = records[:-1]
+    stream_pair = [row for row in ordinary if row["event"] == "cublas_set_stream"]
+    ordinary = [row for row in ordinary if row["event"] != "cublas_set_stream"]
+    ordinary[1:1] = stream_pair
+    result = summarize(resequence([*ordinary, terminal]), POLICY, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert "provider event order mismatch: cublas" in result["issues"]
+    assert result["observed_provider_flags"]["cublas"] is None
+
+
+def test_required_provider_begin_end_pairs_are_complete() -> None:
+    records = [row for row in ordered_records() if row["phase"] != "begin"]
+    result = summarize(resequence(records), POLICY, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert "missing provider begin: cublas_create" in result["issues"]
+    assert "missing provider begin: cusolver_create" in result["issues"]
+    assert result["observed_provider_flags"] == {"cublas": None, "cusolver": None}
+
+
+def test_nested_provider_pairs_are_ambiguous() -> None:
+    records = ordered_records()
+    ordinary, terminal = records[:-1], records[-1]
+    create_begin = next(
+        index
+        for index, row in enumerate(ordinary)
+        if row["event"] == "cublas_create" and row["phase"] == "begin"
+    )
+    stream_begin = next(
+        row
+        for row in ordinary
+        if row["event"] == "cublas_set_stream" and row["phase"] == "begin"
+    )
+    ordinary.remove(stream_begin)
+    ordinary.insert(create_begin + 1, stream_begin)
+    result = summarize(resequence([*ordinary, terminal]), POLICY, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert "provider event pairs overlap: cublas" in result["issues"]
+    assert result["observed_provider_flags"]["cublas"] is None
+
+
+def test_observed_provider_outside_source_policy_is_rejected() -> None:
+    policy = deepcopy(POLICY)
+    del policy["providers"]["cusolver"]
+    result = summarize(ordered_records(), policy, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert "observed provider absent from source policy: cusolver" in result["issues"]
+    assert result["observed_provider_flags"] == {"cublas": True, "cusolver": True}
+    assert result["unexpected_observed_providers"] == ["cusolver"]
+    assert result["measurement"] is None
+
+
 def test_two_candidate_pairs_are_ambiguous() -> None:
     first = ordered_records()[:-1]
     second = ordered_records()[:-1]
@@ -214,13 +274,14 @@ def test_two_candidate_pairs_are_ambiguous() -> None:
     assert "ambiguous provider measurement pairs: 2" in result["issues"]
 
 
-def test_reordered_provider_events_do_not_manufacture_a_pair() -> None:
+def test_provider_events_outside_measurement_do_not_manufacture_flags() -> None:
     records = ordered_records()
     before = records.pop(0)
     records.insert(7, before)
     result = summarize(resequence(records), POLICY, IDENTITY)
     assert result["status"] == "INCOMPLETE"
-    assert "no complete provider measurement pair" in result["issues"]
+    assert "missing required provider event: cublas" in result["issues"]
+    assert result["observed_provider_flags"]["cublas"] is None
 
 
 def test_missing_after_query_is_incomplete() -> None:

@@ -90,10 +90,13 @@ separate source-policy receipt containing provider allowance values and required
 events, plus source/library/endpoint/shim/event-log identities. It selects
 exactly one same-thread pair of successful application-origin memory queries.
 Vendor-internal queries are explanatory and cannot become pair endpoints.
-Effective allowance is derived only when every source-required provider event is
-observed exactly once and succeeds. Missing, duplicate, reordered, ambiguous,
-failed or lossy evidence produces `INCOMPLETE`; absent providers never become
-false/zero.
+The source policy supplies an ordered list of required calls for each provider.
+Effective allowance is derived only when every required call has one successful,
+non-overlapping begin/end pair in that exact order. Missing, duplicate, nested,
+reordered, ambiguous, failed or lossy evidence produces `INCOMPLETE`; absent
+providers never become false/zero. A successful provider create observed outside
+the source policy is also `INCOMPLETE` and remains visible in the observed flags,
+rather than being silently omitted from the effective allowance.
 
 This observation covers one provider-retained free-memory delta. It is not an
 allocation ownership census, clean endpoint timing, scientific qualification or
@@ -106,7 +109,8 @@ The host suite uses independent hand-authored events for:
 - ordered cuBLAS/cuSOLVER setup with a vendor-internal memory query;
 - `after > before` without unsigned underflow;
 - missing terminal/before/after/provider/configuration events;
-- duplicate/reordered/ambiguous pairs;
+- duplicate/reordered/nested/ambiguous begin/end pairs;
+- actual providers omitted by the source policy;
 - provider errors with original status;
 - capture loss, write errors and sequence gaps;
 - source/event-log identity mismatch; and
@@ -119,9 +123,12 @@ No production source fingerprint, AST shape or internal call count is pinned.
 This Windows host has no available Linux distro, ELF compiler, `sccache`,
 `readelf`, `nm` or `objdump`; no tool was installed. The shim is therefore
 uncompiled and its forwarding/version protocol is unverified. A future bounded
-qualification should first use a fake versioned provider DSO to prove exact
-argument/output/status forwarding and nested-call tagging, then inspect the
-shim with:
+qualification should first use a fake provider DSO with multiple symbol versions
+and a different default version. It must prove that each versioned import reaches
+the intended shim and that `RTLD_NEXT` resolves the corresponding real
+implementation while preserving arguments, output pointers, status and
+nested-call tagging. Compile/readelf success alone is insufficient. Then inspect
+the shim with:
 
 ```bash
 readelf -WsW libgenerativeqc.so | grep -E 'cudaMemGetInfo|cublas(Create|Set)|cusolverDn(Create|Set)'
