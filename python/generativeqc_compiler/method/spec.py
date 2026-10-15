@@ -613,8 +613,13 @@ def _generated_libxc_method_specs() -> dict[str, MethodSpec]:
                 "generated Libxc method metadata needs regeneration"
             )
         components = _generated_components(record)
+        direct_component = record.get("direct_semilocal_component")
         direct_stem = record["direct_semilocal_stem"]
-        if direct_stem is not None:
+        if direct_component is not None:
+            if not isinstance(direct_component, str):
+                raise UnsupportedMethod("generated Libxc direct component must be a name")
+            components = ((direct_component, Fraction(1)),)
+        elif direct_stem is not None:
             if not isinstance(direct_stem, str):
                 raise UnsupportedMethod(
                     "generated Libxc direct semilocal stem must be a string"
