@@ -32,6 +32,9 @@ selected library's load failure never authorizes a Python numerical retry.
 - Admit capacity before dimension-sized native allocation or callback work.
   Report tracked solver numeric storage, not callback/provider or whole-endpoint
   physical allocations. Wrapper snapshots and publication copies remain separate.
+  Sequential native batch plans must also charge prior results' reserved history
+  and basis capacities when diagnostics are enabled, rather than assuming that
+  only solution vectors survive between requests.
 - Copy callback inputs before invoking Python: callbacks and retained exception
   tracebacks can otherwise keep NumPy views into freed native vectors. Catch
   exceptions inside ctypes, destroy native publications and rethrow the original

@@ -251,6 +251,11 @@ actions. Plan binding is not a convergence certificate or a substitute for
 those method-owned checks. GMRES equations, residual gates, numeric-payload
 budgets and backend selection are unchanged.
 
+Sequential native batch admission includes prior retained solution vectors and,
+when enabled, the reserved history/basis diagnostic capacities. The result
+reports planned solution and diagnostic retention separately. An empty batch reserves
+neither; a one-byte-short numeric budget is rejected before callback work.
+
 Direct native JVP/VJP calls enforce the same FP64 input/output dimensions as
 solver actions, before invoking method callbacks. Explicit transpose actions
 and certified symmetric fallback actions use this same shape gate. The RHF
