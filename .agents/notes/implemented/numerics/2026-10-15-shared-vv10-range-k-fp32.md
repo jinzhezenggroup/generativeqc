@@ -158,3 +158,56 @@ The independent 96-atom/768-AO reference exceeded its finite 25-minute job.
 There is no measured native 96-atom speedup and these small-system results
 must not be extrapolated to one. PR #2515 was already merged on October 15,
 2026 at 18:58 Shanghai time; this follow-up is not part of that merged PR.
+
+## Clarification: 96-atom timeout versus README
+
+Slurm job 8634 exhausted its 25-minute allocation while running only the
+independent GPU4PySCF WB97M-V reference. Neither native FP64 nor native Fast
+was executed by that command. The output JSON is written after both SCF and
+moving-grid forces return; the interrupted log contains no iteration or phase
+telemetry. It cannot identify an individual slow kernel, an SCF convergence
+failure, or a native Fast regression.
+
+The README is consistent with this outcome. Its direct timing table reports
+native FP64 cold 1336.273 s and fixed-density warm 59.897 s at 96 atoms / 768
+AOs, but explicitly marks the GPU4PySCF reference as `timeout`. The historical
+reference job 7965 reached its 3600-second Slurm limit in `cold/0` without a
+complete record. Separate accuracy-only independent geometry receipts in
+`benchmarks/results/readme-wb97mv-20261014/summary.json.xz` took 4617.113 s and
+4578.170 s. Those diagnostic intervals are not published reference cold/warm
+timings and must not be used to manufacture a speedup.
+
+A host-side input comparison confirms identical original geometry, spherical
+H/O def2-SVP basis elements (subset identity
+`fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8`),
+and the complete 48/16/32 unpruned moving grid: 2,359,296 points on each of
+the semilocal and VV10 grids. The new reference uses a one-electron guess,
+four CPU threads and 180 maximum cycles; the historical accuracy receipts
+use the reference's default atomic guess, eight threads and 100 maximum
+cycles. These are not identical timing protocols even though their physical
+target and stopping tolerances agree.
+
+The 25-minute reference allowance was therefore poorly chosen relative to
+already retained diagnostic evidence. This is not a new 96-atom Fast timeout.
+Native cold versus native fixed-density warm, direct versus DF, and 96 AOs
+versus 96 atoms must remain separate comparisons. A future 96-atom Fast
+qualification may reuse the retained independent accuracy receipt after
+explicit input verification rather than rerun an inadequately budgeted oracle.
+
+## Integration with the subsequent defaults
+
+The follow-up branch starts at master `4e28477e9`, after the guarded DF
+warm-factor and VV10 warp-packet defaults landed. Preserve both defaults.
+The packet traversal now uses the same bounded FP32 bilateral closure and
+strict fallback as the ordered and previous parallel traversals; its
+arithmetic counters count evaluations, not rotated partials or publications.
+FP64 packet coordinates, shuffle payloads, chains and accumulation remain
+unchanged. Retain partial-warp cases added by the default-promotion work.
+The schedule identity advances to `vv10-parallel-bilateral-warp-packet-mixed-v5`.
+Historical endpoint timings above retain their original source identities;
+they are not measurements of this integration revision.
+
+Integrated host suites pass 937 tests with 42 resource skips. The independent
+generated-runtime GPU replay passes 784 tests across ordered, previous
+parallel, wide and packet traversals. Its 32 mixed cases also pass memcheck
+with zero errors, including actual arithmetic census and strict fallback.
