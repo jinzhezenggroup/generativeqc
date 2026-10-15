@@ -278,7 +278,9 @@ backend-independent TensorIR `Program` DAGs:
   `add`, full reduction and broadcast edges retain validation through replay
   and optimization, including empty requested outputs. Guards zero each
   element before reducing, avoiding a new overflow from summing large finite
-  primals/tangents. The CPU node/work/byte budgets charge this validation work.
+  primals/tangents. The reduced guards form an exact +1 multiplier on each
+  output tangent, preserving signed zero and other finite FP64 values.
+  The CPU node/work/byte budgets charge this validation work.
   Retained definitions alone are insufficient: only output-reachable work
   executes. Non-selection forward programs keep the legacy generation version,
   equations and derivative identities, including when the flag is set.

@@ -1075,7 +1075,10 @@ def linearize(
             for value in (root, root_tangent):
                 zero = _zero_like(value)
                 guards.append(reduce_sum(zero, tuple(range(len(zero.spec.indices)))))
-        validation = _combine(guards)
+        # Attach validation with an exact +1 multiplier. Adding a zero guard
+        # to the tangent would turn a selected -0.0 into +0.0; multiplication
+        # preserves every finite FP64 value, including signed zero/subnormals.
+        validation = _combine([constant(1, TensorSpec(role="constant")), *guards])
     derivative_outputs = {}
     output_map = {}
     for name, node in selected_outputs.items():
@@ -1086,7 +1089,7 @@ def linearize(
         if external_where:
             if validation is None:
                 raise ValueError("external-mask JVP requires live-domain validation")
-            tangent = add(tangent, broadcast(validation, tangent.spec.indices, ()))
+            tangent = multiply(tangent, broadcast(validation, tangent.spec.indices, ()))
             generated_nodes.append(tangent)
         derivative_name = f"{TANGENT_PREFIX}{name}"
         derivative_outputs[derivative_name] = tangent
