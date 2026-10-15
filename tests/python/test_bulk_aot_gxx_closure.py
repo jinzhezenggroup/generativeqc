@@ -467,10 +467,18 @@ def test_real_cxx_opaque_cache_and_identity(
     assert keys[0] != keys[1] and objects[0] != objects[1]
     # Ordinary C++ is cacheable. Exact replay must hit; refreshing a manifest
     # input unseen by the preprocessor must miss through the returned seed.
+    # CI restores persistent caches, including earlier runs of this fixture.
+    # Change real opaque bytes in each run instead of assuming fixed payloads
+    # are cold, clearing the cache, or overriding a recorded input identity.
+    namespace = os.urandom(32)
+    stats_option = "--show-stats"
+    if launcher.name == "ccache":
+        cache_environment["CCACHE_STATSLOG"] = str(tmp_path / "ordinary-stats.log")
+        stats_option = "--show-log-stats"
     source.write_text('extern "C" int point() { return 1; }\n')
     commands: list[dict[str, Any]] = []
     for content in (b"salt-one", b"salt-one", b"salt-two"):
-        payload.write_bytes(content)
+        payload.write_bytes(namespace + content)
         snapshot = replace(manifest, files=(*manifest.files, dependency(payload)))
         observed = collect(source, snapshot, compiler=compiler)
         assert not observed.reasons and observed.recipe is not None
@@ -492,11 +500,12 @@ def test_real_cxx_opaque_cache_and_identity(
         )
         assert built.returncode == 0 and not built.timed_out, built.stderr
         stats = run_compiler(
-            [str(launcher.path), "--show-stats"],
+            [str(launcher.path), stats_option],
             30,
             label="cache counters",
             environment=cache_environment,
         )
+        assert stats.returncode == 0 and not stats.timed_out, stats.stderr
         commands.append({"command": launcher.wrap(command), "stats": stats.stdout})
     assert commands[0]["command"] == commands[1]["command"]
     assert commands[1]["command"] != commands[2]["command"]
@@ -512,7 +521,13 @@ def test_real_cxx_opaque_cache_and_identity(
     assert count(commands[2]["stats"], counter) > count(commands[1]["stats"], counter)
     (tmp_path / "cache-evidence.json").write_text(
         json.dumps(
-            {"launcher": launcher.version, "opaque": receipts, "ordinary": commands},
+            {
+                "launcher": launcher.version,
+                "counter_source": stats_option,
+                "opaque_namespace": namespace.hex(),
+                "opaque": receipts,
+                "ordinary": commands,
+            },
             indent=2,
         )
     )

@@ -131,6 +131,28 @@ they do not claim execution of this later environment-poison control. Current
 PR Linux CI must execute the corrected test at the new exact head before
 delivery. No Notebook was restarted to repeat unchanged production qualification.
 
+### CI correction: persistent-cache test inputs
+
+Run `38700565333`, core-c job `116313767233`, reported 22 passing G++ tests,
+one failure and zero skips at `480eebe26`. The failure occurred after successful
+compilation/replay: both fixed ordinary-control payloads were cache hits, leaving
+the expected changed-salt miss counter at zero. A restored persistent cache can
+already contain both fixed input states; a warm hit is not a collector failure.
+The failed JUnit record is retained in ignored
+`.cache/pr2519-corec-debug.zip`. No production collector change follows from it.
+
+The control now prefixes the actual opaque file contents with fresh per-run
+bytes. Its first two states remain byte-identical, while its third state really
+changes the manifest-covered input. This avoids assuming a cold persistent cache
+without clearing it, weakening it, or inventing a source/toolchain identity.
+For ccache, a test-specific `CCACHE_STATSLOG` and `--show-log-stats` attribute
+the counters to these commands even under parallel CI, as described in the
+[ccache 4.14 manual](https://ccache.dev/manual/4.14.html#_cache_statistics).
+The namespace and counter source are retained in the test receipt. Existing
+production flags, salt derivation, object identity and immutable store are
+unchanged. This later test repair needs fresh exact-head CI and independent
+delta approval; the earlier approval and measurements are not promoted to it.
+
 ## Consequences and revisit conditions
 
 This is a narrow opt-in object tool, not an automatic generated-source consumer.
