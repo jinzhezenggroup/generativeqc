@@ -192,6 +192,59 @@ first. The second bounded window found the retained
 CUDA headers, and used that absolute launcher for all five compile/link commands.
 The offline bootstrap remained unused.
 
+## Real H200 observation: retain the ambiguity
+
+One instrumented invocation of the frozen a308 endpoint ran on H200 driver
+570.124.06. It used the qualified shim SHA-256
+`c0081483958d442ec5a5f9caaccfddc2dbd2b807a67171a8d0e1919e60dccbba` after
+rehashing every entry in the retained fake-result manifest and independently
+recomputing both raw stdout comparisons. The endpoint returned 1, and the
+111-byte native log matches the earlier provider-allowance failure exactly
+(SHA-256 `72944503040cc4bc621bb7444672470a5969f376953473369bab50b236ba5468`).
+No clean timing or scientific result was obtained.
+
+The actual event journal was retrieved read-only and verified as 18,227 bytes,
+SHA-256 `84e8d3d11dec6b0faa924be88daaeb1f6b27e63d6642ad6cdc4725d5d3f21e45`.
+It contains 87 ordinary records plus terminal sequence 87, one process/thread,
+balanced provider begin/end nesting, and zero dropped, resolution-error and
+write-error counters. Nevertheless, three adjacent application-query intervals
+contain provider creation:
+
+| Query sequences | Before free bytes | After free bytes | Raw delta bytes |
+| --- | --- | --- | --- |
+| 0 to 39 | 149570977792 | 131340435456 | 18230542336 |
+| 39 to 62 | 131340435456 | 130969239552 | 371195904 |
+| 63 to 86 | 131340435456 | 130969239552 | 371195904 |
+
+The first interval contains two top-level cuSOLVER setup sequences, so it does
+not match one source-required RHF setup. Each later interval has the complete
+ordered top-level cuBLAS and cuSOLVER setup; each also contains four nested
+cuBLAS creates and one nested stream binding within cuSOLVER creation. The shim
+currently marks provider-call records `application` even when a provider wrapper
+is already active; only memory queries receive the depth-based origin tag.
+Consequently, those nested calls must not be mistaken for additional independent
+application providers. The existing parser still refuses the three intervals
+and emits `INCOMPLETE` with a null primary measurement and flags.
+
+Both later raw deltas are 354 MiB. **Conditionally**, if either is the RHF guard's
+interval, the observed top-level providers imply the unchanged 96+96 MiB source
+allowance, leaving 162 MiB above it. That does not identify a unique guard
+interval or authorize changing the allowance. The a308
+`df_ccsdt_force.cu` first prepares a DF guess; `rccsd_method.cpp` then retries a
+failed seeded reference once with a cold reference. This supports an explanation
+for the repeated setup, but the journal records no caller PC or explicit stage
+that proves the correspondence. Do not select the last interval, discard the
+initial interval, or merge equal deltas to manufacture a complete observation.
+
+The GPU Job ended `FAILED` after diagnostic exit 2. Requested priority 4 became
+the observed platform value 20/`NORMAL`; no running-priority snapshot was
+obtained during the 45-second grace period. Scheduled-to-terminal was 67 seconds,
+container-start-to-terminal 58 seconds, and creation-to-terminal 139 seconds;
+the last includes queue time. Billing is unverified. A separate free 1-CPU/4-GiB
+reader retrieved only the journal and stopped after 90 seconds, within its
+10-minute platform timer. These are diagnostic and evidence-recovery results,
+not current-upstream endpoint or parent-issue completion.
+
 ## Owner-coordinated alternative
 
 After #2287 releases ownership, its owner could instead add a failure-path
