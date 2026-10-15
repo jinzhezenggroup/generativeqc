@@ -128,30 +128,30 @@ print(first.energies)
 (2026-10-13–15), compared with GPU4PySCF under matched FP64, basis, and grid
 settings. Cold includes construction, preparation, and the first calculation
 (compiler caches retained); warm reuses a fixed converged density. Measurements retain
-their individually identified source/build identities. The ωB97M-V native refresh
-includes direct populations through 96 atoms and DF through 48 atoms; missing
-independent references remain explicitly unchecked. r²SCAN-3c is remeasured in both
-Direct and DF at 3, 12, 48 and 96 atoms, with independent accuracy checks for every
-complete native call. Remaining functionals retain their prior evidence.
-Native ωB97M-V at 3/12 atoms uses primed compilation caches but fresh measurement
-processes and Calculators; reference timings remain historical.
+their individually identified source/build identities. All native methods are
+remeasured on a combined snapshot of PR #2531 and #2532;
+GPU4PySCF timings and independent oracles remain historical and are not rerun.
+The native populations cover 3, 12, 48 and 96 atoms, except ωB97M-V DF/96;
+missing independent references remain explicitly unchecked. Native 3/12-atom
+populations use separate cache-priming processes followed by fresh measurement
+processes and Calculators. Priming costs are retained separately.
 
 **Direct J/K**
 
-![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/r2scan3c-final-validation-20261015/dft-cold-warm.svg)
+![Cold and warm direct HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/dft-cold-warm.svg)
 
 **Density fitting (DF)** — both engines use cc-pVDZ-JKFIT.
 Only native ωB97M-V DF/96 is omitted because no complete E+F call was obtained;
 DF/48 remains visible without a matching reference.
 
-![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/r2scan3c-final-validation-20261015/df-cold-warm.svg)
+![Cold and warm density-fitted HF and DFT energy-plus-force timings](benchmarks/results/readme-refresh-20261015/df-cold-warm.svg)
 
 In both panels, r²SCAN-3c retains its defining spherical def2-mTZVPP basis;
 the other methods use spherical def2-SVP. Basis sizes therefore differ by method.
 
-See the [direct timing table](benchmarks/results/r2scan3c-final-validation-20261015/timings.md),
-[DF timing table](benchmarks/results/r2scan3c-final-validation-20261015/df-timings.md),
-and [protocol, accuracy, and provenance](benchmarks/results/r2scan3c-final-validation-20261015/README.md).
+See the [direct timing table](benchmarks/results/readme-refresh-20261015/timings.md),
+[DF timing table](benchmarks/results/readme-refresh-20261015/df-timings.md),
+and [protocol, accuracy, and provenance](benchmarks/results/readme-refresh-20261015/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — QM7 C1–C7**
 

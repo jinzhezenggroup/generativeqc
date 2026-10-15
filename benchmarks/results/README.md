@@ -1,5 +1,11 @@
 # Published GPU benchmark artifacts
 
+The [combined PR #2531 + #2532 README refresh](readme-refresh-20261015/README.md)
+remeasures all native HF/DFT methods on one frozen combined-default source,
+updates both Direct and DF panels, and reuses the historical GPU4PySCF
+timings/oracles without executing the reference engine. Separate priming,
+complete endpoint work counts and explicitly unchecked populations are retained.
+
 The [2026-10-15 r²SCAN-3c refresh](r2scan3c-final-validation-20261015/README.md)
 retains complete Direct and DF comparisons at 3/12/48/96 atoms with canonical
 def2-mTZVPP, independent energy/force checks and explicit work-confounded

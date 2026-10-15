@@ -7,6 +7,13 @@ Both README panels use the defining spherical **def2-mTZVPP** basis for
 r²SCAN-3c; other methods retain their historical def2-SVP observations.
 Changing to a smaller basis is not this optimization.
 
+The superseded README plots are retained losslessly as
+[direct](dft-cold-warm.svg.xz) and [DF](df-cold-warm.svg.xz) archives.
+The verifier checks both stored and expanded original identities; `refresh.py
+--output <directory>` regenerates viewable SVGs. Only presentation storage and
+its receipts change: observations, source identities and the acceptance hold
+remain unchanged. This keeps the next native refresh within the evidence cap.
+
 The implementation automatically admits strict-FP64, all-electron,
 restricted, full-range pure-J owners with at least **544 AOs**, with either
 exact-direct or density-fitted J. It reuses the existing resident final-state
