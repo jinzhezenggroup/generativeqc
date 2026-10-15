@@ -223,6 +223,103 @@ class RuntimeTests(unittest.TestCase):
         identity = payload.pop("identity")
         self.assertEqual(identity, digest(payload))
 
+    def test_cpu_hf_cli_uses_shared_native_host_inventory(self) -> None:
+        """The installed CLI and Python bridge use the same phase capacities."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_hf_cpu_host_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in ("rhf", "uhf"):
+            for fitted in (False, True):
+                with self.subTest(method=method, fitted=fitted):
+                    arguments = ["--method", method]
+                    if fitted:
+                        arguments += ["--density-fitting", "cpu"]
+                    run = self.resources(*arguments)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    plan = json.loads(run.stdout)
+                    auxiliary = plan.get("auxiliary") or {}
+                    shape = (ctypes.c_uint64 * 10)(
+                        2,
+                        2,
+                        2,
+                        1 if method == "rhf" else 2,
+                        0,
+                        8,
+                        auxiliary.get("nbf", 0),
+                        auxiliary.get("cartesian_nbf", 0),
+                        auxiliary.get("maximum_angular", 0),
+                        0,
+                    )
+                    values = (ctypes.c_uint64 * 4)()
+                    self.assertEqual(query(shape, len(shape), values, len(values)), 0)
+                    self.assertEqual(
+                        plan["item_inventory"],
+                        dict(
+                            zip(
+                                (
+                                    "preparation",
+                                    "iteration",
+                                    "finalization",
+                                    "integral_state",
+                                ),
+                                values,
+                                strict=True,
+                            )
+                        ),
+                    )
+
+    def test_cpu_hf_cli_fleet_uses_shared_native_aggregation(self) -> None:
+        """Homogeneous CLI batches and native ragged descriptors have equal bounds."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_hf_cpu_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in ("rhf", "uhf"):
+            for fitted in (False, True):
+                with self.subTest(method=method, fitted=fitted):
+                    arguments = ["--method", method, "--batch", "3"]
+                    if fitted:
+                        arguments += ["--density-fitting", "cpu"]
+                    run = self.resources(*arguments)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    plan = json.loads(run.stdout)
+                    orbital, auxiliary = plan["orbital"], plan.get("auxiliary") or {}
+                    item = (
+                        2,
+                        orbital["nbf"],
+                        orbital["cartesian_nbf"],
+                        1 if method == "rhf" else 2,
+                        orbital["maximum_angular"],
+                        8,
+                        auxiliary.get("nbf", 0),
+                        auxiliary.get("cartesian_nbf", 0),
+                        auxiliary.get("maximum_angular", 0),
+                        0,
+                        orbital["shells"],
+                        orbital["primitives"],
+                        auxiliary.get("shells", 0),
+                        auxiliary.get("primitives", 0),
+                    )
+                    shapes = (ctypes.c_uint64 * 42)(*(item * 3))
+                    values = (ctypes.c_uint64 * 15)()
+                    self.assertEqual(query(shapes, len(shapes), values, len(values)), 0)
+                    self.assertEqual(values[0], plan["resident_bytes"]["pageable"])
+                    self.assertEqual(values[2], plan["peak_bytes"]["host"])
+                    self.assertEqual(values[1], values[2] - values[0])
+                    self.assertEqual(list(values[3:7]), list(values[7:11]))
+                    self.assertEqual(list(values[7:11]), list(values[11:15]))
+
     def test_budget_reserve_headroom_and_zero(self) -> None:
         for arguments in (
             ("--host-bytes", "0"),
@@ -323,6 +420,64 @@ class RuntimeTests(unittest.TestCase):
         unsupported = self.resources("--method", "pbe-rks", "--forces")
         self.assertEqual(unsupported.returncode, 2)
         self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
+
+    def test_cpu_ks_cli_uses_shared_native_fleet_inventory(self) -> None:
+        """Homogeneous repeats retain each owner but share the phase workspace."""
+        library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
+        query = library.generativeqc_resource_ks_cpu_fleet_v1
+        query.argtypes = [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        for method in KS_INVENTORY_METHODS:
+            with self.subTest(method=method):
+                run = self.resources(
+                    "--method", method, "--batch", "3", "--max-iterations", "250"
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                plan = json.loads(run.stdout)
+                radial, polar, azimuth = plan["controls"]["grid"]
+                item = (
+                    2,
+                    2,
+                    2,
+                    2,
+                    6,
+                    2 if method.endswith("uks") else 1,
+                    0,
+                    0,
+                    2 * radial * polar * azimuth,
+                    radial,
+                    polar,
+                    256,
+                    8,
+                    250,
+                    int(method.startswith("pbe")),
+                    0,
+                    0,
+                )
+                shapes = (ctypes.c_uint64 * 51)(*(item * 3))
+                values = (ctypes.c_uint64 * 63)()
+                self.assertEqual(query(shapes, len(shapes), 0, values, len(values)), 0)
+                self.assertEqual(plan["resident_bytes"]["pageable"], values[12])
+                self.assertEqual(plan["peak_bytes"]["host"], values[14])
+                self.assertEqual(plan["item_inventory"]["retained"] * 3, values[12])
+                for budget, status in ((values[14], 0), (values[14] - 1, 2)):
+                    bounded = self.resources(
+                        "--method",
+                        method,
+                        "--batch",
+                        "3",
+                        "--max-iterations",
+                        "250",
+                        "--host-bytes",
+                        str(budget),
+                    )
+                    self.assertEqual(bounded.returncode, status, bounded.stderr)
 
     def test_cpu_ks_cli_uses_shared_native_host_inventory(self) -> None:
         """The Python-free command exposes each authoritative host owner."""

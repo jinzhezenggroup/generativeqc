@@ -268,6 +268,9 @@ macro(generativeqc_add_native_tests)
   add_dependencies(generativeqc_d3_zero_reference_tests generativeqc_d3_codegen)
   target_include_directories(generativeqc_d3_zero_reference_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   generativeqc_native_test(generativeqc_d3_ragged_tests tests/native/test_d3_ragged.cpp)
+  generativeqc_native_test(generativeqc_d3_resource_tests tests/native/test_d3_resources.cpp)
+  add_dependencies(generativeqc_d3_resource_tests generativeqc generativeqc_d3_codegen)
+  target_include_directories(generativeqc_d3_resource_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   add_dependencies(generativeqc_d3_ragged_tests generativeqc)
   target_include_directories(generativeqc_d3_ragged_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   generativeqc_native_test(generativeqc_d3_public_variant_tests tests/native/test_d3_public_variants.cpp)
@@ -484,6 +487,8 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_dft_integral_sources.cpp)
   generativeqc_native_test(generativeqc_ks_host_resource_tests
                        tests/native/test_ks_host_resources.cpp)
+  generativeqc_native_test(generativeqc_hf_host_resource_tests
+                       tests/native/test_hf_host_resources.cpp)
   generativeqc_native_test(generativeqc_stationary_integral_gradient_tests
                        tests/native/test_stationary_integral_gradient.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
