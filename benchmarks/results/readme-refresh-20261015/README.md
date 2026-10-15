@@ -1,127 +1,84 @@
-# README native refresh: combined PR #2531 + #2532
+# HF/DFT README benchmark refresh (2026-10-15)
 
-This publication replaces the native HF and seven DFT series in both README
-panels. GPU4PySCF is **not executed again**: its original timing/work populations,
-failures, and independent geometry oracles remain byte-identical in the linked
-historical reductions. DF-CCSD(T)/CBS is unchanged.
+This campaign replaces the native HF and seven DFT series in both README
+Direct/DF panels. **GPU4PySCF was not rerun**: its historical timings, SCF
+work, failures and independent reference arrays remain unchanged.
+DF-CCSD(T)/CBS is unaffected.
 
-## Frozen source and history
+## Results and limits
 
-The user requested measurements assuming these two open PRs were already merged:
-
-| Input | Exact revision |
-| --- | --- |
-| PR #2531: compensated Direct-J and strict-FP64 XC totals | `ba0dadbdcdef7af18715b72a2366595719df4bde` |
-| PR #2532: default resident final validation for eligible pure-J KS | `27d3b8558b7db2ae4b7d4051ae9122522379a809` |
-| Combined measurement commit | `1593d3b2fea9ed3e9232efc49eedede1beb1787b` |
-| Combined source tree | `f158f1c1b69700df6d74b0ebe42c68d370be09f3` |
-
-The merge includes master `890c425b0`, including #2524's shared resource sizing.
-It does not assume that GitHub has merged either prerequisite. Later
-documentation-only commits do not change the measured source or binary identity.
-If either prerequisite changes, these results still describe the exact revisions
-above, not an automatically updated PR head or future master.
-
-During measurement, #2531 advanced to `01ed327f4` with three test-only changes,
-and #2532 advanced to `1be47f590` with publication/test-only changes.
-`source-input-audit.json` records the comparison of the new combined tree:
-no native build input or benchmark consumer changes. The frozen source identity
-above is deliberately retained instead of relabeling the existing observations.
-The #2532 correction retains its original cohort's failed nonregression gate as
-an acceptance hold. This fresh figure campaign does not turn that historical
-promotion gate into a pass or claim that every native population is faster.
-
-The exact combined source can be reconstructed without merging into a working
-checkout: `git merge-tree --write-tree 27d3b8558 ba0dadbdc` produces the source
-tree above, which `git archive` can export. Fetch the two exact prerequisite
-commits first if they are not already available locally.
-
-The default-performance audit also identified #2398/#2399 (hybrid source reuse
-and RHF reference builds), #2494/#2495 (exact-density force-response reuse),
-#2511 (FP64 force-power lowering), #2521 (guarded VV10 warp packets), #2522
-(density-work-jet point capacity), and #2523 (DF hybrid warm-factor replay).
-#2531 changes accumulation used beyond r²SCAN-3c, so this campaign remeasures
-all native panel methods instead of mixing the interrupted earlier campaign's
-`4e28477e9` observations with the combined-default build. Opt-in SCF CSE,
-experimental selectors, and Fast/FP32 modes are not enabled.
-
-## Endpoint protocol
-
-- One Slurm-assigned RTX 5090 per finite `srun` allocation, on n1, n4 or n5.
-  Independent method/DF-mode jobs run concurrently on distinct assigned GPUs.
-  Node n3 is not used; the scheduler's `CUDA_VISIBLE_DEVICES` is never changed.
-- Release/sm_120, CUDA 12.9.1, fast compilation disabled. The source-matched
-  core and all 24 stationary-force AOT plugins are built through verified
-  ccache 4.5.1, reusing existing caches. `build-settings.json` retains source,
-  toolchain, compiler-cache statistics, binary and plugin identities. Full
-  build logs and generated artifacts remain in ignored campaign storage.
-  Runtime cache-miss compilation also verifies available sccache 0.16.0 on n1;
-  other nodes retain the ccache fallback. Shared cache statistics may include
-  concurrent compilations and are not treated as scientific work counters.
-- Original water clusters at 3/12/48/96 atoms. Spherical def2-SVP is used except
-  r²SCAN-3c's defining def2-mTZVPP basis. Both DF engines retain cc-pVDZ-JKFIT.
-  The moving, unpruned `(48, 16, 32)` Becke grid, FP64 equation, public
-  initialization, convergence and independent accuracy thresholds are unchanged.
-- Each measurement population requests one cold call, five fixed-density warm
-  calls, one changed-geometry call, and five changed-geometry warm calls. Cold
-  includes Calculator construction, preparation and the first complete
-  host-returned energy **and analytic forces**. Warm plots show the median and
-  min–max of all five samples. Actual SCF iterations/Fock-build counts remain
-  alongside times; changed iteration counts are not normalized away.
-- Separate 3/12-atom priming processes precede fresh measurement processes and
-  Calculators in each method/mode job. No converged density, checkpoint, or
-  native allocation crosses a process boundary. Priming costs and receipts are
-  retained separately, never subtracted from cold. Larger shapes retain caches
-  but are not claimed to have the same cache readiness as historical references.
-- The native producer uses only retained independent energy/force arrays for
-  validation, never a reference engine or reference density in production.
-  Every checked complete call must satisfy `|ΔE| ≤ 1e-8 Eh` and
-  `max |ΔF| ≤ 1e-7 Eh/bohr`. The reducer recomputes these errors from raw arrays.
-- ωB97M-V DF/48 remains explicitly unchecked: no matching independent oracle
-  is retained. DF/96 is not retried because prior work obtained no complete
-  native E+F population and these prerequisites do not qualify that case.
-  Neither point acquires an invented accuracy pass or speedup.
-
-Earlier paused measurements, incomplete setup attempts and their runtime
-packages are retained separately. They are not qualification samples for this
-combined source. A successful core build alone is insufficient: the stationary
-plugins and their manifests must be source-matched too, or an energy-only result
-can fail force completion. This campaign deploys the complete package unchanged
-to every participating node.
-
-## Results and evidence replay
-
-All 63 requested native populations complete, retaining 756 timed E+F calls:
-744 pass the independent accuracy gates, while the 12 ωB97M-V DF/48 calls
-remain explicitly unchecked. Maximum checked errors are `2.2555e-10 Eh` and
-`1.6854e-10 Eh/bohr`. The 384 separate priming calls are retained but not plotted.
-
-These are fresh absolute endpoint timings, not a balanced baseline/candidate
-promotion experiment. Changes in SCF work remain visible; no individual kernel
-speedup, identical cache readiness, or universal population speedup is claimed.
+- **63 complete native populations, 756 energy + analytic-force calls:** 744
+  pass independent `1e-8 Eh` energy and `1e-7 Eh/bohr` force gates.
+  The 12 ωB97M-V DF/48 calls are explicitly **unchecked** (no matching oracle);
+  DF/96 is omitted because no complete native E+F call was obtained.
+- Maximum checked differences: `2.2555e-10 Eh` in energy and
+  `1.6854e-10 Eh/bohr` in force. Another 384 small-system cache-priming
+  calls are recorded separately, not included in timing populations.
+- These are absolute endpoint timings, **not** a balanced before/after
+  performance experiment. Differing SCF work and cache readiness are not
+  normalized away; neither an individual kernel gain nor a universal speedup
+  is implied.
 
 ![Direct cold and warm E+F](dft-cold-warm.svg)
 
 ![DF cold and warm E+F](df-cold-warm.svg)
 
-See the [direct timing/work table](timings.md) and
-[DF timing/work table](df-timings.md). `native-summary.json.xz` retains native
-scalar observations, residuals, acceptance gates, semantic work counts,
-source/binary/raw-record hashes, Slurm provenance and separate priming receipts.
-`job-receipts.json.xz` records all 16 completed finite allocations, assigned GPU
-visibility/identity and original log hashes.
-Raw force arrays, detailed SCF histories, logs and build products stay in ignored
-storage. Only verbose per-iteration histories are omitted from the publication;
-final convergence diagnostics remain. Offline replay verifies retained scalar
-gates and identities; it does not pretend to reconstruct omitted native vectors.
+Full [Direct timing/work table](timings.md) and
+[DF timing/work table](df-timings.md).
 
-`manifest.json` binds all publication files and the four unchanged historical
-reductions. Four superseded SVGs are archived losslessly as `.svg.xz` to remain
-within the 64 MiB evidence cap. Their historical manifests retain original
-expanded hashes and update only storage/presentation/replay receipts. No timing,
-independent array, source identity or acceptance gate is changed or relabeled.
-Reduction rejects raw observations whose native source or binary differs from
-the independently retained build settings, even if their own hashes agree.
+## Frozen source
+
+| Input | Revision |
+| --- | --- |
+| #2531 (Direct-J / strict-FP64 XC correction) | `ba0dadbdcdef7af18715b72a2366595719df4bde` |
+| #2532 (resident final validation for pure-J KS) | `27d3b8558b7db2ae4b7d4051ae9122522379a809` |
+| Combined measurement commit | `1593d3b2fea9ed3e9232efc49eedede1beb1787b` |
+| Combined source tree | `f158f1c1b69700df6d74b0ebe42c68d370be09f3` |
+
+The combined source includes master `890c425b0` and can be reconstructed
+using `git merge-tree --write-tree 27d3b8558 ba0dadbdc` after fetching
+those commits. The PRs later advanced to `01ed327f4` and `1be47f590`;
+[source-input-audit.json](source-input-audit.json) verifies that these
+test/publication-only changes alter no measured native input or benchmark
+consumer. Measurements retain the original frozen identity, not the later
+PR heads or current master. The historical #2532 `none/96/moved`
+nonregression failure remains an acceptance hold; this refresh does not
+turn that gate into a pass.
+
+## Measurement protocol
+
+- **Hardware/build:** Slurm-assigned RTX 5090 GPUs (n1/n4/n5), finite
+  allocations; CUDA 12.9.1, Release/sm_120, source-matched native core and
+  all 24 stationary-force AOT plugins. Compiler-cache and exact binary
+  identities are retained in [build-settings.json](build-settings.json);
+  all 16 allocations, assigned devices and log hashes are retained in
+  `job-receipts.json.xz`.
+- **Cases:** 3/12/48/96-atom water clusters, spherical def2-SVP except
+  r²SCAN-3c (def2-mTZVPP); both DF engines use cc-pVDZ-JKFIT.
+  The moving, unpruned `(48, 16, 32)` Becke grid, FP64,
+  public initialization and convergence thresholds are unchanged.
+- **Per population:** one cold, five fixed-density warm, one moved-geometry
+  and five moved-warm complete E+F calls. Cold includes Calculator creation,
+  preparation and first execution. Warm results report five-sample medians
+  and ranges; recorded SCF iterations/Fock builds are not normalized away.
+- **Cache and accuracy:** 3/12-atom priming runs in separate processes;
+  measurement Calculators, densities and checkpoints are fresh. Priming is
+  never subtracted from cold. Native accuracy uses retained independent
+  energy/force arrays, never GPU4PySCF or a reference density in production.
+
+## Evidence and reproduction
+
+`manifest.json` records checksums for publication files and four unchanged
+historical reductions. Four superseded SVGs are preserved losslessly as
+`.svg.xz` with verified original expanded hashes, under the 64 MiB cap.
+`native-summary.json.xz` contains native timings, work counts, acceptance
+residuals and provenance; `job-receipts.json.xz` contains GPU/Slurm receipts.
+Large raw arrays, SCF histories and build logs remain in ignored campaign
+storage; offline replay validates retained scalars and identities, **not**
+omitted raw vectors.
+
+From the repository root, replay the figures and tables without a GPU or a
+reference-engine calculation:
 
 ```bash
 PYTHONPATH=.:python python benchmarks/results/readme-refresh-20261015/refresh.py
@@ -129,10 +86,9 @@ PYTHONPATH=.:python python benchmarks/results/readme-refresh-20261015/refresh.py
   --output .artifacts/readme-refresh-replay
 ```
 
-Replay requires Matplotlib, Scour and defusedxml, as in the previous publication;
-no GPU or reference calculation is needed. To reduce retained raw observations
-again, use `reduce.py --raw <campaign-directory>`. `restore_references.py`
-reconstructs accuracy-only reference receipts from stored arrays, without
-executing GPU4PySCF. `reproduce.sh <method> <none|cuda>` runs only the native
-engine inside an existing finite Slurm allocation with `README_REFRESH_ROOT`
-pointing to a frozen `source/` and complete `runtime/` package.
+Replay requires Matplotlib, Scour and defusedxml. For raw-data reduction,
+use `reduce.py --raw <campaign-directory>`; `restore_references.py`
+reconstructs accuracy receipts from retained independent arrays.
+`reproduce.sh <method> <none|cuda>` runs native-only measurements in an
+existing Slurm allocation with `README_REFRESH_ROOT` set to the frozen
+source/runtime package.
