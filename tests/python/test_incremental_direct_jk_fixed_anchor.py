@@ -42,6 +42,8 @@ def anchor_probe(
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include "scf/cuda/scf_incremental_policy.cuh"
+using namespace generativeqc::scf::cuda_execution;
 using std::isfinite;
 struct { unsigned x; } blockIdx{0}, blockDim{128}, threadIdx{0};
 long long __double_as_longlong(double value) { return std::bit_cast<long long>(value); }
@@ -61,7 +63,8 @@ void require(bool condition, const char* message) {
 int main(int argc, char** argv) {
   if(argc!=4) return 99;
   try {
-    const bool fixed=std::string(argv[1])=="fixed";
+    const bool refining=std::string(argv[1])=="refining";
+    const bool fixed=std::string(argv[1])!="rolling";
     const unsigned interval=std::stoul(argv[2]);
     const int spins=std::stoi(argv[3]);
     constexpr int batch=2, nbf=2, matrix=nbf*nbf;
@@ -87,7 +90,8 @@ int main(int argc, char** argv) {
     for(unsigned iteration=0;iteration<20;++iteration) {
       // One nonfinite preceding RMS must force a full refresh, even with no cadence.
       rms[0]=iteration==11 ? std::numeric_limits<double>::quiet_NaN() : 0.0;
-      const bool rebuild=iteration==0 || iteration==11 ||
+      if(refining && iteration==12) updates[0]=kIncrementalDirectJkFullEnergyRefinement;
+      const bool rebuild=iteration==0 || iteration==11 || (refining && iteration>=12) ||
                          (interval!=0 && since_full>=interval);
       if(rebuild) {++reference_full;since_full=0;} else {++reference_delta;++since_full;}
       for(threadIdx.x=0;threadIdx.x<total;++threadIdx.x)
@@ -121,7 +125,9 @@ int main(int argc, char** argv) {
         }
         density[element]+=(element%2 ? -1.0 : 1.0)/32;
       }
-      require(updates[0]==since_full,"delta update count changed with anchor mode");
+      const auto expected_updates=refining && iteration>=12
+          ? kIncrementalDirectJkFullEnergyRefinement : since_full;
+      require(updates[0]==expected_updates,"delta update or sticky full-only state changed");
       require(anchor_density[elements]==-42 && anchor_fock[elements]==-43 &&
                   delta[elements]==-44 && fock[elements]==-45 && updates[1]==0xffffffffU,
               "inactive spin/batch item mutated");
@@ -141,7 +147,7 @@ int main(int argc, char** argv) {
     native_cxx.build_executable(
         [cpp],
         executable,
-        compile_args=["-std=c++20", "-O2", "-fsanitize=undefined"],
+        compile_args=["-std=c++20", "-O2", "-fsanitize=undefined", f"-I{ROOT / 'src'}"],
         link_args=["-fsanitize=undefined"],
     )
     return executable
@@ -149,7 +155,7 @@ int main(int argc, char** argv) {
 
 @pytest.mark.parametrize("spins", [1, 2])
 @pytest.mark.parametrize("interval", [0, 1, 3, 8])
-@pytest.mark.parametrize("mode", ["fixed", "rolling"])
+@pytest.mark.parametrize("mode", ["fixed", "rolling", "refining"])
 def test_device_anchor_reconstruction_and_screening_error(
     anchor_probe: Path, mode: str, interval: int, spins: int
 ) -> None:

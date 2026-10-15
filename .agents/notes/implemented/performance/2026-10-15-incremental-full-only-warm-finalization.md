@@ -210,6 +210,12 @@ remains off by default. Raw traces, endpoints, overlay, frozen harness snapshots
 and reducer remain in ignored `.artifacts/delta-anchor/convergence-384/`, with
 the same local-only evidence availability limitation described above.
 
+The subsequent [screened HF full-energy refinement](../numerics/2026-10-15-incremental-hf-full-energy-refinement.md)
+addresses this diagnosed stationary energy tail by retiring deltas per item
+inside SCF. It is a separate repair: the no-delta warm measurements and the
+unfixed diagnostic rejection above remain historical evidence, not acceptance
+measurements of that later policy.
+
 ## References
 
 - `src/scf/cuda_rhf.cpp`

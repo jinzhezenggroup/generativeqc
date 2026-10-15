@@ -487,6 +487,18 @@ SCF comparison baseline. The original energy and density tolerances still
 apply, but an already converged fixed point may finish after one Graph replay
 instead of an artificial two-replay minimum. The diagnostic
 `GENERATIVEQC_FINAL_FOCK_REBUILD=1` restores the complete rebuild for A/B checks.
+Screened incremental RHF/UHF retires density-delta builds per system once
+the density step and pre-DIIS physical residual meet the original convergence
+criteria. That system uses ordinary full-density builds for the rest of the
+solve, including when the periodic refresh interval is zero. The transition
+discards the reconstructed energy baseline, so convergence still requires two
+consecutive full evaluations and the unchanged energy, density and physical
+residual gates. It does not grant convergence, add iterations beyond the
+configured bound, or depend on a CPU/reference calculation. Full/delta work
+counters charge this refinement, and each new solve resets its admission.
+Unscreened incremental providers and no-delta resident warm solves retain
+their existing paths.
+
 Opt-in incremental Direct-J/K normally retains strict full physical
 finalization. A provenance-matched, unchanged-geometry resident warm bucket
 may reuse the ordinary force-ready path only when every item's actual delta

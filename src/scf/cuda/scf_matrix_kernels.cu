@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "scf/cuda/matrix_index.cuh"
+#include "scf/cuda/scf_incremental_policy.cuh"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -187,8 +188,9 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
  * Build ΔD against the last accepted exact-linear anchor. A 0xffffffff update
  * count denotes the first build. Later full rebuilds happen after the configured
  * number of delta applications or while the previous accepted density RMS is
- * still above the late-SCF gate. Resetting the Fock anchor to hcore makes the
- * downstream builder usable for both cases: it always computes hcore + G(input).
+ * still above the late-SCF gate. A stationary screened HF item can instead
+ * latch full-only energy refinement for the rest of this solve. Resetting the Fock anchor to hcore
+ * makes the downstream builder usable for both cases: it always computes hcore + G(input).
  */
 __global__ void prepare_incremental_direct_jk_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
@@ -207,15 +209,16 @@ __global__ void prepare_incremental_direct_jk_kernel(
   const std::size_t local = element % vector_size;
   const std::size_t physical_element = element % matrix_size;
   const std::uint32_t updates = delta_updates[system];
-  const bool first_build = updates == 0xffffffffU;
-  const bool periodic_rebuild =
-      !first_build && rebuild_interval != 0U && updates >= rebuild_interval;
+  const bool first_build = updates == kIncrementalDirectJkUnanchored;
+  const bool full_energy_refinement = updates == kIncrementalDirectJkFullEnergyRefinement;
+  const bool periodic_rebuild = !first_build && !full_energy_refinement && rebuild_interval != 0U &&
+                                updates >= rebuild_interval;
   bool density_rebuild = false;
   if (!first_build && density_rms_threshold > 0.0) {
     const double previous_rms = density_rms[system];
     density_rebuild = !isfinite(previous_rms) || previous_rms > density_rms_threshold;
   }
-  const bool rebuild = first_build || periodic_rebuild || density_rebuild;
+  const bool rebuild = first_build || periodic_rebuild || density_rebuild || full_energy_refinement;
   if (local == 0U) {
     full_build[system] = rebuild ? 1U : 0U;
     if (rebuild)
@@ -253,14 +256,18 @@ __global__ void finalize_incremental_direct_jk_kernel(
   if (active != nullptr && active[system] == 0) return;
   const std::size_t local = element % vector_size;
   const std::size_t physical_element = element % matrix_size;
+  // A full provider result is already F[D]. Preserve it bitwise rather than
+  // adding and subtracting hcore, which can reintroduce energy-tail noise.
   const double combined =
-      fock[element] + anchor_fock[element] - hcore[system * matrix_size + physical_element];
+      full_build[system] != 0U
+          ? fock[element]
+          : fock[element] + anchor_fock[element] - hcore[system * matrix_size + physical_element];
   fock[element] = combined;
   if (!fixed_full_density_anchor || full_build[system] != 0U) {
     anchor_density[element] = density[element];
     anchor_fock[element] = combined;
   }
-  if (local == 0U) {
+  if (local == 0U && delta_updates[system] != kIncrementalDirectJkFullEnergyRefinement) {
     delta_updates[system] = full_build[system] != 0U ? 0U : delta_updates[system] + 1U;
   }
 }

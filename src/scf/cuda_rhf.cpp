@@ -3429,6 +3429,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   // FP64 direct and DF share the physical pre-DIIS residual gate for both
   // energy and force endpoints. Coarse mixed stages still defer to refinement.
   const double* force_convergence_residual = residual;
+  // Screened deltas retire per item after physical stationarity. The device
+  // controller then stays full-only within the original iteration budget;
+  // unscreened providers and resident warm solves with no delta are unchanged.
+  auto* incremental_energy_refinement_updates =
+      incremental_iteration_enabled && incremental_direct_jk_policy.fixed_full_density_anchor
+          ? incremental_delta_updates
+          : nullptr;
+  const auto* incremental_energy_refinement_census =
+      incremental_energy_refinement_updates != nullptr ? incremental_delta_build_count : nullptr;
   const auto launch_iteration_post_eigensolver =
       [&](bool append_device_tail, bool allow_mixed_precision) -> generativeqc_status {
     const bool screened_stage = screened_reference_iterations && allow_mixed_precision;
@@ -3460,7 +3469,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, incremental_energy_refinement_updates,
+              incremental_energy_refinement_census);
         } else {
           launch_update_uhf_convergence_kernel(
               false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
@@ -3468,7 +3478,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, incremental_energy_refinement_updates,
+              incremental_energy_refinement_census);
         }
       }
     } else {
@@ -3486,7 +3497,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, incremental_energy_refinement_updates,
+              incremental_energy_refinement_census);
         } else {
           launch_update_convergence_kernel(
               false, static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
@@ -3494,7 +3506,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
               static_cast<std::int32_t>(nbf), iteration_energy_tolerance,
               iteration_density_tolerance, true, energy, previous_energy, next_density, density,
               active, converged, iterations, energy_change, density_rms, force_convergence_residual,
-              approximate_census);
+              approximate_census, incremental_energy_refinement_updates,
+              incremental_energy_refinement_census);
         }
       }
     }
@@ -5628,7 +5641,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       result.incremental_direct_jk.delta_builds = delta_builds;
       // The public ABI keeps the historical field name. It now counts every
       // accepted full refresh after the first anchor, including density-RMS
-      // refreshes as well as cadence-driven refreshes.
+      // refreshes and full-only energy refinement as well as cadence refreshes.
       result.incremental_direct_jk.periodic_rebuilds = full_builds == 0U ? 0U : full_builds - 1U;
       result.incremental_direct_jk.anchor_updates =
           incremental_direct_jk_policy.fixed_full_density_anchor ? 0U : delta_builds;

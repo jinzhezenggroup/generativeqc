@@ -160,8 +160,8 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   } else {
     const std::uint64_t expected_full =
         requested_interval == 0U ? 1U : (builds + requested_interval) / (requested_interval + 1U);
-    require(diagnostic.anchor_full_builds == expected_full,
-            "screened incremental mode did not honor the fixed-full-anchor refresh cadence");
+    require(diagnostic.anchor_full_builds >= expected_full && diagnostic.anchor_full_builds >= 3U,
+            "screened incremental mode omitted cadence refreshes or full-energy closure");
     require(diagnostic.periodic_rebuilds + 1U == diagnostic.anchor_full_builds,
             "screened incremental periodic rebuild counters disagree");
   }
