@@ -12,7 +12,7 @@ Its budget floors are `1e-5` Eh energy, `1e-4` Eh/bohr maximum force and
 `3e-5` Eh/bohr RMS force when requested. This domain is independent of the
 384-AO mixed-gradient limit; neither is a hardware AO limit.
 
-Default candidate controls are `1e-6` energy, `1e-5` density/stationarity and
+Default candidate controls are `1e-6` energy, `1e-4` density/stationarity and
 `1e-10` screening. Explicit stricter caller controls remain stricter. Only a
 verified new native Fock capability permits this selection; older libraries,
 other grids/models, density fitting and tighter budgets retain strict controls.
@@ -22,7 +22,11 @@ this is **not an all-FP32 calculation**. An admitted phase-local integral source
 uses FP32 recurrence and FP32 storage, with FP64 density products and compensated
 scatter. Its immutable geometry/operator/precision identity prevents strict
 consumers from borrowing it. At most twelve mixed iterations
-precede a bounded FP64 physical refinement and fresh physical-projector closure.
+precede bounded FP64 physical refinement. At the admitted `1e-4` stationarity
+ceiling, consecutive fresh FP64 physical Focks and authenticated final-state
+validation replace an additional fixed-point SCF sweep. Export still constructs
+the current physical-Fock projector and checks its density defect against the
+selected allowance. Stricter density controls retain corrective closure.
 Final physical checks run in FP64 against the selected relaxed tolerances;
 electron trace, idempotency and canonical diagonalization checks stay strict.
 Relaxed candidates retain FP64 force arithmetic, not the independent

@@ -235,7 +235,7 @@ def test_budget_fock_controls_require_complete_model_and_new_native_capability()
     select = implementation._budget_fock_controls
     assert select(calculator, budget, {}) == {
         "energy_tolerance": 1e-6,
-        "density_tolerance": 1e-5,
+        "density_tolerance": 1e-4,
         "screening_tolerance": 1e-10,
     }
     strict = {
@@ -244,6 +244,11 @@ def test_budget_fock_controls_require_complete_model_and_new_native_capability()
         "screening_tolerance": 1e-14,
     }
     assert select(calculator, budget, strict) == strict
+    for requested, expected in ((1e-6, 1e-6), (5e-5, 5e-5), (1e-2, 1e-4)):
+        selected = select(calculator, budget, {"density_tolerance": requested})
+        assert selected["density_tolerance"] == expected
+        assert selected["energy_tolerance"] == 1e-6
+        assert selected["screening_tolerance"] == 1e-10
     for tighter in (
         TargetErrorBudget(1e-6, 1e-4),
         TargetErrorBudget(1e-5, 1e-5),

@@ -217,6 +217,19 @@ void explicit_stationarity_budget() {
   fixture.limits.stationarity_tolerance = 1e-5;
   require(accept_final_state_products(fixture.id, 2, fixture.limits, diagnostic, detail),
           "explicit physical stationarity allowance was ignored");
+  auto relaxed = diagnostic;
+  relaxed.maximum_commutator = 5e-5;
+  relaxed.density_rms = 3e-5;
+  relaxed.maximum_density_error = 6e-5;
+  require(!accept_final_state_products(fixture.id, 2, fixture.limits, relaxed, detail),
+          "the tighter physical allowance accepted a relaxed state");
+  fixture.limits.stationarity_tolerance = 1e-4;
+  require(!accept_final_state_products(fixture.id, 2, fixture.limits, relaxed, detail),
+          "physical allowance overrode the caller's stricter density tolerance");
+  fixture.limits.density_tolerance = 1e-4;
+  require(accept_final_state_products(fixture.id, 2, fixture.limits, relaxed, detail),
+          "authenticated relaxed final products required an unnecessary correction");
+  fixture.limits.density_tolerance = 1e-5;
   for (const auto invalid : {0.0, -1.0, std::numeric_limits<double>::infinity(),
                              std::numeric_limits<double>::quiet_NaN()}) {
     fixture.limits.stationarity_tolerance = invalid;

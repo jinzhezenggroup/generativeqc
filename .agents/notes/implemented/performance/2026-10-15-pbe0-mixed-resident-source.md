@@ -105,6 +105,10 @@ when making future performance claims.
 
 ## Revisit when
 
+The later [budget-refinement decision](2026-10-15-pbe0-budget-refinement.md)
+supersedes the default stopping/closure policy, not these frozen measurements
+or the precision-bound source ownership and fallback requirements.
+
 Broader spin, range, angular or partial-residency domains have independent
 endpoint evidence and a bounded precision/source identity. Do not infer their
 qualification from shared template instantiation or this shape admission.

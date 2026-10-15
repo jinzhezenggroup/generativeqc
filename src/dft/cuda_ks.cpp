@@ -2768,8 +2768,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
         physical.maximum_residual < std::min(1e-9, options.density_tolerance);
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
-    const bool strict_final_closure =
-        budget_fock || incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();
+    // Budget Fock already requires consecutive fresh FP64 physical Focks and
+    // authenticated canonical export. Do not add a stricter fixed-point sweep
+    // after those budget gates pass; explicit strict callers retain closure.
+    const bool budget_final_validation =
+        budget_fock && budget_stationarity && options.density_tolerance >= 1e-4;
+    const bool strict_final_closure = (budget_fock && !budget_final_validation) ||
+                                      incremental_direct_jk || spins == 2 ||
+                                      !provider.system().ecp_terms.empty();
     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
     const bool enter_strict_refinement =
         mixed_warmup.enter_refinement(mixed_stage, converged, output.iterations,

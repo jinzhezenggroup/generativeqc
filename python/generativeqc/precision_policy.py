@@ -62,6 +62,8 @@ def _budget_fock_controls(
     Native preparation additionally checks spin, basis shape and provider. Older
     libraries, fitted/corrected models and tighter budgets retain strict controls.
     Explicit caller tolerances are ceilings, never silently loosened.
+    The density ceiling matches the native owner's maximum authenticated force
+    stationarity allowance; it is not an observable-error estimate.
     """
     from generativeqc_compiler.method import resolve_method
 
@@ -93,7 +95,7 @@ def _budget_fock_controls(
         )
         for name, ceiling in (
             ("energy_tolerance", 1e-6),
-            ("density_tolerance", 1e-5),
+            ("density_tolerance", 1e-4),
             ("screening_tolerance", 1e-10),
         )
     }
