@@ -58,11 +58,16 @@ class ProjectionDiagnostics:
 
 @dataclass(frozen=True)
 class OccupiedProjection:
-    """Detached immutable occupied coefficients and their target AO density."""
+    """Detached immutable proposal with its actual metric execution owner.
+
+    ``execution_owner`` is ``native_cpu`` only after installed native execution;
+    ``python_compatibility`` identifies explicit old/custom-policy science.
+    """
 
     coefficients: np.ndarray
     density: np.ndarray
     diagnostics: ProjectionDiagnostics
+    execution_owner: str = "python_compatibility"
 
 
 def _immutable(array: typing.Any) -> typing.Any:

@@ -357,5 +357,5 @@ def project(
         }
     )
     return OccupiedProjection(
-        _immutable(coefficients), _immutable(density), diagnostics
+        _immutable(coefficients), _immutable(density), diagnostics, "native_cpu"
     )

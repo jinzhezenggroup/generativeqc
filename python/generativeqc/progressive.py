@@ -186,6 +186,7 @@ def initialize_from(
             ]
             proposal = np.ascontiguousarray([p.density for p in projected])
             report["spins"] = [asdict(p.diagnostics) for p in projected]
+            report["projection_owners"] = [p.execution_owner for p in projected]
             report["numeric_workspace_bound_bytes"] = workspace
             report["source_energy"] = state.energy
             report["source_iterations"] = state.iterations
@@ -232,7 +233,7 @@ def initialize_from(
         "policy": asdict(policy),
         "items": reports,
         "seconds": time.perf_counter() - start,
-        "placement": "native CPU cross-overlap and NumPy metric projection; native target seed import",
+        "placement": "native CPU cross-overlap; per-spin projection_owners; native target seed import",
         "target_verification": "pending_execute",
     }
     target._warm_state.projection_diagnostics = report

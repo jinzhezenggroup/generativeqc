@@ -77,6 +77,9 @@ retains shape/finite conversion, immutable presentation and explicit compatibili
 for old libraries, custom policies/scalars and integers outside the native range.
 A selected-library load, ABI or native execution failure never retries Python
 projection science. Custom compatibility is not advertised as native execution.
+Each detached proposal exposes its actual `execution_owner` (`native_cpu` or
+`python_compatibility`); prepared item reports preserve these per-spin values
+in `projection_owners`. Library availability alone is not execution provenance.
 
 The installed C/C++ entry points are
 `generativeqc_basis_projection_query_v1` and

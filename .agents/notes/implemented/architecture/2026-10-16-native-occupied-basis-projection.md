@@ -79,7 +79,7 @@ remain required before publishing final qualification. Physical progressive
 stage/strict-cleanup execution and #2227 R1-R6 are not completed by this slice.
 
 The development full scalar library subsequently passed the new installed SDK
-cases, including descriptor-extension aliases, and227 Python tests/22 subtests
+cases, including descriptor-extension aliases, and 227 Python tests/22 subtests
 covering progressive projection, resource admission and policy/response
 regressions. This precedes the exact committed-head rebuild and is not a
 replacement for that qualification. The revision endpoint runner deliberately
@@ -87,3 +87,5 @@ includes calculator construction, both prepared lifetimes, detached copies and
 cleanup, preserves first use and every measured sample, and rejects a mismatched
 archived Python/native source identity. Native numeric subplan declarations and
 timings are retained separately from physical work and model identity.
+Actual execution provenance is attached to each detached proposal and retained
+per spin in prepared reports; a capability query alone does not prove execution.

@@ -88,6 +88,7 @@ def test_normal_path_never_runs_python_linear_algebra(
     result = projection.project_occupied(
         source, target, cross, coefficients, policy=policy
     )
+    assert result.execution_owner == "native_cpu"
     np.testing.assert_allclose(
         result.density, 2 * expected @ expected.T, atol=3e-11, rtol=0
     )
@@ -206,6 +207,7 @@ def test_explicit_custom_and_unbounded_compatibility(
         policy=policy,
     )
     np.testing.assert_array_equal(result.density, 2 * np.eye(2))
+    assert result.execution_owner == "python_compatibility"
 
 
 def test_missing_protocol_is_compatibility(
@@ -237,6 +239,28 @@ def test_prepared_projection_honors_native_capacity(
             large.initialize_from(small, strict=False, maximum_host_bytes=maximum)
         result = large.execute(strict=True).items[0]
         assert result.succeeded and result.converged and result.restart_origin == "cold"
+
+
+@pytest.mark.parametrize("compatibility", (False, True))
+def test_prepared_projection_reports_actual_owner(
+    native_projection: typing.Any, compatibility: bool
+) -> None:
+    from generativeqc import Calculator
+
+    class CustomPolicy(projection.ProjectionPolicy):
+        pass
+
+    policy = CustomPolicy() if compatibility else projection.ProjectionPolicy()
+    atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
+    with (
+        Calculator(basis="sto-3g").prepare_batch([atoms]) as source,
+        Calculator(basis="def2-svp").prepare_batch([atoms]) as target,
+    ):
+        source.execute(strict=True)
+        report = target.initialize_from(source, policy=policy)
+        expected = "python_compatibility" if compatibility else "native_cpu"
+        assert report["items"][0]["projection_owners"] == [expected]
+        assert report["target_verification"] == "pending_execute"
 
 
 def test_selected_loader_error_never_tries_a_later_path(
