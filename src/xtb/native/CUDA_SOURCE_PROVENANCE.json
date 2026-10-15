@@ -1,5 +1,7 @@
 {
   "adaptations": {
+    "src/runtime/cuda_descriptor_validation.cu": "Delegate temporary device selection and restoration to the shared runtime CUDA device-scope owner; preserve xTB status/diagnostic translation, same-device admission, cleanup-error consumption and failed-restoration retries.",
+    "src/runtime/cuda_descriptor_validation.hpp": "Replace the private device-state lease with the shared runtime CUDA device scope, retaining the xTB status-returning adapter and borrowed descriptor contracts.",
     "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 science and bounded atom/peer schedules; validate once, retain ordered component sums and fused small-system fallback, and suppress failed-system publication.",
     "src/backends/cuda/gfn2_es3.cu": "Consume compiler-generated TensorIR/AD ES3 energy/potential and finite-range recovery; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_geometry.cu": "Consume compiler-generated TensorIR/AD coordination pair science; retain CUDA geometry/topology ownership.",
@@ -604,12 +606,12 @@
     "src/runtime/cuda_descriptor_validation.cu": {
       "adapted": true,
       "upstream_sha256": "7444c235bc128dc181389cf899acd8b31b6af449f2126f9e8f1222c1033ab779",
-      "vendored_sha256": "116bbc7b2130b54ec611789373d8aa3c1a03ca2bc35735453b67e0a488f49550"
+      "vendored_sha256": "18d96891564df353d8e499addf89933a989317b00049be2afcc67c329f6cbe27"
     },
     "src/runtime/cuda_descriptor_validation.hpp": {
       "adapted": true,
       "upstream_sha256": "24318d733e893bf728f4ecb25df45e8b53f1b2d97018e0d1f1e98ccc4b4b64a2",
-      "vendored_sha256": "6d9d66552e54a2a8a5c9843528914720720e07f6f9d145cb2f039640ca7f0ba0"
+      "vendored_sha256": "0dedfb6a22c3d91f67840bc6f8c5959fde16a8efef4581aca11ee12926085bc9"
     },
     "src/runtime/gfn2_cuda_execution.cu": {
       "adapted": true,

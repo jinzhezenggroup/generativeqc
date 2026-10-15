@@ -41,6 +41,17 @@ and leaves the calculator usable. This bounds the number of retained entries,
 not the memory required by the current molecule. Native SCC graph resource
 fallbacks remain unchanged.
 
+CUDA device selection and restoration use the shared
+`runtime/cuda_device_scope.hpp` owner, also used by shared CUDA resources and
+tensor/provider contexts. The xTB descriptor boundary only translates CUDA
+failures into its status and diagnostic contract. It rejects negative device
+ids before querying CUDA and does not reselect an already current device.
+Explicit restoration reports failure, retains a pending restoration for retry,
+and preserves an existing diagnostic on success. Destruction retries pending
+restoration without throwing and consumes cleanup errors from CUDA's last-error
+slot. These scopes borrow the caller's thread-local device state; they do not
+own a CUDA context, stream, allocation, or Slurm device visibility.
+
 CUDA topology preparation builds parameter plans, stable storage and descriptors
 without evaluating an artificial molecule on the CPU or executing a synthetic
 energy/force calculation. Numerical binding images are zero-filled except for an

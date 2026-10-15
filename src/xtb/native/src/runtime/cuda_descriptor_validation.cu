@@ -215,7 +215,7 @@ generativeqc_xtb_status_t validate_pointer_facts(std::int32_t device_id, const c
 }  // namespace
 
 ScopedCudaDevice::ScopedCudaDevice(std::int32_t device_id, std::string& error)
-    : selected_device_(device_id) {
+    : device_(device_id, std::nothrow) {
   error.clear();
   if (device_id < 0) {
     error = "CUDA device id must be nonnegative";
@@ -223,46 +223,27 @@ ScopedCudaDevice::ScopedCudaDevice(std::int32_t device_id, std::string& error)
     return;
   }
 
-  cudaError_t cuda_status = cudaGetDevice(&previous_device_);
+  const cudaError_t cuda_status = device_.status();
   if (cuda_status != cudaSuccess) {
     consume_validation_error(cuda_status);
-    error = cuda_error_message("cudaGetDevice", cuda_status);
-    status_ = GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
+    const bool selecting =
+        device_.operation() == generativeqc::runtime::CudaDeviceScope::Operation::kSelect;
+    error = cuda_error_message(selecting ? "cudaSetDevice" : "cudaGetDevice", cuda_status);
+    status_ = selecting && cuda_status == cudaErrorInvalidDevice
+                  ? GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT
+                  : GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     return;
   }
-  if (previous_device_ == selected_device_) {
-    status_ = GENERATIVEQC_XTB_STATUS_SUCCESS;
-    return;
-  }
-
-  cuda_status = cudaSetDevice(selected_device_);
-  if (cuda_status != cudaSuccess) {
-    consume_validation_error(cuda_status);
-    error = cuda_error_message("cudaSetDevice", cuda_status);
-    status_ = cuda_status == cudaErrorInvalidDevice ? GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT
-                                                    : GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
-    return;
-  }
-  restore_pending_ = true;
   status_ = GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
-ScopedCudaDevice::~ScopedCudaDevice() {
-  if (restore_pending_) {
-    const cudaError_t cuda_status = cudaSetDevice(previous_device_);
-    consume_validation_error(cuda_status);
-  }
-}
-
 generativeqc_xtb_status_t ScopedCudaDevice::restore(std::string& error) {
-  if (!restore_pending_) return GENERATIVEQC_XTB_STATUS_SUCCESS;
-  const cudaError_t cuda_status = cudaSetDevice(previous_device_);
+  const cudaError_t cuda_status = device_.restore();
   if (cuda_status != cudaSuccess) {
     consume_validation_error(cuda_status);
     error = cuda_error_message("cudaSetDevice while restoring the caller device", cuda_status);
     return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
   }
-  restore_pending_ = false;
   return GENERATIVEQC_XTB_STATUS_SUCCESS;
 }
 
