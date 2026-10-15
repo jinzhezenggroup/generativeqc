@@ -111,9 +111,7 @@ def _manifest_cuda_small_integer_power_schedules(
     In particular, it cannot implicitly change SCF point arithmetic or FP32.
     """
     methods = _manifest_methods(path)
-    rows = json.loads(path.read_text(encoding="utf-8")).get(
-        "cuda_scalar_schedules", []
-    )
+    rows = json.loads(path.read_text(encoding="utf-8")).get("cuda_scalar_schedules", [])
     if not isinstance(rows, list):
         raise MapleImportError("CUDA scalar schedules must be a list")
     fields = {
@@ -408,8 +406,8 @@ def emit_python_registry(path: Path = MANIFEST) -> str:
     entries = registry_entries(path)
     codes = {entry["identifier"]: entry["code"] for entry in entries}
     schedule_rows = [
-        f'    ({codes[method]}, {json.dumps(consumer)}, '
-        f'{json.dumps(spin)}, {json.dumps(scalar_type)}),'
+        f"    ({codes[method]}, {json.dumps(consumer)}, "
+        f"{json.dumps(spin)}, {json.dumps(scalar_type)}),"
         for method, consumer, spin, scalar_type in sorted(
             _manifest_cuda_small_integer_power_schedules(path)
         )

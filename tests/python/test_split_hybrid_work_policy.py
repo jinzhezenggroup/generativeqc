@@ -116,7 +116,10 @@ def test_unknown_or_invalid_scalar_schedule_requests_fail_closed() -> None:
     ).lower_integer_powers
     with pytest.raises(TypeError, match="consumer"):
         select_xc_scalar_schedule(
-            131522, consumer="stationary_force", spin="unpolarized", scalar_type="double"
+            131522,
+            consumer="stationary_force",
+            spin="unpolarized",
+            scalar_type="double",
         )
     with pytest.raises(ValueError, match="spin"):
         select_xc_scalar_schedule(
