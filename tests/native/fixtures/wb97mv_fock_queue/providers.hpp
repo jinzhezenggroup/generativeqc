@@ -306,9 +306,17 @@ inline generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch&, std::s
                                                           dft::CudaKsResidentFockBinding& binding,
                                                           std::string&) {
   // Keep the real lifetime binding and shared model-admission contract in scope.
-  binding = {0, &scf::primary, &scf::correction, queue_test::metadata.data(),
-             queue_test::metadata.data() + 8, 2, queue_test::spins, queue_test::stream,
-             queue_test::valid_fock_binding ? 1U : 0U, 1, 1};
+  binding = {0,
+             &scf::primary,
+             &scf::correction,
+             queue_test::metadata.data(),
+             queue_test::metadata.data() + 8,
+             2,
+             queue_test::spins,
+             queue_test::stream,
+             queue_test::valid_fock_binding ? 1U : 0U,
+             1,
+             1};
   return queue_test::revoked ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : GENERATIVEQC_STATUS_SUCCESS;
 }
 inline generativeqc_status dft_cuda_resident_orbital_frame(
