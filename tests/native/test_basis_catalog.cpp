@@ -93,7 +93,7 @@ void dump() {
       const std::array<generativeqc_atom, 1> atoms{{{atomic_number, 0, 0, 0}}};
       const auto result = expand_bundled_basis(name, atoms, GENERATIVEQC_BASIS_CARTESIAN);
       std::cout << "{\"basis\":\"" << name << "\",\"atomic_number\":" << atomic_number
-                << ",\"shells\":[";
+                << ",\"pack_checksum\":\"" << bundled_basis_pack_checksum() << "\",\"shells\":[";
       for (std::size_t index = 0; index < result.shells.size(); ++index) {
         const auto& shell = result.shells[index];
         if (index) std::cout << ',';

@@ -30,12 +30,24 @@ substitute built-in data.
 
 ## Scope and remaining work
 
-This private shared owner is the prerequisite for a versioned installed catalog
-and thin built-in Python resolver. It does not itself migrate Python model/basis
-resolution, authenticate a custom basis, change its identity/normalization or
+The shared owner now also serves a versioned installed discovery/query and
+system-creation bridge and Python built-in system materialization. It does not
+migrate whole Python model/basis resolution, authenticate a custom basis, change
+its identity/normalization or
 provide complete resource authority. The compiler, independent oracles and
 explicit custom interchange remain separate owners. No complete #2227 R5/R6
 cutover or performance/GPU qualification follows from this structural extraction.
+
+The AOT generator emits the same canonical finite-JSON pack checksum used by
+Python basis provenance. An explicit expected checksum binds a named request;
+system materialization still delegates normalization to the existing public
+owner rather than copying its logic. Python selects this bridge only after
+matching the complete immutable built-in record, not just its display name.
+It retains native-free offline metadata and old/custom/correlation-auxiliary
+domains; selected native failure or inconsistent returned provenance never
+retries Python primitive materialization. The existing consumer preflight remains
+metadata-only. Native API availability alone is not a whole resolution cutover.
+Raw expansion admission is not total normalized-system admission.
 
 ## Validation
 

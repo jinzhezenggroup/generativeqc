@@ -576,6 +576,32 @@ typedef struct generativeqc_atom {
   double z;
 } generativeqc_atom;
 
+/** Named AOT basis input. name/checksum are byte-counted without a required NUL.
+ * expected_pack_checksum is optional (count0), or the canonical JSON SHA256
+ * (count64). Query reads atom identities, not coordinates. Expansion admission
+ * covers only detached raw basis buffers, not complete normalized system memory. */
+typedef struct generativeqc_builtin_basis_descriptor_v1 {
+  uint32_t struct_size, abi_version;
+  const char* name;
+  uint64_t name_count;
+  const generativeqc_atom* atoms;
+  uint64_t atom_count;
+  generativeqc_basis_representation representation;
+  int32_t charge;
+  uint32_t multiplicity, reserved;
+  uint64_t maximum_expansion_bytes;
+  const char* expected_pack_checksum;
+  uint64_t expected_pack_checksum_count;
+} generativeqc_builtin_basis_descriptor_v1;
+
+/** Query publication. Names/checksum borrow immutable loaded-library storage. */
+typedef struct generativeqc_builtin_basis_capacity_v1 {
+  uint32_t struct_size, abi_version;
+  uint64_t shell_count, primitive_count, ao_count, expansion_bytes;
+  const char* canonical_name;
+  const char* pack_checksum;
+} generativeqc_builtin_basis_capacity_v1;
+
 typedef struct generativeqc_primitive {
   double exponent;
   double coefficient;
@@ -1613,6 +1639,71 @@ GENERATIVEQC_API const char* generativeqc_context_last_error(const generativeqc_
 GENERATIVEQC_API generativeqc_status generativeqc_system_create(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     generativeqc_system** system);
+
+/** @native-contract generativeqc_builtin_basis_count_v1
+ * @behavior Count immutable AOT basis names shared with the native CLI.
+ * @inputs No arguments or context are required.
+ * @outputs Returns the number of valid discovery ordinals.
+ * @lifetime Catalog storage belongs to the loaded native library.
+ * @errors No allocation, provider initialization or failure status occurs.
+ * @execution Synchronous immutable lookup, safe without a calculation or device.
+ * @units Returns a dimensionless count, not an execution-capability claim.
+ */
+GENERATIVEQC_API uint32_t generativeqc_builtin_basis_count_v1(void);
+
+/** @native-contract generativeqc_builtin_basis_name_v1
+ * @behavior Discover the canonical name at a catalog ordinal.
+ * @inputs index is zero-based and less than builtin_basis_count_v1().
+ * @outputs Returns a NUL-terminated name, or NULL for an invalid ordinal.
+ * @lifetime The borrowed immutable string remains valid while the library is loaded.
+ * @errors Invalid indices return NULL without allocation or provider initialization.
+ * @execution Synchronous immutable lookup; it does not admit any scientific consumer.
+ * @units index is dimensionless; names use the established case/underscore aliases on input.
+ */
+GENERATIVEQC_API const char* generativeqc_builtin_basis_name_v1(uint64_t index);
+
+/** @native-contract generativeqc_builtin_basis_query_v1
+ * @behavior Query shared AOT basis expansion counts and canonical pack provenance.
+ * @inputs Versioned records, a byte-counted name, bounded nonempty atom array and valid
+ * representation. reserved is zero. Optional expected_pack_checksum has exactly64 bytes.
+ * Charge/spin and coordinate physics are validated only when a system is created.
+ * @outputs On success publishes shell/primitive/AO counts, raw expansion bytes and borrowed
+ * canonical name/checksum. maximum_expansion_bytes does not limit a metadata query.
+ * @lifetime Inputs are borrowed for the call; records must not overlap. Returned strings
+ * borrow immutable library storage, not a context or caller input. Extension tails stay intact.
+ * @errors ABI_MISMATCH for incompatible records; INVALID_ARGUMENT for malformed dimensions,
+ * alias/alignment/overflow, missing data or pack mismatch. Refusal leaves output unchanged.
+ * @execution Synchronous host metadata only; reads atom identities, never coordinates,
+ * numerical execution, runtime JSON/Python, an accelerator or a provider.
+ * @units Counts are dimensionless and expansion bytes cover only detached raw shell/primitive
+ * buffers, excluding allocator metadata, caller atoms and normalized system/provider storage.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_builtin_basis_query_v1(
+    const generativeqc_builtin_basis_descriptor_v1* descriptor,
+    generativeqc_builtin_basis_capacity_v1* capacity);
+
+/** @native-contract generativeqc_system_create_builtin_basis_v1
+ * @behavior Materialize a named shared AOT basis and call the existing system validation/
+ * normalization owner; no alternate scientific formula or custom-basis substitution is used.
+ * @inputs Live context, versioned descriptor and disjoint nonnull system output slot. Coordinates,
+ * charge/spin and backend source limits obey system_create. Optional checksum binds exact pack
+ * contents. Zero maximum_expansion_bytes is unbounded; otherwise it bounds raw expansion only.
+ * @outputs Publishes a newly owned system only after complete success. Refusal preserves the
+ * caller output slot. Release a successful handle with system_destroy; prepared data is copied.
+ * @lifetime Descriptor/atom/name/checksum buffers are borrowed only during the call. The returned
+ * system owns detached normalized state; its lifetime does not depend on those inputs.
+ * @errors ABI_MISMATCH for record versions; INVALID_ARGUMENT for malformed/aliased input,
+ * missing data, pack or physical validation; OUT_OF_MEMORY below raw expansion capacity or on
+ * allocation failure. Existing backend restrictions propagate; never retry another basis/CPU.
+ * @execution Synchronous serialized context use, including destruction. Admission precedes raw
+ * expansion allocation and coordinate reads. This constructs metadata, not energy/integrals.
+ * @units Coordinates are Bohr, Gaussian exponents inverse Bohr squared, and the native basis
+ * normalization contract is unchanged. Raw expansion capacity is not total system/RSS authority.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_system_create_builtin_basis_v1(
+    generativeqc_context* context, const generativeqc_builtin_basis_descriptor_v1* descriptor,
+    generativeqc_system** system);
+
 /** Release a system; prepared consumers retain their own copied system data. */
 /** @native-contract generativeqc_system_destroy
  * @behavior Release the system exactly once.

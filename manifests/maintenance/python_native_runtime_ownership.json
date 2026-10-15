@@ -895,22 +895,32 @@
           "path": "python/generativeqc/basis.py",
           "symbol": "BasisSet",
           "classification": "wrapper"
+        },
+        {
+          "path": "python/generativeqc/_basis_native.py",
+          "symbol": "create_system",
+          "classification": "wrapper"
         }
       ],
       "native_scientific_sources": [
         "src/methods/generated_method_manifest.hpp",
         "src/methods/registry.cpp",
         "src/molecule/basis_catalog.cpp",
+        "src/api/c_api_basis_catalog.cpp",
         "src/cli/native_basis.cpp"
       ],
       "native_callers": [
-        "src/cli/main.cpp"
+        "src/cli/main.cpp",
+        "src/api/c_api_basis_catalog.cpp"
       ],
       "remaining_python_runtime": [
-        "Python built-in Calculator construction still imports compiler MethodIR/model resolution. Native CLI expands built-in bases through the shared molecule catalog; its installed bridge and Python cutover remain pending. Custom Python MethodIR remains explicit compiler work."
+        "Python built-in Calculator construction still imports compiler MethodIR/model resolution and validates consumer metadata. Matching immutable built-in system materialization uses the installed shared AOT catalog with native normalization; old libraries, custom records and correlation-only auxiliary admission retain explicit descriptor compatibility. Offline basis metadata and custom Python MethodIR remain separate owners."
       ],
       "tests": [
         "tests/python/test_cli_method_catalog_codegen.py",
+        "tests/native/test_builtin_basis_sdk.cpp",
+        "tests/native/check_basis_catalog_pack.py",
+        "tests/python/test_native_basis_catalog.py",
         "tests/python/test_api_ownership_boundaries.py"
       ],
       "trackers": [

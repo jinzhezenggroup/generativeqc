@@ -30,6 +30,10 @@ struct Capacity {
 };
 
 /** Borrowed names refer to immutable AOT storage, independently of CLI/Python. */
+GENERATIVEQC_API std::size_t bundled_basis_count() noexcept;
+GENERATIVEQC_API std::string_view bundled_basis_name(std::size_t index) noexcept;
+GENERATIVEQC_API std::string_view bundled_basis_pack_checksum() noexcept;
+GENERATIVEQC_API std::string_view canonical_basis_name(std::string_view name);
 GENERATIVEQC_API std::vector<std::string_view> bundled_basis_names();
 GENERATIVEQC_API bool bundled_basis_supports(std::string_view name, int atomic_number);
 

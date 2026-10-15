@@ -9,6 +9,7 @@
 #include "molecule/basis.hpp"
 
 namespace generativeqc::molecule::catalog {
+static_assert(basis_generated::kBases.size() <= std::numeric_limits<std::uint32_t>::max());
 namespace {
 
 const basis_generated::BasisRow* find_basis(std::string_view name) {
@@ -29,6 +30,20 @@ void add(std::size_t& count, std::size_t increment, std::size_t maximum) {
 }
 
 }  // namespace
+
+std::size_t bundled_basis_count() noexcept { return basis_generated::kBases.size(); }
+
+std::string_view bundled_basis_name(std::size_t index) noexcept {
+  return index < bundled_basis_count() ? basis_generated::kBases[index].name : std::string_view{};
+}
+
+std::string_view bundled_basis_pack_checksum() noexcept { return basis_generated::kPackChecksum; }
+
+std::string_view canonical_basis_name(std::string_view name) {
+  const auto* basis = find_basis(name);
+  if (!basis) throw std::invalid_argument("unknown bundled basis: " + std::string(name));
+  return basis->name;
+}
 
 std::vector<std::string_view> bundled_basis_names() {
   std::vector<std::string_view> result;

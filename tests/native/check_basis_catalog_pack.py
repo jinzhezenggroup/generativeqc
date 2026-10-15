@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -11,7 +12,12 @@ from pathlib import Path
 def main() -> None:
     """Keep full semantic input coverage without pinning generator/body spelling."""
     executable, pack_path = sys.argv[1:]
-    pack = json.loads(Path(pack_path).read_text())["bases"]
+    payload = json.loads(Path(pack_path).read_text())
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    checksum = hashlib.sha256(encoded.encode()).hexdigest()
+    pack = payload["bases"]
     completed = subprocess.run(
         [executable, "--dump"],
         check=True,
@@ -22,6 +28,10 @@ def main() -> None:
     actual = {}
     for line in completed.stdout.splitlines():
         row = json.loads(line)
+        if row["pack_checksum"] != checksum:
+            raise AssertionError(
+                "native catalog provenance differs from canonical pack"
+            )
         key = (row["basis"], row["atomic_number"])
         if key in actual:
             raise AssertionError(f"duplicate native catalog record: {key}")

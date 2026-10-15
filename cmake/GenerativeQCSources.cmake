@@ -18,6 +18,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_gcp.cpp
     src/api/c_api_common.cpp
     src/api/c_api_context.cpp
+    src/api/c_api_basis_catalog.cpp
     src/api/c_api_resources.cpp
     src/api/c_api_resource_planning.cpp
     src/api/c_api_tuning.cpp

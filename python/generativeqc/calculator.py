@@ -1514,14 +1514,15 @@ class Calculator:
             "delta_admitted_quartet_tiles": value.delta_admitted_quartet_tiles,
         }
 
-    def _shells_for_atoms(
+    def _basis_for_atoms(
         self,
         atoms: Sequence[Atom],
         basis: str | Sequence[Shell] | None = None,
         *,
         operator: str | None = None,
         derivative_order: int = 0,
-    ) -> tuple[Shell, ...]:
+    ) -> BasisSet | tuple[Shell, ...]:
+        """Validate consumer metadata without expanding numerical basis buffers."""
         selected_basis = self._basis if basis is None else basis
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
@@ -1540,6 +1541,19 @@ class Calculator:
             consumer=self._auxiliary_basis_consumer(selected_operator)
             if auxiliary
             else None,
+        )
+        return selected_basis
+
+    def _shells_for_atoms(
+        self,
+        atoms: Sequence[Atom],
+        basis: str | Sequence[Shell] | None = None,
+        *,
+        operator: str | None = None,
+        derivative_order: int = 0,
+    ) -> tuple[Shell, ...]:
+        selected_basis = self._basis_for_atoms(
+            atoms, basis, operator=operator, derivative_order=derivative_order
         )
         return (
             selected_basis.shells_for(atoms)
@@ -1879,6 +1893,18 @@ class Calculator:
         selected_basis = self._basis if basis is None else basis
         if not isinstance(selected_basis, BasisSet):
             selected_basis = _snapshot_basis(selected_basis, self._representation_name)
+        from . import _basis_native
+
+        correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
+            "df_metric"
+        )
+        if not correlation_auxiliary and _basis_native.eligible(
+            self._library, selected_basis
+        ):
+            self._basis_for_atoms(atoms, basis)
+            return _basis_native.create_system(
+                self._library, context, selected_basis, atoms, charge, multiplicity
+            )
         shells = self._shells_for_atoms(atoms, basis)
         checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
         checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)

@@ -223,6 +223,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_spherical_eri_projection_tests tests/native/test_spherical_eri_projection.cpp)
   generativeqc_native_test(generativeqc_basis_contract_tests tests/native/test_basis_contract.cpp)
   generativeqc_native_test(generativeqc_basis_catalog_tests tests/native/test_basis_catalog.cpp)
+  generativeqc_native_test(generativeqc_builtin_basis_sdk_tests tests/native/test_builtin_basis_sdk.cpp
+                          NO_SRC_INCLUDE)
   add_test(NAME generativeqc_basis_catalog_pack_parity
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/check_basis_catalog_pack.py"
             "$<TARGET_FILE:generativeqc_basis_catalog_tests>"

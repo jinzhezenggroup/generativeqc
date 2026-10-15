@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -73,7 +74,10 @@ def load_pack(
     return result
 
 
-def emit(pack: list[tuple[str, list[tuple[int, int, list[tuple[str, str]]]]]]) -> str:
+def emit(
+    pack: list[tuple[str, list[tuple[int, int, list[tuple[str, str]]]]]],
+    pack_checksum: str,
+) -> str:
     primitives: list[tuple[str, str]] = []
     shells: list[tuple[int, int, int, int]] = []
     bases: list[tuple[str, int, int]] = []
@@ -99,6 +103,8 @@ def emit(pack: list[tuple[str, list[tuple[int, int, list[tuple[str, str]]]]]]) -
         "#include <string_view>",
         "",
         "namespace generativeqc::molecule::basis_generated {",
+        "",
+        f'inline constexpr std::string_view kPackChecksum = "{pack_checksum}";',
         "",
         "struct PrimitiveRow { double exponent; double coefficient; };",
         "struct ShellRow {",
@@ -157,7 +163,12 @@ def main() -> None:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    text = emit(load_pack(args.input))
+    payload = json.loads(args.input.read_text(encoding="utf-8"))
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    checksum = hashlib.sha256(encoded.encode()).hexdigest()
+    text = emit(load_pack(args.input), checksum)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if not args.output.exists() or args.output.read_text(encoding="utf-8") != text:
         args.output.write_text(text, encoding="utf-8")

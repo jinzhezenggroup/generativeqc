@@ -72,6 +72,43 @@ failed native status calls. `Error::status()` preserves the status code.
 `Calculation::execute` checks supported properties; omitted forces are
 represented by `std::optional` rather than an all-zero vector.
 
+## Shared built-in basis catalog
+
+`generativeqc_builtin_basis_count_v1` and `generativeqc_builtin_basis_name_v1`
+discover immutable AOT names shared with the native CLI, without Python, JSON,
+provider initialization or a context. Discovery is not per-method/backend
+scientific admission. Returned names borrow loaded-library storage.
+
+`generativeqc_builtin_basis_query_v1` validates name/representation, atom
+identities, index widths and optional canonical pack SHA256. It reports detached
+shell/primitive/AO counts and raw expansion bytes without reading coordinates.
+The versioned query result also borrows canonical name/pack-checksum strings;
+output must be disjoint from every input, including descriptor extensions.
+Failure leaves the result unchanged, and successful writes preserve extension
+tails. Query is not restricted by the requested execution expansion limit.
+
+`generativeqc_system_create_builtin_basis_v1` admits that raw expansion before
+allocating it or reading coordinate physics, then delegates normalized system
+creation to the existing `generativeqc_system_create` owner. Zero
+`maximum_expansion_bytes` is unbounded. The declaration excludes caller atoms,
+allocator metadata, normalized system and provider storage; it is not complete
+system/RSS resource authority. Charge/spin, normalization and backend source
+limits are unchanged. Missing/mismatched packs and execution failures do not
+substitute another basis or backend. A failure leaves the caller handle slot
+unchanged; release successful owned handles with `generativeqc_system_destroy`.
+
+Custom canonical records, general-contraction metadata and ECP interchange remain
+separate explicit paths. Python `Calculator` system materialization selects this
+bridge only for the complete immutable built-in record and matching canonical
+pack provenance, using its already-selected library. It marshals atoms rather
+than expanding Python primitive/shell arrays. Selected native ABI, provenance or
+execution failures propagate without a Python-science retry. Old libraries,
+custom records (even with a built-in display name) and the correlation-only
+auxiliary-through-g domain retain their explicit existing descriptor paths.
+Offline immutable basis APIs, consumer capability checks and model identity
+resolution remain Python metadata work; this is not whole model-resolution or
+complete resource-authority migration.
+
 ## Units and failure semantics
 
 Coordinates use **Bohr**, energies **Hartree**, and forces **Hartree/Bohr**
