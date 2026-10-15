@@ -12,8 +12,8 @@
   "automatic_pure_j_lower_ao_boundary": 544,
   "files": {
     "README.md": {
-      "bytes": 6513,
-      "sha256": "3c8908dc500518eaabf29e33765d1b2d921d6fa6c0542663d5aae625d5282e60"
+      "bytes": 7043,
+      "sha256": "bd37dd73782e281cc4e720ecf9c5c6a0fdbd6ebd6bff4c51d35343ebeadfdc8f"
     },
     "df-cold-warm.svg": {
       "bytes": 85194,
@@ -48,8 +48,8 @@
       "sha256": "b5d0ee2994b10d9ecbacd0cbe46a2362cd9a1d156e082af6ea20716213d1e4b1"
     },
     "refresh.py": {
-      "bytes": 5267,
-      "sha256": "85515de23b230522cabd1fe5735663fba8964626652a7b32f71a1772185c2d32"
+      "bytes": 5890,
+      "sha256": "5b3256be9ec6e89ab1e0fea5273a7dedde4e63fbd6ac57bfeaddf0336d9ad168"
     },
     "source.patch.xz": {
       "bytes": 3940,

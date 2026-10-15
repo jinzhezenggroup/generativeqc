@@ -78,3 +78,53 @@ def test_explicit_candidate_schedules_cannot_qualify_default_evidence(
     (directory / "native.json").write_text(json.dumps(document))
     with pytest.raises(ValueError, match="declared defaults"):
         reduce_campaign(tmp_path)
+
+
+@pytest.mark.parametrize("phase", ["cold", "warm", "moved", "moved-warm"])
+@pytest.mark.parametrize("changed_work", [False, True])
+def test_endpoint_regression_cannot_be_waived_by_changed_work(
+    phase: str, changed_work: bool
+) -> None:
+    """Changed SCF work limits attribution but cannot waive a slower endpoint."""
+    compare = runpy.run_path(str(REDUCER))["compare"]
+    verify = runpy.run_path(str(REDUCER.with_name("refresh.py")))["verify_comparison"]
+    control = population(10.0)
+    candidate = population(9.81)
+    for row in candidate["records"]:
+        if row["phase"] == phase:
+            row["complete_seconds"] = 11.0
+            if changed_work:
+                row["iterations"] = row["fock_builds"] = 2
+    comparison = {
+        "density_fitting": "none",
+        "atoms": 96,
+        "arms": {
+            "control": {"engines": {"native": control}},
+            "candidate": {"engines": {"native": candidate}},
+        },
+        "phases": compare(control, candidate),
+    }
+    with pytest.raises(ValueError, match="complete-endpoint nonregression"):
+        verify(comparison)
+
+
+def test_small_positive_benefit_and_work_attribution_remain_separate() -> None:
+    """The benefit label is not an enablement gate; retain unmatched cold work."""
+    compare = runpy.run_path(str(REDUCER))["compare"]
+    verify = runpy.run_path(str(REDUCER.with_name("refresh.py")))["verify_comparison"]
+    control = population(10.0)
+    candidate = population(9.81)
+    candidate["records"][0]["iterations"] = 2
+    comparison = {
+        "density_fitting": "none",
+        "atoms": 48,
+        "arms": {
+            "control": {"engines": {"native": control}},
+            "candidate": {"engines": {"native": candidate}},
+        },
+        "phases": compare(control, candidate),
+    }
+    verify(comparison)
+    comparison["phases"]["cold"]["passes_nonregression_gate"] = False
+    with pytest.raises(ValueError, match="statistics differ"):
+        verify(comparison)
