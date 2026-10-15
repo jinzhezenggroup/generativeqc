@@ -84,6 +84,7 @@ endfunction()
 function(generativeqc_add_posthf_cc_sources target)
   target_sources(${target} PRIVATE
     src/methods/mp2_method.cpp
+    src/methods/correlated_batch.cpp
     src/methods/ump2_method.cpp
     src/methods/rccsd_method.cpp
     src/methods/uccsd_method.cpp

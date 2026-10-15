@@ -19,6 +19,7 @@
 #include "cc/triples_cuda.hpp"
 #include "generated_rccsdt_cpu.hpp"
 #include "methods/batch_capabilities.hpp"
+#include "methods/correlated_batch.hpp"
 #include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/rccsd_method.hpp"
@@ -46,25 +47,7 @@ std::size_t checked_mul(std::size_t a, std::size_t b) {
   return a * b;
 }
 
-generativeqc_status item_exception_status() {
-  try {
-    throw;
-  } catch (const MethodError& error) {
-    return error.status();
-  } catch (const std::bad_alloc&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::length_error&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::invalid_argument&) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  } catch (const std::exception&) {
-    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  } catch (...) {
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
-}
-
-class RccsdtPrepared final : public PreparedCalculation {
+class RccsdtPrepared final : public PreparedCalculation, public ReferenceSeededCalculation {
  public:
   RccsdtPrepared(Capabilities capabilities, runtime::ExecutionContext execution,
                  core::System system, const generativeqc_method_descriptor& descriptor)
@@ -100,6 +83,11 @@ class RccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
   }
 
+  Result execute_seeded_reference(bool compute_forces, const scf::HfWarmState* seed, bool* fallback,
+                                  std::optional<scf::HfWarmState>* candidate) override {
+    return execute_with_reference_seed(compute_forces, seed, fallback, candidate);
+  }
+
   Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
@@ -109,8 +97,10 @@ class RccsdtPrepared final : public PreparedCalculation {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr, components);
   }
 
-  void transfer_cuda_reference_plan_to(RccsdtPrepared& target) noexcept {
-    target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
+  void transfer_reference_execution_to(ReferenceSeededCalculation& target) override {
+    auto* compatible = dynamic_cast<RccsdtPrepared*>(&target);
+    if (!compatible) throw std::logic_error("incompatible correlated reference owner");
+    compatible->cuda_reference_plan_ = std::move(cuda_reference_plan_);
   }
 
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
@@ -532,144 +522,6 @@ class RccsdtPrepared final : public PreparedCalculation {
   mutable std::mutex mutex_;
 };
 
-class RccsdtPreparedBatch final : public PreparedBatch,
-                                  public BatchWarmStarts,
-                                  public BatchCorrelationDiagnostics,
-                                  public BatchCcPerformanceDiagnostics {
- public:
-  RccsdtPreparedBatch(Capabilities capabilities, core::ContextState& context,
-                      std::vector<core::System> systems,
-                      const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : PreparedBatch(context.requested_backend, context.device_id),
-        capabilities_(capabilities),
-        execution_(context),
-        context_(&context),
-        systems_(std::move(systems)),
-        warm_starts_enabled_(warm_starts_enabled),
-        warm_states_(systems_.size()) {
-    descriptor_ = descriptor;
-    descriptor_.density_fitting_auxiliary_basis = nullptr;
-    descriptor_.ks_options = nullptr;
-    owners_.reserve(systems_.size());
-    owner_coordinates_.reserve(systems_.size());
-    for (const auto& system : systems_) {
-      owners_.push_back(prepare_rccsdt_calculation(capabilities_, *context_, system, descriptor_));
-      owner_coordinates_.push_back(warm_reference::coordinates(system));
-    }
-  }
-
-  std::size_t size() const noexcept override { return systems_.size(); }
-
-  void invalidate_result() override {
-    for (auto& owner : owners_) owner->invalidate_result();
-  }
-
-  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
-                                            bool compute_forces) override {
-    if (!coordinates.empty() && coordinates.size() != size())
-      throw std::invalid_argument("RCCSD(T) batch coordinates do not match system count");
-
-    std::vector<BatchItemResult> results(size());
-    for (std::size_t index = 0; index < size(); ++index) {
-      auto& result = results[index];
-      result.bucket_id = 0;
-      result.calculation.energy = std::numeric_limits<double>::quiet_NaN();
-      result.calculation.executed_backend = execution_.backend();
-      try {
-        auto target = systems_[index];
-        auto target_coordinates = warm_reference::coordinates(target);
-        if (!coordinates.empty() && coordinates[index]) {
-          if (!warm_reference::valid_coordinates(*coordinates[index], target))
-            throw std::invalid_argument("invalid RCCSD(T) batch item coordinates");
-          target_coordinates = *coordinates[index];
-          warm_reference::set_coordinates(target, target_coordinates);
-        }
-        if (target_coordinates != owner_coordinates_[index]) {
-          auto candidate =
-              prepare_rccsdt_calculation(capabilities_, *context_, target, descriptor_);
-          auto& current_owner = static_cast<RccsdtPrepared&>(*owners_[index]);
-          auto& candidate_owner = static_cast<RccsdtPrepared&>(*candidate);
-          current_owner.transfer_cuda_reference_plan_to(candidate_owner);
-          owners_[index] = std::move(candidate);
-          owner_coordinates_[index] = std::move(target_coordinates);
-        }
-        const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();
-        result.warm_start_used = has_warm_state;
-        bool warm_start_fallback = false;
-        std::optional<scf::HfWarmState> next_warm_state;
-        auto& owner = static_cast<RccsdtPrepared&>(*owners_[index]);
-        result.calculation = owner.execute_with_reference_seed(
-            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr, &warm_start_fallback,
-            warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
-        result.warm_start_fallback = warm_start_fallback;
-        if (next_warm_state) warm_states_[index].swap(next_warm_state);
-        result.status = result.calculation.convergence.converged
-                            ? GENERATIVEQC_STATUS_SUCCESS
-                            : GENERATIVEQC_STATUS_NOT_CONVERGED;
-      } catch (...) {
-        result.status = item_exception_status();
-      }
-    }
-    return results;
-  }
-
-  std::optional<generativeqc_correlation_diagnostic> correlation_diagnostic(
-      std::size_t index) const override {
-    if (index >= owners_.size())
-      throw std::invalid_argument("correlation diagnostic batch index is out of range");
-    return owners_[index]->correlation_diagnostic();
-  }
-  std::optional<CcPerformanceDiagnostic> cc_performance_diagnostic(
-      std::size_t index) const override {
-    if (index >= owners_.size())
-      throw std::invalid_argument("CC performance diagnostic batch index is out of range");
-    return owners_[index]->cc_performance_diagnostic();
-  }
-
-  void clear_warm_starts() override {
-    for (auto& state : warm_states_) state.reset();
-  }
-  std::size_t warm_density_size(std::size_t index) const override {
-    const auto n = molecule::ao_count(systems_.at(index));
-    if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n)
-      throw std::invalid_argument("RCCSD(T) warm density dimensions overflow");
-    return posthf::checked_mul(n, n);
-  }
-  const std::optional<scf::HfWarmState>& warm_state(std::size_t index) const override {
-    return warm_states_.at(index);
-  }
-  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
-    if (!warm_starts_enabled_ || states.size() != size())
-      throw std::invalid_argument(
-          "checkpoint restore requires a matching warm-enabled RCCSD(T) batch");
-    for (std::size_t index = 0; index < size(); ++index) {
-      if (!states[index]) continue;
-      const auto& state = *states[index];
-      warm_reference::validate_checkpoint(systems_[index], state, "RCCSD(T)");
-    }
-    for (std::size_t index = 0; index < size(); ++index)
-      if (states[index]) warm_states_[index].swap(states[index]);
-  }
-  void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
-  runtime::ExecutionResourceSnapshot execution_resources(
-      std::size_t index) const noexcept override {
-    if (index >= owners_.size() || !owners_[index]) return {};
-    return owners_[index]->execution_resources();
-  }
-
- private:
-  Capabilities capabilities_;
-  runtime::ExecutionContext execution_;
-  core::ContextState* context_{};
-  std::vector<core::System> systems_;
-  bool warm_starts_enabled_{};
-  bool warm_start_updates_enabled_{true};
-  std::vector<std::optional<scf::HfWarmState>> warm_states_;
-  generativeqc_method_descriptor descriptor_{};
-  std::vector<std::unique_ptr<PreparedCalculation>> owners_;
-  std::vector<std::vector<double>> owner_coordinates_;
-};
-
 }  // namespace
 
 generativeqc_status validate_rccsdt_system(generativeqc_method method, const core::System& system,
@@ -715,8 +567,10 @@ std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(
                         "RCCSD(T) prepared batch requires one homogeneous (nocc,nvir) shape; split "
                         "ragged groups");
   }
-  return std::make_unique<RccsdtPreparedBatch>(capabilities, context, std::move(systems),
-                                               descriptor, warm_starts_enabled);
+  return prepare_correlated_batch(capabilities, context, std::move(systems), descriptor,
+                                  (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0,
+                                  prepare_rccsdt_calculation, "RCCSD(T)", GENERATIVEQC_METHOD_RHF,
+                                  false, true);
 }
 
 }  // namespace generativeqc::methods::detail

@@ -29,6 +29,8 @@
 #include "methods/dft_method_owner_port.hpp"
 #include "methods/dft_method_preparation.hpp"
 #include "methods/exact_density_response_cache.hpp"
+#include "methods/execution_failure.hpp"
+#include "methods/geometry.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "runtime/df_progress_trace.hpp"
@@ -2158,65 +2160,6 @@ class KsPreparedState final : public KsSingleOwnerPort {
 #endif
 };
 
-std::vector<double> positions(const core::System& system) {
-  std::vector<double> out;
-  out.reserve(3 * system.atoms.size());
-  for (const auto& atom : system.atoms)
-    out.insert(out.end(), atom.position.begin(), atom.position.end());
-  return out;
-}
-
-bool valid_positions(const std::vector<double>& coordinates, const core::System& system) {
-  return coordinates.size() == 3 * system.atoms.size() &&
-         std::all_of(coordinates.begin(), coordinates.end(),
-                     [](double value) { return std::isfinite(value); });
-}
-
-void set_positions(core::System& system, const std::vector<double>& coordinates) {
-  for (std::size_t i = 0; i < system.atoms.size(); ++i)
-    std::copy_n(coordinates.begin() + 3 * i, 3, system.atoms[i].position.begin());
-}
-
-generativeqc_status item_exception_status() {
-  try {
-    throw;
-  } catch (const MethodError& error) {
-    return error.status();
-  } catch (const generativeqc::Error& error) {
-    return error.status();
-  } catch (const std::bad_alloc&) {
-    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-  } catch (const std::invalid_argument&) {
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  } catch (const std::exception&) {
-    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
-  } catch (...) {
-    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
-  }
-}
-
-bool retryable_seed_failure(generativeqc_status status, const std::exception_ptr& failure) {
-  if (status != GENERATIVEQC_STATUS_NOT_CONVERGED &&
-      status != GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
-      status != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
-    return false;
-  if (!failure) return true;
-  try {
-    std::rethrow_exception(failure);
-  } catch (const MethodError&) {
-    return true;
-  } catch (const generativeqc::Error&) {
-    return true;
-  } catch (const std::invalid_argument&) {
-    return true;
-  } catch (...) {
-    // The public status mapper also classifies untyped runtime exceptions as
-    // numerical failures. CUDA graph launch errors use that path, so status
-    // alone cannot authorize a second solve after possibly submitted work.
-    return false;
-  }
-}
-
 /** Independent native KS owners, with ordinary-stream round-robin CUDA work.
  * Geometry is rebuilt per item, while model/basis/charge/spin remain immutable.
  * No HF graph or Python calculation loop participates in this schedule. */
@@ -2309,19 +2252,11 @@ class KsPreparedBatch final : public PreparedBatch,
     std::vector<scf::HfWarmState> candidates(size());
     for (std::size_t i = 0; i < size(); ++i) {
       auto& result = results[i];
-      result.bucket_id = i;  // One ordinary stream/owner per stable input slot.
-      result.calculation.executed_backend = backend_;
-      result.calculation.energy = std::numeric_limits<double>::quiet_NaN();
       try {
-        auto target = systems_[i];
-        if (!coordinates.empty() && coordinates[i]) {
-          if (!valid_positions(*coordinates[i], target))
-            throw std::invalid_argument("invalid KS batch item coordinates");
-          set_positions(target, *coordinates[i]);
-        }
+        auto target = geometry::bind_batch_item(systems_[i], coordinates, i, result, backend_, i);
         auto& item = items_[i];
-        candidates[i].coordinates = positions(target);
-        if (!item.plan || positions(item.plan->system()) != candidates[i].coordinates) {
+        candidates[i].coordinates = geometry::coordinates(target);
+        if (!item.plan || geometry::coordinates(item.plan->system()) != candidates[i].coordinates) {
           // Preserve the last GOOD seed before freeing its device owner. This
           // explicit rebuild download is never part of routine SCF iterations.
           materialize_warm(i);
@@ -2536,12 +2471,12 @@ class KsPreparedBatch final : public PreparedBatch,
       if (!states[i]) continue;
       const auto& state = *states[i];
       if (state.density.size() != warm_density_size(i) ||
-          !valid_positions(state.coordinates, systems_[i]) || state.iterations < 0 ||
+          !geometry::valid_coordinates(state.coordinates, systems_[i]) || state.iterations < 0 ||
           !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
           !std::isfinite(state.density_rms) || state.density_rms < 0)
         throw std::invalid_argument("invalid KS seed dimensions or diagnostics");
       auto source = systems_[i];
-      set_positions(source, state.coordinates);
+      geometry::set_coordinates(source, state.coordinates);
       scf::initial_guess::EigenOperation eigen;
 #if GENERATIVEQC_HAS_CUDA
       if (auto* cuda = items_[i].plan ? items_[i].plan->cuda_plan() : nullptr)
