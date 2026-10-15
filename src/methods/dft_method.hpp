@@ -8,6 +8,7 @@
 
 #include "dft/cuda_ks_final_state.hpp"
 #include "dft/cuda_ks_resident_frame.hpp"
+#include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/cuda_stationary_controller.hpp"
 #include "dft/grid.hpp"
@@ -166,6 +167,15 @@ generativeqc_status dft_cuda_resident_orbital_frame(PreparedBatch& batch, std::s
                                                     const dft::CudaKsFinalStateToken& expected,
                                                     dft::CudaKsResidentOrbitalFrameBinding& binding,
                                                     std::string& detail, bool prepare = false);
+
+/** Borrow the actual XC owner's packed basis/quadrature and the exact accepted
+ * density after resident canonical preparation. No device/panel allocation, transfer or
+ * scientific work; stale/missing/CPU/host-unfused owners clear the binding.
+ * The enclosing endpoint retains the batch and excludes concurrent calls. */
+generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     dft::CudaKsResidentGridBinding& binding,
+                                                     std::string& detail);
 
 /** Borrow the accepted spin density directly from the exact CUDA KS
  * final-state owner. No transfer or synchronization is performed. source_stream

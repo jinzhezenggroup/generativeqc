@@ -10,6 +10,8 @@ import json
 import os
 import subprocess
 import tempfile
+import typing
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +26,9 @@ from generativeqc_compiler.method.stationary_grid_second import (
 )
 from generativeqc_compiler.method.wb97mv_grid_response import grid_maps, point_program
 from generativeqc_compiler.tensor import execute
+
+if typing.TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 def _fixture(spins: int = 2, points: int = 9, *, vacuum: bool = False) -> dict:
@@ -256,7 +261,11 @@ def _native(
 
 
 def _independent_potential(
-    fixture: dict, density: np.ndarray, *, wide: Path | None = None
+    fixture: dict,
+    density: np.ndarray,
+    *,
+    wide: Path | None = None,
+    libxc_code: str = "wb97m-v",
 ) -> np.ndarray:
     """Pinned upstream potentials plus independent real-space VV10 derivatives.
 
@@ -289,7 +298,7 @@ def _independent_potential(
         )
         rho = fields if fixture["spins"] == 2 else fields[0]
         _, values, _, _ = libxc.eval_xc(
-            "wb97m-v", rho, spin=fixture["spins"] - 1, deriv=1
+            libxc_code, rho, spin=fixture["spins"] - 1, deriv=1
         )
         vrho, vsigma, _, vtau = values
     coefficients = np.zeros_like(fields)
@@ -470,3 +479,140 @@ def test_native_host_only_contract(probe: Path) -> None:
         [str(probe), "contract"], text=True, capture_output=True, check=True, timeout=20
     )
     assert json.loads(result.stdout) == {"contract": True}
+
+
+@contextmanager
+def _signed_density_libxc() -> Iterator[str]:
+    """Independent raw Libxc extension, without the optional FHC work projection.
+
+    The compiler's declared work model floors rho/sigma/tau but does not project
+    arbitrary signed D directions onto the PSD cone. Libxc's default FHC clamp
+    changes this extension at rank-one molecular densities. Customize separate
+    reference handles only; do not mutate the default functional or AD algebra.
+    Physical PSD-path tests retain the completely unmodified default oracle.
+    """
+    import ctypes
+
+    libxc = pytest.importorskip("pyscf.dft.libxc")
+    assert libxc.__version__ == "7.0.0"
+    setter = libxc._itrf.xc_func_set_fhc_enforcement
+    setter.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    setter.restype = None
+
+    def disable_projection(cache: typing.Any, _objects: typing.Any, _spin: int) -> None:
+        for handle in cache.xc_objs:
+            setter(handle, 0)
+
+    name = "GQC_WB97MV_SIGNED_REFERENCE"
+    libxc.register_custom_functional_(name, "wb97m-v", callback=disable_projection)
+    try:
+        yield name
+    finally:
+        libxc.unregister_custom_functional_(name)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("physical", (False, True))
+def test_live_molecular_grid_reference_and_response(spins: int, physical: bool) -> None:
+    """Actual native WB97M-V SCF storage, not a fixture authenticator.
+
+    Only test observations cross to Python. The entire subprocess, including
+    native SCF, canonical proof, grid preparation/action and stale publication
+    rejection, runs with Python/compiler discovery unavailable. This qualifies
+    the fixed-grid component, not nuclear motion or a complete Hessian.
+    """
+    executable = os.environ.get("GENERATIVEQC_KS_WB97MV_GRID_PROBE")
+    if not executable:
+        pytest.skip(
+            "set GENERATIVEQC_KS_WB97MV_GRID_PROBE for native molecular binding"
+        )
+    path = Path(executable).resolve()
+    assert path.is_file()
+    environment = dict(
+        os.environ,
+        PATH="/nonexistent",
+        PYTHONHOME="/nonexistent",
+        PYTHONPATH="/nonexistent",
+    )
+    process = subprocess.run(
+        [
+            str(path),
+            "rks" if spins == 1 else "uks",
+            *(["physical"] if physical else []),
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=180,
+        env=environment,
+    )
+    result = json.loads(process.stdout)
+    assert result["revoked_without_publication"]
+    assert result["spins"] == spins
+    atoms, primitives, nao = (result[name] for name in ("atoms", "primitives", "nao"))
+    packed = np.array(result["basis"])
+    centers = packed[: 3 * atoms].reshape(atoms, 3)
+    contractions = packed[3 * atoms : 3 * atoms + 2 * primitives].reshape(primitives, 2)
+    records = packed[3 * atoms + 2 * primitives :].reshape(nao, 16)
+    coordinates = np.array(result["points"]).reshape(result["point_count"], 3)
+    jets = np.zeros((4, len(coordinates), nao))
+    for orbital, record in enumerate(records):
+        atom, begin, count, terms = record[:4].astype(int)
+        assert terms == 1 and np.all(record[4:7] == 0)
+        displacement = coordinates - centers[atom]
+        radius_squared = np.sum(displacement**2, axis=1)
+        for exponent, weight in contractions[begin : begin + count]:
+            gaussian = record[7] * weight * np.exp(-exponent * radius_squared)
+            jets[0, :, orbital] += gaussian
+            jets[1:, :, orbital] -= 2 * exponent * displacement.T * gaussian
+    matrix_shape = (spins, nao, nao)
+    fixture = {
+        "spins": spins,
+        "jets": jets,
+        "points": coordinates,
+        "weights": np.array(result["weights"]),
+        "density": np.array(result["density"]).reshape(matrix_shape),
+        "direction": np.array(result["direction"]).reshape(matrix_shape),
+    }
+    curvature = np.array(result["curvature"]).reshape(matrix_shape)
+    for block in fixture["direction"]:
+        spectrum = np.linalg.eigvalsh(block)
+        assert spectrum[0] < 0 < spectrum[-1]
+    oracle = nullcontext("wb97m-v") if physical else _signed_density_libxc()
+    with oracle as libxc_code:
+        potential = _independent_potential(
+            fixture, fixture["density"], libxc_code=libxc_code
+        )
+        np.testing.assert_allclose(
+            np.array(result["potential"]).reshape(matrix_shape),
+            potential,
+            atol=3e-10,
+            rtol=3e-9,
+        )
+        for step in (1e-3, 3e-4):
+            displaced = [
+                fixture["density"]
+                + sign * step * fixture["direction"]
+                + step**2 * curvature
+                for sign in (1, -1)
+            ]
+            if physical:
+                for density in displaced:
+                    assert np.linalg.eigvalsh(density).min() >= -2e-14
+            plus, minus = (
+                _independent_potential(
+                    fixture,
+                    density,
+                    libxc_code=libxc_code,
+                )
+                for density in displaced
+            )
+            np.testing.assert_allclose(
+                np.array(result["response"]).reshape(matrix_shape),
+                (plus - minus) / (2 * step),
+                atol=3e-9,
+                rtol=2e-6,
+            )
+    active = np.count_nonzero(_fields(jets, fixture["density"]).sum(axis=0)[0] >= 1e-8)
+    assert result["active"] == active
+    assert result["reference_pairs"] == result["response_pairs"] == active**2

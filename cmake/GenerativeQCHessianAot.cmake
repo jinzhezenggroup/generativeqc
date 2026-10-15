@@ -88,5 +88,8 @@ function(generativeqc_add_hessian_aot target inventory)
     add_executable(generativeqc_cuda_wb97mv_grid_probe
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_wb97mv_grid_probe.cpp")
     target_link_libraries(generativeqc_cuda_wb97mv_grid_probe PRIVATE ${target})
+    add_executable(generativeqc_ks_wb97mv_grid_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/ks_wb97mv_grid_probe.cpp")
+    target_link_libraries(generativeqc_ks_wb97mv_grid_probe PRIVATE ${target} generativeqc)
   endif()
 endfunction()

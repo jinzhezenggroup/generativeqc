@@ -11,6 +11,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_ks_final_state.hpp"
 #include "dft/cuda_ks_resident_frame.hpp"
+#include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -308,6 +309,12 @@ class CudaKsPlan {
   generativeqc_status resident_final_orbital_frame(const CudaKsFinalStateToken& expected,
                                                    CudaKsResidentOrbitalFrameBinding& binding,
                                                    std::string& detail) const;
+  /** Zero-transfer immutable basis/grid and accepted density lease. Requires
+   * the same canonical validation as resident_final_orbital_frame; host-unfused
+   * owners without a resident XC plan fail closed, without staging a copy. */
+  generativeqc_status resident_final_grid(const CudaKsFinalStateToken& expected,
+                                          CudaKsResidentGridBinding& binding,
+                                          std::string& detail) const;
   /** Reuse the shared physical/canonical resident proof and then borrow C/eps.
    * Stale/capturing/failed states never publish a partial frame binding. */
   generativeqc_status prepare_resident_final_orbital_frame(

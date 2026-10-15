@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_ks_grid_reference.hpp"
 #include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
 #include "response/cuda_ks_cpks_reference.hpp"
@@ -73,6 +74,16 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
   };
   require(borrow(0, token, false) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !frame,
           "prepared-batch port admitted an unvalidated frame");
+  dft::CudaKsResidentGridBinding grid_binding;
+  const auto borrow_grid = [&](std::size_t index, const auto& expected) {
+    return methods::detail::dft_cuda_resident_grid_reference(*batch, index, expected, grid_binding,
+                                                             detail);
+  };
+  require(borrow_grid(0, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
+          "prepared-batch port admitted an unvalidated grid reference");
+  dft::CudaKsGridReference grid_reference(*batch, 0, token);
+  require(grid_reference.shape().nao == 0 && !grid_reference.reference().authenticate,
+          "unprepared grid adapter published a reference");
   response::CudaKsCpksReference response_reference(*batch, 0, token);
   require(response_reference.shape().nao == 0 && !response_reference.reference().authenticate,
           "unprepared CPKS adapter published a reference");
@@ -88,12 +99,48 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
               frame.coefficients == leased.coefficients &&
               frame.orbital_energies == leased.orbital_energies,
           "prepared-batch reauthentication replaced the frame");
+  require(grid_reference.prepare(detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  const auto grid_lease = grid_reference.reference();
+  require(grid_lease.authenticate && grid_lease.authenticate(grid_lease.owner) == cudaSuccess &&
+              grid_lease.density == leased.density && grid_lease.device_id == leased.device_id &&
+              reinterpret_cast<void*>(grid_lease.stream) == leased.stream &&
+              grid_reference.shape().nao == leased.nao &&
+              grid_reference.shape().spins == leased.spins,
+          "grid adapter does not authenticate the actual prepared frame");
+  require(borrow_grid(0, token) == GENERATIVEQC_STATUS_SUCCESS && grid_binding, detail);
+  const auto immutable_grid = grid_binding;
+  require(borrow_grid(0, token) == GENERATIVEQC_STATUS_SUCCESS && grid_binding == immutable_grid,
+          "grid reauthentication replaced retained storage");
+  const dft::AoBasis expected_basis(system);
+  require(grid_binding.atoms == expected_basis.natom &&
+              grid_binding.primitives == expected_basis.nprimitive &&
+              grid_binding.nao == expected_basis.nao &&
+              grid_binding.point_count == expected_basis.natom * 24 * 12 * 24,
+          "grid reference has incorrect basis/grid extents");
+  std::vector<double> packed(expected_basis.packed.size());
+  require(cudaMemcpy(packed.data(), grid_binding.basis, packed.size() * sizeof(double),
+                     cudaMemcpyDeviceToHost) == cudaSuccess,
+          "test-only grid reference observations failed");
+  require(packed == expected_basis.packed, "grid reference has incorrect AoBasis records");
+  int grid_device = -1;
+  const double *grid_points{}, *grid_weights{}, *atomic_weights{};
+  std::size_t grid_count{};
+  require(methods::detail::dft_cuda_resident_grid(*batch, 0, token, grid_device, grid_points,
+                                                  grid_weights, atomic_weights, grid_count,
+                                                  detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              grid_device == grid_binding.device_id && grid_points == grid_binding.points &&
+              grid_weights == grid_binding.weights && grid_count == grid_binding.point_count,
+          "grid reference does not borrow the actual immutable molecular quadrature");
+  require(borrow_grid(1, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
+          "missing prepared-batch item retained a grid reference");
   require(borrow(1, token, true) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !frame,
           "missing prepared-batch item retained a frame");
   auto stale = token;
   ++stale.identity.model.owner;
   require(borrow(0, stale, true) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !frame,
           "prepared-batch port accepted another owner's token");
+  require(borrow_grid(0, stale) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
+          "prepared-batch grid accepted another owner's token");
   const auto warmed = batch->execute(methods::Coordinates(1), false);
   require(warmed[0].status == GENERATIVEQC_STATUS_SUCCESS &&
               warmed[0].calculation.convergence.converged,
@@ -103,6 +150,10 @@ void test_batch_port(const core::System& system, bool restricted, bool hybrid) {
   require(reference.authenticate(reference.owner) == cudaErrorInvalidResourceHandle &&
               response_reference.shape().nao == 0 && !response_reference.reference().authenticate,
           "native CPKS adapter retained a stale prepared owner");
+  require(grid_lease.authenticate(grid_lease.owner) == cudaErrorInvalidResourceHandle &&
+              grid_reference.shape().nao == 0 && !grid_reference.reference().authenticate &&
+              borrow_grid(0, token) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !grid_binding,
+          "native grid adapter retained a stale prepared owner");
 }
 
 void run(unsigned atoms, bool restricted, bool hybrid) {
@@ -141,6 +192,7 @@ void run(unsigned atoms, bool restricted, bool hybrid) {
   require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
   dft::CudaKsResidentOrbitalFrameBinding frame;
   dft::KsFinalStateDiagnostic diagnostic;
+  dft::CudaKsResidentGridBinding native_grid;
   const auto prepare = [&](const auto& expected) {
     return plan.prepare_resident_final_orbital_frame(expected, frame, diagnostic, detail);
   };
@@ -148,11 +200,19 @@ void run(unsigned atoms, bool restricted, bool hybrid) {
                   GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               !frame,
           "unvalidated frame was borrowable");
+  require(plan.resident_final_grid(token, native_grid, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              !native_grid,
+          "unvalidated native grid was borrowable");
   auto stale = token;
   ++stale.identity.model.owner;
   const auto before = plan.transfers();
   require(prepare(stale) == GENERATIVEQC_STATUS_INVALID_ARGUMENT && !frame,
           "stale preparation published a frame");
+  require(plan.resident_final_grid(stale, native_grid, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              !native_grid,
+          "stale native grid was borrowable");
   require(plan.transfers().synchronizations == before.synchronizations &&
               plan.transfers().final_state_d2h_bytes == before.final_state_d2h_bytes,
           "stale preparation submitted GPU work");
@@ -166,6 +226,18 @@ void run(unsigned atoms, bool restricted, bool hybrid) {
               proof.scalar_d2h_bytes - before.scalar_d2h_bytes == packet_bytes,
           "frame proof exported dense matrices instead of scalar evidence");
   const auto retained = frame;
+  require(plan.resident_final_grid(token, native_grid, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              native_grid && native_grid.density == frame.density && native_grid.nao == frame.nao &&
+              native_grid.spins == frame.spins && native_grid.stream == frame.stream,
+          "native grid is not bound to its canonical frame");
+  const auto retained_grid = native_grid;
+  require(plan.resident_final_grid(token, native_grid, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              native_grid == retained_grid &&
+              plan.transfers().synchronizations == proof.synchronizations &&
+              plan.transfers().scalar_d2h_bytes == proof.scalar_d2h_bytes &&
+              plan.transfers().matrix_d2h_bytes == proof.matrix_d2h_bytes &&
+              plan.transfers().final_state_d2h_bytes == proof.final_state_d2h_bytes,
+          "native grid reborrowing submitted work, transferred data or replaced storage");
   require(prepare(token) == GENERATIVEQC_STATUS_SUCCESS &&
               frame.coefficients == retained.coefficients &&
               frame.orbital_energies == retained.orbital_energies &&
@@ -253,6 +325,10 @@ void run(unsigned atoms, bool restricted, bool hybrid) {
                   GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               !frame,
           "explicit invalidation preserved the frame lease");
+  require(plan.resident_final_grid(token, native_grid, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              !native_grid,
+          "explicit invalidation preserved the grid lease");
   test_batch_port(system, restricted, hybrid);
   std::cout << "frame atoms=" << atoms << " restricted=" << restricted << " hybrid=" << hybrid
             << " PASS\n";

@@ -728,6 +728,11 @@ CudaXcGridView CudaXcPlan::grid_view() const {
   return {points_, weights_, layout_.npoint, stream_};
 }
 
+const double* CudaXcPlan::packed_basis() const {
+  check_device();
+  return basis_;
+}
+
 void CudaXcPlan::enqueue(const double* density, std::size_t elements, std::uint64_t generation,
                          PrecisionPhase phase) {
   if (layout_.response) throw std::invalid_argument("XC response plan requires a direction");

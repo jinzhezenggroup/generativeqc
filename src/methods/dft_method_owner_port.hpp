@@ -98,6 +98,11 @@ class KsBatchOwnerPort {
                                                unsigned& spins, void*& source_stream,
                                                std::string& detail) = 0;
 
+  virtual generativeqc_status resident_grid_reference(std::size_t index,
+                                                      const dft::CudaKsFinalStateToken& expected,
+                                                      dft::CudaKsResidentGridBinding& binding,
+                                                      std::string& detail) = 0;
+
   virtual generativeqc_status fixed_density_profile(std::size_t index,
                                                     const dft::CudaKsFinalStateToken& expected,
                                                     KsFixedDensityProfile& profile,

@@ -278,6 +278,10 @@ class CudaXcPlan {
   const CudaXcAoSelectionWork& ao_selection_work() const noexcept { return ao_selection_work_; }
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
+  /** Borrow the immutable validated AoBasis records on the plan's current
+   * device. Extents are in layout(); lifetime is that of this XC owner. A
+   * stationary consumer must additionally authenticate its live KS token. */
+  const double* packed_basis() const;
   void enqueue(const double* density, std::size_t elements, std::uint64_t generation,
                generativeqc::runtime::PrecisionPhase phase =
                    generativeqc::runtime::PrecisionPhase::StrictAudit);

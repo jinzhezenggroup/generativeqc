@@ -252,6 +252,19 @@ separately. `src/response/cuda_ks_cpks_reference.hpp` adapts that actual live
 batch/item/token to the CPKS callback, checking all bound pointers, dimensions,
 producer stream and current CUDA device. It cannot be moved while borrowed.
 
+`CudaKsPlan::resident_final_grid` borrows that same accepted density together
+with the actual XC owner's immutable packed AoBasis and quadrature. It requires
+canonical preparation and returns no binding for stale tokens or a host-unfused
+owner without a resident XC plan. The private prepared-batch grid-reference port
+and `src/dft/cuda_ks_grid_reference.hpp` retain this live ownership boundary:
+the nonmovable adapter reborrows every pointer, extent, stream and device before
+grid execution/publication. Neither detached snapshots nor copying identity
+labels authorize reuse. The batch must outlive the adapter and every consumer,
+with no concurrent batch calls. This storage lease is intentionally functional-
+neutral; evaluating WB97M-V at another model's density does not authorize a
+stationary WB97M-V response. The complete molecular provider must also validate
+the physical functional, exact/fitted exchange and VV10 model identity.
+
 `src/dft/cuda_wb97mv_grid.hpp` supplies the separate native fixed-grid
 WB97M-V semilocal plus bilateral VV10 density-response component. It borrows
 validated packed AoBasis, immutable device quadrature and the exact reference
@@ -275,14 +288,24 @@ Exact empty-spin acceptance uses the original pinned upstream Maple C in
 libquadmath and an explicit displacement-convergence study; binary64 Libxc
 has the previously diagnosed Stoll cancellation at that boundary. The oracle
 is test-only, never a runtime fallback.
-This is a correctness-first dense component, not a scaling/performance claim
-or a live prepared molecular-provider binding. It does not supply J/K, nuclear
+The live molecular probe additionally starts with actual native WB97M-V
+RKS/UKS SCF owners and executes canonical preparation, grid response and stale
+publication rejection with Python/compiler paths unavailable. Arbitrary signed
+density directions use isolated Libxc reference handles without optional FHC
+projection, matching the declared unprojected density-kernel extension; default
+handles remain untouched. Separate PSD displaced-density paths keep unmodified
+default Libxc and independently qualify physical indefinite tangents. Both use
+the same value/response gates as the standalone component. These tests cover
+the live fixed-grid component only, not a complete molecular Hessian.
+This is a correctness-first dense component, not a scaling/performance claim.
+The live prepared-owner adapter binds its basis/grid/density storage, not a
+complete physical induced-Fock provider. It does not supply J/K, nuclear
 grid motion, integral/DF/ECP derivatives or stationary Hessian assembly.
 
 The native CPKS component is independently qualified against displaced
 self-consistent generalized eigensolves of a linear coupled-spin test functional,
-**not** a complete molecular WB97M-V provider. The physical grid component still
-needs a prepared-owner binding and composition with exact/fitted J/K and the
+**not** a complete molecular WB97M-V provider. The live-bound grid component still
+needs composition with exact/fitted J/K and the
 correct long-range correction. Complete shell coverage, moving-grid/integral/
 DF/ECP response and stationary molecular assembly also require integration.
 Production CLI Hessian/HVP commands still
@@ -296,6 +319,7 @@ cmake -S . -B build/cuda-release-sm120 \
 cmake --build build/cuda-release-sm120 --target \
   generativeqc_hessian_aot_probe generativeqc_cuda_gmres_probe \
   generativeqc_cuda_cpks_probe generativeqc_cuda_wb97mv_grid_probe \
+  generativeqc_ks_wb97mv_grid_probe \
   generativeqc_ks_resident_frame_tests
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_HESSIAN_AOT_PROBE="$PWD/build/cuda-release-sm120/generativeqc_hessian_aot_probe" \
@@ -309,6 +333,10 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env GENERATIVEQC_CUDA_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_cuda_wb97mv_grid_probe" \
   PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_grid.py
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
+  env GENERATIVEQC_KS_WB97MV_GRID_PROBE="$PWD/build/cuda-release-sm120/generativeqc_ks_wb97mv_grid_probe" \
+  PYTHONPATH=python:. python -m pytest -q tests/python/test_wb97mv_native_grid.py \
+  -k live_molecular
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:05:00 \
   build/cuda-release-sm120/generativeqc_ks_resident_frame_tests
 ```

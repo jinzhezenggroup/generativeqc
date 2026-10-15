@@ -3784,6 +3784,41 @@ generativeqc_status CudaKsPlan::resident_final_orbital_frame(
   }
 }
 
+generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken& expected,
+                                                    CudaKsResidentGridBinding& binding,
+                                                    std::string& detail) const {
+  binding = {};
+  CudaKsResidentOrbitalFrameBinding frame;
+  const auto status = resident_final_orbital_frame(expected, frame, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  if (!impl_->xc) {
+    detail = "resident basis/grid requires a device-fused CUDA XC owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  try {
+    const auto& layout = impl_->xc->layout();
+    const auto grid = impl_->xc->grid_view();
+    CudaKsResidentGridBinding candidate{frame.device_id,   impl_->xc->packed_basis(),
+                                        grid.points,       grid.weights,
+                                        frame.density,     layout.natom,
+                                        layout.nprimitive, layout.nao,
+                                        grid.point_count,  frame.spins,
+                                        frame.stream,      frame.owner,
+                                        frame.solve_epoch, frame.generation};
+    if (!candidate || layout.response || layout.nao != frame.nao || layout.spins != frame.spins ||
+        layout.npoint != grid.point_count || reinterpret_cast<void*>(grid.stream) != frame.stream)
+      throw std::logic_error("CUDA KS resident basis/grid storage is inconsistent");
+    binding = candidate;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
 generativeqc_status CudaKsPlan::prepare_resident_final_orbital_frame(
     const CudaKsFinalStateToken& expected, CudaKsResidentOrbitalFrameBinding& binding,
     KsFinalStateDiagnostic& diagnostic, std::string& detail) {
