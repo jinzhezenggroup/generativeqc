@@ -19,6 +19,9 @@
 
 namespace generativeqc::dft {
 
+/** Three published XC/electron totals plus three private reduction low words. */
+inline constexpr std::size_t kCudaXcTotalStorageElements = 6;
+
 /** Exact explicit storage request for ordinary-stream semilocal XC. The
  * method's ResourcePlan supplies one arena of device_bytes. Optional lowering
  * resources have a separate reservation within that same resource plan.

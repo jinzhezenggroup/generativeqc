@@ -14,12 +14,16 @@ constexpr bool restricted_global_hybrid_exchange_coefficient(double coefficient)
 }
 
 /** The resident final-state matrix algebra is functional-independent.
- * Retain the measured 384-AO RKS/FP64/resource envelope and existing
- * strict token, library-handle and lifetime guards in the CUDA owner. */
-constexpr bool device_final_validation_default_eligible(std::size_t aos, unsigned spins,
-                                                        bool direct_global_hybrid,
-                                                        bool full_precision) noexcept {
-  return aos >= 384 && spins == 1 && direct_global_hybrid && full_precision;
+ * Direct global hybrids retain their 384-AO envelope. Pure-J models start at
+ * 544 AOs, but exact-direct J stops below the failed 1088-AO moved endpoint.
+ * Fitted J retains its separate qualification without that Direct-only hold.
+ * All retain the strict RKS/FP64, token, library and scratch-lifetime guards. */
+constexpr bool device_final_validation_default_eligible(
+    std::size_t aos, unsigned spins, bool direct_global_hybrid, bool full_precision,
+    bool full_range_coulomb_only = false, bool density_fitted_coulomb = false) noexcept {
+  return spins == 1 && full_precision &&
+         ((aos >= 384 && direct_global_hybrid) ||
+          (aos >= 544 && full_range_coulomb_only && (density_fitted_coulomb || aos < 1088)));
 }
 
 /** An unset selector chooses the evidence-bound default; 0 is a durable opt-out.

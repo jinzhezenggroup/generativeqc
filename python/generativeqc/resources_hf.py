@@ -23,13 +23,13 @@ from generativeqc_compiler.common.resources import (
     ResourceRequest,
     byte_product,
     checked_bytes,
-    plan_resources,
 )
 
 from .basis import BasisSet
 from .basis_capabilities import require_basis, resolved_basis_metadata
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
+from .resources_planning import plan_resources
 
 # Newly tracked controls may be absent from earlier schema-1 checkpoints.
 # Preserve that distinction in restart provenance; absence is not a claim
@@ -39,6 +39,7 @@ _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
     # restart identity: changing the force schedule requires explicit admission.
     "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
     "GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS",
+    "GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION",
     "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
     "GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION",
     "GENERATIVEQC_CANONICAL_RSH_VALUES",
@@ -897,4 +898,8 @@ def estimate_hf_resources(
 ) -> typing.Any:
     """Return an HF dry-run plan using compact topology and no native execution."""
     budget = ResourceBudget() if budget is None else budget
-    return plan_resources((hf_resource_request(systems, **options),), budget)
+    return plan_resources(
+        (hf_resource_request(systems, **options),),
+        budget,
+        library=options.get("library"),
+    )

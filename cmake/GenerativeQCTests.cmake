@@ -70,6 +70,10 @@ macro(generativeqc_add_native_tests)
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
   generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
                        tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_fleet_item_tests
+                       tests/native/test_fleet_item.cpp NO_GENERATIVEQC)
+  target_include_directories(generativeqc_fleet_item_tests PRIVATE
+                             "${CMAKE_CURRENT_SOURCE_DIR}/include")
   generativeqc_native_test(generativeqc_df_ccsd_precision_policy_tests
                      tests/native/test_df_ccsd_precision_policy.cpp NO_GENERATIVEQC)
   if(GENERATIVEQC_ENABLE_CUDA)
@@ -220,6 +224,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_basis_contract_tests tests/native/test_basis_contract.cpp)
   generativeqc_native_test(generativeqc_grid_tests tests/native/test_grid.cpp)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_resource_planning_tests tests/native/test_resource_planning.cpp)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
   generativeqc_native_test(generativeqc_prepared_lifecycle_tests tests/native/test_prepared_lifecycle.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)
@@ -549,6 +554,9 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_cuda_generated_j_budget_tests
              COMMAND generativeqc_cuda_fock_provider_tests --generated-j-budget-only)
     set_tests_properties(generativeqc_cuda_generated_j_budget_tests PROPERTIES TIMEOUT 180)
+    add_test(NAME generativeqc_cuda_compensated_j_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --compensated-j-only)
+    set_tests_properties(generativeqc_cuda_compensated_j_tests PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cuda_lr_domain_tests
              COMMAND generativeqc_cuda_fock_provider_tests --lr-domain-only)
     set_tests_properties(generativeqc_cuda_lr_domain_tests PROPERTIES

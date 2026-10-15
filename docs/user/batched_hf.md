@@ -18,6 +18,15 @@ shell-task and DF algorithms remain roadmap work.
 | Differentiable batches | Torch accepts a sequence of ragged coordinate tensors and calls native analytic forces in backward | Ragged H2/H3+ backward checks total gradient invariance |
 | Throughput evidence | Benchmarks report independent, cold-batch, and warm-batch timing for configurable batch size/backend | `benchmarks/batch_throughput.py` exercised at batch 1/16/64 |
 
+CPU, independent CUDA, fused direct CUDA and resident DF CUDA share the fleet's
+per-item input validation, warm-seed binding and successful-state publication.
+A failed warm attempt permits at most one ordinary cold attempt; an exception
+from that cold attempt is terminal for the item rather than starting a third
+solve. Out-of-memory and explicit CUDA-driver errors never trigger a seed retry,
+including when no preliminary-guess policy is enabled. Fock-only diagnostic runs
+never start an additional SCF solve. Failed items do not replace their last-good
+warm snapshots or abort otherwise valid neighbors during a cold retry.
+
 ## Backend labels
 
 - `cpu_reference`: integrals, SCF, and gradients use the reference backend;

@@ -138,7 +138,7 @@ __global__ void batch_ordered_scatter(const CudaXcCompactTile* tiles, I tile_cou
       potential[target] = value;
       potential[(spin * full_n + col) * full_n + row] = value;
     }
-    if (spin == 0 && (!Segmented || blockIdx.y == 0) && threadIdx.x < 3) {
+    if (point_totals && spin == 0 && (!Segmented || blockIdx.y == 0) && threadIdx.x < 3) {
       const I channel = threadIdx.x;
       for (I member = tile_index; member < next_tile; ++member) {
         const auto& current = tiles[member];

@@ -1,6 +1,8 @@
 """Independent compact-factor gates with signed weights and arbitrary AO jets."""
 
+import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -14,6 +16,9 @@ from generativeqc_compiler.dft.xc_contraction_cuda import (
     qualified_xc_matrix_schedules,
     select_xc_matrix_schedule,
 )
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,8 +68,8 @@ def test_potential_uses_compact_triangular_tile_domain() -> None:
         assert triangle < square
 
 
-def test_tiled_potential_fuses_point_total_reduction() -> None:
-    """The production tiled path must not submit a separate total kernel per tile."""
+def test_tiled_potential_retains_optional_point_total_reduction() -> None:
+    """The retained FP32 path can still fuse totals when its pointer is supplied."""
     source = emit_native_xc_matrix_schedule()
     assert "I work_jets, const double* point_totals, double* potential," in source
     assert "point_totals && blockIdx.x == 0 && spin == 0" in source
@@ -86,8 +91,8 @@ def test_tiled_potential_fuses_point_total_reduction() -> None:
     )
 
 
-def test_tiled_first_point_tile_initializes_outputs_without_global_clears() -> None:
-    """Admitted tiled XC must overwrite first-tile outputs instead of pre-clearing them."""
+def test_tiled_first_point_tile_initializes_matrix_without_global_clear() -> None:
+    """Dense tiled XC still initializes its matrix in the first tile."""
     schedule = emit_native_xc_matrix_schedule()
     assert "double* totals, bool accumulate, int* error" in schedule
     assert "const double prior = accumulate ? potential[index] : 0.0;" in schedule
@@ -99,7 +104,6 @@ def test_tiled_first_point_tile_initializes_outputs_without_global_clears() -> N
     setup = glue[: glue.index("for (std::size_t begin")]
     dense_setup, sparse_setup = setup.split("if (l.local_ao || compact_candidate) {", 1)
     assert "cudaMemsetAsync(potential" not in dense_setup
-    assert "cudaMemsetAsync(totals" not in dense_setup
     assert "cudaMemsetAsync(potential" in sparse_setup
     assert "begin != 0 || l.local_ao, error" in glue
 
@@ -116,7 +120,7 @@ def test_tiled_first_point_tile_initializes_outputs_without_global_clears() -> N
 def test_first_tile_initialization_traffic_census(
     nao: int, spins: int, expected_matrix_bytes: int, expected_removed_bytes: int
 ) -> None:
-    """Pin the matrix and totals clear traffic removed per admitted XC evaluation."""
+    """Retained FP32 first-tile fusion avoids matrix and three-total clears."""
     matrix_bytes = spins * nao * nao * 8
     assert matrix_bytes == expected_matrix_bytes
     assert matrix_bytes + 3 * 8 == expected_removed_bytes
@@ -129,12 +133,13 @@ def test_first_tile_initialization_traffic_census(
 def test_tiled_total_reduction_launch_census(
     points: int, expected_tiles: int, expected_two_step_launches: int
 ) -> None:
-    """Pin the retained 256-point 48/96-atom diagnostic launch census."""
+    """Retain the FP32 256-point diagnostic tile census."""
     tiles = (points + 255) // 256
     assert tiles == expected_tiles
     assert 2 * tiles == expected_two_step_launches
     # Before this slice: one standalone accumulate_totals launch per point tile.
-    # After this slice: zero standalone reduction launches in the admitted tiled path.
+    # The retained FP32 tiled path still fuses those scalar reductions.
+    # Strict FP64 instead uses the separately qualified compensated batch reducer.
     assert expected_two_step_launches > 0
 
 
@@ -193,3 +198,72 @@ def test_xc_matrix_candidate_is_frozen_in_grid_source_identity() -> None:
 
     with pytest.raises(ValueError, match="require native KS"):
         emit_grid_source(native_ks=False, xc_matrix_schedule=XcMatrixSchedule(8))
+
+
+def test_xc_setup_resets_compensated_totals_without_clearing_dense_matrix(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Execute real setup for repeated dense/local/compact and precision routes."""
+    source = (ROOT / "src/dft/cuda_xc_kernels.cuh").read_text()
+    start = source.index("  const bool compact_candidate =")
+    end = source.index("  if (density_provider && !l.local_ao)", start)
+    setup = source[start:end]
+    header = (ROOT / "src/dft/cuda_xc.hpp").read_text()
+    start = header.index("inline constexpr std::size_t kCudaXcTotalStorageElements =")
+    storage = header[start : header.index(";", start) + 1]
+    unit, binary = tmp_path / "xc-setup.cpp", tmp_path / "xc-setup"
+    unit.write_text(
+        r"""
+#include <array>
+#include <cassert>
+#include <cstddef>
+#include <cstring>
+#include <algorithm>
+using I = long long;
+int cudaMemsetAsync(void* destination, int value, std::size_t bytes, void*) {
+  std::memset(destination, value, bytes); return 0;
+}
+void cuda_check(int status) { assert(status == 0); }
+struct Layout { bool fp32_contractions, local_ao; };
+struct Batch { bool compact; };
+struct Binding {
+  struct Diagnostic { bool provider_allowance; };
+  Diagnostic diagnostic() const { return {true}; }
+};
+"""
+        + storage
+        + r"""
+void initialize(Layout l, Batch point_batch_plan, const void* density_provider,
+                const Binding* potential_binding, double* potential, double* totals) {
+  const I matrices = 8;
+  void* stream = nullptr;
+"""
+        + setup
+        + r"""
+}
+int main() {
+  const Binding binding;
+  for (bool fp32 : {false, true})
+    for (bool local : {false, true})
+      for (bool compact : {false, true})
+        for (bool density_bound : {false, true})
+          for (bool potential_bound : {false, true}) {
+            std::array<double, 9> potential;
+            std::array<double, 7> totals;
+            for (double poison : {123.0, -987.0}) {
+              potential.fill(poison); totals.fill(poison);
+              initialize({fp32, local}, {compact}, density_bound ? &binding : nullptr,
+                         potential_bound ? &binding : nullptr, potential.data(), totals.data());
+              const bool sparse = local || (compact && !density_bound && !potential_bound);
+              for (int index = 0; index < 8; ++index)
+                assert(potential[index] == (sparse ? 0.0 : poison));
+              for (int index = 0; index < 6; ++index)
+                assert(totals[index] == (!fp32 || (sparse && index < 3) ? 0.0 : poison));
+              assert(potential[8] == poison && totals[6] == poison);
+            }
+          }
+}
+"""
+    )
+    native_cxx.build_executable([unit], binary, compile_args=["-std=c++20"])
+    subprocess.run([binary], check=True, timeout=10)
