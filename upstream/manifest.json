@@ -126,33 +126,35 @@
     "libxc-bulk-graph-catalog": {
       "canonical_inputs": {
         "python/generativeqc_compiler/xc/libxc_bulk.py": "1469c75ef2d22bca13474fea805c885a97fbfe4ec44bc28cd0ab1e034c85a290",
-        "python/generativeqc_compiler/xc/libxc_maple.py": "3d08bdc3bd0474de18090d49624772d93bce3e1586afe55f64840166cfbe8ed7",
+        "python/generativeqc_compiler/xc/libxc_maple.py": "07e95db2a208a0101baa0e07d06ff2e02d74c9c4f780d07792492384d874e676",
         "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b"
       },
       "generator": "tools/import_libxc_bulk.py",
-      "generator_sha256": "42d3068fc9ee85f6bbea052ea0e6b98e7faa4455d09c30b94a4122a4ecdedd9a",
+      "generator_sha256": "96c1f1fee89d44686913061fcde8ef33bfbde4b65f32c339990d3f4a79f78e54",
       "input_identity_sha256": "f386c54fdf599ab325eb1ed83209e3fc90f6dfcd37a2d0ef589663e57199136f",
       "inputs": [
         "libxc-7.0.0-fulltree"
       ],
       "outputs": {
-        "docs/libxc_bulk_import.md": "e7f870e11ff1477938901a69d77321792b286a410a0ae7a55729ace83456e6e1",
-        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "46c288e528a7c200f3d05b1f47473d4afdba0560ad7b17bf9682c5eeba0abf1d"
+        "docs/libxc_bulk_import.md": "e05509396dbeaa84517f37467e0092262325e2d6fea8365d80a6b8b449dc9393",
+        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json": "4d203187f732826667f95a8953bd87c94bc4da78810f562b3f1b8c91e39e2913"
       }
     },
     "libxc-method-metadata": {
       "canonical_inputs": {
+        "python/generativeqc_compiler/xc/libxc_method_metadata.py": "b0598706697105520ace5c3e3d7203fe1cb835e34929992a9198af602eae792c",
         "tools/libxc_bulk_metadata.py": "44d8d7b0d4b6bd8727cb217d14fba241dd45302937fc3d5ef71f2613f2f8d44b",
         "tools/libxc_method_metadata.py": "c1dfd47bfd94811c1eef3dd077eb0d758f7f3ae3a059cd0c40c32126798f2716"
       },
       "generator": "tools/generate_libxc_methods.py",
-      "generator_sha256": "69eaeba331b1fc47f7aa3b8516ae5decc9e3899c36d6767c73a8d8308270a088",
-      "input_identity_sha256": "aa1ecae5abc04565a754de95c16772f0e73b93eed2a695103ee3a6950313887b",
+      "generator_sha256": "d653189e4cc7b0e98ff0bf14d6fc5bba2baf1dc85e9c8db71246b2bd5fb02415",
+      "input_identity_sha256": "aa1123524c7c173d270806ce1f0eebaf7131448d99d77c633a912d6c31bbaea2",
       "inputs": [
-        "libxc-7.0.0"
+        "libxc-7.0.0",
+        "libxc-7.0.0-fulltree"
       ],
       "outputs": {
-        "python/generativeqc_compiler/method/_generated_libxc_methods.py": "5865e441c7be6500cb0ac3636cc8771138ded3f48f5da06745ef1cfb623327d2"
+        "python/generativeqc_compiler/method/_generated_libxc_methods.py": "bd9ae4b3898818b2fdc207f0b6be11e701f60700dbc357f2d57809437ccd17c3"
       }
     },
     "libxc-xc-admission": {
@@ -168,11 +170,11 @@
         "python/generativeqc_compiler/xc/rsh_maple.py": "f52b2453d5d0c18c1f54613540bb461a053b27f5b4ca6a77ac6e6000afac0cc1",
         "python/generativeqc_compiler/xc/scan_maple.py": "a1b567789e9f5d246f00189f9e7b5dcdf5fde2d1e069f52db1b343cc7a212cf3",
         "python/generativeqc_compiler/xc/semilocal_family.py": "bba1f8681f6610423a55efa426d61b59c3a10847ffc728d76bab46c8bd0e3636",
-        "python/generativeqc_compiler/xc/spec.py": "79529c7f375979c57f081f578deaeac7779f87b16301bd99167f843256b0d5a3",
+        "python/generativeqc_compiler/xc/spec.py": "27c43dc86142c8dc273986d48e7b94cd4fbf62efd8d2af3d3ad4fe03308514fe",
         "python/generativeqc_compiler/xc/wb97mv_maple.py": "24499cc623efe00533263a47a06c8408313cea8247de3a1420db4161e1cb932d"
       },
       "generator": "python/generativeqc_compiler/xc/libxc_maple.py",
-      "generator_sha256": "3d08bdc3bd0474de18090d49624772d93bce3e1586afe55f64840166cfbe8ed7",
+      "generator_sha256": "07e95db2a208a0101baa0e07d06ff2e02d74c9c4f780d07792492384d874e676",
       "input_identity_sha256": "aa1ecae5abc04565a754de95c16772f0e73b93eed2a695103ee3a6950313887b",
       "inputs": [
         "libxc-7.0.0"
