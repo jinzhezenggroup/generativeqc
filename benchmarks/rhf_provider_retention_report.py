@@ -90,7 +90,15 @@ def _ordered(records: list[dict]) -> list[dict]:
             raise ValueError("event phase must be begin or end")
         _integer(record.get("pid"), "event pid")
         _integer(record.get("tid"), "event tid")
-        _integer(record.get("status"), "event status")
+        if record["event"] == "resolution_error":
+            if (
+                type(record.get("status")) is not int
+                or record["status"] != -1
+                or record.get("origin") != "interposer"
+            ):
+                raise ValueError("invalid interposer resolution error")
+        else:
+            _integer(record.get("status"), "event status")
         if record["event"] == "cuda_mem_get_info":
             if record.get("origin") not in ("application", "provider_internal"):
                 raise ValueError("memory query origin is invalid")

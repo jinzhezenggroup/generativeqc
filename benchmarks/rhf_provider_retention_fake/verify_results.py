@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -133,6 +134,17 @@ def verify_outputs(root: Path) -> None:
             record["baseline"] == record["shim"],
             f"{name} stdout hash or size differs",
         )
+        raw = {
+            variant: (root / f"{name}.{variant}.stdout.json").read_bytes()
+            for variant in ("baseline", "shim")
+        }
+        require(raw["baseline"] == raw["shim"], f"{name} raw stdout differs")
+        for variant, data in raw.items():
+            require(
+                record[variant]
+                == {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()},
+                f"{name} {variant} stdout identity mismatch",
+            )
 
     positive_baseline = load_json(root / "positive.baseline.stdout.json")
     positive_shim = load_json(root / "positive.shim.stdout.json")

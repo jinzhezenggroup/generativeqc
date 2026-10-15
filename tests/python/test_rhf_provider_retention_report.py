@@ -303,6 +303,16 @@ def test_identity_mismatch_is_rejected() -> None:
         summarize(ordered_records(), policy, IDENTITY)
 
 
+def test_shim_resolution_failure_retains_incomplete_report() -> None:
+    records = ordered_records()
+    records.insert(1, event(0, "resolution_error", status=-1, origin="interposer"))
+    records[-1]["resolution_errors"] = 1
+    result = summarize(resequence(records), POLICY, IDENTITY)
+    assert result["status"] == "INCOMPLETE"
+    assert result["measurement"] is None
+    assert "interposer resolution failed 1 time(s)" in result["issues"]
+
+
 def test_duplicate_sequence_is_rejected() -> None:
     records = ordered_records()
     records[1]["sequence"] = records[0]["sequence"]

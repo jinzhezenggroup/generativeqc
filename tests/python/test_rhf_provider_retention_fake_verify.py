@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -160,21 +161,16 @@ def write_fixture(root: Path) -> None:
         {"case": "resolution_failure", "lookup": "found", "status": 7, "parameters": 0},
     )
     write_json(root / "write_failure.shim.stdout.json", positive)
-    write_json(
-        root / "stdout-parity.json",
-        {
-            "positive": {
-                "baseline": {"size": 10, "sha256": "a" * 64},
-                "shim": {"size": 10, "sha256": "a" * 64},
-                "byte_identical": True,
-            },
-            "provider_failure": {
-                "baseline": {"size": 11, "sha256": "b" * 64},
-                "shim": {"size": 11, "sha256": "b" * 64},
-                "byte_identical": True,
-            },
-        },
-    )
+    parity = {}
+    for name in ("positive", "provider_failure"):
+        data = (root / f"{name}.baseline.stdout.json").read_bytes()
+        identity = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        parity[name] = {
+            "baseline": identity,
+            "shim": identity,
+            "byte_identical": True,
+        }
+    write_json(root / "stdout-parity.json", parity)
 
     write_jsonl(root / "positive.trace.jsonl", positive_trace())
     write_jsonl(root / "provider_failure.trace.jsonl", positive_trace(failure=True))
@@ -281,7 +277,7 @@ def test_independent_verifier_rejects_default_version_forwarding(
     value["audit"]["expected_calls"][0] = 0
     value["audit"]["default_calls"][0] = 1
     write_json(tmp_path / "positive.shim.stdout.json", value)
-    with pytest.raises(verify.VerificationError, match="baseline/shim output differs"):
+    with pytest.raises(verify.VerificationError, match="raw stdout differs"):
         verify.verify_all(tmp_path)
 
 
@@ -291,6 +287,26 @@ def test_independent_verifier_requires_raw_stdout_parity(tmp_path: Path) -> None
     value["positive"]["byte_identical"] = False
     write_json(tmp_path / "stdout-parity.json", value)
     with pytest.raises(verify.VerificationError, match="stdout is not byte-identical"):
+        verify.verify_all(tmp_path)
+
+
+def test_verifier_recomputes_raw_stdout_parity(tmp_path: Path) -> None:
+    write_fixture(tmp_path)
+    target = tmp_path / "positive.shim.stdout.json"
+    value = json.loads(target.read_text(encoding="utf-8"))
+    target.write_text(json.dumps(value, separators=(",", ":")) + "\n", encoding="utf-8")
+    with pytest.raises(verify.VerificationError, match="raw stdout"):
+        verify.verify_all(tmp_path)
+
+
+def test_verifier_recomputes_recorded_stdout_identity(tmp_path: Path) -> None:
+    write_fixture(tmp_path)
+    path = tmp_path / "stdout-parity.json"
+    value = json.loads(path.read_text(encoding="utf-8"))
+    for variant in ("baseline", "shim"):
+        value["positive"][variant]["sha256"] = "f" * 64
+    write_json(path, value)
+    with pytest.raises(verify.VerificationError, match="stdout identity"):
         verify.verify_all(tmp_path)
 
 
