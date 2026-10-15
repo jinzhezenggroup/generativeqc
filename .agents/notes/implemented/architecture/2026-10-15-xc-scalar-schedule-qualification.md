@@ -6,7 +6,7 @@ Date: 2026-10-15
 The user rejected moving a method-specific exception into manifest metadata as
 insufficient generalization. The consumer-only replacement and its independent
 qualification gates are tracked in
-`.agents/notes/proposed/2026-10-15-generic-xc-force-powers.md`. The original
+`.agents/notes/implemented/performance/2026-10-15-generic-xc-force-powers.md`. The original
 admission decision below is historical, not the current schedule contract.
 
 ## Problem
