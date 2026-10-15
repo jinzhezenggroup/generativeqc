@@ -12,6 +12,10 @@ from generativeqc_compiler.xc import libxc_bulk
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.geometry_cuda import _emit_composed_point
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
+from generativeqc_compiler.xc.scalar_schedule import (
+    XcScalarConsumer,
+    select_xc_scalar_schedule,
+)
 from generativeqc_compiler.xc.split_hybrid_domain import stabilize_m06_2x_stoll
 
 from tools.generate_xc_split_hybrid_cuda import (
@@ -80,6 +84,47 @@ def test_split_consumers_qualify_integer_power_schedule_separately(
     assert bool(re.search(pattern, force_source)) == (
         identifier != "M06-2X" or scalar_type != "double" or spin != "unpolarized"
     )
+
+
+@pytest.mark.parametrize("identifier", ("M06-2X", "MN15"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("scalar_type", ("double", "float"))
+@pytest.mark.parametrize(
+    "consumer", (XcScalarConsumer.SCF_POINT, XcScalarConsumer.STATIONARY_FORCE)
+)
+def test_scalar_schedule_selects_only_qualified_consumer(
+    identifier: str, spin: str, scalar_type: str, consumer: XcScalarConsumer
+) -> None:
+    code = SPLIT_HYBRIDS[identifier]["functional_code"]
+    schedule = select_xc_scalar_schedule(
+        code, consumer=consumer, spin=spin, scalar_type=scalar_type
+    )
+    assert schedule.lower_integer_powers is (
+        identifier == "M06-2X"
+        and spin == "unpolarized"
+        and scalar_type == "double"
+        and consumer is XcScalarConsumer.STATIONARY_FORCE
+    )
+
+
+def test_unknown_or_invalid_scalar_schedule_requests_fail_closed() -> None:
+    assert not select_xc_scalar_schedule(
+        999999,
+        consumer=XcScalarConsumer.STATIONARY_FORCE,
+        spin="unpolarized",
+        scalar_type="double",
+    ).lower_integer_powers
+    with pytest.raises(TypeError, match="consumer"):
+        select_xc_scalar_schedule(
+            131522, consumer="stationary_force", spin="unpolarized", scalar_type="double"
+        )
+    with pytest.raises(ValueError, match="spin"):
+        select_xc_scalar_schedule(
+            131522,
+            consumer=XcScalarConsumer.STATIONARY_FORCE,
+            spin="invalid",
+            scalar_type="double",
+        )
 
 
 def test_integer_power_lowering_rejects_unqualified_precision_and_policy() -> None:

@@ -45,4 +45,8 @@ SPLIT_HYBRID_COMPONENTS = frozenset(
     for record in SPLIT_HYBRIDS.values()
     for component, _ in record["components"]
 )
+
+CUDA_SMALL_INTEGER_POWER_SCHEDULES: frozenset[tuple[int, str, str, str]] = frozenset({
+    (131522, "stationary_force", "unpolarized", "double"),
+})
 # fmt: on

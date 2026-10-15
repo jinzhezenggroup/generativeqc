@@ -14,6 +14,7 @@ from ._generated_native_semilocal import (
 from ._generated_split_hybrids import SPLIT_HYBRIDS
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
+from .scalar_schedule import XcScalarConsumer, select_xc_scalar_schedule
 from .semilocal_codegen import emit_polarized_semilocal, emit_r2scan_program
 from .spec import FunctionalSpec
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
@@ -48,9 +49,8 @@ def _emit_composed_point(
     """Reuse the energy consumer's exact generated graph and boundary policy.
 
     The force consumer never differentiates clipping or substitutes an interior
-    point formula. Its FP64 M06-2X RKS graph lowers bounded integer powers after
-    AD; unqualified spin/precision consumers retain their original schedule.
-    This force schedule does not change the SCF point consumer.
+    point formula. Qualified scalar schedules are selected by functional code,
+    consumer, spin, and precision without altering the SCF point consumer.
     """
     polarized = replace(semilocal, spin="polarized")
     curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
@@ -79,14 +79,16 @@ def _emit_composed_point(
             name: Fraction(weight) for name, weight in record["components"]
         }:
             raise ValueError("stationary split-hybrid point composition mismatch")
+        schedule = select_xc_scalar_schedule(
+            code,
+            consumer=XcScalarConsumer.STATIONARY_FORCE,
+            spin=semilocal.spin,
+            scalar_type=scalar_type,
+        )
         body, _, selected = emit_split_hybrid_device_body(
             identifier,
             scalar_type=scalar_type,
-            lower_integer_powers=(
-                identifier == "M06-2X"
-                and semilocal.spin == "unpolarized"
-                and scalar_type == "double"
-            ),
+            lower_integer_powers=schedule.lower_integer_powers,
         )
         # The generated symbol follows the same canonical registry convention.
         import re
