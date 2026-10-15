@@ -33,6 +33,14 @@ void check(cudaError_t error) {
 }
 std::size_t product(std::size_t a, std::size_t b) { return runtime::size_mul(a, b); }
 unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements + 127) / 128); }
+
+/** Both planes belong to the admitted J owner, never to a K/force borrower. */
+runtime::CompensatedOutput generated_coulomb_output(const GeneratedCoulombPlan& plan) {
+  const auto elements = product(product(static_cast<std::size_t>(plan.batch.batch_size),
+                                        static_cast<std::size_t>(plan.batch.direct_nbf)),
+                                static_cast<std::size_t>(plan.batch.direct_nbf));
+  return {plan.coulomb, plan.coulomb + elements};
+}
 }  // namespace
 
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
@@ -133,7 +141,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   charge(rectangular, sizeof(double));  // C is also present for identity transforms.
   charge(order.size() + offsets.size(), sizeof(std::uint32_t));
   charge(primitive_pairs, sizeof(PrimitivePairData));
-  charge(cartesian, 3 * sizeof(double));  // Density, J and Cartesian Schwarz.
+  charge(cartesian, 4 * sizeof(double));  // Density, J, J correction and Cartesian Schwarz.
   charge(rectangular, sizeof(double));
   charge(matrix, 2 * sizeof(double));  // Total spin density and zero one-electron term.
   charge(pairs, sizeof(double));
@@ -195,7 +203,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
       return static_cast<double*>(allocate(count, sizeof(double)));
     };
     plan->density = doubles(cartesian);
-    plan->coulomb = doubles(cartesian);
+    plan->coulomb = doubles(product(cartesian, 2U));
     plan->schwarz = doubles(cartesian);
     plan->temporary = doubles(rectangular);
     plan->total_density = doubles(matrix);
@@ -703,12 +711,13 @@ cudaError_t enqueue_generated_coulomb_prepared(GeneratedExchangePlan& p, bool un
   if (p.bounded_value_capability) {
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
+    auto batch = shared.batch;
+    batch.reference_fock_correction = generated_coulomb_output(shared).correction;
     launch_bounded_shell_fock_source(
-        false, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
-        shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-        p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
-        p.bounded_value_overflow, shared.schwarz, shared.density, shared.active, shared.coulomb,
-        p.force_cursor, true, false);
+        false, shared.worker_blocks, shared.stream, batch, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, shared.value_class_mask, p.bounded_value_overflow, shared.schwarz,
+        shared.density, shared.active, shared.coulomb, p.force_cursor, true, false);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
   }
@@ -1049,7 +1058,12 @@ namespace {
 
 cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
                                              const double* beta) {
-  const auto b = p.batch;
+  auto b = p.batch;
+  const auto output = generated_coulomb_output(p);
+  // Native DDDD and materialized value consumers use this existing scatter
+  // contract. Keep the binding local so shared K/derivative launches cannot
+  // write into J's correction plane.
+  b.reference_fock_correction = output.correction;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
   const auto cartesian = std::size_t(b.batch_size) * b.direct_nbf * b.direct_nbf;
   const auto rectangle = std::size_t(b.batch_size) * b.nbf * b.direct_nbf;
@@ -1082,7 +1096,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
   error = cudaGetLastError();
   if (error != cudaSuccess) return error;
 
-  error = cudaMemsetAsync(p.coulomb, 0, cartesian * sizeof(double), p.stream);
+  error = cudaMemsetAsync(p.coulomb, 0, product(cartesian, 2U * sizeof(double)), p.stream);
   if (error != cudaSuccess) return error;
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           p.stream);
@@ -1096,7 +1110,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
     error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
-        p.schwarz, p.density, p.coulomb, p.heads + cls,
+        p.schwarz, p.density, output, p.heads + cls,
         p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr, nullptr);
     if (error != cudaSuccess) return error;
   }
@@ -1114,6 +1128,15 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb) 
   const auto b = p.batch;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
   const auto rectangle = std::size_t(b.batch_size) * b.nbf * b.direct_nbf;
+  const auto cartesian = product(
+      product(static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.direct_nbf)),
+      static_cast<std::size_t>(b.direct_nbf));
+  // Fold once after all generated/native/bounded J writers, before projection
+  // can discard their recovered low words. The next build resets both planes.
+  launch_jk_compensation_fold(p.stream, p.coulomb, generated_coulomb_output(p).correction,
+                              cartesian);
+  const auto error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
   launch_transform_direct_fock_left_kernel(blocks(rectangle), 128, 0, p.stream, b.batch_size, 1,
                                            b.nbf, b.direct_nbf, b.ao_to_direct_transform, p.coulomb,
                                            p.active, p.temporary);

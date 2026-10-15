@@ -548,6 +548,9 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_cuda_generated_j_budget_tests
              COMMAND generativeqc_cuda_fock_provider_tests --generated-j-budget-only)
     set_tests_properties(generativeqc_cuda_generated_j_budget_tests PROPERTIES TIMEOUT 180)
+    add_test(NAME generativeqc_cuda_compensated_j_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --compensated-j-only)
+    set_tests_properties(generativeqc_cuda_compensated_j_tests PROPERTIES TIMEOUT 180)
     add_test(NAME generativeqc_cuda_lr_domain_tests
              COMMAND generativeqc_cuda_fock_provider_tests --lr-domain-only)
     set_tests_properties(generativeqc_cuda_lr_domain_tests PROPERTIES
